@@ -1,12 +1,12 @@
-#Engagements 
+# Engagements 
 Engagements is a interactive meeting toolset for making meeting, offsites, and training more enagaging with fun exercies, trivia, AI involvement, and documentation. 
 
-#How it works
+# How it works
 Host signup to get a event pass so they can create multiple engagements for their event. Host select the engagement type: Poll, Survey, Call and Answer (Lessons Learned, Solutioning, Direction narrative), Prioritizations, Triva Game, Bingo.
 Question/trivia/polls are provided in three ways 1:system provided(public), system add-ons (theme based), host provided (private based on their login)
 
 
-#Components
+# Components
 - Admin (requires login) Super Admin can change public and system-addons
   - Engagment Sets  
     - List engagementSets Question/Trivia/Poll Sets/Surveys by catagory 
@@ -44,7 +44,7 @@ Question/trivia/polls are provided in three ways 1:system provided(public), syst
   - Title of the engagement type (Poll. Lesson Learned, Survey)
     - How to Play/Instructions
 
-#Enagagement Types
+# Enagagement Types
 ## Polls - no catagories
 Host can ask for input on various topics and the information could be tallked and shared with the partipants. (ie. what cuisine should we order tomorrow: Chinese, Pizza, Mexican, sandwiches)
 Each question in question set has
