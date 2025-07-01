@@ -1,0 +1,4000 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  DEVELOPMENT quiz game with WebSocket support for real-time state management:
+    • Questions: GAME#1234 / QUESTION#001
+    • Answers: GAME#1234 / ANSWER#001#PLAYER#name  
+    • Votes: GAME#1234 / VOTE#001#PLAYER#name
+    • State: GAME#1234 / STATE (with currentQuestion=001, stage=ASK/VOTE/RESULTS)
+    • WebSocket connections for real-time updates
+
+Parameters:
+  DomainName:
+    Type: String
+    Description: The fully qualified domain name (e.g. quiz.example.com)
+    Default: "engagements.sb.seibtribe.us"
+  
+  HostedZoneId:
+    Type: String
+    Description: The Route53 Hosted Zone ID for the domain
+    Default: "Z03473042HSYD8BUY4XSL"
+
+Conditions:
+  HasDomain: !Not [!Equals [!Ref DomainName, ""]]
+
+Globals:
+  Function:
+    Runtime: nodejs16.x
+    Timeout: 10
+    MemorySize: 128
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref GameTable
+        WEBSOCKET_API_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/dev'
+
+Resources:
+
+  ### WebSocket API for Real-time Communication
+  WebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${AWS::StackName}-websocket-dev'
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: "$request.body.action"
+
+  ### WebSocket Deployment
+  WebSocketDeployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+      - ConnectRoute
+      - DisconnectRoute
+      - SendMessageRoute
+    Properties:
+      ApiId: !Ref WebSocketApi
+
+  ### WebSocket Stage
+  WebSocketStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      StageName: dev
+      Description: Development stage for WebSocket API
+      DeploymentId: !Ref WebSocketDeployment
+      ApiId: !Ref WebSocketApi
+
+  ## Connect Function
+  ConnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.connectHandler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Statement:
+          - Effect: Allow
+            Action:
+              - 'execute-api:ManageConnections'
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        const apigateway = new AWS.ApiGatewayManagementApi({
+          endpoint: process.env.WEBSOCKET_API_ENDPOINT
+        });
+        
+        exports.connectHandler = async (event) => {
+          const connectionId = event.requestContext.connectionId;
+          const gameId = event.queryStringParameters?.gameId;
+          const playerName = event.queryStringParameters?.playerName;
+          const isHost = event.queryStringParameters?.isHost === 'true';
+          
+          console.log(`🔌 WebSocket Connect: ${connectionId}, Game: ${gameId}, Player: ${playerName}, Host: ${isHost}`);
+          
+          try {
+            // Store connection info
+            const ttl = Math.floor(Date.now() / 1000) + (2 * 60 * 60); // 2 hours TTL
+            await db.put({
+              TableName: process.env.TABLE_NAME,
+              Item: {
+                PK: `CONNECTION#${connectionId}`,
+                SK: 'METADATA',
+                ConnectionId: connectionId,
+                GameId: gameId || null,
+                PlayerName: playerName || null,
+                IsHost: isHost || false,
+                ConnectedAt: new Date().toISOString(),
+                ttl
+              }
+            }).promise();
+            
+            // Send current game state to newly connected client
+            if (gameId) {
+              console.log(`🔌 Sending current game state to ${connectionId} for game ${gameId}`);
+              
+              try {
+                // Get current game state
+                const stateResult = await db.get({
+                  TableName: process.env.TABLE_NAME,
+                  Key: {
+                    PK: `GAME#${gameId}`,
+                    SK: 'STATE'
+                  }
+                }).promise();
+                
+                if (stateResult.Item) {
+                  const gameState = stateResult.Item;
+                  console.log(`🔌 Found game state:`, gameState);
+                  
+                  // Send lightweight initial state notification
+                  await apigateway.postToConnection({
+                    ConnectionId: connectionId,
+                    Data: JSON.stringify({
+                      type: 'initialStateSync',
+                      gameId,
+                      timestamp: new Date().toISOString()
+                    })
+                  }).promise();
+                  
+                  console.log(`✅ Sent initial state to ${connectionId}`);
+                } else {
+                  console.log(`ℹ️ No game state found for game ${gameId}`);
+                }
+              } catch (stateError) {
+                console.error(`❌ Error sending initial state to ${connectionId}:`, stateError);
+                // Don't fail the connection if we can't send state
+              }
+            }
+            
+            return { statusCode: 200, body: 'Connected' };
+          } catch (error) {
+            console.error('Connect error:', error);
+            return { statusCode: 500, body: 'Failed to connect' };
+          }
+        };
+
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $connect
+      AuthorizationType: NONE
+      OperationName: ConnectRoute
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref ConnectInteg
+
+  ConnectInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      Description: Connect Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub 
+        - 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations'
+        - lambdaArn: !GetAtt ConnectFunction.Arn
+
+  ConnectPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - WebSocketApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ConnectFunction
+      Principal: apigateway.amazonaws.com
+
+  ## Disconnect Function
+  DisconnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.disconnectHandler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        
+        exports.disconnectHandler = async (event) => {
+          const connectionId = event.requestContext.connectionId;
+          
+          console.log(`🔌 WebSocket Disconnect: ${connectionId}`);
+          
+          try {
+            // Remove connection info
+            await db.delete({
+              TableName: process.env.TABLE_NAME,
+              Key: {
+                PK: `CONNECTION#${connectionId}`,
+                SK: 'METADATA'
+              }
+            }).promise();
+            
+            return { statusCode: 200, body: 'Disconnected' };
+          } catch (error) {
+            console.error('Disconnect error:', error);
+            return { statusCode: 500, body: 'Failed to disconnect' };
+          }
+        };
+
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $disconnect
+      AuthorizationType: NONE
+      OperationName: DisconnectRoute
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref DisconnectInteg
+
+  DisconnectInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      Description: Disconnect Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub 
+        - 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations'
+        - lambdaArn: !GetAtt DisconnectFunction.Arn
+
+  DisconnectPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - WebSocketApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref DisconnectFunction
+      Principal: apigateway.amazonaws.com
+
+  ## Send Message Function
+  SendMessageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.sendMessageHandler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        const apiGateway = new AWS.ApiGatewayManagementApi({
+          endpoint: process.env.WEBSOCKET_API_ENDPOINT
+        });
+        
+        exports.sendMessageHandler = async (event) => {
+          const connectionId = event.requestContext.connectionId;
+          const body = JSON.parse(event.body);
+          
+          console.log(`📨 WebSocket Message:`, body);
+          
+          try {
+            if (body.action === 'broadcast') {
+              // Broadcast to all connections in the game
+              const gameId = body.gameId;
+              const message = body.message;
+              
+              // Get all connections for this game
+              const connections = await getGameConnections(gameId);
+              
+              // Send message to all connections
+              const sendPromises = connections.map(async (connection) => {
+                try {
+                  await apiGateway.postToConnection({
+                    ConnectionId: connection.ConnectionId,
+                    Data: JSON.stringify(message)
+                  }).promise();
+                } catch (error) {
+                  if (error.statusCode === 410) {
+                    // Connection is stale, remove it
+                    await db.delete({
+                      TableName: process.env.TABLE_NAME,
+                      Key: {
+                        PK: `CONNECTION#${connection.ConnectionId}`,
+                        SK: 'METADATA'
+                      }
+                    }).promise();
+                  }
+                }
+              });
+              
+              await Promise.all(sendPromises);
+              return { statusCode: 200, body: 'Message sent' };
+            }
+            
+            return { statusCode: 400, body: 'Unknown action' };
+          } catch (error) {
+            console.error('Send message error:', error);
+            return { statusCode: 500, body: 'Failed to send message' };
+          }
+        };
+        
+        async function getGameConnections(gameId) {
+          const result = await db.scan({
+            TableName: process.env.TABLE_NAME,
+            FilterExpression: 'begins_with(PK, :pk) AND GameId = :gameId',
+            ExpressionAttributeValues: {
+              ':pk': 'CONNECTION#',
+              ':gameId': gameId
+            }
+          }).promise();
+          
+          return result.Items;
+        }
+
+  SendMessageRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: sendmessage
+      AuthorizationType: NONE
+      OperationName: SendMessageRoute
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref SendMessageInteg
+
+  SendMessageInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      Description: Send Message Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub 
+        - 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations'
+        - lambdaArn: !GetAtt SendMessageFunction.Arn
+
+  SendMessagePermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - WebSocketApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SendMessageFunction
+      Principal: apigateway.amazonaws.com
+
+  ### DynamoDB Single‐Table
+  GameTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-dev-table'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: ConnectionId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      GlobalSecondaryIndexes:
+        - IndexName: ConnectionIndex
+          KeySchema:
+            - AttributeName: ConnectionId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  ### HTTP API
+  GameApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: ["*"]
+        AllowMethods: ["OPTIONS","GET","POST"]
+        AllowHeaders: ["Content-Type"]
+
+  ### Lambda: Join Game
+  JoinGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.join
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*'
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        const apigateway = new AWS.ApiGatewayManagementApi({
+          endpoint: process.env.WEBSOCKET_API_ENDPOINT
+        });
+        
+        // Helper function to broadcast WebSocket message
+        const broadcastToGame = async (gameId, message) => {
+          try {
+            // Get all WebSocket connections for this game using scan (simple approach)
+            const connectionsResult = await db.scan({
+              TableName: process.env.TABLE_NAME,
+              FilterExpression: 'begins_with(PK, :prefix) AND GameId = :gameId',
+              ExpressionAttributeValues: {
+                ':prefix': 'CONNECTION#',
+                ':gameId': gameId
+              }
+            }).promise();
+            
+            const connections = connectionsResult.Items || [];
+            
+            console.log(`🔌 Broadcasting to ${connections.length} connections for game ${gameId}`);
+            
+            const broadcastPromises = connections.map(async (connection) => {
+              try {
+                await apigateway.postToConnection({
+                  ConnectionId: connection.ConnectionId,
+                  Data: JSON.stringify(message)
+                }).promise();
+              } catch (error) {
+                console.log(`🔌 Failed to send to connection ${connection.ConnectionId}:`, error);
+                // Remove dead connections
+                if (error.statusCode === 410) {
+                  await db.delete({
+                    TableName: process.env.TABLE_NAME,
+                    Key: { PK: connection.PK, SK: connection.SK }
+                  }).promise();
+                }
+              }
+            });
+            
+            await Promise.all(broadcastPromises);
+          } catch (error) {
+            console.error('🔌 Broadcast error:', error);
+          }
+        };
+        
+        exports.join = async (event) => {
+          const gameId = event.pathParameters.gameId;
+          const { name } = JSON.parse(event.body);
+          
+          // Check if the game exists
+          const gameCheck = await db.get({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
+          }).promise();
+          
+          if (!gameCheck.Item) {
+            return { 
+              statusCode: 404, 
+              body: JSON.stringify({ error: 'Game not found. Please check the game ID.' }) 
+            };
+          }
+          
+          // Check if player name already exists
+          const existingPlayer = await db.get({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${name}` }
+          }).promise();
+          
+          if (existingPlayer.Item) {
+            // Player already exists - allow rejoining by updating their timestamp
+            const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60); // 2 weeks TTL
+            
+            await db.update({
+              TableName: process.env.TABLE_NAME,
+              Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${name}` },
+              UpdateExpression: 'SET RejoinedAt = :rejoined, #ttl = :ttl',
+              ExpressionAttributeNames: { '#ttl': 'ttl' },
+              ExpressionAttributeValues: {
+                ':rejoined': new Date().toISOString(),
+                ':ttl': ttl
+              }
+            }).promise();
+            
+            // Broadcast lightweight player rejoined notification (don't fail join if broadcast fails)
+            try {
+              await broadcastToGame(gameId, {
+                type: 'playerJoined',
+                gameId,
+                timestamp: new Date().toISOString()
+              });
+            } catch (error) {
+              console.log('🔌 WebSocket broadcast failed for rejoin, continuing...', error.message);
+            }
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ 
+                message: 'Rejoined successfully', 
+                name,
+                rejoined: true,
+                previousScore: existingPlayer.Item.TotalScore || 0
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+          
+          const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60); // 2 weeks TTL
+          
+          await db.put({
+            TableName: process.env.TABLE_NAME,
+            Item: { 
+              PK: `GAME#${gameId}`, 
+              SK: `PLAYER#${name}`, 
+              PlayerName: name,
+              JoinedAt: new Date().toISOString(),
+              TotalScore: 0,
+              ttl 
+            }
+          }).promise();
+          
+          // Broadcast lightweight new player joined notification (don't fail join if broadcast fails)
+          try {
+            await broadcastToGame(gameId, {
+              type: 'playerJoined',
+              gameId,
+              timestamp: new Date().toISOString()
+            });
+          } catch (error) {
+            console.log('🔌 WebSocket broadcast failed for new join, continuing...', error.message);
+          }
+          
+          return { 
+            statusCode: 200, 
+            body: JSON.stringify({ message: 'Joined', name }),
+            headers: { 'Access-Control-Allow-Origin': '*' }
+          };
+        };
+      Events:
+        JoinGameEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/players
+            Method: POST
+
+  ### Lambda: List Players
+  GetPlayersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getPlayers
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.getPlayers = async (event) => {
+          const gameId = event.pathParameters.gameId;
+          
+          const res = await db.query({
+            TableName: process.env.TABLE_NAME,
+            KeyConditionExpression: 'PK = :g AND begins_with(SK, :p)',
+            ExpressionAttributeValues: { ':g': `GAME#${gameId}`, ':p': 'PLAYER#' }
+          }).promise();
+          
+          const players = res.Items.map(i => ({
+            name: i.PlayerName,
+            score: i.TotalScore || 0,
+            joinedAt: i.JoinedAt
+          }));
+          return { statusCode: 200, body: JSON.stringify({ players }) };
+        };
+      Events:
+        GetPlayersEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/players
+            Method: GET
+
+  ### Lambda: Start Question (creates QUESTION#001 reference)
+  StartQuestionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.startQuestion
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*'
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        const apigateway = new AWS.ApiGatewayManagementApi({
+          endpoint: process.env.WEBSOCKET_API_ENDPOINT
+        });
+        
+        // Helper function to broadcast WebSocket message
+        const broadcastToGame = async (gameId, message) => {
+          try {
+            const connectionsResult = await db.scan({
+              TableName: process.env.TABLE_NAME,
+              FilterExpression: 'begins_with(PK, :prefix) AND GameId = :gameId',
+              ExpressionAttributeValues: {
+                ':prefix': 'CONNECTION#',
+                ':gameId': gameId
+              }
+            }).promise();
+            
+            const connections = connectionsResult.Items || [];
+            console.log(`🔌 Broadcasting to ${connections.length} connections for game ${gameId}`);
+            
+            const broadcastPromises = connections.map(async (connection) => {
+              try {
+                await apigateway.postToConnection({
+                  ConnectionId: connection.ConnectionId,
+                  Data: JSON.stringify(message)
+                }).promise();
+              } catch (error) {
+                console.log(`🔌 Failed to send to connection ${connection.ConnectionId}:`, error);
+                if (error.statusCode === 410) {
+                  await db.delete({
+                    TableName: process.env.TABLE_NAME,
+                    Key: { PK: connection.PK, SK: connection.SK }
+                  }).promise();
+                }
+              }
+            });
+            
+            await Promise.all(broadcastPromises);
+          } catch (error) {
+            console.error('🔌 Broadcast error:', error);
+          }
+        };
+        exports.startQuestion = async (event) => {
+          const gameId = event.pathParameters.gameId;
+          const { questionNumber, questionRef, setId, category } = JSON.parse(event.body);
+          const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);
+          
+          console.log(`📝 Starting question ${questionNumber} for game ${gameId}, ref: ${questionRef}`);
+          
+          // Store question pointer: GAME#1234 / QUESTION#001
+          await db.put({
+            TableName: process.env.TABLE_NAME,
+            Item: {
+              PK: `GAME#${gameId}`,
+              SK: `QUESTION#${questionNumber}`,
+              QuestionRef: questionRef, // Pointer to SET#setId / QUESTION#category#number
+              SetId: setId,
+              Category: category,
+              StartedAt: new Date().toISOString(),
+              ttl
+            }
+          }).promise();
+          
+          // Update game state: current question and stage
+          await db.put({
+            TableName: process.env.TABLE_NAME,
+            Item: {
+              PK: `GAME#${gameId}`,
+              SK: 'STATE',
+              CurrentQuestion: questionNumber, // "001", "002", etc.
+              Stage: 'ASK', // BEGIN, ASK, VOTE, RESULTS, END
+              UpdatedAt: new Date().toISOString(),
+              ttl
+            }
+          }).promise();
+          
+          // Broadcast lightweight question started notification via WebSocket
+          try {
+            await broadcastToGame(gameId, {
+              type: 'questionStarted',
+              gameId,
+              questionId: questionNumber,
+              timestamp: new Date().toISOString()
+            });
+          } catch (error) {
+            console.log('🔌 WebSocket broadcast failed for question start, continuing...', error.message);
+          }
+          
+          return { statusCode: 200, body: JSON.stringify({ status: 'OK' }) };
+        };
+      Events:
+        StartQuestionEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/start-question
+            Method: POST
+
+  ### Lambda: Submit Answer (clean structure)
+  SubmitAnswerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.submitAnswer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*'
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        const apigateway = new AWS.ApiGatewayManagementApi({
+          endpoint: process.env.WEBSOCKET_API_ENDPOINT
+        });
+        
+        // Helper function to broadcast WebSocket message
+        const broadcastToGame = async (gameId, message) => {
+          try {
+            const connectionsResult = await db.scan({
+              TableName: process.env.TABLE_NAME,
+              FilterExpression: 'begins_with(PK, :prefix) AND GameId = :gameId',
+              ExpressionAttributeValues: {
+                ':prefix': 'CONNECTION#',
+                ':gameId': gameId
+              }
+            }).promise();
+            
+            const connections = connectionsResult.Items || [];
+            console.log(`🔌 Broadcasting to ${connections.length} connections for game ${gameId}`);
+            
+            const broadcastPromises = connections.map(async (connection) => {
+              try {
+                await apigateway.postToConnection({
+                  ConnectionId: connection.ConnectionId,
+                  Data: JSON.stringify(message)
+                }).promise();
+              } catch (error) {
+                console.log(`🔌 Failed to send to connection ${connection.ConnectionId}:`, error);
+                if (error.statusCode === 410) {
+                  await db.delete({
+                    TableName: process.env.TABLE_NAME,
+                    Key: { PK: connection.PK, SK: connection.SK }
+                  }).promise();
+                }
+              }
+            });
+            
+            await Promise.all(broadcastPromises);
+          } catch (error) {
+            console.error('🔌 Broadcast error:', error);
+          }
+        };
+        exports.submitAnswer = async (event) => {
+          const gameId = event.pathParameters.gameId;
+          const { name, questionNumber, answer } = JSON.parse(event.body);
+          const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);
+          
+          console.log(`📝 Answer: game=${gameId}, question=${questionNumber}, player=${name}`);
+          
+          // Store answer with sequential question number: ANSWER#001#PLAYER#name
+          await db.put({
+            TableName: process.env.TABLE_NAME,
+            Item: {
+              PK: `GAME#${gameId}`,
+              SK: `ANSWER#${questionNumber}#PLAYER#${name}`,
+              PlayerName: name,
+              QuestionNumber: questionNumber,
+              Answer: answer,
+              SubmittedAt: new Date().toISOString(),
+              ttl
+            }
+          }).promise();
+          
+          // Broadcast lightweight answer submitted notification via WebSocket
+          try {
+            await broadcastToGame(gameId, {
+              type: 'playerAnswered',
+              gameId,
+              questionId: questionNumber,
+              timestamp: new Date().toISOString()
+            });
+          } catch (error) {
+            console.log('🔌 WebSocket broadcast failed for answer submission, continuing...', error.message);
+          }
+          
+          return { statusCode: 200, body: JSON.stringify({ status: 'OK' }) };
+        };
+      Events:
+        SubmitAnswerEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/answers
+            Method: POST
+
+  ### Lambda: Get Answers (by question number)
+  GetAnswersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getAnswers
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.getAnswers = async (event) => {
+          const gameId = event.pathParameters.gameId;
+          const questionNumber = event.queryStringParameters?.questionNumber;
+          
+          console.log(`📋 GetAnswers: game=${gameId}, questionNumber=${questionNumber}`);
+          
+          let keyCondition, expressionValues;
+          if (questionNumber) {
+            // Get answers for specific question: ANSWER#001#PLAYER#
+            keyCondition = 'PK = :g AND begins_with(SK, :a)';
+            expressionValues = { 
+              ':g': `GAME#${gameId}`, 
+              ':a': `ANSWER#${questionNumber}#PLAYER#` 
+            };
+          } else {
+            // Get all answers in the game
+            keyCondition = 'PK = :g AND begins_with(SK, :a)';
+            expressionValues = { 
+              ':g': `GAME#${gameId}`, 
+              ':a': 'ANSWER#' 
+            };
+          }
+          
+          const res = await db.query({
+            TableName: process.env.TABLE_NAME,
+            KeyConditionExpression: keyCondition,
+            ExpressionAttributeValues: expressionValues
+          }).promise();
+          
+          const answers = res.Items.map(item => ({
+            name: item.PlayerName,
+            questionNumber: item.QuestionNumber,
+            answer: item.Answer,
+            submittedAt: item.SubmittedAt
+          }));
+          
+          console.log(`📋 Returning ${answers.length} answers for question ${questionNumber}`);
+          return { statusCode: 200, body: JSON.stringify({ answers }) };
+        };
+      Events:
+        GetAnswersEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/answers
+            Method: GET
+
+  ### Lambda: Submit Votes (clean structure)
+  SubmitVotesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.submitVotes
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*'
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        const apigateway = new AWS.ApiGatewayManagementApi({
+          endpoint: process.env.WEBSOCKET_API_ENDPOINT
+        });
+        
+        // Helper function to broadcast WebSocket message
+        const broadcastToGame = async (gameId, message) => {
+          try {
+            const connectionsResult = await db.scan({
+              TableName: process.env.TABLE_NAME,
+              FilterExpression: 'begins_with(PK, :prefix) AND GameId = :gameId',
+              ExpressionAttributeValues: {
+                ':prefix': 'CONNECTION#',
+                ':gameId': gameId
+              }
+            }).promise();
+            
+            const connections = connectionsResult.Items || [];
+            console.log(`🔌 Broadcasting to ${connections.length} connections for game ${gameId}`);
+            
+            const broadcastPromises = connections.map(async (connection) => {
+              try {
+                await apigateway.postToConnection({
+                  ConnectionId: connection.ConnectionId,
+                  Data: JSON.stringify(message)
+                }).promise();
+              } catch (error) {
+                console.log(`🔌 Failed to send to connection ${connection.ConnectionId}:`, error);
+                if (error.statusCode === 410) {
+                  await db.delete({
+                    TableName: process.env.TABLE_NAME,
+                    Key: { PK: connection.PK, SK: connection.SK }
+                  }).promise();
+                }
+              }
+            });
+            
+            await Promise.all(broadcastPromises);
+          } catch (error) {
+            console.error('🔌 Broadcast error:', error);
+          }
+        };
+        exports.submitVotes = async (event) => {
+          const gameId = event.pathParameters.gameId;
+          const { name, questionNumber, votes } = JSON.parse(event.body);
+          const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);
+          
+          console.log(`🗳️ Votes: game=${gameId}, question=${questionNumber}, voter=${name}`);
+          
+          // Clean structure: GAME#1234 / VOTE#001#PLAYER#name
+          // votes = { "0": 1, "1": 2, "2": 3 } (answerIndex: rank)
+          await db.put({
+            TableName: process.env.TABLE_NAME,
+            Item: {
+              PK: `GAME#${gameId}`,
+              SK: `VOTE#${questionNumber}#PLAYER#${name}`,
+              VoterName: name,
+              QuestionNumber: questionNumber,
+              First: votes["0"] || null,   // Answer index for 1st place
+              Second: votes["1"] || null,  // Answer index for 2nd place  
+              Third: votes["2"] || null,   // Answer index for 3rd place
+              VotesRaw: votes, // Keep original format for compatibility
+              SubmittedAt: new Date().toISOString(),
+              ttl
+            }
+          }).promise();
+          
+          // Broadcast lightweight vote submitted notification via WebSocket
+          try {
+            await broadcastToGame(gameId, {
+              type: 'playerVoted',
+              gameId,
+              questionId: questionNumber,
+              timestamp: new Date().toISOString()
+            });
+          } catch (error) {
+            console.log('🔌 WebSocket broadcast failed for vote submission, continuing...', error.message);
+          }
+          
+          return { statusCode: 200, body: JSON.stringify({ status: 'OK' }) };
+        };
+      Events:
+        SubmitVotesEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/votes
+            Method: POST
+
+  ### Lambda: Save Partial Vote (for state persistence)
+  SavePartialVoteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.savePartialVote
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.savePartialVote = async (event) => {
+          const gameId = event.pathParameters.gameId;
+          const { playerName, questionNumber, votes } = JSON.parse(event.body);
+          
+          console.log(`💾 SavePartialVote: game=${gameId}, player=${playerName}, question=${questionNumber}`, votes);
+          
+          // Save partial vote state to allow page refresh recovery
+          await db.put({
+            TableName: process.env.TABLE_NAME,
+            Item: {
+              PK: `GAME#${gameId}`,
+              SK: `PARTIAL_VOTE#${questionNumber}#PLAYER#${playerName}`,
+              PlayerName: playerName,
+              QuestionNumber: questionNumber,
+              Votes: votes, // {first: "2", second: "", third: "1"}
+              UpdatedAt: new Date().toISOString(),
+              TTL: Math.floor(Date.now() / 1000) + (2 * 60 * 60) // 2 hour TTL
+            }
+          }).promise();
+          
+          return { statusCode: 200, body: JSON.stringify({ status: 'OK' }) };
+        };
+      Events:
+        SavePartialVoteEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/partial-votes
+            Method: POST
+
+  ### Lambda: Get Partial Vote (for state restoration)
+  GetPartialVoteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getPartialVote
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.getPartialVote = async (event) => {
+          const gameId = event.pathParameters.gameId;
+          const playerName = event.queryStringParameters?.playerName;
+          const questionNumber = event.queryStringParameters?.questionNumber;
+          
+          console.log(`🔍 GetPartialVote: game=${gameId}, player=${playerName}, question=${questionNumber}`);
+          
+          if (!playerName || !questionNumber) {
+            return {
+              statusCode: 400,
+              body: JSON.stringify({ error: 'playerName and questionNumber are required' })
+            };
+          }
+          
+          const result = await db.get({
+            TableName: process.env.TABLE_NAME,
+            Key: {
+              PK: `GAME#${gameId}`,
+              SK: `PARTIAL_VOTE#${questionNumber}#PLAYER#${playerName}`
+            }
+          }).promise();
+          
+          if (result.Item) {
+            console.log(`✅ Found partial vote for ${playerName}:`, result.Item.Votes);
+            return {
+              statusCode: 200,
+              body: JSON.stringify({
+                votes: result.Item.Votes,
+                updatedAt: result.Item.UpdatedAt
+              })
+            };
+          } else {
+            console.log(`❌ No partial vote found for ${playerName} on question ${questionNumber}`);
+            return {
+              statusCode: 404,
+              body: JSON.stringify({ message: 'No partial vote found' })
+            };
+          }
+        };
+      Events:
+        GetPartialVoteEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/partial-votes
+            Method: GET
+
+  ### Lambda: Get Votes (by question number)
+  GetVotesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getVotes
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.getVotes = async (event) => {
+          const gameId = event.pathParameters.gameId;
+          const questionNumber = event.queryStringParameters?.questionNumber;
+          
+          console.log(`🔍 GetVotes: game=${gameId}, questionNumber=${questionNumber}`);
+          
+          let keyCondition, expressionValues;
+          if (questionNumber) {
+            // Get votes for specific question: VOTE#001#PLAYER#
+            keyCondition = 'PK = :g AND begins_with(SK, :v)';
+            expressionValues = { 
+              ':g': `GAME#${gameId}`, 
+              ':v': `VOTE#${questionNumber}#PLAYER#` 
+            };
+          } else {
+            // Get all votes in the game
+            keyCondition = 'PK = :g AND begins_with(SK, :v)';
+            expressionValues = { 
+              ':g': `GAME#${gameId}`, 
+              ':v': 'VOTE#' 
+            };
+          }
+          
+          const res = await db.query({
+            TableName: process.env.TABLE_NAME,
+            KeyConditionExpression: keyCondition,
+            ExpressionAttributeValues: expressionValues
+          }).promise();
+          
+          // Transform to individual vote records for frontend compatibility
+          const votes = [];
+          res.Items.forEach(record => {
+            const voterName = record.VoterName;
+            const questionNum = record.QuestionNumber;
+            
+            // Convert to individual vote format
+            if (record.VotesRaw && typeof record.VotesRaw === 'object') {
+              Object.entries(record.VotesRaw).forEach(([answerIndex, rank]) => {
+                votes.push({
+                  questionNumber: questionNum,
+                  voter: voterName,
+                  answerIndex: parseInt(answerIndex),
+                  rank: parseInt(rank),
+                  submittedAt: record.SubmittedAt
+                });
+              });
+            }
+          });
+          
+          console.log(`✅ Returning ${votes.length} vote records for question ${questionNumber}`);
+          return { statusCode: 200, body: JSON.stringify({ votes }) };
+        };
+      Events:
+        GetVotesEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/votes
+            Method: GET
+
+  ### Lambda: Update Game State  
+  SetGameStateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.setGameState
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*'
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        const apigateway = new AWS.ApiGatewayManagementApi({
+          endpoint: process.env.WEBSOCKET_API_ENDPOINT
+        });
+        
+        // Helper function to broadcast WebSocket message
+        const broadcastToGame = async (gameId, message) => {
+          try {
+            const connectionsResult = await db.scan({
+              TableName: process.env.TABLE_NAME,
+              FilterExpression: 'begins_with(PK, :prefix) AND GameId = :gameId',
+              ExpressionAttributeValues: {
+                ':prefix': 'CONNECTION#',
+                ':gameId': gameId
+              }
+            }).promise();
+            
+            const connections = connectionsResult.Items || [];
+            console.log(`🔌 Broadcasting to ${connections.length} connections for game ${gameId}`);
+            
+            const broadcastPromises = connections.map(async (connection) => {
+              try {
+                await apigateway.postToConnection({
+                  ConnectionId: connection.ConnectionId,
+                  Data: JSON.stringify(message)
+                }).promise();
+              } catch (error) {
+                console.log(`🔌 Failed to send to connection ${connection.ConnectionId}:`, error);
+                if (error.statusCode === 410) {
+                  await db.delete({
+                    TableName: process.env.TABLE_NAME,
+                    Key: { PK: connection.PK, SK: connection.SK }
+                  }).promise();
+                }
+              }
+            });
+            
+            await Promise.all(broadcastPromises);
+          } catch (error) {
+            console.error('🔌 Broadcast error:', error);
+          }
+        };
+        exports.setGameState = async (event) => {
+          const gameId = event.pathParameters.gameId;
+          const body = JSON.parse(event.body);
+          const { 
+            currentQuestion, 
+            stage, 
+            state, 
+            currentQuestionIndex, 
+            currentQuestionId,
+            scoredQuestions,
+            usedQuestions,
+            playedQuestions,
+            currentQuestionData
+          } = body;
+          const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);
+          
+          console.log(`🎮 SetGameState: game=${gameId}, state=${state}, questionId=${currentQuestionId}`);
+          
+          // Store complete game state for player synchronization
+          const stateItem = {
+            PK: `GAME#${gameId}`,
+            SK: 'STATE',
+            CurrentQuestion: currentQuestion, // "001", "002", etc.
+            Stage: stage || (state === 'question' ? 'ASK' : 
+                            state === 'voting' ? 'VOTE' :
+                            state === 'results' ? 'RESULTS' : 'BEGIN'),
+            State: state || 'waiting',
+            CurrentQuestionIndex: currentQuestionIndex,
+            CurrentQuestionId: currentQuestionId,
+            UpdatedAt: new Date().toISOString(),
+            ttl
+          };
+          
+          // Add optional arrays if provided
+          if (scoredQuestions) stateItem.ScoredQuestions = scoredQuestions;
+          if (usedQuestions) stateItem.UsedQuestions = usedQuestions;
+          if (playedQuestions) stateItem.PlayedQuestions = playedQuestions;
+          if (currentQuestionData) stateItem.CurrentQuestionData = currentQuestionData;
+          
+          await db.put({
+            TableName: process.env.TABLE_NAME,
+            Item: stateItem
+          }).promise();
+          
+          // Broadcast lightweight game state change notification via WebSocket
+          try {
+            await broadcastToGame(gameId, {
+              type: 'gameStateChanged',
+              gameId,
+              state,
+              questionId: currentQuestionId || currentQuestion,
+              timestamp: new Date().toISOString()
+            });
+          } catch (error) {
+            console.log('🔌 WebSocket broadcast failed for game state change, continuing...', error.message);
+          }
+          
+          return { statusCode: 200, body: JSON.stringify({ status: 'OK' }) };
+        };
+      Events:
+        SetGameStateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/state
+            Method: POST
+
+  ### Lambda: Get Game State
+  GetGameStateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getGameState
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.getGameState = async (event) => {
+          const gameId = event.pathParameters.gameId;
+          
+          const res = await db.get({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: `GAME#${gameId}`, SK: 'STATE' }
+          }).promise();
+          
+          // Also get debug mode from game metadata
+          const metadataRes = await db.get({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
+          }).promise();
+          
+          const state = res.Item || {};
+          const metadata = metadataRes.Item || {};
+          let currentQuestionData = null;
+          
+          // If there's a current question, fetch its data from the pointer
+          if (state.CurrentQuestion) {
+            try {
+              const questionRes = await db.get({
+                TableName: process.env.TABLE_NAME,
+                Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${state.CurrentQuestion}` }
+              }).promise();
+              
+              if (questionRes.Item && questionRes.Item.QuestionRef) {
+                // Fetch the actual question data using the pointer
+                const questionDataRes = await db.get({
+                  TableName: process.env.TABLE_NAME,
+                  Key: { PK: `SET#${questionRes.Item.SetId}`, SK: questionRes.Item.QuestionRef }
+                }).promise();
+                
+                if (questionDataRes.Item) {
+                  currentQuestionData = {
+                    id: state.CurrentQuestion, // Use sequential number as ID for frontend
+                    title: questionDataRes.Item.Title || questionDataRes.Item.Prompt || '',
+                    detail: questionDataRes.Item.Detail || '',
+                    category: questionDataRes.Item.Category || '',
+                    setId: questionRes.Item.SetId
+                  };
+                }
+              }
+            } catch (e) {
+              console.error('Error fetching question data:', e);
+            }
+          }
+          
+          // Return clean state - players only need current question, host needs question tracking
+          const gameState = {
+            stage: state.Stage || 'BEGIN', // BEGIN, ASK, VOTE, RESULTS, END
+            state: state.State || (state.Stage === 'ASK' ? 'question' : 
+                   state.Stage === 'VOTE' ? 'voting' :
+                   state.Stage === 'RESULTS' ? 'results' : 'waiting'),
+            currentQuestionId: state.CurrentQuestion,
+            currentQuestionData: currentQuestionData,
+            updatedAt: state.UpdatedAt,
+            currentQuestion: state.CurrentQuestion, // Add this for backward compatibility
+            debugMode: metadata.DebugMode || false // Include debug mode from game metadata
+          };
+          
+          // Host-only data (for question tracking and scoring)
+          if (state.ScoredQuestions) gameState.scoredQuestions = state.ScoredQuestions;
+          if (state.UsedQuestions) gameState.usedQuestions = state.UsedQuestions;
+          if (state.PlayedQuestions) gameState.playedQuestions = state.PlayedQuestions;
+          
+          console.log(`🎮 GetGameState: game=${gameId}`, gameState);
+          return { statusCode: 200, body: JSON.stringify(gameState) };
+        };
+      Events:
+        GetGameStateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/state
+            Method: GET
+
+  ### Lambda: Update Player Scores
+  UpdateScoresFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.updateScores
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.updateScores = async (event) => {
+          const gameId = event.pathParameters.gameId;
+          const { questionNumber, scores } = JSON.parse(event.body);
+          
+          console.log(`🏆 UpdateScores: game=${gameId}, question=${questionNumber}`, scores);
+          
+          const updatePromises = Object.entries(scores).map(([playerName, pointsToAdd]) => {
+            return db.update({
+              TableName: process.env.TABLE_NAME,
+              Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` },
+              UpdateExpression: 'ADD TotalScore :points',
+              ExpressionAttributeValues: { ':points': pointsToAdd }
+            }).promise();
+          });
+          
+          await Promise.all(updatePromises);
+          return { statusCode: 200, body: JSON.stringify({ status: 'OK' }) };
+        };
+      Events:
+        UpdateScoresEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/scores
+            Method: POST
+
+  ### Lambda: Validate Game
+  ValidateGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.validateGame
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.validateGame = async (event) => {
+          const gameId = event.pathParameters.gameId;
+          
+          try {
+            const gameCheck = await db.get({
+              TableName: process.env.TABLE_NAME,
+              Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
+            }).promise();
+            
+            const exists = !!gameCheck.Item;
+            return { 
+              statusCode: 200, 
+              body: JSON.stringify({ exists, gameId }),
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'GET'
+              }
+            };
+          } catch (error) {
+            console.error('Error validating game:', error);
+            return { 
+              statusCode: 500, 
+              body: JSON.stringify({ error: 'Failed to validate game' }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        ValidateGameEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/validate
+            Method: GET
+
+  ### Lambda: Create Game
+  CreateGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.createGame
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.createGame = async (event) => {
+          const gameId = event.pathParameters.gameId;
+          const { eventTitle, aiContext } = JSON.parse(event.body || '{}');
+          const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);
+          
+          // Create game metadata
+          await db.put({
+            TableName: process.env.TABLE_NAME,
+            Item: {
+              PK: `GAME#${gameId}`,
+              SK: 'METADATA',
+              Title: eventTitle || 'Working Backwards Session',
+              AIContext: aiContext || null,
+              CreatedAt: new Date().toISOString(),
+              ttl
+            }
+          }).promise();
+          
+          // Initialize game state
+          await db.put({
+            TableName: process.env.TABLE_NAME,
+            Item: {
+              PK: `GAME#${gameId}`,
+              SK: 'STATE',
+              CurrentQuestion: null,
+              Stage: 'BEGIN',
+              UpdatedAt: new Date().toISOString(),
+              ttl
+            }
+          }).promise();
+          
+          return { statusCode: 200, body: JSON.stringify({ gameId, created: true }) };
+        };
+      Events:
+        CreateGameEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/create
+            Method: POST
+
+  ### Lambda: Clear Game Data
+  ClearGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.clearGame
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.clearGame = async (event) => {
+          const gameId = event.pathParameters.gameId;
+          
+          // Get all items for this game
+          const res = await db.query({
+            TableName: process.env.TABLE_NAME,
+            KeyConditionExpression: 'PK = :g',
+            ExpressionAttributeValues: { ':g': `GAME#${gameId}` }
+          }).promise();
+          
+          // Delete all items
+          const deletePromises = res.Items.map(item => {
+            return db.delete({
+              TableName: process.env.TABLE_NAME,
+              Key: { PK: item.PK, SK: item.SK }
+            }).promise();
+          });
+          
+          await Promise.all(deletePromises);
+          
+          console.log(`🗑️ Cleared ${res.Items.length} items from game ${gameId}`);
+          return { statusCode: 200, body: JSON.stringify({ message: 'Game cleared', itemsDeleted: res.Items.length }) };
+        };
+      Events:
+        ClearGameEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/clear
+            Method: POST
+
+  ### Lambda: Get Question Sets (unchanged)
+  GetQuestionSetsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getQuestionSets
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.getQuestionSets = async () => {
+          const res = await db.query({
+            TableName: process.env.TABLE_NAME,
+            KeyConditionExpression: 'PK = :pk',
+            ExpressionAttributeValues: { ':pk': 'SETS' }
+          }).promise();
+          
+          // Filter for active sets only and add categories
+          const activeSets = [];
+          for (const item of res.Items) {
+            if (item.Active) {
+              const setId = item.SK.replace('SET#', '');
+              
+              // Get categories for this set
+              const categoriesRes = await db.query({
+                TableName: process.env.TABLE_NAME,
+                KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+                ExpressionAttributeValues: { 
+                  ':pk': `SET#${setId}`,
+                  ':sk': 'CATEGORY#'
+                }
+              }).promise();
+              
+              const categories = categoriesRes.Items.map(cat => ({
+                name: cat.Name,
+                description: cat.Description || '',
+                count: 10 // Assuming 10 questions per category for now
+              }));
+              
+              activeSets.push({
+                id: setId,
+                name: item.Name || 'Unknown Set',
+                description: item.Description || '',
+                totalQuestions: item.TotalQuestions || 0,
+                categoryCount: item.CategoryCount || categories.length,
+                customInstruction: item.CustomInstruction || null,
+                aiContextInstruction: item.AIContextInstruction || null,
+                active: true,
+                categories: categories
+              });
+            }
+          }
+          
+          return { 
+            statusCode: 200, 
+            body: JSON.stringify({ sets: activeSets }),
+            headers: {
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Headers': 'Content-Type',
+              'Access-Control-Allow-Methods': 'GET'
+            }
+          };
+        };
+      Events:
+        GetQuestionSetsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /question-sets
+            Method: GET
+
+  ### Lambda: Get Categories for Question Set
+  GetCategoriesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getCategories
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.getCategories = async (event) => {
+          const setId = event.pathParameters?.setId;
+          
+          if (!setId) {
+            return { 
+              statusCode: 400, 
+              body: JSON.stringify({ error: 'setId parameter is required' }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+          
+          try {
+            // Get categories
+            const categoriesRes = await db.query({
+              TableName: process.env.TABLE_NAME,
+              KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+              ExpressionAttributeValues: { 
+                ':pk': `SET#${setId}`,
+                ':sk': 'CATEGORY#'
+              }
+            }).promise();
+            
+            // Get all questions to count by category
+            const questionsRes = await db.query({
+              TableName: process.env.TABLE_NAME,
+              KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+              ExpressionAttributeValues: { 
+                ':pk': `SET#${setId}`,
+                ':sk': 'QUESTION#'
+              }
+            }).promise();
+            
+            // Count questions per category
+            const questionCountByCategory = {};
+            questionsRes.Items.forEach(question => {
+              const category = question.Category;
+              if (category) {
+                questionCountByCategory[category] = (questionCountByCategory[category] || 0) + 1;
+              }
+            });
+            
+            const categories = categoriesRes.Items.map(cat => ({
+              name: cat.Name,
+              description: cat.Description || '',
+              questionCount: questionCountByCategory[cat.Name] || 0
+            }));
+            
+            return { 
+              statusCode: 200, 
+              body: JSON.stringify({ categories }),
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'GET'
+              }
+            };
+          } catch (error) {
+            console.error('Error fetching categories:', error);
+            return { 
+              statusCode: 500, 
+              body: JSON.stringify({ error: 'Failed to fetch categories' }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        GetCategoriesEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /question-sets/{setId}/categories
+            Method: GET
+
+  ### Lambda: Get Random Question
+  GetQuestionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getQuestions
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.getQuestions = async (event) => {
+          const setId = event.queryStringParameters?.setId;
+          const gameId = event.queryStringParameters?.gameId;
+          const getNext = event.queryStringParameters?.getNext === 'true';
+          const categoriesParam = event.queryStringParameters?.categories;
+          
+          if (!setId) {
+            return { 
+              statusCode: 400, 
+              body: JSON.stringify({ error: 'setId parameter is required' }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+          
+          // Get all questions for this set
+          const res = await db.query({
+            TableName: process.env.TABLE_NAME,
+            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+            ExpressionAttributeValues: { 
+              ':pk': `SET#${setId}`,
+              ':sk': 'QUESTION#'
+            }
+          }).promise();
+          
+          let questions = res.Items.map(i => ({
+            id: i.SK, // Use full SK as unique ID
+            title: i.Title || i.Prompt || '',
+            detail: i.Detail || '',
+            category: i.Category || '',
+            setId: setId
+          }));
+          
+          // Apply category filtering if specified
+          if (categoriesParam) {
+            const activeCategories = categoriesParam.split(',').map(c => c.trim());
+            console.log(`🏷️ Filtering by categories: ${activeCategories.join(', ')}`);
+            console.log(`📋 Questions before filter: ${questions.length}`);
+            console.log(`🔍 Sample categories in questions:`, questions.slice(0, 3).map(q => q.category));
+            questions = questions.filter(q => activeCategories.includes(q.category));
+            console.log(`📋 Questions after category filter: ${questions.length}`);
+          }
+          
+          if (getNext && questions.length > 0 && gameId) {
+            // Get used questions for this game to avoid duplicates
+            let usedQuestions = [];
+            try {
+              const stateRes = await db.get({
+                TableName: process.env.TABLE_NAME,
+                Key: { PK: `GAME#${gameId}`, SK: 'STATE' }
+              }).promise();
+              
+              if (stateRes.Item?.UsedQuestions) {
+                usedQuestions = stateRes.Item.UsedQuestions;
+              }
+            } catch (e) {
+              console.log('No game state found, treating as new game');
+            }
+            
+            // Filter out already used questions
+            const availableQuestions = questions.filter(q => !usedQuestions.includes(q.id));
+            console.log(`🎲 Available questions: ${availableQuestions.length}/${questions.length}`);
+            
+            if (availableQuestions.length === 0) {
+              return {
+                statusCode: 200,
+                body: JSON.stringify({ 
+                  gameComplete: true, 
+                  message: 'All questions in selected categories have been used' 
+                }),
+                headers: { 'Access-Control-Allow-Origin': '*' }
+              };
+            }
+            
+            // Return random available question
+            const randomIndex = Math.floor(Math.random() * availableQuestions.length);
+            const selectedQuestion = availableQuestions[randomIndex];
+            
+            console.log(`🎯 Selected question: ${selectedQuestion.id} from category: ${selectedQuestion.category}`);
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ 
+                questions: [selectedQuestion],
+                availableCount: availableQuestions.length - 1
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+          
+          return { 
+            statusCode: 200, 
+            body: JSON.stringify({ questions }),
+            headers: { 'Access-Control-Allow-Origin': '*' }
+          };
+        };
+      Events:
+        GetQuestionsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /questions
+            Method: GET
+
+  ### Lambda: List Games (for game history)
+  ListGamesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.listGames
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.listGames = async (event) => {
+          try {
+            // Get all game metadata
+            const metadataRes = await db.scan({
+              TableName: process.env.TABLE_NAME,
+              FilterExpression: 'begins_with(PK, :gamePrefix) AND SK = :metadata',
+              ExpressionAttributeValues: {
+                ':gamePrefix': 'GAME#',
+                ':metadata': 'METADATA'
+              }
+            }).promise();
+            
+            // Get the last played date for each game by checking the STATE record
+            const games = [];
+            for (const item of metadataRes.Items) {
+              const gameId = item.PK.replace('GAME#', '');
+              
+              // Get the game state to find the last activity
+              let lastPlayedAt = item.CreatedAt || new Date().toISOString();
+              try {
+                const stateRes = await db.get({
+                  TableName: process.env.TABLE_NAME,
+                  Key: { PK: `GAME#${gameId}`, SK: 'STATE' }
+                }).promise();
+                
+                if (stateRes.Item && stateRes.Item.UpdatedAt) {
+                  lastPlayedAt = stateRes.Item.UpdatedAt;
+                }
+              } catch (e) {
+                console.log(`No state found for game ${gameId}, using created date`);
+              }
+              
+              games.push({
+                gameId: gameId,
+                title: item.Title || item.EventTitle || 'Working Backwards Session',
+                hostName: item.HostName || 'Unknown Host',
+                createdAt: item.CreatedAt || new Date().toISOString(),
+                lastPlayedAt: lastPlayedAt,
+                eventTitle: item.Title || item.EventTitle || 'Working Backwards Session'
+              });
+            }
+            
+            // Sort by most recent first
+            games.sort((a, b) => new Date(b.lastPlayedAt) - new Date(a.lastPlayedAt));
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ games }),
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'GET'
+              }
+            };
+          } catch (error) {
+            console.error('Error listing games:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: 'Failed to list games' }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        ListGamesEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games
+            Method: GET
+
+  ### Lambda: Get Game Report Data (fetches all question data for report)
+  GetGameReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getGameReport
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.getGameReport = async (event) => {
+          const gameId = event.pathParameters.gameId;
+          
+          try {
+            // Get game state
+            const stateRes = await db.get({
+              TableName: process.env.TABLE_NAME,
+              Key: { PK: `GAME#${gameId}`, SK: 'STATE' }
+            }).promise();
+            
+            const gameState = stateRes.Item || {};
+            const playedQuestions = gameState.PlayedQuestions || [];
+            
+            // Get all question pointers for this game
+            const questionData = [];
+            for (const questionNumber of playedQuestions) {
+              // Get question pointer
+              const pointerRes = await db.get({
+                TableName: process.env.TABLE_NAME,
+                Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionNumber}` }
+              }).promise();
+              
+              if (pointerRes.Item && pointerRes.Item.QuestionRef) {
+                // Fetch actual question data
+                const questionRes = await db.get({
+                  TableName: process.env.TABLE_NAME,
+                  Key: { PK: `SET#${pointerRes.Item.SetId}`, SK: pointerRes.Item.QuestionRef }
+                }).promise();
+                
+                if (questionRes.Item) {
+                  questionData.push({
+                    id: questionNumber,
+                    title: questionRes.Item.Title || questionRes.Item.Prompt || '',
+                    detail: questionRes.Item.Detail || '',
+                    category: questionRes.Item.Category || '',
+                    setId: pointerRes.Item.SetId
+                  });
+                }
+              }
+            }
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ questions: questionData, playedQuestions }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          } catch (error) {
+            console.error('Error getting game report data:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: 'Failed to get report data' }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        GetGameReportEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/report
+            Method: GET
+
+  ### Lambda: Admin Upload Questions
+  AdminUploadQuestionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.uploadQuestions
+      Timeout: 60
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.uploadQuestions = async (event) => {
+          try {
+            const { fileName, fileContent, customTitle, customDescription, customInstructions, aiContextInstructions } = JSON.parse(event.body);
+            
+            console.log(`Processing CSV upload: ${fileName}`);
+            console.log(`Custom title: ${customTitle}`);
+            console.log(`Custom instructions: ${customInstructions}`);
+            console.log(`AI context instructions: ${aiContextInstructions}`);
+            
+            // Parse CSV content with better CSV parsing
+            const lines = fileContent.split('\n').filter(line => line.trim());
+            if (lines.length < 2) {
+              return {
+                statusCode: 400,
+                body: JSON.stringify({ error: 'CSV file must have at least a header and one data row' }),
+                headers: { 'Access-Control-Allow-Origin': '*' }
+              };
+            }
+            
+            // Extract set name from custom title or filename
+            const setName = customTitle?.trim() || fileName.replace(/\.csv$/i, '');
+            const setId = setName.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const setDescription = customDescription?.trim() || `Imported from ${fileName}`;
+            
+            // Enhanced CSV parsing function
+            const parseCSVLine = (line) => {
+              const result = [];
+              let current = '';
+              let inQuotes = false;
+              
+              for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                  inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                  result.push(current.trim());
+                  current = '';
+                } else {
+                  current += char;
+                }
+              }
+              result.push(current.trim());
+              return result;
+            };
+            
+            // Parse header with flexible mapping
+            const headers = parseCSVLine(lines[0]).map(h => h.replace(/"/g, '').trim());
+            console.log('🔍 Detected CSV Headers:', headers);
+            
+            // Simple and reliable column mapping - support exact greatest-hits.csv format or generic fallback
+            const getColumnIndex = (header) => headers.findIndex(h => h.toLowerCase() === header.toLowerCase());
+            
+            // Try greatest-hits.csv format first: Category,Question#,Title,Detail_lesson,School,CustomInstruction
+            let categoryIndex = getColumnIndex('Category');
+            let titleIndex = getColumnIndex('Title');
+            let detailIndex = getColumnIndex('Detail_lesson');
+            let schoolIndex = getColumnIndex('School');
+            let customInstructionIndex = getColumnIndex('CustomInstruction');
+            
+            // Fallback to generic column names if exact matches not found
+            if (categoryIndex === -1) categoryIndex = headers.findIndex(h => h.toLowerCase().includes('category'));
+            if (titleIndex === -1) titleIndex = headers.findIndex(h => h.toLowerCase().includes('title') && !h.toLowerCase().includes('#'));
+            if (detailIndex === -1) detailIndex = headers.findIndex(h => h.toLowerCase().includes('detail') || h.toLowerCase().includes('lesson'));
+            if (schoolIndex === -1) schoolIndex = headers.findIndex(h => h.toLowerCase().includes('school'));
+            if (customInstructionIndex === -1) customInstructionIndex = headers.findIndex(h => h.toLowerCase().includes('instruction'));
+            
+            console.log('🔍 Detected CSV Headers:', headers);
+            console.log('📋 Column Mapping:');
+            console.log(`  Category: ${categoryIndex >= 0 ? headers[categoryIndex] : 'NOT FOUND'} (index: ${categoryIndex})`);
+            console.log(`  Title: ${titleIndex >= 0 ? headers[titleIndex] : 'NOT FOUND'} (index: ${titleIndex})`);
+            console.log(`  Detail: ${detailIndex >= 0 ? headers[detailIndex] : 'NOT FOUND'} (index: ${detailIndex})`);
+            console.log(`  School: ${schoolIndex >= 0 ? headers[schoolIndex] : 'NOT FOUND'} (index: ${schoolIndex})`);
+            console.log(`  Instructions: ${customInstructionIndex >= 0 ? headers[customInstructionIndex] : 'NOT FOUND'} (index: ${customInstructionIndex})`);
+            
+            // Check required columns
+            if (categoryIndex === -1 || titleIndex === -1) {
+              const missing = [];
+              if (categoryIndex === -1) missing.push('Category');
+              if (titleIndex === -1) missing.push('Title');
+              
+              return {
+                statusCode: 400,
+                body: JSON.stringify({ 
+                  error: `Missing required columns: ${missing.join(', ')}. \nDetected headers: [${headers.join(', ')}]\nRequired: Category column (category/type/subject) and Title column (title/prompt/question)` 
+                }),
+                headers: { 'Access-Control-Allow-Origin': '*' }
+              };
+            }
+            
+            // Parse questions with mapped columns
+            const questions = [];
+            const categories = new Set();
+            let questionCount = 0;
+            
+            for (let i = 1; i < lines.length; i++) {
+              try {
+                const values = parseCSVLine(lines[i]);
+                if (values.length < 2) continue; // Skip empty lines
+                
+                // Extract values using mapped indices
+                const category = values[categoryIndex]?.replace(/"/g, '')?.trim();
+                const title = values[titleIndex]?.replace(/"/g, '')?.trim();
+                const detail = detailIndex >= 0 ? values[detailIndex]?.replace(/"/g, '')?.trim() || '' : '';
+                const school = schoolIndex >= 0 ? values[schoolIndex]?.replace(/"/g, '')?.trim() || '' : '';
+                const questionCustomInstruction = customInstructionIndex >= 0 ? values[customInstructionIndex]?.replace(/"/g, '')?.trim() || '' : '';
+                
+                if (title && category) {
+                  questionCount++;
+                  
+                  questions.push({
+                    Title: title,
+                    Detail: detail,
+                    Category: category,
+                    School: school,
+                    // Use per-question custom instruction if available, otherwise use set-level custom instructions
+                    CustomInstructions: questionCustomInstruction || customInstructions?.trim() || '',
+                    Active: true,
+                    QuestionNumber: questionCount
+                  });
+                  categories.add(category);
+                  
+                  console.log(`  📝 Question ${questionCount}: ${category} - ${title.substring(0, 50)}...`);
+                }
+              } catch (e) {
+                console.log(`⚠️ Skipping malformed line ${i}: ${lines[i].substring(0, 100)}...`);
+              }
+            }
+            
+            if (questions.length === 0) {
+              return {
+                statusCode: 400,
+                body: JSON.stringify({ error: 'No valid questions found in CSV' }),
+                headers: { 'Access-Control-Allow-Origin': '*' }
+              };
+            }
+            
+            console.log(`✅ Successfully parsed ${questions.length} questions in ${categories.size} categories`);
+            
+            // Check if set already exists
+            const existingSet = await db.get({
+              TableName: process.env.TABLE_NAME,
+              Key: { PK: 'SETS', SK: `SET#${setId}` }
+            }).promise();
+            
+            if (existingSet.Item) {
+              return {
+                statusCode: 400,
+                body: JSON.stringify({ error: `Question set "${setName}" already exists. Please use a different title or delete the existing set first.` }),
+                headers: { 'Access-Control-Allow-Origin': '*' }
+              };
+            }
+            
+            // Create set metadata with enhanced information
+            await db.put({
+              TableName: process.env.TABLE_NAME,
+              Item: {
+                PK: 'SETS',
+                SK: `SET#${setId}`,
+                Name: setName,
+                Description: setDescription,
+                CustomInstruction: customInstructions?.trim() || '',
+                AIContextInstruction: aiContextInstructions?.trim() || '',
+                TotalQuestions: questions.length,
+                CategoryCount: categories.size,
+                Active: true,
+                CreatedAt: new Date().toISOString(),
+                SourceFile: fileName,
+                Mapping: {
+                  categoryColumn: categoryIndex >= 0 ? headers[categoryIndex] : '',
+                  titleColumn: titleIndex >= 0 ? headers[titleIndex] : '',
+                  detailColumn: detailIndex >= 0 ? headers[detailIndex] : '',
+                  schoolColumn: schoolIndex >= 0 ? headers[schoolIndex] : '',
+                  customInstructionColumn: customInstructionIndex >= 0 ? headers[customInstructionIndex] : ''
+                }
+              }
+            }).promise();
+            
+            // Create categories
+            const categoryPromises = Array.from(categories).map((categoryName, idx) => {
+              const categoryId = `c${String(idx + 1).padStart(3, '0')}`;
+              return db.put({
+                TableName: process.env.TABLE_NAME,
+                Item: {
+                  PK: `SET#${setId}`,
+                  SK: `CATEGORY#${categoryId}`,
+                  Name: categoryName,
+                  Description: `${categoryName} questions`,
+                  QuestionCount: questions.filter(q => q.Category === categoryName).length
+                }
+              }).promise();
+            });
+            
+            await Promise.all(categoryPromises);
+            
+            // Create questions with enhanced data
+            console.log(`💾 Creating ${questions.length} questions in database...`);
+            const questionPromises = questions.map((question, idx) => {
+              const categoryIndex = Array.from(categories).indexOf(question.Category) + 1;
+              const categoryId = `c${String(categoryIndex).padStart(3, '0')}`;
+              const questionNumber = String(idx + 1).padStart(3, '0');
+              const questionId = `QUESTION#${categoryId}#${questionNumber}`;
+              
+              return db.put({
+                TableName: process.env.TABLE_NAME,
+                Item: {
+                  PK: `SET#${setId}`,
+                  SK: questionId,
+                  Title: question.Title,
+                  Detail: question.Detail || '',
+                  Category: question.Category,
+                  School: question.School || '',
+                  CustomInstructions: question.CustomInstructions || '',
+                  OrderInCategory: questionNumber,
+                  QuestionNumber: question.QuestionNumber,
+                  Active: true
+                }
+              }).promise();
+            });
+            
+            await Promise.all(questionPromises);
+            
+            console.log(`🎉 Successfully created question set "${setName}"`);
+            console.log(`📊 Final stats: ${questions.length} questions, ${categories.size} categories`);
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ 
+                setName: setName,
+                setId: setId,
+                questionCount: questions.length,
+                categoryCount: categories.size,
+                message: `Successfully created question set "${setName}" with ${questions.length} questions across ${categories.size} categories`,
+                mapping: {
+                  categoryColumn: categoryIndex >= 0 ? headers[categoryIndex] : 'Not found',
+                  titleColumn: titleIndex >= 0 ? headers[titleIndex] : 'Not found',
+                  detailColumn: detailIndex >= 0 ? headers[detailIndex] : 'Not found',
+                  schoolColumn: schoolIndex >= 0 ? headers[schoolIndex] : 'Not found',
+                  customInstructionColumn: customInstructionIndex >= 0 ? headers[customInstructionIndex] : 'Using set-level instructions'
+                }
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+            
+          } catch (error) {
+            console.error('Upload error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: `Upload failed: ${error.message}` }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        AdminUploadQuestionsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /admin/upload-questions
+            Method: POST
+
+  ### Lambda: Admin Clear Single Game
+  AdminClearGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.clearGame
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.clearGame = async (event) => {
+          try {
+            const gameId = event.pathParameters.gameId;
+            
+            // Get all items for this game
+            const res = await db.query({
+              TableName: process.env.TABLE_NAME,
+              KeyConditionExpression: 'PK = :g',
+              ExpressionAttributeValues: { ':g': `GAME#${gameId}` }
+            }).promise();
+            
+            // Delete all items in batches
+            const items = res.Items || [];
+            const batchSize = 25;
+            let deletedCount = 0;
+            
+            for (let i = 0; i < items.length; i += batchSize) {
+              const batch = items.slice(i, i + batchSize);
+              const deleteRequests = batch.map(item => ({
+                DeleteRequest: {
+                  Key: { PK: item.PK, SK: item.SK }
+                }
+              }));
+              
+              await db.batchWrite({
+                RequestItems: {
+                  [process.env.TABLE_NAME]: deleteRequests
+                }
+              }).promise();
+              
+              deletedCount += deleteRequests.length;
+            }
+            
+            console.log(`🗑️ Cleared ${deletedCount} items from game ${gameId}`);
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ 
+                message: `Game ${gameId} cleared successfully`,
+                itemsDeleted: deletedCount
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+            
+          } catch (error) {
+            console.error('Clear game error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: `Failed to clear game: ${error.message}` }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        AdminClearGameEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /admin/clear-game/{gameId}
+            Method: POST
+
+  ### Lambda: Admin Clear All Games
+  AdminClearAllGamesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.clearAllGames
+      Timeout: 300
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.clearAllGames = async (event) => {
+          try {
+            // Scan for all game items
+            const res = await db.scan({
+              TableName: process.env.TABLE_NAME,
+              FilterExpression: 'begins_with(PK, :gamePrefix)',
+              ExpressionAttributeValues: {
+                ':gamePrefix': 'GAME#'
+              }
+            }).promise();
+            
+            const items = res.Items || [];
+            if (items.length === 0) {
+              return {
+                statusCode: 200,
+                body: JSON.stringify({ 
+                  message: 'No games found to delete',
+                  itemsDeleted: 0
+                }),
+                headers: { 'Access-Control-Allow-Origin': '*' }
+              };
+            }
+            
+            // Delete all items in batches
+            const batchSize = 25;
+            let deletedCount = 0;
+            
+            for (let i = 0; i < items.length; i += batchSize) {
+              const batch = items.slice(i, i + batchSize);
+              const deleteRequests = batch.map(item => ({
+                DeleteRequest: {
+                  Key: { PK: item.PK, SK: item.SK }
+                }
+              }));
+              
+              await db.batchWrite({
+                RequestItems: {
+                  [process.env.TABLE_NAME]: deleteRequests
+                }
+              }).promise();
+              
+              deletedCount += deleteRequests.length;
+            }
+            
+            console.log(`🗑️ Cleared all games: ${deletedCount} items deleted`);
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ 
+                message: 'All games cleared successfully',
+                itemsDeleted: deletedCount
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+            
+          } catch (error) {
+            console.error('Clear all games error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: `Failed to clear all games: ${error.message}` }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        AdminClearAllGamesEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /admin/clear-all-games
+            Method: POST
+
+  ### Lambda: Admin Download CSV Template
+  AdminDownloadTemplateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.downloadTemplate
+      InlineCode: |-
+        exports.downloadTemplate = async (event) => {
+          try {
+            // CSV template content based on the existing formats (matches lessons.csv and greatest-hits.csv)
+            const csvTemplate = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction\n' +
+              '"Leadership",1,"MOST EFFECTIVE LEADERSHIP STYLE","Leadership is about inspiring others to achieve their potential. From transformational leaders who create vision to servant leaders who put team first. Consider different situations where different approaches work better. Think about technical skill, cultural impact, innovation, and lasting influence.","School of Management","How would you apply this leadership principle in your current team or organization?"\n' +
+              '"Innovation",2,"GREATEST INNOVATION METHOD","Innovation drives progress and competitive advantage. From design thinking to lean startup methodology to blue ocean strategy. Consider methods that improve quality of life, enable other innovations, transform society, or solve fundamental problems.","School of Innovation","What innovative approach would you implement in your current project?"\n' +
+              '"Strategy",3,"BEST STRATEGIC APPROACH","Strategic thinking involves long-term planning and competitive positioning. From Porter\'s Five Forces to Blue Ocean Strategy to systems thinking approaches. Consider frameworks that provide competitive advantage while remaining adaptable to changing conditions.","School of Strategy","How would you adapt this strategic concept to your industry?"\n' +
+              '"Communication",4,"EFFECTIVE COMMUNICATION STRATEGY","Clear communication drives alignment and results. From active listening to persuasive presentation techniques to visual storytelling. Consider approaches that build trust, convey complex ideas simply, and inspire action across diverse audiences.","School of Communication","How would you improve communication in your current team or project?"\n' +
+              '"Decision Making",5,"OPTIMAL DECISION FRAMEWORK","Good decisions require structured thinking and consideration of multiple factors. From data-driven analysis to intuitive judgment to stakeholder input. Consider frameworks that balance speed with thoroughness and individual insight with collective wisdom.","School of Strategy"';
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ 
+                filename: 'question-set-template.csv',
+                content: csvTemplate 
+              }),
+              headers: { 
+                'Access-Control-Allow-Origin': '*',
+                'Content-Type': 'application/json'
+              }
+            };
+            
+          } catch (error) {
+            console.error('Download template error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: `Failed to generate template: ${error.message}` }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        AdminDownloadTemplateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /admin/download-template
+            Method: GET
+
+  ### Lambda: Admin Get All Question Sets (including inactive)
+  AdminGetQuestionSetsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getQuestionSets
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+
+        exports.getQuestionSets = async (event) => {
+          try {
+            // Get all question set metadata (both active and inactive)
+            const res = await db.query({
+              TableName: process.env.TABLE_NAME,
+              KeyConditionExpression: 'PK = :pk',
+              ExpressionAttributeValues: { ':pk': 'SETS' }
+            }).promise();
+            
+            const allSets = [];
+            for (const item of res.Items) {
+              const setId = item.SK.replace('SET#', '');
+              
+              // Get categories for this set
+              const categoriesRes = await db.query({
+                TableName: process.env.TABLE_NAME,
+                KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+                ExpressionAttributeValues: { 
+                  ':pk': `SET#${setId}`,
+                  ':sk': 'CATEGORY#'
+                }
+              }).promise();
+              
+              const categories = categoriesRes.Items.map(cat => ({
+                name: cat.Name,
+                description: cat.Description || '',
+                count: cat.QuestionCount || 0
+              }));
+              
+              allSets.push({
+                id: setId,
+                name: item.Name || 'Unknown Set',
+                description: item.Description || '',
+                totalQuestions: item.TotalQuestions || 0,
+                categoryCount: item.CategoryCount || categories.length,
+                customInstruction: item.CustomInstruction || '',
+                aiContextInstruction: item.AIContextInstruction || '',
+                active: item.Active || false,
+                createdAt: item.CreatedAt || '',
+                sourceFile: item.SourceFile || '',
+                categories: categories
+              });
+            }
+            
+            // Sort by creation date (newest first)
+            allSets.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            
+            return { 
+              statusCode: 200, 
+              body: JSON.stringify({ sets: allSets }),
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'GET'
+              }
+            };
+            
+          } catch (error) {
+            console.error('Get question sets error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: `Failed to get question sets: ${error.message}` }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        AdminGetQuestionSetsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /admin/question-sets
+            Method: GET
+
+  ### Lambda: Admin Toggle Question Set Active Status
+  AdminToggleQuestionSetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.toggleQuestionSet
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+
+        exports.toggleQuestionSet = async (event) => {
+          try {
+            const setId = event.pathParameters.setId;
+            const { active } = JSON.parse(event.body);
+            
+            console.log(`Toggling question set ${setId} to active: ${active}`);
+            
+            // Update the question set active status
+            await db.update({
+              TableName: process.env.TABLE_NAME,
+              Key: { PK: 'SETS', SK: `SET#${setId}` },
+              UpdateExpression: 'SET Active = :active, UpdatedAt = :updatedAt',
+              ExpressionAttributeValues: {
+                ':active': active,
+                ':updatedAt': new Date().toISOString()
+              }
+            }).promise();
+            
+            console.log(`✅ Successfully toggled question set ${setId} to active: ${active}`);
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ 
+                message: `Question set ${active ? 'activated' : 'deactivated'} successfully`,
+                setId: setId,
+                active: active
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+            
+          } catch (error) {
+            console.error('Toggle question set error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: `Failed to toggle question set: ${error.message}` }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        AdminToggleQuestionSetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /admin/toggle-question-set/{setId}
+            Method: POST
+
+  ### Lambda: Admin Delete Question Set
+  AdminDeleteQuestionSetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.deleteQuestionSet
+      Timeout: 60
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+
+        exports.deleteQuestionSet = async (event) => {
+          try {
+            const setId = event.pathParameters.setId;
+            console.log(`Deleting question set: ${setId}`);
+            
+            // Get set metadata first to check if it exists
+            const metaRes = await db.get({
+              TableName: process.env.TABLE_NAME,
+              Key: { PK: 'SETS', SK: `SET#${setId}` }
+            }).promise();
+            
+            if (!metaRes.Item) {
+              return {
+                statusCode: 404,
+                body: JSON.stringify({ error: 'Question set not found' }),
+                headers: { 'Access-Control-Allow-Origin': '*' }
+              };
+            }
+            
+            const setName = metaRes.Item.Name;
+            
+            // Get all items for this question set from SET# partition
+            const setRes = await db.query({
+              TableName: process.env.TABLE_NAME,
+              KeyConditionExpression: 'PK = :setpk',
+              ExpressionAttributeValues: { ':setpk': `SET#${setId}` }
+            }).promise();
+            
+            // Delete the set metadata first
+            await db.delete({
+              TableName: process.env.TABLE_NAME,
+              Key: { PK: 'SETS', SK: `SET#${setId}` }
+            }).promise();
+            
+            let deletedCount = 1; // Count the metadata deletion
+            
+            // Delete all items from SET# partition in batches
+            const setItems = setRes.Items || [];
+            const batchSize = 25;
+            
+            for (let i = 0; i < setItems.length; i += batchSize) {
+              const batch = setItems.slice(i, i + batchSize);
+              const deleteRequests = batch.map(item => ({
+                DeleteRequest: {
+                  Key: { PK: item.PK, SK: item.SK }
+                }
+              }));
+              
+              await db.batchWrite({
+                RequestItems: {
+                  [process.env.TABLE_NAME]: deleteRequests
+                }
+              }).promise();
+              
+              deletedCount += deleteRequests.length;
+            }
+            
+            console.log(`🗑️ Deleted question set "${setName}": ${deletedCount} items removed`);
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ 
+                message: `Question set "${setName}" deleted successfully`,
+                itemsDeleted: deletedCount
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+            
+          } catch (error) {
+            console.error('Delete question set error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: `Failed to delete question set: ${error.message}` }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        AdminDeleteQuestionSetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /admin/delete-question-set/{setId}
+            Method: POST
+
+  ### Lambda: Edit Question Set
+  AdminEditQuestionSetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.editQuestionSet
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.editQuestionSet = async (event) => {
+          try {
+            const setId = event.pathParameters.setId;
+            const { name, description, customInstruction, aiContextInstruction } = JSON.parse(event.body);
+            
+            if (!name || !name.trim()) {
+              return {
+                statusCode: 400,
+                body: JSON.stringify({ error: 'Name is required' }),
+                headers: { 'Access-Control-Allow-Origin': '*' }
+              };
+            }
+            
+            // Update the question set metadata
+            const updateParams = {
+              TableName: process.env.TABLE_NAME,
+              Key: { PK: 'SETS', SK: `SET#${setId}` },
+              UpdateExpression: 'SET #name = :name',
+              ExpressionAttributeNames: {
+                '#name': 'Name'
+              },
+              ExpressionAttributeValues: {
+                ':name': name.trim()
+              }
+            };
+            
+            // Add optional fields if provided
+            if (description !== null && description !== undefined) {
+              updateParams.UpdateExpression += ', Description = :description';
+              updateParams.ExpressionAttributeValues[':description'] = description;
+            }
+            
+            if (customInstruction !== null && customInstruction !== undefined) {
+              updateParams.UpdateExpression += ', CustomInstruction = :customInstruction';
+              updateParams.ExpressionAttributeValues[':customInstruction'] = customInstruction;
+            }
+            
+            if (aiContextInstruction !== null && aiContextInstruction !== undefined) {
+              updateParams.UpdateExpression += ', AIContextInstruction = :aiContextInstruction';
+              updateParams.ExpressionAttributeValues[':aiContextInstruction'] = aiContextInstruction;
+            }
+            
+            await db.update(updateParams).promise();
+            
+            console.log(`✏️ Updated question set "${setId}" with name: ${name}`);
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ 
+                message: `Question set "${setId}" updated successfully`,
+                setId: setId,
+                name: name
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+            
+          } catch (error) {
+            console.error('Edit question set error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: `Failed to edit question set: ${error.message}` }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        AdminEditQuestionSetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /admin/edit-question-set/{setId}
+            Method: POST
+
+  ### Lambda: Save Report to S3
+  SaveReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.saveReport
+      Timeout: 60
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - S3CrudPolicy:
+            BucketName: !Ref ReportsBucket
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const s3 = new AWS.S3();
+        exports.saveReport = async (event) => {
+          try {
+            const gameId = event.pathParameters.gameId;
+            const { eventTitle, pdfBlob, permanent = false } = JSON.parse(event.body);
+            
+            // Generate filename
+            const timestamp = new Date().toISOString().split('T')[0];
+            const sanitizedTitle = eventTitle.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '-');
+            const baseFileName = `${sanitizedTitle}-${timestamp}-${gameId}.pdf`;
+            
+            // Add prefix for permanent files
+            const fileName = permanent ? `permanent/${baseFileName}` : baseFileName;
+            
+            // Convert base64 to buffer
+            const pdfBuffer = Buffer.from(pdfBlob, 'base64');
+            
+            // Upload to S3
+            const uploadParams = {
+              Bucket: process.env.REPORTS_BUCKET_NAME,
+              Key: fileName,
+              Body: pdfBuffer,
+              ContentType: 'application/pdf',
+              ContentDisposition: `attachment; filename="${baseFileName}"`,
+              Metadata: {
+                'x-amz-meta-permanent': permanent ? 'true' : 'false',
+                'x-amz-meta-game-id': gameId,
+                'x-amz-meta-event-title': eventTitle
+              }
+            };
+            
+            const uploadResult = await s3.upload(uploadParams).promise();
+            
+            // Generate presigned URL for download (valid for 24 hours)
+            const downloadUrl = s3.getSignedUrl('getObject', {
+              Bucket: process.env.REPORTS_BUCKET_NAME,
+              Key: fileName,
+              Expires: 24 * 60 * 60 // 24 hours in seconds
+            });
+            
+            console.log(`📄 Report saved: ${fileName}`);
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({
+                fileName: fileName,
+                downloadUrl: downloadUrl,
+                s3Location: uploadResult.Location
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+            
+          } catch (error) {
+            console.error('Save report error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: `Failed to save report: ${error.message}` }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Environment:
+        Variables:
+          REPORTS_BUCKET_NAME: !Ref ReportsBucket
+      Events:
+        SaveReportEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/save-report
+            Method: POST
+
+  ### Lambda: Update Game Title
+  UpdateGameTitleFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.updateGameTitle
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.updateGameTitle = async (event) => {
+          try {
+            const gameId = event.pathParameters.gameId;
+            const { eventTitle } = JSON.parse(event.body);
+            
+            // Update the game metadata with the new title
+            await db.update({
+              TableName: process.env.TABLE_NAME,
+              Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+              UpdateExpression: 'SET #title = :title, #eventTitle = :eventTitle, UpdatedAt = :updatedAt',
+              ExpressionAttributeNames: {
+                '#title': 'Title',
+                '#eventTitle': 'EventTitle'
+              },
+              ExpressionAttributeValues: {
+                ':title': eventTitle,
+                ':eventTitle': eventTitle,
+                ':updatedAt': new Date().toISOString()
+              }
+            }).promise();
+            
+            console.log(`📝 Updated game ${gameId} title to: ${eventTitle}`);
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ message: 'Title updated successfully' }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+            
+          } catch (error) {
+            console.error('Update title error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: `Failed to update title: ${error.message}` }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        UpdateGameTitleEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/update-title
+            Method: POST
+
+  ### Lambda: Update Debug Mode Setting
+  UpdateDebugModeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.updateDebugMode
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        exports.updateDebugMode = async (event) => {
+          const gameId = event.pathParameters.gameId;
+          const { debugMode } = JSON.parse(event.body);
+          
+          try {
+            // Update the game metadata with debug mode setting
+            await db.update({
+              TableName: process.env.TABLE_NAME,
+              Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+              UpdateExpression: 'SET DebugMode = :debugMode',
+              ExpressionAttributeValues: {
+                ':debugMode': debugMode
+              }
+            }).promise();
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ 
+                message: 'Debug mode updated successfully',
+                gameId,
+                debugMode
+              })
+            };
+          } catch (error) {
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: error.message })
+            };
+          }
+        };
+      Events:
+        UpdateDebugModeEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/debug-mode
+            Method: POST
+
+  ### Lambda: AI Summary Generation
+  AISummaryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.generateAISummary
+      Runtime: nodejs18.x
+      Timeout: 300
+      MemorySize: 512
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource: 
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*'
+      InlineCode: |-
+        const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+        const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand, ScanCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+        const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+        const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+        
+        const dynamoClient = new DynamoDBClient({});
+        const db = DynamoDBDocumentClient.from(dynamoClient);
+        const bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });
+        const apigateway = new ApiGatewayManagementApiClient({
+          endpoint: process.env.WEBSOCKET_API_ENDPOINT
+        });
+        
+        // Helper function to broadcast WebSocket message
+        const broadcastToGame = async (gameId, message) => {
+          try {
+            const connectionsResult = await db.send(new ScanCommand({
+              TableName: process.env.TABLE_NAME,
+              FilterExpression: 'begins_with(PK, :prefix) AND GameId = :gameId',
+              ExpressionAttributeValues: {
+                ':prefix': 'CONNECTION#',
+                ':gameId': gameId
+              }
+            }));
+            
+            const connections = connectionsResult.Items || [];
+            console.log(`🔌 Broadcasting to ${connections.length} connections for game ${gameId}`);
+            
+            const broadcastPromises = connections.map(async (connection) => {
+              try {
+                await apigateway.send(new PostToConnectionCommand({
+                  ConnectionId: connection.ConnectionId,
+                  Data: JSON.stringify(message)
+                }));
+              } catch (error) {
+                console.log(`🔌 Failed to send to connection ${connection.ConnectionId}:`, error);
+                if (error.statusCode === 410) {
+                  await db.send(new DeleteCommand({
+                    TableName: process.env.TABLE_NAME,
+                    Key: { PK: connection.PK, SK: connection.SK }
+                  }));
+                }
+              }
+            });
+            
+            await Promise.all(broadcastPromises);
+          } catch (error) {
+            console.error('🔌 Broadcast error:', error);
+          }
+        };
+        
+        // Function to call Claude via Bedrock
+        const invokeClaude = async (prompt) => {
+          const modelId = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';
+          
+          console.log('🔍 BEDROCK: Prompt being sent to Claude:');
+          console.log('==========================================');
+          console.log('Prompt length:', prompt.length);
+          console.log('First 500 chars:', prompt.substring(0, 500));
+          console.log('Last 200 chars:', prompt.substring(prompt.length - 200));
+          console.log('==========================================');
+          
+          const payload = {
+            anthropic_version: 'bedrock-2023-05-31',
+            max_tokens: 2000,
+            messages: [
+              {
+                role: 'user',
+                content: [{ type: 'text', text: prompt }],
+              },
+            ],
+          };
+          
+          console.log('🔍 BEDROCK: Payload structure:', JSON.stringify({
+            anthropic_version: payload.anthropic_version,
+            max_tokens: payload.max_tokens,
+            messages: [{
+              role: payload.messages[0].role,
+              content: [{ type: 'text', text: `[${payload.messages[0].content[0].text.length} chars]` }]
+            }]
+          }, null, 2));
+          
+          const command = new InvokeModelCommand({
+            contentType: 'application/json',
+            body: JSON.stringify(payload),
+            modelId,
+          });
+          
+          console.log('🔍 BEDROCK: Sending to model:', modelId);
+          const apiResponse = await bedrockClient.send(command);
+          
+          const decodedResponseBody = new TextDecoder().decode(apiResponse.body);
+          const responseBody = JSON.parse(decodedResponseBody);
+          
+          console.log('🔍 BEDROCK: Raw response structure:', JSON.stringify({
+            usage: responseBody.usage,
+            content_length: responseBody.content?.[0]?.text?.length || 0,
+            first_100_chars: responseBody.content?.[0]?.text?.substring(0, 100) || 'No content'
+          }, null, 2));
+          
+          return responseBody.content[0].text;
+        };
+        
+        // Parse Claude's response into structured sections using the new === FORMAT ===
+        const parseAIResponse = (aiResponse) => {
+          console.log('🔍 PARSING: Full AI response length:', aiResponse.length);
+          console.log('🔍 PARSING: First 300 chars:', aiResponse.substring(0, 300));
+          
+          // Extract summary (content between "=== SUMMARY ===" and next section)
+          let summaryText = '';
+          const summaryMatch = aiResponse.match(/===\s*SUMMARY\s*===\s*\n([\s\S]*?)(?=\n===|$)/i);
+          if (summaryMatch) {
+            summaryText = summaryMatch[1].trim().replace(/^\[|\]$/g, ''); // Remove template brackets
+            console.log('🔍 PARSING: Extracted summary:', summaryText.substring(0, 100) + '...');
+          } else {
+            console.log('⚠️ PARSING: No === SUMMARY === section found');
+          }
+          
+          // Extract discussion questions (content between "=== DISCUSSION QUESTIONS ===" and next section)
+          let discussionQuestions = [];
+          const discussionMatch = aiResponse.match(/===\s*DISCUSSION\s*QUESTIONS\s*===\s*\n([\s\S]*?)(?=\n===|$)/i);
+          if (discussionMatch) {
+            const discussionText = discussionMatch[1];
+            // Extract Q1:, Q2:, Q3: format questions
+            const q1Match = discussionText.match(/Q1:\s*(.*?)(?=\nQ2:|$)/s);
+            const q2Match = discussionText.match(/Q2:\s*(.*?)(?=\nQ3:|$)/s);
+            const q3Match = discussionText.match(/Q3:\s*(.*?)(?=\n|$)/s);
+            
+            if (q1Match) discussionQuestions.push(q1Match[1].trim().replace(/^\[|\]$/g, ''));
+            if (q2Match) discussionQuestions.push(q2Match[1].trim().replace(/^\[|\]$/g, ''));
+            if (q3Match) discussionQuestions.push(q3Match[1].trim().replace(/^\[|\]$/g, ''));
+            
+            console.log('🔍 PARSING: Extracted discussion questions:', discussionQuestions);
+          } else {
+            console.log('⚠️ PARSING: No === DISCUSSION QUESTIONS === section found');
+          }
+          
+          // Extract next steps (content between "=== NEXT STEPS ===" and end)
+          let nextSteps = [];
+          const nextStepsMatch = aiResponse.match(/===\s*NEXT\s*STEPS\s*===\s*\n([\s\S]*?)$/i);
+          if (nextStepsMatch) {
+            const nextStepsText = nextStepsMatch[1];
+            // Extract STEP1:, STEP2:, STEP3:, STEP4: format
+            const step1Match = nextStepsText.match(/STEP1:\s*(.*?)(?=\nSTEP2:|$)/s);
+            const step2Match = nextStepsText.match(/STEP2:\s*(.*?)(?=\nSTEP3:|$)/s);
+            const step3Match = nextStepsText.match(/STEP3:\s*(.*?)(?=\nSTEP4:|$)/s);
+            const step4Match = nextStepsText.match(/STEP4:\s*(.*?)(?=\n|$)/s);
+            
+            if (step1Match) nextSteps.push(step1Match[1].trim().replace(/^\[|\]$/g, ''));
+            if (step2Match) nextSteps.push(step2Match[1].trim().replace(/^\[|\]$/g, ''));
+            if (step3Match) nextSteps.push(step3Match[1].trim().replace(/^\[|\]$/g, ''));
+            if (step4Match) nextSteps.push(step4Match[1].trim().replace(/^\[|\]$/g, ''));
+            
+            console.log('🔍 PARSING: Extracted next steps:', nextSteps);
+          } else {
+            console.log('⚠️ PARSING: No === NEXT STEPS === section found');
+          }
+          
+          // NO FALLBACKS - either we parse correctly or we error
+          if (!summaryText || summaryText.length < 20) {
+            console.log('❌ PARSING FAILED: No valid summary found');
+            throw new Error('AI response parsing failed - invalid summary format');
+          }
+          
+          if (discussionQuestions.length === 0) {
+            console.log('❌ PARSING FAILED: No valid discussion questions found');
+            throw new Error('AI response parsing failed - no discussion questions found');
+          }
+          
+          if (nextSteps.length === 0) {
+            console.log('❌ PARSING FAILED: No valid next steps found');
+            throw new Error('AI response parsing failed - no next steps found');
+          }
+          
+          const result = {
+            summaryText: summaryText,
+            discussionQuestions: discussionQuestions,
+            nextSteps: nextSteps
+          };
+          
+          console.log('✅ PARSING SUCCESS: Summary length:', result.summaryText.length);
+          console.log('✅ PARSING SUCCESS: Discussion questions count:', result.discussionQuestions.length);
+          console.log('✅ PARSING SUCCESS: Next steps count:', result.nextSteps.length);
+          
+          return result;
+        };
+        
+        exports.generateAISummary = async (event) => {
+          try {
+            const gameId = event.pathParameters.gameId;
+            const { questionIds } = JSON.parse(event.body);
+            
+            console.log(`🤖 Generating AI summaries for game ${gameId}, questions: ${questionIds}`);
+            
+            if (!questionIds || questionIds.length === 0) {
+              return {
+                statusCode: 400,
+                body: JSON.stringify({ error: 'No questions selected for AI summary' }),
+                headers: { 'Access-Control-Allow-Origin': '*' }
+              };
+            }
+            
+            // Fetch game metadata to get AI context
+            let gameAiContext = null;
+            try {
+              const gameMetadata = await db.send(new GetCommand({
+                TableName: process.env.TABLE_NAME,
+                Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
+              }));
+              if (gameMetadata.Item && gameMetadata.Item.AIContext) {
+                gameAiContext = gameMetadata.Item.AIContext;
+                console.log('🎯 Found game AI context:', gameAiContext);
+              } else {
+                console.log('🎯 No game AI context found');
+              }
+            } catch (contextError) {
+              console.log('⚠️ Could not fetch game AI context:', contextError.message);
+            }
+            
+            const summaries = [];
+            
+            for (const questionId of questionIds) {
+              console.log(`📝 Processing question ${questionId}...`);
+              
+              // Get question details
+              const questionRes = await db.send(new GetCommand({
+                TableName: process.env.TABLE_NAME,
+                Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionId}` }
+              }));
+              
+              if (!questionRes.Item) {
+                console.log(`⚠️ Question ${questionId} not found, skipping`);
+                continue;
+              }
+              
+              const question = questionRes.Item;
+              console.log('🔍 Question pointer data:', JSON.stringify(question, null, 2));
+              
+              // Fetch actual question data using the QuestionRef - REQUIRED for real prompt
+              console.log(`🔍 DETAILED FETCH: Starting question data fetch for ${questionId}`);
+              console.log(`🔍 DETAILED FETCH: Question pointer has QuestionRef: ${question.QuestionRef}`);
+              console.log(`🔍 DETAILED FETCH: Question pointer has SetId: ${question.SetId}`);
+              
+              let actualQuestionData = null;
+              if (!question.QuestionRef) {
+                console.log(`❌ FATAL: No QuestionRef found in question pointer for ${questionId}`);
+                throw new Error(`Missing QuestionRef for question ${questionId} - cannot build real prompt`);
+              }
+              
+              try {
+                // Try multiple set locations since SetId might not match actual storage location
+                const possibleSetIds = [question.SetId, 'amazonleadershipprinciples', 'lessons', 'greatesthits'].filter(Boolean);
+                console.log(`🔍 DETAILED FETCH: Will try these set IDs: ${possibleSetIds.join(', ')}`);
+                
+                for (const setId of possibleSetIds) {
+                  console.log(`🔍 DETAILED FETCH: Trying SET#${setId} with QuestionRef: ${question.QuestionRef}`);
+                  
+                  const actualQuestionRes = await db.send(new GetCommand({
+                    TableName: process.env.TABLE_NAME,
+                    Key: { PK: `SET#${setId}`, SK: question.QuestionRef }
+                  }));
+                  
+                  console.log(`🔍 DETAILED FETCH: Response from SET#${setId}:`, actualQuestionRes.Item ? 'FOUND' : 'NOT FOUND');
+                  
+                  if (actualQuestionRes.Item) {
+                    actualQuestionData = actualQuestionRes.Item;
+                    console.log(`✅ SUCCESS: Found actual question data in SET#${setId}`);
+                    console.log(`✅ SUCCESS: Question title: ${actualQuestionData.Title}`);
+                    console.log(`✅ SUCCESS: Question detail: ${actualQuestionData.Detail}`);
+                    console.log(`✅ SUCCESS: Question category: ${actualQuestionData.Category}`);
+                    break;
+                  }
+                }
+                
+                if (!actualQuestionData) {
+                  console.log(`❌ FATAL: Actual question data not found for ${question.QuestionRef} in any of these sets: ${possibleSetIds.join(', ')}`);
+                  throw new Error(`Question data not found for ${question.QuestionRef} - cannot build real prompt`);
+                }
+              } catch (fetchError) {
+                console.log(`❌ FATAL: Error fetching actual question data: ${fetchError.message}`);
+                throw new Error(`Failed to fetch question data: ${fetchError.message}`);
+              }
+              
+              // Get all answers for this question
+              const answersRes = await db.send(new QueryCommand({
+                TableName: process.env.TABLE_NAME,
+                KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+                ExpressionAttributeValues: {
+                  ':pk': `GAME#${gameId}`,
+                  ':sk': `ANSWER#${questionId}#`
+                }
+              }));
+              
+              console.log('📋 Answer records found:', answersRes.Items.length);
+              console.log('📋 First answer record:', JSON.stringify(answersRes.Items[0], null, 2));
+              
+              // Get all votes for this question
+              const votesRes = await db.send(new QueryCommand({
+                TableName: process.env.TABLE_NAME,
+                KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+                ExpressionAttributeValues: {
+                  ':pk': `GAME#${gameId}`,
+                  ':sk': `VOTE#${questionId}#`
+                }
+              }));
+              
+              // Calculate vote rankings
+              const voteCount = {};
+              votesRes.Items.forEach(vote => {
+                if (vote.Votes) {
+                  vote.Votes.forEach(v => {
+                    if (!voteCount[v.player]) voteCount[v.player] = 0;
+                    voteCount[v.player] += (4 - v.rank); // Higher score for better rank
+                  });
+                }
+              });
+              
+              // Sort answers by vote score
+              const rankedAnswers = answersRes.Items
+                .map(answer => ({
+                  player: answer.SK.split('#')[3],
+                  answer: answer.Answer || answer.AnswerText || answer.answer || 'No answer provided',
+                  score: voteCount[answer.SK.split('#')[3]] || 0
+                }))
+                .sort((a, b) => b.score - a.score);
+              
+              console.log('🎯 Ranked answers:', JSON.stringify(rankedAnswers, null, 2));
+              
+              // Create AI prompt with clear ranking and instructions (with proper tie handling)
+              let currentRank = 1;
+              const responsesText = rankedAnswers.map((answer, idx) => {
+                // Handle ties: if current score is different from previous, update rank
+                if (idx > 0 && answer.score !== rankedAnswers[idx - 1].score) {
+                  currentRank = idx + 1;
+                }
+                
+                const rank = currentRank === 1 ? '🥇 1st Place' : 
+                           currentRank === 2 ? '🥈 2nd Place' : 
+                           currentRank === 3 ? '🥉 3rd Place' : 
+                           `${currentRank}th Place`;
+                           
+                return `${rank}: ${answer.player} - "${answer.answer}" (${answer.score} vote points)`;
+              }).join('\n\n');
+              
+              // Extract question data from actual question record - NO FALLBACKS, REAL DATA ONLY
+              console.log(`🔍 EXTRACT: Extracting real question data (no fallbacks)`);
+              
+              const questionText = actualQuestionData.Title || actualQuestionData.Prompt;
+              const questionCategory = actualQuestionData.Category;
+              const questionDetail = actualQuestionData.Detail;
+              const questionSetId = question.SetId;
+              
+              // Validate that we have all required data
+              if (!questionText) {
+                console.log(`❌ FATAL: No question title/prompt found in actual question data`);
+                throw new Error(`Missing question title for ${questionId} - cannot build real prompt`);
+              }
+              if (!questionCategory) {
+                console.log(`❌ FATAL: No question category found in actual question data`);
+                throw new Error(`Missing question category for ${questionId} - cannot build real prompt`);
+              }
+              if (!questionDetail) {
+                console.log(`❌ FATAL: No question detail found in actual question data`);
+                throw new Error(`Missing question detail for ${questionId} - cannot build real prompt`);
+              }
+              
+              console.log(`✅ EXTRACT SUCCESS: questionText = "${questionText}"`);
+              console.log(`✅ EXTRACT SUCCESS: questionCategory = "${questionCategory}"`);
+              console.log(`✅ EXTRACT SUCCESS: questionDetail = "${questionDetail}"`);
+              
+              // Fetch custom instruction and AI context from question set if available
+              let customInstruction = null;
+              let questionSetAiContext = null;
+              if (questionSetId) {
+                try {
+                  const setResult = await db.send(new GetCommand({
+                    TableName: process.env.TABLE_NAME,
+                    Key: { PK: 'SETS', SK: `SET#${questionSetId}` }
+                  }));
+                  if (setResult.Item) {
+                    if (setResult.Item.CustomInstruction) {
+                      customInstruction = setResult.Item.CustomInstruction;
+                      console.log('📋 Found custom instruction for AI prompt:', customInstruction);
+                    }
+                    if (setResult.Item.AIContextInstruction) {
+                      questionSetAiContext = setResult.Item.AIContextInstruction;
+                      console.log('🎯 Found question set AI context:', questionSetAiContext);
+                    }
+                  }
+                } catch (fetchError) {
+                  console.log('⚠️ Could not fetch question set context:', fetchError.message);
+                }
+              }
+              
+              // Use custom instruction if available, otherwise default context
+              const sessionContext = customInstruction || 
+                'a "Working Backwards" strategic thinking session where participants apply lessons to their work context';
+              
+              // Build context sections for the AI prompt
+              const contextSections = [];
+              if (gameAiContext) {
+                contextSections.push(`SESSION BACKGROUND: ${gameAiContext}`);
+              }
+              if (questionSetAiContext) {
+                contextSections.push(`QUESTION SET CONTEXT: ${questionSetAiContext}`);
+              }
+              if (customInstruction) {
+                contextSections.push(`PARTICIPANT INSTRUCTIONS: "${customInstruction}"`);
+              }
+              
+              const prompt = `You are an expert business strategist analyzing responses from ${sessionContext}.\n\n` +
+                'LESSON DETAILS:\n' +
+                'Question: "' + questionText + '"\n' +
+                'Category: ' + questionCategory + '\n' +
+                'Context: ' + questionDetail + '\n' +
+                (contextSections.length > 0 ? ('\nCONTEXT INFORMATION:\n' + contextSections.join('\n') + '\n') : '') +
+                '\n' +
+                'PLAYER RESPONSES (ranked by peer voting):\n' + responsesText + '\n\n' +
+                'ANALYSIS INSTRUCTIONS:\n' +
+                'You are analyzing ' + rankedAnswers.length + ' responses that were peer-voted by the team. The responses above are ranked by total vote points, with the highest-scoring response first.' +
+                (contextSections.length > 0 ? 
+                  '\n\nIMPORTANT: Please tailor your analysis based on the provided context information above. Consider the specific background, goals, and instructions relevant to this session.' : 
+                  '')+
+                '\n\nPlease provide your strategic analysis in this EXACT format for reliable parsing:\n\n' +
+                '=== SUMMARY ===\n' +
+                '[Write 2-3 sentences synthesizing the key strategic themes and insights from these responses. Pay special attention to the top-ranked responses as they represent the team\'s collective wisdom.]\n\n' +
+                '=== DISCUSSION QUESTIONS ===\n' +
+                'Q1: [First thought-provoking question that builds on these specific responses for deeper strategic discussion. Reference specific player insights.]\n' +
+                'Q2: [Second question that facilitates strategic discussion based on the responses.]\n' +
+                'Q3: [Third question for deeper strategic discussion.]\n\n' +
+                '=== NEXT STEPS ===\n' +
+                'STEP1: [First concrete, actionable step the team could take based on these insights.]\n' +
+                'STEP2: [Second actionable step, prioritizing ideas from highest-ranked responses.]\n' +
+                'STEP3: [Third actionable step for implementation.]\n' +
+                'STEP4: [Fourth actionable step (optional but recommended).]\n\n' +
+                'Focus on actionable insights that connect directly to what these players shared and the specific context they were asked to consider. Be specific and insightful.';
+              
+              console.log('🤖 FULL AI PROMPT CONSTRUCTED:');
+              console.log('=====================================');
+              console.log(prompt);
+              console.log('=====================================');
+
+              // Call Claude via Bedrock for real AI analysis
+              console.log('🤖 Calling Claude via Bedrock...');
+              
+              let aiResponse;
+              let parsed;
+              
+              try {
+                // Call real AI - NO FALLBACKS, NO MOCK DATA
+                console.log('🤖 CALLING CLAUDE: Sending prompt to Bedrock...');
+                aiResponse = await invokeClaude(prompt);
+                console.log('✅ CLAUDE SUCCESS: Real AI response received');
+                parsed = parseAIResponse(aiResponse);
+              } catch (aiError) {
+                console.log(`❌ CLAUDE FAILED: ${aiError.message}`);
+                throw new Error(`AI analysis unavailable: ${aiError.message}`);
+              }
+              
+              // Store the summary (filter out undefined values)
+              const summaryRecord = {
+                PK: `GAME#${gameId}`,
+                SK: `SUMMARY#${questionId}`,
+                QuestionId: questionId,
+                SummaryText: parsed.summaryText || 'AI analysis completed',
+                DiscussionQuestions: parsed.discussionQuestions || [],
+                NextSteps: parsed.nextSteps || [],
+                FullAIResponse: aiResponse || 'No response',
+                RankedAnswers: rankedAnswers || [],
+                DebugPrompt: prompt || 'No prompt available',
+                CreatedAt: new Date().toISOString(),
+                CreatedBy: 'Claude AI'
+              };
+              
+              await db.send(new PutCommand({
+                TableName: process.env.TABLE_NAME,
+                Item: summaryRecord
+              }));
+              
+              // Broadcast lightweight AI summary ready notification via WebSocket
+              try {
+                await broadcastToGame(gameId, {
+                  type: 'aiSummaryReady',
+                  gameId,
+                  questionId,
+                  timestamp: new Date().toISOString()
+                });
+              } catch (error) {
+                console.log('🔌 WebSocket broadcast failed for AI summary, continuing...', error.message);
+              }
+              
+              summaries.push({
+                questionId,
+                questionText: questionText,
+                summary: parsed.summaryText,
+                discussionQuestions: parsed.discussionQuestions,
+                nextSteps: parsed.nextSteps
+              });
+              
+              console.log(`✅ AI summary generated for question ${questionId}`);
+            }
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ 
+                message: `Successfully generated AI summaries for ${summaries.length} questions`,
+                summaries: summaries
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+            
+          } catch (error) {
+            console.error('🚨 AI Summary generation failed:', error);
+            
+            // Provide user-friendly error messages based on error type
+            let userMessage = 'AI summary could not be retrieved at this moment.';
+            let statusCode = 500;
+            
+            if (error.message.includes('Question data not found') || error.message.includes('Missing QuestionRef')) {
+              userMessage = 'AI summary unavailable: Question data is incomplete. Please contact support.';
+              statusCode = 400;
+            } else if (error.message.includes('AI analysis unavailable')) {
+              userMessage = 'AI summary could not be retrieved at this moment. Please try again later.';
+              statusCode = 503;
+            } else if (error.message.includes('Missing question title') || error.message.includes('Missing question category')) {
+              userMessage = 'AI summary unavailable: Question information is incomplete. Please contact support.';
+              statusCode = 400;
+            }
+            
+            console.log(`🔄 RETURNING USER-FRIENDLY ERROR: ${userMessage}`);
+            
+            return {
+              statusCode: statusCode,
+              body: JSON.stringify({ 
+                error: userMessage,
+                details: error.message // For debugging, can be removed in production
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        AISummaryEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /admin/ai-summary/{gameId}
+            Method: POST
+
+  ### Lambda: Get AI Summary
+  GetAISummaryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getAISummary
+      Runtime: nodejs18.x
+      Timeout: 10
+      MemorySize: 256
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        
+        exports.getAISummary = async (event) => {
+          try {
+            const gameId = event.pathParameters.gameId;
+            const questionId = event.pathParameters.questionId;
+            const debug = event.queryStringParameters?.debug === 'true';
+            
+            console.log(`📖 Fetching AI summary for game ${gameId}, question ${questionId} (v2)`);
+            
+            // Get the summary from DynamoDB
+            const result = await db.get({
+              TableName: process.env.TABLE_NAME,
+              Key: {
+                PK: `GAME#${gameId}`,
+                SK: `SUMMARY#${questionId}`
+              }
+            }).promise();
+            
+            if (!result.Item) {
+              console.log(`❌ No AI summary found for game ${gameId}, question ${questionId}`);
+              return {
+                statusCode: 404,
+                body: JSON.stringify({ error: 'AI summary not found' }),
+                headers: { 'Access-Control-Allow-Origin': '*' }
+              };
+            }
+            
+            console.log(`✅ Found AI summary for question ${questionId}`);
+            console.log(`📝 Summary preview: ${result.Item.SummaryText?.substring(0, 100)}...`);
+            
+            // Return the summary data
+            const response = {
+              summaryText: result.Item.SummaryText || '',
+              discussionQuestions: result.Item.DiscussionQuestions || [],
+              nextSteps: result.Item.NextSteps || [],
+              createdAt: result.Item.CreatedAt || '',
+              questionId: result.Item.QuestionId || questionId
+            };
+            
+            // Include debug info if requested
+            if (debug) {
+              response.debugPrompt = result.Item.DebugPrompt || '';
+              response.fullAIResponse = result.Item.FullAIResponse || '';
+              response.rankedAnswers = result.Item.RankedAnswers || [];
+            }
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify(response),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+            
+          } catch (error) {
+            console.error('Error fetching AI summary:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: 'Failed to fetch AI summary' }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        GetAISummaryEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/summary/{questionId}
+            Method: GET
+
+  ### Lambda: Test Bedrock Integration
+  TestBedrockFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.testBedrock
+      Runtime: nodejs18.x
+      Timeout: 60
+      MemorySize: 256
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource: 
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+      InlineCode: |-
+        const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+        
+        const bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });
+        
+        // Function to call Claude via Bedrock
+        const invokeClaude = async (prompt) => {
+          const modelId = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';
+          
+          console.log(`🤖 Testing Claude with model: ${modelId}`);
+          console.log(`📝 Prompt: ${prompt.substring(0, 100)}...`);
+          
+          const payload = {
+            anthropic_version: 'bedrock-2023-05-31',
+            max_tokens: 500,
+            messages: [
+              {
+                role: 'user',
+                content: [{ type: 'text', text: prompt }],
+              },
+            ],
+          };
+          
+          const command = new InvokeModelCommand({
+            contentType: 'application/json',
+            body: JSON.stringify(payload),
+            modelId,
+          });
+          
+          console.log('📡 Sending request to Bedrock...');
+          const apiResponse = await bedrockClient.send(command);
+          
+          const decodedResponseBody = new TextDecoder().decode(apiResponse.body);
+          const responseBody = JSON.parse(decodedResponseBody);
+          
+          console.log('✅ Bedrock response received successfully');
+          console.log(`📊 Response length: ${responseBody.content[0].text.length} characters`);
+          
+          return responseBody.content[0].text;
+        };
+        
+        exports.testBedrock = async (event) => {
+          try {
+            console.log('🧪 Starting Bedrock test with inference profile...');
+            
+            // Simple test prompt
+            const testPrompt = 'You are a helpful AI assistant. Please provide a brief business strategy analysis with:\\n\\n1. A 2-sentence summary about the importance of strategic planning\\n2. 2 discussion questions about strategy implementation\\n3. 2 concrete next steps for improving strategic planning\\n\\nKeep your response structured and concise.';
+            
+            console.log('🚀 Calling Claude...');
+            const aiResponse = await invokeClaude(testPrompt);
+            
+            console.log('✅ Test completed successfully!');
+            console.log(`📄 Full response: ${aiResponse}`);
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({
+                success: true,
+                message: 'Bedrock test completed successfully!',
+                modelId: 'us.anthropic.claude-3-5-sonnet-20241022-v2:0',
+                promptLength: testPrompt.length,
+                responseLength: aiResponse.length,
+                response: aiResponse,
+                timestamp: new Date().toISOString()
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+            
+          } catch (error) {
+            console.error('❌ Bedrock test failed:', error);
+            console.error('Error details:', {
+              name: error.name,
+              message: error.message,
+              code: error.$metadata?.httpStatusCode,
+              requestId: error.$metadata?.requestId
+            });
+            
+            return {
+              statusCode: 500,
+              body: JSON.stringify({
+                success: false,
+                error: error.message,
+                errorName: error.name,
+                errorCode: error.$metadata?.httpStatusCode,
+                timestamp: new Date().toISOString(),
+                troubleshooting: {
+                  modelAccess: 'Check if anthropic.claude-3-5-sonnet-20241022-v2:0 is enabled in Bedrock console',
+                  permissions: 'Verify Lambda has bedrock:InvokeModel permissions',
+                  region: 'Ensure Bedrock is available in us-east-1'
+                }
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        TestBedrockEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /test/bedrock
+            Method: GET
+
+  ### Lambda: Get AI Summary
+  GetAISummaryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getAISummary
+      Runtime: nodejs16.x
+      Timeout: 30
+      MemorySize: 256
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        
+        // Fixed runtime to nodejs16.x for aws-sdk compatibility
+        exports.getAISummary = async (event) => {
+          try {
+            const gameId = event.pathParameters.gameId;
+            const questionId = event.pathParameters.questionId;
+            const debugMode = event.queryStringParameters?.debug === 'true';
+            
+            console.log(`📖 Fetching AI summary for game ${gameId}, question ${questionId}, debug: ${debugMode}`);
+            
+            // Get the AI summary record
+            const result = await db.get({
+              TableName: process.env.TABLE_NAME,
+              Key: { 
+                PK: `GAME#${gameId}`, 
+                SK: `SUMMARY#${questionId}` 
+              }
+            }).promise();
+            
+            if (!result.Item) {
+              return {
+                statusCode: 404,
+                body: JSON.stringify({ error: 'AI summary not found' }),
+                headers: { 'Access-Control-Allow-Origin': '*' }
+              };
+            }
+            
+            const response = {
+              questionId: result.Item.QuestionId,
+              summaryText: result.Item.SummaryText,
+              discussionQuestions: result.Item.DiscussionQuestions || [],
+              nextSteps: result.Item.NextSteps || [],
+              createdAt: result.Item.CreatedAt,
+              createdBy: result.Item.CreatedBy
+            };
+            
+            // Include debug prompt if requested
+            if (debugMode && result.Item.DebugPrompt) {
+              response.debugPrompt = result.Item.DebugPrompt;
+            }
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify(response),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+            
+          } catch (error) {
+            console.error('Get AI Summary error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: `Failed to get AI summary: ${error.message}` }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        GetAISummaryEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/summary/{questionId}
+            Method: GET
+
+  ### CloudFront Origin Access Identity
+  CloudFrontOAI:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub 'OAI for ${AWS::StackName} dev static site'
+
+  ### S3 Bucket for Reports (private) - Dev
+  ReportsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteTemporaryReports
+            Status: Enabled
+            ExpirationInDays: 1  # 24 hours for regular reports
+            Prefix: ""  # Apply to all objects
+            NoncurrentVersionExpirationInDays: 1
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+            # This rule applies to all files except those with -permanent suffix
+          - Id: ExcludePermanentReports
+            Status: Enabled
+            ExpirationInDays: 365  # Keep permanent reports for 1 year
+            Prefix: "permanent/"  # Permanent reports stored in separate prefix
+
+  ### S3 Bucket for Static Site - Dev
+  StaticSiteBucket:
+    Type: AWS::S3::Bucket
+
+  StaticSiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref StaticSiteBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipalReadOnly
+            Effect: Allow
+            Principal:
+              CanonicalUser: !GetAtt CloudFrontOAI.S3CanonicalUserId
+            Action: s3:GetObject
+            Resource: !Sub '${StaticSiteBucket.Arn}/*'
+
+  ### ACM Certificate (for CloudFront) - Must be defined before CloudFront
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Condition: HasDomain
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZoneId
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-CloudFrontCert'
+
+  ### CloudFront Distribution
+  StaticSiteDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt StaticSiteBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub 'origin-access-identity/cloudfront/${CloudFrontOAI}'
+          - Id: ApiOrigin
+            DomainName: !Sub '${GameApi}.execute-api.${AWS::Region}.amazonaws.com'
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              HTTPPort: 80
+              HTTPSPort: 443
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: ["GET","HEAD","OPTIONS"]
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # Disable caching
+        CacheBehaviors:
+          - PathPattern: 'question-sets*'
+            TargetOriginId: ApiOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: ["GET","HEAD","OPTIONS"]
+            Compress: false
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # Disable caching
+            OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf
+          - PathPattern: 'games*'
+            TargetOriginId: ApiOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: ["GET","HEAD","OPTIONS","PUT","POST","PATCH","DELETE"]
+            Compress: false
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # Disable caching
+            OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf
+          - PathPattern: 'questions*'
+            TargetOriginId: ApiOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: ["GET","HEAD","OPTIONS"]
+            Compress: false
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # Disable caching
+            OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf
+          - PathPattern: 'admin/*'
+            TargetOriginId: ApiOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: ["GET","HEAD","OPTIONS","PUT","POST","PATCH","DELETE"]
+            Compress: false
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # Disable caching
+            OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf
+        Aliases: !If
+          - HasDomain
+          - [!Ref DomainName]
+          - !Ref AWS::NoValue
+        ViewerCertificate: !If
+          - HasDomain
+          - AcmCertificateArn: !Ref Certificate
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+
+  ### Route53 DNS Record
+  DnsRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: HasDomain
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt StaticSiteDistribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2  # CloudFront hosted zone ID (fixed for all regions)
+        EvaluateTargetHealth: false
+
+Outputs:
+  StaticSiteBucketName:
+    Description: "S3 bucket name for static site"
+    Value: !Ref StaticSiteBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-StaticSiteBucketName'
+
+  ReportsBucketName:
+    Description: "S3 bucket name for reports"
+    Value: !Ref ReportsBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-ReportsBucketName'
+
+  GameTableName:
+    Description: "DynamoDB table name"
+    Value: !Ref GameTable
+    Export:
+      Name: !Sub '${AWS::StackName}-GameTableName'
+
+  GameApiId:
+    Description: "HTTP API Gateway ID"
+    Value: !Ref GameApi
+    Export:
+      Name: !Sub '${AWS::StackName}-GameApiId'
+
+  CloudFrontDomain:
+    Description: "CloudFront distribution domain"
+    Value: !GetAtt StaticSiteDistribution.DomainName
+
+  ApiUrl:
+    Description: "HTTP API base URL"
+    Value: !Sub 'https://${GameApi}.execute-api.${AWS::Region}.amazonaws.com'
+
+  WebSocketUrl:
+    Description: "WebSocket API URL"
+    Value: !Sub 'wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/dev'
+
+  CertificateArn:
+    Description: "ACM Certificate ARN (only if domain configured)"
+    Condition: HasDomain
+    Value: !Ref Certificate
+
+  WebsiteUrl:
+    Description: "Website URL"
+    Value: !If
+      - HasDomain
+      - !Sub 'https://${DomainName}'
+      - !Sub 'https://${StaticSiteDistribution.DomainName}'

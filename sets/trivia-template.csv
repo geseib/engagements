@@ -1,0 +1,9 @@
+Category,Question,OptionA,OptionB,OptionC,OptionD,CorrectAnswer,Points
+"Science","What is the chemical symbol for gold?","Au","Ag","Go","Gd","Au",10
+"Science","Which planet is closest to the Sun?","Venus","Mercury","Earth","Mars","Mercury",10
+"History","In which year did World War II end?","1944","1945","1946","1947","1945",10
+"History","Who was the first President of the United States?","Thomas Jefferson","John Adams","George Washington","Benjamin Franklin","George Washington",10
+"Geography","What is the capital of Australia?","Sydney","Melbourne","Canberra","Perth","Canberra",10
+"Geography","Which is the longest river in the world?","Amazon","Nile","Mississippi","Yangtze","Nile",10
+"Technology","What does CPU stand for?","Computer Processing Unit","Central Processing Unit","Central Program Unit","Computer Program Unit","Central Processing Unit",10
+"Technology","Which company developed the iPhone?","Google","Microsoft","Apple","Samsung","Apple",10
