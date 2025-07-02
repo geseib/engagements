@@ -40,7 +40,8 @@ function GameHostPage() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1);
   const [currentQuestionId, setCurrentQuestionId] = useState('');
   const [answers, setAnswers] = useState([]);
-  const [gameState, setGameState] = useState('waiting'); // waiting, question, results (no voting for trivia)
+  const [gameState, setGameState] = useState('waiting'); // waiting, question, voting (call-and-answer only), results
+  const [currentGameType, setCurrentGameType] = useState('call-and-answer'); // Track the type of the current game
   const [playersWhoAnswered, setPlayersWhoAnswered] = useState([]);
   const [votes, setVotes] = useState([]);
   const [playersWhoVoted, setPlayersWhoVoted] = useState([]);
@@ -63,20 +64,10 @@ function GameHostPage() {
   
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
-  const [useWebSocket, setUseWebSocket] = useState(() => {
-    // Check both window global and localStorage, defaulting to true (WebSocket enabled)
-    const adminSetting = localStorage.getItem('admin_websocket_mode');
-    const useWebSocket = adminSetting !== null ? adminSetting === 'true' : true; // Default to true
-    const windowSetting = window.WEBSOCKET_MODE || useWebSocket;
-    console.log(`🔌 Initial WebSocket check: localStorage=${adminSetting}, calculated=${useWebSocket}, window=${windowSetting}`);
-    
-    // Set window global if not already set
-    if (!window.WEBSOCKET_MODE) {
-      window.WEBSOCKET_MODE = useWebSocket;
-    }
-    
-    return useWebSocket;
-  });
+  const [useWebSocket, setUseWebSocket] = useState(true); // Always use WebSocket
+
+  // Flag to prevent auto-selection during game state restoration
+  const [isRestoringState, setIsRestoringState] = useState(false);
 
   // Welcome Screen
   const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
@@ -88,6 +79,7 @@ function GameHostPage() {
   const [eventTitle, setEventTitle] = useState('');
   const [gameAiContext, setGameAiContext] = useState('');
   const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer' or 'trivia'
+  const [triviaTimer, setTriviaTimer] = useState(30); // Timer for trivia questions in seconds
   
   // Question Set Management
   const [questionSets, setQuestionSets] = useState([]);
@@ -279,85 +271,7 @@ Focus on actionable business strategy insights.`;
         return;
       }
       
-      // Polling mode (WebSocket disabled)
-      let pollingInterval;
-      let isGenerating = false;
-      
-      const checkAndLoadAI = async () => {
-        try {
-          // First check if AI summary already exists
-          const existingSummary = await fetchAISummary(questionId);
-          if (existingSummary && existingSummary.summaryText) {
-            console.log('✅ Found existing AI summary');
-            setCurrentAIInsights({
-              summary: existingSummary.summaryText,
-              discussionTopics: existingSummary.discussionQuestions || [],
-              nextSteps: existingSummary.nextSteps || [],
-              prompt: gameDebugMode ? existingSummary.debugPrompt : undefined
-            });
-            setLoadingAIInsights(false);
-            if (pollingInterval) clearInterval(pollingInterval);
-            return;
-          }
-          
-          // If not generating yet, trigger generation
-          if (!isGenerating) {
-            isGenerating = true;
-            console.log('🤖 No existing summary, triggering AI generation...');
-            
-            const generateResponse = await fetch(`${API_BASE}admin/ai-summary/${gameId}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ questionIds: [questionId] })
-            });
-            
-            if (!generateResponse.ok) {
-              console.error('❌ Failed to trigger AI generation');
-              setLoadingAIInsights(false);
-              return;
-            }
-            
-            console.log('✅ AI generation triggered, starting to poll...');
-            
-            // Start polling every 3 seconds
-            pollingInterval = setInterval(async () => {
-              console.log('🔍 Polling for AI summary...');
-              const summary = await fetchAISummary(questionId);
-              if (summary && summary.summaryText) {
-                console.log('✅ AI summary ready!');
-                setCurrentAIInsights({
-                  summary: summary.summaryText,
-                  discussionTopics: summary.discussionQuestions || [],
-                  nextSteps: summary.nextSteps || [],
-                  prompt: gameDebugMode ? summary.debugPrompt : undefined
-                });
-                setLoadingAIInsights(false);
-                clearInterval(pollingInterval);
-              }
-            }, 3000);
-            
-            // Stop polling after 45 seconds
-            setTimeout(() => {
-              if (pollingInterval) {
-                clearInterval(pollingInterval);
-                console.warn('⚠️ AI generation timed out');
-                setLoadingAIInsights(false);
-              }
-            }, 45000);
-          }
-        } catch (error) {
-          console.error('❌ Error loading AI insights:', error);
-          setLoadingAIInsights(false);
-          if (pollingInterval) clearInterval(pollingInterval);
-        }
-      };
-      
-      checkAndLoadAI();
-      
-      // Cleanup on unmount or dependencies change
-      return () => {
-        if (pollingInterval) clearInterval(pollingInterval);
-      };
+      // REMOVED: AI insights polling - WebSocket handles notifications
     }
   }, [gameState, currentQuestionIndex, answers.length, gameId, gameDebugMode, useWebSocket]);
 
@@ -441,50 +355,39 @@ Focus on actionable business strategy insights.`;
     
     // Create game in database when gameId changes, then fetch data
     const initializeGame = async () => {
+      console.log(`🚀 HOST: Starting initialization for game ${gameId}`);
+      
+      // First, try to restore state to see if game exists
+      await restoreGameState(); // This will determine if it's an existing game
+      
+      // Check the current state after restoration
+      console.log(`🔍 HOST: After restoration - gameState: ${gameState}, selectedSetId: ${selectedSetId}`);
+      
+      // Use a small delay to ensure state updates have propagated
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Re-check selectedSetId after state has had time to update
+      const currentSelectedSetId = selectedSetId;
+      console.log(`🔍 HOST: Current selectedSetId after delay: ${currentSelectedSetId}`);
+      
+      // If no state was restored (new game), fetch question sets first
+      if (gameState === 'waiting' && !currentSelectedSetId) {
+        console.log(`📚 HOST: No question set found, fetching available sets...`);
+        await fetchQuestionSets(); // This will set selectedSetId
+      } else if (currentSelectedSetId) {
+        console.log(`✅ HOST: Question set already restored: ${currentSelectedSetId}`);
+      }
+      
+      // Now create/validate game with proper questionSetId
       await createGame();
-      await restoreGameState(); // Restore state for reconnections
+      
       fetchPlayers('initial-load');
-      fetchQuestionSets(); // This will auto-select first set and fetch its questions
     };
     
     initializeGame();
   }, [gameId]);
 
-  // Polling effect - only runs when WebSocket is disabled
-  useEffect(() => {
-    console.log(`🔄 POLLING EFFECT: gameId=${gameId}, useWebSocket=${useWebSocket}`);
-    if (!gameId || useWebSocket) {
-      console.log(`🔄 POLLING SKIPPED: ${!gameId ? 'No gameId' : 'WebSocket enabled'}`);
-      return;
-    }
-    
-    console.log(`🔄 HOST: Starting HTTP polling for game ${gameId} (WebSocket disabled)`);
-    
-    const interval = setInterval(() => {
-      console.log(`🔄 POLLING: Current state: ${gameState}, question: ${currentQuestionIndex}`);
-      fetchPlayers('polling');
-      
-      // Poll game state to stay in sync with database (like player page does)
-      if (!manualStateChange) {
-        fetchGameStateForSync();
-      }
-      
-      if (gameState === 'question' && questions.length > 0 && currentQuestionIndex >= 0) {
-        console.log(`🔄 POLLING: Checking answer status (question ${currentQuestionIndex})`);
-        checkAnswerStatus();
-      }
-      
-      if (gameState === 'voting' && questions.length > 0 && currentQuestionIndex >= 0) {
-        console.log(`🔄 POLLING: Checking votes (question ${currentQuestionIndex})`);
-        fetchVotes();
-      }
-    }, 2000);
-    
-    return () => {
-      console.log(`🛑 HOST: Stopping HTTP polling for game ${gameId}`);
-      clearInterval(interval);
-    };
-  }, [gameId, gameState, currentQuestionIndex, questions.length, useWebSocket]); // Include useWebSocket dependency
+  // REMOVED: HTTP polling - WebSocket handles all real-time updates // Include useWebSocket dependency
 
   // WebSocket connection effect - only runs when WebSocket is enabled
   useEffect(() => {
@@ -593,27 +496,7 @@ Focus on actionable business strategy insights.`;
     };
   }, [gameId, useWebSocket]);
 
-  // Monitor WebSocket mode changes from admin panel
-  useEffect(() => {
-    const checkWebSocketMode = () => {
-      // Check both localStorage and window global
-      const adminSetting = localStorage.getItem('admin_websocket_mode') === 'true';
-      const windowSetting = window.WEBSOCKET_MODE || false;
-      const currentMode = adminSetting || windowSetting;
-      
-      if (currentMode !== useWebSocket) {
-        console.log(`🔌 WebSocket mode changed: ${currentMode ? 'ENABLED' : 'DISABLED'} (localStorage=${adminSetting}, window=${windowSetting})`);
-        setUseWebSocket(currentMode);
-        
-        // Sync window global
-        window.WEBSOCKET_MODE = currentMode;
-      }
-    };
-
-    // Check every second for admin toggle changes
-    const modeInterval = setInterval(checkWebSocketMode, 1000);
-    return () => clearInterval(modeInterval);
-  }, [useWebSocket]);
+  // REMOVED: WebSocket mode monitoring - WebSocket always enabled
 
   // Fetch categories when selectedSetId changes
   useEffect(() => {
@@ -639,16 +522,19 @@ Focus on actionable business strategy insights.`;
       
       // Game doesn't exist, create it
       console.log(`🆕 HOST: Game ${gameId} doesn't exist - creating new game`);
+      console.log(`🔍 HOST: Creating game with questionSetId: ${selectedSetId}, gameType: ${currentGameType}`);
       const titleToUse = eventTitle || 'Engagements Session';
       await fetch(`${API_BASE}games/${gameId}/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           eventTitle: titleToUse,
-          aiContext: aiContext || null
+          aiContext: aiContext || null,
+          gameType: currentGameType,
+          questionSetId: selectedSetId
         })
       });
-      console.log(`🆕 HOST: Game ${gameId} created with title: ${titleToUse}`);
+      console.log(`🆕 HOST: Game ${gameId} created with title: ${titleToUse}, questionSetId: ${selectedSetId}`);
       console.log(`✅ HOST: Game ${gameId} created successfully`);
     } catch (e) {
       console.error('Failed to create/validate game', e);
@@ -656,6 +542,7 @@ Focus on actionable business strategy insights.`;
   };
 
   const restoreGameState = async () => {
+    setIsRestoringState(true); // Start restoration
     try {
       console.log(`🔄 HOST: Restoring game state for ${gameId}...`);
       
@@ -675,6 +562,22 @@ Focus on actionable business strategy insights.`;
         if (gameStateData.state) {
           setGameState(gameStateData.state);
           console.log(`🎮 HOST: Restored game state: ${gameStateData.state}`);
+        }
+        
+        // Restore game type
+        if (gameStateData.gameType) {
+          setCurrentGameType(gameStateData.gameType);
+          console.log(`🎯 HOST: Restored game type: ${gameStateData.gameType}`);
+        }
+        
+        // Restore question set
+        if (gameStateData.questionSetId) {
+          console.log(`🔄 HOST: Restoring question set: ${gameStateData.questionSetId}`);
+          setSelectedSetId(gameStateData.questionSetId);
+          fetchCategories(gameStateData.questionSetId);
+          console.log(`📚 HOST: Restored question set: ${gameStateData.questionSetId}`);
+        } else {
+          console.log(`⚠️ HOST: No questionSetId in game state to restore`);
         }
         
         // Calculate currentQuestionIndex from playedQuestions
@@ -712,6 +615,7 @@ Focus on actionable business strategy insights.`;
           console.log(`📝 HOST: Setting up current question: ${gameStateData.currentQuestion}`);
           
           // Set the questions array with the current question for display
+          console.log(`📝 HOST: Setting question data for display:`, gameStateData.currentQuestionData);
           setQuestions([gameStateData.currentQuestionData]);
           
           // Fetch answers for current question
@@ -729,6 +633,8 @@ Focus on actionable business strategy insights.`;
       }
     } catch (e) {
       console.error('Error restoring game state:', e);
+    } finally {
+      setIsRestoringState(false); // End restoration
     }
   };
 
@@ -842,6 +748,8 @@ Focus on actionable business strategy insights.`;
         const question = json.questions[0];
         console.log(`🎯 Got random question: ${question.id} - ${question.title}`);
         console.log(`📊 Remaining questions: ${json.availableCount}`);
+        console.log(`🎮 Question type: ${currentGameType}, has options: ${!!question.optionA}`);
+        console.log(`📝 Full question data:`, question);
         return question;
       }
       
@@ -859,12 +767,29 @@ Focus on actionable business strategy insights.`;
       const activeSets = json.sets?.filter(set => set.active) || [];
       setQuestionSets(activeSets);
       
-      // Auto-select first set if none selected
-      if (activeSets.length > 0 && !selectedSetId) {
+      console.log(`🔍 HOST: fetchQuestionSets auto-selection check:`, {
+        activeSetsCount: activeSets.length,
+        selectedSetId,
+        gameState,
+        shouldAutoSelect: activeSets.length > 0 && !selectedSetId && gameState === 'waiting'
+      });
+      
+      // Auto-select first set if none selected and no game is running
+      // CRITICAL: Don't auto-select during state restoration to prevent override of restored questionSetId
+      if (activeSets.length > 0 && !selectedSetId && gameState === 'waiting' && !isRestoringState) {
         const firstSetId = activeSets[0].id;
         setSelectedSetId(firstSetId);
         fetchCategories(firstSetId);
         fetchQuestions(firstSetId);
+        console.log(`🎯 HOST: Auto-selected first question set: ${firstSetId}`);
+      } else if (selectedSetId) {
+        console.log(`⏳ HOST: Question set already selected: ${selectedSetId}`);
+      } else if (gameState !== 'waiting') {
+        console.log(`⏳ HOST: Game in progress (${gameState}) - not auto-selecting question set`);
+      } else if (isRestoringState) {
+        console.log(`🔄 HOST: State restoration in progress - skipping auto-selection`);
+      } else {
+        console.log(`⏳ HOST: No auto-selection - no active sets available`);
       }
     } catch (e) {
       console.error('fetchQuestionSets error', e);
@@ -976,38 +901,7 @@ Focus on actionable business strategy insights.`;
     }
   };
 
-  const fetchGameStateForSync = async () => {
-    try {
-      const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
-      const gameStateData = await stateRes.json();
-      
-      // Update debug mode from game state
-      if (typeof gameStateData.debugMode === 'boolean') {
-        setGameDebugMode(gameStateData.debugMode);
-      }
-      
-      // Update current question data if it's different from what we have
-      if (gameStateData.currentQuestionData && questions.length > 0) {
-        const currentDisplayedQuestion = questions[0];
-        const stateQuestion = gameStateData.currentQuestionData;
-        
-        // Check if the displayed question is different from the state question
-        if (currentDisplayedQuestion.title !== stateQuestion.title || 
-            currentDisplayedQuestion.category !== stateQuestion.category) {
-          console.log(`🔄 HOST: Syncing question data from state`);
-          console.log(`   Current: ${currentDisplayedQuestion.title} (${currentDisplayedQuestion.category})`);
-          console.log(`   State: ${stateQuestion.title} (${stateQuestion.category})`);
-          setQuestions([stateQuestion]);
-        }
-      } else if (gameStateData.currentQuestionData && questions.length === 0) {
-        // No questions loaded yet, set from state
-        console.log(`🔄 HOST: Loading question data from state`);
-        setQuestions([gameStateData.currentQuestionData]);
-      }
-    } catch (e) {
-      console.error('fetchGameStateForSync error', e);
-    }
-  };
+  // REMOVED: fetchGameStateForSync - WebSocket handles state synchronization
 
   const handleNextQuestion = async () => {
     // Show confirmation when skipping to next question during Ask phase
@@ -1067,7 +961,8 @@ Focus on actionable business strategy insights.`;
           scoredQuestions,
           usedQuestions,
           playedQuestions,
-          currentQuestionData: randomQuestion
+          currentQuestionData: randomQuestion,
+          gameType: currentGameType
         })
       });
       
@@ -1075,6 +970,9 @@ Focus on actionable business strategy insights.`;
       setManualStateChange(true);
       setCurrentQuestionIndex(playedQuestions.length - 1); // Set to the index of this question
       setGameState('question');
+      
+      // Clear all answer/voting state for new question
+      console.log(`🧹 HOST: Clearing state for new question - resetting answers and players`);
       setAnswers([]);
       setPlayersWhoAnswered([]);
       setVotes([]);
@@ -1082,6 +980,8 @@ Focus on actionable business strategy insights.`;
       setCurrentQuestionVotes([]);
       setCurrentAnswerIndex(0);
       setLessonNumber(playedQuestions.length);
+      
+      console.log(`📊 HOST: State after reset - Answers: ${[].length}, PlayersWhoAnswered: ${[].length}`);
       
       // Set the questions array from the data that was sent to the state
       setQuestions([randomQuestion]);
@@ -1091,11 +991,8 @@ Focus on actionable business strategy insights.`;
         setManualStateChange(false);
       }, 3000);
       
-      // Immediately check for existing answers for this question
-      setTimeout(() => {
-        console.log(`🚀 HOST: Checking for existing answers for question ${nextQuestionNumber}`);
-        fetchAnswersForQuestion(nextQuestionNumber);
-      }, 500);
+      // DON'T immediately check for answers on a new question - let players answer first
+      console.log(`🚀 HOST: New question ${nextQuestionNumber} ready - waiting for player answers`);
       
       console.log(`🎯 Started question ${nextQuestionNumber}: ${randomQuestion.title}`);
     } catch (e) {
@@ -1103,7 +1000,130 @@ Focus on actionable business strategy insights.`;
     }
   };
 
+  const calculateTriviaScores = async () => {
+    try {
+      // Get current sequential question number and question data
+      const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
+      const currentState = stateRes.ok ? await stateRes.json() : {};
+      const questionNumber = currentState.currentQuestion;
+      const questionData = currentState.currentQuestionData;
+      
+      if (!questionNumber || !questionData) {
+        console.log('⚠️ No current question data found for trivia scoring');
+        return;
+      }
+      
+      console.log(`🎯 CALCULATING TRIVIA SCORES FOR QUESTION: ${questionNumber}`);
+      console.log(`✅ Correct answer: ${questionData.correctAnswer}`);
+      console.log(`💰 Points per question: ${questionData.points || 10}`);
+      
+      // Get player answers for this question
+      const answersRes = await fetch(`${API_BASE}games/${gameId}/answers?questionNumber=${questionNumber}`);
+      const answersJson = await answersRes.json();
+      const playerAnswers = answersJson.answers || [];
+      
+      console.log(`📋 Player answers:`, playerAnswers);
+      
+      // Calculate scores based on correct answers
+      const playerScoreUpdates = {};
+      const pointsPerCorrect = questionData.points || 10;
+      
+      playerAnswers.forEach(answer => {
+        // Find the correct option text based on the letter answer
+        const optionKey = `option${answer.answer}`;
+        const playerAnswerText = questionData[optionKey];
+        const isCorrect = questionData.correctAnswer === playerAnswerText;
+        
+        console.log(`👤 ${answer.name} answered: ${answer.answer} (${playerAnswerText}) - ${isCorrect ? '✅ CORRECT' : '❌ WRONG'}`);
+        
+        if (isCorrect) {
+          playerScoreUpdates[answer.name] = pointsPerCorrect;
+        }
+      });
+      
+      console.log('🏆 TRIVIA SCORE UPDATES:', playerScoreUpdates);
+      
+      // Check if this question has already been scored
+      const scoredQuestions = currentState.scoredQuestions || [];
+      const alreadyScored = scoredQuestions.includes(questionNumber);
+      
+      if (alreadyScored) {
+        console.log(`⚠️ TRIVIA QUESTION ${questionNumber} ALREADY SCORED - SKIPPING`);
+        return;
+      }
+      
+      // Update scores in backend
+      if (Object.keys(playerScoreUpdates).length > 0) {
+        console.log(`💾 UPDATING TRIVIA SCORES IN BACKEND:`, playerScoreUpdates);
+        await fetch(`${API_BASE}games/${gameId}/scores`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            questionNumber: questionNumber,
+            scores: playerScoreUpdates
+          })
+        });
+        
+        console.log(`✅ TRIVIA SCORES UPDATED SUCCESSFULLY`);
+      } else {
+        console.log(`📊 NO CORRECT ANSWERS - NO SCORE UPDATES NEEDED`);
+      }
+      
+      // Refresh players to get updated scores
+      await fetchPlayers();
+      
+    } catch (e) {
+      console.error('Error calculating trivia scores:', e);
+    }
+  };
+
   const handleFinishQuestion = async () => {
+    // For trivia, go straight to results
+    if (currentGameType === 'trivia') {
+      // Warn if not all players have answered
+      if (playersWhoAnswered.length < players.length) {
+        const proceed = await showConfirmation(
+          'Show Results?',
+          `Only ${playersWhoAnswered.length} of ${players.length} players have answered. Do you want to show results anyway?`,
+          'Show Results'
+        );
+        if (!proceed) return;
+      }
+      
+      // Calculate trivia scores before showing results
+      try {
+        await calculateTriviaScores();
+      } catch (e) {
+        console.error('Error calculating trivia scores:', e);
+      }
+      
+      setManualStateChange(true);
+      setGameState('results');
+      
+      // Update game state in database
+      try {
+        const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
+        const currentState = stateRes.ok ? await stateRes.json() : {};
+        
+        await fetch(`${API_BASE}games/${gameId}/state`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            state: 'results',
+            currentQuestion: currentState.currentQuestion,
+            currentQuestionId: currentState.currentQuestion,
+            scoredQuestions: [...(currentState.scoredQuestions || []), currentState.currentQuestion],
+            usedQuestions: currentState.usedQuestions || [],
+            gameType: currentGameType
+          })
+        });
+      } catch (e) {
+        console.error('Error updating game state to results:', e);
+      }
+      return;
+    }
+    
+    // Call and Answer flow - proceed to voting
     // Warn if not all players have answered
     if (playersWhoAnswered.length < players.length) {
       const proceed = await showConfirmation(
@@ -1411,6 +1431,7 @@ Focus on actionable business strategy insights.`;
     setGameId(newGameId);
     setCurrentQuestionIndex(-1);
     setGameState('waiting');
+    setCurrentGameType(engagementType); // Set the game type
     setAnswers([]);
     setPlayersWhoAnswered([]);
     setVotes([]);
@@ -1631,7 +1652,7 @@ Focus on actionable business strategy insights.`;
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795be09b462b2e8ebf71_osmo-parallax-layer-3.webp" loading="eager" width="800" data-parallax-layer="1" alt="" className="parallax__layer-img" />
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" width="800" data-parallax-layer="2" alt="" className="parallax__layer-img" />
                 <div data-parallax-layer="3" className="parallax__layer-title">
-                  <h2 className="parallax__title">Engagements</h2>
+                  <h2 className="parallax__title">{currentGameType === 'trivia' ? 'Trivia' : 'Call & Answer'}</h2>
                 </div>
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" width="800" data-parallax-layer="4" alt="" className="parallax__layer-img" />
               </div>
@@ -1821,6 +1842,24 @@ Focus on actionable business strategy insights.`;
               </div>
             )}
             
+            {engagementType === 'trivia' && (
+              <div className="form-group">
+                <label>Timer (seconds per question):</label>
+                <input
+                  type="number"
+                  value={triviaTimer}
+                  onChange={(e) => setTriviaTimer(Math.max(10, Math.min(300, parseInt(e.target.value) || 30)))}
+                  min="10"
+                  max="300"
+                  step="10"
+                  className="dialog-input"
+                />
+                <small className="dialog-help-text">
+                  Players will have {triviaTimer} seconds to answer each question.
+                </small>
+              </div>
+            )}
+            
             <div className="form-group">
               <label>AI Context (Optional):</label>
               <textarea
@@ -1994,7 +2033,7 @@ Focus on actionable business strategy insights.`;
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795be09b462b2e8ebf71_osmo-parallax-layer-3.webp" loading="eager" width="800" data-parallax-layer="1" alt="" className="parallax__layer-img" />
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" width="800" data-parallax-layer="2" alt="" className="parallax__layer-img" />
                 <div data-parallax-layer="3" className="parallax__layer-title">
-                  <h2 className="parallax__title">Engagements</h2>
+                  <h2 className="parallax__title">{currentGameType === 'trivia' ? 'Trivia' : 'Call & Answer'}</h2>
                 </div>
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" width="800" data-parallax-layer="4" alt="" className="parallax__layer-img" />
               </div>
@@ -2007,7 +2046,10 @@ Focus on actionable business strategy insights.`;
         {eventTitle && (
           <div className="game-title-header">
             <h1 className="game-title-main">{eventTitle}</h1>
-            <div className="player-count-info">({players.length} Player{players.length !== 1 ? 's' : ''})</div>
+            <div className="game-meta-info">
+              <span className="question-set-name">{questionSets.find(set => set.id === selectedSetId)?.name || 'Unknown Set'}</span>
+              <span className="player-count-info">({players.length} Player{players.length !== 1 ? 's' : ''})</span>
+            </div>
           </div>
         )}
         {!eventTitle && (
@@ -2061,11 +2103,11 @@ Focus on actionable business strategy insights.`;
         {gameState === 'question' && questions.length > 0 && (
           <div className="question-state">
             <div className="question-header">
-              <h2>Lesson {lessonNumber}</h2>
+              <h2>{currentGameType === 'trivia' ? `Question ${lessonNumber}` : `Lesson ${lessonNumber}`}</h2>
               <div className="field-badge">
                 {questions[0].field || questions[0].category}
               </div>
-              {questions[0].school && (
+              {questions[0].school && currentGameType === 'call-and-answer' && (
                 <div className="school-name">{questions[0].school}</div>
               )}
             </div>
@@ -2076,7 +2118,7 @@ Focus on actionable business strategy insights.`;
             >
               {questions[0].title || questions[0].question}
             </div>
-            {!lessonExpanded && questions[0].detail && (
+            {!lessonExpanded && questions[0].detail && currentGameType === 'call-and-answer' && (
               <div 
                 className="lesson-detail clickable-lesson" 
                 onClick={() => setLessonExpanded(true)}
@@ -2085,8 +2127,23 @@ Focus on actionable business strategy insights.`;
                 {questions[0].detail}
               </div>
             )}
+            
+            {currentGameType === 'trivia' && questions[0] && (
+              <div className="trivia-options">
+                {['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF']
+                  .filter(key => questions[0][key])
+                  .map((key, index) => (
+                    <div key={key} className="category-item trivia-option">
+                      <span className="category-name">
+                        <span className="option-letter">{String.fromCharCode(65 + index)}.</span> {questions[0][key]}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            )}
+            
             <div className="application-prompt">
-              <strong>{getInstructionText()}</strong>
+              <strong>{currentGameType === 'trivia' ? 'Select the best answer:' : getInstructionText()}</strong>
             </div>
             <div className="answer-progress">
               {playersWhoAnswered.length} of {players.length} players answered
@@ -2097,7 +2154,7 @@ Focus on actionable business strategy insights.`;
                 onClick={() => { closeAllSidePanels(); handleFinishQuestion(); }}
                 disabled={answers.length === 0}
               >
-                Vote
+                {currentGameType === 'trivia' ? 'Show Results' : 'Vote'}
               </button>
               <button 
                 className="btn-secondary" 
@@ -2161,9 +2218,62 @@ Focus on actionable business strategy insights.`;
           <div className="results-state">
             <h2>🏆 Results</h2>
             
-            
-            <div className="results-display">
-              {answers.map((answer, idx) => {
+            {currentGameType === 'trivia' ? (
+              <div className="trivia-results-display">
+                <div className="trivia-question-recap">
+                  <h3>{questions[0]?.title}</h3>
+                </div>
+                
+                <div className="trivia-options-results">
+                  {['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF']
+                    .filter(key => questions[0]?.[key])
+                    .map((key, index) => {
+                      const optionLetter = String.fromCharCode(65 + index);
+                      const isCorrect = questions[0]?.correctAnswer === questions[0]?.[key];
+                      
+                      // Calculate how many players selected this option
+                      const playersWhoSelectedThis = answers.filter(answer => answer.answer === optionLetter).length;
+                      const totalPlayers = answers.length;
+                      const percentage = totalPlayers > 0 ? Math.round((playersWhoSelectedThis / totalPlayers) * 100) : 0;
+                      
+                      return (
+                        <div 
+                          key={key} 
+                          className={`category-item trivia-result-option ${isCorrect ? 'correct' : 'incorrect'}`}
+                        >
+                          <span className="category-name">
+                            <span className="option-letter">{optionLetter}.</span> {questions[0][key]}
+                            {isCorrect && <span className="correct-indicator"> ✓</span>}
+                          </span>
+                          <span className="category-count">
+                            {percentage}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+                
+                <div className="trivia-player-scores">
+                  <h4>Player Scores This Round:</h4>
+                  {answers.map((answer, idx) => {
+                    const isCorrect = questions[0]?.correctAnswer === questions[0]?.[`option${answer.answer}`];
+                    const points = isCorrect ? (questions[0]?.points || 10) : 0;
+                    const player = players.find(p => p.name === answer.name);
+                    
+                    return (
+                      <div key={idx} className={`trivia-player-result ${isCorrect ? 'correct' : 'incorrect'}`}>
+                        <span className="player-name">{answer.name}</span>
+                        <span className="player-answer">Answer: {answer.answer}</span>
+                        <span className="player-points">{isCorrect ? '✓' : '✗'} {points} pts</span>
+                        <span className="player-total">Total: {player?.score || 0} pts</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="results-display">
+                {answers.map((answer, idx) => {
                 // 🎯 RESULTS DISPLAY: Calculate points for THIS answer from THIS question only
                 console.log(`🖥️ RENDERING RESULT FOR ANSWER ${idx}: "${answer.answer}" by ${answer.name}`);
                 console.log(`📊 Using currentQuestionVotes (length: ${currentQuestionVotes.length}):`, currentQuestionVotes);
@@ -2210,7 +2320,8 @@ Focus on actionable business strategy insights.`;
                   </div>
                 );
               })}
-            </div>
+              </div>
+            )}
             
             <div className="results-actions">
               <button className="btn-primary" onClick={() => { closeAllSidePanels(); handleNextQuestion(); }}>

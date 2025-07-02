@@ -48,6 +48,8 @@ function PlayerPage() {
   const [answerInput, setAnswerInput] = useState('');
   const [hasAnswered, setHasAnswered] = useState(false);
   const [gameState, setGameState] = useState('waiting'); // waiting, question, voting, results
+  const [gameType, setGameType] = useState('call-and-answer'); // 'call-and-answer' or 'trivia'
+  const [selectedTriviaAnswer, setSelectedTriviaAnswer] = useState(null); // For trivia: stores selected option letter
   const [answers, setAnswers] = useState([]);
   const [votes, setVotes] = useState({ first: '', second: '', third: '' });
   const [hasVoted, setHasVoted] = useState(false);
@@ -62,15 +64,11 @@ function PlayerPage() {
   const [playerRanking, setPlayerRanking] = useState(null);
   const [allPlayers, setAllPlayers] = useState([]);
   const [customInstruction, setCustomInstruction] = useState(null);
+  const [lastProcessedQuestionId, setLastProcessedQuestionId] = useState(null);
 
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
-  const [useWebSocket, setUseWebSocket] = useState(() => {
-    const adminSetting = localStorage.getItem('admin_websocket_mode');
-    const useWebSocket = adminSetting !== null ? adminSetting === 'true' : true; // Default to true
-    const windowSetting = window.WEBSOCKET_MODE || useWebSocket;
-    return useWebSocket;
-  });
+  const [useWebSocket, setUseWebSocket] = useState(true); // Always use WebSocket
 
   // Detect desktop screens to prevent mobile overlay behavior
   useEffect(() => {
@@ -255,28 +253,7 @@ function PlayerPage() {
     }
   };
 
-  useEffect(() => {
-    if (joined && gameId) {
-      // Skip polling if WebSocket mode is enabled (for testing)
-      if (useWebSocket) {
-        console.log('⏭️ PLAYER: Skipping game state polling (WebSocket mode enabled)');
-        return;
-      }
-      
-      // Poll for game state - slower when actively voting to avoid disrupting players
-      // Check if user has been actively voting in the last 5 seconds (extended to prevent interference)
-      const recentInteraction = Date.now() - lastVoteInteraction < 5000;
-      const hasVotesInProgress = Object.values(votes).some(v => v !== '');
-      // Extend poll interval significantly during voting to prevent state resets
-      const pollInterval = (gameState === 'voting' && (hasVotesInProgress || recentInteraction || isUserVoting)) ? 10000 : 2000;
-      
-      const interval = setInterval(() => {
-        checkGameState();
-      }, pollInterval);
-      
-      return () => clearInterval(interval);
-    }
-  }, [joined, gameId, gameState, lastVoteInteraction, useWebSocket]); // Removed 'votes' dependency
+  // REMOVED: HTTP polling - WebSocket handles all state updates
 
   // Monitor WebSocket mode changes from admin panel
   useEffect(() => {
@@ -348,6 +325,10 @@ function PlayerPage() {
     if (!connected) {
       console.error('🔌 Failed to connect WebSocket, falling back to polling');
       setUseWebSocket(false);
+    } else {
+      // Do initial state check when WebSocket connects
+      console.log('🔌 PLAYER: WebSocket connected, doing initial state check');
+      setTimeout(() => checkGameState(), 500);
     }
 
     return () => {
@@ -454,37 +435,60 @@ function PlayerPage() {
       const stateJson = await stateRes.json();
       const serverGameState = stateJson.state || 'waiting';
       const currentQuestionNumber = stateJson.currentQuestion; // Use currentQuestion (sequential number)
+      const serverGameType = stateJson.gameType || 'call-and-answer';
+      
+      // Update game type if changed
+      if (serverGameType !== gameType) {
+        setGameType(serverGameType);
+      }
       
       if (serverGameState === 'question' && currentQuestionNumber) {
         // Get the current question from the game state data
-        const currentQuestion = stateJson.currentQuestionData;
+        const newQuestionData = stateJson.currentQuestionData;
         
-        if (currentQuestion) {
-          console.log(`✅ PLAYER: Found question in state:`, currentQuestion);
+        if (newQuestionData) {
+          console.log(`✅ PLAYER: Found question in state:`, newQuestionData);
           console.log(`📝 PLAYER: Question number: ${currentQuestionNumber}`);
           
+          // Check if this is a NEW question by comparing against the last processed question ID
+          const isNewQuestion = lastProcessedQuestionId !== currentQuestionNumber;
+          
           // Set the current question ID to the sequential number for consistency
-          currentQuestion.id = currentQuestionNumber;
-          setCurrentQuestion(currentQuestion);
+          newQuestionData.id = currentQuestionNumber;
+          
+          setCurrentQuestion(newQuestionData);
           
           // Fetch custom instruction for this question's set
-          if (currentQuestion.setId || currentQuestion.SetId) {
-            fetchQuestionSetInstruction(currentQuestion.setId || currentQuestion.SetId);
+          if (newQuestionData.setId || newQuestionData.SetId) {
+            fetchQuestionSetInstruction(newQuestionData.setId || newQuestionData.SetId);
           }
           
-          // Check if player has already answered this question
-          const answersRes = await fetch(`${API_BASE}games/${currentGameId}/answers?questionNumber=${currentQuestionNumber}`);
-          const answersJson = await answersRes.json();
-          const playerAnswer = answersJson.answers?.find(a => 
-            a.name === currentPlayerName && a.questionNumber === currentQuestionNumber
-          );
-          
-          if (playerAnswer) {
-            setHasAnswered(true);
-            console.log(`✅ PLAYER: Already answered this question`);
+          // CRITICAL FIX: Only check answer status and reset state for NEW questions
+          // This prevents race conditions that cause auto-submission
+          if (isNewQuestion) {
+            console.log(`🆕 PLAYER: New question detected (${currentQuestionNumber}) - checking answer status`);
+            
+            // Mark this question as processed to prevent repeated processing
+            setLastProcessedQuestionId(currentQuestionNumber);
+            
+            // Check if player has already answered this question
+            const answersRes = await fetch(`${API_BASE}games/${currentGameId}/answers?questionNumber=${currentQuestionNumber}`);
+            const answersJson = await answersRes.json();
+            const playerAnswer = answersJson.answers?.find(a => 
+              a.name === currentPlayerName && a.questionNumber === currentQuestionNumber
+            );
+            
+            if (playerAnswer) {
+              setHasAnswered(true);
+              console.log(`✅ PLAYER: Already answered this question`);
+            } else {
+              setHasAnswered(false);
+              // Always reset trivia selection for new questions
+              setSelectedTriviaAnswer(null);
+              console.log(`📝 PLAYER: Ready to answer new question - reset trivia selection`);
+            }
           } else {
-            setHasAnswered(false);
-            console.log(`📝 PLAYER: Ready to answer question`);
+            console.log(`🔄 PLAYER: Same question (${currentQuestionNumber}) - preserving answer state`);
           }
           
           // Reset voting state for new question (but preserve if user is actively voting)
@@ -634,9 +638,23 @@ function PlayerPage() {
     }
   };
 
-  const handleSubmitAnswer = async (e) => {
-    e.preventDefault();
-    if (!answerInput.trim() || !currentQuestion) return;
+  const handleSubmitAnswer = async (e, triviaAnswer = null) => {
+    if (e) e.preventDefault();
+    
+    console.log(`🎯 PLAYER: handleSubmitAnswer called - gameType: ${gameType}, triviaAnswer: ${triviaAnswer}, hasAnswered: ${hasAnswered}`);
+    
+    // For trivia, use the provided answer; for call-and-answer, use the text input
+    const answer = gameType === 'trivia' ? triviaAnswer : answerInput.trim();
+    
+    if (!answer || !currentQuestion) {
+      console.log(`❌ PLAYER: Submit blocked - answer: ${answer}, currentQuestion: ${!!currentQuestion}`);
+      return;
+    }
+    
+    if (hasAnswered) {
+      console.log(`❌ PLAYER: Submit blocked - already answered`);
+      return;
+    }
 
     try {
       await fetch(`${API_BASE}games/${gameId}/answers`, {
@@ -645,7 +663,7 @@ function PlayerPage() {
         body: JSON.stringify({
           name: playerName,
           questionNumber: currentQuestion.id,
-          answer: answerInput.trim(),
+          answer: answer,
         }),
       });
       
@@ -933,50 +951,83 @@ function PlayerPage() {
               </div>
             )}
             <div className="application-prompt">
-              <strong>{getPlayerInstructionText(customInstruction)}</strong>
+              <strong>{gameType === 'trivia' ? 'Select the best answer:' : getPlayerInstructionText(customInstruction)}</strong>
             </div>
             
             {!hasAnswered ? (
-              <>
-                {isAnswerInputFocused && !isDesktop && (
-                  <div className="mobile-input-overlay" onClick={() => setIsAnswerInputFocused(false)}>
-                    <div className="mobile-input-container" onClick={(e) => e.stopPropagation()}>
-                      <button 
-                        className="mobile-minimize-btn mobile-minimize-left"
-                        onClick={() => setIsAnswerInputFocused(false)}
-                        type="button"
-                      >
-                        ↓
-                      </button>
-                      <button 
-                        className="mobile-submit-btn-top"
-                        onClick={handleSubmitAnswer}
-                        type="button"
-                        disabled={!answerInput.trim()}
-                      >
-                        ✈️
-                      </button>
-                      <form onSubmit={handleSubmitAnswer} className="mobile-answer-form">
-                        <textarea
-                          value={answerInput}
-                          onChange={(e) => setAnswerInput(e.target.value)}
-                          placeholder="Describe how you would apply this lesson to your work, project, or team..."
-                          className="mobile-answer-input"
-                          rows={12}
-                          required
-                          autoFocus
-                          spellCheck={true}
-                          autoComplete="on"
-                          autoCorrect="on"
-                          autoCapitalize="sentences"
-                        />
-                        <button type="submit" className="btn-primary btn-large mobile-submit-btn">
-                          Submit Answer
-                        </button>
-                      </form>
-                    </div>
+              gameType === 'trivia' ? (
+                <>
+                  <div className="trivia-answer-options">
+                    {['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF']
+                      .filter(key => currentQuestion[key])
+                      .map((key, index) => {
+                        const optionLetter = String.fromCharCode(65 + index);
+                        const isSelected = selectedTriviaAnswer === optionLetter;
+                        return (
+                          <div
+                            key={key}
+                            className={`category-item trivia-option ${isSelected ? 'active' : ''}`}
+                            onClick={() => setSelectedTriviaAnswer(optionLetter)}
+                          >
+                            <span className="category-name">
+                              <span className="option-letter">{optionLetter}.</span> {currentQuestion[key]}
+                            </span>
+                          </div>
+                        );
+                      })}
                   </div>
-                )}
+                  
+                  <div className="trivia-submit-container">
+                    <button 
+                      className="btn-primary btn-large"
+                      onClick={() => handleSubmitAnswer(null, selectedTriviaAnswer)}
+                      disabled={!selectedTriviaAnswer}
+                    >
+                      Submit Answer
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {isAnswerInputFocused && !isDesktop && (
+                    <div className="mobile-input-overlay" onClick={() => setIsAnswerInputFocused(false)}>
+                      <div className="mobile-input-container" onClick={(e) => e.stopPropagation()}>
+                        <button 
+                          className="mobile-minimize-btn mobile-minimize-left"
+                          onClick={() => setIsAnswerInputFocused(false)}
+                          type="button"
+                        >
+                          ↓
+                        </button>
+                        <button 
+                          className="mobile-submit-btn-top"
+                          onClick={handleSubmitAnswer}
+                          type="button"
+                          disabled={!answerInput.trim()}
+                        >
+                          ✈️
+                        </button>
+                        <form onSubmit={handleSubmitAnswer} className="mobile-answer-form">
+                          <textarea
+                            value={answerInput}
+                            onChange={(e) => setAnswerInput(e.target.value)}
+                            placeholder="Describe how you would apply this lesson to your work, project, or team..."
+                            className="mobile-answer-input"
+                            rows={12}
+                            required
+                            autoFocus
+                            spellCheck={true}
+                            autoComplete="on"
+                            autoCorrect="on"
+                            autoCapitalize="sentences"
+                          />
+                          <button type="submit" className="btn-primary btn-large mobile-submit-btn">
+                            Submit Answer
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  )}
                 <form onSubmit={handleSubmitAnswer} className="answer-form">
                   <textarea
                     value={answerInput}
@@ -995,10 +1046,11 @@ function PlayerPage() {
                     Submit Answer
                   </button>
                 </form>
-              </>
+                </>
+              )
             ) : (
               <div className="answer-submitted">
-                <h3>✅ Application Submitted!</h3>
+                <h3>✅ {gameType === 'trivia' ? 'Answer Submitted!' : 'Application Submitted!'}</h3>
                 <p>Waiting for other players...</p>
               </div>
             )}
@@ -1104,28 +1156,88 @@ function PlayerPage() {
           <div className="results-screen">
             <h2>📊 Round Results</h2>
             
-            <div className="player-results-summary">
-              <div className="player-total-score">
-                <span className="score-label">Total Score:</span>
-                <span className="score-value">{playerScore} points</span>
-              </div>
-              
-              {playerRanking && (
-                <div className="player-ranking">
-                  <span className="ranking-label">Your Ranking:</span>
-                  <span className="ranking-value">
-                    {playerRanking.rank === 1 ? '🏆' : 
-                     playerRanking.rank === 2 ? '🥈' : 
-                     playerRanking.rank === 3 ? '🥉' : '📍'} 
-                    {playerRanking.rank} of {playerRanking.total}
-                  </span>
+            {gameType === 'trivia' ? (
+              <div className="trivia-player-results">
+                <div className="trivia-question-recap">
+                  <h3>{currentQuestion?.title}</h3>
                 </div>
-              )}
-            </div>
-            
-            <div className="results-message">
-              <p>Check the main screen for detailed results and AI insights!</p>
-            </div>
+                
+                <div className="trivia-options-results">
+                  {['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF']
+                    .filter(key => currentQuestion?.[key])
+                    .map((key, index) => {
+                      const optionLetter = String.fromCharCode(65 + index);
+                      const isCorrect = currentQuestion?.correctAnswer === currentQuestion?.[key];
+                      
+                      // Find player's answer from the answers array
+                      const playerAnswer = answers.find(answer => answer.name === playerName);
+                      const isPlayerChoice = playerAnswer?.answer === optionLetter;
+                      
+                      let className = 'category-item trivia-result-option';
+                      if (isCorrect) {
+                        className += ' correct';
+                      } else if (isPlayerChoice) {
+                        className += ' player-wrong';
+                      }
+                      
+                      return (
+                        <div key={key} className={className}>
+                          <span className="category-name">
+                            <span className="option-letter">{optionLetter}.</span> {currentQuestion[key]}
+                            {isCorrect && <span className="correct-indicator"> ✓</span>}
+                            {isPlayerChoice && !isCorrect && <span className="wrong-indicator"> ✗</span>}
+                            {isPlayerChoice && <span className="your-choice"> (Your Choice)</span>}
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+                
+                <div className="player-results-summary">
+                  <div className="player-total-score">
+                    <span className="score-label">Total Score:</span>
+                    <span className="score-value">{playerScore} points</span>
+                  </div>
+                  
+                  {playerRanking && (
+                    <div className="player-ranking">
+                      <span className="ranking-label">Your Ranking:</span>
+                      <span className="ranking-value">
+                        {playerRanking.rank === 1 ? '🏆' : 
+                         playerRanking.rank === 2 ? '🥈' : 
+                         playerRanking.rank === 3 ? '🥉' : '📍'} 
+                        {playerRanking.rank} of {playerRanking.total}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="call-and-answer-results">
+                <div className="player-results-summary">
+                  <div className="player-total-score">
+                    <span className="score-label">Total Score:</span>
+                    <span className="score-value">{playerScore} points</span>
+                  </div>
+                  
+                  {playerRanking && (
+                    <div className="player-ranking">
+                      <span className="ranking-label">Your Ranking:</span>
+                      <span className="ranking-value">
+                        {playerRanking.rank === 1 ? '🏆' : 
+                         playerRanking.rank === 2 ? '🥈' : 
+                         playerRanking.rank === 3 ? '🥉' : '📍'} 
+                        {playerRanking.rank} of {playerRanking.total}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="results-message">
+                  <p>Check the main screen for detailed results and AI insights!</p>
+                </div>
+              </div>
+            )}
             
             <div className="status-indicator">
               <div className="pulse"></div>
