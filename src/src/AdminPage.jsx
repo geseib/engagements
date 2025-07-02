@@ -19,6 +19,7 @@ function AdminPage() {
   const [customInstructions, setCustomInstructions] = useState('');
   const [aiContextInstructions, setAiContextInstructions] = useState('');
   const [showDefaultInstructions, setShowDefaultInstructions] = useState(false);
+  const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer' or 'trivia'
   
   // Question set deletion
   const [selectedQuestionSet, setSelectedQuestionSet] = useState('');
@@ -44,6 +45,7 @@ function AdminPage() {
   const [editDescription, setEditDescription] = useState('');
   const [editInstructions, setEditInstructions] = useState('');
   const [editAiContextInstructions, setEditAiContextInstructions] = useState('');
+  const [editEngagementType, setEditEngagementType] = useState('call-and-answer');
   const [saveStatus, setSaveStatus] = useState('');
 
   const defaultInstructions = "How would you apply this concept in your current role or organization? Consider the specific challenges and opportunities in your context.";
@@ -55,6 +57,7 @@ function AdminPage() {
     setEditDescription(questionSet.description || '');
     setEditInstructions(questionSet.customInstruction || '');
     setEditAiContextInstructions(questionSet.aiContextInstruction || '');
+    setEditEngagementType(questionSet.engagementType || 'call-and-answer');
     setSaveStatus('');
   };
 
@@ -65,6 +68,7 @@ function AdminPage() {
     setEditDescription('');
     setEditInstructions('');
     setEditAiContextInstructions('');
+    setEditEngagementType('call-and-answer');
     setSaveStatus('');
   };
 
@@ -314,7 +318,8 @@ function AdminPage() {
           customTitle: customTitle.trim(),
           customDescription: customDescription.trim(),
           customInstructions: customInstructions.trim(),
-          aiContextInstructions: aiContextInstructions.trim()
+          aiContextInstructions: aiContextInstructions.trim(),
+          engagementType: engagementType
         })
       });
 
@@ -500,6 +505,21 @@ function AdminPage() {
 
               <div className="form-row">
                 <div className="form-group">
+                  <label htmlFor="engagement-type">Engagement Type *</label>
+                  <select
+                    id="engagement-type"
+                    value={engagementType}
+                    onChange={(e) => setEngagementType(e.target.value)}
+                    className="input-field"
+                  >
+                    <option value="call-and-answer">Call and Answer</option>
+                    <option value="trivia">Trivia</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
                   <label htmlFor="custom-instructions">
                     Custom Instructions 
                     <button 
@@ -609,6 +629,7 @@ function AdminPage() {
                     <div className="set-stats">
                       <span className="stat-badge">{set.totalQuestions} questions</span>
                       <span className="stat-badge">{set.categoryCount} categories</span>
+                      <span className="stat-badge">{set.engagementType === 'trivia' ? 'Trivia' : 'Call and Answer'}</span>
                       <button
                         className={`status-badge clickable ${set.active ? 'active' : 'inactive'}`}
                         onClick={() => handleToggleActive(set.id, set.active)}

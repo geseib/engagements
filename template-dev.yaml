@@ -1455,7 +1455,7 @@ Resources:
             Item: {
               PK: `GAME#${gameId}`,
               SK: 'METADATA',
-              Title: eventTitle || 'Working Backwards Session',
+              Title: eventTitle || 'Engagements Session',
               AIContext: aiContext || null,
               CreatedAt: new Date().toISOString(),
               ttl
@@ -1576,7 +1576,8 @@ Resources:
                 customInstruction: item.CustomInstruction || null,
                 aiContextInstruction: item.AIContextInstruction || null,
                 active: true,
-                categories: categories
+                categories: categories,
+                engagementType: item.EngagementType || 'call-and-answer'
               });
             }
           }
@@ -1842,11 +1843,11 @@ Resources:
               
               games.push({
                 gameId: gameId,
-                title: item.Title || item.EventTitle || 'Working Backwards Session',
+                title: item.Title || item.EventTitle || 'Engagements Session',
                 hostName: item.HostName || 'Unknown Host',
                 createdAt: item.CreatedAt || new Date().toISOString(),
                 lastPlayedAt: lastPlayedAt,
-                eventTitle: item.Title || item.EventTitle || 'Working Backwards Session'
+                eventTitle: item.Title || item.EventTitle || 'Engagements Session'
               });
             }
             
@@ -1967,7 +1968,7 @@ Resources:
         const db = new AWS.DynamoDB.DocumentClient();
         exports.uploadQuestions = async (event) => {
           try {
-            const { fileName, fileContent, customTitle, customDescription, customInstructions, aiContextInstructions } = JSON.parse(event.body);
+            const { fileName, fileContent, customTitle, customDescription, customInstructions, aiContextInstructions, engagementType } = JSON.parse(event.body);
             
             console.log(`Processing CSV upload: ${fileName}`);
             console.log(`Custom title: ${customTitle}`);
@@ -2132,6 +2133,7 @@ Resources:
                 Active: true,
                 CreatedAt: new Date().toISOString(),
                 SourceFile: fileName,
+                EngagementType: engagementType || 'call-and-answer',
                 Mapping: {
                   categoryColumn: categoryIndex >= 0 ? headers[categoryIndex] : '',
                   titleColumn: titleIndex >= 0 ? headers[titleIndex] : '',
@@ -2478,6 +2480,7 @@ Resources:
                 active: item.Active || false,
                 createdAt: item.CreatedAt || '',
                 sourceFile: item.SourceFile || '',
+                engagementType: item.EngagementType || 'call-and-answer',
                 categories: categories
               });
             }
@@ -3366,7 +3369,7 @@ Resources:
               
               // Use custom instruction if available, otherwise default context
               const sessionContext = customInstruction || 
-                'a "Working Backwards" strategic thinking session where participants apply lessons to their work context';
+                'an "Engagements" strategic thinking session where participants apply lessons to their work context';
               
               // Build context sections for the AI prompt
               const contextSections = [];

@@ -87,6 +87,7 @@ function GameHostPage() {
   const [newGameSetId, setNewGameSetId] = useState('');
   const [eventTitle, setEventTitle] = useState('');
   const [gameAiContext, setGameAiContext] = useState('');
+  const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer' or 'trivia'
   
   // Question Set Management
   const [questionSets, setQuestionSets] = useState([]);
@@ -218,7 +219,7 @@ function GameHostPage() {
       `${item.rank}. ${item.player}: "${item.answer}"`
     ).join('\n\n');
     
-    return `You are an expert business strategist analyzing responses from a "Working Backwards" strategic thinking session.
+    return `You are an expert business strategist analyzing responses from an "Engagements" strategic thinking session.
 
 LESSON DETAILS:
 Question: "${questionTitle}"
@@ -638,7 +639,7 @@ Focus on actionable business strategy insights.`;
       
       // Game doesn't exist, create it
       console.log(`🆕 HOST: Game ${gameId} doesn't exist - creating new game`);
-      const titleToUse = eventTitle || 'Working Backwards Session';
+      const titleToUse = eventTitle || 'Engagements Session';
       await fetch(`${API_BASE}games/${gameId}/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1469,7 +1470,7 @@ Focus on actionable business strategy insights.`;
       console.log(`📊 Generating report for game ${targetGameId}...`);
       
       // Use the event title from the games list (which comes from database)
-      const finalEventTitle = targetEventTitle || 'Working Backwards Session';
+      const finalEventTitle = targetEventTitle || 'Engagements Session';
       
       // Get played questions from game state
       const stateRes = await fetch(`${API_BASE}games/${targetGameId}/state`);
@@ -1630,7 +1631,7 @@ Focus on actionable business strategy insights.`;
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795be09b462b2e8ebf71_osmo-parallax-layer-3.webp" loading="eager" width="800" data-parallax-layer="1" alt="" className="parallax__layer-img" />
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" width="800" data-parallax-layer="2" alt="" className="parallax__layer-img" />
                 <div data-parallax-layer="3" className="parallax__layer-title">
-                  <h2 className="parallax__title">Working Backwards</h2>
+                  <h2 className="parallax__title">Engagements</h2>
                 </div>
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" width="800" data-parallax-layer="4" alt="" className="parallax__layer-img" />
               </div>
@@ -1735,9 +1736,14 @@ Focus on actionable business strategy insights.`;
           <div className="dialog-actions">
             <button 
               className="btn-secondary" 
-              onClick={() => setShowReportsModal(false)}
+              onClick={() => {
+                setShowReportsModal(false);
+                if (reportsModalMode === 'select' && gameState === 'waiting' && lessonNumber === 0) {
+                  setShowWelcomeScreen(true);
+                }
+              }}
             >
-              Close
+              {reportsModalMode === 'select' ? 'Cancel' : 'Close'}
             </button>
           </div>
         </div>
@@ -1764,6 +1770,21 @@ Focus on actionable business strategy insights.`;
             </div>
             
             <div className="form-group">
+              <label>Engagement Type:</label>
+              <select 
+                value={engagementType} 
+                onChange={(e) => {
+                  setEngagementType(e.target.value);
+                  setNewGameSetId(''); // Reset selected set when type changes
+                }}
+                className="dialog-select"
+              >
+                <option value="call-and-answer">Call and Answer</option>
+                <option value="trivia">Trivia</option>
+              </select>
+            </div>
+            
+            <div className="form-group">
               <label>Question Set:</label>
               <select 
                 value={newGameSetId} 
@@ -1776,11 +1797,13 @@ Focus on actionable business strategy insights.`;
                 className="dialog-select"
               >
                 <option value="">Select a question set...</option>
-                {questionSets.map(set => (
-                  <option key={set.id} value={set.id}>
-                    {set.name} ({set.totalQuestions} questions)
-                  </option>
-                ))}
+                {questionSets
+                  .filter(set => set.engagementType === engagementType)
+                  .map(set => (
+                    <option key={set.id} value={set.id}>
+                      {set.name} ({set.totalQuestions} questions)
+                    </option>
+                  ))}
               </select>
             </div>
             
@@ -1816,7 +1839,12 @@ Focus on actionable business strategy insights.`;
           <div className="dialog-actions">
             <button 
               className="btn-secondary" 
-              onClick={() => setShowNewGameDialog(false)}
+              onClick={() => {
+                setShowNewGameDialog(false);
+                if (gameState === 'waiting' && lessonNumber === 0) {
+                  setShowWelcomeScreen(true);
+                }
+              }}
             >
               Cancel
             </button>
@@ -1838,7 +1866,7 @@ Focus on actionable business strategy insights.`;
       {/* Instructions Sidebar */}
       <div className={`instructions-sidebar ${instructionsVisible ? 'visible' : ''}`}>
         <div className="instructions-content">
-          <h3>Working Backwards</h3>
+          <h3>Engagements</h3>
           <h4>How to Play</h4>
           <ol>
             <li><strong>Read the Lesson:</strong> Each round presents a lesson learned from professionals in various fields.</li>
@@ -1966,7 +1994,7 @@ Focus on actionable business strategy insights.`;
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795be09b462b2e8ebf71_osmo-parallax-layer-3.webp" loading="eager" width="800" data-parallax-layer="1" alt="" className="parallax__layer-img" />
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" width="800" data-parallax-layer="2" alt="" className="parallax__layer-img" />
                 <div data-parallax-layer="3" className="parallax__layer-title">
-                  <h2 className="parallax__title">Working Backwards</h2>
+                  <h2 className="parallax__title">Engagements</h2>
                 </div>
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" width="800" data-parallax-layer="4" alt="" className="parallax__layer-img" />
               </div>
@@ -2268,7 +2296,7 @@ Focus on actionable business strategy insights.`;
         <div className="expanded-qr-overlay" onClick={() => setShowExpandedQR(false)}>
           <div className="expanded-qr-content" onClick={(e) => e.stopPropagation()}>
             <div className="expanded-qr-header">
-              <h2>{eventTitle || 'Working Backwards Session'}</h2>
+              <h2>{eventTitle || 'Engagements Session'}</h2>
             </div>
             <div className="expanded-qr-code">
               <QRCodeSVG value={playUrl} size={300} />
@@ -2530,7 +2558,7 @@ function GameReport({ reportData, onClose }) {
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795be09b462b2e8ebf71_osmo-parallax-layer-3.webp" loading="eager" width="800" data-parallax-layer="1" alt="" className="parallax__layer-img" />
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" width="800" data-parallax-layer="2" alt="" className="parallax__layer-img" />
                 <div data-parallax-layer="3" className="parallax__layer-title">
-                  <h2 className="parallax__title report-title">Working Backwards Game Report</h2>
+                  <h2 className="parallax__title report-title">Engagements Game Report</h2>
                 </div>
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" width="800" data-parallax-layer="4" alt="" className="parallax__layer-img" />
               </div>
