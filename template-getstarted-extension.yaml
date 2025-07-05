@@ -1,0 +1,363 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Get Started Extension for Engagements Platform:
+    • Enhanced onboarding flow with user preferences
+    • Template management for quick game setup
+    • Analytics for onboarding optimization
+    • Extensible engagement type system
+
+Parameters:
+  BaseStackName:
+    Type: String
+    Description: Name of the base engagements stack
+    Default: "engagements-dev"
+  
+  DomainName:
+    Type: String
+    Description: The fully qualified domain name
+    Default: "engagements.sb.seibtribe.us"
+
+Globals:
+  Function:
+    Runtime: nodejs18.x
+    Timeout: 10
+    MemorySize: 256
+    Environment:
+      Variables:
+        TABLE_NAME: !ImportValue 
+          Fn::Sub: "${BaseStackName}-TableName"
+        WEBSOCKET_API_ENDPOINT: !ImportValue
+          Fn::Sub: "${BaseStackName}-WebSocketEndpoint"
+
+Resources:
+
+  ### Get Started Template Management
+
+  # Store user preferences and onboarding state
+  GetUserPreferencesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getUserPreferences
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !ImportValue 
+              Fn::Sub: "${BaseStackName}-TableName"
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        
+        exports.getUserPreferences = async (event) => {
+          const userId = event.queryStringParameters?.userId || 'anonymous';
+          
+          try {
+            // Get user preferences from DynamoDB
+            const result = await db.get({
+              TableName: process.env.TABLE_NAME,
+              Key: {
+                PK: `USER#${userId}`,
+                SK: 'PREFERENCES'
+              }
+            }).promise();
+            
+            const preferences = result.Item || {
+              hasCompletedOnboarding: false,
+              preferredEngagementType: null,
+              favoriteQuestionSets: [],
+              lastUsedTemplates: [],
+              createdAt: new Date().toISOString()
+            };
+            
+            return {
+              statusCode: 200,
+              headers: { 'Access-Control-Allow-Origin': '*' },
+              body: JSON.stringify(preferences)
+            };
+          } catch (error) {
+            console.error('Error getting user preferences:', error);
+            return {
+              statusCode: 500,
+              headers: { 'Access-Control-Allow-Origin': '*' },
+              body: JSON.stringify({ error: 'Failed to get preferences' })
+            };
+          }
+        };
+      Events:
+        GetPreferences:
+          Type: HttpApi
+          Properties:
+            ApiId: !ImportValue
+              Fn::Sub: "${BaseStackName}-HttpApiId"
+            Path: /user/preferences
+            Method: GET
+
+  # Save user preferences and onboarding progress
+  SaveUserPreferencesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.saveUserPreferences
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !ImportValue 
+              Fn::Sub: "${BaseStackName}-TableName"
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        
+        exports.saveUserPreferences = async (event) => {
+          const userId = event.queryStringParameters?.userId || 'anonymous';
+          const preferences = JSON.parse(event.body);
+          
+          try {
+            const ttl = Math.floor(Date.now() / 1000) + (90 * 24 * 60 * 60); // 90 days
+            
+            await db.put({
+              TableName: process.env.TABLE_NAME,
+              Item: {
+                PK: `USER#${userId}`,
+                SK: 'PREFERENCES',
+                ...preferences,
+                updatedAt: new Date().toISOString(),
+                ttl
+              }
+            }).promise();
+            
+            return {
+              statusCode: 200,
+              headers: { 'Access-Control-Allow-Origin': '*' },
+              body: JSON.stringify({ success: true })
+            };
+          } catch (error) {
+            console.error('Error saving user preferences:', error);
+            return {
+              statusCode: 500,
+              headers: { 'Access-Control-Allow-Origin': '*' },
+              body: JSON.stringify({ error: 'Failed to save preferences' })
+            };
+          }
+        };
+      Events:
+        SavePreferences:
+          Type: HttpApi
+          Properties:
+            ApiId: !ImportValue
+              Fn::Sub: "${BaseStackName}-HttpApiId"
+            Path: /user/preferences
+            Method: POST
+
+  # Get quick start templates
+  GetQuickStartTemplatesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getQuickStartTemplates
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !ImportValue 
+              Fn::Sub: "${BaseStackName}-TableName"
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        
+        exports.getQuickStartTemplates = async (event) => {
+          try {
+            // Get predefined templates
+            const templates = [
+              {
+                id: 'team-retrospective',
+                name: 'Team Retrospective',
+                description: 'Reflect on recent work and identify improvements',
+                engagementType: 'call-and-answer',
+                estimatedDuration: 45,
+                recommendedParticipants: '5-12',
+                questionSetId: 'lessons',
+                icon: '🔄',
+                tags: ['retrospective', 'team', 'improvement']
+              },
+              {
+                id: 'leadership-workshop',
+                name: 'Leadership Workshop',
+                description: 'Explore leadership scenarios and best practices',
+                engagementType: 'call-and-answer',
+                estimatedDuration: 60,
+                recommendedParticipants: '8-15',
+                questionSetId: 'amazon_all_leadership_scenarios',
+                icon: '👑',
+                tags: ['leadership', 'development', 'scenarios']
+              },
+              {
+                id: 'team-trivia',
+                name: 'Team Building Trivia',
+                description: 'Fun knowledge game to build team connections',
+                engagementType: 'trivia',
+                estimatedDuration: 30,
+                recommendedParticipants: '5-20',
+                questionSetId: 'greatest-hits',
+                icon: '🧠',
+                tags: ['trivia', 'team-building', 'fun']
+              },
+              {
+                id: 'innovation-session',
+                name: 'Innovation Brainstorm',
+                description: 'Generate and prioritize innovative ideas',
+                engagementType: 'call-and-answer',
+                estimatedDuration: 90,
+                recommendedParticipants: '6-10',
+                questionSetId: 'organizational-challenges',
+                icon: '💡',
+                tags: ['innovation', 'brainstorm', 'creativity']
+              }
+            ];
+            
+            return {
+              statusCode: 200,
+              headers: { 'Access-Control-Allow-Origin': '*' },
+              body: JSON.stringify({ templates })
+            };
+          } catch (error) {
+            console.error('Error getting templates:', error);
+            return {
+              statusCode: 500,
+              headers: { 'Access-Control-Allow-Origin': '*' },
+              body: JSON.stringify({ error: 'Failed to get templates' })
+            };
+          }
+        };
+      Events:
+        GetTemplates:
+          Type: HttpApi
+          Properties:
+            ApiId: !ImportValue
+              Fn::Sub: "${BaseStackName}-HttpApiId"
+            Path: /templates
+            Method: GET
+
+  # Create game from template
+  CreateGameFromTemplateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.createGameFromTemplate
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !ImportValue 
+              Fn::Sub: "${BaseStackName}-TableName"
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 
+              - 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/dev/POST/@connections/*'
+              - WebSocketApiId: !ImportValue
+                  Fn::Sub: "${BaseStackName}-WebSocketApiId"
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        
+        // Generate 4-digit game ID
+        const generateGameId = () => {
+          return Math.floor(1000 + Math.random() * 9000).toString();
+        };
+        
+        exports.createGameFromTemplate = async (event) => {
+          const { templateId, customizations } = JSON.parse(event.body);
+          
+          try {
+            const gameId = generateGameId();
+            const now = new Date().toISOString();
+            const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60); // 2 weeks
+            
+            // Create game metadata
+            await db.put({
+              TableName: process.env.TABLE_NAME,
+              Item: {
+                PK: `GAME#${gameId}`,
+                SK: 'METADATA',
+                GameId: gameId,
+                Title: customizations.title,
+                EngagementType: customizations.engagementType,
+                QuestionSetId: customizations.questionSetId,
+                CreatedAt: now,
+                CreatedBy: customizations.hostName || 'Anonymous',
+                AiContext: customizations.aiContext || '',
+                DebugMode: customizations.debugMode || false,
+                TemplateId: templateId,
+                EstimatedDuration: customizations.estimatedDuration,
+                ExpectedParticipants: customizations.expectedParticipants,
+                LastActivityAt: now,
+                ttl
+              }
+            }).promise();
+            
+            // Create initial game state
+            await db.put({
+              TableName: process.env.TABLE_NAME,
+              Item: {
+                PK: `GAME#${gameId}`,
+                SK: 'STATE',
+                CurrentState: 'waiting',
+                CurrentQuestionId: null,
+                CurrentQuestionIndex: -1,
+                PlayedQuestions: [],
+                ScoredQuestions: [],
+                UpdatedAt: now,
+                ttl
+              }
+            }).promise();
+            
+            // Add to game index
+            await db.put({
+              TableName: process.env.TABLE_NAME,
+              Item: {
+                PK: 'GAMES',
+                SK: `GAME#${gameId}`,
+                GameId: gameId,
+                Title: customizations.title,
+                EngagementType: customizations.engagementType,
+                CreatedAt: now,
+                TemplateId: templateId
+              }
+            }).promise();
+            
+            return {
+              statusCode: 201,
+              headers: { 'Access-Control-Allow-Origin': '*' },
+              body: JSON.stringify({
+                gameId,
+                title: customizations.title,
+                engagementType: customizations.engagementType,
+                createdAt: now,
+                joinUrl: `https://${process.env.DOMAIN_NAME || 'localhost:3000'}/play?gameId=${gameId}`
+              })
+            };
+          } catch (error) {
+            console.error('Error creating game from template:', error);
+            return {
+              statusCode: 500,
+              headers: { 'Access-Control-Allow-Origin': '*' },
+              body: JSON.stringify({ error: 'Failed to create game' })
+            };
+          }
+        };
+      Events:
+        CreateFromTemplate:
+          Type: HttpApi
+          Properties:
+            ApiId: !ImportValue
+              Fn::Sub: "${BaseStackName}-HttpApiId"
+            Path: /games/from-template
+            Method: POST
+
+Outputs:
+  GetStartedExtensionVersion:
+    Description: Version of the Get Started extension
+    Value: "1.0.0"
+    Export:
+      Name: !Sub "${AWS::StackName}-Version"
+      
+  TemplateApiEndpoints:
+    Description: API endpoints for template management
+    Value: !Sub 
+      - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com"
+      - ApiId: !ImportValue
+          Fn::Sub: "${BaseStackName}-HttpApiId"
+    Export:
+      Name: !Sub "${AWS::StackName}-TemplateApiEndpoint"

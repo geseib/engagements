@@ -1,0 +1,13 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "engagements-prod"
+s3_bucket = "samcli021891573713"
+s3_prefix = "engagements-prod"
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM"
+disable_rollback = true
+confirm_changeset = false
+fail_on_empty_changeset = false
+parameter_overrides = "DomainName=engagements.sb.seibtribe.us HostedZoneId=Z03473042HSYD8BUY4XSL"
