@@ -147,7 +147,7 @@ Resources:
             Value: engagements-dev
       Source:
         Type: CODEPIPELINE
-        BuildSpec: buildspec-dev.yml
+        BuildSpec: buildspec-simple.yml
 
   ### CodeBuild Project for Test Environment
   TestBuildProject:
