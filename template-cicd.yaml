@@ -230,10 +230,10 @@ Resources:
                 - API_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' --output text)
                 - WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)
                 - echo "Creating config file for test environment"
-                - echo "window.API_BASE='$API_URL/';" > public/config.js
-                - echo "window.WS_URL='$WS_URL';" >> public/config.js
-                - echo 'window.ENV="test";' >> public/config.js
-                - echo 'console.log("🧪 TEST Environment loaded");' >> public/config.js
+                - "echo \"window.API_BASE = '$API_URL/';\" > public/config.js"
+                - "echo \"window.WS_URL = '$WS_URL';\" >> public/config.js"
+                - "echo \"window.ENV = 'test';\" >> public/config.js"
+                - "echo \"console.log('🧪 TEST Environment loaded');\" >> public/config.js"
                 - npm run build
                 - BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`StaticSiteBucketName`].OutputValue' --output text)
                 - aws s3 sync dist/ s3://$BUCKET_NAME/ --delete
@@ -285,10 +285,10 @@ Resources:
                 - API_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' --output text)
                 - WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)
                 - echo "Creating config file for production environment"
-                - echo "window.API_BASE='$API_URL/';" > public/config.js
-                - echo "window.WS_URL='$WS_URL';" >> public/config.js
-                - echo 'window.ENV="production";' >> public/config.js
-                - echo 'console.log("🚀 PRODUCTION Environment loaded");' >> public/config.js
+                - "echo \"window.API_BASE = '$API_URL/';\" > public/config.js"
+                - "echo \"window.WS_URL = '$WS_URL';\" >> public/config.js"
+                - "echo \"window.ENV = 'production';\" >> public/config.js"
+                - "echo \"console.log('🚀 PRODUCTION Environment loaded');\" >> public/config.js"
                 - npm run build
                 - BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`StaticSiteBucketName`].OutputValue' --output text)
                 - aws s3 sync dist/ s3://$BUCKET_NAME/ --delete
