@@ -75,24 +75,24 @@ Resources:
               - 'execute-api:ManageConnections'
             Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
       InlineCode: |-
-        const AWS = require('aws-sdk');
-        const db = new AWS.DynamoDB.DocumentClient();
-        const apigateway = new AWS.ApiGatewayManagementApi({
-          endpoint: process.env.WEBSOCKET_API_ENDPOINT
-        });
-        
+        const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+        const { DynamoDBDocumentClient, PutCommand } = require('@aws-sdk/lib-dynamodb');
+
+        const dynamoClient = new DynamoDBClient({});
+        const db = DynamoDBDocumentClient.from(dynamoClient);
+
         exports.connectHandler = async (event) => {
           const connectionId = event.requestContext.connectionId;
           const gameId = event.queryStringParameters?.gameId;
           const playerName = event.queryStringParameters?.playerName;
           const isHost = event.queryStringParameters?.isHost === 'true';
-          
+
           console.log(`🔌 WebSocket Connect: ${connectionId}, Game: ${gameId}, Player: ${playerName}, Host: ${isHost}`);
-          
+
           try {
             // Store connection info
             const ttl = Math.floor(Date.now() / 1000) + (2 * 60 * 60); // 2 hours TTL
-            await db.put({
+            await db.send(new PutCommand({
               TableName: process.env.TABLE_NAME,
               Item: {
                 PK: `CONNECTION#${connectionId}`,
@@ -104,7 +104,7 @@ Resources:
                 ConnectedAt: new Date().toISOString(),
                 ttl
               }
-            }).promise();
+            }));
             
             // Send current game state to newly connected client
             if (gameId) {
@@ -191,23 +191,26 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       InlineCode: |-
-        const AWS = require('aws-sdk');
-        const db = new AWS.DynamoDB.DocumentClient();
-        
+        const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+        const { DynamoDBDocumentClient, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+
+        const dynamoClient = new DynamoDBClient({});
+        const db = DynamoDBDocumentClient.from(dynamoClient);
+
         exports.disconnectHandler = async (event) => {
           const connectionId = event.requestContext.connectionId;
-          
+
           console.log(`🔌 WebSocket Disconnect: ${connectionId}`);
-          
+
           try {
             // Remove connection info
-            await db.delete({
+            await db.send(new DeleteCommand({
               TableName: process.env.TABLE_NAME,
               Key: {
                 PK: `CONNECTION#${connectionId}`,
                 SK: 'METADATA'
               }
-            }).promise();
+            }));
             
             return { statusCode: 200, body: 'Disconnected' };
           } catch (error) {
@@ -261,9 +264,13 @@ Resources:
               - execute-api:ManageConnections
             Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
       InlineCode: |-
-        const AWS = require('aws-sdk');
-        const db = new AWS.DynamoDB.DocumentClient();
-        const apiGateway = new AWS.ApiGatewayManagementApi({
+        const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+        const { DynamoDBDocumentClient, PutCommand, DeleteCommand, ScanCommand } = require('@aws-sdk/lib-dynamodb');
+        const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+
+        const dynamoClient = new DynamoDBClient({});
+        const db = DynamoDBDocumentClient.from(dynamoClient);
+        const apigateway = new ApiGatewayManagementApiClient({
           endpoint: process.env.WEBSOCKET_API_ENDPOINT
         });
         
