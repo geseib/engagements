@@ -220,16 +220,20 @@ Resources:
                 - cd src && npm ci && cd ..
             build:
               commands:
+                - echo "Building Lambda functions..."
+                - cd lambda-functions && ./build.sh && cd ..
                 - echo "Building and deploying to TEST environment..."
-                - sam build --template-file template-dev.yaml
-                - sam deploy --template-file template-dev.yaml --config-file samconfig-test.toml --parameter-overrides "DomainName=$DOMAIN_NAME HostedZoneId=$HOSTED_ZONE_ID" --stack-name $STACK_NAME --no-confirm-changeset
+                - sam build --template-file template-test.yaml
+                - sam deploy --template-file template-test.yaml --config-file samconfig-test.toml --parameter-overrides "DomainName=$DOMAIN_NAME HostedZoneId=$HOSTED_ZONE_ID" --stack-name $STACK_NAME --no-confirm-changeset
                 - cd src
+                - echo "Getting API endpoints from CloudFormation..."
                 - API_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' --output text)
                 - WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)
-                - echo "window.API_BASE = '$API_URL/';" > public/config.js
-                - echo "window.WS_URL = '$WS_URL';" >> public/config.js
-                - echo 'window.ENV="test";' >> public/config.js
-                - echo "console.log('🧪 TEST Environment loaded:', { API_BASE: window.API_BASE, WS_URL: window.WS_URL });" >> public/config.js
+                - "echo 'Creating config.js with API endpoints...'"
+                - "printf 'window.API_BASE = \"%s/\";\\n' \"$API_URL\" > public/config.js"
+                - "printf 'window.WS_URL = \"%s\";\\n' \"$WS_URL\" >> public/config.js"
+                - "printf 'window.ENV = \"test\";\\n' >> public/config.js"
+                - "printf 'console.log(\"🧪 TEST Environment loaded\");\\n' >> public/config.js"
                 - npm run build
                 - BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`StaticSiteBucketName`].OutputValue' --output text)
                 - aws s3 sync dist/ s3://$BUCKET_NAME/ --delete
@@ -271,16 +275,20 @@ Resources:
                 - cd src && npm ci && cd ..
             build:
               commands:
+                - echo "Building Lambda functions..."
+                - cd lambda-functions && ./build.sh && cd ..
                 - echo "Building and deploying to PRODUCTION environment..."
                 - sam build --template-file template-prod.yaml
                 - sam deploy --template-file template-prod.yaml --config-file samconfig-prod.toml --parameter-overrides "DomainName=$DOMAIN_NAME HostedZoneId=$HOSTED_ZONE_ID" --stack-name $STACK_NAME --no-confirm-changeset
                 - cd src
+                - echo "Getting API endpoints from CloudFormation..."
                 - API_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' --output text)
                 - WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)
-                - echo "window.API_BASE = '$API_URL/';" > public/config.js
-                - echo "window.WS_URL = '$WS_URL';" >> public/config.js
-                - echo 'window.ENV="production";' >> public/config.js
-                - echo "console.log('🚀 PRODUCTION Environment loaded:', { API_BASE: window.API_BASE, WS_URL: window.WS_URL });" >> public/config.js
+                - "echo 'Creating config.js with API endpoints...'"
+                - "printf 'window.API_BASE = \"%s/\";\\n' \"$API_URL\" > public/config.js"
+                - "printf 'window.WS_URL = \"%s\";\\n' \"$WS_URL\" >> public/config.js"
+                - "printf 'window.ENV = \"production\";\\n' >> public/config.js"
+                - "printf 'console.log(\"🚀 PRODUCTION Environment loaded\");\\n' >> public/config.js"
                 - npm run build
                 - BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`StaticSiteBucketName`].OutputValue' --output text)
                 - aws s3 sync dist/ s3://$BUCKET_NAME/ --delete
