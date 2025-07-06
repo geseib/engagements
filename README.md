@@ -1,81 +1,145 @@
-# Engagements 
-Engagements is a interactive meeting toolset for making meeting, offsites, and training more enagaging with fun exercies, trivia, AI involvement, and documentation. 
+# Engagements Platform 🎯
 
-# How it works
-Host signup to get a event pass so they can create multiple engagements for their event. Host select the engagement type: Poll, Survey, Call and Answer (Lessons Learned, Solutioning, Direction narrative), Prioritizations, Triva Game, Bingo.
-Question/trivia/polls are provided in three ways 1:system provided(public), system add-ons (theme based), host provided (private based on their login)
+A serverless, real-time interactive meeting platform for making meetings, offsites, and training more engaging with polls, trivia, surveys, lessons learned, and collaborative exercises.
 
+## 🚀 Live Environments
 
-# Components
-- Admin (requires login) Super Admin can change public and system-addons
-  - Engagment Sets  
-    - List engagementSets Question/Trivia/Poll Sets/Surveys by catagory 
-    - Manage EngagementSets (add, delete, modify) Super can manage 
-      - Add by upload csv, enter manually, AI Generated based on background info)
-    - Download Template CSV (by engagement type)
-  - Super Admin only: Remove games
-    - radio: Single Game, All Games
-    - Dialog box: Enter Game ID (only for Single game)
-  - Super Admin only: Add/Remove host
-    - Add host by name, email (generate passwors and notify them,)
+- **🟢 Development**: https://engagedev.sb.seibtribe.us
+- **🟡 Test**: https://engagetest.sb.seibtribe.us
+- **🔴 Production**: https://engagements.sb.seibtribe.us
 
-- Host (requires login) This is the main display for engagement shared via zoom or projection video usually
-  - Main screen 
-    - Cool Parallex banner
-    - Title of the Engagement 
-    - Partipant cards (Name, scores if applicable. place (1st,2nd,3rd and order by if scoring status [waiting for reply/submitted reply)])
-    - Question/Lesson 
-        - Title
-        - Detail
-        - instructions
-    - Next step button (changes with context: First question, vote, results, Next question)
-    - skip question button
-- Right Panel (Admin) with two columns
-  - Join IN
-    - [GAME ID]
-    - Players can join in at: [url for this gameID] clicking url will copy to clipboard
-    - QR Code with URL to GAMEID
-    - View Report button
-    - Switch Game button
-  - Engagement SET Name
-    - number of questions left/total questions
-    - Catagories (clickable buttons to enable/disable with catagory name and number of questions left)
-- Left Panel
-  - Title of the engagement type (Poll. Lesson Learned, Survey)
-    - How to Play/Instructions
+## 🏗️ Architecture
 
-# Enagagement Types
-## Polls - no catagories
-Host can ask for input on various topics and the information could be tallked and shared with the partipants. (ie. what cuisine should we order tomorrow: Chinese, Pizza, Mexican, sandwiches)
-Each question in question set has
-- title
-- detail question
-- number of expected selections by each particiapnt (1+)
-- list of choices
-Polls go one by one back and forth between the host screen and the partipants screen (where they answer)
-Option when selecting this is Random order
+**Frontend**: React SPA with real-time WebSocket communication
+**Backend**: AWS Lambda functions with API Gateway
+**Database**: DynamoDB single-table design
+**Infrastructure**: CloudFormation with automated CI/CD
 
-## Survey - no catagories
-Host can create surveys that have rating and free form feedback. The ratings items would be tallyed and a report generated
-Items types Rate 1-5: Radio button also will have a question (ie Rate the Speaker's Knowledge)
-Item type Free form dialog with a question (i.e. what would you like to see added to this session)
-All items are given to the partipants screen to submit at once
-Results are only shared if the host chooses to via the report button
+## 🔄 Development Workflow
 
-## Prioritization - no catagories
-Host provides a list of items that the partipants can rank the priority and submit
-The reults are shared after the host click results button 
+### Branch Strategy
+- `dev` → Auto-deploy to Development environment
+- `test` → Auto-deploy to Test environment
+- `main` → Manual approval required for Production
 
-## Call and Answer (vote)
-Host selects a questionb set with catagores, if they are to be randomized or not. Name the engagement and provide Details of the event, goals of this engagment, AI enable toggle w/ AI extra instructions. if there is only one response/particpant, no vote should be triggered instead just go to results and provide AI (if enabled)
--types
-  - Lessons learned: where they are given some scenario/lesson and the partipants respond with how they could adapt this lesson to the task at hand for the engagement event. partipants vote on best response. Ai summerizes and provides insight
-  - Solutioning: where they are given a problem and the partipants respond with an approach or a solution. Vote for best answers
-  - Interview: Where they can practice interview questions and respond as if they were being interviewed. Vote on best responses. 
-- Report will list all questions the answers marking the top 3 answers (they should be first in the report). Current score/Final score of the top three players. if tied skip to the next place. ie. Joe 1st (tied), Sam 1st(tied), Sue 3rd
+### CI/CD Pipelines
+- **🟢 Dev Pipeline**: https://console.aws.amazon.com/codesuite/codepipeline/pipelines/engagements-cicd-dev-pipeline/view
+- **🟡 Test Pipeline**: https://console.aws.amazon.com/codesuite/codepipeline/pipelines/engagements-cicd-test-pipeline/view
+- **🔴 Prod Pipeline**: https://console.aws.amazon.com/codesuite/codepipeline/pipelines/engagements-cicd-prod-pipeline/view
 
-## Trivia
-Host selects a questionb set with catagores, if they are to be randomized or not, time per question. Name the engagement and provide Details of the event.
- - questions are presented with their choices on the main screen and the partipants screen. They are told to pick best answer or x number of answers (i.e choose 2)
- - Results will show those that got it right and add up their scores for the round. . person results will show up in partipants screen only after host clicks results. Also results will show percent of answers for each answer even the worng ones. 
- -Report will list all questions the choices with the percentages answerd marking the correct answer. Current score/Final score of the top three players. if tied skip to the next place. ie. Joe 1st (tied), Sam 1st(tied), Sue 3rd
+## 📁 Project Structure
+
+```
+engagements/
+├── docs/                    # 📚 System documentation
+├── src/                     # 💻 React frontend application
+├── scripts/                 # 🔧 Deployment and setup scripts
+├── template-*.yaml          # ☁️  CloudFormation templates
+├── samconfig-*.toml         # ⚙️  SAM deployment configurations
+└── README.md               # 📖 This file
+```
+
+## 🚀 Quick Start
+
+### For Developers
+1. **Clone and setup**:
+   ```bash
+   git clone https://github.com/geseib/engagements.git
+   cd engagements
+   cd src && npm install
+   ```
+
+2. **Deploy to development**:
+   ```bash
+   # Switch to dev branch and push to trigger deployment
+   git checkout dev
+   git push origin dev
+   ```
+
+3. **Monitor deployment**: Check the [Dev Pipeline](https://console.aws.amazon.com/codesuite/codepipeline/pipelines/engagements-cicd-dev-pipeline/view)
+
+4. **Test your changes**: Visit https://engagedev.sb.seibtribe.us
+
+### For Hosts
+1. Visit the appropriate environment URL
+2. Create a new engagement session
+3. Share the game ID or QR code with participants
+4. Manage the session in real-time
+
+## 🎮 How It Works
+
+Hosts create interactive engagement sessions that participants can join using a simple game ID. The platform supports multiple engagement types with real-time updates and collaborative features.
+
+## 📚 Documentation
+
+Detailed system documentation is available in the `/docs` folder:
+- **System Architecture** - Overall design and technology choices
+- **Data Model** - DynamoDB schema and access patterns
+- **API Design** - REST and WebSocket API specifications
+- **Implementation Guide** - Development and deployment procedures
+- **CI/CD Setup** - Pipeline configuration and branch strategy
+
+## 🎯 Engagement Types
+
+### 📊 **Polls**
+Real-time polling with multiple choice options. Perfect for quick feedback and decision making.
+- Multiple choice questions with configurable selection limits
+- Real-time results visualization
+- Random order option for unbiased responses
+
+### 🧠 **Trivia Games**
+Interactive quiz games with scoring, leaderboards, and real-time competition.
+- Timed questions with multiple choice answers
+- Live scoring and leaderboards
+- Category-based question sets
+- Detailed performance reports
+
+### 📝 **Surveys**
+Comprehensive feedback collection with rating scales and free-form responses.
+- Rating scales (1-5) for quantitative feedback
+- Free-form text responses for qualitative insights
+- Batch submission for efficiency
+- Optional results sharing
+
+### 💡 **Call & Answer**
+Interactive discussion prompts with voting and AI-powered insights.
+- **Lessons Learned**: Scenario-based learning with peer voting
+- **Solution Sessions**: Problem-solving with collaborative evaluation
+- **Interview Practice**: Mock interviews with peer feedback
+- AI summarization and insights (optional)
+
+### 🎯 **Prioritization**
+Ranking exercises to help teams align on priorities and decisions.
+- Drag-and-drop ranking interface
+- Aggregated team priorities
+- Visual results presentation
+
+## 🖥️ User Interfaces
+
+### **Host Dashboard**
+- **Main Screen**: Large display for shared viewing with participant cards and live content
+- **Control Panel**: Session management, QR codes, and real-time controls
+- **Admin Panel**: Content management and engagement configuration
+
+### **Participant Experience**
+- Mobile-optimized interface for easy participation
+- Simple game ID entry to join sessions
+- Real-time updates and instant feedback
+
+### **Admin Portal**
+- Content set management (upload CSV, manual entry, AI generation)
+- User and host management
+- System configuration and game cleanup
+
+## 🛠️ Technical Features
+
+- **Real-time Updates**: WebSocket-powered live synchronization
+- **Mobile-First Design**: Responsive interface for all devices
+- **Serverless Architecture**: AWS Lambda + DynamoDB for scalability
+- **Automated CI/CD**: Branch-based deployment pipeline
+- **Single Table Design**: Optimized DynamoDB access patterns
+- **TTL Management**: Automatic cleanup of expired sessions
+
+## 🤝 Contributing
+
+This platform is designed for extensibility. See `/docs` for detailed technical documentation and development guidelines.

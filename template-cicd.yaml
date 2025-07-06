@@ -40,11 +40,6 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
       LifecycleConfiguration:
         Rules:
           - Id: DeleteOldArtifacts
@@ -81,7 +76,7 @@ Resources:
                   - s3:GetObject
                   - s3:PutObject
                   - s3:DeleteObject
-                Resource: !Sub '${PipelineArtifactsBucket}/*'
+                Resource: !Sub '${PipelineArtifactsBucket.Arn}/*'
               - Effect: Allow
                 Action:
                   - cloudformation:*
@@ -117,8 +112,8 @@ Resources:
                   - s3:PutObject
                   - s3:GetBucketVersioning
                 Resource:
-                  - !Sub '${PipelineArtifactsBucket}'
-                  - !Sub '${PipelineArtifactsBucket}/*'
+                  - !Sub '${PipelineArtifactsBucket.Arn}'
+                  - !Sub '${PipelineArtifactsBucket.Arn}/*'
               - Effect: Allow
                 Action:
                   - codebuild:BatchGetBuilds
