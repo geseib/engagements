@@ -23,10 +23,10 @@ phases:
       - API_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' --output text)
       - WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)
       - echo "Creating config.js with API endpoints..."
-      - echo "window.API_BASE = '$API_URL/';" > public/config.js
-      - echo "window.WS_URL = '$WS_URL';" >> public/config.js
-      - echo "window.ENV = 'development';" >> public/config.js
-      - echo "console.log('🔧 DEV Environment loaded:', { API_BASE: window.API_BASE, WS_URL: window.WS_URL });" >> public/config.js
+      - printf "window.API_BASE = '%s/';\n" "$API_URL" > public/config.js
+      - printf "window.WS_URL = '%s';\n" "$WS_URL" >> public/config.js
+      - printf "window.ENV = 'development';\n" >> public/config.js
+      - printf "console.log('DEV Environment loaded');\n" >> public/config.js
       - npm run build
       - echo "Deploying frontend to S3..."
       - BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`StaticSiteBucketName`].OutputValue' --output text)
