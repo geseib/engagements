@@ -147,44 +147,7 @@ Resources:
             Value: engagements-dev
       Source:
         Type: CODEPIPELINE
-        BuildSpec: |
-          version: 0.2
-          phases:
-            install:
-              runtime-versions:
-                nodejs: 18
-              commands:
-                - echo "Installing SAM CLI..."
-                - pip3 install aws-sam-cli
-                - echo "Installing Node.js dependencies..."
-                - cd src && npm ci && cd ..
-            pre_build:
-              commands:
-                - echo "Pre-build phase for $ENVIRONMENT environment"
-                - echo "Domain: $DOMAIN_NAME"
-            build:
-              commands:
-                - echo "Building and deploying backend..."
-                - sam build --template-file template-dev.yaml
-                - sam deploy --template-file template-dev.yaml --config-file samconfig-dev.toml --parameter-overrides "DomainName=$DOMAIN_NAME HostedZoneId=$HOSTED_ZONE_ID" --stack-name $STACK_NAME --no-confirm-changeset
-                - echo "Building frontend..."
-                - cd src
-                - echo "Getting API endpoints from CloudFormation..."
-                - API_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' --output text)
-                - WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)
-                - echo "Creating config.js with API endpoints..."
-                - echo "window.API_BASE = '$API_URL/';" > public/config.js
-                - echo "window.WS_URL = '$WS_URL';" >> public/config.js
-                - echo "window.ENV = 'development';" >> public/config.js
-                - echo "console.log('🔧 DEV Environment loaded:', { API_BASE: window.API_BASE, WS_URL: window.WS_URL });" >> public/config.js
-                - npm run build
-                - echo "Deploying frontend to S3..."
-                - BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`StaticSiteBucketName`].OutputValue' --output text)
-                - aws s3 sync dist/ s3://$BUCKET_NAME/ --delete
-            post_build:
-              commands:
-                - echo "Deployment completed for $ENVIRONMENT environment"
-                - echo "Website URL: https://$DOMAIN_NAME"
+        BuildSpec: buildspec-dev.yml
 
   ### CodeBuild Project for Test Environment
   TestBuildProject:
