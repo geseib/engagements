@@ -11,23 +11,25 @@ Parameters:
     Type: String
     Description: GitHub repository owner
     Default: "geseib"
-  
+
   GitHubRepo:
     Type: String
     Description: GitHub repository name
     Default: "engagements"
-  
-  GitHubToken:
-    Type: String
-    Description: GitHub personal access token
-    NoEcho: true
-  
+
   HostedZoneId:
     Type: String
     Description: Route53 Hosted Zone ID for sb.seibtribe.us
     Default: "Z03473042HSYD8BUY4XSL"
 
 Resources:
+
+  ### CodeStar Connection for GitHub
+  GitHubConnection:
+    Type: AWS::CodeStarConnections::Connection
+    Properties:
+      ConnectionName: !Sub '${AWS::StackName}-github'
+      ProviderType: GitHub
 
   ### S3 Bucket for Pipeline Artifacts
   PipelineArtifactsBucket:
@@ -122,6 +124,10 @@ Resources:
                   - !GetAtt DevBuildProject.Arn
                   - !GetAtt TestBuildProject.Arn
                   - !GetAtt ProdBuildProject.Arn
+              - Effect: Allow
+                Action:
+                  - codestar-connections:UseConnection
+                Resource: !Ref GitHubConnection
 
   ### CodeBuild Project for Dev Environment
   DevBuildProject:
@@ -222,7 +228,7 @@ Resources:
                 - WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)
                 - echo "window.API_BASE = '$API_URL/';" > public/config.js
                 - echo "window.WS_URL = '$WS_URL';" >> public/config.js
-                - echo "window.ENV = 'test';" >> public/config.js
+                - echo 'window.ENV="test";' >> public/config.js
                 - echo "console.log('🧪 TEST Environment loaded:', { API_BASE: window.API_BASE, WS_URL: window.WS_URL });" >> public/config.js
                 - npm run build
                 - BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`StaticSiteBucketName`].OutputValue' --output text)
@@ -273,7 +279,7 @@ Resources:
                 - WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)
                 - echo "window.API_BASE = '$API_URL/';" > public/config.js
                 - echo "window.WS_URL = '$WS_URL';" >> public/config.js
-                - echo "window.ENV = 'production';" >> public/config.js
+                - echo 'window.ENV="production";' >> public/config.js
                 - echo "console.log('🚀 PRODUCTION Environment loaded:', { API_BASE: window.API_BASE, WS_URL: window.WS_URL });" >> public/config.js
                 - npm run build
                 - BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`StaticSiteBucketName`].OutputValue' --output text)
@@ -294,15 +300,14 @@ Resources:
             - Name: SourceAction
               ActionTypeId:
                 Category: Source
-                Owner: ThirdParty
-                Provider: GitHub
+                Owner: AWS
+                Provider: CodeStarSourceConnection
                 Version: '1'
               Configuration:
-                Owner: !Ref GitHubOwner
-                Repo: !Ref GitHubRepo
-                Branch: dev
-                OAuthToken: !Ref GitHubToken
-                PollForSourceChanges: true
+                ConnectionArn: !Ref GitHubConnection
+                FullRepositoryId: !Sub '${GitHubOwner}/${GitHubRepo}'
+                BranchName: dev
+                OutputArtifactFormat: CODE_ZIP
               OutputArtifacts:
                 - Name: SourceOutput
         - Name: Deploy
@@ -333,15 +338,14 @@ Resources:
             - Name: SourceAction
               ActionTypeId:
                 Category: Source
-                Owner: ThirdParty
-                Provider: GitHub
+                Owner: AWS
+                Provider: CodeStarSourceConnection
                 Version: '1'
               Configuration:
-                Owner: !Ref GitHubOwner
-                Repo: !Ref GitHubRepo
-                Branch: test
-                OAuthToken: !Ref GitHubToken
-                PollForSourceChanges: true
+                ConnectionArn: !Ref GitHubConnection
+                FullRepositoryId: !Sub '${GitHubOwner}/${GitHubRepo}'
+                BranchName: test
+                OutputArtifactFormat: CODE_ZIP
               OutputArtifacts:
                 - Name: SourceOutput
         - Name: Deploy
@@ -372,15 +376,14 @@ Resources:
             - Name: SourceAction
               ActionTypeId:
                 Category: Source
-                Owner: ThirdParty
-                Provider: GitHub
+                Owner: AWS
+                Provider: CodeStarSourceConnection
                 Version: '1'
               Configuration:
-                Owner: !Ref GitHubOwner
-                Repo: !Ref GitHubRepo
-                Branch: main
-                OAuthToken: !Ref GitHubToken
-                PollForSourceChanges: false  # Manual trigger for prod
+                ConnectionArn: !Ref GitHubConnection
+                FullRepositoryId: !Sub '${GitHubOwner}/${GitHubRepo}'
+                BranchName: main
+                OutputArtifactFormat: CODE_ZIP
               OutputArtifacts:
                 - Name: SourceOutput
         - Name: Approval
@@ -424,3 +427,9 @@ Outputs:
   ProdPipelineUrl:
     Description: URL of the Production pipeline
     Value: !Sub 'https://console.aws.amazon.com/codesuite/codepipeline/pipelines/${ProdPipeline}/view'
+
+  GitHubConnectionArn:
+    Description: ARN of the GitHub CodeStar Connection (needs to be activated manually)
+    Value: !Ref GitHubConnection
+    Export:
+      Name: !Sub '${AWS::StackName}-GitHubConnection'
