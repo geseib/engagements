@@ -115,7 +115,7 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
   return (
     <div className="ai-assistant-modal">
       <div className="modal-overlay" onClick={onClose}></div>
-      <div className="modal-content">
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>🤖 AI Assistant</h2>
           <button className="close-button" onClick={onClose}>✕</button>

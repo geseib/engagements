@@ -2494,8 +2494,8 @@ Resources:
     Properties:
       Handler: index.generateQuestions
       Runtime: nodejs18.x
-      Timeout: 300
-      MemorySize: 512
+      Timeout: 900
+      MemorySize: 1024
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -2647,8 +2647,8 @@ Resources:
     Properties:
       Handler: index.generateScenarios
       Runtime: nodejs18.x
-      Timeout: 300
-      MemorySize: 512
+      Timeout: 900
+      MemorySize: 1024
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -2707,34 +2707,33 @@ Resources:
 
             const { scenarioType, prompt, count, difficulty } = JSON.parse(event.body);
 
-            console.log('🤖 Generating scenarios:', { scenarioType, count, difficulty, promptLength: prompt?.length });
+            // Limit count to prevent timeouts
+            const limitedCount = Math.min(count, 10);
+            if (limitedCount !== count) {
+              console.log('⚠️ Limited scenario count from', count, 'to', limitedCount, 'to prevent timeout');
+            }
 
-            // Build comprehensive prompt for scenario generation
-            let fullPrompt = 'You are an expert in creating engaging workplace scenarios and educational content. ';
+            console.log('🤖 Generating scenarios:', { scenarioType, count: limitedCount, difficulty, promptLength: prompt?.length });
+
+            // Build optimized prompt for scenario generation
+            let fullPrompt = 'Create ' + limitedCount + ' workplace scenarios. ';
 
             // Add scenario type specific context
-            if (scenarioType === 'lessons-learned') {
-              fullPrompt += 'Create realistic workplace scenarios that highlight important lessons learned from challenging situations. ';
-            } else if (scenarioType === 'problem-solving') {
-              fullPrompt += 'Create complex problem scenarios that require creative thinking and collaborative solutions. ';
+            if (scenarioType === 'amazon-principles') {
+              fullPrompt += 'Focus on Amazon Leadership Principles with STAR format examples. ';
             } else if (scenarioType === 'interview-prep') {
-              fullPrompt += 'Create interview-style scenarios and questions that help candidates practice and demonstrate their skills. ';
-            } else if (scenarioType === 'amazon-principles') {
-              fullPrompt += 'Create scenarios that explore Amazon Leadership Principles through real-world workplace situations. ';
+              fullPrompt += 'Create interview practice scenarios. ';
+            } else if (scenarioType === 'problem-solving') {
+              fullPrompt += 'Create problem-solving challenges. ';
+            } else if (scenarioType === 'lessons-learned') {
+              fullPrompt += 'Create lessons learned scenarios. ';
             } else if (scenarioType === 'team-building') {
-              fullPrompt += 'Create team-building scenarios that promote collaboration, communication, and trust. ';
+              fullPrompt += 'Create team collaboration scenarios. ';
             }
 
             fullPrompt += prompt;
-            fullPrompt += '\\n\\nPlease create scenarios that are:';
-            fullPrompt += '\\n- Realistic and relatable to workplace situations';
-            fullPrompt += '\\n- Thought-provoking and discussion-worthy';
-            fullPrompt += '\\n- Appropriate for the specified difficulty level';
-            fullPrompt += '\\n- Designed to encourage participation and learning';
-
-            fullPrompt += '\\n\\nFormat your response as a JSON array with this structure:';
-            fullPrompt += '\\n[{"title": "Scenario title", "category": "Category", "detail": "Detailed scenario description", "school": "Professional Development", "customInstructions": "Instructions"}]';
-            fullPrompt += '\\n\\nIMPORTANT: Return ONLY the JSON array, no additional text.';
+            fullPrompt += '\\n\\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "school": "Professional Development", "customInstructions": "Instructions"}]';
+            fullPrompt += '\\nReturn ONLY the JSON array.';
 
             console.log('🤖 Sending prompt to Claude...', { promptLength: fullPrompt.length });
             const aiResponse = await invokeClaude(fullPrompt);
