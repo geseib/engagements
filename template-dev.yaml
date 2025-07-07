@@ -713,7 +713,14 @@ Resources:
   SubmitVotesFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.submitVotes
+      CodeUri: lambda-functions/websocket/
+      Handler: submit-votes.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          WEBSOCKET_API_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/dev'
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
@@ -722,89 +729,7 @@ Resources:
             Action:
               - execute-api:ManageConnections
             Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*'
-      InlineCode: |-
-        const AWS = require('aws-sdk');
-        const db = new AWS.DynamoDB.DocumentClient();
-        const apigateway = new AWS.ApiGatewayManagementApi({
-          endpoint: process.env.WEBSOCKET_API_ENDPOINT
-        });
-        
-        // Helper function to broadcast WebSocket message
-        const broadcastToGame = async (gameId, message) => {
-          try {
-            const connectionsResult = await db.scan({
-              TableName: process.env.TABLE_NAME,
-              FilterExpression: 'begins_with(PK, :prefix) AND GameId = :gameId',
-              ExpressionAttributeValues: {
-                ':prefix': 'CONNECTION#',
-                ':gameId': gameId
-              }
-            }).promise();
-            
-            const connections = connectionsResult.Items || [];
-            console.log(`🔌 Broadcasting to ${connections.length} connections for game ${gameId}`);
-            
-            const broadcastPromises = connections.map(async (connection) => {
-              try {
-                await apigateway.postToConnection({
-                  ConnectionId: connection.ConnectionId,
-                  Data: JSON.stringify(message)
-                }).promise();
-              } catch (error) {
-                console.log(`🔌 Failed to send to connection ${connection.ConnectionId}:`, error);
-                if (error.statusCode === 410) {
-                  await db.delete({
-                    TableName: process.env.TABLE_NAME,
-                    Key: { PK: connection.PK, SK: connection.SK }
-                  }).promise();
-                }
-              }
-            });
-            
-            await Promise.all(broadcastPromises);
-          } catch (error) {
-            console.error('🔌 Broadcast error:', error);
-          }
-        };
-        exports.submitVotes = async (event) => {
-          const gameId = event.pathParameters.gameId;
-          const { name, questionNumber, votes } = JSON.parse(event.body);
-          const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);
-          
-          console.log(`🗳️ Votes: game=${gameId}, question=${questionNumber}, voter=${name}`);
-          
-          // Clean structure: GAME#1234 / VOTE#001#PLAYER#name
-          // votes = { "0": 1, "1": 2, "2": 3 } (answerIndex: rank)
-          await db.put({
-            TableName: process.env.TABLE_NAME,
-            Item: {
-              PK: `GAME#${gameId}`,
-              SK: `VOTE#${questionNumber}#PLAYER#${name}`,
-              VoterName: name,
-              QuestionNumber: questionNumber,
-              First: votes["0"] || null,   // Answer index for 1st place
-              Second: votes["1"] || null,  // Answer index for 2nd place  
-              Third: votes["2"] || null,   // Answer index for 3rd place
-              VotesRaw: votes, // Keep original format for compatibility
-              SubmittedAt: new Date().toISOString(),
-              ttl
-            }
-          }).promise();
-          
-          // Broadcast lightweight vote submitted notification via WebSocket
-          try {
-            await broadcastToGame(gameId, {
-              type: 'playerVoted',
-              gameId,
-              questionId: questionNumber,
-              timestamp: new Date().toISOString()
-            });
-          } catch (error) {
-            console.log('🔌 WebSocket broadcast failed for vote submission, continuing...', error.message);
-          }
-          
-          return { statusCode: 200, body: JSON.stringify({ status: 'OK' }) };
-        };
+
       Events:
         SubmitVotesEvent:
           Type: HttpApi

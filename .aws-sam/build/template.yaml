@@ -513,7 +513,16 @@ Resources:
   SubmitVotesFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.submitVotes
+      CodeUri: SubmitVotesFunction
+      Handler: submit-votes.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+          WEBSOCKET_API_ENDPOINT:
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/dev
       Policies:
       - DynamoDBCrudPolicy:
           TableName:
@@ -524,45 +533,6 @@ Resources:
           - execute-api:ManageConnections
           Resource:
             Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*
-      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
-        const apigateway = new AWS.ApiGatewayManagementApi({\n  endpoint: process.env.WEBSOCKET_API_ENDPOINT\n\
-        });\n\n// Helper function to broadcast WebSocket message\nconst broadcastToGame\
-        \ = async (gameId, message) => {\n  try {\n    const connectionsResult = await\
-        \ db.scan({\n      TableName: process.env.TABLE_NAME,\n      FilterExpression:\
-        \ 'begins_with(PK, :prefix) AND GameId = :gameId',\n      ExpressionAttributeValues:\
-        \ {\n        ':prefix': 'CONNECTION#',\n        ':gameId': gameId\n      }\n\
-        \    }).promise();\n    \n    const connections = connectionsResult.Items\
-        \ || [];\n    console.log(`\U0001F50C Broadcasting to ${connections.length}\
-        \ connections for game ${gameId}`);\n    \n    const broadcastPromises = connections.map(async\
-        \ (connection) => {\n      try {\n        await apigateway.postToConnection({\n\
-        \          ConnectionId: connection.ConnectionId,\n          Data: JSON.stringify(message)\n\
-        \        }).promise();\n      } catch (error) {\n        console.log(`\U0001F50C\
-        \ Failed to send to connection ${connection.ConnectionId}:`, error);\n   \
-        \     if (error.statusCode === 410) {\n          await db.delete({\n     \
-        \       TableName: process.env.TABLE_NAME,\n            Key: { PK: connection.PK,\
-        \ SK: connection.SK }\n          }).promise();\n        }\n      }\n    });\n\
-        \    \n    await Promise.all(broadcastPromises);\n  } catch (error) {\n  \
-        \  console.error('\U0001F50C Broadcast error:', error);\n  }\n};\nexports.submitVotes\
-        \ = async (event) => {\n  const gameId = event.pathParameters.gameId;\n  const\
-        \ { name, questionNumber, votes } = JSON.parse(event.body);\n  const ttl =\
-        \ Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);\n  \n  console.log(`\U0001F5F3\
-        \uFE0F Votes: game=${gameId}, question=${questionNumber}, voter=${name}`);\n\
-        \  \n  // Clean structure: GAME#1234 / VOTE#001#PLAYER#name\n  // votes =\
-        \ { \"0\": 1, \"1\": 2, \"2\": 3 } (answerIndex: rank)\n  await db.put({\n\
-        \    TableName: process.env.TABLE_NAME,\n    Item: {\n      PK: `GAME#${gameId}`,\n\
-        \      SK: `VOTE#${questionNumber}#PLAYER#${name}`,\n      VoterName: name,\n\
-        \      QuestionNumber: questionNumber,\n      First: votes[\"0\"] || null,\
-        \   // Answer index for 1st place\n      Second: votes[\"1\"] || null,  //\
-        \ Answer index for 2nd place  \n      Third: votes[\"2\"] || null,   // Answer\
-        \ index for 3rd place\n      VotesRaw: votes, // Keep original format for\
-        \ compatibility\n      SubmittedAt: new Date().toISOString(),\n      ttl\n\
-        \    }\n  }).promise();\n  \n  // Broadcast lightweight vote submitted notification\
-        \ via WebSocket\n  try {\n    await broadcastToGame(gameId, {\n      type:\
-        \ 'playerVoted',\n      gameId,\n      questionId: questionNumber,\n     \
-        \ timestamp: new Date().toISOString()\n    });\n  } catch (error) {\n    console.log('\U0001F50C\
-        \ WebSocket broadcast failed for vote submission, continuing...', error.message);\n\
-        \  }\n  \n  return { statusCode: 200, body: JSON.stringify({ status: 'OK'\
-        \ }) };\n};"
       Events:
         SubmitVotesEvent:
           Type: HttpApi
@@ -571,6 +541,8 @@ Resources:
               Ref: GameApi
             Path: /games/{gameId}/votes
             Method: POST
+    Metadata:
+      SamResourceId: SubmitVotesFunction
   SavePartialVoteFunction:
     Type: AWS::Serverless::Function
     Properties:
