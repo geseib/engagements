@@ -62,6 +62,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated }) {
   };
 
   const handleConfigSubmit = async () => {
+    console.log('🤖 Starting AI scenario generation...', scenarioConfig);
     setIsGenerating(true);
     setGenerationStatus('🤖 Generating scenarios with AI...');
     setStep(3);
@@ -157,7 +158,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated }) {
   return (
     <div className="ai-scenario-builder-modal">
       <div className="modal-overlay" onClick={onClose}></div>
-      <div className="modal-content scenario-builder">
+      <div className="modal-content scenario-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>🤖 AI Scenario Builder</h2>
           <button className="close-button" onClick={onClose}>✕</button>

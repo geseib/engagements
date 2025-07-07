@@ -880,7 +880,10 @@ function AdminPage() {
               <div className="add-set-buttons">
                 <button
                   className="btn-primary"
-                  onClick={() => setShowAIScenarioBuilder(true)}
+                  onClick={() => {
+                    console.log('🤖 AI Scenario Builder button clicked');
+                    setShowAIScenarioBuilder(true);
+                  }}
                 >
                   🤖 AI Scenario Builder
                 </button>
