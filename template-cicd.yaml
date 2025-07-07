@@ -1,0 +1,449 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CI/CD Pipeline for Engagements Platform:
+    • CodePipeline with GitHub integration
+    • Automated deployment to Dev/Test environments
+    • Manual approval for Production
+    • Multi-environment support with proper naming
+
+Parameters:
+  GitHubOwner:
+    Type: String
+    Description: GitHub repository owner
+    Default: "geseib"
+  
+  GitHubRepo:
+    Type: String
+    Description: GitHub repository name
+    Default: "engagements"
+  
+  GitHubToken:
+    Type: String
+    Description: GitHub personal access token
+    NoEcho: true
+  
+  HostedZoneId:
+    Type: String
+    Description: Route53 Hosted Zone ID for sb.seibtribe.us
+    Default: "Z03473042HSYD8BUY4XSL"
+
+Resources:
+
+  ### S3 Bucket for Pipeline Artifacts
+  PipelineArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'engagements-pipeline-artifacts-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldArtifacts
+            Status: Enabled
+            ExpirationInDays: 30
+
+  ### CodeBuild Service Role
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'EngagementsCodeBuildRole-${AWS::Region}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/PowerUserAccess
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub '${PipelineArtifactsBucket}/*'
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                  - iam:*
+                  - lambda:*
+                  - apigateway:*
+                  - s3:*
+                  - route53:*
+                  - cloudfront:*
+                  - dynamodb:*
+                Resource: '*'
+
+  ### CodePipeline Service Role
+  CodePipelineServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'EngagementsCodePipelineRole-${AWS::Region}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodePipelinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:GetBucketVersioning
+                Resource:
+                  - !Sub '${PipelineArtifactsBucket}'
+                  - !Sub '${PipelineArtifactsBucket}/*'
+              - Effect: Allow
+                Action:
+                  - codebuild:BatchGetBuilds
+                  - codebuild:StartBuild
+                Resource:
+                  - !GetAtt DevBuildProject.Arn
+                  - !GetAtt TestBuildProject.Arn
+                  - !GetAtt ProdBuildProject.Arn
+
+  ### CodeBuild Project for Dev Environment
+  DevBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub '${AWS::StackName}-dev-build'
+      Description: 'Build and deploy to Dev environment'
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:5.0
+        EnvironmentVariables:
+          - Name: ENVIRONMENT
+            Value: dev
+          - Name: DOMAIN_NAME
+            Value: engagedev.sb.seibtribe.us
+          - Name: HOSTED_ZONE_ID
+            Value: !Ref HostedZoneId
+          - Name: STACK_NAME
+            Value: engagements-dev
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            install:
+              runtime-versions:
+                nodejs: 18
+              commands:
+                - echo "Installing SAM CLI..."
+                - pip3 install aws-sam-cli
+                - echo "Installing Node.js dependencies..."
+                - cd src && npm ci && cd ..
+            pre_build:
+              commands:
+                - echo "Pre-build phase for $ENVIRONMENT environment"
+                - echo "Domain: $DOMAIN_NAME"
+            build:
+              commands:
+                - echo "Building and deploying backend..."
+                - sam build --template-file template-dev.yaml
+                - sam deploy --template-file template-dev.yaml --config-file samconfig-dev.toml --parameter-overrides "DomainName=$DOMAIN_NAME HostedZoneId=$HOSTED_ZONE_ID" --stack-name $STACK_NAME --no-confirm-changeset
+                - echo "Building frontend..."
+                - cd src
+                - echo "Getting API endpoints from CloudFormation..."
+                - API_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' --output text)
+                - WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)
+                - echo "Creating config.js with API endpoints..."
+                - |
+                  cat > public/config.js << EOF
+                  window.API_BASE = '$API_URL/';
+                  window.WS_URL = '$WS_URL';
+                  window.ENV = 'development';
+                  console.log('🔧 DEV Environment loaded:', { API_BASE: window.API_BASE, WS_URL: window.WS_URL });
+                  EOF
+                - npm run build
+                - echo "Deploying frontend to S3..."
+                - BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`StaticSiteBucketName`].OutputValue' --output text)
+                - aws s3 sync dist/ s3://$BUCKET_NAME/ --delete
+            post_build:
+              commands:
+                - echo "Deployment completed for $ENVIRONMENT environment"
+                - echo "Website URL: https://$DOMAIN_NAME"
+
+  ### CodeBuild Project for Test Environment
+  TestBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub '${AWS::StackName}-test-build'
+      Description: 'Build and deploy to Test environment'
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:5.0
+        EnvironmentVariables:
+          - Name: ENVIRONMENT
+            Value: test
+          - Name: DOMAIN_NAME
+            Value: engagetest.sb.seibtribe.us
+          - Name: HOSTED_ZONE_ID
+            Value: !Ref HostedZoneId
+          - Name: STACK_NAME
+            Value: engagements-test
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            install:
+              runtime-versions:
+                nodejs: 18
+              commands:
+                - echo "Installing SAM CLI..."
+                - pip3 install aws-sam-cli
+                - echo "Installing Node.js dependencies..."
+                - cd src && npm ci && cd ..
+            build:
+              commands:
+                - echo "Building and deploying to TEST environment..."
+                - sam build --template-file template-dev.yaml
+                - sam deploy --template-file template-dev.yaml --config-file samconfig-test.toml --parameter-overrides "DomainName=$DOMAIN_NAME HostedZoneId=$HOSTED_ZONE_ID" --stack-name $STACK_NAME --no-confirm-changeset
+                - cd src
+                - API_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' --output text)
+                - WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)
+                - |
+                  cat > public/config.js << EOF
+                  window.API_BASE = '$API_URL/';
+                  window.WS_URL = '$WS_URL';
+                  window.ENV = 'test';
+                  console.log('🧪 TEST Environment loaded:', { API_BASE: window.API_BASE, WS_URL: window.WS_URL });
+                  EOF
+                - npm run build
+                - BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`StaticSiteBucketName`].OutputValue' --output text)
+                - aws s3 sync dist/ s3://$BUCKET_NAME/ --delete
+
+  ### CodeBuild Project for Production Environment
+  ProdBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub '${AWS::StackName}-prod-build'
+      Description: 'Build and deploy to Production environment'
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:5.0
+        EnvironmentVariables:
+          - Name: ENVIRONMENT
+            Value: prod
+          - Name: DOMAIN_NAME
+            Value: engagements.sb.seibtribe.us
+          - Name: HOSTED_ZONE_ID
+            Value: !Ref HostedZoneId
+          - Name: STACK_NAME
+            Value: engagements-prod
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            install:
+              runtime-versions:
+                nodejs: 18
+              commands:
+                - echo "Installing SAM CLI..."
+                - pip3 install aws-sam-cli
+                - echo "Installing Node.js dependencies..."
+                - cd src && npm ci && cd ..
+            build:
+              commands:
+                - echo "Building and deploying to PRODUCTION environment..."
+                - sam build --template-file template-prod.yaml
+                - sam deploy --template-file template-prod.yaml --config-file samconfig-prod.toml --parameter-overrides "DomainName=$DOMAIN_NAME HostedZoneId=$HOSTED_ZONE_ID" --stack-name $STACK_NAME --no-confirm-changeset
+                - cd src
+                - API_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' --output text)
+                - WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)
+                - |
+                  cat > public/config.js << EOF
+                  window.API_BASE = '$API_URL/';
+                  window.WS_URL = '$WS_URL';
+                  window.ENV = 'production';
+                  console.log('🚀 PRODUCTION Environment loaded:', { API_BASE: window.API_BASE, WS_URL: window.WS_URL });
+                  EOF
+                - npm run build
+                - BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`StaticSiteBucketName`].OutputValue' --output text)
+                - aws s3 sync dist/ s3://$BUCKET_NAME/ --delete
+
+  ### Dev Environment Pipeline
+  DevPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub '${AWS::StackName}-dev-pipeline'
+      RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref PipelineArtifactsBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: '1'
+              Configuration:
+                Owner: !Ref GitHubOwner
+                Repo: !Ref GitHubRepo
+                Branch: dev
+                OAuthToken: !Ref GitHubToken
+                PollForSourceChanges: true
+              OutputArtifacts:
+                - Name: SourceOutput
+        - Name: Deploy
+          Actions:
+            - Name: DeployToDev
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref DevBuildProject
+              InputArtifacts:
+                - Name: SourceOutput
+
+  ### Test Environment Pipeline
+  TestPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub '${AWS::StackName}-test-pipeline'
+      RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref PipelineArtifactsBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: '1'
+              Configuration:
+                Owner: !Ref GitHubOwner
+                Repo: !Ref GitHubRepo
+                Branch: test
+                OAuthToken: !Ref GitHubToken
+                PollForSourceChanges: true
+              OutputArtifacts:
+                - Name: SourceOutput
+        - Name: Deploy
+          Actions:
+            - Name: DeployToTest
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref TestBuildProject
+              InputArtifacts:
+                - Name: SourceOutput
+
+  ### Production Pipeline (with manual approval)
+  ProdPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub '${AWS::StackName}-prod-pipeline'
+      RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref PipelineArtifactsBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: '1'
+              Configuration:
+                Owner: !Ref GitHubOwner
+                Repo: !Ref GitHubRepo
+                Branch: main
+                OAuthToken: !Ref GitHubToken
+                PollForSourceChanges: false  # Manual trigger for prod
+              OutputArtifacts:
+                - Name: SourceOutput
+        - Name: Approval
+          Actions:
+            - Name: ManualApproval
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: '1'
+              Configuration:
+                CustomData: 'Please review and approve deployment to Production'
+        - Name: Deploy
+          Actions:
+            - Name: DeployToProd
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref ProdBuildProject
+              InputArtifacts:
+                - Name: SourceOutput
+
+Outputs:
+  PipelineArtifactsBucket:
+    Description: S3 bucket for pipeline artifacts
+    Value: !Ref PipelineArtifactsBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-ArtifactsBucket'
+
+  DevPipelineUrl:
+    Description: URL of the Dev pipeline
+    Value: !Sub 'https://console.aws.amazon.com/codesuite/codepipeline/pipelines/${DevPipeline}/view'
+
+  TestPipelineUrl:
+    Description: URL of the Test pipeline
+    Value: !Sub 'https://console.aws.amazon.com/codesuite/codepipeline/pipelines/${TestPipeline}/view'
+
+  ProdPipelineUrl:
+    Description: URL of the Production pipeline
+    Value: !Sub 'https://console.aws.amazon.com/codesuite/codepipeline/pipelines/${ProdPipeline}/view'
