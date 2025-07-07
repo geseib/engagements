@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import AIScenarioBuilder from './components/AIScenarioBuilder';
 import './BuilderPage.css';
 
 const API_BASE = window.API_BASE;
@@ -48,6 +49,9 @@ function AdminPage() {
   const [editAiContextInstructions, setEditAiContextInstructions] = useState('');
   const [editEngagementType, setEditEngagementType] = useState('call-and-answer');
   const [saveStatus, setSaveStatus] = useState('');
+
+  // AI Scenario Builder
+  const [showAIScenarioBuilder, setShowAIScenarioBuilder] = useState(false);
 
   const defaultInstructions = "How would you apply this concept in your current role or organization? Consider the specific challenges and opportunities in your context.";
 
@@ -354,6 +358,55 @@ function AdminPage() {
     }
 
     setShowDeleteConfirm(true);
+  };
+
+  // Handle AI-generated scenarios
+  const handleScenariosGenerated = async (scenarios) => {
+    setShowAIScenarioBuilder(false);
+
+    // Convert scenarios to CSV format and upload
+    const csvContent = generateScenariosCSV(scenarios);
+    const timestamp = Date.now();
+
+    try {
+      setUploadStatus('Processing AI-generated scenarios...');
+
+      const response = await fetch(`${API_BASE}admin/upload-questions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileName: `ai-scenarios-${timestamp}.csv`,
+          fileContent: csvContent,
+          customTitle: `AI Generated Scenarios - ${new Date().toLocaleDateString()}`,
+          customDescription: `AI-generated scenarios created on ${new Date().toLocaleDateString()}`,
+          customInstructions: 'AI-generated scenarios for engagement activities',
+          aiContextInstructions: 'These scenarios were created using AI to promote discussion and learning',
+          engagementType: 'call-and-answer'
+        })
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setUploadStatus(`✅ ${result.message}`);
+        fetchQuestionSets(); // Refresh the list
+      } else {
+        setUploadStatus(`❌ Upload failed: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      setUploadStatus(`❌ Upload failed: ${error.message}`);
+    }
+  };
+
+  const generateScenariosCSV = (scenarios) => {
+    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction';
+    const rows = scenarios.map((scenario, index) => {
+      return `"${scenario.category || 'AI Generated'}","${index + 1}","${scenario.title}","${scenario.detail}","${scenario.school || 'Professional Development'}","${scenario.customInstructions || ''}"`;
+    });
+    return headers + '\n' + rows.join('\n');
   };
 
   const confirmDelete = async () => {
@@ -827,9 +880,15 @@ function AdminPage() {
               <div className="add-set-buttons">
                 <button
                   className="btn-primary"
+                  onClick={() => setShowAIScenarioBuilder(true)}
+                >
+                  🤖 AI Scenario Builder
+                </button>
+                <button
+                  className="btn-secondary"
                   onClick={() => window.open('/builder', '_blank')}
                 >
-                  🎨 Open Builder Interface
+                  🎨 Manual Builder Interface
                 </button>
                 <button
                   className="btn-secondary"
@@ -990,6 +1049,14 @@ function AdminPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* AI Scenario Builder Modal */}
+      {showAIScenarioBuilder && (
+        <AIScenarioBuilder
+          onClose={() => setShowAIScenarioBuilder(false)}
+          onScenariosGenerated={handleScenariosGenerated}
+        />
       )}
     </div>
   );

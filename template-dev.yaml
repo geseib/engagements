@@ -2631,6 +2631,144 @@ Resources:
             Path: /admin/ai-generate-questions
             Method: POST
 
+  ### Lambda: Admin AI Generate Scenarios
+  AdminAIGenerateScenariosFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.generateScenarios
+      Timeout: 180
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource:
+                - !Sub 'arn:aws:bedrock:us-east-1::foundation-model/us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+      InlineCode: |-
+        const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+
+        const bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });
+
+        // Function to call Claude via Bedrock
+        const invokeClaude = async (prompt) => {
+          const modelId = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';
+
+          console.log('🤖 Calling Claude for scenario generation...');
+
+          const payload = {
+            anthropic_version: 'bedrock-2023-05-31',
+            max_tokens: 4000,
+            messages: [
+              {
+                role: 'user',
+                content: [{ type: 'text', text: prompt }],
+              },
+            ],
+          };
+
+          const command = new InvokeModelCommand({
+            contentType: 'application/json',
+            body: JSON.stringify(payload),
+            modelId,
+          });
+
+          const response = await bedrockClient.send(command);
+          const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+
+          return responseBody.content[0].text;
+        };
+
+        exports.generateScenarios = async (event) => {
+          try {
+            const { scenarioType, prompt, count, difficulty } = JSON.parse(event.body);
+
+            console.log('🤖 Generating scenarios:', { scenarioType, count, difficulty });
+
+            // Build comprehensive prompt for scenario generation
+            let fullPrompt = 'You are an expert in creating engaging workplace scenarios and educational content. ';
+
+            // Add scenario type specific context
+            if (scenarioType === 'lessons-learned') {
+              fullPrompt += 'Create realistic workplace scenarios that highlight important lessons learned from challenging situations. ';
+            } else if (scenarioType === 'problem-solving') {
+              fullPrompt += 'Create complex problem scenarios that require creative thinking and collaborative solutions. ';
+            } else if (scenarioType === 'interview-prep') {
+              fullPrompt += 'Create interview-style scenarios and questions that help candidates practice and demonstrate their skills. ';
+            } else if (scenarioType === 'amazon-principles') {
+              fullPrompt += 'Create scenarios that explore Amazon Leadership Principles through real-world workplace situations. ';
+            } else if (scenarioType === 'team-building') {
+              fullPrompt += 'Create team-building scenarios that promote collaboration, communication, and trust. ';
+            }
+
+            fullPrompt += prompt;
+            fullPrompt += '\\n\\nPlease create scenarios that are:';
+            fullPrompt += '\\n- Realistic and relatable to workplace situations';
+            fullPrompt += '\\n- Thought-provoking and discussion-worthy';
+            fullPrompt += '\\n- Appropriate for the specified difficulty level';
+            fullPrompt += '\\n- Designed to encourage participation and learning';
+
+            fullPrompt += '\\n\\nFormat your response as a JSON array of objects with this structure:';
+            fullPrompt += '\\n[\\n  {\\n    "title": "Scenario title",\\n    "category": "Category name",\\n    "detail": "Detailed scenario description with context, situation, and discussion points",\\n    "school": "Professional Development",\\n    "customInstructions": "Specific instructions for facilitators and participants"\\n  }\\n]';
+            fullPrompt += '\\n\\nIMPORTANT: Return ONLY the JSON array, no additional text or formatting.';
+
+            console.log('🤖 Sending prompt to Claude...');
+            const aiResponse = await invokeClaude(fullPrompt);
+            console.log('✅ Received response from Claude');
+
+            // Parse the JSON response
+            let scenarios;
+            try {
+              // Clean the response to extract just the JSON
+              const jsonMatch = aiResponse.match(/\\[[\\s\\S]*\\]/);
+              if (jsonMatch) {
+                scenarios = JSON.parse(jsonMatch[0]);
+              } else {
+                throw new Error('No JSON array found in response');
+              }
+            } catch (parseError) {
+              console.error('❌ Failed to parse AI response:', parseError);
+              console.log('Raw response:', aiResponse);
+              throw new Error('Failed to parse AI response as JSON');
+            }
+
+            // Add IDs and ensure proper structure
+            const processedScenarios = scenarios.map((scenario, index) => ({
+              id: Date.now() + index,
+              title: scenario.title || 'Untitled Scenario',
+              category: scenario.category || 'General',
+              detail: scenario.detail || '',
+              school: scenario.school || 'Professional Development',
+              customInstructions: scenario.customInstructions || ''
+            }));
+
+            console.log('✅ Successfully generated scenarios:', processedScenarios.length);
+
+            return {
+              statusCode: 200,
+              body: JSON.stringify({
+                scenarios: processedScenarios,
+                message: 'Generated scenarios successfully'
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+
+          } catch (error) {
+            console.error('❌ Scenario generation error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: 'Failed to generate scenarios: ' + error.message }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        AdminAIGenerateScenariosEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /admin/ai-generate-scenarios
+            Method: POST
+
   ### Lambda: Admin Get All Question Sets (including inactive)
   AdminGetQuestionSetsFunction:
     Type: AWS::Serverless::Function
