@@ -2493,14 +2493,21 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: index.generateQuestions
-      Timeout: 120
+      Runtime: nodejs18.x
+      Timeout: 300
+      MemorySize: 512
       Policies:
-        - Statement:
+        - Version: '2012-10-17'
+          Statement:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
               Resource:
-                - !Sub 'arn:aws:bedrock:us-east-1::foundation-model/us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
       InlineCode: |-
         const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 
@@ -2636,14 +2643,21 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: index.generateScenarios
-      Timeout: 180
+      Runtime: nodejs18.x
+      Timeout: 300
+      MemorySize: 512
       Policies:
-        - Statement:
+        - Version: '2012-10-17'
+          Statement:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
               Resource:
-                - !Sub 'arn:aws:bedrock:us-east-1::foundation-model/us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
       InlineCode: |-
         const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 
@@ -2651,39 +2665,33 @@ Resources:
 
         // Function to call Claude via Bedrock
         const invokeClaude = async (prompt) => {
-          try {
-            const modelId = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';
+          const modelId = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';
 
-            console.log('🤖 Calling Claude for scenario generation...');
+          console.log('🤖 Calling Claude for scenario generation...');
+          console.log('📝 Prompt length:', prompt.length);
+          console.log('📝 First 200 chars:', prompt.substring(0, 200));
 
-            const payload = {
-              anthropic_version: 'bedrock-2023-05-31',
-              max_tokens: 4000,
-              messages: [
-                {
-                  role: 'user',
-                  content: [{ type: 'text', text: prompt }],
-                },
-              ],
-            };
+          const payload = {
+            anthropic_version: 'bedrock-2023-05-31',
+            max_tokens: 4000,
+            messages: [
+              {
+                role: 'user',
+                content: [{ type: 'text', text: prompt }],
+              },
+            ],
+          };
 
-            console.log('🤖 Bedrock payload prepared, sending request...');
+          const command = new InvokeModelCommand({
+            contentType: 'application/json',
+            body: JSON.stringify(payload),
+            modelId,
+          });
 
-            const command = new InvokeModelCommand({
-              contentType: 'application/json',
-              body: JSON.stringify(payload),
-              modelId,
-            });
+          const response = await bedrockClient.send(command);
+          const responseBody = JSON.parse(new TextDecoder().decode(response.body));
 
-            const response = await bedrockClient.send(command);
-            const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-
-            console.log('✅ Bedrock response received successfully');
-            return responseBody.content[0].text;
-          } catch (bedrockError) {
-            console.error('❌ Bedrock invocation failed:', bedrockError);
-            throw new Error('Bedrock API call failed: ' + bedrockError.message);
-          }
+          return responseBody.content[0].text;
         };
 
         exports.generateScenarios = async (event) => {
