@@ -389,7 +389,16 @@ Resources:
   StartQuestionFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.startQuestion
+      CodeUri: StartQuestionFunction
+      Handler: start-question.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+          WEBSOCKET_API_ENDPOINT:
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/dev
       Policies:
       - DynamoDBCrudPolicy:
           TableName:
@@ -400,46 +409,6 @@ Resources:
           - execute-api:ManageConnections
           Resource:
             Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*
-      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
-        const apigateway = new AWS.ApiGatewayManagementApi({\n  endpoint: process.env.WEBSOCKET_API_ENDPOINT\n\
-        });\n\n// Helper function to broadcast WebSocket message\nconst broadcastToGame\
-        \ = async (gameId, message) => {\n  try {\n    const connectionsResult = await\
-        \ db.scan({\n      TableName: process.env.TABLE_NAME,\n      FilterExpression:\
-        \ 'begins_with(PK, :prefix) AND GameId = :gameId',\n      ExpressionAttributeValues:\
-        \ {\n        ':prefix': 'CONNECTION#',\n        ':gameId': gameId\n      }\n\
-        \    }).promise();\n    \n    const connections = connectionsResult.Items\
-        \ || [];\n    console.log(`\U0001F50C Broadcasting to ${connections.length}\
-        \ connections for game ${gameId}`);\n    \n    const broadcastPromises = connections.map(async\
-        \ (connection) => {\n      try {\n        await apigateway.postToConnection({\n\
-        \          ConnectionId: connection.ConnectionId,\n          Data: JSON.stringify(message)\n\
-        \        }).promise();\n      } catch (error) {\n        console.log(`\U0001F50C\
-        \ Failed to send to connection ${connection.ConnectionId}:`, error);\n   \
-        \     if (error.statusCode === 410) {\n          await db.delete({\n     \
-        \       TableName: process.env.TABLE_NAME,\n            Key: { PK: connection.PK,\
-        \ SK: connection.SK }\n          }).promise();\n        }\n      }\n    });\n\
-        \    \n    await Promise.all(broadcastPromises);\n  } catch (error) {\n  \
-        \  console.error('\U0001F50C Broadcast error:', error);\n  }\n};\nexports.startQuestion\
-        \ = async (event) => {\n  const gameId = event.pathParameters.gameId;\n  const\
-        \ { questionNumber, questionRef, setId, category } = JSON.parse(event.body);\n\
-        \  const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);\n  \n\
-        \  console.log(`\U0001F4DD Starting question ${questionNumber} for game ${gameId},\
-        \ ref: ${questionRef}`);\n  \n  // Store question pointer: GAME#1234 / QUESTION#001\n\
-        \  await db.put({\n    TableName: process.env.TABLE_NAME,\n    Item: {\n \
-        \     PK: `GAME#${gameId}`,\n      SK: `QUESTION#${questionNumber}`,\n   \
-        \   QuestionRef: questionRef, // Pointer to SET#setId / QUESTION#category#number\n\
-        \      SetId: setId,\n      Category: category,\n      StartedAt: new Date().toISOString(),\n\
-        \      ttl\n    }\n  }).promise();\n  \n  // Update game state: current question\
-        \ and stage\n  await db.put({\n    TableName: process.env.TABLE_NAME,\n  \
-        \  Item: {\n      PK: `GAME#${gameId}`,\n      SK: 'STATE',\n      CurrentQuestion:\
-        \ questionNumber, // \"001\", \"002\", etc.\n      Stage: 'ASK', // BEGIN,\
-        \ ASK, VOTE, RESULTS, END\n      UpdatedAt: new Date().toISOString(),\n  \
-        \    ttl\n    }\n  }).promise();\n  \n  // Broadcast lightweight question\
-        \ started notification via WebSocket\n  try {\n    await broadcastToGame(gameId,\
-        \ {\n      type: 'questionStarted',\n      gameId,\n      questionId: questionNumber,\n\
-        \      timestamp: new Date().toISOString()\n    });\n  } catch (error) {\n\
-        \    console.log('\U0001F50C WebSocket broadcast failed for question start,\
-        \ continuing...', error.message);\n  }\n  \n  return { statusCode: 200, body:\
-        \ JSON.stringify({ status: 'OK' }) };\n};"
       Events:
         StartQuestionEvent:
           Type: HttpApi
@@ -448,6 +417,8 @@ Resources:
               Ref: GameApi
             Path: /games/{gameId}/start-question
             Method: POST
+    Metadata:
+      SamResourceId: StartQuestionFunction
   SubmitAnswerFunction:
     Type: AWS::Serverless::Function
     Properties:
