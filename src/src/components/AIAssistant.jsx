@@ -141,19 +141,33 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
 
           {isBulkGeneration && (
             <div className="bulk-controls">
-              <label htmlFor="bulk-count">Number of questions to generate:</label>
-              <select
-                id="bulk-count"
-                value={bulkCount}
-                onChange={(e) => setBulkCount(parseInt(e.target.value))}
-                className="input-field"
-              >
-                <option value={3}>3 questions</option>
-                <option value={5}>5 questions</option>
-                <option value={10}>10 questions</option>
-                <option value={15}>15 questions</option>
-                <option value={20}>20 questions</option>
-              </select>
+              <label htmlFor="bulk-count">Number of questions to generate: <strong>{bulkCount}</strong></label>
+              <div className="quantity-controls">
+                <input
+                  type="range"
+                  id="bulk-count-slider"
+                  min="1"
+                  max="100"
+                  value={bulkCount}
+                  onChange={(e) => setBulkCount(parseInt(e.target.value))}
+                  className="quantity-slider"
+                />
+                <input
+                  type="number"
+                  id="bulk-count-input"
+                  min="1"
+                  max="100"
+                  value={bulkCount}
+                  onChange={(e) => setBulkCount(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
+                  className="quantity-input"
+                />
+              </div>
+              <div className="quantity-presets">
+                <button type="button" className="preset-btn" onClick={() => setBulkCount(5)}>5</button>
+                <button type="button" className="preset-btn" onClick={() => setBulkCount(10)}>10</button>
+                <button type="button" className="preset-btn" onClick={() => setBulkCount(20)}>20</button>
+                <button type="button" className="preset-btn" onClick={() => setBulkCount(50)}>50</button>
+              </div>
             </div>
           )}
 

@@ -221,17 +221,31 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated }) {
                   </div>
 
                   <div className="form-group">
-                    <label>Number of Scenarios</label>
-                    <select
-                      value={scenarioConfig.count}
-                      onChange={(e) => setScenarioConfig(prev => ({ ...prev, count: parseInt(e.target.value) }))}
-                    >
-                      <option value={3}>3 scenarios</option>
-                      <option value={5}>5 scenarios</option>
-                      <option value={10}>10 scenarios</option>
-                      <option value={15}>15 scenarios</option>
-                      <option value={20}>20 scenarios</option>
-                    </select>
+                    <label>Number of Scenarios: <strong>{scenarioConfig.count}</strong></label>
+                    <div className="quantity-controls">
+                      <input
+                        type="range"
+                        min="1"
+                        max="100"
+                        value={scenarioConfig.count}
+                        onChange={(e) => setScenarioConfig(prev => ({ ...prev, count: parseInt(e.target.value) }))}
+                        className="quantity-slider"
+                      />
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={scenarioConfig.count}
+                        onChange={(e) => setScenarioConfig(prev => ({ ...prev, count: Math.min(100, Math.max(1, parseInt(e.target.value) || 1)) }))}
+                        className="quantity-input"
+                      />
+                    </div>
+                    <div className="quantity-presets">
+                      <button type="button" className="preset-btn" onClick={() => setScenarioConfig(prev => ({ ...prev, count: 5 }))}>5</button>
+                      <button type="button" className="preset-btn" onClick={() => setScenarioConfig(prev => ({ ...prev, count: 10 }))}>10</button>
+                      <button type="button" className="preset-btn" onClick={() => setScenarioConfig(prev => ({ ...prev, count: 20 }))}>20</button>
+                      <button type="button" className="preset-btn" onClick={() => setScenarioConfig(prev => ({ ...prev, count: 50 }))}>50</button>
+                    </div>
                   </div>
                 </div>
 

@@ -2707,10 +2707,10 @@ Resources:
 
             const { scenarioType, prompt, count, difficulty } = JSON.parse(event.body);
 
-            // Limit count to prevent timeouts
-            const limitedCount = Math.min(count, 10);
+            // Allow up to 100 scenarios with increased timeout
+            const limitedCount = Math.min(count, 100);
             if (limitedCount !== count) {
-              console.log('⚠️ Limited scenario count from', count, 'to', limitedCount, 'to prevent timeout');
+              console.log('⚠️ Limited scenario count from', count, 'to', limitedCount, 'maximum allowed is 100');
             }
 
             console.log('🤖 Generating scenarios:', { scenarioType, count: limitedCount, difficulty, promptLength: prompt?.length });
