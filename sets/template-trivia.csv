@@ -1,0 +1,11 @@
+Category,Question#,Title,Detail,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Points
+"DevOps",1,"What does CI/CD stand for?","","Continuous Integration/Continuous Deployment","Computer Interface/Computer Design","Code Integration/Code Development","Central Intelligence/Central Database","","","Continuous Integration/Continuous Deployment",10
+"Cloud Computing",2,"Which AWS service is used for serverless computing?","","EC2","Lambda","S3","RDS","","","Lambda",10
+"Programming",3,"What year was Python first released?","","1989","1991","1995","2000","","","1991",10
+"DevOps",4,"What is the primary purpose of Docker?","","Database management","Containerization","Web hosting","Code compilation","","","Containerization",10
+"Frontend",5,"Which company originally developed React?","","Google","Facebook","Microsoft","Twitter","","","Facebook",10
+"Backend",6,"What does REST stand for in API design?","","Remote Execution State Transfer","Representational State Transfer","Rapid Enterprise System Technology","Real-time Event Stream Transfer","","","Representational State Transfer",10
+"Networking",7,"What is the default port for HTTPS?","","80","443","8080","3000","","","443",10
+"Version Control",8,"Which Git command creates a new branch?","","git branch","git checkout -b","Both A and B","git create-branch","","","Both A and B",10
+"Database",9,"What does SQL stand for?","","System Query Language","Structured Query Language","Simple Question Language","Server Query Language","","","Structured Query Language",10
+"Programming",10,"Which programming paradigm does JavaScript primarily support?","","Object-oriented only","Functional only","Multi-paradigm","Procedural only","","","Multi-paradigm",10

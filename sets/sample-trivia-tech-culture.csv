@@ -1,0 +1,33 @@
+Category,Question,OptionA,OptionB,OptionC,OptionD,CorrectAnswer,Points
+"Technology","What does API stand for in software development?","Application Programming Interface","Advanced Protocol Integration","Automated Process Implementation","Application Process Interface","Application Programming Interface",10
+"Technology","Which programming language was created by Guido van Rossum?","Java","Python","Ruby","JavaScript","Python",10
+"Technology","What year was the first iPhone released?","2005","2006","2007","2008","2007",10
+"Technology","What does 'HTTP' stand for?","HyperText Transfer Protocol","High Transfer Text Protocol","HyperText Translation Process","High Technical Transfer Protocol","HyperText Transfer Protocol",10
+"Technology","Which company developed the Git version control system?","Microsoft","Google","Linus Torvalds","Facebook","Linus Torvalds",10
+"Technology","What is the maximum value of a single byte in binary?","127","255","256","512","255",10
+"Technology","Which cloud provider uses the term 'EC2' for its compute service?","Google Cloud","Microsoft Azure","Amazon AWS","IBM Cloud","Amazon AWS",10
+"Technology","What does SQL stand for?","System Query Language","Structured Query Language","Simple Question Language","Server Query Language","Structured Query Language",10
+"Company Culture","Which company is famous for its '20% time' policy for personal projects?","Facebook","Google","Apple","Microsoft","Google",10
+"Company Culture","What does Amazon call its leadership principles?","Core Values","Leadership Principles","Amazonian Way","Customer Obsession Guidelines","Leadership Principles",10
+"Company Culture","Which company uses the motto 'Move Fast and Break Things'?","Twitter","Uber","Facebook (Meta)","Netflix","Facebook (Meta)",10
+"Company Culture","What is Netflix known for in its culture document?","Unlimited PTO","No vacation tracking","Radical Candor","Freedom and Responsibility","Freedom and Responsibility",10
+"Company Culture","Which company pioneered the concept of 'holacracy' (no managers)?","Spotify","Valve","Zappos","GitHub","Zappos",10
+"Company Culture","What does the acronym OKR stand for in goal setting?","Objectives and Key Results","Organizational Key Requirements","Operational Knowledge Results","Objective Knowledge Ratios","Objectives and Key Results",10
+"Company Culture","Which company is known for its 'Day 1' mentality?","Google","Amazon","Microsoft","Apple","Amazon",10
+"Company Culture","What is Spotify's organizational structure model called?","Tribes and Guilds","Squads and Tribes","Teams and Pods","Cells and Clusters","Squads and Tribes",10
+"Innovation History","In what year was the World Wide Web invented?","1989","1991","1993","1995","1989",10
+"Innovation History","Who is credited with inventing the first programmable computer?","Alan Turing","Charles Babbage","John von Neumann","Grace Hopper","Charles Babbage",10
+"Innovation History","What was the first widely-used web browser called?","Internet Explorer","Netscape","Mosaic","Chrome","Mosaic",10
+"Innovation History","Which company created the first commercial microprocessor?","IBM","Intel","AMD","Texas Instruments","Intel",10
+"Innovation History","What year was Bitcoin's whitepaper published?","2006","2008","2010","2012","2008",10
+"Innovation History","Who founded SpaceX?","Jeff Bezos","Richard Branson","Elon Musk","Paul Allen","Elon Musk",10
+"Innovation History","What was the first social media platform to reach 1 billion users?","MySpace","Twitter","Facebook","Instagram","Facebook",10
+"Innovation History","In what year was the first email sent?","1969","1971","1973","1975","1971",10
+"Tech Trends","What does IoT stand for?","Internet of Technology","Internet of Things","Integrated Online Technology","Internal Operating Technology","Internet of Things",10
+"Tech Trends","Which technology enables Bitcoin and other cryptocurrencies?","Quantum Computing","Blockchain","Machine Learning","Cloud Computing","Blockchain",10
+"Tech Trends","What does the 'GPT' in ChatGPT stand for?","General Purpose Technology","Generative Pre-trained Transformer","Global Processing Technology","Generative Pattern Technology","Generative Pre-trained Transformer",10
+"Tech Trends","What is the primary programming language for machine learning?","Java","C++","Python","JavaScript","Python",10
+"Tech Trends","What does 'CI/CD' stand for in DevOps?","Continuous Integration/Continuous Deployment","Code Integration/Code Delivery","Continuous Improvement/Continuous Development","Central Integration/Central Deployment","Continuous Integration/Continuous Deployment",10
+"Tech Trends","Which tech concept refers to processing data closer to where it's generated?","Cloud Computing","Edge Computing","Quantum Computing","Distributed Computing","Edge Computing",10
+"Tech Trends","What does the acronym 'SaaS' stand for?","System as a Service","Software as a Service","Security as a Service","Storage as a Service","Software as a Service",10
+"Tech Trends","What is the term for AI-generated images from text descriptions?","Deep Learning","Computer Vision","Generative AI","Neural Graphics","Generative AI",10

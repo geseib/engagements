@@ -1,0 +1,5 @@
+"PK","SK","aiContext","createdAt","currentQuestion","gameType","octet1","octet2","octet3","phase","questionSetId","randomOrdering","title","ttl","updatedAt"
+"GAME#7028","STATE#CATS","","","","","11111111","00000000","00000000","","","","","1752697571","2025-07-02T20:26:11.974Z"
+"GAME#7028","STATE#META","null","2025-07-02T20:26:11.974Z","","call-and-answer","","","","","","false","The Firm Kickoff 2026","1752697571",""
+"GAME#7028","STATE#PHASE","","","null","","","","","BEGIN","","","","1752697571","2025-07-02T20:26:11.974Z"
+"GAME#7028","STATE#SET","","","","","","","","","lessonsfromcollege","","","1752697571","2025-07-02T20:26:11.974Z"
