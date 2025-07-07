@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import './BuilderPage.css';
 
 const API_BASE = window.API_BASE;
 
@@ -19,7 +20,7 @@ function AdminPage() {
   const [customInstructions, setCustomInstructions] = useState('');
   const [aiContextInstructions, setAiContextInstructions] = useState('');
   const [showDefaultInstructions, setShowDefaultInstructions] = useState(false);
-  const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer' or 'trivia'
+  const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer', 'trivia', or 'poll'
   
   // Question set deletion
   const [selectedQuestionSet, setSelectedQuestionSet] = useState('');
@@ -194,12 +195,12 @@ function AdminPage() {
     }
   };
 
-  const handleDownloadTemplate = async () => {
+  const handleDownloadTemplate = async (templateType = 'call-and-answer') => {
     try {
       setUploadStatus('Downloading template...');
-      const response = await fetch(`${API_BASE}admin/download-template`);
+      const response = await fetch(`${API_BASE}admin/download-template?type=${templateType}`);
       const result = await response.json();
-      
+
       if (response.ok) {
         // Create and download the CSV file
         const blob = new Blob([result.content], { type: 'text/csv' });
@@ -211,7 +212,7 @@ function AdminPage() {
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
-        setUploadStatus('✅ Template downloaded successfully');
+        setUploadStatus(`✅ ${result.filename} downloaded successfully`);
       } else {
         setUploadStatus(`❌ Failed to download template: ${result.error}`);
       }
@@ -456,16 +457,30 @@ function AdminPage() {
         <div className="admin-content">
           {/* CSV Template Download Section */}
           <div className="admin-section">
-            <h2>📥 Download CSV Template</h2>
-            <p className="section-description">Download a sample CSV template to understand the required format for question sets.</p>
-            
+            <h2>📥 Download CSV Templates</h2>
+            <p className="section-description">Download engagement-specific CSV templates to understand the required format for each type of question set.</p>
+
             <div className="template-controls">
-              <button
-                className="btn-secondary"
-                onClick={handleDownloadTemplate}
-              >
-                📄 Download Template CSV
-              </button>
+              <div className="template-buttons">
+                <button
+                  className="btn-secondary"
+                  onClick={() => handleDownloadTemplate('call-and-answer')}
+                >
+                  📞 Call & Answer Template
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => handleDownloadTemplate('trivia')}
+                >
+                  🧠 Trivia Template
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => handleDownloadTemplate('poll')}
+                >
+                  📊 Poll Template
+                </button>
+              </div>
             </div>
           </div>
 
@@ -514,6 +529,7 @@ function AdminPage() {
                   >
                     <option value="call-and-answer">Call and Answer</option>
                     <option value="trivia">Trivia</option>
+                    <option value="poll">Poll</option>
                   </select>
                 </div>
               </div>
@@ -629,7 +645,10 @@ function AdminPage() {
                     <div className="set-stats">
                       <span className="stat-badge">{set.totalQuestions} questions</span>
                       <span className="stat-badge">{set.categoryCount} categories</span>
-                      <span className="stat-badge">{set.engagementType === 'trivia' ? 'Trivia' : 'Call and Answer'}</span>
+                      <span className="stat-badge">
+                        {set.engagementType === 'trivia' ? 'Trivia' :
+                         set.engagementType === 'poll' ? 'Poll' : 'Call and Answer'}
+                      </span>
                       <button
                         className={`status-badge clickable ${set.active ? 'active' : 'inactive'}`}
                         onClick={() => handleToggleActive(set.id, set.active)}
@@ -783,6 +802,44 @@ function AdminPage() {
                 {questionSetDeleteStatus}
               </div>
             )}
+          </div>
+
+          {/* Add New Set Section */}
+          <div className="admin-section">
+            <h2>➕ Add New Question Set</h2>
+            <p className="section-description">Create new question sets using different methods based on your engagement type.</p>
+
+            <div className="add-set-controls">
+              <div className="engagement-type-selector">
+                <label htmlFor="new-set-engagement-type">Engagement Type:</label>
+                <select
+                  id="new-set-engagement-type"
+                  value={engagementType}
+                  onChange={(e) => setEngagementType(e.target.value)}
+                  className="input-field"
+                >
+                  <option value="call-and-answer">Call and Answer</option>
+                  <option value="trivia">Trivia</option>
+                  <option value="poll">Poll</option>
+                </select>
+              </div>
+
+              <div className="add-set-buttons">
+                <button
+                  className="btn-primary"
+                  onClick={() => window.open('/builder', '_blank')}
+                >
+                  🎨 Open Builder Interface
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => handleDownloadTemplate(engagementType)}
+                >
+                  📄 Download {engagementType === 'call-and-answer' ? 'Call & Answer' :
+                              engagementType === 'trivia' ? 'Trivia' : 'Poll'} Template
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Delete Games Section */}

@@ -2024,7 +2024,27 @@ Resources:
             let detailIndex = getColumnIndex('Detail_lesson');
             let schoolIndex = getColumnIndex('School');
             let customInstructionIndex = getColumnIndex('CustomInstruction');
-            
+
+            // Engagement-type specific columns
+            let correctAnswerIndex = -1;
+            let wrongAnswer1Index = -1;
+            let wrongAnswer2Index = -1;
+            let wrongAnswer3Index = -1;
+            let difficultyIndex = -1;
+            let optionsIndex = -1;
+            let allowMultipleIndex = -1;
+
+            if (engagementType === 'trivia') {
+              correctAnswerIndex = getColumnIndex('CorrectAnswer');
+              wrongAnswer1Index = getColumnIndex('WrongAnswer1');
+              wrongAnswer2Index = getColumnIndex('WrongAnswer2');
+              wrongAnswer3Index = getColumnIndex('WrongAnswer3');
+              difficultyIndex = getColumnIndex('Difficulty');
+            } else if (engagementType === 'poll') {
+              optionsIndex = getColumnIndex('Options');
+              allowMultipleIndex = getColumnIndex('AllowMultiple');
+            }
+
             // Fallback to generic column names if exact matches not found
             if (categoryIndex === -1) categoryIndex = headers.findIndex(h => h.toLowerCase().includes('category'));
             if (titleIndex === -1) titleIndex = headers.findIndex(h => h.toLowerCase().includes('title') && !h.toLowerCase().includes('#'));
@@ -2071,11 +2091,11 @@ Resources:
                 const detail = detailIndex >= 0 ? values[detailIndex]?.replace(/"/g, '')?.trim() || '' : '';
                 const school = schoolIndex >= 0 ? values[schoolIndex]?.replace(/"/g, '')?.trim() || '' : '';
                 const questionCustomInstruction = customInstructionIndex >= 0 ? values[customInstructionIndex]?.replace(/"/g, '')?.trim() || '' : '';
-                
+
                 if (title && category) {
                   questionCount++;
-                  
-                  questions.push({
+
+                  const baseQuestion = {
                     Title: title,
                     Detail: detail,
                     Category: category,
@@ -2084,9 +2104,25 @@ Resources:
                     CustomInstructions: questionCustomInstruction || customInstructions?.trim() || '',
                     Active: true,
                     QuestionNumber: questionCount
-                  });
+                  };
+
+                  // Add engagement-type specific fields
+                  if (engagementType === 'trivia') {
+                    baseQuestion.CorrectAnswer = correctAnswerIndex >= 0 ? values[correctAnswerIndex]?.replace(/"/g, '')?.trim() || '' : '';
+                    baseQuestion.WrongAnswer1 = wrongAnswer1Index >= 0 ? values[wrongAnswer1Index]?.replace(/"/g, '')?.trim() || '' : '';
+                    baseQuestion.WrongAnswer2 = wrongAnswer2Index >= 0 ? values[wrongAnswer2Index]?.replace(/"/g, '')?.trim() || '' : '';
+                    baseQuestion.WrongAnswer3 = wrongAnswer3Index >= 0 ? values[wrongAnswer3Index]?.replace(/"/g, '')?.trim() || '' : '';
+                    baseQuestion.Difficulty = difficultyIndex >= 0 ? values[difficultyIndex]?.replace(/"/g, '')?.trim() || 'medium' : 'medium';
+                  } else if (engagementType === 'poll') {
+                    const optionsStr = optionsIndex >= 0 ? values[optionsIndex]?.replace(/"/g, '')?.trim() || '' : '';
+                    baseQuestion.Options = optionsStr ? optionsStr.split('|').map(opt => opt.trim()) : [];
+                    const allowMultipleStr = allowMultipleIndex >= 0 ? values[allowMultipleIndex]?.replace(/"/g, '')?.trim() || 'false' : 'false';
+                    baseQuestion.AllowMultiple = allowMultipleStr.toLowerCase() === 'true';
+                  }
+
+                  questions.push(baseQuestion);
                   categories.add(category);
-                  
+
                   console.log(`  📝 Question ${questionCount}: ${category} - ${title.substring(0, 50)}...`);
                 }
               } catch (e) {
@@ -2391,26 +2427,43 @@ Resources:
       InlineCode: |-
         exports.downloadTemplate = async (event) => {
           try {
-            // CSV template content based on the existing formats (matches lessons.csv and greatest-hits.csv)
-            const csvTemplate = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction\n' +
-              '"Leadership",1,"MOST EFFECTIVE LEADERSHIP STYLE","Leadership is about inspiring others to achieve their potential. From transformational leaders who create vision to servant leaders who put team first. Consider different situations where different approaches work better. Think about technical skill, cultural impact, innovation, and lasting influence.","School of Management","How would you apply this leadership principle in your current team or organization?"\n' +
-              '"Innovation",2,"GREATEST INNOVATION METHOD","Innovation drives progress and competitive advantage. From design thinking to lean startup methodology to blue ocean strategy. Consider methods that improve quality of life, enable other innovations, transform society, or solve fundamental problems.","School of Innovation","What innovative approach would you implement in your current project?"\n' +
-              '"Strategy",3,"BEST STRATEGIC APPROACH","Strategic thinking involves long-term planning and competitive positioning. From Porter\'s Five Forces to Blue Ocean Strategy to systems thinking approaches. Consider frameworks that provide competitive advantage while remaining adaptable to changing conditions.","School of Strategy","How would you adapt this strategic concept to your industry?"\n' +
-              '"Communication",4,"EFFECTIVE COMMUNICATION STRATEGY","Clear communication drives alignment and results. From active listening to persuasive presentation techniques to visual storytelling. Consider approaches that build trust, convey complex ideas simply, and inspire action across diverse audiences.","School of Communication","How would you improve communication in your current team or project?"\n' +
-              '"Decision Making",5,"OPTIMAL DECISION FRAMEWORK","Good decisions require structured thinking and consideration of multiple factors. From data-driven analysis to intuitive judgment to stakeholder input. Consider frameworks that balance speed with thoroughness and individual insight with collective wisdom.","School of Strategy"';
-            
+            const templateType = event.queryStringParameters?.type || 'call-and-answer';
+
+            let csvTemplate, filename;
+
+            if (templateType === 'trivia') {
+              filename = 'trivia-template.csv';
+              csvTemplate = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,CorrectAnswer,WrongAnswer1,WrongAnswer2,WrongAnswer3,Difficulty\n' +
+                '"Business",1,"What is the primary purpose of a SWOT analysis?","SWOT analysis is a strategic planning tool used to evaluate strengths, weaknesses, opportunities, and threats.","Business School","Choose the best answer.","To evaluate strengths, weaknesses, opportunities, and threats","To calculate financial ratios","To manage employee performance","To design marketing campaigns","medium"\n' +
+                '"Technology",2,"Which programming language is primarily used for web development?","Web development involves creating websites and web applications using various programming languages.","Tech School","Select the correct answer.","JavaScript","Assembly","COBOL","Fortran","easy"\n' +
+                '"Leadership",3,"What is emotional intelligence in leadership?","Emotional intelligence refers to the ability to understand and manage emotions effectively in leadership contexts.","Business School","Pick the most accurate definition.","The ability to understand and manage emotions","The ability to solve complex problems","The ability to memorize information","The ability to work with numbers","medium"';
+            } else if (templateType === 'poll') {
+              filename = 'poll-template.csv';
+              csvTemplate = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple\n' +
+                '"Workplace",1,"What is your preferred work environment?","Understanding work environment preferences helps create better workplace policies.","Business School","Select your preference.","Office|Remote|Hybrid|Co-working space","false"\n' +
+                '"Communication",2,"Which communication tools do you use most?","Communication tool preferences vary by generation and work style.","Business School","You may select multiple options.","Email|Slack|Teams|Phone|Video calls|In-person","true"\n' +
+                '"Development",3,"What skills would you like to develop?","Professional development priorities help guide training programs.","Business School","Choose your top priorities.","Leadership|Technical skills|Communication|Project management|Data analysis","true"';
+            } else {
+              // call-and-answer (default)
+              filename = 'call-and-answer-template.csv';
+              csvTemplate = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction\n' +
+                '"Leadership",1,"MOST EFFECTIVE LEADERSHIP STYLE","Leadership is about inspiring others to achieve their potential. From transformational leaders who create vision to servant leaders who put team first. Consider different situations where different approaches work better. Think about technical skill, cultural impact, innovation, and lasting influence.","School of Management","How would you apply this leadership principle in your current team or organization?"\n' +
+                '"Innovation",2,"GREATEST INNOVATION METHOD","Innovation drives progress and competitive advantage. From design thinking to lean startup methodology to blue ocean strategy. Consider methods that improve quality of life, enable other innovations, transform society, or solve fundamental problems.","School of Innovation","What innovative approach would you implement in your current project?"\n' +
+                '"Strategy",3,"BEST STRATEGIC APPROACH","Strategic thinking involves long-term planning and competitive positioning. From Porter\'s Five Forces to Blue Ocean Strategy to systems thinking approaches. Consider frameworks that provide competitive advantage while remaining adaptable to changing conditions.","School of Strategy","How would you adapt this strategic concept to your industry?"';
+            }
+
             return {
               statusCode: 200,
-              body: JSON.stringify({ 
-                filename: 'question-set-template.csv',
-                content: csvTemplate 
+              body: JSON.stringify({
+                filename: filename,
+                content: csvTemplate
               }),
-              headers: { 
+              headers: {
                 'Access-Control-Allow-Origin': '*',
                 'Content-Type': 'application/json'
               }
             };
-            
+
           } catch (error) {
             console.error('Download template error:', error);
             return {
@@ -2427,6 +2480,181 @@ Resources:
             ApiId: !Ref GameApi
             Path: /admin/download-template
             Method: GET
+
+  ### Lambda: Admin AI Generate Questions
+  AdminAIGenerateQuestionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.generateQuestions
+      Timeout: 120
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - bedrock:InvokeModel
+            Resource:
+              - !Sub 'arn:aws:bedrock:us-east-1::foundation-model/us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+      InlineCode: |-
+        const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+
+        const bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });
+
+        // Function to call Claude via Bedrock
+        const invokeClaude = async (prompt) => {
+          const modelId = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';
+
+          console.log(`🤖 Calling Claude for question generation...`);
+
+          const payload = {
+            anthropic_version: 'bedrock-2023-05-31',
+            max_tokens: 3000,
+            messages: [
+              {
+                role: 'user',
+                content: [{ type: 'text', text: prompt }],
+              },
+            ],
+          };
+
+          const command = new InvokeModelCommand({
+            contentType: 'application/json',
+            body: JSON.stringify(payload),
+            modelId,
+          });
+
+          const response = await bedrockClient.send(command);
+          const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+
+          return responseBody.content[0].text;
+        };
+
+        exports.generateQuestions = async (event) => {
+          try {
+            const { engagementType, userInput, questionCount, existingQuestion, context } = JSON.parse(event.body);
+
+            console.log(`🤖 Generating ${questionCount} ${engagementType} questions`);
+            console.log(`📝 User input: ${userInput}`);
+
+            // Build the AI prompt based on engagement type
+            let prompt = `You are an expert educational content creator. `;
+
+            if (existingQuestion) {
+              prompt += `Please improve the following ${engagementType} question based on the user's feedback.\n\n`;
+              prompt += `EXISTING QUESTION:\n`;
+              prompt += `Title: ${existingQuestion.title}\n`;
+              prompt += `Category: ${existingQuestion.category}\n`;
+              prompt += `Detail: ${existingQuestion.detail}\n`;
+              if (engagementType === 'trivia') {
+                prompt += `Correct Answer: ${existingQuestion.correctAnswer}\n`;
+                prompt += `Wrong Answers: ${existingQuestion.wrongAnswers.join(', ')}\n`;
+              } else if (engagementType === 'poll') {
+                prompt += `Options: ${existingQuestion.options.join(', ')}\n`;
+              }
+              prompt += `\nUSER FEEDBACK: ${userInput}\n\n`;
+            } else {
+              prompt += `Please create ${questionCount} high-quality ${engagementType} questions based on the following requirements:\n\n`;
+              prompt += `REQUIREMENTS: ${userInput}\n\n`;
+              if (context.title) prompt += `Question Set Title: ${context.title}\n`;
+              if (context.description) prompt += `Description: ${context.description}\n`;
+            }
+
+            // Add format instructions based on engagement type
+            if (engagementType === 'trivia') {
+              prompt += `\nPlease format your response as a JSON array of objects with this structure:
+[
+  {
+    "title": "Question text",
+    "category": "Category name",
+    "detail": "Additional context or explanation",
+    "school": "Educational context",
+    "customInstructions": "Specific instructions",
+    "correctAnswer": "The correct answer",
+    "wrongAnswers": ["Wrong answer 1", "Wrong answer 2", "Wrong answer 3"],
+    "difficulty": "easy|medium|hard"
+  }
+]`;
+            } else if (engagementType === 'poll') {
+              prompt += `\nPlease format your response as a JSON array of objects with this structure:
+[
+  {
+    "title": "Poll question text",
+    "category": "Category name",
+    "detail": "Additional context",
+    "school": "Educational context",
+    "customInstructions": "Specific instructions",
+    "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+    "allowMultiple": true/false
+  }
+]`;
+            } else {
+              prompt += `\nPlease format your response as a JSON array of objects with this structure:
+[
+  {
+    "title": "Question or prompt text",
+    "category": "Category name",
+    "detail": "Detailed context or lesson content",
+    "school": "Educational context",
+    "customInstructions": "Specific instructions for participants"
+  }
+]`;
+            }
+
+            prompt += `\n\nIMPORTANT: Return ONLY the JSON array, no additional text or formatting.`;
+
+            console.log('🤖 Sending prompt to Claude...');
+            const aiResponse = await invokeClaude(prompt);
+            console.log('✅ Received response from Claude');
+
+            // Parse the JSON response
+            let questions;
+            try {
+              // Clean the response to extract just the JSON
+              const jsonMatch = aiResponse.match(/\[[\s\S]*\]/);
+              if (jsonMatch) {
+                questions = JSON.parse(jsonMatch[0]);
+              } else {
+                throw new Error('No JSON array found in response');
+              }
+            } catch (parseError) {
+              console.error('❌ Failed to parse AI response:', parseError);
+              console.log('Raw response:', aiResponse);
+              throw new Error('Failed to parse AI response as JSON');
+            }
+
+            // Add IDs and ensure proper structure
+            const processedQuestions = questions.map(q => ({
+              id: Date.now() + Math.random(),
+              active: true,
+              ...q
+            }));
+
+            console.log(`✅ Successfully generated ${processedQuestions.length} questions`);
+
+            return {
+              statusCode: 200,
+              body: JSON.stringify({
+                questions: processedQuestions,
+                message: `Generated ${processedQuestions.length} questions successfully`
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+
+          } catch (error) {
+            console.error('❌ AI generation error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: `Failed to generate questions: ${error.message}` }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        AdminAIGenerateQuestionsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /admin/ai-generate-questions
+            Method: POST
 
   ### Lambda: Admin Get All Question Sets (including inactive)
   AdminGetQuestionSetsFunction:

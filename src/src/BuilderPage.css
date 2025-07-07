@@ -1,0 +1,508 @@
+/* Builder Page Styles */
+.builder-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+.builder-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.builder-header h1 {
+  color: #2c3e50;
+  margin-bottom: 10px;
+}
+
+.builder-header p {
+  color: #7f8c8d;
+  font-size: 16px;
+}
+
+.builder-content {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.builder-section {
+  background: white;
+  border-radius: 8px;
+  padding: 25px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e1e8ed;
+}
+
+.builder-section h2 {
+  color: #2c3e50;
+  margin-bottom: 15px;
+  font-size: 20px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.section-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* Form Styles */
+.form-row {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.form-group {
+  flex: 1;
+}
+
+.form-group.full-width {
+  flex: 100%;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 600;
+  color: #34495e;
+}
+
+.input-field, .textarea-field {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: border-color 0.3s;
+}
+
+.input-field:focus, .textarea-field:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.textarea-field {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* Button Styles */
+.btn-primary, .btn-secondary, .btn-success, .btn-danger, .btn-ai, .btn-example {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-primary {
+  background-color: #3498db;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #2980b9;
+}
+
+.btn-secondary {
+  background-color: #95a5a6;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background-color: #7f8c8d;
+}
+
+.btn-success {
+  background-color: #27ae60;
+  color: white;
+}
+
+.btn-success:hover {
+  background-color: #229954;
+}
+
+.btn-danger {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.btn-danger:hover {
+  background-color: #c0392b;
+}
+
+.btn-ai {
+  background-color: #9b59b6;
+  color: white;
+}
+
+.btn-ai:hover {
+  background-color: #8e44ad;
+}
+
+.btn-example {
+  background-color: #f8f9fa;
+  color: #495057;
+  border: 1px solid #dee2e6;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.btn-example:hover {
+  background-color: #e9ecef;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.btn-large {
+  padding: 15px 30px;
+  font-size: 16px;
+}
+
+/* Question Card Styles */
+.question-card {
+  border: 1px solid #e1e8ed;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  background: #fafbfc;
+}
+
+.question-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e1e8ed;
+}
+
+.question-header h3 {
+  color: #2c3e50;
+  margin: 0;
+}
+
+.question-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.question-form {
+  margin-bottom: 20px;
+}
+
+.question-preview {
+  background: white;
+  padding: 15px;
+  border-radius: 4px;
+  border: 1px solid #e1e8ed;
+}
+
+.question-preview h4 {
+  margin-top: 0;
+  color: #2c3e50;
+}
+
+.preview-content {
+  color: #555;
+  line-height: 1.5;
+}
+
+/* Engagement Type Specific Styles */
+.answers-section, .options-section {
+  margin: 20px 0;
+  padding: 15px;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #e1e8ed;
+}
+
+.answers-section h4, .options-section h4 {
+  margin-top: 0;
+  color: #2c3e50;
+}
+
+.wrong-answers {
+  margin-top: 10px;
+}
+
+.correct-answer {
+  border-color: #27ae60 !important;
+}
+
+.wrong-answer {
+  border-color: #e74c3c !important;
+}
+
+.options-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.option-row {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.option-input {
+  flex: 1;
+}
+
+.remove-option {
+  margin-bottom: 0;
+}
+
+.difficulty-badge {
+  background: #f39c12;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  margin-left: 10px;
+}
+
+/* Template Controls */
+.template-controls {
+  margin-top: 15px;
+}
+
+.template-buttons {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.add-set-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.engagement-type-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.add-set-buttons {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+/* Save Controls */
+.save-controls {
+  text-align: center;
+  padding: 20px;
+}
+
+.save-status {
+  margin-top: 15px;
+  padding: 10px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+/* No Content States */
+.no-questions {
+  text-align: center;
+  padding: 40px;
+  color: #7f8c8d;
+}
+
+/* AI Assistant Modal */
+.ai-assistant-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+  background: white;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e1e8ed;
+}
+
+.modal-header h2 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #7f8c8d;
+}
+
+.close-button:hover {
+  color: #2c3e50;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 20px;
+  border-top: 1px solid #e1e8ed;
+}
+
+.ai-context {
+  margin-bottom: 20px;
+}
+
+.ai-context h3 {
+  color: #2c3e50;
+  margin-bottom: 10px;
+}
+
+.ai-context p {
+  color: #7f8c8d;
+  line-height: 1.5;
+}
+
+.bulk-controls {
+  margin-bottom: 20px;
+}
+
+.input-section {
+  margin-bottom: 20px;
+}
+
+.example-prompts {
+  margin-bottom: 20px;
+}
+
+.example-prompts h4 {
+  color: #2c3e50;
+  margin-bottom: 10px;
+}
+
+.prompt-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.current-question {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.current-question h4 {
+  margin-top: 0;
+  color: #2c3e50;
+}
+
+.question-display {
+  color: #555;
+  line-height: 1.5;
+}
+
+.generation-status {
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  font-weight: 500;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .builder-page {
+    padding: 10px;
+  }
+  
+  .form-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .section-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 15px;
+  }
+  
+  .section-actions {
+    justify-content: center;
+  }
+  
+  .template-buttons, .add-set-buttons {
+    flex-direction: column;
+  }
+  
+  .question-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 15px;
+  }
+  
+  .question-actions {
+    justify-content: center;
+  }
+  
+  .option-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .modal-content {
+    width: 95%;
+    margin: 10px;
+  }
+}
