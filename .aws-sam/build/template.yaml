@@ -1,0 +1,2440 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: "DEVELOPMENT quiz game with WebSocket support for real-time state management:\n\
+  \  \u2022 Questions: GAME#1234 / QUESTION#001\n  \u2022 Answers: GAME#1234 / ANSWER#001#PLAYER#name\
+  \  \n  \u2022 Votes: GAME#1234 / VOTE#001#PLAYER#name\n  \u2022 State: GAME#1234\
+  \ / STATE (with currentQuestion=001, stage=ASK/VOTE/RESULTS)\n  \u2022 WebSocket\
+  \ connections for real-time updates\n"
+Parameters:
+  DomainName:
+    Type: String
+    Description: The fully qualified domain name (e.g. quiz.example.com)
+    Default: engagements.sb.seibtribe.us
+  HostedZoneId:
+    Type: String
+    Description: The Route53 Hosted Zone ID for the domain
+    Default: Z03473042HSYD8BUY4XSL
+Conditions:
+  HasDomain:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: DomainName
+      - ''
+Globals:
+  Function:
+    Runtime: nodejs16.x
+    Timeout: 10
+    MemorySize: 128
+    Environment:
+      Variables:
+        TABLE_NAME:
+          Ref: GameTable
+        WEBSOCKET_API_ENDPOINT:
+          Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/dev
+Resources:
+  WebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name:
+        Fn::Sub: ${AWS::StackName}-websocket-dev
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.action
+  WebSocketDeployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+    - ConnectRoute
+    - DisconnectRoute
+    - SendMessageRoute
+    Properties:
+      ApiId:
+        Ref: WebSocketApi
+  WebSocketStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      StageName: dev
+      Description: Development stage for WebSocket API
+      DeploymentId:
+        Ref: WebSocketDeployment
+      ApiId:
+        Ref: WebSocketApi
+  ConnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ConnectFunction
+      Handler: connect.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+    Metadata:
+      SamResourceId: ConnectFunction
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId:
+        Ref: WebSocketApi
+      RouteKey: $connect
+      AuthorizationType: NONE
+      OperationName: ConnectRoute
+      Target:
+        Fn::Join:
+        - /
+        - - integrations
+          - Ref: ConnectInteg
+  ConnectInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId:
+        Ref: WebSocketApi
+      Description: Connect Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri:
+        Fn::Sub:
+        - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations
+        - lambdaArn:
+            Fn::GetAtt:
+            - ConnectFunction
+            - Arn
+  ConnectPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+    - WebSocketApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Ref: ConnectFunction
+      Principal: apigateway.amazonaws.com
+  DisconnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.disconnectHandler
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        \nexports.disconnectHandler = async (event) => {\n  const connectionId = event.requestContext.connectionId;\n\
+        \n  console.log(`\U0001F50C WebSocket Disconnect: ${connectionId}`);\n\n \
+        \ try {\n    // Remove connection info\n    await db.send(new DeleteCommand({\n\
+        \      TableName: process.env.TABLE_NAME,\n      Key: {\n        PK: `CONNECTION#${connectionId}`,\n\
+        \        SK: 'METADATA'\n      }\n    }));\n    \n    return { statusCode:\
+        \ 200, body: 'Disconnected' };\n  } catch (error) {\n    console.error('Disconnect\
+        \ error:', error);\n    return { statusCode: 500, body: 'Failed to disconnect'\
+        \ };\n  }\n};"
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId:
+        Ref: WebSocketApi
+      RouteKey: $disconnect
+      AuthorizationType: NONE
+      OperationName: DisconnectRoute
+      Target:
+        Fn::Join:
+        - /
+        - - integrations
+          - Ref: DisconnectInteg
+  DisconnectInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId:
+        Ref: WebSocketApi
+      Description: Disconnect Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri:
+        Fn::Sub:
+        - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations
+        - lambdaArn:
+            Fn::GetAtt:
+            - DisconnectFunction
+            - Arn
+  DisconnectPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+    - WebSocketApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Ref: DisconnectFunction
+      Principal: apigateway.amazonaws.com
+  SendMessageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.sendMessageHandler
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - execute-api:ManageConnections
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*
+      InlineCode: "const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');\n\
+        const { DynamoDBDocumentClient, PutCommand, DeleteCommand, ScanCommand } =\
+        \ require('@aws-sdk/lib-dynamodb');\nconst { ApiGatewayManagementApiClient,\
+        \ PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');\n\
+        \nconst dynamoClient = new DynamoDBClient({});\nconst db = DynamoDBDocumentClient.from(dynamoClient);\n\
+        const apigateway = new ApiGatewayManagementApiClient({\n  endpoint: process.env.WEBSOCKET_API_ENDPOINT\n\
+        });\n\nexports.sendMessageHandler = async (event) => {\n  const connectionId\
+        \ = event.requestContext.connectionId;\n  const body = JSON.parse(event.body);\n\
+        \  \n  console.log(`\U0001F4E8 WebSocket Message:`, body);\n  \n  try {\n\
+        \    if (body.action === 'broadcast') {\n      // Broadcast to all connections\
+        \ in the game\n      const gameId = body.gameId;\n      const message = body.message;\n\
+        \      \n      // Get all connections for this game\n      const connections\
+        \ = await getGameConnections(gameId);\n      \n      // Send message to all\
+        \ connections\n      const sendPromises = connections.map(async (connection)\
+        \ => {\n        try {\n          await apiGateway.postToConnection({\n   \
+        \         ConnectionId: connection.ConnectionId,\n            Data: JSON.stringify(message)\n\
+        \          }).promise();\n        } catch (error) {\n          if (error.statusCode\
+        \ === 410) {\n            // Connection is stale, remove it\n            await\
+        \ db.delete({\n              TableName: process.env.TABLE_NAME,\n        \
+        \      Key: {\n                PK: `CONNECTION#${connection.ConnectionId}`,\n\
+        \                SK: 'METADATA'\n              }\n            }).promise();\n\
+        \          }\n        }\n      });\n      \n      await Promise.all(sendPromises);\n\
+        \      return { statusCode: 200, body: 'Message sent' };\n    }\n    \n  \
+        \  return { statusCode: 400, body: 'Unknown action' };\n  } catch (error)\
+        \ {\n    console.error('Send message error:', error);\n    return { statusCode:\
+        \ 500, body: 'Failed to send message' };\n  }\n};\n\nasync function getGameConnections(gameId)\
+        \ {\n  const result = await db.scan({\n    TableName: process.env.TABLE_NAME,\n\
+        \    FilterExpression: 'begins_with(PK, :pk) AND GameId = :gameId',\n    ExpressionAttributeValues:\
+        \ {\n      ':pk': 'CONNECTION#',\n      ':gameId': gameId\n    }\n  }).promise();\n\
+        \  \n  return result.Items;\n}"
+  SendMessageRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId:
+        Ref: WebSocketApi
+      RouteKey: sendmessage
+      AuthorizationType: NONE
+      OperationName: SendMessageRoute
+      Target:
+        Fn::Join:
+        - /
+        - - integrations
+          - Ref: SendMessageInteg
+  SendMessageInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId:
+        Ref: WebSocketApi
+      Description: Send Message Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri:
+        Fn::Sub:
+        - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations
+        - lambdaArn:
+            Fn::GetAtt:
+            - SendMessageFunction
+            - Arn
+  SendMessagePermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+    - WebSocketApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Ref: SendMessageFunction
+      Principal: apigateway.amazonaws.com
+  GameTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName:
+        Fn::Sub: ${AWS::StackName}-dev-table
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: PK
+        AttributeType: S
+      - AttributeName: SK
+        AttributeType: S
+      - AttributeName: ConnectionId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: PK
+        KeyType: HASH
+      - AttributeName: SK
+        KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      GlobalSecondaryIndexes:
+      - IndexName: ConnectionIndex
+        KeySchema:
+        - AttributeName: ConnectionId
+          KeyType: HASH
+        Projection:
+          ProjectionType: ALL
+  GameApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+        - '*'
+        AllowMethods:
+        - OPTIONS
+        - GET
+        - POST
+        AllowHeaders:
+        - Content-Type
+  JoinGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.join
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - execute-api:ManageConnections
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        const apigateway = new AWS.ApiGatewayManagementApi({\n  endpoint: process.env.WEBSOCKET_API_ENDPOINT\n\
+        });\n\n// Helper function to broadcast WebSocket message\nconst broadcastToGame\
+        \ = async (gameId, message) => {\n  try {\n    // Get all WebSocket connections\
+        \ for this game using scan (simple approach)\n    const connectionsResult\
+        \ = await db.scan({\n      TableName: process.env.TABLE_NAME,\n      FilterExpression:\
+        \ 'begins_with(PK, :prefix) AND GameId = :gameId',\n      ExpressionAttributeValues:\
+        \ {\n        ':prefix': 'CONNECTION#',\n        ':gameId': gameId\n      }\n\
+        \    }).promise();\n    \n    const connections = connectionsResult.Items\
+        \ || [];\n    \n    console.log(`\U0001F50C Broadcasting to ${connections.length}\
+        \ connections for game ${gameId}`);\n    \n    const broadcastPromises = connections.map(async\
+        \ (connection) => {\n      try {\n        await apigateway.postToConnection({\n\
+        \          ConnectionId: connection.ConnectionId,\n          Data: JSON.stringify(message)\n\
+        \        }).promise();\n      } catch (error) {\n        console.log(`\U0001F50C\
+        \ Failed to send to connection ${connection.ConnectionId}:`, error);\n   \
+        \     // Remove dead connections\n        if (error.statusCode === 410) {\n\
+        \          await db.delete({\n            TableName: process.env.TABLE_NAME,\n\
+        \            Key: { PK: connection.PK, SK: connection.SK }\n          }).promise();\n\
+        \        }\n      }\n    });\n    \n    await Promise.all(broadcastPromises);\n\
+        \  } catch (error) {\n    console.error('\U0001F50C Broadcast error:', error);\n\
+        \  }\n};\n\nexports.join = async (event) => {\n  const gameId = event.pathParameters.gameId;\n\
+        \  const { name } = JSON.parse(event.body);\n  \n  // Check if the game exists\n\
+        \  const gameCheck = await db.get({\n    TableName: process.env.TABLE_NAME,\n\
+        \    Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }\n  }).promise();\n  \n\
+        \  if (!gameCheck.Item) {\n    return { \n      statusCode: 404, \n      body:\
+        \ JSON.stringify({ error: 'Game not found. Please check the game ID.' }) \n\
+        \    };\n  }\n  \n  // Check if player name already exists\n  const existingPlayer\
+        \ = await db.get({\n    TableName: process.env.TABLE_NAME,\n    Key: { PK:\
+        \ `GAME#${gameId}`, SK: `PLAYER#${name}` }\n  }).promise();\n  \n  if (existingPlayer.Item)\
+        \ {\n    // Player already exists - allow rejoining by updating their timestamp\n\
+        \    const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60); // 2\
+        \ weeks TTL\n    \n    await db.update({\n      TableName: process.env.TABLE_NAME,\n\
+        \      Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${name}` },\n      UpdateExpression:\
+        \ 'SET RejoinedAt = :rejoined, #ttl = :ttl',\n      ExpressionAttributeNames:\
+        \ { '#ttl': 'ttl' },\n      ExpressionAttributeValues: {\n        ':rejoined':\
+        \ new Date().toISOString(),\n        ':ttl': ttl\n      }\n    }).promise();\n\
+        \    \n    // Broadcast lightweight player rejoined notification (don't fail\
+        \ join if broadcast fails)\n    try {\n      await broadcastToGame(gameId,\
+        \ {\n        type: 'playerJoined',\n        gameId,\n        timestamp: new\
+        \ Date().toISOString()\n      });\n    } catch (error) {\n      console.log('\U0001F50C\
+        \ WebSocket broadcast failed for rejoin, continuing...', error.message);\n\
+        \    }\n    \n    return {\n      statusCode: 200,\n      body: JSON.stringify({\
+        \ \n        message: 'Rejoined successfully', \n        name,\n        rejoined:\
+        \ true,\n        previousScore: existingPlayer.Item.TotalScore || 0\n    \
+        \  }),\n      headers: { 'Access-Control-Allow-Origin': '*' }\n    };\n  }\n\
+        \  \n  const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60); //\
+        \ 2 weeks TTL\n  \n  await db.put({\n    TableName: process.env.TABLE_NAME,\n\
+        \    Item: { \n      PK: `GAME#${gameId}`, \n      SK: `PLAYER#${name}`, \n\
+        \      PlayerName: name,\n      JoinedAt: new Date().toISOString(),\n    \
+        \  TotalScore: 0,\n      ttl \n    }\n  }).promise();\n  \n  // Broadcast\
+        \ lightweight new player joined notification (don't fail join if broadcast\
+        \ fails)\n  try {\n    await broadcastToGame(gameId, {\n      type: 'playerJoined',\n\
+        \      gameId,\n      timestamp: new Date().toISOString()\n    });\n  } catch\
+        \ (error) {\n    console.log('\U0001F50C WebSocket broadcast failed for new\
+        \ join, continuing...', error.message);\n  }\n  \n  return { \n    statusCode:\
+        \ 200, \n    body: JSON.stringify({ message: 'Joined', name }),\n    headers:\
+        \ { 'Access-Control-Allow-Origin': '*' }\n  };\n};"
+      Events:
+        JoinGameEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/players
+            Method: POST
+  GetPlayersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getPlayers
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.getPlayers = async (event) => {\n  const gameId = event.pathParameters.gameId;\n\
+        \  \n  const res = await db.query({\n    TableName: process.env.TABLE_NAME,\n\
+        \    KeyConditionExpression: 'PK = :g AND begins_with(SK, :p)',\n    ExpressionAttributeValues:\
+        \ { ':g': `GAME#${gameId}`, ':p': 'PLAYER#' }\n  }).promise();\n  \n  const\
+        \ players = res.Items.map(i => ({\n    name: i.PlayerName,\n    score: i.TotalScore\
+        \ || 0,\n    joinedAt: i.JoinedAt\n  }));\n  return { statusCode: 200, body:\
+        \ JSON.stringify({ players }) };\n};"
+      Events:
+        GetPlayersEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/players
+            Method: GET
+  StartQuestionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.startQuestion
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - execute-api:ManageConnections
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        const apigateway = new AWS.ApiGatewayManagementApi({\n  endpoint: process.env.WEBSOCKET_API_ENDPOINT\n\
+        });\n\n// Helper function to broadcast WebSocket message\nconst broadcastToGame\
+        \ = async (gameId, message) => {\n  try {\n    const connectionsResult = await\
+        \ db.scan({\n      TableName: process.env.TABLE_NAME,\n      FilterExpression:\
+        \ 'begins_with(PK, :prefix) AND GameId = :gameId',\n      ExpressionAttributeValues:\
+        \ {\n        ':prefix': 'CONNECTION#',\n        ':gameId': gameId\n      }\n\
+        \    }).promise();\n    \n    const connections = connectionsResult.Items\
+        \ || [];\n    console.log(`\U0001F50C Broadcasting to ${connections.length}\
+        \ connections for game ${gameId}`);\n    \n    const broadcastPromises = connections.map(async\
+        \ (connection) => {\n      try {\n        await apigateway.postToConnection({\n\
+        \          ConnectionId: connection.ConnectionId,\n          Data: JSON.stringify(message)\n\
+        \        }).promise();\n      } catch (error) {\n        console.log(`\U0001F50C\
+        \ Failed to send to connection ${connection.ConnectionId}:`, error);\n   \
+        \     if (error.statusCode === 410) {\n          await db.delete({\n     \
+        \       TableName: process.env.TABLE_NAME,\n            Key: { PK: connection.PK,\
+        \ SK: connection.SK }\n          }).promise();\n        }\n      }\n    });\n\
+        \    \n    await Promise.all(broadcastPromises);\n  } catch (error) {\n  \
+        \  console.error('\U0001F50C Broadcast error:', error);\n  }\n};\nexports.startQuestion\
+        \ = async (event) => {\n  const gameId = event.pathParameters.gameId;\n  const\
+        \ { questionNumber, questionRef, setId, category } = JSON.parse(event.body);\n\
+        \  const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);\n  \n\
+        \  console.log(`\U0001F4DD Starting question ${questionNumber} for game ${gameId},\
+        \ ref: ${questionRef}`);\n  \n  // Store question pointer: GAME#1234 / QUESTION#001\n\
+        \  await db.put({\n    TableName: process.env.TABLE_NAME,\n    Item: {\n \
+        \     PK: `GAME#${gameId}`,\n      SK: `QUESTION#${questionNumber}`,\n   \
+        \   QuestionRef: questionRef, // Pointer to SET#setId / QUESTION#category#number\n\
+        \      SetId: setId,\n      Category: category,\n      StartedAt: new Date().toISOString(),\n\
+        \      ttl\n    }\n  }).promise();\n  \n  // Update game state: current question\
+        \ and stage\n  await db.put({\n    TableName: process.env.TABLE_NAME,\n  \
+        \  Item: {\n      PK: `GAME#${gameId}`,\n      SK: 'STATE',\n      CurrentQuestion:\
+        \ questionNumber, // \"001\", \"002\", etc.\n      Stage: 'ASK', // BEGIN,\
+        \ ASK, VOTE, RESULTS, END\n      UpdatedAt: new Date().toISOString(),\n  \
+        \    ttl\n    }\n  }).promise();\n  \n  // Broadcast lightweight question\
+        \ started notification via WebSocket\n  try {\n    await broadcastToGame(gameId,\
+        \ {\n      type: 'questionStarted',\n      gameId,\n      questionId: questionNumber,\n\
+        \      timestamp: new Date().toISOString()\n    });\n  } catch (error) {\n\
+        \    console.log('\U0001F50C WebSocket broadcast failed for question start,\
+        \ continuing...', error.message);\n  }\n  \n  return { statusCode: 200, body:\
+        \ JSON.stringify({ status: 'OK' }) };\n};"
+      Events:
+        StartQuestionEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/start-question
+            Method: POST
+  SubmitAnswerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.submitAnswer
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - execute-api:ManageConnections
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        const apigateway = new AWS.ApiGatewayManagementApi({\n  endpoint: process.env.WEBSOCKET_API_ENDPOINT\n\
+        });\n\n// Helper function to broadcast WebSocket message\nconst broadcastToGame\
+        \ = async (gameId, message) => {\n  try {\n    const connectionsResult = await\
+        \ db.scan({\n      TableName: process.env.TABLE_NAME,\n      FilterExpression:\
+        \ 'begins_with(PK, :prefix) AND GameId = :gameId',\n      ExpressionAttributeValues:\
+        \ {\n        ':prefix': 'CONNECTION#',\n        ':gameId': gameId\n      }\n\
+        \    }).promise();\n    \n    const connections = connectionsResult.Items\
+        \ || [];\n    console.log(`\U0001F50C Broadcasting to ${connections.length}\
+        \ connections for game ${gameId}`);\n    \n    const broadcastPromises = connections.map(async\
+        \ (connection) => {\n      try {\n        await apigateway.postToConnection({\n\
+        \          ConnectionId: connection.ConnectionId,\n          Data: JSON.stringify(message)\n\
+        \        }).promise();\n      } catch (error) {\n        console.log(`\U0001F50C\
+        \ Failed to send to connection ${connection.ConnectionId}:`, error);\n   \
+        \     if (error.statusCode === 410) {\n          await db.delete({\n     \
+        \       TableName: process.env.TABLE_NAME,\n            Key: { PK: connection.PK,\
+        \ SK: connection.SK }\n          }).promise();\n        }\n      }\n    });\n\
+        \    \n    await Promise.all(broadcastPromises);\n  } catch (error) {\n  \
+        \  console.error('\U0001F50C Broadcast error:', error);\n  }\n};\nexports.submitAnswer\
+        \ = async (event) => {\n  const gameId = event.pathParameters.gameId;\n  const\
+        \ { name, questionNumber, answer } = JSON.parse(event.body);\n  const ttl\
+        \ = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);\n  \n  console.log(`\U0001F4DD\
+        \ Answer: game=${gameId}, question=${questionNumber}, player=${name}`);\n\
+        \  \n  // Store answer with sequential question number: ANSWER#001#PLAYER#name\n\
+        \  await db.put({\n    TableName: process.env.TABLE_NAME,\n    Item: {\n \
+        \     PK: `GAME#${gameId}`,\n      SK: `ANSWER#${questionNumber}#PLAYER#${name}`,\n\
+        \      PlayerName: name,\n      QuestionNumber: questionNumber,\n      Answer:\
+        \ answer,\n      SubmittedAt: new Date().toISOString(),\n      ttl\n    }\n\
+        \  }).promise();\n  \n  // Broadcast lightweight answer submitted notification\
+        \ via WebSocket\n  try {\n    await broadcastToGame(gameId, {\n      type:\
+        \ 'playerAnswered',\n      gameId,\n      questionId: questionNumber,\n  \
+        \    timestamp: new Date().toISOString()\n    });\n  } catch (error) {\n \
+        \   console.log('\U0001F50C WebSocket broadcast failed for answer submission,\
+        \ continuing...', error.message);\n  }\n  \n  return { statusCode: 200, body:\
+        \ JSON.stringify({ status: 'OK' }) };\n};"
+      Events:
+        SubmitAnswerEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/answers
+            Method: POST
+  GetAnswersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getAnswers
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.getAnswers = async (event) => {\n  const gameId = event.pathParameters.gameId;\n\
+        \  const questionNumber = event.queryStringParameters?.questionNumber;\n \
+        \ \n  console.log(`\U0001F4CB GetAnswers: game=${gameId}, questionNumber=${questionNumber}`);\n\
+        \  \n  let keyCondition, expressionValues;\n  if (questionNumber) {\n    //\
+        \ Get answers for specific question: ANSWER#001#PLAYER#\n    keyCondition\
+        \ = 'PK = :g AND begins_with(SK, :a)';\n    expressionValues = { \n      ':g':\
+        \ `GAME#${gameId}`, \n      ':a': `ANSWER#${questionNumber}#PLAYER#` \n  \
+        \  };\n  } else {\n    // Get all answers in the game\n    keyCondition =\
+        \ 'PK = :g AND begins_with(SK, :a)';\n    expressionValues = { \n      ':g':\
+        \ `GAME#${gameId}`, \n      ':a': 'ANSWER#' \n    };\n  }\n  \n  const res\
+        \ = await db.query({\n    TableName: process.env.TABLE_NAME,\n    KeyConditionExpression:\
+        \ keyCondition,\n    ExpressionAttributeValues: expressionValues\n  }).promise();\n\
+        \  \n  const answers = res.Items.map(item => ({\n    name: item.PlayerName,\n\
+        \    questionNumber: item.QuestionNumber,\n    answer: item.Answer,\n    submittedAt:\
+        \ item.SubmittedAt\n  }));\n  \n  console.log(`\U0001F4CB Returning ${answers.length}\
+        \ answers for question ${questionNumber}`);\n  return { statusCode: 200, body:\
+        \ JSON.stringify({ answers }) };\n};"
+      Events:
+        GetAnswersEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/answers
+            Method: GET
+  SubmitVotesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.submitVotes
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - execute-api:ManageConnections
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        const apigateway = new AWS.ApiGatewayManagementApi({\n  endpoint: process.env.WEBSOCKET_API_ENDPOINT\n\
+        });\n\n// Helper function to broadcast WebSocket message\nconst broadcastToGame\
+        \ = async (gameId, message) => {\n  try {\n    const connectionsResult = await\
+        \ db.scan({\n      TableName: process.env.TABLE_NAME,\n      FilterExpression:\
+        \ 'begins_with(PK, :prefix) AND GameId = :gameId',\n      ExpressionAttributeValues:\
+        \ {\n        ':prefix': 'CONNECTION#',\n        ':gameId': gameId\n      }\n\
+        \    }).promise();\n    \n    const connections = connectionsResult.Items\
+        \ || [];\n    console.log(`\U0001F50C Broadcasting to ${connections.length}\
+        \ connections for game ${gameId}`);\n    \n    const broadcastPromises = connections.map(async\
+        \ (connection) => {\n      try {\n        await apigateway.postToConnection({\n\
+        \          ConnectionId: connection.ConnectionId,\n          Data: JSON.stringify(message)\n\
+        \        }).promise();\n      } catch (error) {\n        console.log(`\U0001F50C\
+        \ Failed to send to connection ${connection.ConnectionId}:`, error);\n   \
+        \     if (error.statusCode === 410) {\n          await db.delete({\n     \
+        \       TableName: process.env.TABLE_NAME,\n            Key: { PK: connection.PK,\
+        \ SK: connection.SK }\n          }).promise();\n        }\n      }\n    });\n\
+        \    \n    await Promise.all(broadcastPromises);\n  } catch (error) {\n  \
+        \  console.error('\U0001F50C Broadcast error:', error);\n  }\n};\nexports.submitVotes\
+        \ = async (event) => {\n  const gameId = event.pathParameters.gameId;\n  const\
+        \ { name, questionNumber, votes } = JSON.parse(event.body);\n  const ttl =\
+        \ Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);\n  \n  console.log(`\U0001F5F3\
+        \uFE0F Votes: game=${gameId}, question=${questionNumber}, voter=${name}`);\n\
+        \  \n  // Clean structure: GAME#1234 / VOTE#001#PLAYER#name\n  // votes =\
+        \ { \"0\": 1, \"1\": 2, \"2\": 3 } (answerIndex: rank)\n  await db.put({\n\
+        \    TableName: process.env.TABLE_NAME,\n    Item: {\n      PK: `GAME#${gameId}`,\n\
+        \      SK: `VOTE#${questionNumber}#PLAYER#${name}`,\n      VoterName: name,\n\
+        \      QuestionNumber: questionNumber,\n      First: votes[\"0\"] || null,\
+        \   // Answer index for 1st place\n      Second: votes[\"1\"] || null,  //\
+        \ Answer index for 2nd place  \n      Third: votes[\"2\"] || null,   // Answer\
+        \ index for 3rd place\n      VotesRaw: votes, // Keep original format for\
+        \ compatibility\n      SubmittedAt: new Date().toISOString(),\n      ttl\n\
+        \    }\n  }).promise();\n  \n  // Broadcast lightweight vote submitted notification\
+        \ via WebSocket\n  try {\n    await broadcastToGame(gameId, {\n      type:\
+        \ 'playerVoted',\n      gameId,\n      questionId: questionNumber,\n     \
+        \ timestamp: new Date().toISOString()\n    });\n  } catch (error) {\n    console.log('\U0001F50C\
+        \ WebSocket broadcast failed for vote submission, continuing...', error.message);\n\
+        \  }\n  \n  return { statusCode: 200, body: JSON.stringify({ status: 'OK'\
+        \ }) };\n};"
+      Events:
+        SubmitVotesEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/votes
+            Method: POST
+  SavePartialVoteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.savePartialVote
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.savePartialVote = async (event) => {\n  const gameId = event.pathParameters.gameId;\n\
+        \  const { playerName, questionNumber, votes } = JSON.parse(event.body);\n\
+        \  \n  console.log(`\U0001F4BE SavePartialVote: game=${gameId}, player=${playerName},\
+        \ question=${questionNumber}`, votes);\n  \n  // Save partial vote state to\
+        \ allow page refresh recovery\n  await db.put({\n    TableName: process.env.TABLE_NAME,\n\
+        \    Item: {\n      PK: `GAME#${gameId}`,\n      SK: `PARTIAL_VOTE#${questionNumber}#PLAYER#${playerName}`,\n\
+        \      PlayerName: playerName,\n      QuestionNumber: questionNumber,\n  \
+        \    Votes: votes, // {first: \"2\", second: \"\", third: \"1\"}\n      UpdatedAt:\
+        \ new Date().toISOString(),\n      TTL: Math.floor(Date.now() / 1000) + (2\
+        \ * 60 * 60) // 2 hour TTL\n    }\n  }).promise();\n  \n  return { statusCode:\
+        \ 200, body: JSON.stringify({ status: 'OK' }) };\n};"
+      Events:
+        SavePartialVoteEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/partial-votes
+            Method: POST
+  GetPartialVoteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getPartialVote
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.getPartialVote = async (event) => {\n  const gameId = event.pathParameters.gameId;\n\
+        \  const playerName = event.queryStringParameters?.playerName;\n  const questionNumber\
+        \ = event.queryStringParameters?.questionNumber;\n  \n  console.log(`\U0001F50D\
+        \ GetPartialVote: game=${gameId}, player=${playerName}, question=${questionNumber}`);\n\
+        \  \n  if (!playerName || !questionNumber) {\n    return {\n      statusCode:\
+        \ 400,\n      body: JSON.stringify({ error: 'playerName and questionNumber\
+        \ are required' })\n    };\n  }\n  \n  const result = await db.get({\n   \
+        \ TableName: process.env.TABLE_NAME,\n    Key: {\n      PK: `GAME#${gameId}`,\n\
+        \      SK: `PARTIAL_VOTE#${questionNumber}#PLAYER#${playerName}`\n    }\n\
+        \  }).promise();\n  \n  if (result.Item) {\n    console.log(`\u2705 Found\
+        \ partial vote for ${playerName}:`, result.Item.Votes);\n    return {\n  \
+        \    statusCode: 200,\n      body: JSON.stringify({\n        votes: result.Item.Votes,\n\
+        \        updatedAt: result.Item.UpdatedAt\n      })\n    };\n  } else {\n\
+        \    console.log(`\u274C No partial vote found for ${playerName} on question\
+        \ ${questionNumber}`);\n    return {\n      statusCode: 404,\n      body:\
+        \ JSON.stringify({ message: 'No partial vote found' })\n    };\n  }\n};"
+      Events:
+        GetPartialVoteEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/partial-votes
+            Method: GET
+  GetVotesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getVotes
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.getVotes = async (event) => {\n  const gameId = event.pathParameters.gameId;\n\
+        \  const questionNumber = event.queryStringParameters?.questionNumber;\n \
+        \ \n  console.log(`\U0001F50D GetVotes: game=${gameId}, questionNumber=${questionNumber}`);\n\
+        \  \n  let keyCondition, expressionValues;\n  if (questionNumber) {\n    //\
+        \ Get votes for specific question: VOTE#001#PLAYER#\n    keyCondition = 'PK\
+        \ = :g AND begins_with(SK, :v)';\n    expressionValues = { \n      ':g': `GAME#${gameId}`,\
+        \ \n      ':v': `VOTE#${questionNumber}#PLAYER#` \n    };\n  } else {\n  \
+        \  // Get all votes in the game\n    keyCondition = 'PK = :g AND begins_with(SK,\
+        \ :v)';\n    expressionValues = { \n      ':g': `GAME#${gameId}`, \n     \
+        \ ':v': 'VOTE#' \n    };\n  }\n  \n  const res = await db.query({\n    TableName:\
+        \ process.env.TABLE_NAME,\n    KeyConditionExpression: keyCondition,\n   \
+        \ ExpressionAttributeValues: expressionValues\n  }).promise();\n  \n  // Transform\
+        \ to individual vote records for frontend compatibility\n  const votes = [];\n\
+        \  res.Items.forEach(record => {\n    const voterName = record.VoterName;\n\
+        \    const questionNum = record.QuestionNumber;\n    \n    // Convert to individual\
+        \ vote format\n    if (record.VotesRaw && typeof record.VotesRaw === 'object')\
+        \ {\n      Object.entries(record.VotesRaw).forEach(([answerIndex, rank]) =>\
+        \ {\n        votes.push({\n          questionNumber: questionNum,\n      \
+        \    voter: voterName,\n          answerIndex: parseInt(answerIndex),\n  \
+        \        rank: parseInt(rank),\n          submittedAt: record.SubmittedAt\n\
+        \        });\n      });\n    }\n  });\n  \n  console.log(`\u2705 Returning\
+        \ ${votes.length} vote records for question ${questionNumber}`);\n  return\
+        \ { statusCode: 200, body: JSON.stringify({ votes }) };\n};"
+      Events:
+        GetVotesEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/votes
+            Method: GET
+  SetGameStateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.setGameState
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - execute-api:ManageConnections
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        const apigateway = new AWS.ApiGatewayManagementApi({\n  endpoint: process.env.WEBSOCKET_API_ENDPOINT\n\
+        });\n\n// Helper function to broadcast WebSocket message\nconst broadcastToGame\
+        \ = async (gameId, message) => {\n  try {\n    const connectionsResult = await\
+        \ db.scan({\n      TableName: process.env.TABLE_NAME,\n      FilterExpression:\
+        \ 'begins_with(PK, :prefix) AND GameId = :gameId',\n      ExpressionAttributeValues:\
+        \ {\n        ':prefix': 'CONNECTION#',\n        ':gameId': gameId\n      }\n\
+        \    }).promise();\n    \n    const connections = connectionsResult.Items\
+        \ || [];\n    console.log(`\U0001F50C Broadcasting to ${connections.length}\
+        \ connections for game ${gameId}`);\n    \n    const broadcastPromises = connections.map(async\
+        \ (connection) => {\n      try {\n        await apigateway.postToConnection({\n\
+        \          ConnectionId: connection.ConnectionId,\n          Data: JSON.stringify(message)\n\
+        \        }).promise();\n      } catch (error) {\n        console.log(`\U0001F50C\
+        \ Failed to send to connection ${connection.ConnectionId}:`, error);\n   \
+        \     if (error.statusCode === 410) {\n          await db.delete({\n     \
+        \       TableName: process.env.TABLE_NAME,\n            Key: { PK: connection.PK,\
+        \ SK: connection.SK }\n          }).promise();\n        }\n      }\n    });\n\
+        \    \n    await Promise.all(broadcastPromises);\n  } catch (error) {\n  \
+        \  console.error('\U0001F50C Broadcast error:', error);\n  }\n};\nexports.setGameState\
+        \ = async (event) => {\n  const gameId = event.pathParameters.gameId;\n  const\
+        \ body = JSON.parse(event.body);\n  const { \n    currentQuestion, \n    stage,\
+        \ \n    state, \n    currentQuestionIndex, \n    currentQuestionId,\n    scoredQuestions,\n\
+        \    usedQuestions,\n    playedQuestions,\n    currentQuestionData\n  } =\
+        \ body;\n  const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);\n\
+        \  \n  console.log(`\U0001F3AE SetGameState: game=${gameId}, state=${state},\
+        \ questionId=${currentQuestionId}`);\n  \n  // Store complete game state for\
+        \ player synchronization\n  const stateItem = {\n    PK: `GAME#${gameId}`,\n\
+        \    SK: 'STATE',\n    CurrentQuestion: currentQuestion, // \"001\", \"002\"\
+        , etc.\n    Stage: stage || (state === 'question' ? 'ASK' : \n           \
+        \         state === 'voting' ? 'VOTE' :\n                    state === 'results'\
+        \ ? 'RESULTS' : 'BEGIN'),\n    State: state || 'waiting',\n    CurrentQuestionIndex:\
+        \ currentQuestionIndex,\n    CurrentQuestionId: currentQuestionId,\n    UpdatedAt:\
+        \ new Date().toISOString(),\n    ttl\n  };\n  \n  // Add optional arrays if\
+        \ provided\n  if (scoredQuestions) stateItem.ScoredQuestions = scoredQuestions;\n\
+        \  if (usedQuestions) stateItem.UsedQuestions = usedQuestions;\n  if (playedQuestions)\
+        \ stateItem.PlayedQuestions = playedQuestions;\n  if (currentQuestionData)\
+        \ stateItem.CurrentQuestionData = currentQuestionData;\n  \n  await db.put({\n\
+        \    TableName: process.env.TABLE_NAME,\n    Item: stateItem\n  }).promise();\n\
+        \  \n  // Broadcast lightweight game state change notification via WebSocket\n\
+        \  try {\n    await broadcastToGame(gameId, {\n      type: 'gameStateChanged',\n\
+        \      gameId,\n      state,\n      questionId: currentQuestionId || currentQuestion,\n\
+        \      timestamp: new Date().toISOString()\n    });\n  } catch (error) {\n\
+        \    console.log('\U0001F50C WebSocket broadcast failed for game state change,\
+        \ continuing...', error.message);\n  }\n  \n  return { statusCode: 200, body:\
+        \ JSON.stringify({ status: 'OK' }) };\n};"
+      Events:
+        SetGameStateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/state
+            Method: POST
+  GetGameStateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getGameState
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.getGameState = async (event) => {\n  const gameId = event.pathParameters.gameId;\n\
+        \  \n  const res = await db.get({\n    TableName: process.env.TABLE_NAME,\n\
+        \    Key: { PK: `GAME#${gameId}`, SK: 'STATE' }\n  }).promise();\n  \n  //\
+        \ Also get debug mode from game metadata\n  const metadataRes = await db.get({\n\
+        \    TableName: process.env.TABLE_NAME,\n    Key: { PK: `GAME#${gameId}`,\
+        \ SK: 'METADATA' }\n  }).promise();\n  \n  const state = res.Item || {};\n\
+        \  const metadata = metadataRes.Item || {};\n  let currentQuestionData = null;\n\
+        \  \n  // If there's a current question, fetch its data from the pointer\n\
+        \  if (state.CurrentQuestion) {\n    try {\n      const questionRes = await\
+        \ db.get({\n        TableName: process.env.TABLE_NAME,\n        Key: { PK:\
+        \ `GAME#${gameId}`, SK: `QUESTION#${state.CurrentQuestion}` }\n      }).promise();\n\
+        \      \n      if (questionRes.Item && questionRes.Item.QuestionRef) {\n \
+        \       // Fetch the actual question data using the pointer\n        const\
+        \ questionDataRes = await db.get({\n          TableName: process.env.TABLE_NAME,\n\
+        \          Key: { PK: `SET#${questionRes.Item.SetId}`, SK: questionRes.Item.QuestionRef\
+        \ }\n        }).promise();\n        \n        if (questionDataRes.Item) {\n\
+        \          currentQuestionData = {\n            id: state.CurrentQuestion,\
+        \ // Use sequential number as ID for frontend\n            title: questionDataRes.Item.Title\
+        \ || questionDataRes.Item.Prompt || '',\n            detail: questionDataRes.Item.Detail\
+        \ || '',\n            category: questionDataRes.Item.Category || '',\n   \
+        \         setId: questionRes.Item.SetId\n          };\n        }\n      }\n\
+        \    } catch (e) {\n      console.error('Error fetching question data:', e);\n\
+        \    }\n  }\n  \n  // Return clean state - players only need current question,\
+        \ host needs question tracking\n  const gameState = {\n    stage: state.Stage\
+        \ || 'BEGIN', // BEGIN, ASK, VOTE, RESULTS, END\n    state: state.State ||\
+        \ (state.Stage === 'ASK' ? 'question' : \n           state.Stage === 'VOTE'\
+        \ ? 'voting' :\n           state.Stage === 'RESULTS' ? 'results' : 'waiting'),\n\
+        \    currentQuestionId: state.CurrentQuestion,\n    currentQuestionData: currentQuestionData,\n\
+        \    updatedAt: state.UpdatedAt,\n    currentQuestion: state.CurrentQuestion,\
+        \ // Add this for backward compatibility\n    debugMode: metadata.DebugMode\
+        \ || false // Include debug mode from game metadata\n  };\n  \n  // Host-only\
+        \ data (for question tracking and scoring)\n  if (state.ScoredQuestions) gameState.scoredQuestions\
+        \ = state.ScoredQuestions;\n  if (state.UsedQuestions) gameState.usedQuestions\
+        \ = state.UsedQuestions;\n  if (state.PlayedQuestions) gameState.playedQuestions\
+        \ = state.PlayedQuestions;\n  \n  console.log(`\U0001F3AE GetGameState: game=${gameId}`,\
+        \ gameState);\n  return { statusCode: 200, body: JSON.stringify(gameState)\
+        \ };\n};"
+      Events:
+        GetGameStateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/state
+            Method: GET
+  UpdateScoresFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.updateScores
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.updateScores = async (event) => {\n  const gameId = event.pathParameters.gameId;\n\
+        \  const { questionNumber, scores } = JSON.parse(event.body);\n  \n  console.log(`\U0001F3C6\
+        \ UpdateScores: game=${gameId}, question=${questionNumber}`, scores);\n  \n\
+        \  const updatePromises = Object.entries(scores).map(([playerName, pointsToAdd])\
+        \ => {\n    return db.update({\n      TableName: process.env.TABLE_NAME,\n\
+        \      Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` },\n      UpdateExpression:\
+        \ 'ADD TotalScore :points',\n      ExpressionAttributeValues: { ':points':\
+        \ pointsToAdd }\n    }).promise();\n  });\n  \n  await Promise.all(updatePromises);\n\
+        \  return { statusCode: 200, body: JSON.stringify({ status: 'OK' }) };\n};"
+      Events:
+        UpdateScoresEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/scores
+            Method: POST
+  ValidateGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.validateGame
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.validateGame = async (event) => {\n  const gameId = event.pathParameters.gameId;\n\
+        \  \n  try {\n    const gameCheck = await db.get({\n      TableName: process.env.TABLE_NAME,\n\
+        \      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }\n    }).promise();\n\
+        \    \n    const exists = !!gameCheck.Item;\n    return { \n      statusCode:\
+        \ 200, \n      body: JSON.stringify({ exists, gameId }),\n      headers: {\n\
+        \        'Access-Control-Allow-Origin': '*',\n        'Access-Control-Allow-Headers':\
+        \ 'Content-Type',\n        'Access-Control-Allow-Methods': 'GET'\n      }\n\
+        \    };\n  } catch (error) {\n    console.error('Error validating game:',\
+        \ error);\n    return { \n      statusCode: 500, \n      body: JSON.stringify({\
+        \ error: 'Failed to validate game' }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n    };\n  }\n};"
+      Events:
+        ValidateGameEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/validate
+            Method: GET
+  CreateGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.createGame
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.createGame = async (event) => {\n  const gameId = event.pathParameters.gameId;\n\
+        \  const { eventTitle, aiContext } = JSON.parse(event.body || '{}');\n  const\
+        \ ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);\n  \n  // Create\
+        \ game metadata\n  await db.put({\n    TableName: process.env.TABLE_NAME,\n\
+        \    Item: {\n      PK: `GAME#${gameId}`,\n      SK: 'METADATA',\n      Title:\
+        \ eventTitle || 'Engagements Session',\n      AIContext: aiContext || null,\n\
+        \      CreatedAt: new Date().toISOString(),\n      ttl\n    }\n  }).promise();\n\
+        \  \n  // Initialize game state\n  await db.put({\n    TableName: process.env.TABLE_NAME,\n\
+        \    Item: {\n      PK: `GAME#${gameId}`,\n      SK: 'STATE',\n      CurrentQuestion:\
+        \ null,\n      Stage: 'BEGIN',\n      UpdatedAt: new Date().toISOString(),\n\
+        \      ttl\n    }\n  }).promise();\n  \n  return { statusCode: 200, body:\
+        \ JSON.stringify({ gameId, created: true }) };\n};"
+      Events:
+        CreateGameEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/create
+            Method: POST
+  ClearGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.clearGame
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.clearGame = async (event) => {\n  const gameId = event.pathParameters.gameId;\n\
+        \  \n  // Get all items for this game\n  const res = await db.query({\n  \
+        \  TableName: process.env.TABLE_NAME,\n    KeyConditionExpression: 'PK = :g',\n\
+        \    ExpressionAttributeValues: { ':g': `GAME#${gameId}` }\n  }).promise();\n\
+        \  \n  // Delete all items\n  const deletePromises = res.Items.map(item =>\
+        \ {\n    return db.delete({\n      TableName: process.env.TABLE_NAME,\n  \
+        \    Key: { PK: item.PK, SK: item.SK }\n    }).promise();\n  });\n  \n  await\
+        \ Promise.all(deletePromises);\n  \n  console.log(`\U0001F5D1\uFE0F Cleared\
+        \ ${res.Items.length} items from game ${gameId}`);\n  return { statusCode:\
+        \ 200, body: JSON.stringify({ message: 'Game cleared', itemsDeleted: res.Items.length\
+        \ }) };\n};"
+      Events:
+        ClearGameEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/clear
+            Method: POST
+  GetQuestionSetsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getQuestionSets
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.getQuestionSets = async () => {\n  const res = await db.query({\n\
+        \    TableName: process.env.TABLE_NAME,\n    KeyConditionExpression: 'PK =\
+        \ :pk',\n    ExpressionAttributeValues: { ':pk': 'SETS' }\n  }).promise();\n\
+        \  \n  // Filter for active sets only and add categories\n  const activeSets\
+        \ = [];\n  for (const item of res.Items) {\n    if (item.Active) {\n     \
+        \ const setId = item.SK.replace('SET#', '');\n      \n      // Get categories\
+        \ for this set\n      const categoriesRes = await db.query({\n        TableName:\
+        \ process.env.TABLE_NAME,\n        KeyConditionExpression: 'PK = :pk AND begins_with(SK,\
+        \ :sk)',\n        ExpressionAttributeValues: { \n          ':pk': `SET#${setId}`,\n\
+        \          ':sk': 'CATEGORY#'\n        }\n      }).promise();\n      \n  \
+        \    const categories = categoriesRes.Items.map(cat => ({\n        name: cat.Name,\n\
+        \        description: cat.Description || '',\n        count: 10 // Assuming\
+        \ 10 questions per category for now\n      }));\n      \n      activeSets.push({\n\
+        \        id: setId,\n        name: item.Name || 'Unknown Set',\n        description:\
+        \ item.Description || '',\n        totalQuestions: item.TotalQuestions ||\
+        \ 0,\n        categoryCount: item.CategoryCount || categories.length,\n  \
+        \      customInstruction: item.CustomInstruction || null,\n        aiContextInstruction:\
+        \ item.AIContextInstruction || null,\n        active: true,\n        categories:\
+        \ categories,\n        engagementType: item.EngagementType || 'call-and-answer'\n\
+        \      });\n    }\n  }\n  \n  return { \n    statusCode: 200, \n    body:\
+        \ JSON.stringify({ sets: activeSets }),\n    headers: {\n      'Access-Control-Allow-Origin':\
+        \ '*',\n      'Access-Control-Allow-Headers': 'Content-Type',\n      'Access-Control-Allow-Methods':\
+        \ 'GET'\n    }\n  };\n};"
+      Events:
+        GetQuestionSetsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /question-sets
+            Method: GET
+  GetCategoriesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getCategories
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.getCategories = async (event) => {\n  const setId = event.pathParameters?.setId;\n\
+        \  \n  if (!setId) {\n    return { \n      statusCode: 400, \n      body:\
+        \ JSON.stringify({ error: 'setId parameter is required' }),\n      headers:\
+        \ { 'Access-Control-Allow-Origin': '*' }\n    };\n  }\n  \n  try {\n    //\
+        \ Get categories\n    const categoriesRes = await db.query({\n      TableName:\
+        \ process.env.TABLE_NAME,\n      KeyConditionExpression: 'PK = :pk AND begins_with(SK,\
+        \ :sk)',\n      ExpressionAttributeValues: { \n        ':pk': `SET#${setId}`,\n\
+        \        ':sk': 'CATEGORY#'\n      }\n    }).promise();\n    \n    // Get\
+        \ all questions to count by category\n    const questionsRes = await db.query({\n\
+        \      TableName: process.env.TABLE_NAME,\n      KeyConditionExpression: 'PK\
+        \ = :pk AND begins_with(SK, :sk)',\n      ExpressionAttributeValues: { \n\
+        \        ':pk': `SET#${setId}`,\n        ':sk': 'QUESTION#'\n      }\n   \
+        \ }).promise();\n    \n    // Count questions per category\n    const questionCountByCategory\
+        \ = {};\n    questionsRes.Items.forEach(question => {\n      const category\
+        \ = question.Category;\n      if (category) {\n        questionCountByCategory[category]\
+        \ = (questionCountByCategory[category] || 0) + 1;\n      }\n    });\n    \n\
+        \    const categories = categoriesRes.Items.map(cat => ({\n      name: cat.Name,\n\
+        \      description: cat.Description || '',\n      questionCount: questionCountByCategory[cat.Name]\
+        \ || 0\n    }));\n    \n    return { \n      statusCode: 200, \n      body:\
+        \ JSON.stringify({ categories }),\n      headers: {\n        'Access-Control-Allow-Origin':\
+        \ '*',\n        'Access-Control-Allow-Headers': 'Content-Type',\n        'Access-Control-Allow-Methods':\
+        \ 'GET'\n      }\n    };\n  } catch (error) {\n    console.error('Error fetching\
+        \ categories:', error);\n    return { \n      statusCode: 500, \n      body:\
+        \ JSON.stringify({ error: 'Failed to fetch categories' }),\n      headers:\
+        \ { 'Access-Control-Allow-Origin': '*' }\n    };\n  }\n};"
+      Events:
+        GetCategoriesEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /question-sets/{setId}/categories
+            Method: GET
+  GetQuestionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getQuestions
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.getQuestions = async (event) => {\n  const setId = event.queryStringParameters?.setId;\n\
+        \  const gameId = event.queryStringParameters?.gameId;\n  const getNext =\
+        \ event.queryStringParameters?.getNext === 'true';\n  const categoriesParam\
+        \ = event.queryStringParameters?.categories;\n  \n  if (!setId) {\n    return\
+        \ { \n      statusCode: 400, \n      body: JSON.stringify({ error: 'setId\
+        \ parameter is required' }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n    };\n  }\n  \n  // Get all questions for this set\n  const res\
+        \ = await db.query({\n    TableName: process.env.TABLE_NAME,\n    KeyConditionExpression:\
+        \ 'PK = :pk AND begins_with(SK, :sk)',\n    ExpressionAttributeValues: { \n\
+        \      ':pk': `SET#${setId}`,\n      ':sk': 'QUESTION#'\n    }\n  }).promise();\n\
+        \  \n  let questions = res.Items.map(i => ({\n    id: i.SK, // Use full SK\
+        \ as unique ID\n    title: i.Title || i.Prompt || '',\n    detail: i.Detail\
+        \ || '',\n    category: i.Category || '',\n    setId: setId\n  }));\n  \n\
+        \  // Apply category filtering if specified\n  if (categoriesParam) {\n  \
+        \  const activeCategories = categoriesParam.split(',').map(c => c.trim());\n\
+        \    console.log(`\U0001F3F7\uFE0F Filtering by categories: ${activeCategories.join(',\
+        \ ')}`);\n    console.log(`\U0001F4CB Questions before filter: ${questions.length}`);\n\
+        \    console.log(`\U0001F50D Sample categories in questions:`, questions.slice(0,\
+        \ 3).map(q => q.category));\n    questions = questions.filter(q => activeCategories.includes(q.category));\n\
+        \    console.log(`\U0001F4CB Questions after category filter: ${questions.length}`);\n\
+        \  }\n  \n  if (getNext && questions.length > 0 && gameId) {\n    // Get used\
+        \ questions for this game to avoid duplicates\n    let usedQuestions = [];\n\
+        \    try {\n      const stateRes = await db.get({\n        TableName: process.env.TABLE_NAME,\n\
+        \        Key: { PK: `GAME#${gameId}`, SK: 'STATE' }\n      }).promise();\n\
+        \      \n      if (stateRes.Item?.UsedQuestions) {\n        usedQuestions\
+        \ = stateRes.Item.UsedQuestions;\n      }\n    } catch (e) {\n      console.log('No\
+        \ game state found, treating as new game');\n    }\n    \n    // Filter out\
+        \ already used questions\n    const availableQuestions = questions.filter(q\
+        \ => !usedQuestions.includes(q.id));\n    console.log(`\U0001F3B2 Available\
+        \ questions: ${availableQuestions.length}/${questions.length}`);\n    \n \
+        \   if (availableQuestions.length === 0) {\n      return {\n        statusCode:\
+        \ 200,\n        body: JSON.stringify({ \n          gameComplete: true, \n\
+        \          message: 'All questions in selected categories have been used'\
+        \ \n        }),\n        headers: { 'Access-Control-Allow-Origin': '*' }\n\
+        \      };\n    }\n    \n    // Return random available question\n    const\
+        \ randomIndex = Math.floor(Math.random() * availableQuestions.length);\n \
+        \   const selectedQuestion = availableQuestions[randomIndex];\n    \n    console.log(`\U0001F3AF\
+        \ Selected question: ${selectedQuestion.id} from category: ${selectedQuestion.category}`);\n\
+        \    \n    return {\n      statusCode: 200,\n      body: JSON.stringify({\
+        \ \n        questions: [selectedQuestion],\n        availableCount: availableQuestions.length\
+        \ - 1\n      }),\n      headers: { 'Access-Control-Allow-Origin': '*' }\n\
+        \    };\n  }\n  \n  return { \n    statusCode: 200, \n    body: JSON.stringify({\
+        \ questions }),\n    headers: { 'Access-Control-Allow-Origin': '*' }\n  };\n\
+        };"
+      Events:
+        GetQuestionsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /questions
+            Method: GET
+  ListGamesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.listGames
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.listGames = async (event) => {\n  try {\n    // Get all game metadata\n\
+        \    const metadataRes = await db.scan({\n      TableName: process.env.TABLE_NAME,\n\
+        \      FilterExpression: 'begins_with(PK, :gamePrefix) AND SK = :metadata',\n\
+        \      ExpressionAttributeValues: {\n        ':gamePrefix': 'GAME#',\n   \
+        \     ':metadata': 'METADATA'\n      }\n    }).promise();\n    \n    // Get\
+        \ the last played date for each game by checking the STATE record\n    const\
+        \ games = [];\n    for (const item of metadataRes.Items) {\n      const gameId\
+        \ = item.PK.replace('GAME#', '');\n      \n      // Get the game state to\
+        \ find the last activity\n      let lastPlayedAt = item.CreatedAt || new Date().toISOString();\n\
+        \      try {\n        const stateRes = await db.get({\n          TableName:\
+        \ process.env.TABLE_NAME,\n          Key: { PK: `GAME#${gameId}`, SK: 'STATE'\
+        \ }\n        }).promise();\n        \n        if (stateRes.Item && stateRes.Item.UpdatedAt)\
+        \ {\n          lastPlayedAt = stateRes.Item.UpdatedAt;\n        }\n      }\
+        \ catch (e) {\n        console.log(`No state found for game ${gameId}, using\
+        \ created date`);\n      }\n      \n      games.push({\n        gameId: gameId,\n\
+        \        title: item.Title || item.EventTitle || 'Engagements Session',\n\
+        \        hostName: item.HostName || 'Unknown Host',\n        createdAt: item.CreatedAt\
+        \ || new Date().toISOString(),\n        lastPlayedAt: lastPlayedAt,\n    \
+        \    eventTitle: item.Title || item.EventTitle || 'Engagements Session'\n\
+        \      });\n    }\n    \n    // Sort by most recent first\n    games.sort((a,\
+        \ b) => new Date(b.lastPlayedAt) - new Date(a.lastPlayedAt));\n    \n    return\
+        \ {\n      statusCode: 200,\n      body: JSON.stringify({ games }),\n    \
+        \  headers: {\n        'Access-Control-Allow-Origin': '*',\n        'Access-Control-Allow-Headers':\
+        \ 'Content-Type',\n        'Access-Control-Allow-Methods': 'GET'\n      }\n\
+        \    };\n  } catch (error) {\n    console.error('Error listing games:', error);\n\
+        \    return {\n      statusCode: 500,\n      body: JSON.stringify({ error:\
+        \ 'Failed to list games' }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n    };\n  }\n};"
+      Events:
+        ListGamesEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games
+            Method: GET
+  GetGameReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getGameReport
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.getGameReport = async (event) => {\n  const gameId = event.pathParameters.gameId;\n\
+        \  \n  try {\n    // Get game state\n    const stateRes = await db.get({\n\
+        \      TableName: process.env.TABLE_NAME,\n      Key: { PK: `GAME#${gameId}`,\
+        \ SK: 'STATE' }\n    }).promise();\n    \n    const gameState = stateRes.Item\
+        \ || {};\n    const playedQuestions = gameState.PlayedQuestions || [];\n \
+        \   \n    // Get all question pointers for this game\n    const questionData\
+        \ = [];\n    for (const questionNumber of playedQuestions) {\n      // Get\
+        \ question pointer\n      const pointerRes = await db.get({\n        TableName:\
+        \ process.env.TABLE_NAME,\n        Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionNumber}`\
+        \ }\n      }).promise();\n      \n      if (pointerRes.Item && pointerRes.Item.QuestionRef)\
+        \ {\n        // Fetch actual question data\n        const questionRes = await\
+        \ db.get({\n          TableName: process.env.TABLE_NAME,\n          Key: {\
+        \ PK: `SET#${pointerRes.Item.SetId}`, SK: pointerRes.Item.QuestionRef }\n\
+        \        }).promise();\n        \n        if (questionRes.Item) {\n      \
+        \    questionData.push({\n            id: questionNumber,\n            title:\
+        \ questionRes.Item.Title || questionRes.Item.Prompt || '',\n            detail:\
+        \ questionRes.Item.Detail || '',\n            category: questionRes.Item.Category\
+        \ || '',\n            setId: pointerRes.Item.SetId\n          });\n      \
+        \  }\n      }\n    }\n    \n    return {\n      statusCode: 200,\n      body:\
+        \ JSON.stringify({ questions: questionData, playedQuestions }),\n      headers:\
+        \ { 'Access-Control-Allow-Origin': '*' }\n    };\n  } catch (error) {\n  \
+        \  console.error('Error getting game report data:', error);\n    return {\n\
+        \      statusCode: 500,\n      body: JSON.stringify({ error: 'Failed to get\
+        \ report data' }),\n      headers: { 'Access-Control-Allow-Origin': '*' }\n\
+        \    };\n  }\n};"
+      Events:
+        GetGameReportEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/report
+            Method: GET
+  AdminUploadQuestionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.uploadQuestions
+      Timeout: 60
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.uploadQuestions = async (event) => {\n  try {\n    const { fileName,\
+        \ fileContent, customTitle, customDescription, customInstructions, aiContextInstructions,\
+        \ engagementType } = JSON.parse(event.body);\n    \n    console.log(`Processing\
+        \ CSV upload: ${fileName}`);\n    console.log(`Custom title: ${customTitle}`);\n\
+        \    console.log(`Custom instructions: ${customInstructions}`);\n    console.log(`AI\
+        \ context instructions: ${aiContextInstructions}`);\n    \n    // Parse CSV\
+        \ content with better CSV parsing\n    const lines = fileContent.split('\\\
+        n').filter(line => line.trim());\n    if (lines.length < 2) {\n      return\
+        \ {\n        statusCode: 400,\n        body: JSON.stringify({ error: 'CSV\
+        \ file must have at least a header and one data row' }),\n        headers:\
+        \ { 'Access-Control-Allow-Origin': '*' }\n      };\n    }\n    \n    // Extract\
+        \ set name from custom title or filename\n    const setName = customTitle?.trim()\
+        \ || fileName.replace(/\\.csv$/i, '');\n    const setId = setName.toLowerCase().replace(/[^a-z0-9]/g,\
+        \ '');\n    const setDescription = customDescription?.trim() || `Imported\
+        \ from ${fileName}`;\n    \n    // Enhanced CSV parsing function\n    const\
+        \ parseCSVLine = (line) => {\n      const result = [];\n      let current\
+        \ = '';\n      let inQuotes = false;\n      \n      for (let i = 0; i < line.length;\
+        \ i++) {\n        const char = line[i];\n        if (char === '\"') {\n  \
+        \        inQuotes = !inQuotes;\n        } else if (char === ',' && !inQuotes)\
+        \ {\n          result.push(current.trim());\n          current = '';\n   \
+        \     } else {\n          current += char;\n        }\n      }\n      result.push(current.trim());\n\
+        \      return result;\n    };\n    \n    // Parse header with flexible mapping\n\
+        \    const headers = parseCSVLine(lines[0]).map(h => h.replace(/\"/g, '').trim());\n\
+        \    console.log('\U0001F50D Detected CSV Headers:', headers);\n    \n   \
+        \ // Simple and reliable column mapping - support exact greatest-hits.csv\
+        \ format or generic fallback\n    const getColumnIndex = (header) => headers.findIndex(h\
+        \ => h.toLowerCase() === header.toLowerCase());\n    \n    // Try greatest-hits.csv\
+        \ format first: Category,Question#,Title,Detail_lesson,School,CustomInstruction\n\
+        \    let categoryIndex = getColumnIndex('Category');\n    let titleIndex =\
+        \ getColumnIndex('Title');\n    let detailIndex = getColumnIndex('Detail_lesson');\n\
+        \    let schoolIndex = getColumnIndex('School');\n    let customInstructionIndex\
+        \ = getColumnIndex('CustomInstruction');\n    \n    // Fallback to generic\
+        \ column names if exact matches not found\n    if (categoryIndex === -1) categoryIndex\
+        \ = headers.findIndex(h => h.toLowerCase().includes('category'));\n    if\
+        \ (titleIndex === -1) titleIndex = headers.findIndex(h => h.toLowerCase().includes('title')\
+        \ && !h.toLowerCase().includes('#'));\n    if (detailIndex === -1) detailIndex\
+        \ = headers.findIndex(h => h.toLowerCase().includes('detail') || h.toLowerCase().includes('lesson'));\n\
+        \    if (schoolIndex === -1) schoolIndex = headers.findIndex(h => h.toLowerCase().includes('school'));\n\
+        \    if (customInstructionIndex === -1) customInstructionIndex = headers.findIndex(h\
+        \ => h.toLowerCase().includes('instruction'));\n    \n    console.log('\U0001F50D\
+        \ Detected CSV Headers:', headers);\n    console.log('\U0001F4CB Column Mapping:');\n\
+        \    console.log(`  Category: ${categoryIndex >= 0 ? headers[categoryIndex]\
+        \ : 'NOT FOUND'} (index: ${categoryIndex})`);\n    console.log(`  Title: ${titleIndex\
+        \ >= 0 ? headers[titleIndex] : 'NOT FOUND'} (index: ${titleIndex})`);\n  \
+        \  console.log(`  Detail: ${detailIndex >= 0 ? headers[detailIndex] : 'NOT\
+        \ FOUND'} (index: ${detailIndex})`);\n    console.log(`  School: ${schoolIndex\
+        \ >= 0 ? headers[schoolIndex] : 'NOT FOUND'} (index: ${schoolIndex})`);\n\
+        \    console.log(`  Instructions: ${customInstructionIndex >= 0 ? headers[customInstructionIndex]\
+        \ : 'NOT FOUND'} (index: ${customInstructionIndex})`);\n    \n    // Check\
+        \ required columns\n    if (categoryIndex === -1 || titleIndex === -1) {\n\
+        \      const missing = [];\n      if (categoryIndex === -1) missing.push('Category');\n\
+        \      if (titleIndex === -1) missing.push('Title');\n      \n      return\
+        \ {\n        statusCode: 400,\n        body: JSON.stringify({ \n         \
+        \ error: `Missing required columns: ${missing.join(', ')}. \\nDetected headers:\
+        \ [${headers.join(', ')}]\\nRequired: Category column (category/type/subject)\
+        \ and Title column (title/prompt/question)` \n        }),\n        headers:\
+        \ { 'Access-Control-Allow-Origin': '*' }\n      };\n    }\n    \n    // Parse\
+        \ questions with mapped columns\n    const questions = [];\n    const categories\
+        \ = new Set();\n    let questionCount = 0;\n    \n    for (let i = 1; i <\
+        \ lines.length; i++) {\n      try {\n        const values = parseCSVLine(lines[i]);\n\
+        \        if (values.length < 2) continue; // Skip empty lines\n        \n\
+        \        // Extract values using mapped indices\n        const category =\
+        \ values[categoryIndex]?.replace(/\"/g, '')?.trim();\n        const title\
+        \ = values[titleIndex]?.replace(/\"/g, '')?.trim();\n        const detail\
+        \ = detailIndex >= 0 ? values[detailIndex]?.replace(/\"/g, '')?.trim() ||\
+        \ '' : '';\n        const school = schoolIndex >= 0 ? values[schoolIndex]?.replace(/\"\
+        /g, '')?.trim() || '' : '';\n        const questionCustomInstruction = customInstructionIndex\
+        \ >= 0 ? values[customInstructionIndex]?.replace(/\"/g, '')?.trim() || ''\
+        \ : '';\n        \n        if (title && category) {\n          questionCount++;\n\
+        \          \n          questions.push({\n            Title: title,\n     \
+        \       Detail: detail,\n            Category: category,\n            School:\
+        \ school,\n            // Use per-question custom instruction if available,\
+        \ otherwise use set-level custom instructions\n            CustomInstructions:\
+        \ questionCustomInstruction || customInstructions?.trim() || '',\n       \
+        \     Active: true,\n            QuestionNumber: questionCount\n         \
+        \ });\n          categories.add(category);\n          \n          console.log(`\
+        \  \U0001F4DD Question ${questionCount}: ${category} - ${title.substring(0,\
+        \ 50)}...`);\n        }\n      } catch (e) {\n        console.log(`\u26A0\uFE0F\
+        \ Skipping malformed line ${i}: ${lines[i].substring(0, 100)}...`);\n    \
+        \  }\n    }\n    \n    if (questions.length === 0) {\n      return {\n   \
+        \     statusCode: 400,\n        body: JSON.stringify({ error: 'No valid questions\
+        \ found in CSV' }),\n        headers: { 'Access-Control-Allow-Origin': '*'\
+        \ }\n      };\n    }\n    \n    console.log(`\u2705 Successfully parsed ${questions.length}\
+        \ questions in ${categories.size} categories`);\n    \n    // Check if set\
+        \ already exists\n    const existingSet = await db.get({\n      TableName:\
+        \ process.env.TABLE_NAME,\n      Key: { PK: 'SETS', SK: `SET#${setId}` }\n\
+        \    }).promise();\n    \n    if (existingSet.Item) {\n      return {\n  \
+        \      statusCode: 400,\n        body: JSON.stringify({ error: `Question set\
+        \ \"${setName}\" already exists. Please use a different title or delete the\
+        \ existing set first.` }),\n        headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n      };\n    }\n    \n    // Create set metadata with enhanced information\n\
+        \    await db.put({\n      TableName: process.env.TABLE_NAME,\n      Item:\
+        \ {\n        PK: 'SETS',\n        SK: `SET#${setId}`,\n        Name: setName,\n\
+        \        Description: setDescription,\n        CustomInstruction: customInstructions?.trim()\
+        \ || '',\n        AIContextInstruction: aiContextInstructions?.trim() || '',\n\
+        \        TotalQuestions: questions.length,\n        CategoryCount: categories.size,\n\
+        \        Active: true,\n        CreatedAt: new Date().toISOString(),\n   \
+        \     SourceFile: fileName,\n        EngagementType: engagementType || 'call-and-answer',\n\
+        \        Mapping: {\n          categoryColumn: categoryIndex >= 0 ? headers[categoryIndex]\
+        \ : '',\n          titleColumn: titleIndex >= 0 ? headers[titleIndex] : '',\n\
+        \          detailColumn: detailIndex >= 0 ? headers[detailIndex] : '',\n \
+        \         schoolColumn: schoolIndex >= 0 ? headers[schoolIndex] : '',\n  \
+        \        customInstructionColumn: customInstructionIndex >= 0 ? headers[customInstructionIndex]\
+        \ : ''\n        }\n      }\n    }).promise();\n    \n    // Create categories\n\
+        \    const categoryPromises = Array.from(categories).map((categoryName, idx)\
+        \ => {\n      const categoryId = `c${String(idx + 1).padStart(3, '0')}`;\n\
+        \      return db.put({\n        TableName: process.env.TABLE_NAME,\n     \
+        \   Item: {\n          PK: `SET#${setId}`,\n          SK: `CATEGORY#${categoryId}`,\n\
+        \          Name: categoryName,\n          Description: `${categoryName} questions`,\n\
+        \          QuestionCount: questions.filter(q => q.Category === categoryName).length\n\
+        \        }\n      }).promise();\n    });\n    \n    await Promise.all(categoryPromises);\n\
+        \    \n    // Create questions with enhanced data\n    console.log(`\U0001F4BE\
+        \ Creating ${questions.length} questions in database...`);\n    const questionPromises\
+        \ = questions.map((question, idx) => {\n      const categoryIndex = Array.from(categories).indexOf(question.Category)\
+        \ + 1;\n      const categoryId = `c${String(categoryIndex).padStart(3, '0')}`;\n\
+        \      const questionNumber = String(idx + 1).padStart(3, '0');\n      const\
+        \ questionId = `QUESTION#${categoryId}#${questionNumber}`;\n      \n     \
+        \ return db.put({\n        TableName: process.env.TABLE_NAME,\n        Item:\
+        \ {\n          PK: `SET#${setId}`,\n          SK: questionId,\n          Title:\
+        \ question.Title,\n          Detail: question.Detail || '',\n          Category:\
+        \ question.Category,\n          School: question.School || '',\n         \
+        \ CustomInstructions: question.CustomInstructions || '',\n          OrderInCategory:\
+        \ questionNumber,\n          QuestionNumber: question.QuestionNumber,\n  \
+        \        Active: true\n        }\n      }).promise();\n    });\n    \n   \
+        \ await Promise.all(questionPromises);\n    \n    console.log(`\U0001F389\
+        \ Successfully created question set \"${setName}\"`);\n    console.log(`\U0001F4CA\
+        \ Final stats: ${questions.length} questions, ${categories.size} categories`);\n\
+        \    \n    return {\n      statusCode: 200,\n      body: JSON.stringify({\
+        \ \n        setName: setName,\n        setId: setId,\n        questionCount:\
+        \ questions.length,\n        categoryCount: categories.size,\n        message:\
+        \ `Successfully created question set \"${setName}\" with ${questions.length}\
+        \ questions across ${categories.size} categories`,\n        mapping: {\n \
+        \         categoryColumn: categoryIndex >= 0 ? headers[categoryIndex] : 'Not\
+        \ found',\n          titleColumn: titleIndex >= 0 ? headers[titleIndex] :\
+        \ 'Not found',\n          detailColumn: detailIndex >= 0 ? headers[detailIndex]\
+        \ : 'Not found',\n          schoolColumn: schoolIndex >= 0 ? headers[schoolIndex]\
+        \ : 'Not found',\n          customInstructionColumn: customInstructionIndex\
+        \ >= 0 ? headers[customInstructionIndex] : 'Using set-level instructions'\n\
+        \        }\n      }),\n      headers: { 'Access-Control-Allow-Origin': '*'\
+        \ }\n    };\n    \n  } catch (error) {\n    console.error('Upload error:',\
+        \ error);\n    return {\n      statusCode: 500,\n      body: JSON.stringify({\
+        \ error: `Upload failed: ${error.message}` }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n    };\n  }\n};"
+      Events:
+        AdminUploadQuestionsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /admin/upload-questions
+            Method: POST
+  AdminClearGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.clearGame
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.clearGame = async (event) => {\n  try {\n    const gameId = event.pathParameters.gameId;\n\
+        \    \n    // Get all items for this game\n    const res = await db.query({\n\
+        \      TableName: process.env.TABLE_NAME,\n      KeyConditionExpression: 'PK\
+        \ = :g',\n      ExpressionAttributeValues: { ':g': `GAME#${gameId}` }\n  \
+        \  }).promise();\n    \n    // Delete all items in batches\n    const items\
+        \ = res.Items || [];\n    const batchSize = 25;\n    let deletedCount = 0;\n\
+        \    \n    for (let i = 0; i < items.length; i += batchSize) {\n      const\
+        \ batch = items.slice(i, i + batchSize);\n      const deleteRequests = batch.map(item\
+        \ => ({\n        DeleteRequest: {\n          Key: { PK: item.PK, SK: item.SK\
+        \ }\n        }\n      }));\n      \n      await db.batchWrite({\n        RequestItems:\
+        \ {\n          [process.env.TABLE_NAME]: deleteRequests\n        }\n     \
+        \ }).promise();\n      \n      deletedCount += deleteRequests.length;\n  \
+        \  }\n    \n    console.log(`\U0001F5D1\uFE0F Cleared ${deletedCount} items\
+        \ from game ${gameId}`);\n    \n    return {\n      statusCode: 200,\n   \
+        \   body: JSON.stringify({ \n        message: `Game ${gameId} cleared successfully`,\n\
+        \        itemsDeleted: deletedCount\n      }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n    };\n    \n  } catch (error) {\n    console.error('Clear game\
+        \ error:', error);\n    return {\n      statusCode: 500,\n      body: JSON.stringify({\
+        \ error: `Failed to clear game: ${error.message}` }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n    };\n  }\n};"
+      Events:
+        AdminClearGameEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /admin/clear-game/{gameId}
+            Method: POST
+  AdminClearAllGamesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.clearAllGames
+      Timeout: 300
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.clearAllGames = async (event) => {\n  try {\n    // Scan for all game\
+        \ items\n    const res = await db.scan({\n      TableName: process.env.TABLE_NAME,\n\
+        \      FilterExpression: 'begins_with(PK, :gamePrefix)',\n      ExpressionAttributeValues:\
+        \ {\n        ':gamePrefix': 'GAME#'\n      }\n    }).promise();\n    \n  \
+        \  const items = res.Items || [];\n    if (items.length === 0) {\n      return\
+        \ {\n        statusCode: 200,\n        body: JSON.stringify({ \n         \
+        \ message: 'No games found to delete',\n          itemsDeleted: 0\n      \
+        \  }),\n        headers: { 'Access-Control-Allow-Origin': '*' }\n      };\n\
+        \    }\n    \n    // Delete all items in batches\n    const batchSize = 25;\n\
+        \    let deletedCount = 0;\n    \n    for (let i = 0; i < items.length; i\
+        \ += batchSize) {\n      const batch = items.slice(i, i + batchSize);\n  \
+        \    const deleteRequests = batch.map(item => ({\n        DeleteRequest: {\n\
+        \          Key: { PK: item.PK, SK: item.SK }\n        }\n      }));\n    \
+        \  \n      await db.batchWrite({\n        RequestItems: {\n          [process.env.TABLE_NAME]:\
+        \ deleteRequests\n        }\n      }).promise();\n      \n      deletedCount\
+        \ += deleteRequests.length;\n    }\n    \n    console.log(`\U0001F5D1\uFE0F\
+        \ Cleared all games: ${deletedCount} items deleted`);\n    \n    return {\n\
+        \      statusCode: 200,\n      body: JSON.stringify({ \n        message: 'All\
+        \ games cleared successfully',\n        itemsDeleted: deletedCount\n     \
+        \ }),\n      headers: { 'Access-Control-Allow-Origin': '*' }\n    };\n   \
+        \ \n  } catch (error) {\n    console.error('Clear all games error:', error);\n\
+        \    return {\n      statusCode: 500,\n      body: JSON.stringify({ error:\
+        \ `Failed to clear all games: ${error.message}` }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n    };\n  }\n};"
+      Events:
+        AdminClearAllGamesEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /admin/clear-all-games
+            Method: POST
+  AdminDownloadTemplateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.downloadTemplate
+      InlineCode: "exports.downloadTemplate = async (event) => {\n  try {\n    //\
+        \ CSV template content based on the existing formats (matches lessons.csv\
+        \ and greatest-hits.csv)\n    const csvTemplate = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction\\\
+        n' +\n      '\"Leadership\",1,\"MOST EFFECTIVE LEADERSHIP STYLE\",\"Leadership\
+        \ is about inspiring others to achieve their potential. From transformational\
+        \ leaders who create vision to servant leaders who put team first. Consider\
+        \ different situations where different approaches work better. Think about\
+        \ technical skill, cultural impact, innovation, and lasting influence.\",\"\
+        School of Management\",\"How would you apply this leadership principle in\
+        \ your current team or organization?\"\\n' +\n      '\"Innovation\",2,\"GREATEST\
+        \ INNOVATION METHOD\",\"Innovation drives progress and competitive advantage.\
+        \ From design thinking to lean startup methodology to blue ocean strategy.\
+        \ Consider methods that improve quality of life, enable other innovations,\
+        \ transform society, or solve fundamental problems.\",\"School of Innovation\"\
+        ,\"What innovative approach would you implement in your current project?\"\
+        \\n' +\n      '\"Strategy\",3,\"BEST STRATEGIC APPROACH\",\"Strategic thinking\
+        \ involves long-term planning and competitive positioning. From Porter\\'s\
+        \ Five Forces to Blue Ocean Strategy to systems thinking approaches. Consider\
+        \ frameworks that provide competitive advantage while remaining adaptable\
+        \ to changing conditions.\",\"School of Strategy\",\"How would you adapt this\
+        \ strategic concept to your industry?\"\\n' +\n      '\"Communication\",4,\"\
+        EFFECTIVE COMMUNICATION STRATEGY\",\"Clear communication drives alignment\
+        \ and results. From active listening to persuasive presentation techniques\
+        \ to visual storytelling. Consider approaches that build trust, convey complex\
+        \ ideas simply, and inspire action across diverse audiences.\",\"School of\
+        \ Communication\",\"How would you improve communication in your current team\
+        \ or project?\"\\n' +\n      '\"Decision Making\",5,\"OPTIMAL DECISION FRAMEWORK\"\
+        ,\"Good decisions require structured thinking and consideration of multiple\
+        \ factors. From data-driven analysis to intuitive judgment to stakeholder\
+        \ input. Consider frameworks that balance speed with thoroughness and individual\
+        \ insight with collective wisdom.\",\"School of Strategy\"';\n    \n    return\
+        \ {\n      statusCode: 200,\n      body: JSON.stringify({ \n        filename:\
+        \ 'question-set-template.csv',\n        content: csvTemplate \n      }),\n\
+        \      headers: { \n        'Access-Control-Allow-Origin': '*',\n        'Content-Type':\
+        \ 'application/json'\n      }\n    };\n    \n  } catch (error) {\n    console.error('Download\
+        \ template error:', error);\n    return {\n      statusCode: 500,\n      body:\
+        \ JSON.stringify({ error: `Failed to generate template: ${error.message}`\
+        \ }),\n      headers: { 'Access-Control-Allow-Origin': '*' }\n    };\n  }\n\
+        };"
+      Events:
+        AdminDownloadTemplateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /admin/download-template
+            Method: GET
+  AdminGetQuestionSetsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getQuestionSets
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        \nexports.getQuestionSets = async (event) => {\n  try {\n    // Get all question\
+        \ set metadata (both active and inactive)\n    const res = await db.query({\n\
+        \      TableName: process.env.TABLE_NAME,\n      KeyConditionExpression: 'PK\
+        \ = :pk',\n      ExpressionAttributeValues: { ':pk': 'SETS' }\n    }).promise();\n\
+        \    \n    const allSets = [];\n    for (const item of res.Items) {\n    \
+        \  const setId = item.SK.replace('SET#', '');\n      \n      // Get categories\
+        \ for this set\n      const categoriesRes = await db.query({\n        TableName:\
+        \ process.env.TABLE_NAME,\n        KeyConditionExpression: 'PK = :pk AND begins_with(SK,\
+        \ :sk)',\n        ExpressionAttributeValues: { \n          ':pk': `SET#${setId}`,\n\
+        \          ':sk': 'CATEGORY#'\n        }\n      }).promise();\n      \n  \
+        \    const categories = categoriesRes.Items.map(cat => ({\n        name: cat.Name,\n\
+        \        description: cat.Description || '',\n        count: cat.QuestionCount\
+        \ || 0\n      }));\n      \n      allSets.push({\n        id: setId,\n   \
+        \     name: item.Name || 'Unknown Set',\n        description: item.Description\
+        \ || '',\n        totalQuestions: item.TotalQuestions || 0,\n        categoryCount:\
+        \ item.CategoryCount || categories.length,\n        customInstruction: item.CustomInstruction\
+        \ || '',\n        aiContextInstruction: item.AIContextInstruction || '',\n\
+        \        active: item.Active || false,\n        createdAt: item.CreatedAt\
+        \ || '',\n        sourceFile: item.SourceFile || '',\n        engagementType:\
+        \ item.EngagementType || 'call-and-answer',\n        categories: categories\n\
+        \      });\n    }\n    \n    // Sort by creation date (newest first)\n   \
+        \ allSets.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));\n\
+        \    \n    return { \n      statusCode: 200, \n      body: JSON.stringify({\
+        \ sets: allSets }),\n      headers: {\n        'Access-Control-Allow-Origin':\
+        \ '*',\n        'Access-Control-Allow-Headers': 'Content-Type',\n        'Access-Control-Allow-Methods':\
+        \ 'GET'\n      }\n    };\n    \n  } catch (error) {\n    console.error('Get\
+        \ question sets error:', error);\n    return {\n      statusCode: 500,\n \
+        \     body: JSON.stringify({ error: `Failed to get question sets: ${error.message}`\
+        \ }),\n      headers: { 'Access-Control-Allow-Origin': '*' }\n    };\n  }\n\
+        };"
+      Events:
+        AdminGetQuestionSetsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /admin/question-sets
+            Method: GET
+  AdminToggleQuestionSetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.toggleQuestionSet
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        \nexports.toggleQuestionSet = async (event) => {\n  try {\n    const setId\
+        \ = event.pathParameters.setId;\n    const { active } = JSON.parse(event.body);\n\
+        \    \n    console.log(`Toggling question set ${setId} to active: ${active}`);\n\
+        \    \n    // Update the question set active status\n    await db.update({\n\
+        \      TableName: process.env.TABLE_NAME,\n      Key: { PK: 'SETS', SK: `SET#${setId}`\
+        \ },\n      UpdateExpression: 'SET Active = :active, UpdatedAt = :updatedAt',\n\
+        \      ExpressionAttributeValues: {\n        ':active': active,\n        ':updatedAt':\
+        \ new Date().toISOString()\n      }\n    }).promise();\n    \n    console.log(`\u2705\
+        \ Successfully toggled question set ${setId} to active: ${active}`);\n   \
+        \ \n    return {\n      statusCode: 200,\n      body: JSON.stringify({ \n\
+        \        message: `Question set ${active ? 'activated' : 'deactivated'} successfully`,\n\
+        \        setId: setId,\n        active: active\n      }),\n      headers:\
+        \ { 'Access-Control-Allow-Origin': '*' }\n    };\n    \n  } catch (error)\
+        \ {\n    console.error('Toggle question set error:', error);\n    return {\n\
+        \      statusCode: 500,\n      body: JSON.stringify({ error: `Failed to toggle\
+        \ question set: ${error.message}` }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n    };\n  }\n};"
+      Events:
+        AdminToggleQuestionSetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /admin/toggle-question-set/{setId}
+            Method: POST
+  AdminDeleteQuestionSetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.deleteQuestionSet
+      Timeout: 60
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        \nexports.deleteQuestionSet = async (event) => {\n  try {\n    const setId\
+        \ = event.pathParameters.setId;\n    console.log(`Deleting question set: ${setId}`);\n\
+        \    \n    // Get set metadata first to check if it exists\n    const metaRes\
+        \ = await db.get({\n      TableName: process.env.TABLE_NAME,\n      Key: {\
+        \ PK: 'SETS', SK: `SET#${setId}` }\n    }).promise();\n    \n    if (!metaRes.Item)\
+        \ {\n      return {\n        statusCode: 404,\n        body: JSON.stringify({\
+        \ error: 'Question set not found' }),\n        headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n      };\n    }\n    \n    const setName = metaRes.Item.Name;\n \
+        \   \n    // Get all items for this question set from SET# partition\n   \
+        \ const setRes = await db.query({\n      TableName: process.env.TABLE_NAME,\n\
+        \      KeyConditionExpression: 'PK = :setpk',\n      ExpressionAttributeValues:\
+        \ { ':setpk': `SET#${setId}` }\n    }).promise();\n    \n    // Delete the\
+        \ set metadata first\n    await db.delete({\n      TableName: process.env.TABLE_NAME,\n\
+        \      Key: { PK: 'SETS', SK: `SET#${setId}` }\n    }).promise();\n    \n\
+        \    let deletedCount = 1; // Count the metadata deletion\n    \n    // Delete\
+        \ all items from SET# partition in batches\n    const setItems = setRes.Items\
+        \ || [];\n    const batchSize = 25;\n    \n    for (let i = 0; i < setItems.length;\
+        \ i += batchSize) {\n      const batch = setItems.slice(i, i + batchSize);\n\
+        \      const deleteRequests = batch.map(item => ({\n        DeleteRequest:\
+        \ {\n          Key: { PK: item.PK, SK: item.SK }\n        }\n      }));\n\
+        \      \n      await db.batchWrite({\n        RequestItems: {\n          [process.env.TABLE_NAME]:\
+        \ deleteRequests\n        }\n      }).promise();\n      \n      deletedCount\
+        \ += deleteRequests.length;\n    }\n    \n    console.log(`\U0001F5D1\uFE0F\
+        \ Deleted question set \"${setName}\": ${deletedCount} items removed`);\n\
+        \    \n    return {\n      statusCode: 200,\n      body: JSON.stringify({\
+        \ \n        message: `Question set \"${setName}\" deleted successfully`,\n\
+        \        itemsDeleted: deletedCount\n      }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n    };\n    \n  } catch (error) {\n    console.error('Delete question\
+        \ set error:', error);\n    return {\n      statusCode: 500,\n      body:\
+        \ JSON.stringify({ error: `Failed to delete question set: ${error.message}`\
+        \ }),\n      headers: { 'Access-Control-Allow-Origin': '*' }\n    };\n  }\n\
+        };"
+      Events:
+        AdminDeleteQuestionSetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /admin/delete-question-set/{setId}
+            Method: POST
+  AdminEditQuestionSetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.editQuestionSet
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.editQuestionSet = async (event) => {\n  try {\n    const setId = event.pathParameters.setId;\n\
+        \    const { name, description, customInstruction, aiContextInstruction }\
+        \ = JSON.parse(event.body);\n    \n    if (!name || !name.trim()) {\n    \
+        \  return {\n        statusCode: 400,\n        body: JSON.stringify({ error:\
+        \ 'Name is required' }),\n        headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n      };\n    }\n    \n    // Update the question set metadata\n\
+        \    const updateParams = {\n      TableName: process.env.TABLE_NAME,\n  \
+        \    Key: { PK: 'SETS', SK: `SET#${setId}` },\n      UpdateExpression: 'SET\
+        \ #name = :name',\n      ExpressionAttributeNames: {\n        '#name': 'Name'\n\
+        \      },\n      ExpressionAttributeValues: {\n        ':name': name.trim()\n\
+        \      }\n    };\n    \n    // Add optional fields if provided\n    if (description\
+        \ !== null && description !== undefined) {\n      updateParams.UpdateExpression\
+        \ += ', Description = :description';\n      updateParams.ExpressionAttributeValues[':description']\
+        \ = description;\n    }\n    \n    if (customInstruction !== null && customInstruction\
+        \ !== undefined) {\n      updateParams.UpdateExpression += ', CustomInstruction\
+        \ = :customInstruction';\n      updateParams.ExpressionAttributeValues[':customInstruction']\
+        \ = customInstruction;\n    }\n    \n    if (aiContextInstruction !== null\
+        \ && aiContextInstruction !== undefined) {\n      updateParams.UpdateExpression\
+        \ += ', AIContextInstruction = :aiContextInstruction';\n      updateParams.ExpressionAttributeValues[':aiContextInstruction']\
+        \ = aiContextInstruction;\n    }\n    \n    await db.update(updateParams).promise();\n\
+        \    \n    console.log(`\u270F\uFE0F Updated question set \"${setId}\" with\
+        \ name: ${name}`);\n    \n    return {\n      statusCode: 200,\n      body:\
+        \ JSON.stringify({ \n        message: `Question set \"${setId}\" updated successfully`,\n\
+        \        setId: setId,\n        name: name\n      }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n    };\n    \n  } catch (error) {\n    console.error('Edit question\
+        \ set error:', error);\n    return {\n      statusCode: 500,\n      body:\
+        \ JSON.stringify({ error: `Failed to edit question set: ${error.message}`\
+        \ }),\n      headers: { 'Access-Control-Allow-Origin': '*' }\n    };\n  }\n\
+        };"
+      Events:
+        AdminEditQuestionSetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /admin/edit-question-set/{setId}
+            Method: POST
+  SaveReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.saveReport
+      Timeout: 60
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - S3CrudPolicy:
+          BucketName:
+            Ref: ReportsBucket
+      InlineCode: "const AWS = require('aws-sdk');\nconst s3 = new AWS.S3();\nexports.saveReport\
+        \ = async (event) => {\n  try {\n    const gameId = event.pathParameters.gameId;\n\
+        \    const { eventTitle, pdfBlob, permanent = false } = JSON.parse(event.body);\n\
+        \    \n    // Generate filename\n    const timestamp = new Date().toISOString().split('T')[0];\n\
+        \    const sanitizedTitle = eventTitle.replace(/[^a-zA-Z0-9\\s-]/g, '').replace(/\\\
+        s+/g, '-');\n    const baseFileName = `${sanitizedTitle}-${timestamp}-${gameId}.pdf`;\n\
+        \    \n    // Add prefix for permanent files\n    const fileName = permanent\
+        \ ? `permanent/${baseFileName}` : baseFileName;\n    \n    // Convert base64\
+        \ to buffer\n    const pdfBuffer = Buffer.from(pdfBlob, 'base64');\n    \n\
+        \    // Upload to S3\n    const uploadParams = {\n      Bucket: process.env.REPORTS_BUCKET_NAME,\n\
+        \      Key: fileName,\n      Body: pdfBuffer,\n      ContentType: 'application/pdf',\n\
+        \      ContentDisposition: `attachment; filename=\"${baseFileName}\"`,\n \
+        \     Metadata: {\n        'x-amz-meta-permanent': permanent ? 'true' : 'false',\n\
+        \        'x-amz-meta-game-id': gameId,\n        'x-amz-meta-event-title':\
+        \ eventTitle\n      }\n    };\n    \n    const uploadResult = await s3.upload(uploadParams).promise();\n\
+        \    \n    // Generate presigned URL for download (valid for 24 hours)\n \
+        \   const downloadUrl = s3.getSignedUrl('getObject', {\n      Bucket: process.env.REPORTS_BUCKET_NAME,\n\
+        \      Key: fileName,\n      Expires: 24 * 60 * 60 // 24 hours in seconds\n\
+        \    });\n    \n    console.log(`\U0001F4C4 Report saved: ${fileName}`);\n\
+        \    \n    return {\n      statusCode: 200,\n      body: JSON.stringify({\n\
+        \        fileName: fileName,\n        downloadUrl: downloadUrl,\n        s3Location:\
+        \ uploadResult.Location\n      }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n    };\n    \n  } catch (error) {\n    console.error('Save report\
+        \ error:', error);\n    return {\n      statusCode: 500,\n      body: JSON.stringify({\
+        \ error: `Failed to save report: ${error.message}` }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n    };\n  }\n};"
+      Environment:
+        Variables:
+          REPORTS_BUCKET_NAME:
+            Ref: ReportsBucket
+      Events:
+        SaveReportEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/save-report
+            Method: POST
+  UpdateGameTitleFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.updateGameTitle
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.updateGameTitle = async (event) => {\n  try {\n    const gameId =\
+        \ event.pathParameters.gameId;\n    const { eventTitle } = JSON.parse(event.body);\n\
+        \    \n    // Update the game metadata with the new title\n    await db.update({\n\
+        \      TableName: process.env.TABLE_NAME,\n      Key: { PK: `GAME#${gameId}`,\
+        \ SK: 'METADATA' },\n      UpdateExpression: 'SET #title = :title, #eventTitle\
+        \ = :eventTitle, UpdatedAt = :updatedAt',\n      ExpressionAttributeNames:\
+        \ {\n        '#title': 'Title',\n        '#eventTitle': 'EventTitle'\n   \
+        \   },\n      ExpressionAttributeValues: {\n        ':title': eventTitle,\n\
+        \        ':eventTitle': eventTitle,\n        ':updatedAt': new Date().toISOString()\n\
+        \      }\n    }).promise();\n    \n    console.log(`\U0001F4DD Updated game\
+        \ ${gameId} title to: ${eventTitle}`);\n    \n    return {\n      statusCode:\
+        \ 200,\n      body: JSON.stringify({ message: 'Title updated successfully'\
+        \ }),\n      headers: { 'Access-Control-Allow-Origin': '*' }\n    };\n   \
+        \ \n  } catch (error) {\n    console.error('Update title error:', error);\n\
+        \    return {\n      statusCode: 500,\n      body: JSON.stringify({ error:\
+        \ `Failed to update title: ${error.message}` }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n    };\n  }\n};"
+      Events:
+        UpdateGameTitleEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/update-title
+            Method: POST
+  UpdateDebugModeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.updateDebugMode
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        exports.updateDebugMode = async (event) => {\n  const gameId = event.pathParameters.gameId;\n\
+        \  const { debugMode } = JSON.parse(event.body);\n  \n  try {\n    // Update\
+        \ the game metadata with debug mode setting\n    await db.update({\n     \
+        \ TableName: process.env.TABLE_NAME,\n      Key: { PK: `GAME#${gameId}`, SK:\
+        \ 'METADATA' },\n      UpdateExpression: 'SET DebugMode = :debugMode',\n \
+        \     ExpressionAttributeValues: {\n        ':debugMode': debugMode\n    \
+        \  }\n    }).promise();\n    \n    return {\n      statusCode: 200,\n    \
+        \  body: JSON.stringify({ \n        message: 'Debug mode updated successfully',\n\
+        \        gameId,\n        debugMode\n      })\n    };\n  } catch (error) {\n\
+        \    return {\n      statusCode: 500,\n      body: JSON.stringify({ error:\
+        \ error.message })\n    };\n  }\n};"
+      Events:
+        UpdateDebugModeEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/debug-mode
+            Method: POST
+  AISummaryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.generateAISummary
+      Runtime: nodejs18.x
+      Timeout: 300
+      MemorySize: 512
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - bedrock:InvokeModel
+          - bedrock:InvokeModelWithResponseStream
+          Resource:
+          - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+        - Effect: Allow
+          Action:
+          - execute-api:ManageConnections
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*
+      InlineCode: "const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');\n\
+        const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand, ScanCommand,\
+        \ DeleteCommand } = require('@aws-sdk/lib-dynamodb');\nconst { BedrockRuntimeClient,\
+        \ InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');\nconst\
+        \ { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');\n\
+        \nconst dynamoClient = new DynamoDBClient({});\nconst db = DynamoDBDocumentClient.from(dynamoClient);\n\
+        const bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });\n\
+        const apigateway = new ApiGatewayManagementApiClient({\n  endpoint: process.env.WEBSOCKET_API_ENDPOINT\n\
+        });\n\n// Helper function to broadcast WebSocket message\nconst broadcastToGame\
+        \ = async (gameId, message) => {\n  try {\n    const connectionsResult = await\
+        \ db.send(new ScanCommand({\n      TableName: process.env.TABLE_NAME,\n  \
+        \    FilterExpression: 'begins_with(PK, :prefix) AND GameId = :gameId',\n\
+        \      ExpressionAttributeValues: {\n        ':prefix': 'CONNECTION#',\n \
+        \       ':gameId': gameId\n      }\n    }));\n    \n    const connections\
+        \ = connectionsResult.Items || [];\n    console.log(`\U0001F50C Broadcasting\
+        \ to ${connections.length} connections for game ${gameId}`);\n    \n    const\
+        \ broadcastPromises = connections.map(async (connection) => {\n      try {\n\
+        \        await apigateway.send(new PostToConnectionCommand({\n          ConnectionId:\
+        \ connection.ConnectionId,\n          Data: JSON.stringify(message)\n    \
+        \    }));\n      } catch (error) {\n        console.log(`\U0001F50C Failed\
+        \ to send to connection ${connection.ConnectionId}:`, error);\n        if\
+        \ (error.statusCode === 410) {\n          await db.send(new DeleteCommand({\n\
+        \            TableName: process.env.TABLE_NAME,\n            Key: { PK: connection.PK,\
+        \ SK: connection.SK }\n          }));\n        }\n      }\n    });\n    \n\
+        \    await Promise.all(broadcastPromises);\n  } catch (error) {\n    console.error('\U0001F50C\
+        \ Broadcast error:', error);\n  }\n};\n\n// Function to call Claude via Bedrock\n\
+        const invokeClaude = async (prompt) => {\n  const modelId = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';\n\
+        \  \n  console.log('\U0001F50D BEDROCK: Prompt being sent to Claude:');\n\
+        \  console.log('==========================================');\n  console.log('Prompt\
+        \ length:', prompt.length);\n  console.log('First 500 chars:', prompt.substring(0,\
+        \ 500));\n  console.log('Last 200 chars:', prompt.substring(prompt.length\
+        \ - 200));\n  console.log('==========================================');\n\
+        \  \n  const payload = {\n    anthropic_version: 'bedrock-2023-05-31',\n \
+        \   max_tokens: 2000,\n    messages: [\n      {\n        role: 'user',\n \
+        \       content: [{ type: 'text', text: prompt }],\n      },\n    ],\n  };\n\
+        \  \n  console.log('\U0001F50D BEDROCK: Payload structure:', JSON.stringify({\n\
+        \    anthropic_version: payload.anthropic_version,\n    max_tokens: payload.max_tokens,\n\
+        \    messages: [{\n      role: payload.messages[0].role,\n      content: [{\
+        \ type: 'text', text: `[${payload.messages[0].content[0].text.length} chars]`\
+        \ }]\n    }]\n  }, null, 2));\n  \n  const command = new InvokeModelCommand({\n\
+        \    contentType: 'application/json',\n    body: JSON.stringify(payload),\n\
+        \    modelId,\n  });\n  \n  console.log('\U0001F50D BEDROCK: Sending to model:',\
+        \ modelId);\n  const apiResponse = await bedrockClient.send(command);\n  \n\
+        \  const decodedResponseBody = new TextDecoder().decode(apiResponse.body);\n\
+        \  const responseBody = JSON.parse(decodedResponseBody);\n  \n  console.log('\U0001F50D\
+        \ BEDROCK: Raw response structure:', JSON.stringify({\n    usage: responseBody.usage,\n\
+        \    content_length: responseBody.content?.[0]?.text?.length || 0,\n    first_100_chars:\
+        \ responseBody.content?.[0]?.text?.substring(0, 100) || 'No content'\n  },\
+        \ null, 2));\n  \n  return responseBody.content[0].text;\n};\n\n// Parse Claude's\
+        \ response into structured sections using the new === FORMAT ===\nconst parseAIResponse\
+        \ = (aiResponse) => {\n  console.log('\U0001F50D PARSING: Full AI response\
+        \ length:', aiResponse.length);\n  console.log('\U0001F50D PARSING: First\
+        \ 300 chars:', aiResponse.substring(0, 300));\n  \n  // Extract summary (content\
+        \ between \"=== SUMMARY ===\" and next section)\n  let summaryText = '';\n\
+        \  const summaryMatch = aiResponse.match(/===\\s*SUMMARY\\s*===\\s*\\n([\\\
+        s\\S]*?)(?=\\n===|$)/i);\n  if (summaryMatch) {\n    summaryText = summaryMatch[1].trim().replace(/^\\\
+        [|\\]$/g, ''); // Remove template brackets\n    console.log('\U0001F50D PARSING:\
+        \ Extracted summary:', summaryText.substring(0, 100) + '...');\n  } else {\n\
+        \    console.log('\u26A0\uFE0F PARSING: No === SUMMARY === section found');\n\
+        \  }\n  \n  // Extract discussion questions (content between \"=== DISCUSSION\
+        \ QUESTIONS ===\" and next section)\n  let discussionQuestions = [];\n  const\
+        \ discussionMatch = aiResponse.match(/===\\s*DISCUSSION\\s*QUESTIONS\\s*===\\\
+        s*\\n([\\s\\S]*?)(?=\\n===|$)/i);\n  if (discussionMatch) {\n    const discussionText\
+        \ = discussionMatch[1];\n    // Extract Q1:, Q2:, Q3: format questions\n \
+        \   const q1Match = discussionText.match(/Q1:\\s*(.*?)(?=\\nQ2:|$)/s);\n \
+        \   const q2Match = discussionText.match(/Q2:\\s*(.*?)(?=\\nQ3:|$)/s);\n \
+        \   const q3Match = discussionText.match(/Q3:\\s*(.*?)(?=\\n|$)/s);\n    \n\
+        \    if (q1Match) discussionQuestions.push(q1Match[1].trim().replace(/^\\\
+        [|\\]$/g, ''));\n    if (q2Match) discussionQuestions.push(q2Match[1].trim().replace(/^\\\
+        [|\\]$/g, ''));\n    if (q3Match) discussionQuestions.push(q3Match[1].trim().replace(/^\\\
+        [|\\]$/g, ''));\n    \n    console.log('\U0001F50D PARSING: Extracted discussion\
+        \ questions:', discussionQuestions);\n  } else {\n    console.log('\u26A0\uFE0F\
+        \ PARSING: No === DISCUSSION QUESTIONS === section found');\n  }\n  \n  //\
+        \ Extract next steps (content between \"=== NEXT STEPS ===\" and end)\n  let\
+        \ nextSteps = [];\n  const nextStepsMatch = aiResponse.match(/===\\s*NEXT\\\
+        s*STEPS\\s*===\\s*\\n([\\s\\S]*?)$/i);\n  if (nextStepsMatch) {\n    const\
+        \ nextStepsText = nextStepsMatch[1];\n    // Extract STEP1:, STEP2:, STEP3:,\
+        \ STEP4: format\n    const step1Match = nextStepsText.match(/STEP1:\\s*(.*?)(?=\\\
+        nSTEP2:|$)/s);\n    const step2Match = nextStepsText.match(/STEP2:\\s*(.*?)(?=\\\
+        nSTEP3:|$)/s);\n    const step3Match = nextStepsText.match(/STEP3:\\s*(.*?)(?=\\\
+        nSTEP4:|$)/s);\n    const step4Match = nextStepsText.match(/STEP4:\\s*(.*?)(?=\\\
+        n|$)/s);\n    \n    if (step1Match) nextSteps.push(step1Match[1].trim().replace(/^\\\
+        [|\\]$/g, ''));\n    if (step2Match) nextSteps.push(step2Match[1].trim().replace(/^\\\
+        [|\\]$/g, ''));\n    if (step3Match) nextSteps.push(step3Match[1].trim().replace(/^\\\
+        [|\\]$/g, ''));\n    if (step4Match) nextSteps.push(step4Match[1].trim().replace(/^\\\
+        [|\\]$/g, ''));\n    \n    console.log('\U0001F50D PARSING: Extracted next\
+        \ steps:', nextSteps);\n  } else {\n    console.log('\u26A0\uFE0F PARSING:\
+        \ No === NEXT STEPS === section found');\n  }\n  \n  // NO FALLBACKS - either\
+        \ we parse correctly or we error\n  if (!summaryText || summaryText.length\
+        \ < 20) {\n    console.log('\u274C PARSING FAILED: No valid summary found');\n\
+        \    throw new Error('AI response parsing failed - invalid summary format');\n\
+        \  }\n  \n  if (discussionQuestions.length === 0) {\n    console.log('\u274C\
+        \ PARSING FAILED: No valid discussion questions found');\n    throw new Error('AI\
+        \ response parsing failed - no discussion questions found');\n  }\n  \n  if\
+        \ (nextSteps.length === 0) {\n    console.log('\u274C PARSING FAILED: No valid\
+        \ next steps found');\n    throw new Error('AI response parsing failed - no\
+        \ next steps found');\n  }\n  \n  const result = {\n    summaryText: summaryText,\n\
+        \    discussionQuestions: discussionQuestions,\n    nextSteps: nextSteps\n\
+        \  };\n  \n  console.log('\u2705 PARSING SUCCESS: Summary length:', result.summaryText.length);\n\
+        \  console.log('\u2705 PARSING SUCCESS: Discussion questions count:', result.discussionQuestions.length);\n\
+        \  console.log('\u2705 PARSING SUCCESS: Next steps count:', result.nextSteps.length);\n\
+        \  \n  return result;\n};\n\nexports.generateAISummary = async (event) =>\
+        \ {\n  try {\n    const gameId = event.pathParameters.gameId;\n    const {\
+        \ questionIds } = JSON.parse(event.body);\n    \n    console.log(`\U0001F916\
+        \ Generating AI summaries for game ${gameId}, questions: ${questionIds}`);\n\
+        \    \n    if (!questionIds || questionIds.length === 0) {\n      return {\n\
+        \        statusCode: 400,\n        body: JSON.stringify({ error: 'No questions\
+        \ selected for AI summary' }),\n        headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n      };\n    }\n    \n    // Fetch game metadata to get AI context\n\
+        \    let gameAiContext = null;\n    try {\n      const gameMetadata = await\
+        \ db.send(new GetCommand({\n        TableName: process.env.TABLE_NAME,\n \
+        \       Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }\n      }));\n      if\
+        \ (gameMetadata.Item && gameMetadata.Item.AIContext) {\n        gameAiContext\
+        \ = gameMetadata.Item.AIContext;\n        console.log('\U0001F3AF Found game\
+        \ AI context:', gameAiContext);\n      } else {\n        console.log('\U0001F3AF\
+        \ No game AI context found');\n      }\n    } catch (contextError) {\n   \
+        \   console.log('\u26A0\uFE0F Could not fetch game AI context:', contextError.message);\n\
+        \    }\n    \n    const summaries = [];\n    \n    for (const questionId of\
+        \ questionIds) {\n      console.log(`\U0001F4DD Processing question ${questionId}...`);\n\
+        \      \n      // Get question details\n      const questionRes = await db.send(new\
+        \ GetCommand({\n        TableName: process.env.TABLE_NAME,\n        Key: {\
+        \ PK: `GAME#${gameId}`, SK: `QUESTION#${questionId}` }\n      }));\n     \
+        \ \n      if (!questionRes.Item) {\n        console.log(`\u26A0\uFE0F Question\
+        \ ${questionId} not found, skipping`);\n        continue;\n      }\n     \
+        \ \n      const question = questionRes.Item;\n      console.log('\U0001F50D\
+        \ Question pointer data:', JSON.stringify(question, null, 2));\n      \n \
+        \     // Fetch actual question data using the QuestionRef - REQUIRED for real\
+        \ prompt\n      console.log(`\U0001F50D DETAILED FETCH: Starting question\
+        \ data fetch for ${questionId}`);\n      console.log(`\U0001F50D DETAILED\
+        \ FETCH: Question pointer has QuestionRef: ${question.QuestionRef}`);\n  \
+        \    console.log(`\U0001F50D DETAILED FETCH: Question pointer has SetId: ${question.SetId}`);\n\
+        \      \n      let actualQuestionData = null;\n      if (!question.QuestionRef)\
+        \ {\n        console.log(`\u274C FATAL: No QuestionRef found in question pointer\
+        \ for ${questionId}`);\n        throw new Error(`Missing QuestionRef for question\
+        \ ${questionId} - cannot build real prompt`);\n      }\n      \n      try\
+        \ {\n        // Try multiple set locations since SetId might not match actual\
+        \ storage location\n        const possibleSetIds = [question.SetId, 'amazonleadershipprinciples',\
+        \ 'lessons', 'greatesthits'].filter(Boolean);\n        console.log(`\U0001F50D\
+        \ DETAILED FETCH: Will try these set IDs: ${possibleSetIds.join(', ')}`);\n\
+        \        \n        for (const setId of possibleSetIds) {\n          console.log(`\U0001F50D\
+        \ DETAILED FETCH: Trying SET#${setId} with QuestionRef: ${question.QuestionRef}`);\n\
+        \          \n          const actualQuestionRes = await db.send(new GetCommand({\n\
+        \            TableName: process.env.TABLE_NAME,\n            Key: { PK: `SET#${setId}`,\
+        \ SK: question.QuestionRef }\n          }));\n          \n          console.log(`\U0001F50D\
+        \ DETAILED FETCH: Response from SET#${setId}:`, actualQuestionRes.Item ? 'FOUND'\
+        \ : 'NOT FOUND');\n          \n          if (actualQuestionRes.Item) {\n \
+        \           actualQuestionData = actualQuestionRes.Item;\n            console.log(`\u2705\
+        \ SUCCESS: Found actual question data in SET#${setId}`);\n            console.log(`\u2705\
+        \ SUCCESS: Question title: ${actualQuestionData.Title}`);\n            console.log(`\u2705\
+        \ SUCCESS: Question detail: ${actualQuestionData.Detail}`);\n            console.log(`\u2705\
+        \ SUCCESS: Question category: ${actualQuestionData.Category}`);\n        \
+        \    break;\n          }\n        }\n        \n        if (!actualQuestionData)\
+        \ {\n          console.log(`\u274C FATAL: Actual question data not found for\
+        \ ${question.QuestionRef} in any of these sets: ${possibleSetIds.join(', ')}`);\n\
+        \          throw new Error(`Question data not found for ${question.QuestionRef}\
+        \ - cannot build real prompt`);\n        }\n      } catch (fetchError) {\n\
+        \        console.log(`\u274C FATAL: Error fetching actual question data: ${fetchError.message}`);\n\
+        \        throw new Error(`Failed to fetch question data: ${fetchError.message}`);\n\
+        \      }\n      \n      // Get all answers for this question\n      const\
+        \ answersRes = await db.send(new QueryCommand({\n        TableName: process.env.TABLE_NAME,\n\
+        \        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',\n  \
+        \      ExpressionAttributeValues: {\n          ':pk': `GAME#${gameId}`,\n\
+        \          ':sk': `ANSWER#${questionId}#`\n        }\n      }));\n      \n\
+        \      console.log('\U0001F4CB Answer records found:', answersRes.Items.length);\n\
+        \      console.log('\U0001F4CB First answer record:', JSON.stringify(answersRes.Items[0],\
+        \ null, 2));\n      \n      // Get all votes for this question\n      const\
+        \ votesRes = await db.send(new QueryCommand({\n        TableName: process.env.TABLE_NAME,\n\
+        \        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',\n  \
+        \      ExpressionAttributeValues: {\n          ':pk': `GAME#${gameId}`,\n\
+        \          ':sk': `VOTE#${questionId}#`\n        }\n      }));\n      \n \
+        \     // Calculate vote rankings\n      const voteCount = {};\n      votesRes.Items.forEach(vote\
+        \ => {\n        if (vote.Votes) {\n          vote.Votes.forEach(v => {\n \
+        \           if (!voteCount[v.player]) voteCount[v.player] = 0;\n         \
+        \   voteCount[v.player] += (4 - v.rank); // Higher score for better rank\n\
+        \          });\n        }\n      });\n      \n      // Sort answers by vote\
+        \ score\n      const rankedAnswers = answersRes.Items\n        .map(answer\
+        \ => ({\n          player: answer.SK.split('#')[3],\n          answer: answer.Answer\
+        \ || answer.AnswerText || answer.answer || 'No answer provided',\n       \
+        \   score: voteCount[answer.SK.split('#')[3]] || 0\n        }))\n        .sort((a,\
+        \ b) => b.score - a.score);\n      \n      console.log('\U0001F3AF Ranked\
+        \ answers:', JSON.stringify(rankedAnswers, null, 2));\n      \n      // Create\
+        \ AI prompt with clear ranking and instructions (with proper tie handling)\n\
+        \      let currentRank = 1;\n      const responsesText = rankedAnswers.map((answer,\
+        \ idx) => {\n        // Handle ties: if current score is different from previous,\
+        \ update rank\n        if (idx > 0 && answer.score !== rankedAnswers[idx -\
+        \ 1].score) {\n          currentRank = idx + 1;\n        }\n        \n   \
+        \     const rank = currentRank === 1 ? '\U0001F947 1st Place' : \n       \
+        \            currentRank === 2 ? '\U0001F948 2nd Place' : \n             \
+        \      currentRank === 3 ? '\U0001F949 3rd Place' : \n                   `${currentRank}th\
+        \ Place`;\n                   \n        return `${rank}: ${answer.player}\
+        \ - \"${answer.answer}\" (${answer.score} vote points)`;\n      }).join('\\\
+        n\\n');\n      \n      // Extract question data from actual question record\
+        \ - NO FALLBACKS, REAL DATA ONLY\n      console.log(`\U0001F50D EXTRACT: Extracting\
+        \ real question data (no fallbacks)`);\n      \n      const questionText =\
+        \ actualQuestionData.Title || actualQuestionData.Prompt;\n      const questionCategory\
+        \ = actualQuestionData.Category;\n      const questionDetail = actualQuestionData.Detail;\n\
+        \      const questionSetId = question.SetId;\n      \n      // Validate that\
+        \ we have all required data\n      if (!questionText) {\n        console.log(`\u274C\
+        \ FATAL: No question title/prompt found in actual question data`);\n     \
+        \   throw new Error(`Missing question title for ${questionId} - cannot build\
+        \ real prompt`);\n      }\n      if (!questionCategory) {\n        console.log(`\u274C\
+        \ FATAL: No question category found in actual question data`);\n        throw\
+        \ new Error(`Missing question category for ${questionId} - cannot build real\
+        \ prompt`);\n      }\n      if (!questionDetail) {\n        console.log(`\u274C\
+        \ FATAL: No question detail found in actual question data`);\n        throw\
+        \ new Error(`Missing question detail for ${questionId} - cannot build real\
+        \ prompt`);\n      }\n      \n      console.log(`\u2705 EXTRACT SUCCESS: questionText\
+        \ = \"${questionText}\"`);\n      console.log(`\u2705 EXTRACT SUCCESS: questionCategory\
+        \ = \"${questionCategory}\"`);\n      console.log(`\u2705 EXTRACT SUCCESS:\
+        \ questionDetail = \"${questionDetail}\"`);\n      \n      // Fetch custom\
+        \ instruction and AI context from question set if available\n      let customInstruction\
+        \ = null;\n      let questionSetAiContext = null;\n      if (questionSetId)\
+        \ {\n        try {\n          const setResult = await db.send(new GetCommand({\n\
+        \            TableName: process.env.TABLE_NAME,\n            Key: { PK: 'SETS',\
+        \ SK: `SET#${questionSetId}` }\n          }));\n          if (setResult.Item)\
+        \ {\n            if (setResult.Item.CustomInstruction) {\n              customInstruction\
+        \ = setResult.Item.CustomInstruction;\n              console.log('\U0001F4CB\
+        \ Found custom instruction for AI prompt:', customInstruction);\n        \
+        \    }\n            if (setResult.Item.AIContextInstruction) {\n         \
+        \     questionSetAiContext = setResult.Item.AIContextInstruction;\n      \
+        \        console.log('\U0001F3AF Found question set AI context:', questionSetAiContext);\n\
+        \            }\n          }\n        } catch (fetchError) {\n          console.log('\u26A0\
+        \uFE0F Could not fetch question set context:', fetchError.message);\n    \
+        \    }\n      }\n      \n      // Use custom instruction if available, otherwise\
+        \ default context\n      const sessionContext = customInstruction || \n  \
+        \      'an \"Engagements\" strategic thinking session where participants apply\
+        \ lessons to their work context';\n      \n      // Build context sections\
+        \ for the AI prompt\n      const contextSections = [];\n      if (gameAiContext)\
+        \ {\n        contextSections.push(`SESSION BACKGROUND: ${gameAiContext}`);\n\
+        \      }\n      if (questionSetAiContext) {\n        contextSections.push(`QUESTION\
+        \ SET CONTEXT: ${questionSetAiContext}`);\n      }\n      if (customInstruction)\
+        \ {\n        contextSections.push(`PARTICIPANT INSTRUCTIONS: \"${customInstruction}\"\
+        `);\n      }\n      \n      const prompt = `You are an expert business strategist\
+        \ analyzing responses from ${sessionContext}.\\n\\n` +\n        'LESSON DETAILS:\\\
+        n' +\n        'Question: \"' + questionText + '\"\\n' +\n        'Category:\
+        \ ' + questionCategory + '\\n' +\n        'Context: ' + questionDetail + '\\\
+        n' +\n        (contextSections.length > 0 ? ('\\nCONTEXT INFORMATION:\\n'\
+        \ + contextSections.join('\\n') + '\\n') : '') +\n        '\\n' +\n      \
+        \  'PLAYER RESPONSES (ranked by peer voting):\\n' + responsesText + '\\n\\\
+        n' +\n        'ANALYSIS INSTRUCTIONS:\\n' +\n        'You are analyzing '\
+        \ + rankedAnswers.length + ' responses that were peer-voted by the team. The\
+        \ responses above are ranked by total vote points, with the highest-scoring\
+        \ response first.' +\n        (contextSections.length > 0 ? \n          '\\\
+        n\\nIMPORTANT: Please tailor your analysis based on the provided context information\
+        \ above. Consider the specific background, goals, and instructions relevant\
+        \ to this session.' : \n          '')+\n        '\\n\\nPlease provide your\
+        \ strategic analysis in this EXACT format for reliable parsing:\\n\\n' +\n\
+        \        '=== SUMMARY ===\\n' +\n        '[Write 2-3 sentences synthesizing\
+        \ the key strategic themes and insights from these responses. Pay special\
+        \ attention to the top-ranked responses as they represent the team\\'s collective\
+        \ wisdom.]\\n\\n' +\n        '=== DISCUSSION QUESTIONS ===\\n' +\n       \
+        \ 'Q1: [First thought-provoking question that builds on these specific responses\
+        \ for deeper strategic discussion. Reference specific player insights.]\\\
+        n' +\n        'Q2: [Second question that facilitates strategic discussion\
+        \ based on the responses.]\\n' +\n        'Q3: [Third question for deeper\
+        \ strategic discussion.]\\n\\n' +\n        '=== NEXT STEPS ===\\n' +\n   \
+        \     'STEP1: [First concrete, actionable step the team could take based on\
+        \ these insights.]\\n' +\n        'STEP2: [Second actionable step, prioritizing\
+        \ ideas from highest-ranked responses.]\\n' +\n        'STEP3: [Third actionable\
+        \ step for implementation.]\\n' +\n        'STEP4: [Fourth actionable step\
+        \ (optional but recommended).]\\n\\n' +\n        'Focus on actionable insights\
+        \ that connect directly to what these players shared and the specific context\
+        \ they were asked to consider. Be specific and insightful.';\n      \n   \
+        \   console.log('\U0001F916 FULL AI PROMPT CONSTRUCTED:');\n      console.log('=====================================');\n\
+        \      console.log(prompt);\n      console.log('=====================================');\n\
+        \n      // Call Claude via Bedrock for real AI analysis\n      console.log('\U0001F916\
+        \ Calling Claude via Bedrock...');\n      \n      let aiResponse;\n      let\
+        \ parsed;\n      \n      try {\n        // Call real AI - NO FALLBACKS, NO\
+        \ MOCK DATA\n        console.log('\U0001F916 CALLING CLAUDE: Sending prompt\
+        \ to Bedrock...');\n        aiResponse = await invokeClaude(prompt);\n   \
+        \     console.log('\u2705 CLAUDE SUCCESS: Real AI response received');\n \
+        \       parsed = parseAIResponse(aiResponse);\n      } catch (aiError) {\n\
+        \        console.log(`\u274C CLAUDE FAILED: ${aiError.message}`);\n      \
+        \  throw new Error(`AI analysis unavailable: ${aiError.message}`);\n     \
+        \ }\n      \n      // Store the summary (filter out undefined values)\n  \
+        \    const summaryRecord = {\n        PK: `GAME#${gameId}`,\n        SK: `SUMMARY#${questionId}`,\n\
+        \        QuestionId: questionId,\n        SummaryText: parsed.summaryText\
+        \ || 'AI analysis completed',\n        DiscussionQuestions: parsed.discussionQuestions\
+        \ || [],\n        NextSteps: parsed.nextSteps || [],\n        FullAIResponse:\
+        \ aiResponse || 'No response',\n        RankedAnswers: rankedAnswers || [],\n\
+        \        DebugPrompt: prompt || 'No prompt available',\n        CreatedAt:\
+        \ new Date().toISOString(),\n        CreatedBy: 'Claude AI'\n      };\n  \
+        \    \n      await db.send(new PutCommand({\n        TableName: process.env.TABLE_NAME,\n\
+        \        Item: summaryRecord\n      }));\n      \n      // Broadcast lightweight\
+        \ AI summary ready notification via WebSocket\n      try {\n        await\
+        \ broadcastToGame(gameId, {\n          type: 'aiSummaryReady',\n         \
+        \ gameId,\n          questionId,\n          timestamp: new Date().toISOString()\n\
+        \        });\n      } catch (error) {\n        console.log('\U0001F50C WebSocket\
+        \ broadcast failed for AI summary, continuing...', error.message);\n     \
+        \ }\n      \n      summaries.push({\n        questionId,\n        questionText:\
+        \ questionText,\n        summary: parsed.summaryText,\n        discussionQuestions:\
+        \ parsed.discussionQuestions,\n        nextSteps: parsed.nextSteps\n     \
+        \ });\n      \n      console.log(`\u2705 AI summary generated for question\
+        \ ${questionId}`);\n    }\n    \n    return {\n      statusCode: 200,\n  \
+        \    body: JSON.stringify({ \n        message: `Successfully generated AI\
+        \ summaries for ${summaries.length} questions`,\n        summaries: summaries\n\
+        \      }),\n      headers: { 'Access-Control-Allow-Origin': '*' }\n    };\n\
+        \    \n  } catch (error) {\n    console.error('\U0001F6A8 AI Summary generation\
+        \ failed:', error);\n    \n    // Provide user-friendly error messages based\
+        \ on error type\n    let userMessage = 'AI summary could not be retrieved\
+        \ at this moment.';\n    let statusCode = 500;\n    \n    if (error.message.includes('Question\
+        \ data not found') || error.message.includes('Missing QuestionRef')) {\n \
+        \     userMessage = 'AI summary unavailable: Question data is incomplete.\
+        \ Please contact support.';\n      statusCode = 400;\n    } else if (error.message.includes('AI\
+        \ analysis unavailable')) {\n      userMessage = 'AI summary could not be\
+        \ retrieved at this moment. Please try again later.';\n      statusCode =\
+        \ 503;\n    } else if (error.message.includes('Missing question title') ||\
+        \ error.message.includes('Missing question category')) {\n      userMessage\
+        \ = 'AI summary unavailable: Question information is incomplete. Please contact\
+        \ support.';\n      statusCode = 400;\n    }\n    \n    console.log(`\U0001F504\
+        \ RETURNING USER-FRIENDLY ERROR: ${userMessage}`);\n    \n    return {\n \
+        \     statusCode: statusCode,\n      body: JSON.stringify({ \n        error:\
+        \ userMessage,\n        details: error.message // For debugging, can be removed\
+        \ in production\n      }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n    };\n  }\n};"
+      Events:
+        AISummaryEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /admin/ai-summary/{gameId}
+            Method: POST
+  GetAISummaryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getAISummary
+      Runtime: nodejs16.x
+      Timeout: 30
+      MemorySize: 256
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
+        \n// Fixed runtime to nodejs16.x for aws-sdk compatibility\nexports.getAISummary\
+        \ = async (event) => {\n  try {\n    const gameId = event.pathParameters.gameId;\n\
+        \    const questionId = event.pathParameters.questionId;\n    const debugMode\
+        \ = event.queryStringParameters?.debug === 'true';\n    \n    console.log(`\U0001F4D6\
+        \ Fetching AI summary for game ${gameId}, question ${questionId}, debug: ${debugMode}`);\n\
+        \    \n    // Get the AI summary record\n    const result = await db.get({\n\
+        \      TableName: process.env.TABLE_NAME,\n      Key: { \n        PK: `GAME#${gameId}`,\
+        \ \n        SK: `SUMMARY#${questionId}` \n      }\n    }).promise();\n   \
+        \ \n    if (!result.Item) {\n      return {\n        statusCode: 404,\n  \
+        \      body: JSON.stringify({ error: 'AI summary not found' }),\n        headers:\
+        \ { 'Access-Control-Allow-Origin': '*' }\n      };\n    }\n    \n    const\
+        \ response = {\n      questionId: result.Item.QuestionId,\n      summaryText:\
+        \ result.Item.SummaryText,\n      discussionQuestions: result.Item.DiscussionQuestions\
+        \ || [],\n      nextSteps: result.Item.NextSteps || [],\n      createdAt:\
+        \ result.Item.CreatedAt,\n      createdBy: result.Item.CreatedBy\n    };\n\
+        \    \n    // Include debug prompt if requested\n    if (debugMode && result.Item.DebugPrompt)\
+        \ {\n      response.debugPrompt = result.Item.DebugPrompt;\n    }\n    \n\
+        \    return {\n      statusCode: 200,\n      body: JSON.stringify(response),\n\
+        \      headers: { 'Access-Control-Allow-Origin': '*' }\n    };\n    \n  }\
+        \ catch (error) {\n    console.error('Get AI Summary error:', error);\n  \
+        \  return {\n      statusCode: 500,\n      body: JSON.stringify({ error: `Failed\
+        \ to get AI summary: ${error.message}` }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n    };\n  }\n};"
+      Events:
+        GetAISummaryEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/summary/{questionId}
+            Method: GET
+  TestBedrockFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.testBedrock
+      Runtime: nodejs18.x
+      Timeout: 60
+      MemorySize: 256
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - bedrock:InvokeModel
+          - bedrock:InvokeModelWithResponseStream
+          Resource:
+          - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+      InlineCode: "const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');\n\
+        \nconst bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });\n\
+        \n// Function to call Claude via Bedrock\nconst invokeClaude = async (prompt)\
+        \ => {\n  const modelId = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';\n\
+        \  \n  console.log(`\U0001F916 Testing Claude with model: ${modelId}`);\n\
+        \  console.log(`\U0001F4DD Prompt: ${prompt.substring(0, 100)}...`);\n  \n\
+        \  const payload = {\n    anthropic_version: 'bedrock-2023-05-31',\n    max_tokens:\
+        \ 500,\n    messages: [\n      {\n        role: 'user',\n        content:\
+        \ [{ type: 'text', text: prompt }],\n      },\n    ],\n  };\n  \n  const command\
+        \ = new InvokeModelCommand({\n    contentType: 'application/json',\n    body:\
+        \ JSON.stringify(payload),\n    modelId,\n  });\n  \n  console.log('\U0001F4E1\
+        \ Sending request to Bedrock...');\n  const apiResponse = await bedrockClient.send(command);\n\
+        \  \n  const decodedResponseBody = new TextDecoder().decode(apiResponse.body);\n\
+        \  const responseBody = JSON.parse(decodedResponseBody);\n  \n  console.log('\u2705\
+        \ Bedrock response received successfully');\n  console.log(`\U0001F4CA Response\
+        \ length: ${responseBody.content[0].text.length} characters`);\n  \n  return\
+        \ responseBody.content[0].text;\n};\n\nexports.testBedrock = async (event)\
+        \ => {\n  try {\n    console.log('\U0001F9EA Starting Bedrock test with inference\
+        \ profile...');\n    \n    // Simple test prompt\n    const testPrompt = 'You\
+        \ are a helpful AI assistant. Please provide a brief business strategy analysis\
+        \ with:\\\\n\\\\n1. A 2-sentence summary about the importance of strategic\
+        \ planning\\\\n2. 2 discussion questions about strategy implementation\\\\\
+        n3. 2 concrete next steps for improving strategic planning\\\\n\\\\nKeep your\
+        \ response structured and concise.';\n    \n    console.log('\U0001F680 Calling\
+        \ Claude...');\n    const aiResponse = await invokeClaude(testPrompt);\n \
+        \   \n    console.log('\u2705 Test completed successfully!');\n    console.log(`\U0001F4C4\
+        \ Full response: ${aiResponse}`);\n    \n    return {\n      statusCode: 200,\n\
+        \      body: JSON.stringify({\n        success: true,\n        message: 'Bedrock\
+        \ test completed successfully!',\n        modelId: 'us.anthropic.claude-3-5-sonnet-20241022-v2:0',\n\
+        \        promptLength: testPrompt.length,\n        responseLength: aiResponse.length,\n\
+        \        response: aiResponse,\n        timestamp: new Date().toISOString()\n\
+        \      }),\n      headers: { 'Access-Control-Allow-Origin': '*' }\n    };\n\
+        \    \n  } catch (error) {\n    console.error('\u274C Bedrock test failed:',\
+        \ error);\n    console.error('Error details:', {\n      name: error.name,\n\
+        \      message: error.message,\n      code: error.$metadata?.httpStatusCode,\n\
+        \      requestId: error.$metadata?.requestId\n    });\n    \n    return {\n\
+        \      statusCode: 500,\n      body: JSON.stringify({\n        success: false,\n\
+        \        error: error.message,\n        errorName: error.name,\n        errorCode:\
+        \ error.$metadata?.httpStatusCode,\n        timestamp: new Date().toISOString(),\n\
+        \        troubleshooting: {\n          modelAccess: 'Check if anthropic.claude-3-5-sonnet-20241022-v2:0\
+        \ is enabled in Bedrock console',\n          permissions: 'Verify Lambda has\
+        \ bedrock:InvokeModel permissions',\n          region: 'Ensure Bedrock is\
+        \ available in us-east-1'\n        }\n      }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n    };\n  }\n};"
+      Events:
+        TestBedrockEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /test/bedrock
+            Method: GET
+  CloudFrontOAI:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment:
+          Fn::Sub: OAI for ${AWS::StackName} dev static site
+  ReportsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      LifecycleConfiguration:
+        Rules:
+        - Id: DeleteTemporaryReports
+          Status: Enabled
+          ExpirationInDays: 1
+          Prefix: ''
+          NoncurrentVersionExpirationInDays: 1
+          AbortIncompleteMultipartUpload:
+            DaysAfterInitiation: 1
+        - Id: ExcludePermanentReports
+          Status: Enabled
+          ExpirationInDays: 365
+          Prefix: permanent/
+  StaticSiteBucket:
+    Type: AWS::S3::Bucket
+  StaticSiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: StaticSiteBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: AllowCloudFrontServicePrincipalReadOnly
+          Effect: Allow
+          Principal:
+            CanonicalUser:
+              Fn::GetAtt:
+              - CloudFrontOAI
+              - S3CanonicalUserId
+          Action: s3:GetObject
+          Resource:
+            Fn::Sub: ${StaticSiteBucket.Arn}/*
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Condition: HasDomain
+    Properties:
+      DomainName:
+        Ref: DomainName
+      ValidationMethod: DNS
+      DomainValidationOptions:
+      - DomainName:
+          Ref: DomainName
+        HostedZoneId:
+          Ref: HostedZoneId
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub: ${AWS::StackName}-CloudFrontCert
+  StaticSiteDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        PriceClass: PriceClass_100
+        Origins:
+        - Id: S3Origin
+          DomainName:
+            Fn::GetAtt:
+            - StaticSiteBucket
+            - RegionalDomainName
+          S3OriginConfig:
+            OriginAccessIdentity:
+              Fn::Sub: origin-access-identity/cloudfront/${CloudFrontOAI}
+        - Id: ApiOrigin
+          DomainName:
+            Fn::Sub: ${GameApi}.execute-api.${AWS::Region}.amazonaws.com
+          CustomOriginConfig:
+            OriginProtocolPolicy: https-only
+            HTTPPort: 80
+            HTTPSPort: 443
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+          - GET
+          - HEAD
+          - OPTIONS
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+        CacheBehaviors:
+        - PathPattern: question-sets*
+          TargetOriginId: ApiOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+          - GET
+          - HEAD
+          - OPTIONS
+          Compress: false
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf
+        - PathPattern: games*
+          TargetOriginId: ApiOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+          - GET
+          - HEAD
+          - OPTIONS
+          - PUT
+          - POST
+          - PATCH
+          - DELETE
+          Compress: false
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf
+        - PathPattern: questions*
+          TargetOriginId: ApiOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+          - GET
+          - HEAD
+          - OPTIONS
+          Compress: false
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf
+        - PathPattern: admin/*
+          TargetOriginId: ApiOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+          - GET
+          - HEAD
+          - OPTIONS
+          - PUT
+          - POST
+          - PATCH
+          - DELETE
+          Compress: false
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf
+        Aliases:
+          Fn::If:
+          - HasDomain
+          - - Ref: DomainName
+          - Ref: AWS::NoValue
+        ViewerCertificate:
+          Fn::If:
+          - HasDomain
+          - AcmCertificateArn:
+              Ref: Certificate
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
+        CustomErrorResponses:
+        - ErrorCode: 403
+          ResponseCode: 200
+          ResponsePagePath: /index.html
+          ErrorCachingMinTTL: 0
+        - ErrorCode: 404
+          ResponseCode: 200
+          ResponsePagePath: /index.html
+          ErrorCachingMinTTL: 0
+  DnsRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: HasDomain
+    Properties:
+      HostedZoneId:
+        Ref: HostedZoneId
+      Name:
+        Ref: DomainName
+      Type: A
+      AliasTarget:
+        DNSName:
+          Fn::GetAtt:
+          - StaticSiteDistribution
+          - DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+        EvaluateTargetHealth: false
+Outputs:
+  StaticSiteBucketName:
+    Description: S3 bucket name for static site
+    Value:
+      Ref: StaticSiteBucket
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-StaticSiteBucketName
+  ReportsBucketName:
+    Description: S3 bucket name for reports
+    Value:
+      Ref: ReportsBucket
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-ReportsBucketName
+  GameTableName:
+    Description: DynamoDB table name
+    Value:
+      Ref: GameTable
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-GameTableName
+  GameApiId:
+    Description: HTTP API Gateway ID
+    Value:
+      Ref: GameApi
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-GameApiId
+  CloudFrontDomain:
+    Description: CloudFront distribution domain
+    Value:
+      Fn::GetAtt:
+      - StaticSiteDistribution
+      - DomainName
+  ApiUrl:
+    Description: HTTP API base URL
+    Value:
+      Fn::Sub: https://${GameApi}.execute-api.${AWS::Region}.amazonaws.com
+  WebSocketUrl:
+    Description: WebSocket API URL
+    Value:
+      Fn::Sub: wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/dev
+  CertificateArn:
+    Description: ACM Certificate ARN (only if domain configured)
+    Condition: HasDomain
+    Value:
+      Ref: Certificate
+  WebsiteUrl:
+    Description: Website URL
+    Value:
+      Fn::If:
+      - HasDomain
+      - Fn::Sub: https://${DomainName}
+      - Fn::Sub: https://${StaticSiteDistribution.DomainName}
