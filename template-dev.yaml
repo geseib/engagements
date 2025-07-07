@@ -2496,11 +2496,11 @@ Resources:
       Timeout: 120
       Policies:
         - Statement:
-          - Effect: Allow
-            Action:
-              - bedrock:InvokeModel
-            Resource:
-              - !Sub 'arn:aws:bedrock:us-east-1::foundation-model/us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource:
+                - !Sub 'arn:aws:bedrock:us-east-1::foundation-model/us.anthropic.claude-3-5-sonnet-20241022-v2:0'
       InlineCode: |-
         const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 
@@ -2567,46 +2567,14 @@ Resources:
 
             // Add format instructions based on engagement type
             if (engagementType === 'trivia') {
-              prompt += `\nPlease format your response as a JSON array of objects with this structure:
-[
-  {
-    "title": "Question text",
-    "category": "Category name",
-    "detail": "Additional context or explanation",
-    "school": "Educational context",
-    "customInstructions": "Specific instructions",
-    "correctAnswer": "The correct answer",
-    "wrongAnswers": ["Wrong answer 1", "Wrong answer 2", "Wrong answer 3"],
-    "difficulty": "easy|medium|hard"
-  }
-]`;
+              prompt += '\\nPlease format your response as a JSON array of objects with this structure:\\n[\\n  {\\n    "title": "Question text",\\n    "category": "Category name",\\n    "detail": "Additional context or explanation",\\n    "school": "Educational context",\\n    "customInstructions": "Specific instructions",\\n    "correctAnswer": "The correct answer",\\n    "wrongAnswers": ["Wrong answer 1", "Wrong answer 2", "Wrong answer 3"],\\n    "difficulty": "easy|medium|hard"\\n  }\\n]';
             } else if (engagementType === 'poll') {
-              prompt += `\nPlease format your response as a JSON array of objects with this structure:
-[
-  {
-    "title": "Poll question text",
-    "category": "Category name",
-    "detail": "Additional context",
-    "school": "Educational context",
-    "customInstructions": "Specific instructions",
-    "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
-    "allowMultiple": true/false
-  }
-]`;
+              prompt += '\\nPlease format your response as a JSON array of objects with this structure:\\n[\\n  {\\n    "title": "Poll question text",\\n    "category": "Category name",\\n    "detail": "Additional context",\\n    "school": "Educational context",\\n    "customInstructions": "Specific instructions",\\n    "options": ["Option 1", "Option 2", "Option 3", "Option 4"],\\n    "allowMultiple": true\\n  }\\n]';
             } else {
-              prompt += `\nPlease format your response as a JSON array of objects with this structure:
-[
-  {
-    "title": "Question or prompt text",
-    "category": "Category name",
-    "detail": "Detailed context or lesson content",
-    "school": "Educational context",
-    "customInstructions": "Specific instructions for participants"
-  }
-]`;
+              prompt += '\\nPlease format your response as a JSON array of objects with this structure:\\n[\\n  {\\n    "title": "Question or prompt text",\\n    "category": "Category name",\\n    "detail": "Detailed context or lesson content",\\n    "school": "Educational context",\\n    "customInstructions": "Specific instructions for participants"\\n  }\\n]';
             }
 
-            prompt += `\n\nIMPORTANT: Return ONLY the JSON array, no additional text or formatting.`;
+            prompt += '\\n\\nIMPORTANT: Return ONLY the JSON array, no additional text or formatting.';
 
             console.log('🤖 Sending prompt to Claude...');
             const aiResponse = await invokeClaude(prompt);
