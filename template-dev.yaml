@@ -2732,7 +2732,7 @@ Resources:
               throw new Error('No request body provided');
             }
 
-            const { scenarioType, prompt, count, difficulty } = JSON.parse(event.body);
+            const { scenarioType, prompt, count, difficulty, context, audience, customPrompt } = JSON.parse(event.body);
 
             // Allow up to 100 scenarios with increased timeout
             const limitedCount = Math.min(count, 100);
@@ -2821,11 +2821,54 @@ Resources:
 
             console.log('✅ Successfully generated scenarios:', processedScenarios.length);
 
+            // Generate metadata using AI
+            console.log('🤖 Generating metadata...');
+            const metadataPrompt = 'Based on the following scenario generation request, create appropriate metadata:\\n\\n' +
+              'Scenario Type: ' + scenarioType + '\\n' +
+              'Context: ' + (context || 'Not specified') + '\\n' +
+              'Audience: ' + (audience || 'General') + '\\n' +
+              'Difficulty: ' + difficulty + '\\n' +
+              'Count: ' + limitedCount + ' scenarios\\n' +
+              'Custom Requirements: ' + (customPrompt || 'None') + '\\n\\n' +
+              'Generate a JSON object with these fields:\\n' +
+              '{"title": "Descriptive title for this scenario set", "description": "Brief description of what these scenarios cover", "customInstructions": "Instructions for participants", "aiContextInstructions": "Context for AI analysis"}\\n\\n' +
+              'Return ONLY the JSON object.';
+
+            let metadata;
+            try {
+              const metadataResponse = await invokeClaude(metadataPrompt);
+              console.log('✅ Received metadata response');
+
+              // Parse metadata response
+              let metadataString = metadataResponse.trim();
+              if (metadataString.startsWith('{') && metadataString.endsWith('}')) {
+                metadata = JSON.parse(metadataString);
+              } else {
+                const jsonMatch = metadataString.match(/{[\\s\\S]*}/);
+                if (jsonMatch) {
+                  metadata = JSON.parse(jsonMatch[0]);
+                } else {
+                  throw new Error('No JSON object found in metadata response');
+                }
+              }
+              console.log('✅ Successfully parsed metadata');
+            } catch (metadataError) {
+              console.error('❌ Failed to generate metadata:', metadataError);
+              // Fallback to default metadata
+              metadata = {
+                title: scenarioType.charAt(0).toUpperCase() + scenarioType.slice(1).replace('-', ' ') + ' Scenarios',
+                description: limitedCount + ' AI-generated scenarios for ' + difficulty + ' difficulty level',
+                customInstructions: 'Engage thoughtfully with each scenario and share your experiences and insights.',
+                aiContextInstructions: 'These scenarios are designed for professional development and learning. Provide constructive feedback and encourage specific, detailed responses.'
+              };
+            }
+
             return {
               statusCode: 200,
               body: JSON.stringify({
                 scenarios: processedScenarios,
-                message: 'Generated scenarios successfully'
+                metadata: metadata,
+                message: 'Generated scenarios and metadata successfully'
               }),
               headers: { 'Access-Control-Allow-Origin': '*' }
             };

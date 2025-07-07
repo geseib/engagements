@@ -13,6 +13,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated }) {
     customPrompt: ''
   });
   const [generatedScenarios, setGeneratedScenarios] = useState([]);
+  const [generatedMetadata, setGeneratedMetadata] = useState(null);
   const [currentScenarioIndex, setCurrentScenarioIndex] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStatus, setGenerationStatus] = useState('');
@@ -93,7 +94,10 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated }) {
           scenarioType: scenarioConfig.type,
           prompt: prompt,
           count: scenarioConfig.count,
-          difficulty: scenarioConfig.difficulty
+          difficulty: scenarioConfig.difficulty,
+          context: scenarioConfig.context,
+          audience: scenarioConfig.audience,
+          customPrompt: scenarioConfig.customPrompt
         })
       });
 
@@ -101,6 +105,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated }) {
 
       if (response.ok) {
         setGeneratedScenarios(result.scenarios);
+        setGeneratedMetadata(result.metadata);
         setGenerationStatus(`✅ Generated ${result.scenarios.length} scenarios successfully`);
         setCurrentScenarioIndex(0);
       } else {
@@ -142,7 +147,66 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated }) {
   };
 
   const handleLoadIntoSystem = () => {
-    onScenariosGenerated(generatedScenarios);
+    // Use AI-generated metadata if available, otherwise generate from configuration
+    const metadata = generatedMetadata || {
+      title: generateTitle(),
+      description: generateDescription(),
+      customInstructions: generateCustomInstructions(),
+      aiContextInstructions: generateAIContextInstructions()
+    };
+
+    onScenariosGenerated({
+      scenarios: generatedScenarios,
+      metadata: metadata
+    });
+  };
+
+  // Generate contextual title based on scenario type and content
+  const generateTitle = () => {
+    const typeNames = {
+      'amazon-principles': 'Amazon Leadership Principles',
+      'interview-prep': 'Interview Preparation',
+      'problem-solving': 'Problem-Solving Challenges',
+      'lessons-learned': 'Lessons Learned',
+      'team-building': 'Team Building Exercises',
+      'custom': 'Custom Scenarios'
+    };
+
+    const typeName = typeNames[scenarioConfig.type] || 'Professional Development';
+    const audienceText = scenarioConfig.audience ? ` for ${scenarioConfig.audience}` : '';
+
+    return `${typeName}${audienceText}`;
+  };
+
+  // Generate contextual description
+  const generateDescription = () => {
+    const contextText = scenarioConfig.context ? ` Context: ${scenarioConfig.context.substring(0, 100)}${scenarioConfig.context.length > 100 ? '...' : ''}` : '';
+    const audienceText = scenarioConfig.audience ? ` Target audience: ${scenarioConfig.audience}.` : '';
+
+    return `${generatedScenarios.length} AI-generated scenarios for ${scenarioConfig.difficulty} difficulty level.${audienceText}${contextText}`;
+  };
+
+  // Generate custom instructions based on scenario type
+  const generateCustomInstructions = () => {
+    const typeInstructions = {
+      'amazon-principles': 'Answer using the STAR format (Situation, Task, Action, Results). Focus on demonstrating specific leadership principles through real examples.',
+      'interview-prep': 'Practice answering these questions with specific examples from your experience. Be prepared to provide concrete details and measurable results.',
+      'problem-solving': 'Work through these challenges systematically. Consider multiple solutions and discuss the pros and cons of each approach.',
+      'lessons-learned': 'Share specific experiences and focus on what was learned and how it changed your approach going forward.',
+      'team-building': 'Engage in open discussion and listen to different perspectives. Focus on building understanding and collaboration.',
+      'custom': 'Follow the specific guidelines provided for your scenario type.'
+    };
+
+    return typeInstructions[scenarioConfig.type] || 'Engage thoughtfully with each scenario and share your experiences and insights.';
+  };
+
+  // Generate AI context instructions
+  const generateAIContextInstructions = () => {
+    const audienceContext = scenarioConfig.audience ? ` The target audience is ${scenarioConfig.audience}.` : '';
+    const difficultyContext = ` These are ${scenarioConfig.difficulty}-level scenarios.`;
+    const typeContext = scenarioConfig.type === 'amazon-principles' ? ' Focus on Amazon Leadership Principles and STAR format responses.' : '';
+
+    return `These scenarios are designed for professional development and learning.${audienceContext}${difficultyContext}${typeContext} Provide constructive feedback and encourage specific, detailed responses.`;
   };
 
   const navigateScenario = (direction) => {

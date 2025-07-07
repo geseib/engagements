@@ -364,8 +364,11 @@ function AdminPage() {
   };
 
   // Handle AI-generated scenarios
-  const handleScenariosGenerated = async (scenarios) => {
+  const handleScenariosGenerated = async (scenarioData) => {
     setShowAIScenarioBuilder(false);
+
+    // scenarioData now includes both scenarios and metadata
+    const { scenarios, metadata } = scenarioData;
 
     // Convert scenarios to CSV format and upload
     const csvContent = generateScenariosCSV(scenarios);
@@ -380,12 +383,12 @@ function AdminPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          fileName: `ai-scenarios-${timestamp}.csv`,
+          fileName: `${metadata.title.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.csv`,
           fileContent: csvContent,
-          customTitle: `AI Generated Scenarios - ${new Date().toLocaleDateString()}`,
-          customDescription: `AI-generated scenarios created on ${new Date().toLocaleDateString()}`,
-          customInstructions: 'AI-generated scenarios for engagement activities',
-          aiContextInstructions: 'These scenarios were created using AI to promote discussion and learning',
+          customTitle: metadata.title,
+          customDescription: metadata.description,
+          customInstructions: metadata.customInstructions,
+          aiContextInstructions: metadata.aiContextInstructions,
           engagementType: 'call-and-answer'
         })
       });
