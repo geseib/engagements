@@ -53,6 +53,9 @@ function AdminPage() {
   // AI Scenario Builder
   const [showAIScenarioBuilder, setShowAIScenarioBuilder] = useState(false);
 
+  // Test API endpoints
+  const [testStatus, setTestStatus] = useState('');
+
   const defaultInstructions = "How would you apply this concept in your current role or organization? Consider the specific challenges and opportunities in your context.";
 
   const handleEditQuestionSet = (questionSet) => {
@@ -409,6 +412,53 @@ function AdminPage() {
     return headers + '\n' + rows.join('\n');
   };
 
+  // Test API endpoints
+  const testAPIEndpoints = async () => {
+    setTestStatus('Testing API endpoints...');
+
+    try {
+      // Test the simple endpoint first
+      console.log('🧪 Testing API endpoint:', `${API_BASE}admin/test-ai`);
+      const testResponse = await fetch(`${API_BASE}admin/test-ai`);
+      const testResult = await testResponse.json();
+
+      if (testResponse.ok) {
+        setTestStatus(`✅ API Test Success: ${testResult.message}`);
+
+        // Test AI generation endpoint
+        setTimeout(async () => {
+          try {
+            const aiResponse = await fetch(`${API_BASE}admin/ai-generate-questions`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                engagementType: 'call-and-answer',
+                userInput: 'Test prompt for leadership scenarios',
+                questionCount: 1,
+                context: { title: 'Test' }
+              })
+            });
+
+            if (aiResponse.ok) {
+              setTestStatus(prev => prev + ' | ✅ AI Generation API Working');
+            } else {
+              const errorResult = await aiResponse.json();
+              setTestStatus(prev => prev + ` | ❌ AI Generation Failed: ${errorResult.error}`);
+            }
+          } catch (aiError) {
+            setTestStatus(prev => prev + ` | ❌ AI Generation Error: ${aiError.message}`);
+          }
+        }, 1000);
+
+      } else {
+        setTestStatus(`❌ API Test Failed: ${testResult.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      setTestStatus(`❌ API Test Error: ${error.message}`);
+      console.error('API Test Error:', error);
+    }
+  };
+
   const confirmDelete = async () => {
     setShowDeleteConfirm(false);
     setIsDeleting(true);
@@ -508,6 +558,26 @@ function AdminPage() {
         </div>
 
         <div className="admin-content">
+          {/* API Test Section */}
+          <div className="admin-section">
+            <h2>🧪 API Endpoint Test</h2>
+            <p className="section-description">Test if the AI generation API endpoints are working properly.</p>
+
+            <div className="test-controls">
+              <button
+                className="btn-secondary"
+                onClick={testAPIEndpoints}
+              >
+                🧪 Test AI API Endpoints
+              </button>
+              {testStatus && (
+                <div className="test-status" style={{ marginTop: '10px', padding: '10px', background: '#f8f9fa', borderRadius: '4px' }}>
+                  {testStatus}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* CSV Template Download Section */}
           <div className="admin-section">
             <h2>📥 Download CSV Templates</h2>
