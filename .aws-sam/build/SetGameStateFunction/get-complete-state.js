@@ -236,9 +236,9 @@ const getPlayerState = async (gameId, playerName) => {
 exports.handler = async (event) => {
   const gameId = event.pathParameters.gameId;
   const playerName = event.pathParameters.playerName || event.queryStringParameters?.playerName;
-  
+
   try {
-    if (playerName && event.resource.includes('/players/')) {
+    if (playerName && (event.resource?.includes('/players/') || event.rawPath?.includes('/players/'))) {
       // Get specific player state
       console.log(`🎮 Getting player state for ${playerName} in game ${gameId}`);
       
