@@ -2574,14 +2574,17 @@ Resources:
 
             // Add format instructions based on engagement type
             if (engagementType === 'trivia') {
-              prompt += '\\nPlease format your response as a JSON array of objects with this structure:\\n[\\n  {\\n    "title": "Question text",\\n    "category": "Category name",\\n    "detail": "Additional context or explanation",\\n    "school": "Educational context",\\n    "customInstructions": "Specific instructions",\\n    "correctAnswer": "The correct answer",\\n    "wrongAnswers": ["Wrong answer 1", "Wrong answer 2", "Wrong answer 3"],\\n    "difficulty": "easy|medium|hard"\\n  }\\n]';
+              prompt += '\\n\\nPlease format your response as a JSON array with this structure:';
+              prompt += '\\n[{"title": "Question text", "category": "Category", "detail": "Context", "school": "School", "customInstructions": "Instructions", "correctAnswer": "Answer", "wrongAnswers": ["Wrong1", "Wrong2", "Wrong3"], "difficulty": "medium"}]';
             } else if (engagementType === 'poll') {
-              prompt += '\\nPlease format your response as a JSON array of objects with this structure:\\n[\\n  {\\n    "title": "Poll question text",\\n    "category": "Category name",\\n    "detail": "Additional context",\\n    "school": "Educational context",\\n    "customInstructions": "Specific instructions",\\n    "options": ["Option 1", "Option 2", "Option 3", "Option 4"],\\n    "allowMultiple": true\\n  }\\n]';
+              prompt += '\\n\\nPlease format your response as a JSON array with this structure:';
+              prompt += '\\n[{"title": "Poll question", "category": "Category", "detail": "Context", "school": "School", "customInstructions": "Instructions", "options": ["Option1", "Option2"], "allowMultiple": false}]';
             } else {
-              prompt += '\\nPlease format your response as a JSON array of objects with this structure:\\n[\\n  {\\n    "title": "Question or prompt text",\\n    "category": "Category name",\\n    "detail": "Detailed context or lesson content",\\n    "school": "Educational context",\\n    "customInstructions": "Specific instructions for participants"\\n  }\\n]';
+              prompt += '\\n\\nPlease format your response as a JSON array with this structure:';
+              prompt += '\\n[{"title": "Question text", "category": "Category", "detail": "Detailed context", "school": "School", "customInstructions": "Instructions"}]';
             }
 
-            prompt += '\\n\\nIMPORTANT: Return ONLY the JSON array, no additional text or formatting.';
+            prompt += '\\n\\nIMPORTANT: Return ONLY the JSON array, no additional text.';
 
             console.log('🤖 Sending prompt to Claude...');
             const aiResponse = await invokeClaude(prompt);
@@ -2729,9 +2732,9 @@ Resources:
             fullPrompt += '\\n- Appropriate for the specified difficulty level';
             fullPrompt += '\\n- Designed to encourage participation and learning';
 
-            fullPrompt += '\\n\\nFormat your response as a JSON array of objects with this structure:';
-            fullPrompt += '\\n[\\n  {\\n    "title": "Scenario title",\\n    "category": "Category name",\\n    "detail": "Detailed scenario description with context, situation, and discussion points",\\n    "school": "Professional Development",\\n    "customInstructions": "Specific instructions for facilitators and participants"\\n  }\\n]';
-            fullPrompt += '\\n\\nIMPORTANT: Return ONLY the JSON array, no additional text or formatting.';
+            fullPrompt += '\\n\\nFormat your response as a JSON array with this structure:';
+            fullPrompt += '\\n[{"title": "Scenario title", "category": "Category", "detail": "Detailed scenario description", "school": "Professional Development", "customInstructions": "Instructions"}]';
+            fullPrompt += '\\n\\nIMPORTANT: Return ONLY the JSON array, no additional text.';
 
             console.log('🤖 Sending prompt to Claude...', { promptLength: fullPrompt.length });
             const aiResponse = await invokeClaude(fullPrompt);
@@ -2790,6 +2793,47 @@ Resources:
             ApiId: !Ref GameApi
             Path: /admin/ai-generate-scenarios
             Method: POST
+
+  ### Lambda: Test AI Endpoints
+  TestAIEndpointsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.testAI
+      Runtime: nodejs18.x
+      Timeout: 30
+      MemorySize: 256
+      InlineCode: |-
+        exports.testAI = async (event) => {
+          try {
+            console.log('🧪 AI Endpoints Test - Event:', JSON.stringify(event, null, 2));
+
+            return {
+              statusCode: 200,
+              body: JSON.stringify({
+                message: 'AI endpoints are working!',
+                timestamp: new Date().toISOString(),
+                path: event.rawPath || event.path,
+                method: event.requestContext?.http?.method || event.httpMethod
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+
+          } catch (error) {
+            console.error('❌ Test error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: error.message }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        TestAIEndpointsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /admin/test-ai
+            Method: GET
 
   ### Lambda: Admin Get All Question Sets (including inactive)
   AdminGetQuestionSetsFunction:
