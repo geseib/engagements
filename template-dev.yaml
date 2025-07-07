@@ -937,7 +937,41 @@ Resources:
             Path: /games/{gameId}/state
             Method: POST
 
-  ### Lambda: Get Game State
+  ### Lambda: Get Complete Game State
+  GetCompleteGameStateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-functions/websocket/
+      Handler: get-complete-state.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          WEBSOCKET_API_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/dev'
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*'
+      Events:
+        GetCompleteStateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/state/complete
+            Method: GET
+        GetPlayerStateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/players/{playerName}/state
+            Method: GET
+
+  ### Lambda: Get Game State (Legacy)
   GetGameStateFunction:
     Type: AWS::Serverless::Function
     Properties:

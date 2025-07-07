@@ -677,6 +677,46 @@ Resources:
             Method: POST
     Metadata:
       SamResourceId: SetGameStateFunction
+  GetCompleteGameStateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: GetCompleteGameStateFunction
+      Handler: get-complete-state.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+          WEBSOCKET_API_ENDPOINT:
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/dev
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - execute-api:ManageConnections
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*
+      Events:
+        GetCompleteStateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/state/complete
+            Method: GET
+        GetPlayerStateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/players/{playerName}/state
+            Method: GET
+    Metadata:
+      SamResourceId: GetCompleteGameStateFunction
   GetGameStateFunction:
     Type: AWS::Serverless::Function
     Properties:

@@ -7,6 +7,6 @@ architecture = "x86_64"
 handler = "connect.handler"
 manifest_hash = ""
 packagetype = "Zip"
-functions = ["ConnectFunction", "StartQuestionFunction", "SubmitVotesFunction", "SetGameStateFunction"]
+functions = ["ConnectFunction", "StartQuestionFunction", "SubmitVotesFunction", "SetGameStateFunction", "GetCompleteGameStateFunction"]
 
 [layer_build_definitions]
