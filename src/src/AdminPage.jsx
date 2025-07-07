@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import AIScenarioBuilder from './components/AIScenarioBuilder';
+import TriviaAIBuilder from './components/TriviaAIBuilder';
 import './BuilderPage.css';
 
 const API_BASE = window.API_BASE;
@@ -52,6 +53,9 @@ function AdminPage() {
 
   // AI Scenario Builder
   const [showAIScenarioBuilder, setShowAIScenarioBuilder] = useState(false);
+
+  // AI Trivia Builder
+  const [showTriviaAIBuilder, setShowTriviaAIBuilder] = useState(false);
 
   // Test API endpoints
   const [testStatus, setTestStatus] = useState('');
@@ -411,6 +415,72 @@ function AdminPage() {
     const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction';
     const rows = scenarios.map((scenario, index) => {
       return `"${scenario.category || 'AI Generated'}","${index + 1}","${scenario.title}","${scenario.detail}","${scenario.school || 'Professional Development'}","${scenario.customInstructions || ''}"`;
+    });
+    return headers + '\n' + rows.join('\n');
+  };
+
+  // Handle AI-generated trivia
+  const handleTriviaGenerated = async (triviaData) => {
+    setShowTriviaAIBuilder(false);
+
+    // triviaData includes both questions and metadata
+    const { questions, metadata } = triviaData;
+
+    // Convert trivia to CSV format and upload
+    const csvContent = generateTriviaCSV(questions);
+    const timestamp = Date.now();
+
+    try {
+      setUploadStatus('Processing AI-generated trivia questions...');
+
+      const response = await fetch(`${API_BASE}admin/upload-questions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileName: `${metadata.title.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.csv`,
+          fileContent: csvContent,
+          customTitle: metadata.title,
+          customDescription: metadata.description,
+          customInstructions: metadata.customInstructions,
+          aiContextInstructions: metadata.aiContextInstructions,
+          engagementType: 'trivia'
+        })
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setUploadStatus(`✅ ${result.message}`);
+        fetchQuestionSets(); // Refresh the list
+      } else {
+        setUploadStatus(`❌ Upload failed: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      setUploadStatus(`❌ Upload failed: ${error.message}`);
+    }
+  };
+
+  const generateTriviaCSV = (questions) => {
+    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,CorrectAnswer,WrongAnswer1,WrongAnswer2,WrongAnswer3,WrongAnswer4,WrongAnswer5,Difficulty';
+    const rows = questions.map((trivia, index) => {
+      const wrongAnswers = [
+        trivia.optionA !== trivia.correctAnswer ? trivia.optionA : '',
+        trivia.optionB !== trivia.correctAnswer ? trivia.optionB : '',
+        trivia.optionC !== trivia.correctAnswer ? trivia.optionC : '',
+        trivia.optionD !== trivia.correctAnswer ? trivia.optionD : '',
+        trivia.optionE !== trivia.correctAnswer ? trivia.optionE : '',
+        trivia.optionF !== trivia.correctAnswer ? trivia.optionF : ''
+      ].filter(answer => answer && answer.trim()).slice(0, 5);
+
+      // Pad with empty strings if needed
+      while (wrongAnswers.length < 5) {
+        wrongAnswers.push('');
+      }
+
+      return `"${trivia.category}","${index + 1}","${trivia.title}","${trivia.detail || ''}","${trivia.school || 'General'}","${trivia.customInstructions || ''}","${trivia.correctAnswer}","${wrongAnswers[0]}","${wrongAnswers[1]}","${wrongAnswers[2]}","${wrongAnswers[3]}","${wrongAnswers[4]}","${trivia.difficulty}"`;
     });
     return headers + '\n' + rows.join('\n');
   };
@@ -961,6 +1031,15 @@ function AdminPage() {
                   🤖 AI Scenario Builder
                 </button>
                 <button
+                  className="btn-primary"
+                  onClick={() => {
+                    console.log('🧠 AI Trivia Builder button clicked');
+                    setShowTriviaAIBuilder(true);
+                  }}
+                >
+                  🧠 AI Trivia Builder
+                </button>
+                <button
                   className="btn-secondary"
                   onClick={() => window.open('/builder', '_blank')}
                 >
@@ -1132,6 +1211,14 @@ function AdminPage() {
         <AIScenarioBuilder
           onClose={() => setShowAIScenarioBuilder(false)}
           onScenariosGenerated={handleScenariosGenerated}
+        />
+      )}
+
+      {/* AI Trivia Builder Modal */}
+      {showTriviaAIBuilder && (
+        <TriviaAIBuilder
+          onClose={() => setShowTriviaAIBuilder(false)}
+          onTriviaGenerated={handleTriviaGenerated}
         />
       )}
     </div>
