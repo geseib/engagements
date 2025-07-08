@@ -40,7 +40,7 @@ Resources:
     Properties:
       Name: !Sub '${AWS::StackName}-websocket-dev'
       ProtocolType: WEBSOCKET
-      RouteSelectionExpression: "$request.body.action"
+      RouteSelectionExpression: "$default"
 
   ### WebSocket Deployment
   WebSocketDeployment:
@@ -261,7 +261,7 @@ Resources:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref WebSocketApi
-      RouteKey: sendmessage
+      RouteKey: $default
       AuthorizationType: NONE
       OperationName: SendMessageRoute
       Target: !Join
@@ -2070,41 +2070,67 @@ Resources:
         exports.clearGame = async (event) => {
           try {
             const gameId = event.pathParameters.gameId;
-            
-            // Get all items for this game
-            const res = await db.query({
+            let deletedCount = 0;
+
+            // 1. Get all GAME# items for this game
+            const gameRes = await db.query({
               TableName: process.env.TABLE_NAME,
               KeyConditionExpression: 'PK = :g',
               ExpressionAttributeValues: { ':g': `GAME#${gameId}` }
             }).promise();
-            
+
+            // 2. Get GAMES entry for this game
+            const gamesRes = await db.query({
+              TableName: process.env.TABLE_NAME,
+              KeyConditionExpression: 'PK = :games AND SK = :gameId',
+              ExpressionAttributeValues: {
+                ':games': 'GAMES',
+                ':gameId': `GAME#${gameId}`
+              }
+            }).promise();
+
+            // 3. Get CONNECTION# entries for this game
+            const connRes = await db.query({
+              TableName: process.env.TABLE_NAME,
+              KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+              ExpressionAttributeValues: {
+                ':pk': `GAME#${gameId}`,
+                ':sk': 'CONNECTION#'
+              }
+            }).promise();
+
+            // Combine all items to delete
+            const allItems = [
+              ...(gameRes.Items || []),
+              ...(gamesRes.Items || []),
+              ...(connRes.Items || [])
+            ];
+
             // Delete all items in batches
-            const items = res.Items || [];
             const batchSize = 25;
-            let deletedCount = 0;
-            
-            for (let i = 0; i < items.length; i += batchSize) {
-              const batch = items.slice(i, i + batchSize);
+
+            for (let i = 0; i < allItems.length; i += batchSize) {
+              const batch = allItems.slice(i, i + batchSize);
               const deleteRequests = batch.map(item => ({
                 DeleteRequest: {
                   Key: { PK: item.PK, SK: item.SK }
                 }
               }));
-              
+
               await db.batchWrite({
                 RequestItems: {
                   [process.env.TABLE_NAME]: deleteRequests
                 }
               }).promise();
-              
+
               deletedCount += deleteRequests.length;
             }
-            
-            console.log(`🗑️ Cleared ${deletedCount} items from game ${gameId}`);
-            
+
+            console.log(`🗑️ Cleared ${deletedCount} items from game ${gameId} (GAME# includes connections, GAMES)`);
+
             return {
               statusCode: 200,
-              body: JSON.stringify({ 
+              body: JSON.stringify({
                 message: `Game ${gameId} cleared successfully`,
                 itemsDeleted: deletedCount
               }),
@@ -2142,49 +2168,68 @@ Resources:
         const db = new AWS.DynamoDB.DocumentClient();
         exports.clearAllGames = async (event) => {
           try {
-            // Scan for all game items
-            const res = await db.scan({
+            let deletedCount = 0;
+
+            // 1. Scan for all GAME# items
+            const gameRes = await db.scan({
               TableName: process.env.TABLE_NAME,
               FilterExpression: 'begins_with(PK, :gamePrefix)',
               ExpressionAttributeValues: {
                 ':gamePrefix': 'GAME#'
               }
             }).promise();
-            
-            const items = res.Items || [];
-            if (items.length === 0) {
+
+            // 2. Scan for all GAMES items
+            const gamesRes = await db.scan({
+              TableName: process.env.TABLE_NAME,
+              FilterExpression: 'PK = :games AND begins_with(SK, :gamePrefix)',
+              ExpressionAttributeValues: {
+                ':games': 'GAMES',
+                ':gamePrefix': 'GAME#'
+              }
+            }).promise();
+
+            // Note: CONNECTION# entries are now stored under GAME# partitions
+            // so they will be deleted when we delete GAME# items
+
+            // Combine all items to delete
+            const allItems = [
+              ...(gameRes.Items || []),
+              ...(gamesRes.Items || [])
+            ];
+
+            if (allItems.length === 0) {
               return {
                 statusCode: 200,
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                   message: 'No games found to delete',
                   itemsDeleted: 0
                 }),
                 headers: { 'Access-Control-Allow-Origin': '*' }
               };
             }
-            
+
             // Delete all items in batches
             const batchSize = 25;
-            let deletedCount = 0;
-            
-            for (let i = 0; i < items.length; i += batchSize) {
-              const batch = items.slice(i, i + batchSize);
+
+            for (let i = 0; i < allItems.length; i += batchSize) {
+              const batch = allItems.slice(i, i + batchSize);
               const deleteRequests = batch.map(item => ({
                 DeleteRequest: {
                   Key: { PK: item.PK, SK: item.SK }
                 }
               }));
-              
+
               await db.batchWrite({
                 RequestItems: {
                   [process.env.TABLE_NAME]: deleteRequests
                 }
               }).promise();
-              
+
               deletedCount += deleteRequests.length;
             }
-            
-            console.log(`🗑️ Cleared all games: ${deletedCount} items deleted`);
+
+            console.log(`🗑️ Cleared all games: ${deletedCount} items deleted (GAME# includes connections, GAMES)`);
             
             return {
               statusCode: 200,
