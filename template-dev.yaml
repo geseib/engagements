@@ -188,7 +188,7 @@ Resources:
             Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
       InlineCode: |-
         const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-        const { DynamoDBDocumentClient, PutCommand, DeleteCommand, ScanCommand } = require('@aws-sdk/lib-dynamodb');
+        const { DynamoDBDocumentClient, PutCommand, DeleteCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
         const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 
         const dynamoClient = new DynamoDBClient({});
@@ -245,15 +245,15 @@ Resources:
         };
         
         async function getGameConnections(gameId) {
-          const result = await db.scan({
+          const result = await db.send(new QueryCommand({
             TableName: process.env.TABLE_NAME,
-            FilterExpression: 'begins_with(PK, :pk) AND GameId = :gameId',
+            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
             ExpressionAttributeValues: {
-              ':pk': 'CONNECTION#',
-              ':gameId': gameId
+              ':pk': `GAME#${gameId}`,
+              ':sk': 'CONNECTION#'
             }
-          }).promise();
-          
+          }));
+
           return result.Items;
         }
 
@@ -349,13 +349,13 @@ Resources:
         // Helper function to broadcast WebSocket message
         const broadcastToGame = async (gameId, message) => {
           try {
-            // Get all WebSocket connections for this game using scan (simple approach)
-            const connectionsResult = await db.scan({
+            // Get all WebSocket connections for this game using efficient query
+            const connectionsResult = await db.query({
               TableName: process.env.TABLE_NAME,
-              FilterExpression: 'begins_with(PK, :prefix) AND GameId = :gameId',
+              KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
               ExpressionAttributeValues: {
-                ':prefix': 'CONNECTION#',
-                ':gameId': gameId
+                ':pk': `GAME#${gameId}`,
+                ':sk': 'CONNECTION#'
               }
             }).promise();
             
@@ -391,16 +391,17 @@ Resources:
           const gameId = event.pathParameters.gameId;
           const { name } = JSON.parse(event.body);
           
-          // Check if the game exists
+          // Check if the game exists (check GAMES list)
           const gameCheck = await db.get({
             TableName: process.env.TABLE_NAME,
-            Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
+            Key: { PK: 'GAMES', SK: `GAME#${gameId}` }
           }).promise();
-          
+
           if (!gameCheck.Item) {
-            return { 
-              statusCode: 404, 
-              body: JSON.stringify({ error: 'Game not found. Please check the game ID.' }) 
+            return {
+              statusCode: 404,
+              body: JSON.stringify({ error: 'Game not found. Please check the game ID.' }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
             };
           }
           
@@ -450,25 +451,58 @@ Resources:
           
           const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60); // 2 weeks TTL
           
-          await db.put({
-            TableName: process.env.TABLE_NAME,
-            Item: { 
-              PK: `GAME#${gameId}`, 
-              SK: `PLAYER#${name}`, 
-              PlayerName: name,
-              JoinedAt: new Date().toISOString(),
-              TotalScore: 0,
-              ttl 
-            }
-          }).promise();
-          
-          // Broadcast lightweight new player joined notification (don't fail join if broadcast fails)
+          const now = new Date().toISOString();
+
+          // Create both PLAYER records for schema compliance
+          await Promise.all([
+            // 1. Basic PLAYER record (for template compatibility)
+            db.put({
+              TableName: process.env.TABLE_NAME,
+              Item: {
+                PK: `GAME#${gameId}`,
+                SK: `PLAYER#${name}`,
+                PlayerName: name,
+                JoinedAt: now,
+                TotalScore: 0,
+                CurrentRank: 0,
+                IsActive: true,
+                ttl
+              }
+            }).promise(),
+
+            // 2. PLAYER#STATE record (for state management)
+            db.put({
+              TableName: process.env.TABLE_NAME,
+              Item: {
+                PK: `GAME#${gameId}`,
+                SK: `PLAYER#${name}#STATE`,
+                PlayerName: name,
+                CurrentState: 'JOINED',
+                AnsweredQuestions: [],
+                VotedQuestions: [],
+                TotalScore: 0,
+                LastSeenAt: now,
+                IsActive: true,
+                ttl
+              }
+            }).promise()
+          ]);
+
+          // Broadcast comprehensive player joined notification
           try {
             await broadcastToGame(gameId, {
               type: 'playerJoined',
               gameId,
-              timestamp: new Date().toISOString()
+              playerName: name,
+              playerData: {
+                playerName: name,
+                joinedAt: now,
+                totalScore: 0,
+                isActive: true
+              },
+              timestamp: now
             });
+            console.log(`✅ Player join broadcast sent for ${name} in game ${gameId}`);
           } catch (error) {
             console.log('🔌 WebSocket broadcast failed for new join, continuing...', error.message);
           }
@@ -506,8 +540,13 @@ Resources:
             KeyConditionExpression: 'PK = :g AND begins_with(SK, :p)',
             ExpressionAttributeValues: { ':g': `GAME#${gameId}`, ':p': 'PLAYER#' }
           }).promise();
-          
-          const players = res.Items.map(i => ({
+
+          // Filter to only include main player records, not state records
+          const playerItems = res.Items.filter(item =>
+            item.SK.startsWith('PLAYER#') && !item.SK.includes('#STATE')
+          );
+
+          const players = playerItems.map(i => ({
             name: i.PlayerName,
             score: i.TotalScore || 0,
             joinedAt: i.JoinedAt
@@ -526,7 +565,14 @@ Resources:
   StartQuestionFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.startQuestion
+      CodeUri: lambda-functions/websocket/
+      Handler: start-question.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          WEBSOCKET_API_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/dev'
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
@@ -535,104 +581,42 @@ Resources:
             Action:
               - execute-api:ManageConnections
             Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*'
-      InlineCode: |-
-        const AWS = require('aws-sdk');
-        const db = new AWS.DynamoDB.DocumentClient();
-        const apigateway = new AWS.ApiGatewayManagementApi({
-          endpoint: process.env.WEBSOCKET_API_ENDPOINT
-        });
-        
-        // Helper function to broadcast WebSocket message
-        const broadcastToGame = async (gameId, message) => {
-          try {
-            const connectionsResult = await db.scan({
-              TableName: process.env.TABLE_NAME,
-              FilterExpression: 'begins_with(PK, :prefix) AND GameId = :gameId',
-              ExpressionAttributeValues: {
-                ':prefix': 'CONNECTION#',
-                ':gameId': gameId
-              }
-            }).promise();
-            
-            const connections = connectionsResult.Items || [];
-            console.log(`🔌 Broadcasting to ${connections.length} connections for game ${gameId}`);
-            
-            const broadcastPromises = connections.map(async (connection) => {
-              try {
-                await apigateway.postToConnection({
-                  ConnectionId: connection.ConnectionId,
-                  Data: JSON.stringify(message)
-                }).promise();
-              } catch (error) {
-                console.log(`🔌 Failed to send to connection ${connection.ConnectionId}:`, error);
-                if (error.statusCode === 410) {
-                  await db.delete({
-                    TableName: process.env.TABLE_NAME,
-                    Key: { PK: connection.PK, SK: connection.SK }
-                  }).promise();
-                }
-              }
-            });
-            
-            await Promise.all(broadcastPromises);
-          } catch (error) {
-            console.error('🔌 Broadcast error:', error);
-          }
-        };
-        exports.startQuestion = async (event) => {
-          const gameId = event.pathParameters.gameId;
-          const { questionNumber, questionRef, setId, category } = JSON.parse(event.body);
-          const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);
-          
-          console.log(`📝 Starting question ${questionNumber} for game ${gameId}, ref: ${questionRef}`);
-          
-          // Store question pointer: GAME#1234 / QUESTION#001
-          await db.put({
-            TableName: process.env.TABLE_NAME,
-            Item: {
-              PK: `GAME#${gameId}`,
-              SK: `QUESTION#${questionNumber}`,
-              QuestionRef: questionRef, // Pointer to SET#setId / QUESTION#category#number
-              SetId: setId,
-              Category: category,
-              StartedAt: new Date().toISOString(),
-              ttl
-            }
-          }).promise();
-          
-          // Update game state: current question and stage
-          await db.put({
-            TableName: process.env.TABLE_NAME,
-            Item: {
-              PK: `GAME#${gameId}`,
-              SK: 'STATE',
-              CurrentQuestion: questionNumber, // "001", "002", etc.
-              Stage: 'ASK', // BEGIN, ASK, VOTE, RESULTS, END
-              UpdatedAt: new Date().toISOString(),
-              ttl
-            }
-          }).promise();
-          
-          // Broadcast lightweight question started notification via WebSocket
-          try {
-            await broadcastToGame(gameId, {
-              type: 'questionStarted',
-              gameId,
-              questionId: questionNumber,
-              timestamp: new Date().toISOString()
-            });
-          } catch (error) {
-            console.log('🔌 WebSocket broadcast failed for question start, continuing...', error.message);
-          }
-          
-          return { statusCode: 200, body: JSON.stringify({ status: 'OK' }) };
-        };
+
       Events:
         StartQuestionEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref GameApi
             Path: /games/{gameId}/start-question
+            Method: POST
+
+  ### Lambda: Start Vote (broadcasts VOTE state change)
+  StartVoteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-functions/websocket/
+      Handler: start-vote.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          WEBSOCKET_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/dev'
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*'
+
+      Events:
+        StartVoteEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/start-vote
             Method: POST
 
   ### Lambda: Submit Answer (clean structure)
@@ -658,12 +642,12 @@ Resources:
         // Helper function to broadcast WebSocket message
         const broadcastToGame = async (gameId, message) => {
           try {
-            const connectionsResult = await db.scan({
+            const connectionsResult = await db.query({
               TableName: process.env.TABLE_NAME,
-              FilterExpression: 'begins_with(PK, :prefix) AND GameId = :gameId',
+              KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
               ExpressionAttributeValues: {
-                ':prefix': 'CONNECTION#',
-                ':gameId': gameId
+                ':pk': `GAME#${gameId}`,
+                ':sk': 'CONNECTION#'
               }
             }).promise();
             
@@ -797,7 +781,14 @@ Resources:
   SubmitVotesFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.submitVotes
+      CodeUri: lambda-functions/websocket/
+      Handler: submit-votes.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          WEBSOCKET_API_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/dev'
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
@@ -806,89 +797,7 @@ Resources:
             Action:
               - execute-api:ManageConnections
             Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*'
-      InlineCode: |-
-        const AWS = require('aws-sdk');
-        const db = new AWS.DynamoDB.DocumentClient();
-        const apigateway = new AWS.ApiGatewayManagementApi({
-          endpoint: process.env.WEBSOCKET_API_ENDPOINT
-        });
-        
-        // Helper function to broadcast WebSocket message
-        const broadcastToGame = async (gameId, message) => {
-          try {
-            const connectionsResult = await db.scan({
-              TableName: process.env.TABLE_NAME,
-              FilterExpression: 'begins_with(PK, :prefix) AND GameId = :gameId',
-              ExpressionAttributeValues: {
-                ':prefix': 'CONNECTION#',
-                ':gameId': gameId
-              }
-            }).promise();
-            
-            const connections = connectionsResult.Items || [];
-            console.log(`🔌 Broadcasting to ${connections.length} connections for game ${gameId}`);
-            
-            const broadcastPromises = connections.map(async (connection) => {
-              try {
-                await apigateway.postToConnection({
-                  ConnectionId: connection.ConnectionId,
-                  Data: JSON.stringify(message)
-                }).promise();
-              } catch (error) {
-                console.log(`🔌 Failed to send to connection ${connection.ConnectionId}:`, error);
-                if (error.statusCode === 410) {
-                  await db.delete({
-                    TableName: process.env.TABLE_NAME,
-                    Key: { PK: connection.PK, SK: connection.SK }
-                  }).promise();
-                }
-              }
-            });
-            
-            await Promise.all(broadcastPromises);
-          } catch (error) {
-            console.error('🔌 Broadcast error:', error);
-          }
-        };
-        exports.submitVotes = async (event) => {
-          const gameId = event.pathParameters.gameId;
-          const { name, questionNumber, votes } = JSON.parse(event.body);
-          const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);
-          
-          console.log(`🗳️ Votes: game=${gameId}, question=${questionNumber}, voter=${name}`);
-          
-          // Clean structure: GAME#1234 / VOTE#001#PLAYER#name
-          // votes = { "0": 1, "1": 2, "2": 3 } (answerIndex: rank)
-          await db.put({
-            TableName: process.env.TABLE_NAME,
-            Item: {
-              PK: `GAME#${gameId}`,
-              SK: `VOTE#${questionNumber}#PLAYER#${name}`,
-              VoterName: name,
-              QuestionNumber: questionNumber,
-              First: votes["0"] || null,   // Answer index for 1st place
-              Second: votes["1"] || null,  // Answer index for 2nd place  
-              Third: votes["2"] || null,   // Answer index for 3rd place
-              VotesRaw: votes, // Keep original format for compatibility
-              SubmittedAt: new Date().toISOString(),
-              ttl
-            }
-          }).promise();
-          
-          // Broadcast lightweight vote submitted notification via WebSocket
-          try {
-            await broadcastToGame(gameId, {
-              type: 'playerVoted',
-              gameId,
-              questionId: questionNumber,
-              timestamp: new Date().toISOString()
-            });
-          } catch (error) {
-            console.log('🔌 WebSocket broadcast failed for vote submission, continuing...', error.message);
-          }
-          
-          return { statusCode: 200, body: JSON.stringify({ status: 'OK' }) };
-        };
+
       Events:
         SubmitVotesEvent:
           Type: HttpApi
@@ -1067,11 +976,18 @@ Resources:
             Path: /games/{gameId}/votes
             Method: GET
 
-  ### Lambda: Update Game State  
+  ### Lambda: Update Game State
   SetGameStateFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.setGameState
+      CodeUri: lambda-functions/websocket/
+      Handler: set-game-state.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          WEBSOCKET_API_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/dev'
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
@@ -1080,109 +996,7 @@ Resources:
             Action:
               - execute-api:ManageConnections
             Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*'
-      InlineCode: |-
-        const AWS = require('aws-sdk');
-        const db = new AWS.DynamoDB.DocumentClient();
-        const apigateway = new AWS.ApiGatewayManagementApi({
-          endpoint: process.env.WEBSOCKET_API_ENDPOINT
-        });
-        
-        // Helper function to broadcast WebSocket message
-        const broadcastToGame = async (gameId, message) => {
-          try {
-            const connectionsResult = await db.scan({
-              TableName: process.env.TABLE_NAME,
-              FilterExpression: 'begins_with(PK, :prefix) AND GameId = :gameId',
-              ExpressionAttributeValues: {
-                ':prefix': 'CONNECTION#',
-                ':gameId': gameId
-              }
-            }).promise();
-            
-            const connections = connectionsResult.Items || [];
-            console.log(`🔌 Broadcasting to ${connections.length} connections for game ${gameId}`);
-            
-            const broadcastPromises = connections.map(async (connection) => {
-              try {
-                await apigateway.postToConnection({
-                  ConnectionId: connection.ConnectionId,
-                  Data: JSON.stringify(message)
-                }).promise();
-              } catch (error) {
-                console.log(`🔌 Failed to send to connection ${connection.ConnectionId}:`, error);
-                if (error.statusCode === 410) {
-                  await db.delete({
-                    TableName: process.env.TABLE_NAME,
-                    Key: { PK: connection.PK, SK: connection.SK }
-                  }).promise();
-                }
-              }
-            });
-            
-            await Promise.all(broadcastPromises);
-          } catch (error) {
-            console.error('🔌 Broadcast error:', error);
-          }
-        };
-        exports.setGameState = async (event) => {
-          const gameId = event.pathParameters.gameId;
-          const body = JSON.parse(event.body);
-          const { 
-            currentQuestion, 
-            stage, 
-            state, 
-            currentQuestionIndex, 
-            currentQuestionId,
-            scoredQuestions,
-            usedQuestions,
-            playedQuestions,
-            currentQuestionData
-          } = body;
-          const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);
-          
-          console.log(`🎮 SetGameState: game=${gameId}, state=${state}, questionId=${currentQuestionId}`);
-          
-          // Store complete game state for player synchronization
-          const stateItem = {
-            PK: `GAME#${gameId}`,
-            SK: 'STATE',
-            CurrentQuestion: currentQuestion, // "001", "002", etc.
-            Stage: stage || (state === 'question' ? 'ASK' : 
-                            state === 'voting' ? 'VOTE' :
-                            state === 'results' ? 'RESULTS' : 'BEGIN'),
-            State: state || 'waiting',
-            CurrentQuestionIndex: currentQuestionIndex,
-            CurrentQuestionId: currentQuestionId,
-            UpdatedAt: new Date().toISOString(),
-            ttl
-          };
-          
-          // Add optional arrays if provided
-          if (scoredQuestions) stateItem.ScoredQuestions = scoredQuestions;
-          if (usedQuestions) stateItem.UsedQuestions = usedQuestions;
-          if (playedQuestions) stateItem.PlayedQuestions = playedQuestions;
-          if (currentQuestionData) stateItem.CurrentQuestionData = currentQuestionData;
-          
-          await db.put({
-            TableName: process.env.TABLE_NAME,
-            Item: stateItem
-          }).promise();
-          
-          // Broadcast lightweight game state change notification via WebSocket
-          try {
-            await broadcastToGame(gameId, {
-              type: 'gameStateChanged',
-              gameId,
-              state,
-              questionId: currentQuestionId || currentQuestion,
-              timestamp: new Date().toISOString()
-            });
-          } catch (error) {
-            console.log('🔌 WebSocket broadcast failed for game state change, continuing...', error.message);
-          }
-          
-          return { statusCode: 200, body: JSON.stringify({ status: 'OK' }) };
-        };
+
       Events:
         SetGameStateEvent:
           Type: HttpApi
@@ -1191,7 +1005,41 @@ Resources:
             Path: /games/{gameId}/state
             Method: POST
 
-  ### Lambda: Get Game State
+  ### Lambda: Get Complete Game State
+  GetCompleteGameStateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-functions/websocket/
+      Handler: get-complete-state.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          WEBSOCKET_API_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/dev'
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*'
+      Events:
+        GetCompleteStateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/state/complete
+            Method: GET
+        GetPlayerStateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/players/{playerName}/state
+            Method: GET
+
+  ### Lambda: Get Game State (Legacy)
   GetGameStateFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -1221,11 +1069,11 @@ Resources:
           let currentQuestionData = null;
           
           // If there's a current question, fetch its data from the pointer
-          if (state.CurrentQuestion) {
+          if (state.CurrentQuestionId) {
             try {
               const questionRes = await db.get({
                 TableName: process.env.TABLE_NAME,
-                Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${state.CurrentQuestion}` }
+                Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${state.CurrentQuestionId}` }
               }).promise();
               
               if (questionRes.Item && questionRes.Item.QuestionRef) {
@@ -1237,7 +1085,7 @@ Resources:
                 
                 if (questionDataRes.Item) {
                   currentQuestionData = {
-                    id: state.CurrentQuestion, // Use sequential number as ID for frontend
+                    id: state.CurrentQuestionId, // Use sequential number as ID for frontend
                     title: questionDataRes.Item.Title || questionDataRes.Item.Prompt || '',
                     detail: questionDataRes.Item.Detail || '',
                     category: questionDataRes.Item.Category || '',
@@ -1252,21 +1100,22 @@ Resources:
           
           // Return clean state - players only need current question, host needs question tracking
           const gameState = {
-            stage: state.Stage || 'BEGIN', // BEGIN, ASK, VOTE, RESULTS, END
-            state: state.State || (state.Stage === 'ASK' ? 'question' : 
-                   state.Stage === 'VOTE' ? 'voting' :
-                   state.Stage === 'RESULTS' ? 'results' : 'waiting'),
-            currentQuestionId: state.CurrentQuestion,
+            stage: state.HostState || 'LOBBY', // LOBBY, ASK/Q001, VOTE/Q001, RESULTS/Q001, END
+            state: state.HostState === 'LOBBY' ? 'waiting' :
+                   state.HostState?.startsWith('ASK/') ? 'question' :
+                   state.HostState?.startsWith('VOTE/') ? 'voting' :
+                   state.HostState?.startsWith('RESULTS/') ? 'results' : 'waiting',
+            currentQuestionId: state.CurrentQuestionId,
             currentQuestionData: currentQuestionData,
             updatedAt: state.UpdatedAt,
-            currentQuestion: state.CurrentQuestion, // Add this for backward compatibility
+            currentQuestion: state.CurrentQuestionId, // Add this for backward compatibility
             debugMode: metadata.DebugMode || false // Include debug mode from game metadata
           };
           
           // Host-only data (for question tracking and scoring)
           if (state.ScoredQuestions) gameState.scoredQuestions = state.ScoredQuestions;
-          if (state.UsedQuestions) gameState.usedQuestions = state.UsedQuestions;
           if (state.PlayedQuestions) gameState.playedQuestions = state.PlayedQuestions;
+          if (state.PlayedQuestions) gameState.usedQuestions = state.PlayedQuestions; // Backward compatibility
           
           console.log(`🎮 GetGameState: game=${gameId}`, gameState);
           return { statusCode: 200, body: JSON.stringify(gameState) };
@@ -1367,46 +1216,11 @@ Resources:
   CreateGameFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.createGame
+      CodeUri: lambda-functions/websocket/
+      Handler: create-game.handler
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
-      InlineCode: |-
-        const AWS = require('aws-sdk');
-        const db = new AWS.DynamoDB.DocumentClient();
-        exports.createGame = async (event) => {
-          const gameId = event.pathParameters.gameId;
-          const { eventTitle, aiContext } = JSON.parse(event.body || '{}');
-          const ttl = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);
-          
-          // Create game metadata
-          await db.put({
-            TableName: process.env.TABLE_NAME,
-            Item: {
-              PK: `GAME#${gameId}`,
-              SK: 'METADATA',
-              Title: eventTitle || 'Engagements Session',
-              AIContext: aiContext || null,
-              CreatedAt: new Date().toISOString(),
-              ttl
-            }
-          }).promise();
-          
-          // Initialize game state
-          await db.put({
-            TableName: process.env.TABLE_NAME,
-            Item: {
-              PK: `GAME#${gameId}`,
-              SK: 'STATE',
-              CurrentQuestion: null,
-              Stage: 'BEGIN',
-              UpdatedAt: new Date().toISOString(),
-              ttl
-            }
-          }).promise();
-          
-          return { statusCode: 200, body: JSON.stringify({ gameId, created: true }) };
-        };
       Events:
         CreateGameEvent:
           Type: HttpApi
@@ -1427,27 +1241,76 @@ Resources:
         const AWS = require('aws-sdk');
         const db = new AWS.DynamoDB.DocumentClient();
         exports.clearGame = async (event) => {
-          const gameId = event.pathParameters.gameId;
-          
-          // Get all items for this game
-          const res = await db.query({
-            TableName: process.env.TABLE_NAME,
-            KeyConditionExpression: 'PK = :g',
-            ExpressionAttributeValues: { ':g': `GAME#${gameId}` }
-          }).promise();
-          
-          // Delete all items
-          const deletePromises = res.Items.map(item => {
-            return db.delete({
-              TableName: process.env.TABLE_NAME,
-              Key: { PK: item.PK, SK: item.SK }
-            }).promise();
-          });
-          
-          await Promise.all(deletePromises);
-          
-          console.log(`🗑️ Cleared ${res.Items.length} items from game ${gameId}`);
-          return { statusCode: 200, body: JSON.stringify({ message: 'Game cleared', itemsDeleted: res.Items.length }) };
+          try {
+            const gameId = event.pathParameters.gameId;
+
+            if (!gameId || gameId.trim() === '') {
+              console.log(`🗑️ No game ID provided for clear operation (gameId: "${gameId}")`);
+              return {
+                statusCode: 200,
+                body: JSON.stringify({
+                  message: 'No game to clear - no game ID provided',
+                  itemsDeleted: 0,
+                  status: 'no_game_id',
+                  debug: {
+                    gameIdReceived: gameId,
+                    pathParameters: event.pathParameters
+                  }
+                }),
+                headers: { 'Access-Control-Allow-Origin': '*' }
+              };
+            }
+
+            console.log(`🗑️ Clearing game ${gameId}`);
+
+            // Get all items for this game (including GAMES list entry)
+            const [gameItems, gamesListItem] = await Promise.all([
+              db.query({
+                TableName: process.env.TABLE_NAME,
+                KeyConditionExpression: 'PK = :g',
+                ExpressionAttributeValues: { ':g': `GAME#${gameId}` }
+              }).promise(),
+              db.query({
+                TableName: process.env.TABLE_NAME,
+                KeyConditionExpression: 'PK = :games AND SK = :gameId',
+                ExpressionAttributeValues: {
+                  ':games': 'GAMES',
+                  ':gameId': `GAME#${gameId}`
+                }
+              }).promise()
+            ]);
+
+            // Combine all items to delete
+            const allItems = [...(gameItems.Items || []), ...(gamesListItem.Items || [])];
+
+            // Delete all items
+            const deletePromises = allItems.map(item => {
+              return db.delete({
+                TableName: process.env.TABLE_NAME,
+                Key: { PK: item.PK, SK: item.SK }
+              }).promise();
+            });
+
+            await Promise.all(deletePromises);
+
+            console.log(`🗑️ Cleared ${allItems.length} items from game ${gameId}`);
+            return {
+              statusCode: 200,
+              body: JSON.stringify({
+                message: 'Game cleared successfully',
+                itemsDeleted: allItems.length,
+                gameId: gameId
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          } catch (error) {
+            console.error('Clear game error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: `Failed to clear game: ${error.message}` }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
         };
       Events:
         ClearGameEvent:
@@ -1675,9 +1538,9 @@ Resources:
                 TableName: process.env.TABLE_NAME,
                 Key: { PK: `GAME#${gameId}`, SK: 'STATE' }
               }).promise();
-              
-              if (stateRes.Item?.UsedQuestions) {
-                usedQuestions = stateRes.Item.UsedQuestions;
+
+              if (stateRes.Item?.PlayedQuestions) {
+                usedQuestions = stateRes.Item.PlayedQuestions;
               }
             } catch (e) {
               console.log('No game state found, treating as new game');
@@ -4016,6 +3879,56 @@ Resources:
             Path: /games/{gameId}/update-title
             Method: POST
 
+  ### Lambda: Save Game Context (Categories, Settings)
+  SaveGameContextFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-functions/websocket/
+      Handler: save-game-context.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        SaveGameContextEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/context
+            Method: POST
+
+  ### Lambda: Start Game (Initialize Categories & Question Orders)
+  StartGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-functions/websocket/
+      Handler: start-game.handler
+      Runtime: nodejs18.x
+      Timeout: 60
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          WEBSOCKET_API_ENDPOINT: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/dev"
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*"
+      Events:
+        StartGameEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/start
+            Method: POST
+
   ### Lambda: Update Debug Mode Setting
   UpdateDebugModeFunction:
     Type: AWS::Serverless::Function
@@ -4093,7 +4006,7 @@ Resources:
               Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*'
       InlineCode: |-
         const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-        const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand, ScanCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+        const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
         const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
         const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
         
@@ -4107,24 +4020,24 @@ Resources:
         // Helper function to broadcast WebSocket message
         const broadcastToGame = async (gameId, message) => {
           try {
-            const connectionsResult = await db.send(new ScanCommand({
+            const connectionsResult = await db.query({
               TableName: process.env.TABLE_NAME,
-              FilterExpression: 'begins_with(PK, :prefix) AND GameId = :gameId',
+              KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
               ExpressionAttributeValues: {
-                ':prefix': 'CONNECTION#',
-                ':gameId': gameId
+                ':pk': `GAME#${gameId}`,
+                ':sk': 'CONNECTION#'
               }
-            }));
-            
+            }).promise();
+
             const connections = connectionsResult.Items || [];
             console.log(`🔌 Broadcasting to ${connections.length} connections for game ${gameId}`);
-            
+
             const broadcastPromises = connections.map(async (connection) => {
               try {
-                await apigateway.send(new PostToConnectionCommand({
+                await apigateway.postToConnection({
                   ConnectionId: connection.ConnectionId,
                   Data: JSON.stringify(message)
-                }));
+                }).promise();
               } catch (error) {
                 console.log(`🔌 Failed to send to connection ${connection.ConnectionId}:`, error);
                 if (error.statusCode === 410) {

@@ -1,6 +1,6 @@
 // Development environment configuration
-window.API_BASE = 'https://bqy0f09h2k.execute-api.us-east-1.amazonaws.com/';
-window.WS_URL = 'wss://fidyyajm1e.execute-api.us-east-1.amazonaws.com/dev';
+window.API_BASE = 'https://wq93y66cqk.execute-api.us-east-1.amazonaws.com/';
+window.WS_URL = 'wss://024cfn695m.execute-api.us-east-1.amazonaws.com/dev';
 window.ENV = 'development';
 
 console.log('🔧 DEV Environment loaded:');
