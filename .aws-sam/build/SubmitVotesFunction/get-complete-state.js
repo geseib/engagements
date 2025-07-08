@@ -54,7 +54,7 @@ const getGameContext = async (gameId) => {
         TableName: process.env.TABLE_NAME,
         Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
       }));
-      
+
       if (metadataResult.Item) {
         return {
           title: metadataResult.Item.Title,
@@ -68,9 +68,21 @@ const getGameContext = async (gameId) => {
           debugMode: metadataResult.Item.DebugMode || false
         };
       }
+      return null;
     }
-    
-    return result.Item || null;
+
+    // Transform CONTEXT record to expected format
+    return {
+      title: result.Item.Title,
+      engagementType: result.Item.EngagementType,
+      questionSetId: result.Item.QuestionSetId,
+      selectedCategories: result.Item.SelectedCategories || [],
+      hostPreferences: result.Item.HostPreferences || {},
+      createdAt: result.Item.CreatedAt,
+      createdBy: result.Item.CreatedBy,
+      aiContext: result.Item.AiContext,
+      debugMode: result.Item.DebugMode || false
+    };
   } catch (error) {
     console.error(`❌ Error getting game context for ${gameId}:`, error);
     return null;

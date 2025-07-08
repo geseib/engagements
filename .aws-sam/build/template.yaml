@@ -1664,6 +1664,31 @@ Resources:
               Ref: GameApi
             Path: /games/{gameId}/update-title
             Method: POST
+  SaveGameContextFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: SaveGameContextFunction
+      Handler: save-game-context.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Events:
+        SaveGameContextEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: GameApi
+            Path: /games/{gameId}/context
+            Method: POST
+    Metadata:
+      SamResourceId: SaveGameContextFunction
   UpdateDebugModeFunction:
     Type: AWS::Serverless::Function
     Properties:

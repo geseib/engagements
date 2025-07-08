@@ -91,6 +91,7 @@ exports.handler = async (event) => {
         SK: 'STATE',
         CurrentQuestion: questionNumber, // "001", "002", etc.
         Stage: 'ASK', // BEGIN, ASK, VOTE, RESULTS, END
+        State: 'question', // Frontend expects this field
         UpdatedAt: new Date().toISOString(),
         ttl
       }

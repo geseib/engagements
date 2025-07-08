@@ -2608,6 +2608,28 @@ Resources:
             Path: /games/{gameId}/update-title
             Method: POST
 
+  ### Lambda: Save Game Context (Categories, Settings)
+  SaveGameContextFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-functions/websocket/
+      Handler: save-game-context.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        SaveGameContextEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/context
+            Method: POST
+
   ### Lambda: Update Debug Mode Setting
   UpdateDebugModeFunction:
     Type: AWS::Serverless::Function
