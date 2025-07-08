@@ -2544,6 +2544,26 @@ Resources:
 
         exports.generateQuestions = async (event) => {
           try {
+            console.log('🤖 Lambda function started for question generation');
+            console.log('Event:', JSON.stringify(event, null, 2));
+
+            // Handle CORS preflight
+            if (event.requestContext?.http?.method === 'OPTIONS') {
+              return {
+                statusCode: 200,
+                headers: {
+                  'Access-Control-Allow-Origin': '*',
+                  'Access-Control-Allow-Headers': 'Content-Type',
+                  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+                },
+                body: ''
+              };
+            }
+
+            if (!event.body) {
+              throw new Error('No request body provided');
+            }
+
             const { engagementType, userInput, questionCount, existingQuestion, context } = JSON.parse(event.body);
 
             console.log(`🤖 Generating ${questionCount} ${engagementType} questions`);

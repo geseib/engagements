@@ -1024,21 +1024,23 @@ function AdminPage() {
                 <button
                   className="btn-primary"
                   onClick={() => {
-                    console.log('🤖 AI Scenario Builder button clicked');
+                    console.log('🤖 AI Scenario Builder button clicked for', engagementType);
                     setShowAIScenarioBuilder(true);
                   }}
                 >
-                  🤖 AI Scenario Builder
+                  🤖 AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : 'Scenario'} Builder
                 </button>
-                <button
-                  className="btn-primary"
-                  onClick={() => {
-                    console.log('🧠 AI Trivia Builder button clicked');
-                    setShowTriviaAIBuilder(true);
-                  }}
-                >
-                  🧠 AI Trivia Builder
-                </button>
+                {engagementType === 'trivia' && (
+                  <button
+                    className="btn-primary"
+                    onClick={() => {
+                      console.log('🧠 AI Trivia Builder button clicked');
+                      setShowTriviaAIBuilder(true);
+                    }}
+                  >
+                    🧠 Advanced Trivia Builder
+                  </button>
+                )}
                 <button
                   className="btn-secondary"
                   onClick={() => window.open('/builder', '_blank')}
@@ -1211,6 +1213,7 @@ function AdminPage() {
         <AIScenarioBuilder
           onClose={() => setShowAIScenarioBuilder(false)}
           onScenariosGenerated={handleScenariosGenerated}
+          engagementType={engagementType}
         />
       )}
 

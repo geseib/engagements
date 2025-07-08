@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 const API_BASE = window.API_BASE;
 
-function AIScenarioBuilder({ onClose, onScenariosGenerated }) {
+function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'call-and-answer' }) {
   const [step, setStep] = useState(1);
   const [scenarioConfig, setScenarioConfig] = useState({
     type: '',
@@ -18,44 +18,121 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStatus, setGenerationStatus] = useState('');
 
-  const scenarioTypes = [
-    {
-      id: 'lessons-learned',
-      title: 'Lessons Learned Scenarios',
-      description: 'Real-world situations where teams learned valuable lessons',
-      prompt: 'Create scenarios based on common workplace challenges and the lessons learned from them'
-    },
-    {
-      id: 'problem-solving',
-      title: 'Problem-Solving Challenges',
-      description: 'Current problems your team is tackling that need solutions',
-      prompt: 'Generate problem scenarios that require creative thinking and collaborative solutions'
-    },
-    {
-      id: 'interview-prep',
-      title: 'Interview Preparation',
-      description: 'Practice questions for job interviews and assessments',
-      prompt: 'Create interview-style questions that help candidates prepare and practice their responses'
-    },
-    {
-      id: 'amazon-principles',
-      title: 'Amazon Leadership Principles',
-      description: 'Scenarios based on Amazon\'s 16 Leadership Principles',
-      prompt: 'Generate scenarios that explore Amazon Leadership Principles through real-world situations'
-    },
-    {
-      id: 'team-building',
-      title: 'Team Building Exercises',
-      description: 'Scenarios that promote team collaboration and communication',
-      prompt: 'Create team-building scenarios that encourage discussion and collaboration'
-    },
-    {
-      id: 'custom',
-      title: 'Custom Scenarios',
-      description: 'Define your own specific scenario requirements',
-      prompt: 'Create scenarios based on the custom requirements provided'
+  // Define scenario types based on engagement type
+  const getScenarioTypes = (engagementType) => {
+    switch (engagementType) {
+      case 'trivia':
+        return [
+          {
+            id: 'general-knowledge',
+            title: 'General Knowledge Trivia',
+            description: 'Broad knowledge questions across various topics',
+            prompt: 'Create general knowledge trivia questions covering history, science, geography, and culture'
+          },
+          {
+            id: 'subject-specific',
+            title: 'Subject-Specific Trivia',
+            description: 'Deep dive into a specific subject or field',
+            prompt: 'Generate trivia questions focused on a specific subject area with varying difficulty levels'
+          },
+          {
+            id: 'workplace-trivia',
+            title: 'Workplace & Business Trivia',
+            description: 'Business knowledge and workplace concepts',
+            prompt: 'Create trivia questions about business concepts, workplace skills, and professional knowledge'
+          },
+          {
+            id: 'fun-facts',
+            title: 'Fun Facts & Interesting Trivia',
+            description: 'Entertaining and surprising facts',
+            prompt: 'Generate fun and interesting trivia questions with surprising facts and entertaining knowledge'
+          },
+          {
+            id: 'custom-trivia',
+            title: 'Custom Trivia Topics',
+            description: 'Define your own trivia topic and requirements',
+            prompt: 'Create trivia questions based on the specific topic and requirements provided'
+          }
+        ];
+
+      case 'poll':
+        return [
+          {
+            id: 'opinion-polls',
+            title: 'Opinion & Preference Polls',
+            description: 'Gather opinions and preferences from participants',
+            prompt: 'Create poll questions that gather opinions, preferences, and viewpoints on various topics'
+          },
+          {
+            id: 'decision-making',
+            title: 'Decision-Making Polls',
+            description: 'Help teams make decisions through voting',
+            prompt: 'Generate poll questions that help teams make decisions and choose between options'
+          },
+          {
+            id: 'feedback-polls',
+            title: 'Feedback & Assessment Polls',
+            description: 'Collect feedback and assess understanding',
+            prompt: 'Create poll questions to gather feedback, assess understanding, and measure satisfaction'
+          },
+          {
+            id: 'icebreaker-polls',
+            title: 'Icebreaker & Team Polls',
+            description: 'Fun polls to break the ice and learn about team members',
+            prompt: 'Generate fun and engaging poll questions that help team members get to know each other'
+          },
+          {
+            id: 'custom-polls',
+            title: 'Custom Poll Topics',
+            description: 'Define your own poll topic and requirements',
+            prompt: 'Create poll questions based on the specific topic and requirements provided'
+          }
+        ];
+
+      case 'call-and-answer':
+      default:
+        return [
+          {
+            id: 'lessons-learned',
+            title: 'Lessons Learned Scenarios',
+            description: 'Real-world situations where teams learned valuable lessons',
+            prompt: 'Create scenarios based on common workplace challenges and the lessons learned from them'
+          },
+          {
+            id: 'problem-solving',
+            title: 'Problem-Solving Challenges',
+            description: 'Current problems your team is tackling that need solutions',
+            prompt: 'Generate problem scenarios that require creative thinking and collaborative solutions'
+          },
+          {
+            id: 'interview-prep',
+            title: 'Interview Preparation',
+            description: 'Practice questions for job interviews and assessments',
+            prompt: 'Create interview-style questions that help candidates prepare and practice their responses'
+          },
+          {
+            id: 'amazon-principles',
+            title: 'Amazon Leadership Principles',
+            description: 'Scenarios based on Amazon\'s 16 Leadership Principles',
+            prompt: 'Generate scenarios that explore Amazon Leadership Principles through real-world situations'
+          },
+          {
+            id: 'team-building',
+            title: 'Team Building Exercises',
+            description: 'Scenarios that promote team collaboration and communication',
+            prompt: 'Create team-building scenarios that encourage discussion and collaboration'
+          },
+          {
+            id: 'custom',
+            title: 'Custom Scenarios',
+            description: 'Define your own specific scenario requirements',
+            prompt: 'Create scenarios based on the custom requirements provided'
+          }
+        ];
     }
-  ];
+  };
+
+  const scenarioTypes = getScenarioTypes(engagementType);
 
   const handleTypeSelection = (type) => {
     setScenarioConfig(prev => ({ ...prev, type }));
@@ -224,14 +301,14 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated }) {
       <div className="modal-overlay" onClick={onClose}></div>
       <div className="modal-content scenario-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>🤖 AI Scenario Builder</h2>
+          <h2>🤖 AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : 'Scenario'} Builder</h2>
           <button className="close-button" onClick={onClose}>✕</button>
         </div>
 
         <div className="modal-body">
           {step === 1 && (
             <div className="scenario-type-selection">
-              <h3>What type of scenarios do you want to create?</h3>
+              <h3>What type of {engagementType === 'trivia' ? 'trivia questions' : engagementType === 'poll' ? 'poll questions' : 'scenarios'} do you want to create?</h3>
               <div className="scenario-types-grid">
                 {scenarioTypes.map(type => (
                   <div
