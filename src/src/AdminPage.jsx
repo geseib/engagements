@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import AIScenarioBuilder from './components/AIScenarioBuilder';
 import TriviaAIBuilder from './components/TriviaAIBuilder';
+import PollAIBuilder from './components/PollAIBuilder';
+import SurveyAIBuilder from './components/SurveyAIBuilder';
 import './BuilderPage.css';
 
 const API_BASE = window.API_BASE;
@@ -56,6 +58,12 @@ function AdminPage() {
 
   // AI Trivia Builder
   const [showTriviaAIBuilder, setShowTriviaAIBuilder] = useState(false);
+
+  // AI Poll Builder
+  const [showPollAIBuilder, setShowPollAIBuilder] = useState(false);
+
+  // AI Survey Builder
+  const [showSurveyAIBuilder, setShowSurveyAIBuilder] = useState(false);
 
   // Test API endpoints
   const [testStatus, setTestStatus] = useState('');
@@ -483,6 +491,97 @@ function AdminPage() {
       return `"${trivia.category}","${index + 1}","${trivia.title}","${trivia.detail || ''}","${trivia.school || 'General'}","${trivia.customInstructions || ''}","${trivia.correctAnswer}","${wrongAnswers[0]}","${wrongAnswers[1]}","${wrongAnswers[2]}","${wrongAnswers[3]}","${wrongAnswers[4]}","${trivia.difficulty}"`;
     });
     return headers + '\n' + rows.join('\n');
+  };
+
+  // Handle AI-generated polls
+  const handlePollGenerated = async (pollData) => {
+    setShowPollAIBuilder(false);
+
+    // pollData includes both questions and metadata
+    const { questions, metadata } = pollData;
+
+    // Convert polls to CSV format and upload
+    const csvContent = generatePollCSV(questions);
+    const timestamp = Date.now();
+
+    try {
+      setUploadStatus('Processing AI-generated poll questions...');
+
+      const response = await fetch(`${API_BASE}admin/upload-questions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileName: `${metadata.title.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.csv`,
+          fileContent: csvContent,
+          customTitle: metadata.title,
+          customDescription: metadata.description,
+          customInstructions: metadata.customInstructions,
+          aiContextInstructions: metadata.aiContextInstructions,
+          engagementType: 'poll'
+        })
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setUploadStatus(`✅ ${result.message}`);
+        fetchQuestionSets(); // Refresh the list
+      } else {
+        setUploadStatus(`❌ Upload failed: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      setUploadStatus(`❌ Upload failed: ${error.message}`);
+    }
+  };
+
+  const generatePollCSV = (questions) => {
+    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Option1,Option2,Option3,Option4,Option5,AllowMultiple';
+    const rows = questions.map((poll, index) => {
+      const options = [...poll.options];
+      while (options.length < 5) {
+        options.push('');
+      }
+
+      return `"${poll.category}","${index + 1}","${poll.title}","${poll.detail || ''}","${poll.school || 'General'}","${poll.customInstructions || ''}","${options[0]}","${options[1]}","${options[2]}","${options[3]}","${options[4]}","${poll.allowMultiple ? 'true' : 'false'}"`;
+    });
+    return headers + '\n' + rows.join('\n');
+  };
+
+  // Handle AI-generated surveys
+  const handleSurveyGenerated = async (surveyData) => {
+    setShowSurveyAIBuilder(false);
+
+    // surveyData includes survey and metadata
+    const { survey, metadata } = surveyData;
+
+    // Export survey as JSON file
+    const jsonContent = JSON.stringify(survey, null, 2);
+    const timestamp = Date.now();
+    const fileName = `survey-${survey.title.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.json`;
+
+    try {
+      setUploadStatus('Processing AI-generated survey...');
+
+      // Create download link for JSON
+      const blob = new Blob([jsonContent], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      setUploadStatus(`✅ Survey "${survey.title}" exported as JSON file with ${survey.questions.length} questions`);
+
+    } catch (error) {
+      console.error('Survey export error:', error);
+      setUploadStatus(`❌ Survey export failed: ${error.message}`);
+    }
   };
 
   // Test API endpoints
@@ -1041,6 +1140,26 @@ function AdminPage() {
                     🧠 Advanced Trivia Builder
                   </button>
                 )}
+                {engagementType === 'poll' && (
+                  <button
+                    className="btn-primary"
+                    onClick={() => {
+                      console.log('📊 AI Poll Builder button clicked');
+                      setShowPollAIBuilder(true);
+                    }}
+                  >
+                    📊 Advanced Poll Builder
+                  </button>
+                )}
+                <button
+                  className="btn-primary"
+                  onClick={() => {
+                    console.log('📋 AI Survey Builder button clicked');
+                    setShowSurveyAIBuilder(true);
+                  }}
+                >
+                  📋 AI Survey Builder
+                </button>
                 <button
                   className="btn-secondary"
                   onClick={() => window.open('/builder', '_blank')}
@@ -1222,6 +1341,22 @@ function AdminPage() {
         <TriviaAIBuilder
           onClose={() => setShowTriviaAIBuilder(false)}
           onTriviaGenerated={handleTriviaGenerated}
+        />
+      )}
+
+      {/* AI Poll Builder Modal */}
+      {showPollAIBuilder && (
+        <PollAIBuilder
+          onClose={() => setShowPollAIBuilder(false)}
+          onPollGenerated={handlePollGenerated}
+        />
+      )}
+
+      {/* AI Survey Builder Modal */}
+      {showSurveyAIBuilder && (
+        <SurveyAIBuilder
+          onClose={() => setShowSurveyAIBuilder(false)}
+          onSurveyGenerated={handleSurveyGenerated}
         />
       )}
     </div>
