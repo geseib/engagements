@@ -2668,7 +2668,11 @@ Resources:
                 questions: processedQuestions,
                 message: `Generated ${processedQuestions.length} questions successfully`
               }),
-              headers: { 'Access-Control-Allow-Origin': '*' }
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS'
+              }
             };
 
           } catch (error) {
@@ -2676,7 +2680,11 @@ Resources:
             return {
               statusCode: 500,
               body: JSON.stringify({ error: `Failed to generate questions: ${error.message}` }),
-              headers: { 'Access-Control-Allow-Origin': '*' }
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS'
+              }
             };
           }
         };
@@ -2746,7 +2754,21 @@ Resources:
 
         exports.generateScenarios = async (event) => {
           try {
-            console.log('🤖 Lambda function started, event:', JSON.stringify(event, null, 2));
+            console.log('🤖 Lambda function started for scenario generation');
+            console.log('Event:', JSON.stringify(event, null, 2));
+
+            // Handle CORS preflight
+            if (event.requestContext?.http?.method === 'OPTIONS') {
+              return {
+                statusCode: 200,
+                headers: {
+                  'Access-Control-Allow-Origin': '*',
+                  'Access-Control-Allow-Headers': 'Content-Type',
+                  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+                },
+                body: ''
+              };
+            }
 
             if (!event.body) {
               throw new Error('No request body provided');
@@ -2890,7 +2912,11 @@ Resources:
                 metadata: metadata,
                 message: 'Generated scenarios and metadata successfully'
               }),
-              headers: { 'Access-Control-Allow-Origin': '*' }
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS'
+              }
             };
 
           } catch (error) {
@@ -2898,7 +2924,11 @@ Resources:
             return {
               statusCode: 500,
               body: JSON.stringify({ error: 'Failed to generate scenarios: ' + error.message }),
-              headers: { 'Access-Control-Allow-Origin': '*' }
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS'
+              }
             };
           }
         };
@@ -2968,6 +2998,20 @@ Resources:
         exports.generateTrivia = async (event) => {
           try {
             console.log('🧠 Lambda function started for trivia generation');
+            console.log('Event:', JSON.stringify(event, null, 2));
+
+            // Handle CORS preflight
+            if (event.requestContext?.http?.method === 'OPTIONS') {
+              return {
+                statusCode: 200,
+                headers: {
+                  'Access-Control-Allow-Origin': '*',
+                  'Access-Control-Allow-Headers': 'Content-Type',
+                  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+                },
+                body: ''
+              };
+            }
 
             if (!event.body) {
               throw new Error('No request body provided');
@@ -3080,7 +3124,11 @@ Resources:
                 questions: processedQuestions,
                 message: 'Generated trivia questions successfully'
               }),
-              headers: { 'Access-Control-Allow-Origin': '*' }
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS'
+              }
             };
 
           } catch (error) {
@@ -3088,7 +3136,11 @@ Resources:
             return {
               statusCode: 500,
               body: JSON.stringify({ error: 'Failed to generate trivia questions: ' + error.message }),
-              headers: { 'Access-Control-Allow-Origin': '*' }
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS'
+              }
             };
           }
         };
