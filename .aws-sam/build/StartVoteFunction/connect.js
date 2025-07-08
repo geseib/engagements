@@ -13,13 +13,13 @@ exports.handler = async (event) => {
   console.log(`🔌 WebSocket Connect: ${connectionId}, Game: ${gameId}, Player: ${playerName}, Host: ${isHost}`);
   
   try {
-    // Store connection info
+    // Store connection info using proper single table design
     const ttl = Math.floor(Date.now() / 1000) + (2 * 60 * 60); // 2 hours TTL
     await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
       Item: {
-        PK: `CONNECTION#${connectionId}`,
-        SK: 'METADATA',
+        PK: `GAME#${gameId || 'LOBBY'}`,
+        SK: `CONNECTION#${connectionId}`,
         ConnectionId: connectionId,
         GameId: gameId || null,
         PlayerName: playerName || null,

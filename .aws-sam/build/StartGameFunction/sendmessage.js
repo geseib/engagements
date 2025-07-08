@@ -296,12 +296,12 @@ const getPlayerState = async (gameId, playerName) => {
 // Helper function to broadcast WebSocket message
 const broadcastToGame = async (gameId, message) => {
   try {
-    const connectionsResult = await db.send(new ScanCommand({
+    const connectionsResult = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
-      FilterExpression: 'begins_with(PK, :prefix) AND GameId = :gameId',
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
       ExpressionAttributeValues: {
-        ':prefix': 'CONNECTION#',
-        ':gameId': gameId
+        ':pk': `GAME#${gameId}`,
+        ':sk': 'CONNECTION#'
       }
     }));
     

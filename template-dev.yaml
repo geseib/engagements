@@ -40,7 +40,7 @@ Resources:
     Properties:
       Name: !Sub '${AWS::StackName}-websocket-dev'
       ProtocolType: WEBSOCKET
-      RouteSelectionExpression: "$default"
+      RouteSelectionExpression: "$request.body.action"
 
   ### WebSocket Deployment
   WebSocketDeployment:
@@ -49,6 +49,7 @@ Resources:
       - ConnectRoute
       - DisconnectRoute
       - SendMessageRoute
+      - DefaultRoute
     Properties:
       ApiId: !Ref WebSocketApi
 
@@ -177,7 +178,13 @@ Resources:
   SendMessageFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.sendMessageHandler
+      CodeUri: lambda-functions/websocket/
+      Runtime: nodejs18.x
+      Handler: sendmessage.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          WEBSOCKET_API_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/dev'
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
@@ -186,84 +193,26 @@ Resources:
             Action:
               - execute-api:ManageConnections
             Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
-      InlineCode: |-
-        const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-        const { DynamoDBDocumentClient, PutCommand, DeleteCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
-        const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
-
-        const dynamoClient = new DynamoDBClient({});
-        const db = DynamoDBDocumentClient.from(dynamoClient);
-        const apigateway = new ApiGatewayManagementApiClient({
-          endpoint: process.env.WEBSOCKET_API_ENDPOINT
-        });
-        
-        exports.sendMessageHandler = async (event) => {
-          const connectionId = event.requestContext.connectionId;
-          const body = JSON.parse(event.body);
-          
-          console.log(`📨 WebSocket Message:`, body);
-          
-          try {
-            if (body.action === 'broadcast') {
-              // Broadcast to all connections in the game
-              const gameId = body.gameId;
-              const message = body.message;
-              
-              // Get all connections for this game
-              const connections = await getGameConnections(gameId);
-              
-              // Send message to all connections
-              const sendPromises = connections.map(async (connection) => {
-                try {
-                  await apiGateway.postToConnection({
-                    ConnectionId: connection.ConnectionId,
-                    Data: JSON.stringify(message)
-                  }).promise();
-                } catch (error) {
-                  if (error.statusCode === 410) {
-                    // Connection is stale, remove it
-                    await db.delete({
-                      TableName: process.env.TABLE_NAME,
-                      Key: {
-                        PK: `CONNECTION#${connection.ConnectionId}`,
-                        SK: 'METADATA'
-                      }
-                    }).promise();
-                  }
-                }
-              });
-              
-              await Promise.all(sendPromises);
-              return { statusCode: 200, body: 'Message sent' };
-            }
-            
-            return { statusCode: 400, body: 'Unknown action' };
-          } catch (error) {
-            console.error('Send message error:', error);
-            return { statusCode: 500, body: 'Failed to send message' };
-          }
-        };
-        
-        async function getGameConnections(gameId) {
-          const result = await db.send(new QueryCommand({
-            TableName: process.env.TABLE_NAME,
-            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-            ExpressionAttributeValues: {
-              ':pk': `GAME#${gameId}`,
-              ':sk': 'CONNECTION#'
-            }
-          }));
-
-          return result.Items;
-        }
 
   SendMessageRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref WebSocketApi
-      RouteKey: $default
+      RouteKey: sendmessage
       AuthorizationType: NONE
       OperationName: SendMessageRoute
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref SendMessageInteg
+
+  DefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $default
+      AuthorizationType: NONE
+      OperationName: DefaultRoute
       Target: !Join
         - '/'
         - - 'integrations'

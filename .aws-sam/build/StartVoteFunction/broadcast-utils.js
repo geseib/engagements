@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, ScanCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 
 const dynamoClient = new DynamoDBClient({});
@@ -18,13 +18,13 @@ const broadcastToGame = async (gameId, message, websocketEndpoint) => {
   });
 
   try {
-    // Get all WebSocket connections for this game
-    const connectionsResult = await db.send(new ScanCommand({
+    // Get all WebSocket connections for this game using efficient query
+    const connectionsResult = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
-      FilterExpression: 'begins_with(PK, :prefix) AND GameId = :gameId',
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
       ExpressionAttributeValues: {
-        ':prefix': 'CONNECTION#',
-        ':gameId': gameId
+        ':pk': `GAME#${gameId}`,
+        ':sk': 'CONNECTION#'
       }
     }));
     

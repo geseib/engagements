@@ -38,13 +38,14 @@ Resources:
       Name:
         Fn::Sub: ${AWS::StackName}-websocket-dev
       ProtocolType: WEBSOCKET
-      RouteSelectionExpression: $default
+      RouteSelectionExpression: $request.body.action
   WebSocketDeployment:
     Type: AWS::ApiGatewayV2::Deployment
     DependsOn:
     - ConnectRoute
     - DisconnectRoute
     - SendMessageRoute
+    - DefaultRoute
     Properties:
       ApiId:
         Ref: WebSocketApi
@@ -166,7 +167,15 @@ Resources:
   SendMessageFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.sendMessageHandler
+      CodeUri: SendMessageFunction
+      Runtime: nodejs18.x
+      Handler: sendmessage.handler
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+          WEBSOCKET_API_ENDPOINT:
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/dev
       Policies:
       - DynamoDBCrudPolicy:
           TableName:
@@ -177,44 +186,29 @@ Resources:
           - execute-api:ManageConnections
           Resource:
             Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*
-      InlineCode: "const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');\n\
-        const { DynamoDBDocumentClient, PutCommand, DeleteCommand, QueryCommand }\
-        \ = require('@aws-sdk/lib-dynamodb');\nconst { ApiGatewayManagementApiClient,\
-        \ PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');\n\
-        \nconst dynamoClient = new DynamoDBClient({});\nconst db = DynamoDBDocumentClient.from(dynamoClient);\n\
-        const apigateway = new ApiGatewayManagementApiClient({\n  endpoint: process.env.WEBSOCKET_API_ENDPOINT\n\
-        });\n\nexports.sendMessageHandler = async (event) => {\n  const connectionId\
-        \ = event.requestContext.connectionId;\n  const body = JSON.parse(event.body);\n\
-        \  \n  console.log(`\U0001F4E8 WebSocket Message:`, body);\n  \n  try {\n\
-        \    if (body.action === 'broadcast') {\n      // Broadcast to all connections\
-        \ in the game\n      const gameId = body.gameId;\n      const message = body.message;\n\
-        \      \n      // Get all connections for this game\n      const connections\
-        \ = await getGameConnections(gameId);\n      \n      // Send message to all\
-        \ connections\n      const sendPromises = connections.map(async (connection)\
-        \ => {\n        try {\n          await apiGateway.postToConnection({\n   \
-        \         ConnectionId: connection.ConnectionId,\n            Data: JSON.stringify(message)\n\
-        \          }).promise();\n        } catch (error) {\n          if (error.statusCode\
-        \ === 410) {\n            // Connection is stale, remove it\n            await\
-        \ db.delete({\n              TableName: process.env.TABLE_NAME,\n        \
-        \      Key: {\n                PK: `CONNECTION#${connection.ConnectionId}`,\n\
-        \                SK: 'METADATA'\n              }\n            }).promise();\n\
-        \          }\n        }\n      });\n      \n      await Promise.all(sendPromises);\n\
-        \      return { statusCode: 200, body: 'Message sent' };\n    }\n    \n  \
-        \  return { statusCode: 400, body: 'Unknown action' };\n  } catch (error)\
-        \ {\n    console.error('Send message error:', error);\n    return { statusCode:\
-        \ 500, body: 'Failed to send message' };\n  }\n};\n\nasync function getGameConnections(gameId)\
-        \ {\n  const result = await db.send(new QueryCommand({\n    TableName: process.env.TABLE_NAME,\n\
-        \    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',\n    ExpressionAttributeValues:\
-        \ {\n      ':pk': `GAME#${gameId}`,\n      ':sk': 'CONNECTION#'\n    }\n \
-        \ }));\n\n  return result.Items;\n}"
+    Metadata:
+      SamResourceId: SendMessageFunction
   SendMessageRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId:
+        Ref: WebSocketApi
+      RouteKey: sendmessage
+      AuthorizationType: NONE
+      OperationName: SendMessageRoute
+      Target:
+        Fn::Join:
+        - /
+        - - integrations
+          - Ref: SendMessageInteg
+  DefaultRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId:
         Ref: WebSocketApi
       RouteKey: $default
       AuthorizationType: NONE
-      OperationName: SendMessageRoute
+      OperationName: DefaultRoute
       Target:
         Fn::Join:
         - /
@@ -1363,24 +1357,35 @@ Resources:
             Ref: GameTable
       InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
         exports.clearGame = async (event) => {\n  try {\n    const gameId = event.pathParameters.gameId;\n\
-        \    \n    // Get all items for this game\n    const res = await db.query({\n\
-        \      TableName: process.env.TABLE_NAME,\n      KeyConditionExpression: 'PK\
-        \ = :g',\n      ExpressionAttributeValues: { ':g': `GAME#${gameId}` }\n  \
-        \  }).promise();\n    \n    // Delete all items in batches\n    const items\
-        \ = res.Items || [];\n    const batchSize = 25;\n    let deletedCount = 0;\n\
-        \    \n    for (let i = 0; i < items.length; i += batchSize) {\n      const\
-        \ batch = items.slice(i, i + batchSize);\n      const deleteRequests = batch.map(item\
+        \    let deletedCount = 0;\n\n    // 1. Get all GAME# items for this game\n\
+        \    const gameRes = await db.query({\n      TableName: process.env.TABLE_NAME,\n\
+        \      KeyConditionExpression: 'PK = :g',\n      ExpressionAttributeValues:\
+        \ { ':g': `GAME#${gameId}` }\n    }).promise();\n\n    // 2. Get GAMES entry\
+        \ for this game\n    const gamesRes = await db.query({\n      TableName: process.env.TABLE_NAME,\n\
+        \      KeyConditionExpression: 'PK = :games AND SK = :gameId',\n      ExpressionAttributeValues:\
+        \ {\n        ':games': 'GAMES',\n        ':gameId': `GAME#${gameId}`\n   \
+        \   }\n    }).promise();\n\n    // 3. Get CONNECTION# entries for this game\n\
+        \    const connRes = await db.query({\n      TableName: process.env.TABLE_NAME,\n\
+        \      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',\n    \
+        \  ExpressionAttributeValues: {\n        ':pk': `GAME#${gameId}`,\n      \
+        \  ':sk': 'CONNECTION#'\n      }\n    }).promise();\n\n    // Combine all\
+        \ items to delete\n    const allItems = [\n      ...(gameRes.Items || []),\n\
+        \      ...(gamesRes.Items || []),\n      ...(connRes.Items || [])\n    ];\n\
+        \n    // Delete all items in batches\n    const batchSize = 25;\n\n    for\
+        \ (let i = 0; i < allItems.length; i += batchSize) {\n      const batch =\
+        \ allItems.slice(i, i + batchSize);\n      const deleteRequests = batch.map(item\
         \ => ({\n        DeleteRequest: {\n          Key: { PK: item.PK, SK: item.SK\
-        \ }\n        }\n      }));\n      \n      await db.batchWrite({\n        RequestItems:\
+        \ }\n        }\n      }));\n\n      await db.batchWrite({\n        RequestItems:\
         \ {\n          [process.env.TABLE_NAME]: deleteRequests\n        }\n     \
-        \ }).promise();\n      \n      deletedCount += deleteRequests.length;\n  \
-        \  }\n    \n    console.log(`\U0001F5D1\uFE0F Cleared ${deletedCount} items\
-        \ from game ${gameId}`);\n    \n    return {\n      statusCode: 200,\n   \
-        \   body: JSON.stringify({ \n        message: `Game ${gameId} cleared successfully`,\n\
-        \        itemsDeleted: deletedCount\n      }),\n      headers: { 'Access-Control-Allow-Origin':\
-        \ '*' }\n    };\n    \n  } catch (error) {\n    console.error('Clear game\
-        \ error:', error);\n    return {\n      statusCode: 500,\n      body: JSON.stringify({\
-        \ error: `Failed to clear game: ${error.message}` }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ }).promise();\n\n      deletedCount += deleteRequests.length;\n    }\n\n\
+        \    console.log(`\U0001F5D1\uFE0F Cleared ${deletedCount} items from game\
+        \ ${gameId} (GAME# includes connections, GAMES)`);\n\n    return {\n     \
+        \ statusCode: 200,\n      body: JSON.stringify({\n        message: `Game ${gameId}\
+        \ cleared successfully`,\n        itemsDeleted: deletedCount\n      }),\n\
+        \      headers: { 'Access-Control-Allow-Origin': '*' }\n    };\n    \n  }\
+        \ catch (error) {\n    console.error('Clear game error:', error);\n    return\
+        \ {\n      statusCode: 500,\n      body: JSON.stringify({ error: `Failed to\
+        \ clear game: ${error.message}` }),\n      headers: { 'Access-Control-Allow-Origin':\
         \ '*' }\n    };\n  }\n};"
       Events:
         AdminClearGameEvent:
@@ -1400,30 +1405,37 @@ Resources:
           TableName:
             Ref: GameTable
       InlineCode: "const AWS = require('aws-sdk');\nconst db = new AWS.DynamoDB.DocumentClient();\n\
-        exports.clearAllGames = async (event) => {\n  try {\n    // Scan for all game\
-        \ items\n    const res = await db.scan({\n      TableName: process.env.TABLE_NAME,\n\
-        \      FilterExpression: 'begins_with(PK, :gamePrefix)',\n      ExpressionAttributeValues:\
-        \ {\n        ':gamePrefix': 'GAME#'\n      }\n    }).promise();\n    \n  \
-        \  const items = res.Items || [];\n    if (items.length === 0) {\n      return\
-        \ {\n        statusCode: 200,\n        body: JSON.stringify({ \n         \
-        \ message: 'No games found to delete',\n          itemsDeleted: 0\n      \
-        \  }),\n        headers: { 'Access-Control-Allow-Origin': '*' }\n      };\n\
-        \    }\n    \n    // Delete all items in batches\n    const batchSize = 25;\n\
-        \    let deletedCount = 0;\n    \n    for (let i = 0; i < items.length; i\
-        \ += batchSize) {\n      const batch = items.slice(i, i + batchSize);\n  \
-        \    const deleteRequests = batch.map(item => ({\n        DeleteRequest: {\n\
-        \          Key: { PK: item.PK, SK: item.SK }\n        }\n      }));\n    \
-        \  \n      await db.batchWrite({\n        RequestItems: {\n          [process.env.TABLE_NAME]:\
-        \ deleteRequests\n        }\n      }).promise();\n      \n      deletedCount\
-        \ += deleteRequests.length;\n    }\n    \n    console.log(`\U0001F5D1\uFE0F\
-        \ Cleared all games: ${deletedCount} items deleted`);\n    \n    return {\n\
-        \      statusCode: 200,\n      body: JSON.stringify({ \n        message: 'All\
-        \ games cleared successfully',\n        itemsDeleted: deletedCount\n     \
-        \ }),\n      headers: { 'Access-Control-Allow-Origin': '*' }\n    };\n   \
-        \ \n  } catch (error) {\n    console.error('Clear all games error:', error);\n\
-        \    return {\n      statusCode: 500,\n      body: JSON.stringify({ error:\
-        \ `Failed to clear all games: ${error.message}` }),\n      headers: { 'Access-Control-Allow-Origin':\
-        \ '*' }\n    };\n  }\n};"
+        exports.clearAllGames = async (event) => {\n  try {\n    let deletedCount\
+        \ = 0;\n\n    // 1. Scan for all GAME# items\n    const gameRes = await db.scan({\n\
+        \      TableName: process.env.TABLE_NAME,\n      FilterExpression: 'begins_with(PK,\
+        \ :gamePrefix)',\n      ExpressionAttributeValues: {\n        ':gamePrefix':\
+        \ 'GAME#'\n      }\n    }).promise();\n\n    // 2. Scan for all GAMES items\n\
+        \    const gamesRes = await db.scan({\n      TableName: process.env.TABLE_NAME,\n\
+        \      FilterExpression: 'PK = :games AND begins_with(SK, :gamePrefix)',\n\
+        \      ExpressionAttributeValues: {\n        ':games': 'GAMES',\n        ':gamePrefix':\
+        \ 'GAME#'\n      }\n    }).promise();\n\n    // Note: CONNECTION# entries\
+        \ are now stored under GAME# partitions\n    // so they will be deleted when\
+        \ we delete GAME# items\n\n    // Combine all items to delete\n    const allItems\
+        \ = [\n      ...(gameRes.Items || []),\n      ...(gamesRes.Items || [])\n\
+        \    ];\n\n    if (allItems.length === 0) {\n      return {\n        statusCode:\
+        \ 200,\n        body: JSON.stringify({\n          message: 'No games found\
+        \ to delete',\n          itemsDeleted: 0\n        }),\n        headers: {\
+        \ 'Access-Control-Allow-Origin': '*' }\n      };\n    }\n\n    // Delete all\
+        \ items in batches\n    const batchSize = 25;\n\n    for (let i = 0; i < allItems.length;\
+        \ i += batchSize) {\n      const batch = allItems.slice(i, i + batchSize);\n\
+        \      const deleteRequests = batch.map(item => ({\n        DeleteRequest:\
+        \ {\n          Key: { PK: item.PK, SK: item.SK }\n        }\n      }));\n\n\
+        \      await db.batchWrite({\n        RequestItems: {\n          [process.env.TABLE_NAME]:\
+        \ deleteRequests\n        }\n      }).promise();\n\n      deletedCount +=\
+        \ deleteRequests.length;\n    }\n\n    console.log(`\U0001F5D1\uFE0F Cleared\
+        \ all games: ${deletedCount} items deleted (GAME# includes connections, GAMES)`);\n\
+        \    \n    return {\n      statusCode: 200,\n      body: JSON.stringify({\
+        \ \n        message: 'All games cleared successfully',\n        itemsDeleted:\
+        \ deletedCount\n      }),\n      headers: { 'Access-Control-Allow-Origin':\
+        \ '*' }\n    };\n    \n  } catch (error) {\n    console.error('Clear all games\
+        \ error:', error);\n    return {\n      statusCode: 500,\n      body: JSON.stringify({\
+        \ error: `Failed to clear all games: ${error.message}` }),\n      headers:\
+        \ { 'Access-Control-Allow-Origin': '*' }\n    };\n  }\n};"
       Events:
         AdminClearAllGamesEvent:
           Type: HttpApi
