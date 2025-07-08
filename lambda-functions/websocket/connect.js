@@ -21,9 +21,9 @@ exports.handler = async (event) => {
         PK: `GAME#${gameId || 'LOBBY'}`,
         SK: `CONNECTION#${connectionId}`,
         ConnectionId: connectionId,
+        ConnectionType: isHost ? 'HOST' : 'PLAYER',
         GameId: gameId || null,
         PlayerName: playerName || null,
-        IsHost: isHost || false,
         ConnectedAt: new Date().toISOString(),
         ttl
       }

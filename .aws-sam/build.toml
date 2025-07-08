@@ -7,7 +7,7 @@ architecture = "x86_64"
 handler = "connect.handler"
 manifest_hash = ""
 packagetype = "Zip"
-functions = ["ConnectFunction", "SendMessageFunction", "StartQuestionFunction", "StartVoteFunction", "SubmitVotesFunction", "SetGameStateFunction", "GetCompleteGameStateFunction", "SaveGameContextFunction", "StartGameFunction"]
+functions = ["ConnectFunction", "MessageFunction", "StartQuestionFunction", "StartVoteFunction", "SubmitVotesFunction", "SetGameStateFunction", "GetCompleteGameStateFunction", "SaveGameContextFunction", "StartGameFunction"]
 
 [function_build_definitions.f28153d1-8afe-40e4-863e-bffc8a31288a]
 codeuri = "/Users/georgeseib/Documents/projects/engagements/lambda-functions/websocket"

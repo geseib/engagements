@@ -38,14 +38,12 @@ Resources:
       Name:
         Fn::Sub: ${AWS::StackName}-websocket-dev
       ProtocolType: WEBSOCKET
-      RouteSelectionExpression: $request.body.action
   WebSocketDeployment:
     Type: AWS::ApiGatewayV2::Deployment
     DependsOn:
     - ConnectRoute
     - DisconnectRoute
-    - SendMessageRoute
-    - DefaultRoute
+    - MessageRoute
     Properties:
       ApiId:
         Ref: WebSocketApi
@@ -164,12 +162,12 @@ Resources:
       FunctionName:
         Ref: DisconnectFunction
       Principal: apigateway.amazonaws.com
-  SendMessageFunction:
+  MessageFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: SendMessageFunction
+      CodeUri: MessageFunction
       Runtime: nodejs18.x
-      Handler: sendmessage.handler
+      Handler: message.handler
       Environment:
         Variables:
           TABLE_NAME:
@@ -187,55 +185,42 @@ Resources:
           Resource:
             Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*
     Metadata:
-      SamResourceId: SendMessageFunction
-  SendMessageRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId:
-        Ref: WebSocketApi
-      RouteKey: sendmessage
-      AuthorizationType: NONE
-      OperationName: SendMessageRoute
-      Target:
-        Fn::Join:
-        - /
-        - - integrations
-          - Ref: SendMessageInteg
-  DefaultRoute:
+      SamResourceId: MessageFunction
+  MessageRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId:
         Ref: WebSocketApi
       RouteKey: $default
       AuthorizationType: NONE
-      OperationName: DefaultRoute
+      OperationName: MessageRoute
       Target:
         Fn::Join:
         - /
         - - integrations
-          - Ref: SendMessageInteg
-  SendMessageInteg:
+          - Ref: MessageInteg
+  MessageInteg:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
       ApiId:
         Ref: WebSocketApi
-      Description: Send Message Integration
+      Description: WebSocket Message Integration
       IntegrationType: AWS_PROXY
       IntegrationUri:
         Fn::Sub:
         - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations
         - lambdaArn:
             Fn::GetAtt:
-            - SendMessageFunction
+            - MessageFunction
             - Arn
-  SendMessagePermission:
+  MessagePermission:
     Type: AWS::Lambda::Permission
     DependsOn:
     - WebSocketApi
     Properties:
       Action: lambda:InvokeFunction
       FunctionName:
-        Ref: SendMessageFunction
+        Ref: MessageFunction
       Principal: apigateway.amazonaws.com
   GameTable:
     Type: AWS::DynamoDB::Table
