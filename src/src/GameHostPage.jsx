@@ -80,6 +80,7 @@ function GameHostPage() {
   const [gameAiContext, setGameAiContext] = useState('');
   const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer' or 'trivia'
   const [triviaTimer, setTriviaTimer] = useState(30); // Timer for trivia questions in seconds
+  const [randomizeQuestions, setRandomizeQuestions] = useState(true); // Default ON - randomize question order
   
   // Question Set Management
   const [questionSets, setQuestionSets] = useState([]);
@@ -441,10 +442,15 @@ Focus on actionable business strategy insights.`;
 
     webSocketClient.onMessage('playerVoted', (data) => {
       console.log('🔌 Player voted notification:', data);
-      // Fetch latest votes for the question
-      if (data.questionId) {
-        console.log(`🔌 Refreshing votes for question ${data.questionId}`);
-        fetchVotesForQuestion(data.questionId);
+      // Use WebSocket data directly - mark player as voted and increment count
+      if (data.playerName) {
+        setPlayersWhoVoted(prev => {
+          if (!prev.includes(data.playerName)) {
+            console.log(`✅ Marking ${data.playerName} as voted`);
+            return [...prev, data.playerName];
+          }
+          return prev;
+        });
       }
     });
 
@@ -474,12 +480,9 @@ Focus on actionable business strategy insights.`;
       }
     });
 
-    // Connect as host
-    const connected = webSocketClient.connect(gameId, null, true);
-    if (!connected) {
-      console.error('🔌 Failed to connect WebSocket, falling back to polling');
-      setUseWebSocket(false);
-    }
+    // Connect as host - WebSocket is required
+    console.log('🔌 HOST: Connecting WebSocket for real-time updates');
+    webSocketClient.connect(gameId, null, true);
 
     return () => {
       console.log(`🔌 HOST: Disconnecting WebSocket for game ${gameId}`);
@@ -527,11 +530,12 @@ Focus on actionable business strategy insights.`;
       await fetch(`${API_BASE}games/${gameId}/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           eventTitle: titleToUse,
           aiContext: aiContext || null,
           gameType: currentGameType,
-          questionSetId: selectedSetId
+          questionSetId: selectedSetId,
+          randomizeQuestions: randomizeQuestions
         })
       });
       console.log(`🆕 HOST: Game ${gameId} created with title: ${titleToUse}, questionSetId: ${selectedSetId}`);
@@ -1137,28 +1141,25 @@ Focus on actionable business strategy insights.`;
     setManualStateChange(true);
     setGameState('voting');
     setCurrentAnswerIndex(0); // Reset to first answer for navigation
-    
-    // Update game state in database
+
+    // Start vote using dedicated function that broadcasts state change
     try {
-      // Get current state to preserve scoredQuestions
+      // Get current question number
       const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
       const currentState = stateRes.ok ? await stateRes.json() : {};
-      
-      await fetch(`${API_BASE}games/${gameId}/state`, {
+      const questionNumber = currentState.currentQuestion;
+
+      await fetch(`${API_BASE}games/${gameId}/start-vote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          state: 'voting',
-          currentQuestion: currentState.currentQuestion, // Keep the sequential number
-          currentQuestionId: currentState.currentQuestion, // Use sequential number as ID
-          scoredQuestions: currentState.scoredQuestions || [],
-          usedQuestions: currentState.usedQuestions || [],
-          playedQuestions: currentState.playedQuestions || [],
-          currentQuestionData: currentState.currentQuestionData
+          questionNumber: questionNumber
         })
       });
+
+      console.log(`🗳️ Vote started for question ${questionNumber} - WebSocket broadcast sent`);
     } catch (e) {
-      console.error('Failed to update game state', e);
+      console.error('Failed to start vote', e);
     }
   };
 
@@ -1399,14 +1400,26 @@ Focus on actionable business strategy insights.`;
     }
 
     try {
-      // Clear all game data from database
-      console.log(`🗑️ HOST: Clearing old game ${gameId} data`);
-      await fetch(`${API_BASE}games/${gameId}/clear`, {
+      // Clear all game data from database (always call, backend handles empty gameId gracefully)
+      console.log(`🗑️ HOST: Clearing old game data (gameId: ${gameId || 'none'})`);
+      const clearResponse = await fetch(`${API_BASE}games/${gameId || ''}/clear`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
+
+      if (clearResponse.ok) {
+        const clearData = await clearResponse.json();
+        console.log(`✅ HOST: Clear response:`, clearData);
+        if (clearData.status === 'no_game_id') {
+          console.log(`📝 HOST: No previous game to clear - starting fresh`);
+        } else {
+          console.log(`🗑️ HOST: Cleared ${clearData.itemsDeleted} items from previous game`);
+        }
+      }
     } catch (e) {
       console.error('handleNewGame clear error', e);
+      // Don't fail the new game creation if clear fails
+      console.log(`⚠️ HOST: Clear failed, but continuing with new game creation`);
     }
     
     // Generate new game ID and update URL
@@ -1859,7 +1872,25 @@ Focus on actionable business strategy insights.`;
                 </small>
               </div>
             )}
-            
+
+            <div className="form-group">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={randomizeQuestions}
+                  onChange={(e) => setRandomizeQuestions(e.target.checked)}
+                  className="dialog-checkbox"
+                />
+                Randomize Question Order
+              </label>
+              <small className="dialog-help-text">
+                {randomizeQuestions
+                  ? "Questions will be selected randomly from available categories"
+                  : "Questions will be asked in order, completing each category before moving to the next"
+                }
+              </small>
+            </div>
+
             <div className="form-group">
               <label>AI Context (Optional):</label>
               <textarea

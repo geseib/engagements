@@ -258,12 +258,17 @@ function PlayerPage() {
   // Monitor WebSocket mode changes from admin panel
   useEffect(() => {
     const checkWebSocketMode = () => {
-      const adminSetting = localStorage.getItem('admin_websocket_mode') === 'true';
-      const windowSetting = window.WEBSOCKET_MODE || false;
-      const currentMode = adminSetting || windowSetting;
-      
+      const adminSetting = localStorage.getItem('admin_websocket_mode');
+      const windowSetting = window.WEBSOCKET_MODE;
+
+      // Default to true if no setting exists (first time users)
+      const adminMode = adminSetting !== null ? adminSetting === 'true' : true;
+      const windowMode = windowSetting !== undefined ? windowSetting : true;
+      const currentMode = adminMode && windowMode;
+
       if (currentMode !== useWebSocket) {
         console.log(`🔌 PLAYER: WebSocket mode changed: ${currentMode ? 'ENABLED' : 'DISABLED'}`);
+        console.log(`🔍 PLAYER: Settings - admin: ${adminSetting}, window: ${windowSetting}, final: ${currentMode}`);
         setUseWebSocket(currentMode);
         window.WEBSOCKET_MODE = currentMode;
       }
@@ -302,6 +307,12 @@ function PlayerPage() {
       checkGameState();
     });
 
+    webSocketClient.onMessage('votingStarted', (data) => {
+      console.log('🔌 Player received voting started notification:', data);
+      // Fetch current game state from API to get voting data
+      checkGameState();
+    });
+
     webSocketClient.onMessage('playerAnswered', (data) => {
       console.log('🔌 Player received player answered notification:', data);
       // This notification comes when any player submits an answer
@@ -320,16 +331,13 @@ function PlayerPage() {
       // We don't currently show AI summaries to players, but this is available
     });
 
-    // Connect as player
-    const connected = webSocketClient.connect(gameId, playerName, false);
-    if (!connected) {
-      console.error('🔌 Failed to connect WebSocket, falling back to polling');
-      setUseWebSocket(false);
-    } else {
-      // Do initial state check when WebSocket connects
-      console.log('🔌 PLAYER: WebSocket connected, doing initial state check');
-      setTimeout(() => checkGameState(), 500);
-    }
+    // Connect as player - WebSocket is required
+    console.log('🔌 PLAYER: Connecting WebSocket for real-time updates');
+    webSocketClient.connect(gameId, playerName, false);
+
+    // Do initial state check when WebSocket connects
+    console.log('🔌 PLAYER: WebSocket connecting, doing initial state check');
+    setTimeout(() => checkGameState(), 500);
 
     return () => {
       console.log(`🔌 PLAYER: Disconnecting WebSocket for game ${gameId}`);
@@ -338,6 +346,7 @@ function PlayerPage() {
       webSocketClient.offMessage('initialStateSync');
       webSocketClient.offMessage('gameStateChanged');
       webSocketClient.offMessage('questionStarted');
+      webSocketClient.offMessage('votingStarted');
       webSocketClient.offMessage('playerAnswered');
       webSocketClient.offMessage('playerVoted');
       webSocketClient.offMessage('aiSummaryReady');
@@ -738,12 +747,17 @@ function PlayerPage() {
     if (votes.third !== '') backendVotes[parseInt(votes.third)] = 3;
 
     try {
+      // Get current question number from game state
+      const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
+      const stateJson = await stateRes.json();
+      const currentQuestionNumber = stateJson.currentQuestion;
+
       await fetch(`${API_BASE}games/${gameId}/votes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: playerName,
-          questionNumber: currentQuestion?.id,
+          questionNumber: currentQuestionNumber,
           votes: backendVotes,
         }),
       });
@@ -1199,13 +1213,13 @@ function PlayerPage() {
                     <span className="score-value">{playerScore} points</span>
                   </div>
                   
-                  {playerRanking && (
+                  {playerRanking && playerScore > 0 && (
                     <div className="player-ranking">
                       <span className="ranking-label">Your Ranking:</span>
                       <span className="ranking-value">
-                        {playerRanking.rank === 1 ? '🏆' : 
-                         playerRanking.rank === 2 ? '🥈' : 
-                         playerRanking.rank === 3 ? '🥉' : '📍'} 
+                        {playerRanking.rank === 1 ? '🏆' :
+                         playerRanking.rank === 2 ? '🥈' :
+                         playerRanking.rank === 3 ? '🥉' : '📍'}
                         {playerRanking.rank} of {playerRanking.total}
                       </span>
                     </div>
@@ -1220,13 +1234,13 @@ function PlayerPage() {
                     <span className="score-value">{playerScore} points</span>
                   </div>
                   
-                  {playerRanking && (
+                  {playerRanking && playerScore > 0 && (
                     <div className="player-ranking">
                       <span className="ranking-label">Your Ranking:</span>
                       <span className="ranking-value">
-                        {playerRanking.rank === 1 ? '🏆' : 
-                         playerRanking.rank === 2 ? '🥈' : 
-                         playerRanking.rank === 3 ? '🥉' : '📍'} 
+                        {playerRanking.rank === 1 ? '🏆' :
+                         playerRanking.rank === 2 ? '🥈' :
+                         playerRanking.rank === 3 ? '🥉' : '📍'}
                         {playerRanking.rank} of {playerRanking.total}
                       </span>
                     </div>
