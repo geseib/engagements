@@ -4,7 +4,10 @@
   "private": true,
   "scripts": {
     "start": "webpack serve --mode development --open",
-    "build": "webpack --mode production"
+    "build": "webpack --mode production",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "html-webpack-plugin": "^5.6.3",
@@ -17,9 +20,15 @@
     "@babel/core": "latest",
     "@babel/preset-env": "latest",
     "@babel/preset-react": "latest",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "babel-loader": "latest",
     "copy-webpack-plugin": "^13.0.0",
     "css-loader": "latest",
+    "identity-obj-proxy": "^3.0.0",
+    "jest": "^30.0.4",
+    "jest-environment-jsdom": "^30.0.4",
     "style-loader": "latest",
     "webpack": "latest",
     "webpack-cli": "latest",

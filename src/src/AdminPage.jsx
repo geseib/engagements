@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from 'react';
+import AIScenarioBuilder from './components/AIScenarioBuilder';
+import TriviaAIBuilder from './components/TriviaAIBuilder';
+import PollAIBuilder from './components/PollAIBuilder';
+import SurveyAIBuilder from './components/SurveyAIBuilder';
+import './BuilderPage.css';
 
 const API_BASE = window.API_BASE;
 
 function AdminPage() {
+  console.log('🔧 AdminPage component loading with AI builders...');
+
   const [questionSets, setQuestionSets] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadStatus, setUploadStatus] = useState('');
@@ -19,7 +26,7 @@ function AdminPage() {
   const [customInstructions, setCustomInstructions] = useState('');
   const [aiContextInstructions, setAiContextInstructions] = useState('');
   const [showDefaultInstructions, setShowDefaultInstructions] = useState(false);
-  const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer' or 'trivia'
+  const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer', 'trivia', or 'poll'
   
   // Question set deletion
   const [selectedQuestionSet, setSelectedQuestionSet] = useState('');
@@ -47,6 +54,21 @@ function AdminPage() {
   const [editAiContextInstructions, setEditAiContextInstructions] = useState('');
   const [editEngagementType, setEditEngagementType] = useState('call-and-answer');
   const [saveStatus, setSaveStatus] = useState('');
+
+  // AI Scenario Builder
+  const [showAIScenarioBuilder, setShowAIScenarioBuilder] = useState(false);
+
+  // AI Trivia Builder
+  const [showTriviaAIBuilder, setShowTriviaAIBuilder] = useState(false);
+
+  // AI Poll Builder
+  const [showPollAIBuilder, setShowPollAIBuilder] = useState(false);
+
+  // AI Survey Builder
+  const [showSurveyAIBuilder, setShowSurveyAIBuilder] = useState(false);
+
+  // Test API endpoints
+  const [testStatus, setTestStatus] = useState('');
 
   const defaultInstructions = "How would you apply this concept in your current role or organization? Consider the specific challenges and opportunities in your context.";
 
@@ -194,12 +216,12 @@ function AdminPage() {
     }
   };
 
-  const handleDownloadTemplate = async () => {
+  const handleDownloadTemplate = async (templateType = 'call-and-answer') => {
     try {
       setUploadStatus('Downloading template...');
-      const response = await fetch(`${API_BASE}admin/download-template`);
+      const response = await fetch(`${API_BASE}admin/download-template?type=${templateType}`);
       const result = await response.json();
-      
+
       if (response.ok) {
         // Create and download the CSV file
         const blob = new Blob([result.content], { type: 'text/csv' });
@@ -211,7 +233,7 @@ function AdminPage() {
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
-        setUploadStatus('✅ Template downloaded successfully');
+        setUploadStatus(`✅ ${result.filename} downloaded successfully`);
       } else {
         setUploadStatus(`❌ Failed to download template: ${result.error}`);
       }
@@ -355,6 +377,262 @@ function AdminPage() {
     setShowDeleteConfirm(true);
   };
 
+  // Handle AI-generated scenarios
+  const handleScenariosGenerated = async (scenarioData) => {
+    setShowAIScenarioBuilder(false);
+
+    // scenarioData now includes both scenarios and metadata
+    const { scenarios, metadata } = scenarioData;
+
+    // Convert scenarios to CSV format and upload
+    const csvContent = generateScenariosCSV(scenarios);
+    const timestamp = Date.now();
+
+    try {
+      setUploadStatus('Processing AI-generated scenarios...');
+
+      const response = await fetch(`${API_BASE}admin/upload-questions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileName: `${metadata.title.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.csv`,
+          fileContent: csvContent,
+          customTitle: metadata.title,
+          customDescription: metadata.description,
+          customInstructions: metadata.customInstructions,
+          aiContextInstructions: metadata.aiContextInstructions,
+          engagementType: 'call-and-answer'
+        })
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setUploadStatus(`✅ ${result.message}`);
+        fetchQuestionSets(); // Refresh the list
+      } else {
+        setUploadStatus(`❌ Upload failed: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      setUploadStatus(`❌ Upload failed: ${error.message}`);
+    }
+  };
+
+  const generateScenariosCSV = (scenarios) => {
+    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction';
+    const rows = scenarios.map((scenario, index) => {
+      return `"${scenario.category || 'AI Generated'}","${index + 1}","${scenario.title}","${scenario.detail}","${scenario.school || 'Professional Development'}","${scenario.customInstructions || ''}"`;
+    });
+    return headers + '\n' + rows.join('\n');
+  };
+
+  // Handle AI-generated trivia
+  const handleTriviaGenerated = async (triviaData) => {
+    setShowTriviaAIBuilder(false);
+
+    // triviaData includes both questions and metadata
+    const { questions, metadata } = triviaData;
+
+    // Convert trivia to CSV format and upload
+    const csvContent = generateTriviaCSV(questions);
+    const timestamp = Date.now();
+
+    try {
+      setUploadStatus('Processing AI-generated trivia questions...');
+
+      const response = await fetch(`${API_BASE}admin/upload-questions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileName: `${metadata.title.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.csv`,
+          fileContent: csvContent,
+          customTitle: metadata.title,
+          customDescription: metadata.description,
+          customInstructions: metadata.customInstructions,
+          aiContextInstructions: metadata.aiContextInstructions,
+          engagementType: 'trivia'
+        })
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setUploadStatus(`✅ ${result.message}`);
+        fetchQuestionSets(); // Refresh the list
+      } else {
+        setUploadStatus(`❌ Upload failed: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      setUploadStatus(`❌ Upload failed: ${error.message}`);
+    }
+  };
+
+  const generateTriviaCSV = (questions) => {
+    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,CorrectAnswer,WrongAnswer1,WrongAnswer2,WrongAnswer3,WrongAnswer4,WrongAnswer5,Difficulty';
+    const rows = questions.map((trivia, index) => {
+      const wrongAnswers = [
+        trivia.optionA !== trivia.correctAnswer ? trivia.optionA : '',
+        trivia.optionB !== trivia.correctAnswer ? trivia.optionB : '',
+        trivia.optionC !== trivia.correctAnswer ? trivia.optionC : '',
+        trivia.optionD !== trivia.correctAnswer ? trivia.optionD : '',
+        trivia.optionE !== trivia.correctAnswer ? trivia.optionE : '',
+        trivia.optionF !== trivia.correctAnswer ? trivia.optionF : ''
+      ].filter(answer => answer && answer.trim()).slice(0, 5);
+
+      // Pad with empty strings if needed
+      while (wrongAnswers.length < 5) {
+        wrongAnswers.push('');
+      }
+
+      return `"${trivia.category}","${index + 1}","${trivia.title}","${trivia.detail || ''}","${trivia.school || 'General'}","${trivia.customInstructions || ''}","${trivia.correctAnswer}","${wrongAnswers[0]}","${wrongAnswers[1]}","${wrongAnswers[2]}","${wrongAnswers[3]}","${wrongAnswers[4]}","${trivia.difficulty}"`;
+    });
+    return headers + '\n' + rows.join('\n');
+  };
+
+  // Handle AI-generated polls
+  const handlePollGenerated = async (pollData) => {
+    setShowPollAIBuilder(false);
+
+    // pollData includes both questions and metadata
+    const { questions, metadata } = pollData;
+
+    // Convert polls to CSV format and upload
+    const csvContent = generatePollCSV(questions);
+    const timestamp = Date.now();
+
+    try {
+      setUploadStatus('Processing AI-generated poll questions...');
+
+      const response = await fetch(`${API_BASE}admin/upload-questions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileName: `${metadata.title.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.csv`,
+          fileContent: csvContent,
+          customTitle: metadata.title,
+          customDescription: metadata.description,
+          customInstructions: metadata.customInstructions,
+          aiContextInstructions: metadata.aiContextInstructions,
+          engagementType: 'poll'
+        })
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setUploadStatus(`✅ ${result.message}`);
+        fetchQuestionSets(); // Refresh the list
+      } else {
+        setUploadStatus(`❌ Upload failed: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      setUploadStatus(`❌ Upload failed: ${error.message}`);
+    }
+  };
+
+  const generatePollCSV = (questions) => {
+    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Option1,Option2,Option3,Option4,Option5,AllowMultiple';
+    const rows = questions.map((poll, index) => {
+      const options = [...poll.options];
+      while (options.length < 5) {
+        options.push('');
+      }
+
+      return `"${poll.category}","${index + 1}","${poll.title}","${poll.detail || ''}","${poll.school || 'General'}","${poll.customInstructions || ''}","${options[0]}","${options[1]}","${options[2]}","${options[3]}","${options[4]}","${poll.allowMultiple ? 'true' : 'false'}"`;
+    });
+    return headers + '\n' + rows.join('\n');
+  };
+
+  // Handle AI-generated surveys
+  const handleSurveyGenerated = async (surveyData) => {
+    setShowSurveyAIBuilder(false);
+
+    // surveyData includes survey and metadata
+    const { survey, metadata } = surveyData;
+
+    // Export survey as JSON file
+    const jsonContent = JSON.stringify(survey, null, 2);
+    const timestamp = Date.now();
+    const fileName = `survey-${survey.title.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.json`;
+
+    try {
+      setUploadStatus('Processing AI-generated survey...');
+
+      // Create download link for JSON
+      const blob = new Blob([jsonContent], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      setUploadStatus(`✅ Survey "${survey.title}" exported as JSON file with ${survey.questions.length} questions`);
+
+    } catch (error) {
+      console.error('Survey export error:', error);
+      setUploadStatus(`❌ Survey export failed: ${error.message}`);
+    }
+  };
+
+  // Test API endpoints
+  const testAPIEndpoints = async () => {
+    setTestStatus('Testing API endpoints...');
+
+    try {
+      // Test the simple endpoint first
+      console.log('🧪 Testing API endpoint:', `${API_BASE}admin/test-ai`);
+      const testResponse = await fetch(`${API_BASE}admin/test-ai`);
+      const testResult = await testResponse.json();
+
+      if (testResponse.ok) {
+        setTestStatus(`✅ API Test Success: ${testResult.message}`);
+
+        // Test AI generation endpoint
+        setTimeout(async () => {
+          try {
+            const aiResponse = await fetch(`${API_BASE}admin/ai-generate-questions`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                engagementType: 'call-and-answer',
+                userInput: 'Test prompt for leadership scenarios',
+                questionCount: 1,
+                context: { title: 'Test' }
+              })
+            });
+
+            if (aiResponse.ok) {
+              setTestStatus(prev => prev + ' | ✅ AI Generation API Working');
+            } else {
+              const errorResult = await aiResponse.json();
+              setTestStatus(prev => prev + ` | ❌ AI Generation Failed: ${errorResult.error}`);
+            }
+          } catch (aiError) {
+            setTestStatus(prev => prev + ` | ❌ AI Generation Error: ${aiError.message}`);
+          }
+        }, 1000);
+
+      } else {
+        setTestStatus(`❌ API Test Failed: ${testResult.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      setTestStatus(`❌ API Test Error: ${error.message}`);
+      console.error('API Test Error:', error);
+    }
+  };
+
   const confirmDelete = async () => {
     setShowDeleteConfirm(false);
     setIsDeleting(true);
@@ -454,18 +732,52 @@ function AdminPage() {
         </div>
 
         <div className="admin-content">
-          {/* CSV Template Download Section */}
+          {/* API Test Section */}
           <div className="admin-section">
-            <h2>📥 Download CSV Template</h2>
-            <p className="section-description">Download a sample CSV template to understand the required format for question sets.</p>
-            
-            <div className="template-controls">
+            <h2>🧪 API Endpoint Test</h2>
+            <p className="section-description">Test if the AI generation API endpoints are working properly. Use this to verify that all AI builders are functioning correctly.</p>
+
+            <div className="test-controls">
               <button
                 className="btn-secondary"
-                onClick={handleDownloadTemplate}
+                onClick={testAPIEndpoints}
               >
-                📄 Download Template CSV
+                🧪 Test AI API Endpoints
               </button>
+              {testStatus && (
+                <div className="test-status" style={{ marginTop: '10px', padding: '10px', background: '#f8f9fa', borderRadius: '4px' }}>
+                  {testStatus}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* CSV Template Download Section */}
+          <div className="admin-section">
+            <h2>📥 Download CSV Templates</h2>
+            <p className="section-description">Download engagement-specific CSV templates to understand the required format for each type of question set.</p>
+
+            <div className="template-controls">
+              <div className="template-buttons">
+                <button
+                  className="btn-secondary"
+                  onClick={() => handleDownloadTemplate('call-and-answer')}
+                >
+                  📞 Call & Answer Template
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => handleDownloadTemplate('trivia')}
+                >
+                  🧠 Trivia Template
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => handleDownloadTemplate('poll')}
+                >
+                  📊 Poll Template
+                </button>
+              </div>
             </div>
           </div>
 
@@ -514,6 +826,7 @@ function AdminPage() {
                   >
                     <option value="call-and-answer">Call and Answer</option>
                     <option value="trivia">Trivia</option>
+                    <option value="poll">Poll</option>
                   </select>
                 </div>
               </div>
@@ -629,7 +942,10 @@ function AdminPage() {
                     <div className="set-stats">
                       <span className="stat-badge">{set.totalQuestions} questions</span>
                       <span className="stat-badge">{set.categoryCount} categories</span>
-                      <span className="stat-badge">{set.engagementType === 'trivia' ? 'Trivia' : 'Call and Answer'}</span>
+                      <span className="stat-badge">
+                        {set.engagementType === 'trivia' ? 'Trivia' :
+                         set.engagementType === 'poll' ? 'Poll' : 'Call and Answer'}
+                      </span>
                       <button
                         className={`status-badge clickable ${set.active ? 'active' : 'inactive'}`}
                         onClick={() => handleToggleActive(set.id, set.active)}
@@ -785,6 +1101,84 @@ function AdminPage() {
             )}
           </div>
 
+          {/* Add New Set Section */}
+          <div className="admin-section">
+            <h2>➕ Add New Question Set</h2>
+            <p className="section-description">Create new question sets using different methods based on your engagement type.</p>
+
+            <div className="add-set-controls">
+              <div className="engagement-type-selector">
+                <label htmlFor="new-set-engagement-type">Engagement Type:</label>
+                <select
+                  id="new-set-engagement-type"
+                  value={engagementType}
+                  onChange={(e) => setEngagementType(e.target.value)}
+                  className="input-field"
+                >
+                  <option value="call-and-answer">Call and Answer</option>
+                  <option value="trivia">Trivia</option>
+                  <option value="poll">Poll</option>
+                </select>
+              </div>
+
+              <div className="add-set-buttons">
+                <button
+                  className="btn-primary"
+                  onClick={() => {
+                    console.log('🤖 AI Scenario Builder button clicked for', engagementType);
+                    setShowAIScenarioBuilder(true);
+                  }}
+                >
+                  🤖 AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : 'Scenario'} Builder
+                </button>
+                {engagementType === 'trivia' && (
+                  <button
+                    className="btn-primary"
+                    onClick={() => {
+                      console.log('🧠 AI Trivia Builder button clicked');
+                      setShowTriviaAIBuilder(true);
+                    }}
+                  >
+                    🧠 Advanced Trivia Builder
+                  </button>
+                )}
+                {engagementType === 'poll' && (
+                  <button
+                    className="btn-primary"
+                    onClick={() => {
+                      console.log('📊 AI Poll Builder button clicked');
+                      setShowPollAIBuilder(true);
+                    }}
+                  >
+                    📊 Advanced Poll Builder
+                  </button>
+                )}
+                <button
+                  className="btn-primary"
+                  onClick={() => {
+                    console.log('📋 AI Survey Builder button clicked');
+                    setShowSurveyAIBuilder(true);
+                  }}
+                >
+                  📋 AI Survey Builder
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => window.open('/builder', '_blank')}
+                >
+                  🎨 Manual Builder Interface
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => handleDownloadTemplate(engagementType)}
+                >
+                  📄 Download {engagementType === 'call-and-answer' ? 'Call & Answer' :
+                              engagementType === 'trivia' ? 'Trivia' : 'Poll'} Template
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Delete Games Section */}
           <div className="admin-section danger-section">
             <h2>🎮 Remove Games</h2>
@@ -933,6 +1327,39 @@ function AdminPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* AI Scenario Builder Modal */}
+      {showAIScenarioBuilder && (
+        <AIScenarioBuilder
+          onClose={() => setShowAIScenarioBuilder(false)}
+          onScenariosGenerated={handleScenariosGenerated}
+          engagementType={engagementType}
+        />
+      )}
+
+      {/* AI Trivia Builder Modal */}
+      {showTriviaAIBuilder && (
+        <TriviaAIBuilder
+          onClose={() => setShowTriviaAIBuilder(false)}
+          onTriviaGenerated={handleTriviaGenerated}
+        />
+      )}
+
+      {/* AI Poll Builder Modal */}
+      {showPollAIBuilder && (
+        <PollAIBuilder
+          onClose={() => setShowPollAIBuilder(false)}
+          onPollGenerated={handlePollGenerated}
+        />
+      )}
+
+      {/* AI Survey Builder Modal */}
+      {showSurveyAIBuilder && (
+        <SurveyAIBuilder
+          onClose={() => setShowSurveyAIBuilder(false)}
+          onSurveyGenerated={handleSurveyGenerated}
+        />
       )}
     </div>
   );
