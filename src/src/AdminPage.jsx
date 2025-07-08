@@ -8,6 +8,8 @@ import './BuilderPage.css';
 const API_BASE = window.API_BASE;
 
 function AdminPage() {
+  console.log('🔧 AdminPage component loading with AI builders...');
+
   const [questionSets, setQuestionSets] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadStatus, setUploadStatus] = useState('');
@@ -733,7 +735,7 @@ function AdminPage() {
           {/* API Test Section */}
           <div className="admin-section">
             <h2>🧪 API Endpoint Test</h2>
-            <p className="section-description">Test if the AI generation API endpoints are working properly.</p>
+            <p className="section-description">Test if the AI generation API endpoints are working properly. Use this to verify that all AI builders are functioning correctly.</p>
 
             <div className="test-controls">
               <button
