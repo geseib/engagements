@@ -1,0 +1,41 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      nodejs: 18
+    commands:
+      - echo "Installing SAM CLI..."
+      - pip3 install aws-sam-cli
+      - sam --version
+  pre_build:
+    commands:
+      - echo "Pre-build phase started on $(date)"
+      - echo "Environment: $ENVIRONMENT"
+      - echo "Domain: $DOMAIN_NAME"
+  build:
+    commands:
+      - echo "Build phase started on $(date)"
+      - echo "Building and deploying backend..."
+      - ./scripts/deploy-clean.sh $STACK_NAME $DOMAIN_NAME $HOSTED_ZONE_ID
+      - echo "Building frontend..."
+      - cd src
+      - echo "Getting API endpoints from CloudFormation..."
+      - "API_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`RestApiUrl`].OutputValue' --output text)"
+      - "WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)"
+      - "echo 'Creating config.js with API endpoints...'"
+      - "printf 'window.API_BASE = \"%s/\";\\n' \"$API_URL\" > public/config.js"
+      - "printf 'window.WS_URL = \"%s\";\\n' \"$WS_URL\" >> public/config.js"
+      - "printf 'window.ENV = \"test\";\\n' >> public/config.js"
+      - "printf 'console.log(\"TEST Environment loaded\");\\n' >> public/config.js"
+      - "npm run build"
+      - "echo 'Deploying frontend to S3...'"
+      - "BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`FrontendBucketName`].OutputValue' --output text)"
+      - "aws s3 sync dist/ s3://$BUCKET_NAME/ --delete"
+      - "echo 'Invalidating CloudFront cache...'"
+      - "DISTRIBUTION_ID=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDistributionId`].OutputValue' --output text)"
+      - "aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths '/*'"
+      - "echo 'Deployment complete!'"
+  post_build:
+    commands:
+      - "echo 'Deployment completed for $ENVIRONMENT environment'"
+      - "echo 'Website URL: https://$DOMAIN_NAME'"

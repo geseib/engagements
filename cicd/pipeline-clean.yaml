@@ -208,42 +208,7 @@ Resources:
             Value: !Ref HostedZoneId
       Source:
         Type: CODEPIPELINE
-        BuildSpec: |
-          version: 0.2
-          phases:
-            install:
-              runtime-versions:
-                nodejs: 18
-              commands:
-                - echo "Installing SAM CLI..."
-                - pip3 install aws-sam-cli
-                - sam --version
-            pre_build:
-              commands:
-                - echo "Pre-build phase started on $(date)"
-                - echo "Environment: $ENVIRONMENT"
-                - echo "Domain: $DOMAIN_NAME"
-                - echo "Setting up environment variables..."
-                - "export API_URL=https://$STACK_NAME-api-rest.execute-api.$AWS_DEFAULT_REGION.amazonaws.com/$ENVIRONMENT"
-                - "export WS_URL=wss://$STACK_NAME-api-ws.execute-api.$AWS_DEFAULT_REGION.amazonaws.com/$ENVIRONMENT"
-                - "echo API_URL: $API_URL"
-                - "echo WS_URL: $WS_URL"
-            build:
-              commands:
-                - echo "Build phase started on $(date)"
-                - echo "Building and deploying backend to $STACK_NAME environment..."
-                - ./scripts/deploy-clean.sh $STACK_NAME $DOMAIN_NAME $HOSTED_ZONE_ID
-                - echo "Building frontend configuration..."
-                - mkdir -p src/public
-                - "echo \"window.API_BASE = '$API_URL/';\" > src/public/config.js"
-                - "echo \"window.WS_URL = '$WS_URL';\" >> src/public/config.js"
-                - "echo \"window.ENV = '$ENVIRONMENT';\" >> src/public/config.js"
-                - echo "Frontend config created:"
-                - cat src/public/config.js
-            post_build:
-              commands:
-                - echo "Post-build phase completed on $(date)"
-                - echo "Deployment to $ENVIRONMENT completed successfully"
+        BuildSpec: buildspec-test.yml
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -273,42 +238,7 @@ Resources:
             Value: !Ref HostedZoneId
       Source:
         Type: CODEPIPELINE
-        BuildSpec: |
-          version: 0.2
-          phases:
-            install:
-              runtime-versions:
-                nodejs: 18
-              commands:
-                - echo "Installing SAM CLI..."
-                - pip3 install aws-sam-cli
-                - sam --version
-            pre_build:
-              commands:
-                - echo "Pre-build phase started on $(date)"
-                - echo "Environment: $ENVIRONMENT"
-                - echo "Domain: $DOMAIN_NAME"
-                - echo "Setting up environment variables..."
-                - "export API_URL=https://$STACK_NAME-api-rest.execute-api.$AWS_DEFAULT_REGION.amazonaws.com/$ENVIRONMENT"
-                - "export WS_URL=wss://$STACK_NAME-api-ws.execute-api.$AWS_DEFAULT_REGION.amazonaws.com/$ENVIRONMENT"
-                - "echo API_URL: $API_URL"
-                - "echo WS_URL: $WS_URL"
-            build:
-              commands:
-                - echo "Build phase started on $(date)"
-                - echo "Building and deploying backend to $STACK_NAME environment..."
-                - ./scripts/deploy-clean.sh $STACK_NAME $DOMAIN_NAME $HOSTED_ZONE_ID
-                - echo "Building frontend configuration..."
-                - mkdir -p src/public
-                - "echo \"window.API_BASE = '$API_URL/';\" > src/public/config.js"
-                - "echo \"window.WS_URL = '$WS_URL';\" >> src/public/config.js"
-                - "echo \"window.ENV = '$ENVIRONMENT';\" >> src/public/config.js"
-                - echo "Frontend config created:"
-                - cat src/public/config.js
-            post_build:
-              commands:
-                - echo "Post-build phase completed on $(date)"
-                - echo "Deployment to $ENVIRONMENT completed successfully"
+        BuildSpec: buildspec-prod.yml
       Tags:
         - Key: Project
           Value: !Ref ProjectName
