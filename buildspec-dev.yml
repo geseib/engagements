@@ -18,7 +18,10 @@ phases:
   build:
     commands:
       - echo "Building and deploying backend..."
-      - ./scripts/deploy-clean.sh $STACK_NAME $DOMAIN_NAME $HOSTED_ZONE_ID
+      - echo "Building SAM application..."
+      - sam build -t template-clean.yaml
+      - echo "Deploying to AWS..."
+      - sam deploy --template-file .aws-sam/build/template.yaml --stack-name $STACK_NAME --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --parameter-overrides "DomainName=$DOMAIN_NAME" "HostedZoneId=$HOSTED_ZONE_ID" --no-confirm-changeset --no-fail-on-empty-changeset
 
       - echo "Building frontend..."
       - cd src
