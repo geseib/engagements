@@ -19,8 +19,8 @@ phases:
       - echo "Building frontend..."
       - cd src
       - echo "Getting API endpoints from CloudFormation..."
-      - API_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`RestApiUrl`].OutputValue' --output text)
-      - WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)
+      - "API_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`RestApiUrl`].OutputValue' --output text)"
+      - "WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)"
       - "echo 'Creating config.js with API endpoints...'"
       - "printf 'window.API_BASE = \"%s/\";\\n' \"$API_URL\" > public/config.js"
       - "printf 'window.WS_URL = \"%s\";\\n' \"$WS_URL\" >> public/config.js"

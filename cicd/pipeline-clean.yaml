@@ -224,10 +224,10 @@ Resources:
                 - echo "Environment: $ENVIRONMENT"
                 - echo "Domain: $DOMAIN_NAME"
                 - echo "Setting up environment variables..."
-                - export API_URL="https://$STACK_NAME-api-rest.execute-api.$AWS_DEFAULT_REGION.amazonaws.com/$ENVIRONMENT"
-                - export WS_URL="wss://$STACK_NAME-api-ws.execute-api.$AWS_DEFAULT_REGION.amazonaws.com/$ENVIRONMENT"
-                - echo "API_URL: $API_URL"
-                - echo "WS_URL: $WS_URL"
+                - "export API_URL=https://$STACK_NAME-api-rest.execute-api.$AWS_DEFAULT_REGION.amazonaws.com/$ENVIRONMENT"
+                - "export WS_URL=wss://$STACK_NAME-api-ws.execute-api.$AWS_DEFAULT_REGION.amazonaws.com/$ENVIRONMENT"
+                - "echo API_URL: $API_URL"
+                - "echo WS_URL: $WS_URL"
             build:
               commands:
                 - echo "Build phase started on $(date)"
@@ -235,9 +235,9 @@ Resources:
                 - ./scripts/deploy-clean.sh $STACK_NAME $DOMAIN_NAME $HOSTED_ZONE_ID
                 - echo "Building frontend configuration..."
                 - mkdir -p src/public
-                - echo "window.API_BASE = '$API_URL/';" > src/public/config.js
-                - echo "window.WS_URL = '$WS_URL';" >> src/public/config.js
-                - echo "window.ENV = '$ENVIRONMENT';" >> src/public/config.js
+                - "echo \"window.API_BASE = '$API_URL/';\" > src/public/config.js"
+                - "echo \"window.WS_URL = '$WS_URL';\" >> src/public/config.js"
+                - "echo \"window.ENV = '$ENVIRONMENT';\" >> src/public/config.js"
                 - echo "Frontend config created:"
                 - cat src/public/config.js
             post_build:
@@ -289,10 +289,10 @@ Resources:
                 - echo "Environment: $ENVIRONMENT"
                 - echo "Domain: $DOMAIN_NAME"
                 - echo "Setting up environment variables..."
-                - export API_URL="https://$STACK_NAME-api-rest.execute-api.$AWS_DEFAULT_REGION.amazonaws.com/$ENVIRONMENT"
-                - export WS_URL="wss://$STACK_NAME-api-ws.execute-api.$AWS_DEFAULT_REGION.amazonaws.com/$ENVIRONMENT"
-                - echo "API_URL: $API_URL"
-                - echo "WS_URL: $WS_URL"
+                - "export API_URL=https://$STACK_NAME-api-rest.execute-api.$AWS_DEFAULT_REGION.amazonaws.com/$ENVIRONMENT"
+                - "export WS_URL=wss://$STACK_NAME-api-ws.execute-api.$AWS_DEFAULT_REGION.amazonaws.com/$ENVIRONMENT"
+                - "echo API_URL: $API_URL"
+                - "echo WS_URL: $WS_URL"
             build:
               commands:
                 - echo "Build phase started on $(date)"
@@ -300,9 +300,9 @@ Resources:
                 - ./scripts/deploy-clean.sh $STACK_NAME $DOMAIN_NAME $HOSTED_ZONE_ID
                 - echo "Building frontend configuration..."
                 - mkdir -p src/public
-                - echo "window.API_BASE = '$API_URL/';" > src/public/config.js
-                - echo "window.WS_URL = '$WS_URL';" >> src/public/config.js
-                - echo "window.ENV = '$ENVIRONMENT';" >> src/public/config.js
+                - "echo \"window.API_BASE = '$API_URL/';\" > src/public/config.js"
+                - "echo \"window.WS_URL = '$WS_URL';\" >> src/public/config.js"
+                - "echo \"window.ENV = '$ENVIRONMENT';\" >> src/public/config.js"
                 - echo "Frontend config created:"
                 - cat src/public/config.js
             post_build:
