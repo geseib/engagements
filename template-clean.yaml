@@ -83,6 +83,7 @@ Resources:
     Properties:
       Name: !Sub '${StackName}-api-ws'
       ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.action
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
