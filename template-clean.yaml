@@ -292,7 +292,7 @@ Resources:
             Effect: Allow
             Principal: '*'
             Action: 's3:GetObject'
-            Resource: !Sub '${FrontendBucket}/*'
+            Resource: !Sub '${FrontendBucket.Arn}/*'
 
   ### CloudFront Distribution (if domain is provided)
   CloudFrontDistribution:
