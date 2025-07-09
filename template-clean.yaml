@@ -246,61 +246,13 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${StackName}-admin-get-question-sets'
-      Handler: index.getQuestionSets
+      CodeUri: lambda-functions/admin/
+      Handler: get-question-sets.handler
       Runtime: nodejs18.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
-      Environment:
-        Variables:
-          TABLE_NAME: !Ref GameTable
-      InlineCode: |-
-        const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-        const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
-
-        const client = new DynamoDBClient({});
-        const db = DynamoDBDocumentClient.from(client);
-
-        exports.getQuestionSets = async (event) => {
-          try {
-            console.log('Getting question sets...');
-
-            // Get all question set metadata (both active and inactive)
-            const res = await db.send(new QueryCommand({
-              TableName: process.env.TABLE_NAME,
-              KeyConditionExpression: 'PK = :pk',
-              ExpressionAttributeValues: { ':pk': 'SETS' }
-            }));
-
-            const questionSets = res.Items.map(item => ({
-              id: item.SK.replace('SET#', ''),
-              name: item.name,
-              description: item.description,
-              customInstruction: item.customInstruction,
-              aiContextInstruction: item.aiContextInstruction,
-              engagementType: item.engagementType,
-              questionCount: item.questionCount || 0,
-              active: item.active !== false,
-              createdAt: item.createdAt,
-              updatedAt: item.updatedAt
-            }));
-
-            return {
-              statusCode: 200,
-              body: JSON.stringify({ questionSets }),
-              headers: { 'Access-Control-Allow-Origin': '*' }
-            };
-
-          } catch (error) {
-            console.error('Get question sets error:', error);
-            return {
-              statusCode: 500,
-              body: JSON.stringify({ error: `Failed to get question sets: ${error.message}` }),
-              headers: { 'Access-Control-Allow-Origin': '*' }
-            };
-          }
-        };
       Events:
         AdminGetQuestionSetsEvent:
           Type: HttpApi
@@ -317,91 +269,13 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${StackName}-get-question-sets'
-      Handler: index.getQuestionSets
+      CodeUri: lambda-functions/game/
+      Handler: get-question-sets.handler
       Runtime: nodejs18.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
-      Environment:
-        Variables:
-          TABLE_NAME: !Ref GameTable
-      InlineCode: |-
-        const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-        const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
-
-        const client = new DynamoDBClient({});
-        const db = DynamoDBDocumentClient.from(client);
-
-        exports.getQuestionSets = async (event) => {
-          try {
-            console.log('Getting active question sets for game creation...');
-
-            // Get all question set metadata
-            const res = await db.send(new QueryCommand({
-              TableName: process.env.TABLE_NAME,
-              KeyConditionExpression: 'PK = :pk',
-              ExpressionAttributeValues: { ':pk': 'SETS' }
-            }));
-
-            // Filter for active sets only and add categories
-            const activeSets = [];
-            for (const item of res.Items) {
-              if (item.active !== false) { // Include if active is true or undefined
-                const setId = item.SK.replace('SET#', '');
-
-                // Get categories for this set
-                const categoriesRes = await db.send(new QueryCommand({
-                  TableName: process.env.TABLE_NAME,
-                  KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-                  ExpressionAttributeValues: {
-                    ':pk': `SET#${setId}`,
-                    ':sk': 'CATEGORY#'
-                  }
-                }));
-
-                const categories = categoriesRes.Items.map(cat => ({
-                  name: cat.Name,
-                  description: cat.Description || '',
-                  count: cat.QuestionCount || 10
-                }));
-
-                activeSets.push({
-                  id: setId,
-                  name: item.name || 'Unknown Set',
-                  description: item.description || '',
-                  totalQuestions: item.questionCount || 0,
-                  categoryCount: item.categoryCount || categories.length,
-                  customInstruction: item.customInstruction || null,
-                  aiContextInstruction: item.aiContextInstruction || null,
-                  active: true,
-                  categories: categories,
-                  engagementType: item.engagementType || 'call-and-answer'
-                });
-              }
-            }
-
-            console.log(`Found ${activeSets.length} active question sets`);
-
-            return {
-              statusCode: 200,
-              body: JSON.stringify({ sets: activeSets }),
-              headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Content-Type',
-                'Access-Control-Allow-Methods': 'GET'
-              }
-            };
-
-          } catch (error) {
-            console.error('Get question sets error:', error);
-            return {
-              statusCode: 500,
-              body: JSON.stringify({ error: `Failed to get question sets: ${error.message}` }),
-              headers: { 'Access-Control-Allow-Origin': '*' }
-            };
-          }
-        };
       Events:
         GetQuestionSetsEvent:
           Type: HttpApi
@@ -417,7 +291,8 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${StackName}-admin-ai-generate-questions'
-      Handler: index.generateQuestions
+      CodeUri: lambda-functions/admin/
+      Handler: ai-generate-questions.handler
       Runtime: nodejs18.x
       Timeout: 900
       MemorySize: 1024
@@ -435,16 +310,18 @@ Resources:
                 - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
                 - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
                 - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
-      Environment:
-        Variables:
-          TABLE_NAME: !Ref GameTable
-      InlineCode: |-
-        const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+      Events:
+        AdminAIGenerateQuestionsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/ai-generate-questions
+            Method: POST
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
 
-        const bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });
-
-        // Function to call Claude via Bedrock
-        const invokeClaude = async (prompt) => {
+  AdminAIGenerateScenariosFunction:
           const modelId = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';
 
           console.log(`🤖 Calling Claude for question generation...`);
