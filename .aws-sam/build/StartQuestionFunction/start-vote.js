@@ -1,5 +1,5 @@
 const { updateHostState } = require('./clean-state-manager');
-const { broadcastToGame } = require('./broadcast-utils');
+const { sendHostMessage } = require('./clean-websocket-utils');
 
 exports.handler = async (event) => {
   const gameId = event.pathParameters.gameId;
@@ -13,13 +13,10 @@ exports.handler = async (event) => {
       VoteStartedAt: new Date().toISOString()
     });
 
-    // Broadcast state change to all clients
-    await broadcastToGame(gameId, {
-      type: 'gameStateChanged',
-      gameId: gameId,
-      newState: `VOTE/${questionNumber}`,
+    // Broadcast VOTE#Q{questionNumber} via new clean WebSocket system
+    await sendHostMessage(gameId, `VOTE#${questionNumber}`, {
       questionNumber: questionNumber
-    }, process.env.WEBSOCKET_ENDPOINT);
+    });
 
     console.log(`✅ Vote started successfully for game ${gameId}, question ${questionNumber}`);
     return {

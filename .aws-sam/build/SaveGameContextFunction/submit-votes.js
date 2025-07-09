@@ -1,7 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { updatePlayerState } = require('./clean-state-manager');
-const { broadcastToGame } = require('./broadcast-utils');
+const { sendPlayerMessage } = require('./clean-websocket-utils');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -44,13 +44,11 @@ exports.handler = async (event) => {
       VotedAt: new Date().toISOString()
     });
 
-    // Broadcast player voted state change
-    await broadcastToGame(gameId, {
-      type: 'playerVoted',
-      gameId: gameId,
-      playerName: name,
-      questionNumber: paddedQuestionNumber
-    }, process.env.WEBSOCKET_ENDPOINT);
+    // Send VOTED#Q{questionNumber} message to host via new clean WebSocket system
+    await sendPlayerMessage(gameId, name, `VOTED#${paddedQuestionNumber}`, {
+      questionNumber: paddedQuestionNumber,
+      votes: votes
+    });
 
     console.log(`✅ Vote submission complete for ${name} on question ${questionNumber}`);
     return { 

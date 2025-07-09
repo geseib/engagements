@@ -1,76 +1,12 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, ScanCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
-const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { sendPlayerMessage } = require('./clean-websocket-utils');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
-const apigateway = new ApiGatewayManagementApiClient({
-  endpoint: process.env.WEBSOCKET_API_ENDPOINT
-});
 
 // TTL Constants
 const TTL_ACTIVE_PHASE = 7 * 24 * 60 * 60; // 7 days
-
-// Helper function to broadcast WebSocket message
-const broadcastToGame = async (gameId, message, targetType = 'ALL') => {
-  try {
-    const connectionsResult = await db.send(new QueryCommand({
-      TableName: process.env.TABLE_NAME,
-      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-      ExpressionAttributeValues: {
-        ':pk': `GAME#${gameId}`,
-        ':sk': 'CONNECTION#'
-      }
-    }));
-    
-    const connections = connectionsResult.Items || [];
-    console.log(`🔌 Broadcasting to ${connections.length} connections for game ${gameId}:`, message);
-    
-    if (connections.length === 0) {
-      console.log(`⚠️ No active connections found for game ${gameId}`);
-      return;
-    }
-    
-    // Filter connections based on target type
-    let targetConnections = connections;
-    if (targetType === 'HOST') {
-      targetConnections = connections.filter(conn => conn.IsHost === true);
-    } else if (targetType === 'PARTICIPANTS') {
-      targetConnections = connections.filter(conn => conn.IsHost !== true);
-    }
-    
-    const broadcastPromises = targetConnections.map(async (connection) => {
-      try {
-        await apigateway.send(new PostToConnectionCommand({
-          ConnectionId: connection.ConnectionId,
-          Data: JSON.stringify(message)
-        }));
-        console.log(`✅ Message sent to connection ${connection.ConnectionId} (${connection.PlayerName || 'Host'})`);
-      } catch (error) {
-        console.log(`❌ Failed to send to connection ${connection.ConnectionId}:`, error.message);
-        
-        // Remove stale connections (410 = Gone)
-        if (error.statusCode === 410 || error.$metadata?.httpStatusCode === 410) {
-          console.log(`🧹 Removing stale connection: ${connection.ConnectionId}`);
-          try {
-            await db.send(new DeleteCommand({
-              TableName: process.env.TABLE_NAME,
-              Key: { PK: connection.PK, SK: connection.SK }
-            }));
-          } catch (deleteError) {
-            console.error(`❌ Failed to delete stale connection:`, deleteError);
-          }
-        }
-      }
-    });
-    
-    await Promise.all(broadcastPromises);
-    console.log(`✅ Broadcast complete for game ${gameId} (${targetType})`);
-  } catch (error) {
-    console.error('❌ Broadcast error:', error);
-    throw error;
-  }
-};
 
 // Update host state with WebSocket broadcast
 const updateHostState = async (gameId, newState, questionId = null, additionalData = {}) => {
@@ -121,36 +57,11 @@ const updateHostState = async (gameId, newState, questionId = null, additionalDa
       Item: stateItem
     }));
     
-    // Determine WebSocket message type and broadcast
-    let messageType = 'hostStateChanged';
-    let targetType = 'ALL';
-    
-    if (newState === 'LOBBY') {
-      messageType = 'gameCreated';
-      targetType = 'ALL';
-    } else if (newState.startsWith('ASK/')) {
-      messageType = 'questionStarted';
-      targetType = 'PARTICIPANTS';
-    } else if (newState.startsWith('VOTE/')) {
-      messageType = 'votingStarted';
-      targetType = 'PARTICIPANTS';
-    } else if (newState.startsWith('RESULTS/')) {
-      messageType = 'resultsReady';
-      targetType = 'PARTICIPANTS';
-    } else if (newState === 'END') {
-      messageType = 'gameEnded';
-      targetType = 'ALL';
-    }
-    
-    // Broadcast state change
-    await broadcastToGame(gameId, {
-      type: messageType,
-      gameId,
-      hostState: newState,
-      questionId,
-      timestamp: new Date().toISOString(),
-      ...additionalData
-    }, targetType);
+    // Note: Host state changes are now handled by specific functions:
+    // - start-question.js sends ASK#Q{n} messages
+    // - start-vote.js sends VOTE#Q{n} messages
+    // - set-game-state.js sends RESULT#Q{n} and END messages
+    console.log(`✅ Host state updated to ${newState} for game ${gameId}`);
     
     console.log(`✅ HOST: State updated successfully for game ${gameId}: ${newState}`);
     return stateItem;
@@ -213,28 +124,25 @@ const updatePlayerState = async (gameId, playerName, newState, questionId = null
       Item: playerStateItem
     }));
     
-    // Determine WebSocket message type
-    let messageType = 'playerStateChanged';
-    if (newState === 'JOINED') {
-      messageType = 'playerJoined';
-    } else if (newState.startsWith('ANSWERED/')) {
-      messageType = 'playerAnswered';
+    // Send player message to host via new clean WebSocket system
+    if (newState.startsWith('ANSWERED/')) {
+      const questionNum = questionId || newState.split('/')[1];
+      await sendPlayerMessage(gameId, playerName, `ANSWERED#${questionNum}`, {
+        questionId: questionNum,
+        ...additionalData
+      });
     } else if (newState.startsWith('VOTED/')) {
-      messageType = 'playerVoted';
+      const questionNum = questionId || newState.split('/')[1];
+      await sendPlayerMessage(gameId, playerName, `VOTED#${questionNum}`, {
+        questionId: questionNum,
+        ...additionalData
+      });
     } else if (newState === 'QUIT') {
-      messageType = 'playerQuit';
+      await sendPlayerMessage(gameId, playerName, 'QUIT', {
+        ...additionalData
+      });
     }
-    
-    // Broadcast to host (and other participants for some events)
-    await broadcastToGame(gameId, {
-      type: messageType,
-      gameId,
-      playerName,
-      playerState: newState,
-      questionId,
-      timestamp: new Date().toISOString(),
-      ...additionalData
-    }, 'HOST');
+    // Note: JOINED messages are handled by the join process, not state updates
     
     console.log(`✅ PLAYER: State updated successfully for ${playerName} in game ${gameId}: ${newState}`);
     return playerStateItem;
@@ -322,6 +230,5 @@ const getAllPlayerStates = async (gameId) => {
 module.exports = {
   updateHostState,
   updatePlayerState,
-  getCompleteGameState,
-  broadcastToGame
+  getCompleteGameState
 };

@@ -100,9 +100,43 @@ class WebSocketClient {
     return true;
   }
 
+  // Send message using new clean WebSocket format
+  sendCleanMessage(messageType, data = {}) {
+    if (!this.isConnected()) {
+      console.warn('🔌 Cannot send clean message: WebSocket not connected');
+      return false;
+    }
+
+    const message = {
+      messageType,
+      gameId: this.gameId,
+      playerName: this.playerName,
+      timestamp: new Date().toISOString(),
+      ...data
+    };
+
+    console.log('🔌 Sending clean WebSocket message:', message);
+    this.ws.send(JSON.stringify(message));
+    return true;
+  }
+
   handleMessage(message) {
+    console.log('🔌 Raw WebSocket message:', message);
+
+    // Handle new clean WebSocket system messages
+    if (message.type === 'hostMessage') {
+      this.handleHostMessage(message);
+      return;
+    }
+
+    if (message.type === 'playerMessage') {
+      this.handlePlayerMessage(message);
+      return;
+    }
+
+    // Handle legacy message format (for backward compatibility during transition)
     const { type, data, ...messageData } = message;
-    
+
     if (this.messageHandlers.has(type)) {
       const handler = this.messageHandlers.get(type);
       try {
@@ -114,6 +148,80 @@ class WebSocketClient {
       }
     } else {
       console.warn(`🔌 No handler for message type '${type}'`);
+    }
+  }
+
+  handleHostMessage(message) {
+    const { messageType, ...messageData } = message;
+    console.log(`🎯 Host message received: ${messageType}`, messageData);
+
+    // Map new clean WebSocket message types to frontend handlers
+    if (messageType.startsWith('ASK#')) {
+      // ASK#Q1 -> questionStarted
+      this.triggerHandler('questionStarted', {
+        questionId: messageType.split('#')[1],
+        ...messageData
+      });
+    } else if (messageType.startsWith('VOTE#')) {
+      // VOTE#Q1 -> votingStarted
+      this.triggerHandler('votingStarted', {
+        questionId: messageType.split('#')[1],
+        ...messageData
+      });
+    } else if (messageType.startsWith('RESULT#')) {
+      // RESULT#Q1 -> resultsReady
+      this.triggerHandler('resultsReady', {
+        questionId: messageType.split('#')[1],
+        ...messageData
+      });
+    } else if (messageType === 'END') {
+      // END -> gameEnded
+      this.triggerHandler('gameEnded', messageData);
+    } else {
+      console.warn(`🔌 Unknown host message type: ${messageType}`);
+    }
+  }
+
+  handlePlayerMessage(message) {
+    const { messageType, playerName, ...messageData } = message;
+    console.log(`👤 Player message received: ${messageType} from ${playerName}`, messageData);
+
+    // Map new clean WebSocket message types to frontend handlers
+    if (messageType.startsWith('ANSWERED#')) {
+      // ANSWERED#Q1 -> playerAnswered
+      this.triggerHandler('playerAnswered', {
+        questionId: messageType.split('#')[1],
+        playerName,
+        ...messageData
+      });
+    } else if (messageType.startsWith('VOTED#')) {
+      // VOTED#Q1 -> playerVoted
+      this.triggerHandler('playerVoted', {
+        questionId: messageType.split('#')[1],
+        playerName,
+        ...messageData
+      });
+    } else if (messageType === 'QUIT') {
+      // QUIT -> playerLeft
+      this.triggerHandler('playerLeft', {
+        playerName,
+        ...messageData
+      });
+    } else {
+      console.warn(`🔌 Unknown player message type: ${messageType}`);
+    }
+  }
+
+  triggerHandler(type, payload) {
+    if (this.messageHandlers.has(type)) {
+      const handler = this.messageHandlers.get(type);
+      try {
+        handler(payload);
+      } catch (error) {
+        console.error(`🔌 Error handling mapped message type '${type}':`, error);
+      }
+    } else {
+      console.warn(`🔌 No handler for mapped message type '${type}'`);
     }
   }
 

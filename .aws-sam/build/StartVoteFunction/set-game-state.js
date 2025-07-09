@@ -1,65 +1,11 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand, ScanCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
-const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+const { DynamoDBDocumentClient, PutCommand } = require('@aws-sdk/lib-dynamodb');
+const { sendHostMessage } = require('./clean-websocket-utils');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
-const apigateway = new ApiGatewayManagementApiClient({
-  endpoint: process.env.WEBSOCKET_API_ENDPOINT
-});
 
-// Helper function to broadcast WebSocket message
-const broadcastToGame = async (gameId, message) => {
-  try {
-    const connectionsResult = await db.send(new ScanCommand({
-      TableName: process.env.TABLE_NAME,
-      FilterExpression: 'begins_with(PK, :prefix) AND GameId = :gameId',
-      ExpressionAttributeValues: {
-        ':prefix': 'CONNECTION#',
-        ':gameId': gameId
-      }
-    }));
-    
-    const connections = connectionsResult.Items || [];
-    console.log(`🔌 Broadcasting to ${connections.length} connections for game ${gameId}:`, message);
-    
-    if (connections.length === 0) {
-      console.log(`⚠️ No active connections found for game ${gameId}`);
-      return;
-    }
-    
-    const broadcastPromises = connections.map(async (connection) => {
-      try {
-        await apigateway.send(new PostToConnectionCommand({
-          ConnectionId: connection.ConnectionId,
-          Data: JSON.stringify(message)
-        }));
-        console.log(`✅ Message sent to connection ${connection.ConnectionId} (${connection.PlayerName || 'Unknown'})`);
-      } catch (error) {
-        console.log(`❌ Failed to send to connection ${connection.ConnectionId}:`, error.message);
-        
-        // Remove stale connections (410 = Gone)
-        if (error.statusCode === 410 || error.$metadata?.httpStatusCode === 410) {
-          console.log(`🧹 Removing stale connection: ${connection.ConnectionId}`);
-          try {
-            await db.send(new DeleteCommand({
-              TableName: process.env.TABLE_NAME,
-              Key: { PK: connection.PK, SK: connection.SK }
-            }));
-          } catch (deleteError) {
-            console.error(`❌ Failed to delete stale connection:`, deleteError);
-          }
-        }
-      }
-    });
-    
-    await Promise.all(broadcastPromises);
-    console.log(`✅ Broadcast complete for game ${gameId}`);
-  } catch (error) {
-    console.error('❌ Broadcast error:', error);
-    throw error;
-  }
-};
+
 
 exports.handler = async (event) => {
   const gameId = event.pathParameters.gameId;
@@ -102,15 +48,24 @@ exports.handler = async (event) => {
       Item: stateItem
     }));
     
-    // Broadcast game state change notification via WebSocket
-    console.log(`🔌 Broadcasting gameStateChanged for game ${gameId}: ${state}`);
-    await broadcastToGame(gameId, {
-      type: 'gameStateChanged',
-      gameId,
-      state,
-      questionId: currentQuestionId || currentQuestion,
-      timestamp: new Date().toISOString()
-    });
+    // Send appropriate host message based on state via new clean WebSocket system
+    console.log(`🔌 Sending host message for game ${gameId}: ${state}`);
+
+    // Map game states to new clean WebSocket message types
+    if (state === 'results' && (currentQuestionId || currentQuestion)) {
+      // Send RESULT#Q{questionNumber} when showing results
+      const questionNum = (currentQuestionId || currentQuestion).toString().padStart(3, '0');
+      await sendHostMessage(gameId, `RESULT#${questionNum}`, {
+        questionId: currentQuestionId || currentQuestion,
+        state
+      });
+    } else if (state === 'end') {
+      // Send END when game ends
+      await sendHostMessage(gameId, 'END', {
+        state
+      });
+    }
+    // Note: ASK and VOTE messages are sent by start-question.js and start-vote.js respectively
     
     console.log(`✅ Game state updated successfully for game ${gameId}: ${state}`);
     return { 

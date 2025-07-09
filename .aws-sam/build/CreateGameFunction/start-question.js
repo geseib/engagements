@@ -1,65 +1,10 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
-const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+const { DynamoDBDocumentClient, PutCommand } = require('@aws-sdk/lib-dynamodb');
+const { sendHostMessage } = require('./clean-websocket-utils');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
-const apigateway = new ApiGatewayManagementApiClient({
-  endpoint: process.env.WEBSOCKET_API_ENDPOINT
-});
 
-// Helper function to broadcast WebSocket message
-const broadcastToGame = async (gameId, message) => {
-  try {
-    const connectionsResult = await db.send(new QueryCommand({
-      TableName: process.env.TABLE_NAME,
-      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-      ExpressionAttributeValues: {
-        ':pk': `GAME#${gameId}`,
-        ':sk': 'CONNECTION#'
-      }
-    }));
-    
-    const connections = connectionsResult.Items || [];
-    console.log(`🔌 Broadcasting to ${connections.length} connections for game ${gameId}:`, message);
-    
-    if (connections.length === 0) {
-      console.log(`⚠️ No active connections found for game ${gameId}`);
-      return;
-    }
-    
-    const broadcastPromises = connections.map(async (connection) => {
-      try {
-        await apigateway.send(new PostToConnectionCommand({
-          ConnectionId: connection.ConnectionId,
-          Data: JSON.stringify(message)
-        }));
-        console.log(`✅ Message sent to connection ${connection.ConnectionId} (${connection.PlayerName || 'Unknown'})`);
-      } catch (error) {
-        console.log(`❌ Failed to send to connection ${connection.ConnectionId}:`, error.message);
-        
-        // Remove stale connections (410 = Gone)
-        if (error.statusCode === 410 || error.$metadata?.httpStatusCode === 410) {
-          console.log(`🧹 Removing stale connection: ${connection.ConnectionId}`);
-          try {
-            await db.send(new DeleteCommand({
-              TableName: process.env.TABLE_NAME,
-              Key: { PK: connection.PK, SK: connection.SK }
-            }));
-          } catch (deleteError) {
-            console.error(`❌ Failed to delete stale connection:`, deleteError);
-          }
-        }
-      }
-    });
-    
-    await Promise.all(broadcastPromises);
-    console.log(`✅ Broadcast complete for game ${gameId}`);
-  } catch (error) {
-    console.error('❌ Broadcast error:', error);
-    throw error;
-  }
-};
 
 exports.handler = async (event) => {
   const gameId = event.pathParameters.gameId;
@@ -97,13 +42,13 @@ exports.handler = async (event) => {
       }
     }));
     
-    // Broadcast question started notification via WebSocket
-    console.log(`🔌 Broadcasting questionStarted for game ${gameId}, question ${questionNumber}`);
-    await broadcastToGame(gameId, {
-      type: 'questionStarted',
-      gameId,
+    // Broadcast ASK#Q{questionNumber} via new clean WebSocket system
+    console.log(`🔌 Broadcasting ASK#${questionNumber} for game ${gameId}`);
+    await sendHostMessage(gameId, `ASK#${questionNumber}`, {
       questionId: questionNumber,
-      timestamp: new Date().toISOString()
+      questionRef,
+      setId,
+      category
     });
     
     console.log(`✅ Question ${questionNumber} started successfully for game ${gameId}`);
