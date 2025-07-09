@@ -166,9 +166,9 @@ Resources:
       Handler: create-game.handler
       Events:
         CreateGame:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref RestApi
+            ApiId: !Ref RestApi
             Path: /games
             Method: post
       Policies:
@@ -186,9 +186,9 @@ Resources:
       Handler: start-question.handler
       Events:
         StartQuestion:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref RestApi
+            ApiId: !Ref RestApi
             Path: /games/{gameId}/start-question
             Method: post
       Policies:
@@ -211,9 +211,9 @@ Resources:
       Handler: start-vote.handler
       Events:
         StartVote:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref RestApi
+            ApiId: !Ref RestApi
             Path: /games/{gameId}/start-vote
             Method: post
       Policies:
