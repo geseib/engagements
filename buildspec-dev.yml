@@ -15,12 +15,11 @@ phases:
   build:
     commands:
       - echo "Building and deploying backend..."
-      - sam build --template-file template-dev.yaml
-      - sam deploy --template-file template-dev.yaml --config-file samconfig-dev.toml --parameter-overrides "DomainName=$DOMAIN_NAME HostedZoneId=$HOSTED_ZONE_ID" --stack-name $STACK_NAME --no-confirm-changeset
+      - ./scripts/deploy-clean.sh $STACK_NAME $DOMAIN_NAME $HOSTED_ZONE_ID
       - echo "Building frontend..."
       - cd src
       - echo "Getting API endpoints from CloudFormation..."
-      - API_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' --output text)
+      - API_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`RestApiUrl`].OutputValue' --output text)
       - WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)
       - "echo 'Creating config.js with API endpoints...'"
       - "printf 'window.API_BASE = \"%s/\";\\n' \"$API_URL\" > public/config.js"
@@ -29,7 +28,7 @@ phases:
       - "printf 'console.log(\"DEV Environment loaded\");\\n' >> public/config.js"
       - "npm run build"
       - "echo 'Deploying frontend to S3...'"
-      - "BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`StaticSiteBucketName`].OutputValue' --output text)"
+      - "BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`FrontendBucketName`].OutputValue' --output text)"
       - "aws s3 sync dist/ s3://$BUCKET_NAME/ --delete"
       - "echo 'Invalidating CloudFront cache...'"
       - "DISTRIBUTION_ID=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDistributionId`].OutputValue' --output text)"

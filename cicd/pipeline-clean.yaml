@@ -4,7 +4,7 @@ Description: 'Clean CI/CD Pipeline for Engagements Platform'
 Parameters:
   ProjectName:
     Type: String
-    Default: engagements
+    Default: engage
     Description: Project name for resource naming
 
   GitHubOwner:
@@ -25,21 +25,22 @@ Parameters:
   # Domain Configuration
   DevDomain:
     Type: String
-    Default: dev.engagements.example.com
+    Default: engage.dev.seibtribe.us
     Description: Development environment domain
 
   TestDomain:
     Type: String
-    Default: test.engagements.example.com
+    Default: engage.test.seibtribe.us
     Description: Test environment domain
 
   ProdDomain:
     Type: String
-    Default: engagements.example.com
+    Default: engage.seibtribe.us
     Description: Production environment domain
 
   HostedZoneId:
     Type: String
+    Default: ZB9TUA073B5SH
     Description: Route53 hosted zone ID for all environments
 
 Resources:
@@ -48,7 +49,7 @@ Resources:
   ArtifactsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub '${ProjectName}-cicd-bucket-artifacts'
+      BucketName: !Sub '${ProjectName}cicd-artifacts'
       VersioningConfiguration:
         Status: Enabled
       BucketEncryption:
@@ -75,7 +76,7 @@ Resources:
   CodeBuildServiceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub '${ProjectName}-cicd-role-codebuild'
+      RoleName: !Sub '${ProjectName}cicd-codebuild'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -101,11 +102,11 @@ Resources:
                   - s3:GetObject
                   - s3:PutObject
                   - s3:DeleteObject
-                Resource: !Sub '${ArtifactsBucket}/*'
+                Resource: !Sub 'arn:aws:s3:::${ArtifactsBucket}/*'
               - Effect: Allow
                 Action:
                   - s3:ListBucket
-                Resource: !Ref ArtifactsBucket
+                Resource: !Sub 'arn:aws:s3:::${ArtifactsBucket}'
               - Effect: Allow
                 Action:
                   - iam:PassRole
@@ -118,7 +119,7 @@ Resources:
   CodePipelineServiceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub '${ProjectName}-cicd-role-codepipeline'
+      RoleName: !Sub '${ProjectName}cicd-codepipeline'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -138,8 +139,8 @@ Resources:
                   - s3:DeleteObject
                   - s3:GetBucketVersioning
                 Resource:
-                  - !Sub '${ArtifactsBucket}/*'
-                  - !Ref ArtifactsBucket
+                  - !Sub 'arn:aws:s3:::${ArtifactsBucket}/*'
+                  - !Sub 'arn:aws:s3:::${ArtifactsBucket}'
               - Effect: Allow
                 Action:
                   - codebuild:BatchGetBuilds
@@ -158,7 +159,7 @@ Resources:
   DevBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name: !Sub '${ProjectName}-cicd-build-dev'
+      Name: !Sub '${ProjectName}cicd-build-dev'
       ServiceRole: !GetAtt CodeBuildServiceRole.Arn
       Artifacts:
         Type: CODEPIPELINE
@@ -169,38 +170,15 @@ Resources:
         EnvironmentVariables:
           - Name: ENVIRONMENT
             Value: dev
+          - Name: STACK_NAME
+            Value: engagedev
           - Name: DOMAIN_NAME
             Value: !Ref DevDomain
           - Name: HOSTED_ZONE_ID
             Value: !Ref HostedZoneId
-          - Name: PROJECT_NAME
-            Value: !Ref ProjectName
       Source:
         Type: CODEPIPELINE
-        BuildSpec: |
-          version: 0.2
-          phases:
-            install:
-              runtime-versions:
-                nodejs: 18
-              commands:
-                - echo "Installing SAM CLI..."
-                - pip3 install aws-sam-cli
-                - sam --version
-            pre_build:
-              commands:
-                - echo "Pre-build phase started on `date`"
-                - echo "Environment: $ENVIRONMENT"
-                - echo "Domain: $DOMAIN_NAME"
-            build:
-              commands:
-                - echo "Build phase started on `date`"
-                - echo "Building and deploying to $ENVIRONMENT environment..."
-                - ./scripts/deploy-clean.sh $ENVIRONMENT $DOMAIN_NAME $HOSTED_ZONE_ID
-            post_build:
-              commands:
-                - echo "Post-build phase completed on `date`"
-                - echo "Deployment to $ENVIRONMENT completed successfully"
+        BuildSpec: buildspec-dev.yml
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -211,7 +189,7 @@ Resources:
   TestBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name: !Sub '${ProjectName}-cicd-build-test'
+      Name: !Sub '${ProjectName}cicd-build-test'
       ServiceRole: !GetAtt CodeBuildServiceRole.Arn
       Artifacts:
         Type: CODEPIPELINE
@@ -222,12 +200,12 @@ Resources:
         EnvironmentVariables:
           - Name: ENVIRONMENT
             Value: test
+          - Name: STACK_NAME
+            Value: engagetest
           - Name: DOMAIN_NAME
             Value: !Ref TestDomain
           - Name: HOSTED_ZONE_ID
             Value: !Ref HostedZoneId
-          - Name: PROJECT_NAME
-            Value: !Ref ProjectName
       Source:
         Type: CODEPIPELINE
         BuildSpec: |
@@ -242,17 +220,29 @@ Resources:
                 - sam --version
             pre_build:
               commands:
-                - echo "Pre-build phase started on `date`"
+                - echo "Pre-build phase started on $(date)"
                 - echo "Environment: $ENVIRONMENT"
                 - echo "Domain: $DOMAIN_NAME"
+                - echo "Setting up environment variables..."
+                - export API_URL="https://$STACK_NAME-api-rest.execute-api.$AWS_DEFAULT_REGION.amazonaws.com/$ENVIRONMENT"
+                - export WS_URL="wss://$STACK_NAME-api-ws.execute-api.$AWS_DEFAULT_REGION.amazonaws.com/$ENVIRONMENT"
+                - echo "API_URL: $API_URL"
+                - echo "WS_URL: $WS_URL"
             build:
               commands:
-                - echo "Build phase started on `date`"
-                - echo "Building and deploying to $ENVIRONMENT environment..."
-                - ./scripts/deploy-clean.sh $ENVIRONMENT $DOMAIN_NAME $HOSTED_ZONE_ID
+                - echo "Build phase started on $(date)"
+                - echo "Building and deploying backend to $STACK_NAME environment..."
+                - ./scripts/deploy-clean.sh $STACK_NAME $DOMAIN_NAME $HOSTED_ZONE_ID
+                - echo "Building frontend configuration..."
+                - mkdir -p src/public
+                - echo "window.API_BASE = '$API_URL/';" > src/public/config.js
+                - echo "window.WS_URL = '$WS_URL';" >> src/public/config.js
+                - echo "window.ENV = '$ENVIRONMENT';" >> src/public/config.js
+                - echo "Frontend config created:"
+                - cat src/public/config.js
             post_build:
               commands:
-                - echo "Post-build phase completed on `date`"
+                - echo "Post-build phase completed on $(date)"
                 - echo "Deployment to $ENVIRONMENT completed successfully"
       Tags:
         - Key: Project
@@ -264,7 +254,7 @@ Resources:
   ProdBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name: !Sub '${ProjectName}-cicd-build-prod'
+      Name: !Sub '${ProjectName}cicd-build-prod'
       ServiceRole: !GetAtt CodeBuildServiceRole.Arn
       Artifacts:
         Type: CODEPIPELINE
@@ -275,12 +265,12 @@ Resources:
         EnvironmentVariables:
           - Name: ENVIRONMENT
             Value: prod
+          - Name: STACK_NAME
+            Value: engageprod
           - Name: DOMAIN_NAME
             Value: !Ref ProdDomain
           - Name: HOSTED_ZONE_ID
             Value: !Ref HostedZoneId
-          - Name: PROJECT_NAME
-            Value: !Ref ProjectName
       Source:
         Type: CODEPIPELINE
         BuildSpec: |
@@ -295,17 +285,29 @@ Resources:
                 - sam --version
             pre_build:
               commands:
-                - echo "Pre-build phase started on `date`"
+                - echo "Pre-build phase started on $(date)"
                 - echo "Environment: $ENVIRONMENT"
                 - echo "Domain: $DOMAIN_NAME"
+                - echo "Setting up environment variables..."
+                - export API_URL="https://$STACK_NAME-api-rest.execute-api.$AWS_DEFAULT_REGION.amazonaws.com/$ENVIRONMENT"
+                - export WS_URL="wss://$STACK_NAME-api-ws.execute-api.$AWS_DEFAULT_REGION.amazonaws.com/$ENVIRONMENT"
+                - echo "API_URL: $API_URL"
+                - echo "WS_URL: $WS_URL"
             build:
               commands:
-                - echo "Build phase started on `date`"
-                - echo "Building and deploying to $ENVIRONMENT environment..."
-                - ./scripts/deploy-clean.sh $ENVIRONMENT $DOMAIN_NAME $HOSTED_ZONE_ID
+                - echo "Build phase started on $(date)"
+                - echo "Building and deploying backend to $STACK_NAME environment..."
+                - ./scripts/deploy-clean.sh $STACK_NAME $DOMAIN_NAME $HOSTED_ZONE_ID
+                - echo "Building frontend configuration..."
+                - mkdir -p src/public
+                - echo "window.API_BASE = '$API_URL/';" > src/public/config.js
+                - echo "window.WS_URL = '$WS_URL';" >> src/public/config.js
+                - echo "window.ENV = '$ENVIRONMENT';" >> src/public/config.js
+                - echo "Frontend config created:"
+                - cat src/public/config.js
             post_build:
               commands:
-                - echo "Post-build phase completed on `date`"
+                - echo "Post-build phase completed on $(date)"
                 - echo "Deployment to $ENVIRONMENT completed successfully"
       Tags:
         - Key: Project
@@ -313,11 +315,13 @@ Resources:
         - Key: Environment
           Value: prod
 
-  ### CodePipeline
-  Pipeline:
+  ### CodePipelines - One per Environment/Branch
+
+  ## Dev Pipeline (dev branch)
+  DevPipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
-      Name: !Sub '${ProjectName}-cicd-pipeline'
+      Name: !Sub '${ProjectName}cicd-pipeline-dev'
       RoleArn: !GetAtt CodePipelineServiceRole.Arn
       ArtifactStore:
         Type: S3
@@ -355,6 +359,33 @@ Resources:
               OutputArtifacts:
                 - Name: DevOutput
 
+  ## Test Pipeline (test branch)
+  TestPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub '${ProjectName}cicd-pipeline-test'
+      RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactsBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: '1'
+              Configuration:
+                Owner: !Ref GitHubOwner
+                Repo: !Ref GitHubRepo
+                Branch: test
+                OAuthToken: !Ref GitHubToken
+                PollForSourceChanges: false
+              OutputArtifacts:
+                - Name: SourceOutput
+
         - Name: DeployTest
           Actions:
             - Name: DeployToTest
@@ -369,7 +400,33 @@ Resources:
                 - Name: SourceOutput
               OutputArtifacts:
                 - Name: TestOutput
-              RunOrder: 1
+
+  ## Prod Pipeline (prod branch)
+  ProdPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub '${ProjectName}cicd-pipeline-prod'
+      RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactsBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: '1'
+              Configuration:
+                Owner: !Ref GitHubOwner
+                Repo: !Ref GitHubRepo
+                Branch: prod
+                OAuthToken: !Ref GitHubToken
+                PollForSourceChanges: false
+              OutputArtifacts:
+                - Name: SourceOutput
 
         - Name: ApprovalForProd
           Actions:
@@ -380,7 +437,7 @@ Resources:
                 Provider: Manual
                 Version: '1'
               Configuration:
-                CustomData: 'Please review the test environment and approve deployment to production'
+                CustomData: 'Please review and approve deployment to production'
 
         - Name: DeployProd
           Actions:
@@ -401,8 +458,10 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
-  ### GitHub Webhook
-  GitHubWebhook:
+  ### GitHub Webhooks - One per Branch/Pipeline
+
+  ## Dev Branch Webhook
+  DevGitHubWebhook:
     Type: AWS::CodePipeline::Webhook
     Properties:
       Authentication: GITHUB_HMAC
@@ -411,28 +470,82 @@ Resources:
       Filters:
         - JsonPath: $.ref
           MatchEquals: refs/heads/dev
-      TargetPipeline: !Ref Pipeline
+      TargetPipeline: !Ref DevPipeline
       TargetAction: SourceAction
-      TargetPipelineVersion: !GetAtt Pipeline.Version
+      TargetPipelineVersion: !GetAtt DevPipeline.Version
+      RegisterWithThirdParty: true
+
+  ## Test Branch Webhook
+  TestGitHubWebhook:
+    Type: AWS::CodePipeline::Webhook
+    Properties:
+      Authentication: GITHUB_HMAC
+      AuthenticationConfiguration:
+        SecretToken: !Ref GitHubToken
+      Filters:
+        - JsonPath: $.ref
+          MatchEquals: refs/heads/test
+      TargetPipeline: !Ref TestPipeline
+      TargetAction: SourceAction
+      TargetPipelineVersion: !GetAtt TestPipeline.Version
+      RegisterWithThirdParty: true
+
+  ## Prod Branch Webhook
+  ProdGitHubWebhook:
+    Type: AWS::CodePipeline::Webhook
+    Properties:
+      Authentication: GITHUB_HMAC
+      AuthenticationConfiguration:
+        SecretToken: !Ref GitHubToken
+      Filters:
+        - JsonPath: $.ref
+          MatchEquals: refs/heads/prod
+      TargetPipeline: !Ref ProdPipeline
+      TargetAction: SourceAction
+      TargetPipelineVersion: !GetAtt ProdPipeline.Version
       RegisterWithThirdParty: true
 
 Outputs:
-  PipelineName:
-    Description: Name of the CodePipeline
-    Value: !Ref Pipeline
+  # Pipeline Names
+  DevPipelineName:
+    Description: Name of the Dev CodePipeline
+    Value: !Ref DevPipeline
     Export:
-      Name: !Sub '${ProjectName}-cicd-pipeline-name'
+      Name: !Sub '${ProjectName}-cicd-dev-pipeline-name'
 
+  TestPipelineName:
+    Description: Name of the Test CodePipeline
+    Value: !Ref TestPipeline
+    Export:
+      Name: !Sub '${ProjectName}-cicd-test-pipeline-name'
+
+  ProdPipelineName:
+    Description: Name of the Prod CodePipeline
+    Value: !Ref ProdPipeline
+    Export:
+      Name: !Sub '${ProjectName}-cicd-prod-pipeline-name'
+
+  # Pipeline URLs
+  DevPipelineUrl:
+    Description: URL of the Dev CodePipeline
+    Value: !Sub 'https://console.aws.amazon.com/codesuite/codepipeline/pipelines/${DevPipeline}/view'
+
+  TestPipelineUrl:
+    Description: URL of the Test CodePipeline
+    Value: !Sub 'https://console.aws.amazon.com/codesuite/codepipeline/pipelines/${TestPipeline}/view'
+
+  ProdPipelineUrl:
+    Description: URL of the Prod CodePipeline
+    Value: !Sub 'https://console.aws.amazon.com/codesuite/codepipeline/pipelines/${ProdPipeline}/view'
+
+  # Shared Resources
   ArtifactsBucketName:
     Description: Name of the artifacts S3 bucket
     Value: !Ref ArtifactsBucket
     Export:
       Name: !Sub '${ProjectName}-cicd-artifacts-bucket'
 
-  PipelineUrl:
-    Description: URL of the CodePipeline
-    Value: !Sub 'https://console.aws.amazon.com/codesuite/codepipeline/pipelines/${Pipeline}/view'
-
+  # Build Projects
   DevBuildProject:
     Description: Development build project name
     Value: !Ref DevBuildProject

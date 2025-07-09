@@ -1,0 +1,39 @@
+{
+  "cicd": {
+    "stackName": "engagecicd",
+    "artifactsBucket": "engagecicd-artifacts",
+    "pipelines": {
+      "dev": {
+        "name": "engagecicd-pipeline-dev",
+        "url": "https://console.aws.amazon.com/codesuite/codepipeline/pipelines/engagecicd-pipeline-dev/view",
+        "branch": "dev"
+      },
+      "test": {
+        "name": "engagecicd-pipeline-test",
+        "url": "https://console.aws.amazon.com/codesuite/codepipeline/pipelines/engagecicd-pipeline-test/view",
+        "branch": "test"
+      },
+      "prod": {
+        "name": "engagecicd-pipeline-prod",
+        "url": "https://console.aws.amazon.com/codesuite/codepipeline/pipelines/engagecicd-pipeline-prod/view",
+        "branch": "prod"
+      }
+    }
+  },
+  "aws": {
+    "accountId": "239601476690",
+    "region": "us-east-1",
+    "profile": "adminaccess"
+  },
+  "domains": {
+    "dev": "engage.dev.seibtribe.us",
+    "test": "engage.test.seibtribe.us",
+    "prod": "engage.seibtribe.us",
+    "hostedZoneId": "ZB9TUA073B5SH"
+  },
+  "github": {
+    "owner": "geseib",
+    "repo": "engagements",
+    "branches": ["dev", "test", "prod"]
+  }
+}

@@ -322,8 +322,8 @@ Resources:
       Tags:
         - Key: Environment
           Value: !Ref Environment
-        - Key: Project
-          Value: !Ref ProjectName
+        - Key: StackName
+          Value: !Ref StackName
 
   ### SSL Certificate (if domain is provided)
   SSLCertificate:
@@ -338,8 +338,8 @@ Resources:
       Tags:
         - Key: Environment
           Value: !Ref Environment
-        - Key: Project
-          Value: !Ref ProjectName
+        - Key: StackName
+          Value: !Ref StackName
 
   ### Route53 Record (if domain is provided)
   DNSRecord:
@@ -449,46 +449,46 @@ Outputs:
     Description: REST API Gateway endpoint URL
     Value: !Sub 'https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
     Export:
-      Name: !Sub '${ProjectName}-${Environment}-rest-api-url'
+      Name: !Sub '${StackName}-rest-api-url'
 
   WebSocketUrl:
     Description: WebSocket API Gateway endpoint URL
     Value: !Sub 'wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
     Export:
-      Name: !Sub '${ProjectName}-${Environment}-websocket-url'
+      Name: !Sub '${StackName}-websocket-url'
 
   # Frontend
   FrontendBucketName:
     Description: Frontend S3 bucket name
     Value: !Ref FrontendBucket
     Export:
-      Name: !Sub '${ProjectName}-${Environment}-frontend-bucket'
+      Name: !Sub '${StackName}-frontend-bucket'
 
   FrontendUrl:
     Description: Frontend URL
-    Value: !If 
+    Value: !If
       - HasDomain
       - !Sub 'https://${DomainName}'
       - !Sub 'http://${FrontendBucket}.s3-website-${AWS::Region}.amazonaws.com'
     Export:
-      Name: !Sub '${ProjectName}-${Environment}-frontend-url'
+      Name: !Sub '${StackName}-frontend-url'
 
   # Database
   GameTableName:
     Description: DynamoDB table name
     Value: !Ref GameTable
     Export:
-      Name: !Sub '${ProjectName}-${Environment}-table-name'
+      Name: !Sub '${StackName}-table-name'
 
   # Environment Info
   Environment:
     Description: Environment name
     Value: !Ref Environment
     Export:
-      Name: !Sub '${ProjectName}-${Environment}-environment'
+      Name: !Sub '${StackName}-environment'
 
   StackName:
     Description: CloudFormation stack name
     Value: !Ref AWS::StackName
     Export:
-      Name: !Sub '${ProjectName}-${Environment}-stack-name'
+      Name: !Sub '${StackName}-stack-name'

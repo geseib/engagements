@@ -31,28 +31,37 @@ print_error() {
 
 # Check arguments
 if [ $# -lt 1 ]; then
-    print_error "Usage: $0 <environment> [domain] [hosted-zone-id]"
-    print_error "Example: $0 dev dev.engagements.example.com Z1234567890ABC"
+    print_error "Usage: $0 <stack-name> [domain] [hosted-zone-id]"
+    print_error "Example: $0 engagedev engage.dev.seibtribe.us ZB9TUA073B5SH"
     exit 1
 fi
 
-ENVIRONMENT=$1
+STACK_NAME=$1
 DOMAIN=${2:-""}
-HOSTED_ZONE_ID=${3:-""}
-PROJECT_NAME="engagements"
-STACK_NAME="${PROJECT_NAME}-${ENVIRONMENT}-infrastructure"
+HOSTED_ZONE_ID=${3:-"ZB9TUA073B5SH"}
 
-print_status "Starting deployment for environment: $ENVIRONMENT"
+print_status "Starting deployment for stack: $STACK_NAME"
 
-# Validate environment
-if [[ ! "$ENVIRONMENT" =~ ^(dev|test|prod)$ ]]; then
-    print_error "Environment must be one of: dev, test, prod"
+# Determine environment from stack name
+if [[ "$STACK_NAME" == *"dev"* ]]; then
+    ENVIRONMENT="dev"
+elif [[ "$STACK_NAME" == *"test"* ]]; then
+    ENVIRONMENT="test"
+elif [[ "$STACK_NAME" == *"prod"* ]]; then
+    ENVIRONMENT="prod"
+else
+    print_error "Cannot determine environment from stack name: $STACK_NAME"
+    print_error "Stack name should contain 'dev', 'test', or 'prod'"
     exit 1
 fi
 
-# Check if AWS CLI is configured
+# Check if AWS CLI is configured (use adminaccess profile if AWS_PROFILE not set)
+if [ -z "$AWS_PROFILE" ]; then
+    export AWS_PROFILE=adminaccess
+fi
+
 if ! aws sts get-caller-identity > /dev/null 2>&1; then
-    print_error "AWS CLI not configured. Please run 'aws configure' first."
+    print_error "AWS CLI not configured with profile $AWS_PROFILE. Please configure it first."
     exit 1
 fi
 
@@ -81,7 +90,7 @@ fi
 print_success "Build completed"
 
 # Prepare deployment parameters
-PARAMETERS="Environment=$ENVIRONMENT ProjectName=$PROJECT_NAME"
+PARAMETERS="Environment=$ENVIRONMENT StackName=$STACK_NAME"
 
 if [ -n "$DOMAIN" ] && [ -n "$HOSTED_ZONE_ID" ]; then
     PARAMETERS="$PARAMETERS DomainName=$DOMAIN HostedZoneId=$HOSTED_ZONE_ID"
@@ -98,7 +107,7 @@ sam deploy \
     --capabilities CAPABILITY_IAM \
     --parameter-overrides $PARAMETERS \
     --resolve-s3 \
-    --tags Environment="$ENVIRONMENT" Project="$PROJECT_NAME" \
+    --tags Environment="$ENVIRONMENT" StackName="$STACK_NAME" \
     --no-fail-on-empty-changeset
 
 if [ $? -ne 0 ]; then
