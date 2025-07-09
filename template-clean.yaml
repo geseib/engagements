@@ -10,24 +10,29 @@ Parameters:
     Type: String
     AllowedValues: [dev, test, prod]
     Description: Environment name (dev, test, prod)
-  
-  ProjectName:
+
+  StackName:
     Type: String
-    Default: engagements
-    Description: Project name for resource naming
-  
+    Description: Stack name for resource naming (e.g., engagedev, engagetest, engageprod)
+
   DomainName:
     Type: String
-    Description: Domain name for this environment
+    Description: Primary domain name for this environment
     Default: ""
-  
+
+  SecondaryDomainName:
+    Type: String
+    Description: Secondary domain name (for prod dual domains)
+    Default: ""
+
   HostedZoneId:
     Type: String
     Description: Route53 hosted zone ID
-    Default: ""
+    Default: "ZB9TUA073B5SH"
 
 Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
+  HasSecondaryDomain: !Not [!Equals [!Ref SecondaryDomainName, ""]]
   IsProd: !Equals [!Ref Environment, "prod"]
 
 Globals:
@@ -43,11 +48,11 @@ Globals:
 
 Resources:
 
-  ### DynamoDB Table with Clean Naming
+  ### DynamoDB Table with Simple Naming
   GameTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub '${ProjectName}-${Environment}-table-main'
+      TableName: !Ref StackName
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: PK
@@ -69,18 +74,18 @@ Resources:
       Tags:
         - Key: Environment
           Value: !Ref Environment
-        - Key: Project
-          Value: !Ref ProjectName
+        - Key: StackName
+          Value: !Ref StackName
 
-  ### WebSocket API with Clean Naming
+  ### WebSocket API with Simple Naming
   WebSocketApi:
     Type: AWS::ApiGatewayV2::Api
     Properties:
-      Name: !Sub '${ProjectName}-${Environment}-api-websocket'
+      Name: !Sub '${StackName}-api-ws'
       ProtocolType: WEBSOCKET
       Tags:
         Environment: !Ref Environment
-        Project: !Ref ProjectName
+        StackName: !Ref StackName
 
   ### WebSocket Deployment
   WebSocketDeployment:
@@ -102,15 +107,15 @@ Resources:
       ApiId: !Ref WebSocketApi
       Tags:
         Environment: !Ref Environment
-        Project: !Ref ProjectName
+        StackName: !Ref StackName
 
-  ### Lambda Functions with Clean Naming
+  ### Lambda Functions with Simple Naming
 
   ## WebSocket Functions
   ConnectFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub '${ProjectName}-${Environment}-lambda-websocket-connect'
+      FunctionName: !Sub '${StackName}-connect'
       CodeUri: lambda-functions/websocket/
       Handler: connect.handler
       Policies:
@@ -118,12 +123,12 @@ Resources:
             TableName: !Ref GameTable
       Tags:
         Environment: !Ref Environment
-        Project: !Ref ProjectName
+        StackName: !Ref StackName
 
   DisconnectFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub '${ProjectName}-${Environment}-lambda-websocket-disconnect'
+      FunctionName: !Sub '${StackName}-disconnect'
       CodeUri: lambda-functions/websocket/
       Handler: disconnect.handler
       Policies:
@@ -131,12 +136,12 @@ Resources:
             TableName: !Ref GameTable
       Tags:
         Environment: !Ref Environment
-        Project: !Ref ProjectName
+        StackName: !Ref StackName
 
   MessageFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub '${ProjectName}-${Environment}-lambda-websocket-message'
+      FunctionName: !Sub '${StackName}-message'
       CodeUri: lambda-functions/websocket/
       Handler: message.handler
       Policies:
@@ -149,13 +154,13 @@ Resources:
             Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
       Tags:
         Environment: !Ref Environment
-        Project: !Ref ProjectName
+        StackName: !Ref StackName
 
   ## Game Management Functions
   CreateGameFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub '${ProjectName}-${Environment}-lambda-api-create-game'
+      FunctionName: !Sub '${StackName}-create-game'
       CodeUri: lambda-functions/websocket/
       Handler: create-game.handler
       Events:
@@ -170,12 +175,12 @@ Resources:
             TableName: !Ref GameTable
       Tags:
         Environment: !Ref Environment
-        Project: !Ref ProjectName
+        StackName: !Ref StackName
 
   StartQuestionFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub '${ProjectName}-${Environment}-lambda-api-start-question'
+      FunctionName: !Sub '${StackName}-start-question'
       CodeUri: lambda-functions/websocket/
       Handler: start-question.handler
       Events:
@@ -195,12 +200,12 @@ Resources:
             Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
       Tags:
         Environment: !Ref Environment
-        Project: !Ref ProjectName
+        StackName: !Ref StackName
 
   StartVoteFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub '${ProjectName}-${Environment}-lambda-api-start-vote'
+      FunctionName: !Sub '${StackName}-start-vote'
       CodeUri: lambda-functions/websocket/
       Handler: start-vote.handler
       Events:
@@ -220,13 +225,13 @@ Resources:
             Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
       Tags:
         Environment: !Ref Environment
-        Project: !Ref ProjectName
+        StackName: !Ref StackName
 
-  ### REST API with Clean Naming
+  ### REST API with Simple Naming
   RestApi:
     Type: AWS::Serverless::Api
     Properties:
-      Name: !Sub '${ProjectName}-${Environment}-api-rest'
+      Name: !Sub '${StackName}-api-rest'
       StageName: !Ref Environment
       Cors:
         AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
@@ -234,13 +239,13 @@ Resources:
         AllowOrigin: "'*'"
       Tags:
         Environment: !Ref Environment
-        Project: !Ref ProjectName
+        StackName: !Ref StackName
 
-  ### S3 Bucket for Frontend with Clean Naming
+  ### S3 Buckets with Simple Naming
   FrontendBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub '${ProjectName}-${Environment}-bucket-frontend'
+      BucketName: !Sub '${StackName}-web'
       WebsiteConfiguration:
         IndexDocument: index.html
         ErrorDocument: error.html
@@ -252,8 +257,28 @@ Resources:
       Tags:
         - Key: Environment
           Value: !Ref Environment
-        - Key: Project
-          Value: !Ref ProjectName
+        - Key: StackName
+          Value: !Ref StackName
+
+  ReportsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${StackName}-reports'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldReports
+            Status: Enabled
+            ExpirationInDays: 90
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: StackName
+          Value: !Ref StackName
 
   ### S3 Bucket Policy
   FrontendBucketPolicy:
