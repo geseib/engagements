@@ -48,4 +48,4 @@ phases:
   post_build:
     commands:
       - echo "Deployment completed for $ENVIRONMENT environment"
-      - echo "Website URL: https://$DOMAIN_NAME"
+      - 'echo "Website URL: https://$DOMAIN_NAME"''
