@@ -247,6 +247,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${StackName}-admin-get-question-sets'
+      Handler: index.getQuestionSets
       Runtime: nodejs18.x
       Timeout: 30
       Policies:
@@ -262,7 +263,7 @@ Resources:
         const client = new DynamoDBClient({});
         const db = DynamoDBDocumentClient.from(client);
 
-        exports.handler = async (event) => {
+        exports.getQuestionSets = async (event) => {
           try {
             console.log('Getting question sets...');
 
@@ -316,6 +317,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${StackName}-admin-ai-generate-questions'
+      Handler: index.generateQuestions
       Runtime: nodejs18.x
       Timeout: 900
       MemorySize: 1024
@@ -370,7 +372,7 @@ Resources:
           return responseBody.content[0].text;
         };
 
-        exports.handler = async (event) => {
+        exports.generateQuestions = async (event) => {
           try {
             console.log('🤖 Lambda function started for question generation');
             console.log('Event:', JSON.stringify(event, null, 2));
@@ -531,6 +533,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${StackName}-admin-upload-questions'
+      Handler: index.uploadQuestions
       Runtime: nodejs18.x
       Timeout: 60
       Policies:
@@ -546,7 +549,7 @@ Resources:
         const client = new DynamoDBClient({});
         const db = DynamoDBDocumentClient.from(client);
 
-        exports.handler = async (event) => {
+        exports.uploadQuestions = async (event) => {
           try {
             const { fileName, fileContent, customTitle, customDescription, customInstructions, aiContextInstructions, engagementType } = JSON.parse(event.body);
 
