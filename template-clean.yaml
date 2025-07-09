@@ -304,9 +304,9 @@ Resources:
         };
       Events:
         AdminGetQuestionSetsEvent:
-          Type: HttpApi
+          Type: Api
           Properties:
-            ApiId: !Ref RestApi
+            RestApiId: !Ref RestApi
             Path: /admin/question-sets
             Method: GET
       Tags:
@@ -520,9 +520,9 @@ Resources:
         };
       Events:
         AdminAIGenerateQuestionsEvent:
-          Type: HttpApi
+          Type: Api
           Properties:
-            ApiId: !Ref RestApi
+            RestApiId: !Ref RestApi
             Path: /admin/ai-generate-questions
             Method: POST
       Tags:
@@ -827,9 +827,9 @@ Resources:
         };
       Events:
         AdminUploadQuestionsEvent:
-          Type: HttpApi
+          Type: Api
           Properties:
-            ApiId: !Ref RestApi
+            RestApiId: !Ref RestApi
             Path: /admin/upload-questions
             Method: POST
       Tags:
