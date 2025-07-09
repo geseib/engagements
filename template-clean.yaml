@@ -242,6 +242,181 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  ## Admin Functions
+  AdminGetQuestionSetsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-get-question-sets'
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      InlineCode: |-
+        const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+        const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+
+        const client = new DynamoDBClient({});
+        const db = DynamoDBDocumentClient.from(client);
+
+        exports.handler = async (event) => {
+          try {
+            console.log('Getting question sets...');
+
+            // Get all question set metadata (both active and inactive)
+            const res = await db.send(new QueryCommand({
+              TableName: process.env.TABLE_NAME,
+              KeyConditionExpression: 'PK = :pk',
+              ExpressionAttributeValues: { ':pk': 'SETS' }
+            }));
+
+            const questionSets = res.Items.map(item => ({
+              id: item.SK.replace('SET#', ''),
+              name: item.name,
+              description: item.description,
+              customInstruction: item.customInstruction,
+              aiContextInstruction: item.aiContextInstruction,
+              engagementType: item.engagementType,
+              questionCount: item.questionCount || 0,
+              active: item.active !== false,
+              createdAt: item.createdAt,
+              updatedAt: item.updatedAt
+            }));
+
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ questionSets }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+
+          } catch (error) {
+            console.error('Get question sets error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: `Failed to get question sets: ${error.message}` }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        AdminGetQuestionSetsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/question-sets
+            Method: GET
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  AdminAIGenerateQuestionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-ai-generate-questions'
+      Runtime: nodejs18.x
+      Timeout: 900
+      MemorySize: 1024
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource:
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0'
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      InlineCode: |-
+        const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+        const { DynamoDBDocumentClient, PutCommand } = require('@aws-sdk/lib-dynamodb');
+        const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+
+        const dbClient = new DynamoDBClient({});
+        const db = DynamoDBDocumentClient.from(dbClient);
+        const bedrock = new BedrockRuntimeClient({ region: 'us-east-1' });
+
+        exports.handler = async (event) => {
+          try {
+            const { topic, questionCount = 10, customInstructions = '', aiContextInstructions = '' } = JSON.parse(event.body);
+
+            if (!topic || !topic.trim()) {
+              return {
+                statusCode: 400,
+                body: JSON.stringify({ error: 'Topic is required' }),
+                headers: { 'Access-Control-Allow-Origin': '*' }
+              };
+            }
+
+            console.log(`Generating ${questionCount} questions for topic: ${topic}`);
+
+            const prompt = `Generate ${questionCount} engaging call-and-answer questions about "${topic}".
+
+${customInstructions ? `Additional Instructions: ${customInstructions}` : ''}
+${aiContextInstructions ? `Context: ${aiContextInstructions}` : ''}
+
+Format as CSV with columns: question,answer
+- Questions should be clear and engaging
+- Answers should be concise but complete
+- Include the CSV header row
+- Escape any commas in content with quotes
+- No extra formatting or explanations
+
+Example:
+question,answer
+"What is the capital of France?","Paris"`;
+
+            const response = await bedrock.send(new InvokeModelCommand({
+              modelId: 'anthropic.claude-3-sonnet-20240229-v1:0',
+              body: JSON.stringify({
+                anthropic_version: 'bedrock-2023-05-31',
+                max_tokens: 4000,
+                messages: [{ role: 'user', content: prompt }]
+              }),
+              contentType: 'application/json'
+            }));
+
+            const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+            const csvContent = responseBody.content[0].text;
+
+            return {
+              statusCode: 200,
+              body: JSON.stringify({
+                csvContent,
+                topic,
+                questionCount: parseInt(questionCount)
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+
+          } catch (error) {
+            console.error('AI generation error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: `AI generation failed: ${error.message}` }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        AdminAIGenerateQuestionsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/ai-generate-questions
+            Method: POST
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   ### S3 Buckets with Simple Naming
   FrontendBucket:
     Type: AWS::S3::Bucket
