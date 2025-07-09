@@ -329,9 +329,10 @@ Resources:
                 - bedrock:InvokeModel
                 - bedrock:InvokeModelWithResponseStream
               Resource:
-                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0'
-                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0'
-                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0'
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
@@ -375,7 +376,7 @@ question,answer
 "What is the capital of France?","Paris"`;
 
             const response = await bedrock.send(new InvokeModelCommand({
-              modelId: 'anthropic.claude-3-sonnet-20240229-v1:0',
+              modelId: 'us.anthropic.claude-3-5-sonnet-20241022-v2:0',
               body: JSON.stringify({
                 anthropic_version: 'bedrock-2023-05-31',
                 max_tokens: 4000,
