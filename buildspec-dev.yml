@@ -13,7 +13,7 @@ phases:
   pre_build:
     commands:
       - echo "Pre-build phase for $ENVIRONMENT environment"
-      - echo "Domain: $DOMAIN_NAME"
+      - 'echo "Domain: $DOMAIN_NAME"'
 
   build:
     commands:
