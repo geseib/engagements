@@ -228,16 +228,15 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
-  ### REST API with Simple Naming
+  ### HTTP API with Simple Naming (like original GameApi)
   RestApi:
-    Type: AWS::Serverless::Api
+    Type: AWS::Serverless::HttpApi
     Properties:
-      Name: !Sub '${StackName}-api-rest'
       StageName: !Ref Environment
-      Cors:
-        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
-        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-        AllowOrigin: "'*'"
+      CorsConfiguration:
+        AllowOrigins: ["*"]
+        AllowMethods: ["OPTIONS","GET","POST","PUT","DELETE"]
+        AllowHeaders: ["Content-Type"]
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -304,9 +303,9 @@ Resources:
         };
       Events:
         AdminGetQuestionSetsEvent:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref RestApi
+            ApiId: !Ref RestApi
             Path: /admin/question-sets
             Method: GET
       Tags:
@@ -520,9 +519,9 @@ Resources:
         };
       Events:
         AdminAIGenerateQuestionsEvent:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref RestApi
+            ApiId: !Ref RestApi
             Path: /admin/ai-generate-questions
             Method: POST
       Tags:
@@ -827,9 +826,9 @@ Resources:
         };
       Events:
         AdminUploadQuestionsEvent:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref RestApi
+            ApiId: !Ref RestApi
             Path: /admin/upload-questions
             Method: POST
       Tags:
