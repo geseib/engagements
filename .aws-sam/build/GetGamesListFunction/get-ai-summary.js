@@ -490,16 +490,16 @@ exports.handler = async (event) => {
         }));
         
         if (setResult.Item) {
-          if (setResult.Item.CustomInstruction) {
-            customInstruction = setResult.Item.CustomInstruction;
+          if (setResult.Item.customInstruction) {
+            customInstruction = setResult.Item.customInstruction;
             console.log('📋 Found custom instruction for AI prompt:', customInstruction);
           }
-          if (setResult.Item.AIContextInstruction) {
-            questionSetAiContext = setResult.Item.AIContextInstruction;
+          if (setResult.Item.aiContextInstruction) {
+            questionSetAiContext = setResult.Item.aiContextInstruction;
             console.log('🎯 Found question set AI context:', questionSetAiContext);
           }
-          if (setResult.Item.PromptId) {
-            promptId = setResult.Item.PromptId;
+          if (setResult.Item.promptId) {
+            promptId = setResult.Item.promptId;
             console.log('🎨 Found custom prompt ID:', promptId);
           }
         }

@@ -778,3 +778,137 @@
     grid-template-columns: 1fr;
   }
 }
+/* Template Editor with Variables Panel */
+.template-group {
+  margin-bottom: 24px;
+}
+
+.template-editor-container {
+  display: flex;
+  gap: 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+}
+
+.template-variables-panel {
+  width: 280px;
+  background: #f8f9fa;
+  padding: 16px;
+  border-right: 1px solid #e0e0e0;
+  overflow-y: auto;
+  max-height: 400px;
+}
+
+.template-variables-panel h4 {
+  margin: 0 0 12px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.variables-help {
+  font-size: 12px;
+  color: #666;
+  margin: 0 0 16px 0;
+}
+
+.variable-category {
+  margin-bottom: 16px;
+}
+
+.variable-category h5 {
+  margin: 0 0 8px 0;
+  color: #555;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.variable-btn {
+  display: block;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 6px 8px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'Courier New', monospace;
+  color: #0066cc;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.variable-btn:hover {
+  background: #0066cc;
+  color: white;
+  border-color: #0066cc;
+}
+
+.variable-btn:active {
+  transform: translateY(1px);
+}
+
+.template-textarea-container {
+  flex: 1;
+  position: relative;
+}
+
+.template-textarea-container textarea {
+  width: 100%;
+  height: 400px;
+  padding: 16px;
+  border: none;
+  resize: vertical;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.template-textarea-container textarea:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px #0066cc;
+}
+
+/* Improved Prompt Actions */
+.improved-prompt-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.apply-btn {
+  background: #4caf50;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s ease;
+}
+
+.apply-btn:hover {
+  background: #45a049;
+}
+
+.copy-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s ease;
+}
+
+.copy-btn:hover {
+  background: #5a6268;
+}
+EOF < /dev/null

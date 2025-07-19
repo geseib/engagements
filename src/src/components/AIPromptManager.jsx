@@ -20,6 +20,42 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
 
   const [tagInput, setTagInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [templateTextareaRef, setTemplateTextareaRef] = useState(null);
+
+  // Available template variables
+  const templateVariables = [
+    { name: 'sessionContext', description: 'Session/event context and instructions', category: 'Context' },
+    { name: 'questionTitle', description: 'Question title/text', category: 'Question' },
+    { name: 'questionCategory', description: 'Question category', category: 'Question' },
+    { name: 'questionDetail', description: 'Question details/context', category: 'Question' },
+    { name: 'responsesText', description: 'Top player responses ranked by votes', category: 'Responses' },
+    { name: 'responseCount', description: 'Total number of responses', category: 'Responses' },
+    { name: 'contextSections', description: 'Combined context sections', category: 'Context' },
+    { name: 'contextInstructions', description: 'Context-based instructions', category: 'Context' },
+    { name: 'eventTitle', description: 'Game/event title', category: 'Game' },
+    { name: 'gameType', description: 'Game type (call-and-answer, trivia, polls)', category: 'Game' },
+    { name: 'totalParticipants', description: 'Total number of participants', category: 'Game' }
+  ];
+
+  const insertVariable = (variableName) => {
+    if (templateTextareaRef) {
+      const cursorPos = templateTextareaRef.selectionStart;
+      const textBefore = formData.template.substring(0, cursorPos);
+      const textAfter = formData.template.substring(templateTextareaRef.selectionEnd);
+      const newTemplate = textBefore + `{${variableName}}` + textAfter;
+      
+      setFormData({ ...formData, template: newTemplate });
+      
+      // Move cursor after inserted variable
+      setTimeout(() => {
+        templateTextareaRef.setSelectionRange(
+          cursorPos + variableName.length + 2,
+          cursorPos + variableName.length + 2
+        );
+        templateTextareaRef.focus();
+      }, 0);
+    }
+  };
 
   const gameTypes = [
     { value: 'callandanswer', label: 'Call and Answer' },
@@ -169,17 +205,45 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
             />
           </div>
 
-          <div className="form-group">
+          <div className="form-group template-group">
             <label>Prompt Template *</label>
-            <textarea
-              value={formData.template}
-              onChange={(e) => setFormData({ ...formData, template: e.target.value })}
-              placeholder="Enter your AI prompt template here. Use {question}, {playerResponses}, and {gameContext} as variables."
-              rows="12"
-              required
-            />
+            <div className="template-editor-container">
+              <div className="template-variables-panel">
+                <h4>📝 Available Variables</h4>
+                <p className="variables-help">Click to insert into template:</p>
+                {['Context', 'Question', 'Responses', 'Game'].map(category => (
+                  <div key={category} className="variable-category">
+                    <h5>{category}</h5>
+                    {templateVariables
+                      .filter(v => v.category === category)
+                      .map(variable => (
+                        <button
+                          key={variable.name}
+                          type="button"
+                          className="variable-btn"
+                          onClick={() => insertVariable(variable.name)}
+                          title={variable.description}
+                        >
+                          {'{' + variable.name + '}'}
+                        </button>
+                      ))
+                    }
+                  </div>
+                ))}
+              </div>
+              <div className="template-textarea-container">
+                <textarea
+                  ref={setTemplateTextareaRef}
+                  value={formData.template}
+                  onChange={(e) => setFormData({ ...formData, template: e.target.value })}
+                  placeholder="Enter your AI prompt template here. Click variable buttons to insert them."
+                  rows="12"
+                  required
+                />
+              </div>
+            </div>
             <small className="form-help">
-              Available variables: {'{question}'}, {'{playerResponses}'}, {'{gameContext}'}
+              Click the variable buttons to insert them into your template. Variables will be replaced with actual content when the AI summary is generated.
             </small>
           </div>
 
@@ -231,7 +295,7 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
 }
 
 // AI Prompt Advisor Modal Component
-function AIPromptAdvisor({ prompt, onClose }) {
+function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
   const [analysisType, setAnalysisType] = useState('improve');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState(null);
@@ -322,12 +386,23 @@ function AIPromptAdvisor({ prompt, onClose }) {
                   <h4>✨ Improved Prompt</h4>
                   <div className="improved-prompt">
                     <pre>{analysis.improvedPrompt}</pre>
-                    <button 
-                      className="btn-secondary copy-btn"
-                      onClick={() => navigator.clipboard.writeText(analysis.improvedPrompt)}
-                    >
-                      📋 Copy to Clipboard
-                    </button>
+                    <div className="improved-prompt-actions">
+                      <button 
+                        className="btn-secondary copy-btn"
+                        onClick={() => navigator.clipboard.writeText(analysis.improvedPrompt)}
+                      >
+                        📋 Copy to Clipboard
+                      </button>
+                      <button 
+                        className="btn-primary apply-btn"
+                        onClick={() => {
+                          onApplyImprovedPrompt(analysis.improvedPrompt);
+                          onClose();
+                        }}
+                      >
+                        ✨ Apply to Prompt
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -527,6 +602,15 @@ function AIPromptManager() {
     setEditingPrompt(null);
     setIsCreating(false);
     await fetchPrompts();
+  };
+
+  const handleApplyImprovedPrompt = (improvedTemplate) => {
+    if (advisorPrompt) {
+      // Update the prompt in the state and open it for editing
+      const updatedPrompt = { ...advisorPrompt, template: improvedTemplate };
+      setEditingPrompt(updatedPrompt);
+      setAdvisorPrompt(null);
+    }
   };
 
   const handlePopulateDefaults = async () => {
@@ -739,6 +823,7 @@ function AIPromptManager() {
         <AIPromptAdvisor
           prompt={advisorPrompt}
           onClose={() => setAdvisorPrompt(null)}
+          onApplyImprovedPrompt={handleApplyImprovedPrompt}
         />
       )}
     </div>
