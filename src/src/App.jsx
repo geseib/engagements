@@ -3,6 +3,7 @@ import GameHostPage from './GameHostPage';
 import PlayerPage from './PlayerPage';
 import AdminPage from './AdminPage';
 import BuilderPage from './BuilderPage';
+import HostRemote from './HostRemote';
 
 function App() {
   // Simple routing based on URL path
@@ -18,6 +19,10 @@ function App() {
 
   if (path.startsWith('/builder')) {
     return <BuilderPage />;
+  }
+
+  if (path.startsWith('/remote')) {
+    return <HostRemote />;
   }
 
   return <GameHostPage />;

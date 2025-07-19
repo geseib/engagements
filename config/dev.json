@@ -1,0 +1,22 @@
+{
+  "environment": "dev",
+  "aws": {
+    "region": "us-east-1",
+    "accountId": "239601476690"
+  },
+  "api": {
+    "restUrl": "https://h1jcmja0w1.execute-api.us-east-1.amazonaws.com/dev",
+    "websocketUrl": "wss://r4c24mqku1.execute-api.us-east-1.amazonaws.com/dev"
+  },
+  "frontend": {
+    "bucket": "engdev-web",
+    "url": "https://eng.dev.seibtribe.us"
+  },
+  "database": {
+    "tableName": "engdev"
+  },
+  "domain": {
+    "name": "eng.dev.seibtribe.us",
+    "hostedZoneId": "ZB9TUA073B5SH"
+  }
+}

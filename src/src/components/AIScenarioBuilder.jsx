@@ -10,7 +10,10 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     audience: '',
     difficulty: 'medium',
     count: 5,
-    customPrompt: ''
+    customPrompt: '',
+    customTitle: '',
+    numberOfCategories: 3,
+    mustHaveCategories: ''
   });
   const [generatedScenarios, setGeneratedScenarios] = useState([]);
   const [generatedMetadata, setGeneratedMetadata] = useState(null);
@@ -134,8 +137,63 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
 
   const scenarioTypes = getScenarioTypes(engagementType);
 
+  // Template prefilling based on scenario type
+  const getTemplateDefaults = (scenarioType) => {
+    const templates = {
+      'lessons-learned': {
+        customTitle: 'Lessons Learned Workshop',
+        context: 'Professional development workshop focusing on real-world challenges and the valuable lessons learned from them',
+        audience: 'Team leaders, project managers, and experienced professionals',
+        numberOfCategories: 4,
+        mustHaveCategories: 'Leadership, Project Management, Team Dynamics, Problem Resolution'
+      },
+      'problem-solving': {
+        customTitle: 'Problem-Solving Challenge Session',
+        context: 'Interactive session designed to tackle current workplace challenges through collaborative problem-solving',
+        audience: 'Cross-functional teams, managers, and solution-oriented professionals',
+        numberOfCategories: 5,
+        mustHaveCategories: 'Technical Challenges, Process Improvement, Team Collaboration, Innovation, Risk Management'
+      },
+      'interview-prep': {
+        customTitle: 'Interview Preparation Workshop',
+        context: 'Comprehensive practice session for job interviews with scenario-based questions',
+        audience: 'Job seekers, career changers, and professionals seeking advancement',
+        numberOfCategories: 3,
+        mustHaveCategories: 'Behavioral Questions, Technical Skills, Situational Judgment'
+      },
+      'amazon-principles': {
+        customTitle: 'Amazon Leadership Principles Workshop',
+        context: 'Deep dive into Amazon\'s 16 Leadership Principles through real-world scenarios and STAR method practice',
+        audience: 'Amazon employees, leadership candidates, and professionals interested in Amazon culture',
+        numberOfCategories: 4,
+        mustHaveCategories: 'Customer Obsession, Ownership, Invent & Simplify, Bias for Action'
+      },
+      'team-building': {
+        customTitle: 'Team Building Workshop',
+        context: 'Collaborative exercises designed to strengthen team bonds and improve communication',
+        audience: 'Team members, project groups, and departments looking to improve collaboration',
+        numberOfCategories: 3,
+        mustHaveCategories: 'Communication, Trust Building, Conflict Resolution'
+      },
+      'custom': {
+        customTitle: 'Custom Scenario Workshop',
+        context: 'Tailored scenarios based on specific organizational needs and requirements',
+        audience: 'Customized based on requirements',
+        numberOfCategories: 3,
+        mustHaveCategories: ''
+      }
+    };
+
+    return templates[scenarioType] || templates['custom'];
+  };
+
   const handleTypeSelection = (type) => {
-    setScenarioConfig(prev => ({ ...prev, type }));
+    const templateDefaults = getTemplateDefaults(type);
+    setScenarioConfig(prev => ({ 
+      ...prev, 
+      type,
+      ...templateDefaults
+    }));
     setStep(2);
   };
 
@@ -148,46 +206,78 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     try {
       const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
       
-      let prompt = selectedType.prompt;
+      let basePrompt = selectedType.prompt;
       if (scenarioConfig.context) {
-        prompt += `\n\nContext: ${scenarioConfig.context}`;
+        basePrompt += `\n\nContext: ${scenarioConfig.context}`;
       }
       if (scenarioConfig.audience) {
-        prompt += `\nAudience: ${scenarioConfig.audience}`;
+        basePrompt += `\nAudience: ${scenarioConfig.audience}`;
       }
       if (scenarioConfig.customPrompt) {
-        prompt += `\n\nAdditional Requirements: ${scenarioConfig.customPrompt}`;
+        basePrompt += `\n\nAdditional Requirements: ${scenarioConfig.customPrompt}`;
       }
 
-      prompt += `\n\nDifficulty Level: ${scenarioConfig.difficulty}`;
-      prompt += `\nNumber of scenarios needed: ${scenarioConfig.count}`;
-
-      const response = await fetch(`${API_BASE}admin/ai-generate-scenarios`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          scenarioType: scenarioConfig.type,
-          prompt: prompt,
-          count: scenarioConfig.count,
-          difficulty: scenarioConfig.difficulty,
-          context: scenarioConfig.context,
-          audience: scenarioConfig.audience,
-          customPrompt: scenarioConfig.customPrompt
-        })
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        setGeneratedScenarios(result.scenarios);
-        setGeneratedMetadata(result.metadata);
-        setGenerationStatus(`✅ Generated ${result.scenarios.length} scenarios successfully`);
-        setCurrentScenarioIndex(0);
-      } else {
-        setGenerationStatus(`❌ Generation failed: ${result.error || 'Unknown error'}`);
+      basePrompt += `\n\nDifficulty Level: ${scenarioConfig.difficulty}`;
+      basePrompt += `\nNumber of categories needed: ${scenarioConfig.numberOfCategories}`;
+      
+      if (scenarioConfig.mustHaveCategories) {
+        basePrompt += `\nMust include these categories: ${scenarioConfig.mustHaveCategories}`;
       }
+
+      // Break large requests into chunks to avoid timeout
+      const CHUNK_SIZE = 10; // Generate max 10 scenarios per request
+      const totalCount = scenarioConfig.count;
+      const chunks = Math.ceil(totalCount / CHUNK_SIZE);
+      
+      let allScenarios = [];
+      
+      for (let i = 0; i < chunks; i++) {
+        const remainingCount = totalCount - (i * CHUNK_SIZE);
+        const chunkSize = Math.min(CHUNK_SIZE, remainingCount);
+        
+        setGenerationStatus(`🤖 Generating batch ${i + 1} of ${chunks} (${chunkSize} scenarios)...`);
+        
+        const chunkPrompt = basePrompt + `\nNumber of scenarios needed: ${chunkSize}`;
+        
+        const response = await fetch(`${API_BASE}admin/ai-generate-scenarios`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            scenarioType: scenarioConfig.type,
+            prompt: chunkPrompt,
+            count: chunkSize,
+            difficulty: scenarioConfig.difficulty,
+            context: scenarioConfig.context,
+            audience: scenarioConfig.audience,
+            customPrompt: scenarioConfig.customPrompt,
+            customTitle: scenarioConfig.customTitle,
+            numberOfCategories: scenarioConfig.numberOfCategories,
+            mustHaveCategories: scenarioConfig.mustHaveCategories
+          })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          allScenarios.push(...result.scenarios);
+          setGenerationStatus(`✅ Generated ${allScenarios.length} of ${totalCount} scenarios...`);
+        } else {
+          throw new Error(`Batch ${i + 1} failed: ${result.error || 'Unknown error'}`);
+        }
+        
+        // Small delay between requests to avoid overwhelming the API
+        if (i < chunks - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      setGeneratedScenarios(allScenarios);
+      setGeneratedMetadata(null); // Will be generated later
+      setGenerationStatus(`✅ Generated ${allScenarios.length} scenarios successfully`);
+      setCurrentScenarioIndex(0);
+      
     } catch (error) {
       console.error('AI generation error:', error);
       setGenerationStatus(`❌ Generation failed: ${error.message}`);
@@ -217,9 +307,26 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
 
   const generateCSVContent = () => {
     const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction';
-    const rows = generatedScenarios.map((scenario, index) => {
-      return `"${scenario.category}","${index + 1}","${scenario.title}","${scenario.detail}","${scenario.school || 'Professional Development'}","${scenario.customInstructions || ''}"`;
+    
+    // First, group scenarios by category
+    const scenariosByCategory = {};
+    generatedScenarios.forEach(scenario => {
+      const category = scenario.category || 'AI Generated';
+      if (!scenariosByCategory[category]) {
+        scenariosByCategory[category] = [];
+      }
+      scenariosByCategory[category].push(scenario);
     });
+    
+    // Generate CSV rows with proper category-relative numbering
+    const rows = [];
+    Object.keys(scenariosByCategory).forEach(category => {
+      scenariosByCategory[category].forEach((scenario, index) => {
+        const questionNumber = index + 1; // Category-relative numbering
+        rows.push(`"${category}","${questionNumber}","${scenario.title}","${scenario.detail}","${scenario.school || 'Professional Development'}","${scenario.customInstructions || ''}"`);
+      });
+    });
+    
     return headers + '\n' + rows.join('\n');
   };
 
@@ -240,6 +347,11 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
 
   // Generate contextual title based on scenario type and content
   const generateTitle = () => {
+    // Use custom title if provided, otherwise generate from scenario type
+    if (scenarioConfig.customTitle && scenarioConfig.customTitle.trim()) {
+      return scenarioConfig.customTitle.trim();
+    }
+
     const typeNames = {
       'amazon-principles': 'Amazon Leadership Principles',
       'interview-prep': 'Interview Preparation',
@@ -329,6 +441,16 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
               <h3>Configure Your Scenarios</h3>
               <div className="config-form">
                 <div className="form-group">
+                  <label>Workshop Title</label>
+                  <input
+                    type="text"
+                    value={scenarioConfig.customTitle}
+                    onChange={(e) => setScenarioConfig(prev => ({ ...prev, customTitle: e.target.value }))}
+                    placeholder="Enter a title for your workshop..."
+                  />
+                </div>
+
+                <div className="form-group">
                   <label>Context/Background</label>
                   <textarea
                     value={scenarioConfig.context}
@@ -346,6 +468,28 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                     onChange={(e) => setScenarioConfig(prev => ({ ...prev, audience: e.target.value }))}
                     placeholder="e.g., Software Engineers, Managers, New Hires..."
                   />
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Number of Categories</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={scenarioConfig.numberOfCategories}
+                      onChange={(e) => setScenarioConfig(prev => ({ ...prev, numberOfCategories: Math.min(10, Math.max(1, parseInt(e.target.value) || 1)) }))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Must Have Categories</label>
+                    <input
+                      type="text"
+                      value={scenarioConfig.mustHaveCategories}
+                      onChange={(e) => setScenarioConfig(prev => ({ ...prev, mustHaveCategories: e.target.value }))}
+                      placeholder="Leadership, Management, Communication..."
+                    />
+                  </div>
                 </div>
 
                 <div className="form-row">

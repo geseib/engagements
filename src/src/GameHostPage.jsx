@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import html2pdf from 'html2pdf.js';
 import webSocketClient from './WebSocketClient';
+import MarkdownRenderer from './components/MarkdownRenderer';
 
 const API_BASE = window.API_BASE;
 
@@ -35,12 +36,31 @@ const calculatePlayerRankings = (players) => {
 function GameHostPage() {
   // 🎯 GAME ID MANAGEMENT: Use URL as single source of truth
   const [gameId, setGameId] = useState('');
+  
+  // Helper function to check if game is in waiting state
+  const isWaitingState = (state) => {
+    if (!state) {
+      console.log('🚨 DEBUG: isWaitingState - no state provided, returning true');
+      return true; // Default to waiting state if no state
+    }
+    const isWaiting = state === 'CREATED' || state === 'STARTED' || 
+           (!state.startsWith('ASK#') && !state.startsWith('VOTE#') && !state.startsWith('RESULTS#'));
+    console.log(`🚨 DEBUG: isWaitingState - state: ${state}, isWaiting: ${isWaiting}`);
+    return isWaiting;
+  };
   const [players, setPlayers] = useState([]);
   const [questions, setQuestions] = useState([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1);
   const [currentQuestionId, setCurrentQuestionId] = useState('');
   const [answers, setAnswers] = useState([]);
-  const [gameState, setGameState] = useState('waiting'); // waiting, question, voting (call-and-answer only), results
+  const [gameState, setGameStateRaw] = useState('CREATED'); // CREATED, STARTED, ASK#001, VOTE#001, RESULTS#001, etc.
+  
+  // Debug wrapper for setGameState
+  const setGameState = (newState) => {
+    console.log(`🚨 DEBUG: setGameState called - changing from "${gameState}" to "${newState}"`);
+    console.trace('🚨 DEBUG: setGameState call stack');
+    setGameStateRaw(newState);
+  };
   const [currentGameType, setCurrentGameType] = useState('call-and-answer'); // Track the type of the current game
   const [playersWhoAnswered, setPlayersWhoAnswered] = useState([]);
   const [votes, setVotes] = useState([]);
@@ -77,6 +97,7 @@ function GameHostPage() {
   const [showNewGameDialog, setShowNewGameDialog] = useState(false);
   const [newGameSetId, setNewGameSetId] = useState('');
   const [eventTitle, setEventTitle] = useState('');
+  const [eventDetails, setEventDetails] = useState('');
   const [gameAiContext, setGameAiContext] = useState('');
   const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer' or 'trivia'
   const [triviaTimer, setTriviaTimer] = useState(30); // Timer for trivia questions in seconds
@@ -102,6 +123,87 @@ function GameHostPage() {
   // Debug mode for AI prompts
   const [gameDebugMode, setGameDebugMode] = useState(false);
   
+  // Big screen mode for conference room displays (always defaults to false on page load)
+  const [bigScreenMode, setBigScreenMode] = useState(false);
+  
+  // Ensure big screen mode is always false on page load/refresh
+  useEffect(() => {
+    setBigScreenMode(false);
+    console.log('🖥️ Big screen mode reset to false on component mount');
+  }, []);
+
+  // Listen for remote control commands from Host Remote app
+  useEffect(() => {
+    const handleRemoteCommand = (event) => {
+      // Verify origin for security
+      if (event.origin !== window.location.origin) return;
+      
+      if (event.data?.type === 'REMOTE_COMMAND') {
+        const { command, data } = event.data;
+        console.log('🎮 Remote command received:', command, data);
+        
+        switch (command) {
+          case 'SCROLL_TO_TOP':
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            break;
+          case 'SCROLL_TO_BOTTOM':
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+            break;
+          case 'SCROLL_TO_RESULTS':
+            const resultsElement = document.querySelector('.results-container, .game-results, .question-results');
+            if (resultsElement) {
+              resultsElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+            break;
+          case 'TOGGLE_BIG_SCREEN':
+            setBigScreenMode(prev => !prev);
+            break;
+          case 'NEXT_QUESTION':
+            if (typeof nextQuestion === 'function') {
+              nextQuestion();
+            }
+            break;
+          case 'START_VOTING':
+            if (typeof startVoting === 'function') {
+              startVoting();
+            }
+            break;
+          case 'SHOW_RESULTS':
+            if (typeof showResults === 'function') {
+              showResults();
+            }
+            break;
+          default:
+            console.log('🎮 Unknown remote command:', command);
+        }
+      }
+    };
+
+    window.addEventListener('message', handleRemoteCommand);
+    return () => window.removeEventListener('message', handleRemoteCommand);
+  }, []);
+  
+  // Check game status helper function
+  const checkGameStatus = async (gameId) => {
+    try {
+      const response = await fetch(`${API_BASE}games/${gameId}?role=host`);
+      if (response.ok) {
+        const gameData = await response.json();
+        return {
+          exists: true,
+          started: gameData.started === true
+        };
+      } else if (response.status === 404) {
+        return { exists: false, started: false };
+      } else {
+        throw new Error(`HTTP ${response.status}`);
+      }
+    } catch (error) {
+      console.error(`Error checking game ${gameId} status:`, error);
+      return { exists: false, started: false };
+    }
+  };
+  
   // AI Summary data
   const [aiSummaries, setAiSummaries] = useState({});
   const [currentAIInsights, setCurrentAIInsights] = useState(null);
@@ -110,6 +212,14 @@ function GameHostPage() {
   // Flash alerts for when all players have answered/voted
   const [showAllAnsweredAlert, setShowAllAnsweredAlert] = useState(false);
   const [showAllVotedAlert, setShowAllVotedAlert] = useState(false);
+  
+  // Invite creation state
+  const [showInviteCreated, setShowInviteCreated] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
+  
+  // Loading overlay state
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('Loading...');
   
   // Note: Save Report Modal state moved to GameReport component
   
@@ -171,7 +281,7 @@ function GameHostPage() {
     
     try {
       const debugParam = gameDebugMode ? '?debug=true' : '';
-      const response = await fetch(`${API_BASE}games/${gameId}/summary/${questionId}${debugParam}`);
+      const response = await fetch(`${API_BASE}games/${gameId}/ai-summary${debugParam}`);
       
       if (response.ok) {
         const summaryData = await response.json();
@@ -193,6 +303,46 @@ function GameHostPage() {
     } catch (error) {
       console.error(`❌ Error fetching AI summary for question ${questionId}:`, error);
       return null;
+    }
+  };
+
+  // Regenerate AI Summary with new generation
+  const handleRegenerateAISummary = async () => {
+    const currentQuestionNum = gameState.match(/#(\d+)/)?.[1];
+    if (!currentQuestionNum) {
+      console.log('⚠️ No current question number found for regeneration');
+      return;
+    }
+
+    console.log('🔄 Regenerating AI Summary for question:', currentQuestionNum);
+    setCurrentAIInsights(null); // Clear current insights to show loading
+    setLoadingAIInsights(true);
+    
+    try {
+      const debugParam = gameDebugMode ? '&debug=true' : '';
+      const response = await fetch(`${API_BASE}games/${gameId}/ai-summary?questionId=${currentQuestionNum}&generateNew=true${debugParam}`);
+      
+      if (response.ok) {
+        const newSummary = await response.json();
+        setCurrentAIInsights({
+          summary: newSummary.summary,
+          discussionTopics: newSummary.discussionQuestions || [],
+          nextSteps: newSummary.nextSteps || [],
+          prompt: gameDebugMode ? newSummary.debugPrompt : undefined
+        });
+        // Also update the cached summaries
+        setAiSummaries(prev => ({
+          ...prev,
+          [currentQuestionNum]: newSummary
+        }));
+        console.log('✅ AI Summary regenerated successfully');
+      } else {
+        console.error('❌ Failed to regenerate AI Summary. Status:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ Error regenerating AI Summary:', error);
+    } finally {
+      setLoadingAIInsights(false);
     }
   };
 
@@ -235,7 +385,7 @@ Focus on actionable business strategy insights.`;
 
   // Load AI insights when in results state and we have answers
   useEffect(() => {
-    if (gameState === 'results' && currentQuestionIndex >= 0 && answers.length > 0) {
+    if (gameState.startsWith('RESULTS#') && currentQuestionIndex >= 0 && answers.length > 0) {
       const questionId = String(currentQuestionIndex + 1).padStart(3, '0');
       console.log(`🤖 Starting AI insights load for question ${questionId} with ${answers.length} answers`);
       setLoadingAIInsights(true);
@@ -247,22 +397,22 @@ Focus on actionable business strategy insights.`;
         
         // Check if AI summary already exists first
         fetchAISummary(questionId).then(existingSummary => {
-          if (existingSummary && existingSummary.summaryText) {
+          if (existingSummary && existingSummary.summary) {
             console.log('✅ Found existing AI summary');
             setCurrentAIInsights({
-              summary: existingSummary.summaryText,
+              summary: existingSummary.summary,
               discussionTopics: existingSummary.discussionQuestions || [],
               nextSteps: existingSummary.nextSteps || [],
+              markdownResponse: existingSummary.markdownResponse || null,
               prompt: gameDebugMode ? existingSummary.debugPrompt : undefined
             });
             setLoadingAIInsights(false);
           } else {
             // Trigger AI generation - WebSocket will notify us when done
             console.log('🤖 Triggering AI generation, will wait for WebSocket notification...');
-            fetch(`${API_BASE}admin/ai-summary/${gameId}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ questionIds: [questionId] })
+            fetch(`${API_BASE}games/${gameId}/ai-summary?questionId=${questionId}&generateNew=true`, {
+              method: 'GET',
+              headers: { 'Content-Type': 'application/json' }
             }).catch(error => {
               console.error('❌ Failed to trigger AI generation:', error);
               setLoadingAIInsights(false);
@@ -278,7 +428,7 @@ Focus on actionable business strategy insights.`;
 
   // Check if all players have answered and trigger flash alert
   useEffect(() => {
-    if (gameState === 'question' && players.length > 0 && playersWhoAnswered.length === players.length && playersWhoAnswered.length > 0) {
+    if (gameState.startsWith('ASK#') && players.length > 0 && playersWhoAnswered.length === players.length && playersWhoAnswered.length > 0) {
       console.log('🎉 All players have answered! Triggering flash alert.');
       setShowAllAnsweredAlert(true);
       
@@ -297,7 +447,7 @@ Focus on actionable business strategy insights.`;
 
   // Check if all players have voted and trigger flash alert
   useEffect(() => {
-    if (gameState === 'voting' && players.length > 0 && playersWhoVoted.length === players.length && playersWhoVoted.length > 0) {
+    if (gameState.startsWith('VOTE#') && players.length > 0 && playersWhoVoted.length === players.length && playersWhoVoted.length > 0) {
       console.log('🗳️ All players have voted! Triggering flash alert.');
       setShowAllVotedAlert(true);
       
@@ -316,31 +466,49 @@ Focus on actionable business strategy insights.`;
     
     if (gameIdFromUrl) {
       console.log(`🔗 HOST: Found game ID in URL: ${gameIdFromUrl}`);
-      setGameId(gameIdFromUrl);
-      setShowWelcomeScreen(false); // Hide welcome screen if we have a game ID
       
-      // Restore event title from URL or localStorage
-      if (eventTitleFromUrl) {
-        const decodedTitle = decodeURIComponent(eventTitleFromUrl);
-        setEventTitle(decodedTitle);
-        console.log(`🔗 HOST: Restored event title from URL: ${decodedTitle}`);
-        // Update the database with the restored title
-        updateGameTitle(gameIdFromUrl, decodedTitle);
-      } else {
-        // Try localStorage as backup
-        const storedTitle = localStorage.getItem(`game_${gameIdFromUrl}_title`);
-        if (storedTitle) {
-          setEventTitle(storedTitle);
-          console.log(`🔗 HOST: Restored event title from localStorage: ${storedTitle}`);
-          // Update the database with the restored title
-          updateGameTitle(gameIdFromUrl, storedTitle);
+      // Check if this game exists and is started before proceeding
+      checkGameStatus(gameIdFromUrl).then(gameStatus => {
+        if (gameStatus.exists) {
+          if (gameStatus.started) {
+            // Game exists and is started - go to game screen
+            console.log(`✅ HOST: Game ${gameIdFromUrl} exists and is started - proceeding to game screen`);
+            setGameId(gameIdFromUrl);
+            setShowWelcomeScreen(false);
+            
+            // Restore event title from URL or localStorage
+            if (eventTitleFromUrl) {
+              const decodedTitle = decodeURIComponent(eventTitleFromUrl);
+              setEventTitle(decodedTitle);
+              console.log(`🔗 HOST: Restored event title from URL: ${decodedTitle}`);
+            } else {
+              const storedTitle = localStorage.getItem(`game_${gameIdFromUrl}_title`);
+              if (storedTitle) {
+                setEventTitle(storedTitle);
+                console.log(`🔗 HOST: Restored event title from localStorage: ${storedTitle}`);
+              }
+            }
+          } else {
+            // Game exists but not started - show welcome screen
+            console.log(`⚠️ HOST: Game ${gameIdFromUrl} exists but not started - showing welcome screen`);
+            setShowWelcomeScreen(true);
+            // Show game history so user can start the game
+            setTimeout(() => handleViewGameHistory(), 500);
+          }
+        } else {
+          // Game doesn't exist - show welcome screen
+          console.log(`❌ HOST: Game ${gameIdFromUrl} doesn't exist - showing welcome screen`);
+          setShowWelcomeScreen(true);
         }
-      }
+      }).catch(error => {
+        console.error(`❌ Error checking game status:`, error);
+        setShowWelcomeScreen(true);
+      });
     } else {
       // No game ID in URL - show welcome screen
       console.log(`🏠 HOST: No game ID in URL - showing welcome screen`);
       setShowWelcomeScreen(true);
-      // Preload question sets for the new game dialog
+      // Load question sets for UI display (needed for set name display)
       fetchQuestionSets();
     }
   }, []);
@@ -359,30 +527,28 @@ Focus on actionable business strategy insights.`;
       console.log(`🚀 HOST: Starting initialization for game ${gameId}`);
       
       // First, try to restore state to see if game exists
-      await restoreGameState(); // This will determine if it's an existing game
+      const gameExists = await restoreGameState(); // This will determine if it's an existing game
       
-      // Check the current state after restoration
-      console.log(`🔍 HOST: After restoration - gameState: ${gameState}, selectedSetId: ${selectedSetId}`);
-      
-      // Use a small delay to ensure state updates have propagated
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Re-check selectedSetId after state has had time to update
-      const currentSelectedSetId = selectedSetId;
-      console.log(`🔍 HOST: Current selectedSetId after delay: ${currentSelectedSetId}`);
-      
-      // If no state was restored (new game), fetch question sets first
-      if (gameState === 'waiting' && !currentSelectedSetId) {
-        console.log(`📚 HOST: No question set found, fetching available sets...`);
-        await fetchQuestionSets(); // This will set selectedSetId
-      } else if (currentSelectedSetId) {
-        console.log(`✅ HOST: Question set already restored: ${currentSelectedSetId}`);
+      if (gameExists) {
+        console.log(`✅ HOST: Game ${gameId} exists - restoration complete`);
+        // Game already exists, just fetch players
+        fetchPlayers('initial-load');
+      } else {
+        console.log(`⚠️ HOST: Game ${gameId} doesn't exist`);
+        // If game doesn't exist, load question sets for new game creation
+        console.log(`🔍 HOST: Loading question sets for new game...`);
+        await fetchQuestionSets();
+        
+        // Only show welcome screen if we're not already in an active game
+        // Don't auto-create games here - only through explicit user action
+        if (!gameState || gameState === 'CREATED' || gameState === 'STARTED') {
+          console.log(`⚠️ HOST: No active game state - showing welcome screen`);
+          setShowWelcomeScreen(true);
+        } else {
+          console.log(`⚠️ HOST: Game in active state ${gameState} - keeping game interface`);
+        }
+        // Keep the gameId for potential game creation, don't clear it
       }
-      
-      // Now create/validate game with proper questionSetId
-      await createGame();
-      
-      fetchPlayers('initial-load');
     };
     
     initializeGame();
@@ -433,10 +599,21 @@ Focus on actionable business strategy insights.`;
 
     webSocketClient.onMessage('playerAnswered', (data) => {
       console.log('🔌 Player answered notification:', data);
-      // Fetch latest answers for the question
-      if (data.questionId) {
-        console.log(`🔌 Refreshing answers for question ${data.questionId}`);
-        fetchAnswersForQuestion(data.questionId);
+      // Update the playersWhoAnswered list directly
+      if (data.playerName) {
+        setPlayersWhoAnswered(prev => {
+          if (!prev.includes(data.playerName)) {
+            console.log(`✅ Marking ${data.playerName} as answered`);
+            return [...prev, data.playerName];
+          }
+          return prev;
+        });
+        
+        // Refresh answers array to enable vote button
+        if (data.questionNumber) {
+          console.log(`🔄 Refreshing answers for question ${data.questionNumber} to enable vote button`);
+          fetchAnswersForQuestion(data.questionNumber);
+        }
       }
     });
 
@@ -454,6 +631,15 @@ Focus on actionable business strategy insights.`;
       }
     });
 
+    webSocketClient.onMessage('votingStarted', (data) => {
+      console.log('🔌 Voting started notification:', data);
+      // Update game state to voting without full restoration
+      if (data.newState) {
+        setGameState(data.newState);
+        console.log(`🔌 Updated game state to: ${data.newState}`);
+      }
+    });
+
     webSocketClient.onMessage('aiSummaryReady', (data) => {
       console.log('🔌 AI Summary ready notification:', data);
       // Fetch the AI summary from API
@@ -463,9 +649,10 @@ Focus on actionable business strategy insights.`;
           if (summary) {
             console.log('🔌 AI Summary fetched successfully:', summary);
             setCurrentAIInsights({
-              summary: summary.summaryText,
+              summary: summary.summary,
               discussionTopics: summary.discussionQuestions || [],
               nextSteps: summary.nextSteps || [],
+              markdownResponse: summary.markdownResponse || null,
               prompt: gameDebugMode ? summary.debugPrompt : undefined
             });
             setLoadingAIInsights(false);
@@ -495,6 +682,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('questionStarted');
       webSocketClient.offMessage('playerAnswered');
       webSocketClient.offMessage('playerVoted');
+      webSocketClient.offMessage('votingStarted');
       webSocketClient.offMessage('aiSummaryReady');
     };
   }, [gameId, useWebSocket]);
@@ -508,42 +696,7 @@ Focus on actionable business strategy insights.`;
     }
   }, [selectedSetId]);
 
-  const createGame = async (aiContext = null) => {
-    try {
-      console.log(`🔍 HOST: Checking if game ${gameId} already exists...`);
-      
-      // First check if game already exists (for reconnection scenarios)
-      const validateRes = await fetch(`${API_BASE}games/${gameId}/validate`);
-      
-      if (validateRes.ok) {
-        const validateData = await validateRes.json();
-        if (validateData.exists) {
-          console.log(`✅ HOST: Game ${gameId} already exists - reconnecting to existing game`);
-          return; // Don't create, just connect to existing game
-        }
-      }
-      
-      // Game doesn't exist, create it
-      console.log(`🆕 HOST: Game ${gameId} doesn't exist - creating new game`);
-      console.log(`🔍 HOST: Creating game with questionSetId: ${selectedSetId}, gameType: ${currentGameType}`);
-      const titleToUse = eventTitle || 'Engagements Session';
-      await fetch(`${API_BASE}games/${gameId}/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eventTitle: titleToUse,
-          aiContext: aiContext || null,
-          gameType: currentGameType,
-          questionSetId: selectedSetId,
-          randomizeQuestions: randomizeQuestions
-        })
-      });
-      console.log(`🆕 HOST: Game ${gameId} created with title: ${titleToUse}, questionSetId: ${selectedSetId}`);
-      console.log(`✅ HOST: Game ${gameId} created successfully`);
-    } catch (e) {
-      console.error('Failed to create/validate game', e);
-    }
-  };
+  // OLD createGame function removed - now using handleStartNewGame which properly shows game history
 
   const restoreGameState = async () => {
     setIsRestoringState(true); // Start restoration
@@ -554,98 +707,195 @@ Focus on actionable business strategy insights.`;
       if (manualStateChange) {
         console.log(`⏭️ HOST: Skipping state restore - manual change in progress`);
         setManualStateChange(false); // Reset the flag
-        return;
+        return false; // Return false to indicate no restoration occurred
       }
       
-      const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
+      // Use new game state API with host data
+      const stateRes = await fetch(`${API_BASE}games/${gameId}/state?includeHostData=true`);
       if (stateRes.ok) {
         const gameStateData = await stateRes.json();
         console.log(`📊 HOST: Found existing game state:`, gameStateData);
         
-        // Restore game state
-        if (gameStateData.state) {
-          setGameState(gameStateData.state);
-          console.log(`🎮 HOST: Restored game state: ${gameStateData.state}`);
-        }
+        // First, load question sets for the restored game
+        console.log(`🔍 HOST: Loading question sets for restored game...`);
+        await fetchQuestionSets(true); // true = during restoration, no auto-selection
         
-        // Restore game type
-        if (gameStateData.gameType) {
-          setCurrentGameType(gameStateData.gameType);
-          console.log(`🎯 HOST: Restored game type: ${gameStateData.gameType}`);
-        }
-        
-        // Restore question set
-        if (gameStateData.questionSetId) {
-          console.log(`🔄 HOST: Restoring question set: ${gameStateData.questionSetId}`);
-          setSelectedSetId(gameStateData.questionSetId);
-          fetchCategories(gameStateData.questionSetId);
-          console.log(`📚 HOST: Restored question set: ${gameStateData.questionSetId}`);
-        } else {
-          console.log(`⚠️ HOST: No questionSetId in game state to restore`);
-        }
-        
-        // Calculate currentQuestionIndex from playedQuestions
-        if (gameStateData.playedQuestions && gameStateData.currentQuestion) {
-          const playedQuestions = gameStateData.playedQuestions;
-          const currentQuestion = gameStateData.currentQuestion;
+        // Restore basic game metadata
+        if (gameStateData.gameMetadata) {
+          setEventTitle(gameStateData.gameMetadata.title || '');
+          setCurrentGameType(gameStateData.gameMetadata.gameType || 'call-and-answer');
+          const restoredSetId = gameStateData.gameMetadata.questionSetId || '';
+          setSelectedSetId(restoredSetId);
+          console.log(`🎮 HOST: Restored game metadata`);
           
-          // Track current question ID
-          setCurrentQuestionId(currentQuestion);
+          // Restore categories from bitmask if we have a question set
+          if (restoredSetId) {
+            await fetchCategories(restoredSetId, true); // true = restore from game bitmask
+          }
+        }
+        
+        // Parse and restore game state
+        const currentState = gameStateData.state || 'LOBBY';
+        let questionNumber = gameStateData.currentQuestion || 0;
+        
+        // Trust the currentQuestion from backend - don't override it by parsing state
+        console.log(`🔄 HOST: Using lesson number ${questionNumber} from backend (state: ${currentState})`);
+        
+        // Only extract from state if backend didn't provide currentQuestion (legacy fallback)
+        if (questionNumber === 0 && (currentState.includes('#'))) {
+          const stateQuestionMatch = currentState.match(/#(\d+)/);
+          if (stateQuestionMatch) {
+            questionNumber = parseInt(stateQuestionMatch[1], 10);
+            console.log(`🔄 HOST: Fallback: Extracted question number ${questionNumber} from state ${currentState}`);
+          }
+        }
+        
+        console.log(`📊 HOST: Current state: ${currentState}, Question: ${questionNumber}`);
+        
+        // Use server state directly instead of mapping to legacy format
+        setGameState(currentState);
+        console.log(`🎮 HOST: Set game state to ${currentState}`);
+        console.log(`🔍 HOST: Questions array length: ${questions.length}`);
+        
+        // If we have a current question, set it up
+        if (questionNumber > 0) {
+          setCurrentQuestionIndex(questionNumber - 1); // Convert to 0-based index
+          setLessonNumber(questionNumber);
           
-          // Find the index of the current question in the played questions array
-          const questionIndex = playedQuestions.indexOf(currentQuestion);
-          if (questionIndex !== -1) {
-            setCurrentQuestionIndex(questionIndex);
-            console.log(`📝 HOST: Restored question index: ${questionIndex} for question ${currentQuestion}`);
+          // Get the current question data using new API (only if we have currentQuestionData)
+          if (gameStateData.currentQuestionData) {
+            // Use the question data from game state
+            setQuestions([gameStateData.currentQuestionData]);
+            console.log(`📝 HOST: Loaded question ${questionNumber} from game state:`, gameStateData.currentQuestionData.title);
           } else {
-            // If current question not found in played questions, it's probably the latest one
-            setCurrentQuestionIndex(playedQuestions.length - 1);
-            console.log(`📝 HOST: Current question not found in played list, using latest index: ${playedQuestions.length - 1}`);
+            // Try to fetch question data with question number
+            try {
+              const paddedQuestionNumber = String(questionNumber).padStart(3, '0');
+              const questionRes = await fetch(`${API_BASE}games/${gameId}/question?role=host`);
+              
+              if (questionRes.ok) {
+                const questionData = await questionRes.json();
+                setQuestions([questionData]);
+                console.log(`📝 HOST: Loaded question ${questionNumber}:`, questionData.title);
+                console.log('🔍 HOST: Question data keys:', Object.keys(questionData));
+                console.log('🔍 HOST: Updated questions array:', [questionData]);
+              } else {
+                console.error(`❌ HOST: Failed to load question ${questionNumber}, status:`, questionRes.status);
+                const errorText = await questionRes.text();
+                console.error(`❌ HOST: Error response:`, errorText);
+              }
+            } catch (error) {
+              console.error(`❌ Failed to load question ${questionNumber}:`, error);
+            }
           }
           
-          // Set lesson number from played questions count
-          setLessonNumber(playedQuestions.length);
-          console.log(`🔢 HOST: Restored lesson number: ${playedQuestions.length}`);
-        } else if (gameStateData.currentQuestion) {
-          // If we have a current question but no played questions array, assume it's question 1
-          setCurrentQuestionIndex(0);
-          setLessonNumber(1);
-          console.log(`📝 HOST: Set to first question (no played questions array)`);
+          // If in voting or answer phase, get progress data
+          if (currentState.startsWith('ASK#') && gameStateData.answerProgress) {
+            setPlayersWhoAnswered(gameStateData.answerProgress.answererIds || []);
+            console.log(`📝 HOST: ${gameStateData.answerProgress.answersReceived}/${gameStateData.answerProgress.totalPlayers} players have answered`);
+            
+            // If there are answers, load them to show the host what has been submitted
+            if (gameStateData.answerProgress.answersReceived > 0) {
+              console.log(`📝 HOST: Loading ${gameStateData.answerProgress.answersReceived} existing answers for display`);
+              fetchAnswersForQuestion(questionNumber);
+            }
+          }
+          
+          if (currentState.startsWith('VOTE#')) {
+            // Get answers for voting display
+            try {
+              const paddedQuestionNumber = String(questionNumber).padStart(3, '0');
+              const answersRes = await fetch(`${API_BASE}games/${gameId}/answers?role=host&questionId=${paddedQuestionNumber}`);
+              
+              if (answersRes.ok) {
+                const answersData = await answersRes.json();
+                setAnswers(answersData.answers || []);
+                console.log(`🗳️ HOST: Loaded ${answersData.answers.length} answers for voting`);
+              }
+            } catch (error) {
+              console.error(`❌ Failed to load answers for question ${questionNumber}:`, error);
+            }
+            
+            // Set voting progress
+            if (gameStateData.votingProgress) {
+              const votersIds = gameStateData.votingProgress.votersIds || [];
+              setPlayersWhoVoted(votersIds);
+              console.log(`🗳️ HOST: ${gameStateData.votingProgress.votesReceived}/${gameStateData.votingProgress.totalPlayers} players have voted`);
+              console.log(`🗳️ HOST: Restored voting progress - votersIds:`, votersIds);
+              
+              // If there are votes, load them to show the host the voting status
+              if (gameStateData.votingProgress.votesReceived > 0) {
+                console.log(`🗳️ HOST: Loading ${gameStateData.votingProgress.votesReceived} existing votes for display`);
+                fetchVotesForQuestion(questionNumber);
+              }
+            }
+          }
+          
+          if (currentState.startsWith('RESULTS#')) {
+            // Get results data
+            try {
+              const resultsRes = await fetch(`${API_BASE}games/get-results`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  gameId: gameId,
+                  questionNumber: questionNumber
+                })
+              });
+              
+              if (resultsRes.ok) {
+                const resultsData = await resultsRes.json();
+                console.log(`🏆 HOST: Received results for question ${questionNumber}:`, resultsData);
+                console.log(`🔍 HOST: voteTallies structure:`, resultsData.voteTallies);
+                console.log(`🔍 HOST: voteTallies keys:`, Object.keys(resultsData.voteTallies || {}));
+                
+                // Format results the same way as handleShowResults
+                const formattedAnswers = resultsData.voteTallies && Object.keys(resultsData.voteTallies).length > 0
+                  ? Object.values(resultsData.voteTallies).map((tally, index) => {
+                      console.log(`📊 HOST: Formatting tally ${index}:`, tally);
+                      return {
+                        player: tally.playerName,
+                        answer: tally.answerText,
+                        points: tally.totalScore,
+                        placement: tally.firstPlace > 0 ? 1 : tally.secondPlace > 0 ? 2 : tally.thirdPlace > 0 ? 3 : 0,
+                        votes: tally.firstPlace + tally.secondPlace + tally.thirdPlace
+                      };
+                    })
+                  : [];
+                
+                console.log(`🎯 HOST: Final formatted answers:`, formattedAnswers);
+                setAnswers(formattedAnswers);
+                console.log(`🏆 HOST: Loaded ${formattedAnswers.length} formatted results for question ${questionNumber}`);
+              }
+            } catch (error) {
+              console.error(`❌ Failed to load results for question ${questionNumber}:`, error);
+            }
+          }
         }
         
-        // If we're in an active game state, set up the current question data
-        if ((gameStateData.state === 'question' || gameStateData.state === 'voting' || gameStateData.state === 'results') && 
-            gameStateData.currentQuestion && gameStateData.currentQuestionData) {
-          console.log(`📝 HOST: Setting up current question: ${gameStateData.currentQuestion}`);
-          
-          // Set the questions array with the current question for display
-          console.log(`📝 HOST: Setting question data for display:`, gameStateData.currentQuestionData);
-          setQuestions([gameStateData.currentQuestionData]);
-          
-          // Fetch answers for current question
-          console.log(`📝 HOST: Fetching answers for current question: ${gameStateData.currentQuestion}`);
-          await fetchAnswersForQuestion(gameStateData.currentQuestion);
-          
-          // If we're in voting or results state, fetch the votes too
-          if (gameStateData.state === 'voting' || gameStateData.state === 'results') {
-            console.log(`🗳️ HOST: Fetching votes for current question: ${gameStateData.currentQuestion}`);
-            await fetchVotesForQuestion(gameStateData.currentQuestion);
-          }
-        }
+        // Fetch current players with scores
+        await fetchPlayers('state-restore');
+        
+        setIsRestoringState(false); // End restoration
+        return true; // Successfully restored existing game
+        
       } else {
         console.log(`ℹ️ HOST: No existing game state found - starting fresh`);
+        setIsRestoringState(false); // End restoration
+        return false; // No existing game found
       }
     } catch (e) {
       console.error('Error restoring game state:', e);
-    } finally {
       setIsRestoringState(false); // End restoration
+      return false; // Restoration failed
     }
   };
 
   const fetchAnswersForQuestion = async (questionNumber) => {
     try {
       console.log(`📡 HOST: Fetching answers for question ${questionNumber}`);
-      const url = `${API_BASE}games/${gameId}/answers?questionNumber=${questionNumber}`;
+      const paddedQuestionNumber = String(questionNumber).padStart(3, '0');
+      const url = `${API_BASE}games/${gameId}/answers?role=host&questionId=${paddedQuestionNumber}`;
       console.log(`📡 HOST: API call: ${url}`);
       
       const res = await fetch(url);
@@ -657,7 +907,7 @@ Focus on actionable business strategy insights.`;
       
       setAnswers(questionAnswers);
       
-      const playerNames = questionAnswers.map(a => a.name);
+      const playerNames = questionAnswers.map(a => a.playerName);
       setPlayersWhoAnswered(playerNames);
       console.log(`✅ HOST: Set playersWhoAnswered to:`, playerNames);
       console.log(`📝 HOST: Loaded ${questionAnswers.length} answers for question ${questionNumber}`);
@@ -669,7 +919,8 @@ Focus on actionable business strategy insights.`;
   const fetchVotesForQuestion = async (questionNumber) => {
     try {
       console.log(`📡 HOST: Fetching votes for question ${questionNumber}`);
-      const url = `${API_BASE}games/${gameId}/votes?questionNumber=${questionNumber}`;
+      const paddedQuestionNumber = String(questionNumber).padStart(3, '0');
+      const url = `${API_BASE}games/${gameId}/votes?role=host&questionNumber=${paddedQuestionNumber}`;
       console.log(`📡 HOST: API call: ${url}`);
       
       const res = await fetch(url);
@@ -705,66 +956,25 @@ Focus on actionable business strategy insights.`;
       
       const json = await res.json();
       console.log('Players fetched:', json.players);
-      setPlayers(json.players || []);
+      
+      // Transform player data to match frontend expectations
+      const transformedPlayers = (json.players || []).map(player => ({
+        ...player,
+        name: player.playerName, // Map playerName to name
+        score: player.totalScore || 0, // Map totalScore to score
+        playerName: player.playerName, // Keep original for compatibility
+        totalScore: player.totalScore || 0 // Keep original for compatibility
+      }));
+      
+      console.log('Transformed players:', transformedPlayers);
+      setPlayers(transformedPlayers);
     } catch (e) {
       console.error('fetchPlayers error', e);
     }
   };
 
-  const fetchQuestions = async (setId = null) => {
-    try {
-      const url = setId ? `${API_BASE}questions?setId=${setId}` : `${API_BASE}questions`;
-      const res = await fetch(url);
-      const json = await res.json();
-      setQuestions(json.questions || []);
-      console.log(`📚 Loaded ${json.questions?.length || 0} questions from ${setId ? `set ${setId}` : 'default source'}`);
-    } catch (e) {
-      console.error('fetchQuestions error', e);
-    }
-  };
 
-  const fetchRandomQuestion = async () => {
-    if (!selectedSetId || !gameId) {
-      console.error('Cannot fetch random question: missing setId or gameId');
-      return null;
-    }
-    
-    try {
-      // Convert Set to Array for URL params
-      const activeCategoriesArray = Array.from(activeCategoryIds);
-      const categoriesParam = activeCategoriesArray.length > 0 ? `&categories=${encodeURIComponent(activeCategoriesArray.join(','))}` : '';
-      
-      const url = `${API_BASE}questions?setId=${selectedSetId}&gameId=${gameId}&getNext=true${categoriesParam}`;
-      console.log(`🎲 Fetching random question: ${url}`);
-      console.log(`🏷️ Active categories: ${activeCategoriesArray.join(', ')}`);
-      console.log(`🔗 Categories param: ${categoriesParam}`);
-      
-      const res = await fetch(url);
-      const json = await res.json();
-      
-      if (json.gameComplete) {
-        console.log('🎉 Game complete - all questions used!');
-        alert('Congratulations! You\'ve completed all questions in this set.');
-        return null;
-      }
-      
-      if (json.questions && json.questions.length > 0) {
-        const question = json.questions[0];
-        console.log(`🎯 Got random question: ${question.id} - ${question.title}`);
-        console.log(`📊 Remaining questions: ${json.availableCount}`);
-        console.log(`🎮 Question type: ${currentGameType}, has options: ${!!question.optionA}`);
-        console.log(`📝 Full question data:`, question);
-        return question;
-      }
-      
-      return null;
-    } catch (e) {
-      console.error('fetchRandomQuestion error', e);
-      return null;
-    }
-  };
-
-  const fetchQuestionSets = async () => {
+  const fetchQuestionSets = async (duringRestoration = false) => {
     try {
       const res = await fetch(`${API_BASE}question-sets`);
       const json = await res.json();
@@ -775,22 +985,22 @@ Focus on actionable business strategy insights.`;
         activeSetsCount: activeSets.length,
         selectedSetId,
         gameState,
-        shouldAutoSelect: activeSets.length > 0 && !selectedSetId && gameState === 'waiting'
+        duringRestoration,
+        shouldAutoSelect: activeSets.length > 0 && !selectedSetId && isWaitingState(gameState) && !duringRestoration
       });
       
       // Auto-select first set if none selected and no game is running
       // CRITICAL: Don't auto-select during state restoration to prevent override of restored questionSetId
-      if (activeSets.length > 0 && !selectedSetId && gameState === 'waiting' && !isRestoringState) {
+      if (activeSets.length > 0 && !selectedSetId && isWaitingState(gameState) && !isRestoringState && !duringRestoration) {
         const firstSetId = activeSets[0].id;
         setSelectedSetId(firstSetId);
         fetchCategories(firstSetId);
-        fetchQuestions(firstSetId);
         console.log(`🎯 HOST: Auto-selected first question set: ${firstSetId}`);
       } else if (selectedSetId) {
         console.log(`⏳ HOST: Question set already selected: ${selectedSetId}`);
-      } else if (gameState !== 'waiting') {
+      } else if (!isWaitingState(gameState)) {
         console.log(`⏳ HOST: Game in progress (${gameState}) - not auto-selecting question set`);
-      } else if (isRestoringState) {
+      } else if (isRestoringState || duringRestoration) {
         console.log(`🔄 HOST: State restoration in progress - skipping auto-selection`);
       } else {
         console.log(`⏳ HOST: No auto-selection - no active sets available`);
@@ -800,7 +1010,7 @@ Focus on actionable business strategy insights.`;
     }
   };
 
-  const fetchCategories = async (setId) => {
+  const fetchCategories = async (setId, restoreFromGame = false) => {
     if (!setId) {
       setCategories([]);
       setActiveCategoryIds(new Set());
@@ -813,12 +1023,72 @@ Focus on actionable business strategy insights.`;
       const fetchedCategories = json.categories || [];
       setCategories(fetchedCategories);
       
-      // Initialize all categories as active by default
-      const allCategoryIds = new Set(fetchedCategories.map(cat => cat.name));
-      setActiveCategoryIds(allCategoryIds);
+      // If restoring from existing game, get the bitmask data
+      if (restoreFromGame && gameId) {
+        try {
+          const gameRes = await fetch(`${API_BASE}games/${gameId}?role=host`);
+          if (gameRes.ok) {
+            const gameData = await gameRes.json();
+            if (gameData.categoryState) {
+              // Convert bitmask back to selected categories
+              const selectedCategoryIds = convertBitmaskToCategories(gameData.categoryState, fetchedCategories);
+              setActiveCategoryIds(new Set(selectedCategoryIds));
+              console.log(`🔄 HOST: Restored ${selectedCategoryIds.length} selected categories from bitmask:`, selectedCategoryIds);
+              return;
+            }
+          }
+        } catch (error) {
+          console.error('❌ Failed to restore categories from game bitmask:', error);
+        }
+      }
+      
+      // Initialize all categories as active by default (new game only)
+      if (!restoreFromGame) {
+        const allCategoryIds = new Set(fetchedCategories.map(cat => cat.name));
+        setActiveCategoryIds(allCategoryIds);
+        console.log(`🎯 HOST: Initialized all ${allCategoryIds.size} categories as active for new game`);
+      } else {
+        console.log(`✅ HOST: Categories restored from game - not initializing as new game`);
+      }
     } catch (e) {
       console.error('fetchCategories error', e);
     }
+  };
+
+  // Convert bitmask back to selected category names
+  const convertBitmaskToCategories = (categoryState, allCategories) => {
+    const selectedCategories = [];
+    
+    // Convert binary string masks to arrays for easier processing
+    const hostMask1_8 = categoryState.hostMask1_8 || '00000000';
+    const hostMask9_16 = categoryState.hostMask9_16 || '00000000';
+    const hostMask17_24 = categoryState.hostMask17_24 || '00000000';
+    
+    console.log(`🔢 HOST: Converting bitmasks: ${hostMask1_8} ${hostMask9_16} ${hostMask17_24}`);
+    
+    // Check each category position in the bitmasks
+    for (let i = 0; i < allCategories.length && i < 24; i++) {
+      const category = allCategories[i];
+      const bitPosition = i + 1;
+      let isSelected = false;
+      
+      if (bitPosition <= 8) {
+        const pos = bitPosition - 1;
+        isSelected = hostMask1_8.charAt(pos) === '1';
+      } else if (bitPosition <= 16) {
+        const pos = bitPosition - 9;
+        isSelected = hostMask9_16.charAt(pos) === '1';
+      } else if (bitPosition <= 24) {
+        const pos = bitPosition - 17;
+        isSelected = hostMask17_24.charAt(pos) === '1';
+      }
+      
+      if (isSelected) {
+        selectedCategories.push(category.name);
+      }
+    }
+    
+    return selectedCategories;
   };
 
   const toggleCategoryActive = (categoryName) => {
@@ -907,73 +1177,66 @@ Focus on actionable business strategy insights.`;
 
   // REMOVED: fetchGameStateForSync - WebSocket handles state synchronization
 
-  const handleNextQuestion = async () => {
-    // Show confirmation when skipping to next question during Ask phase
-    if (gameState === 'question') {
+  const handleNextQuestion = async (forceSkip = false) => {
+    // Show confirmation when skipping to next question during Ask/Vote phase
+    if ((gameState.startsWith('ASK#') || gameState.startsWith('VOTE#')) && !forceSkip) {
       const proceed = await showConfirmation(
         'Skip to Next Question?',
-        'Do you want to skip to the next question?',
+        'Do you want to skip the current question and move to the next one?',
         'Skip Question'
       );
       if (!proceed) return;
     }
 
+    // Show loading overlay
+    setIsLoadingData(true);
+    setLoadingMessage('Loading Next Question...');
+
     try {
-      // Get a random question
-      const randomQuestion = await fetchRandomQuestion();
+      console.log(`🎯 HOST: Requesting next question, forceSkip: ${forceSkip}, current state: ${gameState}`);
       
-      if (!randomQuestion) {
-        console.log('🚫 No more questions available or game complete');
+      // Include skip action if we're forcing advancement from ASK/VOTE states
+      const requestBody = {};
+      if ((gameState.startsWith('ASK#') || gameState.startsWith('VOTE#')) && forceSkip) {
+        requestBody.action = 'skip';
+      }
+      
+      // Use the new next-question API that handles category selection and progression
+      const nextQuestionRes = await fetch(`${API_BASE}games/${gameId}/next-question`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+      
+      if (!nextQuestionRes.ok) {
+        const errorData = await nextQuestionRes.json();
+        console.error('Failed to get next question:', errorData);
+        alert(`Failed to get next question: ${errorData.error || 'Unknown error'}`);
         return;
       }
       
-      // Get current state to track progress
-      const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
-      const currentState = stateRes.ok ? await stateRes.json() : {};
-      let scoredQuestions = currentState.scoredQuestions || [];
-      let usedQuestions = currentState.usedQuestions || [];
-      let playedQuestions = currentState.playedQuestions || [];
+      const nextQuestionData = await nextQuestionRes.json();
+      console.log(`📝 HOST: Next question selected:`, nextQuestionData);
       
-      // Calculate the next sequential question number
-      const nextQuestionNumber = String(playedQuestions.length + 1).padStart(3, '0'); // "001", "002", etc.
-      console.log(`🎯 Starting question ${nextQuestionNumber}: ${randomQuestion.title}`);
+      const questionId = nextQuestionData.questionId;
+      const lessonNumber = nextQuestionData.lessonNumber;
+      const newState = nextQuestionData.state; // Use actual state from API (e.g., ASK#001)
       
-      // Update the used questions list
-      usedQuestions = [...usedQuestions, randomQuestion.id];
-      playedQuestions = [...playedQuestions, nextQuestionNumber];
+      // Get the actual question details using the QUESTION#001#LOOKUP system
+      const questionLookupRes = await fetch(`${API_BASE}games/${gameId}/question?role=host`);
       
-      // Call StartQuestion endpoint to create the pointer record
-      await fetch(`${API_BASE}games/${gameId}/start-question`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          questionNumber: nextQuestionNumber,
-          questionRef: randomQuestion.id, // Pointer to the original question
-          setId: randomQuestion.setId,
-          category: randomQuestion.category
-        })
-      });
+      if (!questionLookupRes.ok) {
+        console.error('Failed to get question details:', questionLookupRes.status);
+        return;
+      }
       
-      // Update game state with current question
-      await fetch(`${API_BASE}games/${gameId}/state`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          state: 'question',
-          currentQuestion: nextQuestionNumber,
-          currentQuestionId: nextQuestionNumber,
-          scoredQuestions,
-          usedQuestions,
-          playedQuestions,
-          currentQuestionData: randomQuestion,
-          gameType: currentGameType
-        })
-      });
+      const questionData = await questionLookupRes.json();
+      console.log(`📝 HOST: Loaded question details:`, questionData.title);
       
       // Update local state - mark as manual change to prevent restore override
       setManualStateChange(true);
-      setCurrentQuestionIndex(playedQuestions.length - 1); // Set to the index of this question
-      setGameState('question');
+      setCurrentQuestionIndex(lessonNumber - 1); // Convert to 0-based index
+      setGameState(newState); // Use actual state from API (e.g., ASK#001)
       
       // Clear all answer/voting state for new question
       console.log(`🧹 HOST: Clearing state for new question - resetting answers and players`);
@@ -983,24 +1246,29 @@ Focus on actionable business strategy insights.`;
       setPlayersWhoVoted([]);
       setCurrentQuestionVotes([]);
       setCurrentAnswerIndex(0);
-      setLessonNumber(playedQuestions.length);
+      setLessonNumber(lessonNumber);
+      setCurrentQuestionId(questionId);
       
-      console.log(`📊 HOST: State after reset - Answers: ${[].length}, PlayersWhoAnswered: ${[].length}`);
+      // Set the questions array
+      setQuestions([questionData]);
       
-      // Set the questions array from the data that was sent to the state
-      setQuestions([randomQuestion]);
+      // WebSocket notification is handled automatically by the backend
+      console.log(`✅ HOST: Question ${lessonNumber} started successfully`);
+      
+      // Refresh players to show any updated status
+      await fetchPlayers('after-next-question');
       
       // Reset manual state change flag after a delay to allow polling to resume
       setTimeout(() => {
         setManualStateChange(false);
       }, 3000);
       
-      // DON'T immediately check for answers on a new question - let players answer first
-      console.log(`🚀 HOST: New question ${nextQuestionNumber} ready - waiting for player answers`);
-      
-      console.log(`🎯 Started question ${nextQuestionNumber}: ${randomQuestion.title}`);
     } catch (e) {
       console.error('Failed to get next question', e);
+      alert('Failed to start next question. Please try again.');
+    } finally {
+      // Hide loading overlay
+      setIsLoadingData(false);
     }
   };
 
@@ -1101,8 +1369,13 @@ Focus on actionable business strategy insights.`;
         console.error('Error calculating trivia scores:', e);
       }
       
+      // The backend sets the state to RESULTS#paddedQuestionId, so we need to match that format
+      const paddedQuestionNumber = String(lessonNumber).padStart(3, '0');
+      const resultsState = `RESULTS#${paddedQuestionNumber}`;
+      
       setManualStateChange(true);
-      setGameState('results');
+      setGameState(resultsState);
+      console.log(`✅ HOST: Set trivia game state to ${resultsState}`);
       
       // Update game state in database
       try {
@@ -1142,22 +1415,35 @@ Focus on actionable business strategy insights.`;
     setGameState('voting');
     setCurrentAnswerIndex(0); // Reset to first answer for navigation
 
-    // Start vote using dedicated function that broadcasts state change
+    // Get answers and update state to voting using new API
     try {
-      // Get current question number
-      const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
-      const currentState = stateRes.ok ? await stateRes.json() : {};
-      const questionNumber = currentState.currentQuestion;
-
-      await fetch(`${API_BASE}games/${gameId}/start-vote`, {
+      const questionNumber = lessonNumber; // Current question number
+      
+      // Start the voting process using the dedicated endpoint
+      const startVoteRes = await fetch(`${API_BASE}games/${gameId}/start-vote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           questionNumber: questionNumber
         })
       });
-
-      console.log(`🗳️ Vote started for question ${questionNumber} - WebSocket broadcast sent`);
+      
+      if (startVoteRes.ok) {
+        const voteData = await startVoteRes.json();
+        console.log(`🗳️ HOST: Vote started successfully:`, voteData);
+        
+        // The start-vote endpoint should return the answers
+        if (voteData.answers) {
+          setAnswers(voteData.answers);
+          console.log(`🗳️ HOST: Loaded ${voteData.answers.length} answers for voting`);
+        }
+        // Update the local state to reflect the voting state
+        setGameState(`VOTE#${questionNumber.toString().padStart(3, '0')}`);
+      } else {
+        console.error(`❌ HOST: Failed to start vote:`, startVoteRes.status);
+        const errorData = await startVoteRes.json();
+        console.error(`❌ HOST: Vote start error:`, errorData);
+      }
     } catch (e) {
       console.error('Failed to start vote', e);
     }
@@ -1174,142 +1460,60 @@ Focus on actionable business strategy insights.`;
       if (!proceed) return;
     }
 
+    // Show loading overlay
+    setIsLoadingData(true);
+    setLoadingMessage('Calculating Results...');
+
     try {
-      // Get current sequential question number
-      const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
-      const currentState = stateRes.ok ? await stateRes.json() : {};
-      const questionNumber = currentState.currentQuestion;
+      const questionNumber = lessonNumber; // Current question number
       
-      if (!questionNumber) {
-        console.log('⚠️ No current question number found');
+      console.log(`🎯 Getting results for question ${questionNumber}`);
+      
+      // Use new getResults API to calculate scores and get formatted results
+      const resultsRes = await fetch(`${API_BASE}games/get-results`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId: gameId,
+          questionNumber: questionNumber
+        })
+      });
+      
+      if (!resultsRes.ok) {
+        console.error('Failed to get results:', resultsRes.status);
         return;
       }
       
-      // STEP 1: Fetch votes for ONLY this specific question
-      console.log(`🎯 FETCHING VOTES FOR QUESTION: ${questionNumber}`);
-      console.log(`📡 API Call: ${API_BASE}games/${gameId}/votes?questionNumber=${questionNumber}`);
+      const resultsData = await resultsRes.json();
+      console.log(`🏆 HOST: Received results for question ${questionNumber}:`, resultsData);
       
-      const votesRes = await fetch(`${API_BASE}games/${gameId}/votes?questionNumber=${questionNumber}`);
-      const votesJson = await votesRes.json();
-      const questionVotes = votesJson.votes || [];
+      // Update state with results (formatted as answers with scoring)
+      const formattedAnswers = resultsData.voteTallies && Object.keys(resultsData.voteTallies).length > 0
+        ? Object.values(resultsData.voteTallies).map(tally => ({
+            player: tally.playerName,
+            answer: tally.answerText,
+            points: tally.totalScore,
+            placement: tally.firstPlace > 0 ? 1 : tally.secondPlace > 0 ? 2 : tally.thirdPlace > 0 ? 3 : 0,
+            votes: tally.firstPlace + tally.secondPlace + tally.thirdPlace
+          }))
+        : []; // Empty array if no votes
       
-      // STEP 2: Update state with fresh vote data
-      console.log(`📊 RAW VOTE DATA RECEIVED:`, questionVotes);
-      setVotes(questionVotes);
-      setCurrentQuestionVotes(questionVotes);
+      setAnswers(formattedAnswers);
+      console.log(`📊 HOST: Updated answers with ${formattedAnswers.length} results`);
       
-      // STEP 3: Analyze vote distribution for debugging
-      const votesByRank = { 1: 0, 2: 0, 3: 0 };
-      questionVotes.forEach(vote => {
-        votesByRank[vote.rank] = (votesByRank[vote.rank] || 0) + 1;
-        console.log(`  👤 Vote: ${vote.voter} ranked answer ${vote.answerIndex} as #${vote.rank} for question ${vote.questionNumber}`);
-      });
-      
-      console.log(`=== 🏆 SCORING DEBUG for question ${questionNumber} ===`);
-      console.log('📈 Vote counts by rank:', votesByRank);
-      console.log('👥 Total players:', players.length);
-      console.log('🗳️ Total votes received:', questionVotes.length);
-      console.log('📋 Complete vote list:', questionVotes);
-      
-      // STEP 4: Calculate points for each answer (3=1st, 2=2nd, 1=3rd)
-      console.log(`🧮 CALCULATING POINTS FOR ${answers.length} ANSWERS...`);
-      const answerPoints = {};
-      questionVotes.forEach(vote => {
-        const answerIndex = vote.answerIndex;
-        if (!answerPoints[answerIndex]) answerPoints[answerIndex] = 0;
-        
-        // 3 points for 1st place, 2 points for 2nd, 1 point for 3rd
-        let points = 0;
-        if (vote.rank === 1) points = 3;
-        else if (vote.rank === 2) points = 2;
-        else if (vote.rank === 3) points = 1;
-        
-        answerPoints[answerIndex] += points;
-        console.log(`  💰 Answer ${answerIndex} gets +${points} points from ${vote.voter}'s rank ${vote.rank} vote`);
-      });
-      
-      // STEP 5: Map points back to player names
-      console.log(`👤 MAPPING POINTS TO PLAYERS...`);
+      // Extract player score updates from results (already calculated by get-results API)
       const playerScoreUpdates = {};
-      answers.forEach((answer, index) => {
-        const points = answerPoints[index] || 0;
-        console.log(`  🎯 Answer ${index} "${answer.answer}" by ${answer.name}: ${points} points`);
-        if (points > 0) {
-          playerScoreUpdates[answer.name] = points;
+      formattedAnswers.forEach(answer => {
+        if (answer.points > 0) {
+          playerScoreUpdates[answer.player] = answer.points;
         }
       });
       
-      console.log('💯 FINAL ANSWER POINTS:', answerPoints);
       console.log('🏆 PLAYER SCORE UPDATES:', playerScoreUpdates);
       
-      // STEP 6: Check if this question has already been scored (prevent double-scoring)
-      console.log(`🔍 CHECKING IF QUESTION ${questionNumber} ALREADY SCORED...`);
-      const scoredRes = await fetch(`${API_BASE}games/${gameId}/state`);
-      const currentGameState = await scoredRes.json();
-      const scoredQuestions = currentGameState.scoredQuestions || [];
-      
-      const alreadyScored = scoredQuestions.includes(questionNumber);
-      console.log(`❓ Question ${questionNumber} scoring status:`, {
-        alreadyScored,
-        scoredQuestions,
-        playerScoreUpdates
-      });
-      
-      if (alreadyScored) {
-        console.log(`⚠️ QUESTION ${questionNumber} ALREADY SCORED - SKIPPING BACKEND UPDATE`);
-      } else {
-        console.log(`✅ QUESTION ${questionNumber} NOT YET SCORED - PROCEEDING WITH UPDATE`);
-      }
-      
-      if (!scoredQuestions.includes(questionNumber)) {
-        // STEP 7: Update scores in backend (only if not already scored)
-        if (Object.keys(playerScoreUpdates).length > 0) {
-          console.log(`💾 UPDATING PLAYER SCORES IN BACKEND:`, playerScoreUpdates);
-          await fetch(`${API_BASE}games/${gameId}/scores`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              questionNumber: questionNumber,
-              scores: playerScoreUpdates
-            })
-          });
-          console.log(`✅ SCORES UPDATED IN BACKEND`);
-          
-          // STEP 8: Mark this question as scored to prevent double-scoring
-          console.log(`🏷️ MARKING QUESTION ${questionNumber} AS SCORED`);
-          await fetch(`${API_BASE}games/${gameId}/state`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              state: 'results',
-              currentQuestion: questionNumber,
-              currentQuestionId: questionNumber,
-              scoredQuestions: [...scoredQuestions, questionNumber],
-              usedQuestions: currentGameState.usedQuestions || [],
-              playedQuestions: currentGameState.playedQuestions || [],
-              currentQuestionData: currentState.currentQuestionData
-            })
-          });
-          console.log(`🎯 QUESTION ${questionNumber} MARKED AS SCORED`);
-        } else {
-          console.log(`⚠️ NO SCORE UPDATES TO APPLY - NO PLAYERS EARNED POINTS`);
-        }
-      } else {
-        console.log(`⏭️ QUESTION ${questionNumber} ALREADY SCORED - JUST UPDATING GAME STATE`);
-        // Just update state to results without scoring
-        await fetch(`${API_BASE}games/${gameId}/state`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            state: 'results',
-            currentQuestion: questionNumber,
-            currentQuestionId: questionNumber,
-            scoredQuestions,
-            usedQuestions: currentGameState.usedQuestions || [],
-            playedQuestions: currentGameState.playedQuestions || []
-          })
-        });
-      }
+      // Results are calculated dynamically by get-results API
+      // Game state transitions will be handled by the polling mechanism
+      console.log(`✅ RESULTS CALCULATED AND DISPLAYED FOR QUESTION ${questionNumber}`);
       
       // Refresh player data to show updated scores
       await fetchPlayers('after-start-question');
@@ -1321,11 +1525,23 @@ Focus on actionable business strategy insights.`;
       // Fetch AI summary for this question if available
       await fetchAISummary(questionNumber);
       
+      // The backend sets the state to RESULTS#paddedQuestionId, so we need to match that format
+      const paddedQuestionNumber = String(questionNumber).padStart(3, '0');
+      const resultsState = `RESULTS#${paddedQuestionNumber}`;
+      
       setManualStateChange(true);
-      setGameState('results');
+      setGameState(resultsState);
+      console.log(`✅ HOST: Set game state to ${resultsState}`);
     } catch (e) {
       console.error('handleShowResults error', e);
-      setGameState('results');
+      // Even on error, set to proper results state format
+      const paddedQuestionNumber = String(lessonNumber).padStart(3, '0');
+      const resultsState = `RESULTS#${paddedQuestionNumber}`;
+      setGameState(resultsState);
+      console.log(`⚠️ HOST: Error occurred, but still set game state to ${resultsState}`);
+    } finally {
+      // Hide loading overlay
+      setIsLoadingData(false);
     }
   };
 
@@ -1384,13 +1600,66 @@ Focus on actionable business strategy insights.`;
     setShowReportsModal(false);
     setGameId(selectedGameId);
     setEventTitle(selectedEventTitle);
+    setShowWelcomeScreen(false);
     
     // Update URL
     const url = new URL(window.location);
     url.searchParams.set('gameId', selectedGameId);
     url.searchParams.set('eventTitle', encodeURIComponent(selectedEventTitle));
     window.history.replaceState(null, '', url);
-    console.log(`🔗 HOST: Selected game ${selectedGameId} from history`);
+    console.log(`🔗 HOST: Continuing game ${selectedGameId} from history`);
+  };
+  
+  const startGameFromHistory = async (selectedGameId, selectedEventTitle) => {
+    try {
+      console.log(`🚀 HOST: Starting game ${selectedGameId} from history`);
+      
+      // Call start-game API
+      const response = await fetch(`${API_BASE}games/${selectedGameId}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to start game: ${response.status} ${response.statusText}`);
+      }
+
+      console.log(`✅ Game ${selectedGameId} started successfully from history`);
+      
+      // Close modal and go to game screen
+      setShowReportsModal(false);
+      setGameId(selectedGameId);
+      setEventTitle(selectedEventTitle || 'Engagement Session');
+      setShowWelcomeScreen(false);
+      
+      // Update URL to reflect the selected game
+      const url = new URL(window.location);
+      url.searchParams.set('gameId', selectedGameId);
+      url.searchParams.set('eventTitle', encodeURIComponent(selectedEventTitle));
+      window.history.replaceState(null, '', url);
+      
+    } catch (err) {
+      console.error('❌ Error starting game from history:', err);
+      alert(`Failed to start game: ${err.message}`);
+    }
+  };
+  
+  const copyPlayerUrl = (gameId) => {
+    const playerUrl = `${window.location.origin}/player?gameId=${gameId}`;
+    navigator.clipboard.writeText(playerUrl).then(() => {
+      console.log('📋 Player URL copied to clipboard');
+    }).catch(err => {
+      console.error('❌ Failed to copy player URL:', err);
+    });
+  };
+  
+  const copyInviteInfo = (game) => {
+    const inviteText = `🎮 Join the engagement!\n\nGame ID: ${game.gameId}\nURL: ${window.location.origin}/player?gameId=${game.gameId}\n\nTitle: ${game.eventTitle || 'Engagement Session'}`;
+    navigator.clipboard.writeText(inviteText).then(() => {
+      console.log('📋 Invite info copied to clipboard');
+    }).catch(err => {
+      console.error('❌ Failed to copy to clipboard:', err);
+    });
   };
 
   const handleStartNewGame = async () => {
@@ -1402,7 +1671,7 @@ Focus on actionable business strategy insights.`;
     try {
       // Clear all game data from database (always call, backend handles empty gameId gracefully)
       console.log(`🗑️ HOST: Clearing old game data (gameId: ${gameId || 'none'})`);
-      const clearResponse = await fetch(`${API_BASE}games/${gameId || ''}/clear`, {
+      const clearResponse = await fetch(`${API_BASE}admin/clear-game/${gameId || 'empty'}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -1422,28 +1691,15 @@ Focus on actionable business strategy insights.`;
       console.log(`⚠️ HOST: Clear failed, but continuing with new game creation`);
     }
     
-    // Generate new game ID and update URL
-    const newGameId = generateGameId();
-    console.log(`🆕 HOST: Starting new game with ID ${newGameId}`);
-    
-    // Update URL with both gameId and eventTitle
-    const url = new URL(window.location);
-    url.searchParams.set('gameId', newGameId);
-    url.searchParams.set('eventTitle', encodeURIComponent(eventTitle));
-    window.history.replaceState(null, '', url);
-    console.log(`🔗 HOST: Updated URL for new game`);
-    
-    // Store event title in localStorage as backup
-    localStorage.setItem(`game_${newGameId}_title`, eventTitle);
+    // Create the game first - let backend generate the gameId
+    console.log(`🆕 HOST: Creating new game with backend-generated ID`);
     
     // Update question set selection
     setSelectedSetId(newGameSetId);
-    fetchCategories(newGameSetId);
     
     // Reset all state
-    setGameId(newGameId);
     setCurrentQuestionIndex(-1);
-    setGameState('waiting');
+    setGameState('CREATED');
     setCurrentGameType(engagementType); // Set the game type
     setAnswers([]);
     setPlayersWhoAnswered([]);
@@ -1456,11 +1712,58 @@ Focus on actionable business strategy insights.`;
     setReportData(null);
     setLessonNumber(0);
     
-    // Create the game with AI context
-    await createGame(gameAiContext);
-    
-    // Close dialog
-    setShowNewGameDialog(false);
+    // Create the game directly with the backend API
+    try {
+      // Convert activeCategoryIds Set to array for selectedCategories
+      const selectedCategories = Array.from(activeCategoryIds);
+      
+      const createResponse = await fetch(`${API_BASE}games`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventTitle: eventTitle,
+          engagementInfo: eventDetails || null,
+          aiContext: gameAiContext || null,
+          gameType: engagementType,
+          questionSetId: newGameSetId,
+          randomizeQuestions: randomizeQuestions,
+          selectedCategories: selectedCategories,
+          hostName: 'Host'
+        })
+      });
+
+      if (createResponse.ok) {
+        const gameData = await createResponse.json();
+        console.log(`✅ HOST: Game created successfully:`, gameData);
+        
+        // Game created successfully - now show game history
+        const newGameId = gameData.gameId;
+        console.log(`✅ HOST: Game ${newGameId} created successfully - showing game history`);
+        console.log(`🎯 HOST: IMPORTANT - We should now see the game history modal instead of going to game screen`);
+        
+        // Store event title in localStorage as backup
+        localStorage.setItem(`game_${newGameId}_title`, eventTitle);
+        
+        // Close new game dialog
+        setShowNewGameDialog(false);
+        
+        // Show game history with the new game highlighted
+        await fetchGamesList();
+        setReportsModalMode('select');
+        setShowReportsModal(true);
+        
+        console.log(`🎯 HOST: New game created with ID ${newGameId}, set "${newGameSetId}", title "${eventTitle}" - showing in history`);
+      } else {
+        const errorData = await createResponse.json();
+        console.error(`❌ HOST: Failed to create game:`, errorData);
+        alert(`Failed to create game: ${errorData.error || 'Unknown error'}`);
+        return;
+      }
+    } catch (error) {
+      console.error('Failed to create game:', error);
+      alert('Failed to create game. Please try again.');
+      return;
+    }
     
     console.log(`🎯 HOST: New game started with set "${newGameSetId}", title "${eventTitle}", and AI context: ${gameAiContext ? 'provided' : 'none'}`);
     
@@ -1478,6 +1781,66 @@ Focus on actionable business strategy insights.`;
       console.log(`📝 HOST: Updated game ${gameId} title to: ${title}`);
     } catch (error) {
       console.error('Error updating game title:', error);
+    }
+  };
+
+  // Create and copy comprehensive meeting invite
+  const createInvite = async () => {
+    if (!gameId || !eventTitle) {
+      console.error('Cannot create invite: missing gameId or eventTitle');
+      return;
+    }
+
+    const gameUrl = `https://eng.dev.seibtribe.us/play?gameId=${gameId}`;
+    const questionSet = questionSets.find(set => set.id === selectedSetId);
+    
+    // Get selected categories text
+    const selectedCategoriesList = categories.filter(cat => activeCategoryIds.has(cat.name));
+    const catText = selectedCategoriesList.length > 0 
+      ? selectedCategoriesList.map(cat => `${cat.name} (${cat.questionCount})`).join(', ')
+      : 'All categories';
+
+    const inviteText = `ENGAGEMENT INVITATION
+
+${eventTitle}
+
+You're invited to participate in an interactive engagement session!
+
+DETAILS:
+• Type: ${engagementType === 'call-and-answer' ? 'Call and Answer (Discussion + Voting)' : 'Trivia (Questions Only)'}
+• Question Set: ${questionSet?.name || questionSet?.title || 'Unknown Set'}
+• Categories: ${catText}
+${gameAiContext ? `• Context: ${gameAiContext}` : ''}
+
+TO JOIN:
+Click this link or copy it to your browser:
+${gameUrl}
+
+INSTRUCTIONS:
+1. Click the link above or paste it into your browser
+2. Enter your name when prompted
+3. Wait for the host to begin
+4. Participate by answering questions and voting
+
+Ready to engage? See you there!`;
+
+    try {
+      await navigator.clipboard.writeText(inviteText);
+      setInviteCopied(true);
+      setShowInviteCreated(true);
+      
+      // Hide success feedback after 4 seconds
+      setTimeout(() => {
+        setInviteCopied(false);
+        setShowInviteCreated(false);
+      }, 4000);
+      
+      console.log('📋 Invite copied to clipboard');
+      console.log('Invite text:', inviteText);
+    } catch (error) {
+      console.error('Failed to copy invite to clipboard:', error);
+      // Fallback: show invite text in an alert
+      alert('Invite text (copy manually):\n\n' + inviteText);
     }
   };
 
@@ -1503,80 +1866,95 @@ Focus on actionable business strategy insights.`;
     try {
       console.log(`📊 Generating report for game ${targetGameId}...`);
       
-      // Use the event title from the games list (which comes from database)
-      const finalEventTitle = targetEventTitle || 'Engagements Session';
+      // Use the backend create-report endpoint instead of frontend logic
+      const reportRes = await fetch(`${API_BASE}games/${targetGameId}/report`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
       
-      // Get played questions from game state
-      const stateRes = await fetch(`${API_BASE}games/${targetGameId}/state`);
-      const gameState = stateRes.ok ? await stateRes.json() : {};
-      const playedQuestions = gameState.playedQuestions || [];
+      if (!reportRes.ok) {
+        throw new Error(`Failed to create report: ${reportRes.status}`);
+      }
       
-      console.log(`📋 Found ${playedQuestions.length} played questions for report`);
+      const reportData = await reportRes.json();
+      const report = reportData.report;
       
-      // Get players for this game
-      const playersRes = await fetch(`${API_BASE}games/${targetGameId}/players`);
-      const playersData = await playersRes.json();
-      const gamePlayers = playersData.players || [];
+      console.log(`📋 Retrieved ${report.detailedQuestions?.length || 0} questions with full data`);
+      console.log('🔍 Report data structure:', {
+        playerPerformance: report.playerPerformance?.length || 0,
+        detailedQuestions: report.detailedQuestions?.length || 0,
+        samplePlayer: report.playerPerformance?.[0],
+        sampleQuestion: report.detailedQuestions?.[0]
+      });
       
-      // Collect all game data
+      // Debug player performance data specifically
+      console.log('🎯 Backend playerPerformance data:', report.playerPerformance);
+      if (report.playerPerformance) {
+        report.playerPerformance.forEach((player, idx) => {
+          console.log(`🎯 Backend Player ${idx + 1}: ${player.playerName} - totalScore: ${player.totalScore}`);
+        });
+      }
+      
+      // Use the report data directly from backend
+      const finalEventTitle = targetEventTitle || report.gameTitle || 'Engagements Session';
+      
       const gameData = {
         gameId: targetGameId,
         eventTitle: finalEventTitle,
-        players: gamePlayers,
-        questions: [],
+        players: report.playerPerformance || [],
+        questions: report.detailedQuestions || [],
         allAnswers: [],
         allVotes: [],
         aiSummaries: {}
       };
 
-      // Fetch all question data from the report endpoint
-      const reportDataRes = await fetch(`${API_BASE}games/${targetGameId}/report`);
-      const reportData = await reportDataRes.json();
-      gameData.questions = reportData.questions || [];
-      
-      console.log(`📋 Retrieved ${gameData.questions.length} questions with full data`);
-      
-      // Get all answers and votes for played questions
-      for (let i = 0; i < playedQuestions.length; i++) {
-        const questionNumber = playedQuestions[i]; // Sequential number like "001", "002"
-        
-        // Get answers for this question
-        const answersRes = await fetch(`${API_BASE}games/${targetGameId}/answers?questionNumber=${questionNumber}`);
-        const answersData = await answersRes.json();
-        const questionAnswers = answersData.answers || [];
-        
-        // Get votes for this question
-        const votesRes = await fetch(`${API_BASE}games/${targetGameId}/votes?questionNumber=${questionNumber}`);
-        const votesData = await votesRes.json();
-        const questionVotes = votesData.votes || [];
-        
-        gameData.allAnswers.push({
-          questionNumber,
-          answers: questionAnswers
-        });
-        
-        gameData.allVotes.push({
-          questionNumber,
-          votes: questionVotes
-        });
-        
-        // Fetch AI summary for this question
-        try {
-          // Check if we should include debug info based on current game's debug mode
-          const gameStateRes = await fetch(`${API_BASE}games/${targetGameId}/state`);
-          const gameStateData = gameStateRes.ok ? await gameStateRes.json() : {};
-          const debugMode = gameStateData.debugMode || false;
+      // Transform the detailed questions data to match the frontend report format
+      if (report.detailedQuestions && report.detailedQuestions.length > 0) {
+        report.detailedQuestions.forEach(question => {
+          // Add answers data
+          gameData.allAnswers.push({
+            questionNumber: question.questionNumber,
+            answers: question.answers || []
+          });
           
-          const debugParam = debugMode ? '?debug=true' : '';
-          const summaryRes = await fetch(`${API_BASE}games/${targetGameId}/summary/${questionNumber}${debugParam}`);
-          if (summaryRes.ok) {
-            const summary = await summaryRes.json();
-            gameData.aiSummaries[questionNumber] = summary;
+          // Add votes data (construct from answer rankings)
+          const questionVotes = [];
+          if (question.answers && question.answers.length > 0) {
+            question.answers.forEach((answer, index) => {
+              if (answer.totalScore > 0) {
+                questionVotes.push({
+                  playerName: answer.playerName,
+                  answerIndex: index,
+                  votes: answer.voteBreakdown || `${answer.firstPlace} first, ${answer.secondPlace} second, ${answer.thirdPlace} third`
+                });
+              }
+            });
           }
-        } catch (error) {
-          console.log(`Could not fetch AI summary for question ${questionNumber}:`, error);
-        }
+          
+          gameData.allVotes.push({
+            questionNumber: question.questionNumber,
+            votes: questionVotes
+          });
+          
+          // Add AI summary if available
+          if (question.aiSummary) {
+            gameData.aiSummaries[question.questionNumber] = {
+              summary: question.aiSummary.summaryText,
+              discussionQuestions: question.aiSummary.discussionQuestions || [],
+              nextSteps: question.aiSummary.nextSteps || [],
+              markdownResponse: question.aiSummary.markdownResponse || null
+            };
+          }
+        });
       }
+
+      // Debug the gameData before setting it
+      console.log('🎯 GameData players being passed to report:', gameData.players);
+      gameData.players.forEach((player, idx) => {
+        console.log(`🎯 GameData Player ${idx + 1}: ${player.playerName} - totalScore: ${player.totalScore}`);
+      });
 
       // Close reports modal and show report
       setShowReportsModal(false);
@@ -1681,7 +2059,7 @@ Focus on actionable business strategy insights.`;
             
             <div className="welcome-options">
               <button className="btn-primary btn-large welcome-btn" onClick={handleWelcomeNewGame}>
-                🎯 Start New Game
+                🎯 Create Engagement
               </button>
               
               <div className="continue-game-section">
@@ -1721,63 +2099,165 @@ Focus on actionable business strategy insights.`;
   }
 
 
-  // Render the reports modal if it's being shown
+  // Render the game history modal if it's being shown
   if (showReportsModal) {
+    // Sort games by creation date (newest first) and find the most recent
+    const sortedGames = [...gamesList].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const mostRecentGameId = sortedGames.length > 0 ? sortedGames[0].gameId : null;
+    
     return (
       <div className="new-game-overlay">
         <div className="new-game-dialog reports-modal">
-          <h2>{reportsModalMode === 'select' ? 'Select Game' : 'Game Reports'}</h2>
+          <div className="modal-header">
+            <h2 className="modal-title">{reportsModalMode === 'select' ? '🎮 Game History' : '📊 Game Reports'}</h2>
+            <div className="modal-subtitle">
+              {reportsModalMode === 'select' ? 'Select a game to start or continue' : 'View past game reports'}
+            </div>
+          </div>
+          
           <div className="dialog-content">
             <div className="games-list">
               {gamesList.length === 0 ? (
-                <p>No games found.</p>
+                <div className="empty-state">
+                  <div className="empty-icon">🎯</div>
+                  <p>No games found.</p>
+                  <small>Create your first engagement session to get started!</small>
+                </div>
               ) : (
-                gamesList.map((game, index) => (
-                  <div 
-                    key={game.gameId} 
-                    className={`game-list-item ${game.gameId === gameId ? 'current-game' : ''}`}
-                    onClick={() => {
-                      if (reportsModalMode === 'select') {
-                        selectGameFromHistory(game.gameId, game.eventTitle);
-                      } else {
-                        generateReportForGame(game.gameId, game.eventTitle);
-                      }
-                    }}
-                  >
-                    <div className="game-header">
-                      <div className="game-title">
-                        {game.eventTitle}
-                        {game.gameId === gameId && <span className="current-badge">Current Game</span>}
+                sortedGames.map((game, index) => {
+                  const isRecent = game.gameId === mostRecentGameId;
+                  const isCurrent = game.gameId === gameId;
+                  const isFirst = index === 0;
+                  const displayTitle = game.title || game.eventTitle || 'Engagement Session';
+                  
+                  return (
+                    <div 
+                      key={game.gameId} 
+                      className={`game-history-item ${isCurrent ? 'current-game' : ''} ${isRecent ? 'recent-game' : ''} ${isFirst ? 'first-game' : ''}`}
+                    >
+                      <div className="game-header">
+                        <div className="game-title-section">
+                          <h3 className="game-title">
+                            {displayTitle}
+                            {isRecent && <span className="new-badge">✨ Latest</span>}
+                            {isCurrent && <span className="current-badge">📍 Current</span>}
+                          </h3>
+                          <div className="game-id">#{game.gameId}</div>
+                        </div>
+                        <div className="game-status-badges">
+                          {game.started ? (
+                            <span className="status-badge started">▶️ Started</span>
+                          ) : (
+                            <span className="status-badge pending">⏸️ Ready to Start</span>
+                          )}
+                        </div>
                       </div>
-                      <div className="game-id">Game ID: {game.gameId}</div>
+                      
+                      <div className="game-details">
+                        <div className="game-info-grid">
+                          <div className="info-item">
+                            <span className="info-label">Type:</span>
+                            <span className="info-value">
+                              {game.gameType === 'call-and-answer' ? '💬 Call & Answer' : '🧠 Trivia'}
+                            </span>
+                          </div>
+                          <div className="info-item">
+                            <span className="info-label">Question Set:</span>
+                            <span className="info-value">{game.questionSetId || 'Unknown'}</span>
+                          </div>
+                          <div className="info-item">
+                            <span className="info-label">Created:</span>
+                            <span className="info-value">
+                              {game.createdAt ? new Date(game.createdAt).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              }) : 'Unknown'}
+                            </span>
+                          </div>
+                          {game.lastPlayedAt && (
+                            <div className="info-item">
+                              <span className="info-label">Last Played:</span>
+                              <span className="info-value">
+                                {new Date(game.lastPlayedAt).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="game-actions">
+                        <button 
+                          className="game-action-btn category-style-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyPlayerUrl(game.gameId);
+                          }}
+                          title="Copy player URL"
+                        >
+                          🔗 Player URL
+                        </button>
+                        <button 
+                          className="game-action-btn category-style-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyInviteInfo(game);
+                          }}
+                          title="Copy invite info"
+                        >
+                          📋 Invite
+                        </button>
+                        {game.started && (
+                          <button 
+                            className="game-action-btn category-style-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              generateReportForGame(game.gameId, displayTitle);
+                            }}
+                            title="View detailed game report"
+                          >
+                            📊 Report
+                          </button>
+                        )}
+                        <button 
+                          className={`game-action-btn category-style-btn primary-action-btn ${game.started ? 'continue-btn' : 'start-btn'}`}
+                          onClick={() => {
+                            if (game.started) {
+                              // Continue existing game
+                              selectGameFromHistory(game.gameId, displayTitle);
+                            } else {
+                              // Start new game
+                              startGameFromHistory(game.gameId, displayTitle);
+                            }
+                          }}
+                        >
+                          {game.started ? '▶️ Continue' : '🚀 Start Game'}
+                        </button>
+                      </div>
                     </div>
-                    <div className="game-date">
-                      Last played: {new Date(game.lastPlayedAt).toLocaleDateString('en-US', {
-                        weekday: 'short',
-                        year: 'numeric', 
-                        month: 'short', 
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
           
           <div className="dialog-actions">
             <button 
-              className="btn-secondary" 
+              className="btn-secondary modal-close-btn" 
               onClick={() => {
                 setShowReportsModal(false);
-                if (reportsModalMode === 'select' && gameState === 'waiting' && lessonNumber === 0) {
+                if (reportsModalMode === 'select' && isWaitingState(gameState) && lessonNumber === 0) {
                   setShowWelcomeScreen(true);
                 }
               }}
             >
-              {reportsModalMode === 'select' ? 'Cancel' : 'Close'}
+              {reportsModalMode === 'select' ? '❌ Cancel' : '✖️ Close'}
             </button>
           </div>
         </div>
@@ -1790,7 +2270,7 @@ Focus on actionable business strategy insights.`;
     return (
       <div className="new-game-overlay">
         <div className="new-game-dialog">
-          <h2>{gameState === 'waiting' && lessonNumber === 0 ? 'Create Game' : 'Start New Game'}</h2>
+          <h2>{isWaitingState(gameState) && lessonNumber === 0 ? 'Create Engagement' : 'Start New Game'}</h2>
           <div className="dialog-content">
             <div className="form-group">
               <label>Event Title:</label>
@@ -1801,6 +2281,21 @@ Focus on actionable business strategy insights.`;
                 placeholder="Enter event title (e.g., Team Leadership Workshop)"
                 className="dialog-input"
               />
+            </div>
+            
+            <div className="form-group">
+              <label>Event Details (Optional):</label>
+              <textarea
+                value={eventDetails}
+                onChange={(e) => setEventDetails(e.target.value)}
+                placeholder="Describe the session details, purpose, or context that will be visible to participants (e.g., 'This workshop focuses on improving team collaboration and communication skills')"
+                className="dialog-textarea"
+                rows="2"
+                maxLength="300"
+              />
+              <small className="dialog-help-text">
+                This information will be shown to participants when they join. {eventDetails.length}/300 characters
+              </small>
             </div>
             
             <div className="form-group">
@@ -1843,14 +2338,27 @@ Focus on actionable business strategy insights.`;
             
             {newGameSetId && (
               <div className="form-group">
-                <label>Categories Preview:</label>
-                <div className="categories-preview">
-                  {categories.map(category => (
-                    <div key={category.name} className="category-preview-item">
-                      <span className="category-name">{category.name}</span>
-                      <span className="category-count">({category.questionCount})</span>
-                    </div>
-                  ))}
+                <label>Categories:</label>
+                <div className="category-selection">
+                  <div className="category-button-grid">
+                    {categories.map(category => (
+                      <button
+                        key={category.name}
+                        type="button"
+                        className={`category-button ${activeCategoryIds.has(category.name) ? 'selected' : ''}`}
+                        onClick={() => toggleCategoryActive(category.name)}
+                      >
+                        <span className="category-name">{category.name}</span>
+                        <span className="category-count">({category.questionCount})</span>
+                      </button>
+                    ))}
+                  </div>
+                  <small>
+                    {activeCategoryIds.size === 0 
+                      ? 'No categories selected - all categories will be included'
+                      : `${activeCategoryIds.size} category(ies) selected`
+                    }
+                  </small>
                 </div>
               </div>
             )}
@@ -1896,12 +2404,13 @@ Focus on actionable business strategy insights.`;
               <textarea
                 value={gameAiContext}
                 onChange={(e) => setGameAiContext(e.target.value)}
-                placeholder="Describe your project, team context, or goals to help AI provide more relevant analysis (e.g., 'Building a new application to support engineering learning' or 'Developer advocacy team in healthcare sector')..."
+                placeholder="Describe your project, team context, or goals to help AI provide more relevant analysis (e.g., 'Building a new application to support engineering learning' or 'Team working on improving collaboration and communication')"
                 className="dialog-textarea"
                 rows="3"
+                maxLength="500"
               />
               <small className="dialog-help-text">
-                This helps AI provide more contextual analysis during the session.
+                This helps AI provide more contextual analysis during the session. {gameAiContext.length}/500 characters
               </small>
             </div>
           </div>
@@ -1911,7 +2420,7 @@ Focus on actionable business strategy insights.`;
               className="btn-secondary" 
               onClick={() => {
                 setShowNewGameDialog(false);
-                if (gameState === 'waiting' && lessonNumber === 0) {
+                if (isWaitingState(gameState) && lessonNumber === 0) {
                   setShowWelcomeScreen(true);
                 }
               }}
@@ -1923,7 +2432,7 @@ Focus on actionable business strategy insights.`;
               onClick={handleStartNewGame}
               disabled={!newGameSetId || !eventTitle.trim()}
             >
-              Start New Game
+              Create Engagement
             </button>
           </div>
         </div>
@@ -2000,11 +2509,29 @@ Focus on actionable business strategy insights.`;
             </div>
             <div className="qr-controls">
               <button 
+                className={`btn-${inviteCopied ? 'success' : 'primary'}`}
+                onClick={createInvite}
+                title="Copy meeting invitation to clipboard"
+              >
+                📋 {inviteCopied ? 'Copied!' : 'Copy Invite'}
+              </button>
+              <button 
                 className={`btn-${gameDebugMode ? 'primary' : 'secondary'}`} 
                 onClick={handleToggleGameDebugMode}
                 title="Toggle debug mode to show AI prompts in results"
               >
                 🐛 Debug {gameDebugMode ? 'ON' : 'OFF'}
+              </button>
+              <button 
+                className={`btn-${bigScreenMode ? 'primary' : 'secondary'}`} 
+                onClick={() => {
+                  const newMode = !bigScreenMode;
+                  console.log(`🖥️ Toggling big screen mode: ${bigScreenMode} → ${newMode}`);
+                  setBigScreenMode(newMode);
+                }}
+                title="Toggle big screen mode for conference room displays"
+              >
+                📺 Big Screen {bigScreenMode ? 'ON' : 'OFF'}
               </button>
               <button className="btn-secondary" onClick={handleViewReports}>
                 View Reports
@@ -2053,7 +2580,7 @@ Focus on actionable business strategy insights.`;
         <span>{qrSidebarVisible ? 'Hide ▶' : '◀ Game Info'}</span>
       </div>
       
-      <div className={`outer-container ${!qrSidebarVisible ? 'qr-hidden' : ''} ${instructionsVisible ? 'instructions-open' : ''}`}>
+      <div className={`outer-container ${!qrSidebarVisible ? 'qr-hidden' : ''} ${instructionsVisible ? 'instructions-open' : ''} ${bigScreenMode ? 'big-screen-mode' : ''}`}>
       
       <div className="game-host-container">
         <div className="parallax">
@@ -2089,50 +2616,79 @@ Focus on actionable business strategy insights.`;
           </div>
         )}
         <div className="players-grid">
-          {calculatePlayerRankings(players)
-            .map((player) => (
-            <div key={player.name} className="player-card">
-              <div className="player-name">
-                {player.rank === 1 ? '🏆' : player.rank === 2 ? '🥈' : player.rank === 3 ? '🥉' : '📍'} 
-                {player.name}
+          {calculatePlayerRankings(players).map((player) => {
+            const score = player.score || 0;
+            const hasPoints = score > 0;
+            
+            // Only show trophies if player has 1+ points
+            let rankEmoji = '👤'; // Default person icon
+            if (hasPoints) {
+              if (player.rank === 1) rankEmoji = '🏆';
+              else if (player.rank === 2) rankEmoji = '🥈';
+              else if (player.rank === 3) rankEmoji = '🥉';
+              else rankEmoji = '📍';
+            }
+            
+            return (
+              <div key={player.name || `player-${Math.random()}`} className="player-card">
+                <div className="player-name">
+                  {rankEmoji} {player.name || player.playerName || 'Unknown Player'}
+                </div>
+                <div className="player-score">{score} pts</div>
+                {gameState.startsWith('ASK#') && (
+                  <div className={`answer-status ${playersWhoAnswered.includes(player.name) ? 'answered' : 'waiting'}`}>
+                    {playersWhoAnswered.includes(player.name) ? '✓' : '⏱️'}
+                  </div>
+                )}
+                {gameState.startsWith('VOTE#') && (
+                  <div className={`answer-status ${playersWhoVoted.includes(player.name) ? 'answered' : 'waiting'}`}>
+                    {playersWhoVoted.includes(player.name) ? '✓' : '⏱️'}
+                  </div>
+                )}
               </div>
-              <div className="player-score">{player.score || 0} pts</div>
-              {gameState === 'question' && (
-                <div className={`answer-status ${playersWhoAnswered.includes(player.name) ? 'answered' : 'waiting'}`}>
-                  {playersWhoAnswered.includes(player.name) ? '✓' : '⏱️'}
-                </div>
-              )}
-              {gameState === 'voting' && (
-                <div className={`answer-status ${playersWhoVoted.includes(player.name) ? 'answered' : 'waiting'}`}>
-                  {playersWhoVoted.includes(player.name) ? '✓' : '⏱️'}
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
-      <div className="game-content">
-        {gameState === 'waiting' && (
-          <div className="waiting-state">
+      <div className={`game-content ${bigScreenMode ? 'big-screen-mode' : ''}`}>
+        {isWaitingState(gameState) && (
+          <div className={`waiting-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
+            {bigScreenMode && gameId && (
+              <div className="big-screen-join-qr">
+                <QRCodeSVG 
+                  value={`${window.location.origin}/play?gameId=${gameId}`}
+                  size={bigScreenMode ? 300 : 200}
+                  level="M"
+                  includeMargin={true}
+                  className="join-qr-code"
+                />
+                <div className="join-instructions">
+                  <p className="join-url-text">Scan to join the game</p>
+                  <p className="game-id-display">Game ID: <strong>{gameId}</strong></p>
+                </div>
+              </div>
+            )}
             <h2>Waiting for players to join...</h2>
-            {selectedSetId && (
-              <button 
-                className="btn-primary btn-large" 
-                onClick={() => { closeAllSidePanels(); handleNextQuestion(); }}
-                disabled={players.length === 0}
-              >
-                Start First Question
-              </button>
-            )}
-            {!selectedSetId && (
-              <p>Please select a question set in the sidebar to begin.</p>
-            )}
+            <div className="waiting-controls">
+              {selectedSetId && (
+                <button 
+                  className="btn-primary btn-large" 
+                  onClick={() => { closeAllSidePanels(); handleNextQuestion(false); }}
+                  disabled={players.length === 0}
+                >
+                  Start First Question
+                </button>
+              )}
+              {!selectedSetId && (
+                <p>Please select a question set in the sidebar to begin.</p>
+              )}
+            </div>
           </div>
         )}
 
-        {gameState === 'question' && questions.length > 0 && (
-          <div className="question-state">
+        {gameState.startsWith('ASK#') && questions.length > 0 && (
+          <div className={`question-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
             <div className="question-header">
               <h2>{currentGameType === 'trivia' ? `Question ${lessonNumber}` : `Lesson ${lessonNumber}`}</h2>
               <div className="field-badge">
@@ -2189,16 +2745,16 @@ Focus on actionable business strategy insights.`;
               </button>
               <button 
                 className="btn-secondary" 
-                onClick={() => { closeAllSidePanels(); handleNextQuestion(); }}
+                onClick={() => { closeAllSidePanels(); handleNextQuestion(true); }}
               >
-                Next Question
+                Skip to Next Question
               </button>
             </div>
           </div>
         )}
 
-        {gameState === 'voting' && (
-          <div className="voting-state">
+        {gameState.startsWith('VOTE#') && (
+          <div className={`voting-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
             <h2>Vote for the Best Applications!</h2>
             <p>Which applications of this lesson would be most valuable for teams to implement?</p>
             
@@ -2236,17 +2792,19 @@ Focus on actionable business strategy insights.`;
             <div className="voting-progress">
               {playersWhoVoted.length} of {players.length} players voted
             </div>
-            <button 
-              className="btn-primary" 
-              onClick={() => { closeAllSidePanels(); handleShowResults(); }}
-            >
-              Show Results
-            </button>
+            <div className="voting-controls">
+              <button 
+                className="btn-primary" 
+                onClick={() => { closeAllSidePanels(); handleShowResults(); }}
+              >
+                Show Results
+              </button>
+            </div>
           </div>
         )}
 
-        {gameState === 'results' && (
-          <div className="results-state">
+        {gameState.startsWith('RESULTS#') && (
+          <div className={`results-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
             <h2>🏆 Results</h2>
             
             {currentGameType === 'trivia' ? (
@@ -2304,29 +2862,25 @@ Focus on actionable business strategy insights.`;
               </div>
             ) : (
               <div className="results-display">
+                {answers.length === 0 && (
+                  <div className="no-results-message">
+                    <p>No results available. Results should load automatically when the game transitions to RESULTS state.</p>
+                    <p>Current answers array: {JSON.stringify(answers)}</p>
+                  </div>
+                )}
                 {answers.map((answer, idx) => {
-                // 🎯 RESULTS DISPLAY: Calculate points for THIS answer from THIS question only
-                console.log(`🖥️ RENDERING RESULT FOR ANSWER ${idx}: "${answer.answer}" by ${answer.name}`);
-                console.log(`📊 Using currentQuestionVotes (length: ${currentQuestionVotes.length}):`, currentQuestionVotes);
+                // 🎯 RESULTS DISPLAY: Use data from get-results API (already calculated)
+                console.log(`🖥️ RENDERING RESULT FOR ANSWER ${idx}: "${answer.answer}" by ${answer.player}`);
+                console.log(`📊 Using get-results data: ${answer.points} points, ${answer.votes} votes, placement: ${answer.placement}`);
                 
-                const answerVotes = currentQuestionVotes.filter(v => v.answerIndex === idx);
-                console.log(`🗳️ Votes for answer ${idx}:`, answerVotes);
-                
-                const totalPoints = answerVotes.reduce((sum, vote) => {
-                  let points = 0;
-                  if (vote.rank === 1) points = 3;
-                  else if (vote.rank === 2) points = 2;
-                  else if (vote.rank === 3) points = 1;
-                  console.log(`  📈 Vote from ${vote.voter} (rank ${vote.rank}): +${points} points`);
-                  return sum + points;
-                }, 0);
+                const totalPoints = answer.points || 0;
                 
                 console.log(`💰 TOTAL POINTS FOR ANSWER ${idx}: ${totalPoints}`);
                 
                 // Find the player's current total score from backend
-                const player = players.find(p => p.name === answer.name);
+                const player = players.find(p => p.name === answer.player);
                 const playerTotalScore = player?.score || 0;
-                console.log(`👤 Player ${answer.name} total score from backend: ${playerTotalScore}`);
+                console.log(`👤 Player ${answer.player} total score from backend: ${playerTotalScore}`);
                 console.log(`🧮 This means previous score was: ${playerTotalScore - totalPoints}`);
                 
                 const previousScore = playerTotalScore - totalPoints;
@@ -2334,7 +2888,7 @@ Focus on actionable business strategy insights.`;
                 return (
                   <div key={idx} className={`result-item ${totalPoints > 0 ? 'scored' : ''}`}>
                     <div className="result-player-header">
-                      <div className="result-player-name">{answer.name}</div>
+                      <div className="result-player-name">{answer.player}</div>
                       <div className="result-points">
                         <span className="points-this-round">+{totalPoints} pts this round</span>
                         <span className="points-total">Total: {playerTotalScore} pts</span>
@@ -2342,11 +2896,9 @@ Focus on actionable business strategy insights.`;
                     </div>
                     <div className="result-answer">"{answer.answer}"</div>
                     <div className="result-breakdown">
-                      {answerVotes.map((vote, vIdx) => (
-                        <span key={vIdx} className={`vote-badge rank-${vote.rank}`}>
-                          {vote.rank === 1 ? '🥇' : vote.rank === 2 ? '🥈' : '🥉'}
-                        </span>
-                      ))}
+                      <span className="vote-summary">
+                        {answer.votes} votes • Placement: {answer.placement ? (answer.placement === 1 ? '🥇' : answer.placement === 2 ? '🥈' : '🥉') : '-'}
+                      </span>
                     </div>
                   </div>
                 );
@@ -2354,8 +2906,8 @@ Focus on actionable business strategy insights.`;
               </div>
             )}
             
-            <div className="results-actions">
-              <button className="btn-primary" onClick={() => { closeAllSidePanels(); handleNextQuestion(); }}>
+            <div className="results-controls">
+              <button className="btn-primary" onClick={() => { closeAllSidePanels(); handleNextQuestion(false); }}>
                 Next Question
               </button>
             </div>
@@ -2378,34 +2930,56 @@ Focus on actionable business strategy insights.`;
                       <h3>💡 Strategic Insights from Workie</h3>
                       <p>AI-powered analysis of your team's responses</p>
                     </div>
+                    <button 
+                      className="regenerate-ai-btn"
+                      onClick={handleRegenerateAISummary}
+                      title="Regenerate AI Summary with fresh analysis"
+                      disabled={loadingAIInsights}
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
                   </div>
                   
                   <div className="ai-insights-body">
-                    {/* Summary */}
-                    <div className="ai-insights-section-item">
-                      <h4>📋 Summary</h4>
-                      <p>{currentAIInsights.summary}</p>
-                    </div>
-                    
-                    {/* Discussion Topics */}
-                    <div className="ai-insights-section-item">
-                      <h4>💬 Discussion Topics</h4>
-                      <ul>
-                        {currentAIInsights.discussionTopics.map((topic, idx) => (
-                          <li key={idx}>{topic}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    
-                    {/* Next Steps */}
-                    <div className="ai-insights-section-item">
-                      <h4>🎡 Next Steps</h4>
-                      <ul>
-                        {currentAIInsights.nextSteps.map((step, idx) => (
-                          <li key={idx}>{step}</li>
-                        ))}
-                      </ul>
-                    </div>
+                    {currentAIInsights.markdownResponse ? (
+                      // Use Markdown renderer if available
+                      <MarkdownRenderer 
+                        content={currentAIInsights.markdownResponse} 
+                        className="ai-insights-markdown"
+                      />
+                    ) : (
+                      // Fallback to structured display
+                      <>
+                        {/* Summary */}
+                        <div className="ai-insights-section-item">
+                          <h4>📋 Summary</h4>
+                          <p>{currentAIInsights.summary}</p>
+                        </div>
+                        
+                        {/* Discussion Topics */}
+                        <div className="ai-insights-section-item">
+                          <h4>💬 Discussion Topics</h4>
+                          <ul>
+                            {currentAIInsights.discussionTopics.map((topic, idx) => (
+                              <li key={idx}>{topic}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        
+                        {/* Next Steps */}
+                        <div className="ai-insights-section-item">
+                          <h4>🎡 Next Steps</h4>
+                          <ul>
+                            {currentAIInsights.nextSteps.map((step, idx) => (
+                              <li key={idx}>{step}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </>
+                    )}
                     
                     {/* Debug Prompt Display */}
                     {gameDebugMode && currentAIInsights.prompt && (
@@ -2465,6 +3039,17 @@ Focus on actionable business strategy insights.`;
         </div>
       )}
       
+      {/* Loading Data Overlay */}
+      {isLoadingData && (
+        <div className="flash-alert-overlay">
+          <div className="flash-alert">
+            <div className="flash-alert-icon">⏳</div>
+            <div className="flash-alert-text">{loadingMessage}</div>
+            <div className="flash-alert-subtext">Please wait while we update the game...</div>
+          </div>
+        </div>
+      )}
+
       {/* Flash Alert for All Players Answered */}
       {showAllAnsweredAlert && (
         <div className="flash-alert-overlay">
@@ -2483,6 +3068,17 @@ Focus on actionable business strategy insights.`;
             <div className="flash-alert-icon">🗳️</div>
             <div className="flash-alert-text">All Players Have Voted!</div>
             <div className="flash-alert-subtext">Ready to see results</div>
+          </div>
+        </div>
+      )}
+      
+      {/* Invite Created Success Alert */}
+      {showInviteCreated && (
+        <div className="flash-alert-overlay">
+          <div className="flash-alert">
+            <div className="flash-alert-icon">📋</div>
+            <div className="flash-alert-text">Invite Created & Copied!</div>
+            <div className="flash-alert-subtext">Meeting invitation copied to clipboard</div>
           </div>
         </div>
       )}
@@ -2664,30 +3260,6 @@ function GameReport({ reportData, onClose }) {
     }
   };
 
-  // Calculate winners for each question
-  const getQuestionWinners = (questionNumber) => {
-    const questionAnswers = allAnswers.find(qa => qa.questionNumber === questionNumber)?.answers || [];
-    const questionVotes = allVotes.find(qv => qv.questionNumber === questionNumber)?.votes || [];
-
-    // Calculate points for each answer
-    const answerPoints = {};
-    questionAnswers.forEach((answer, idx) => {
-      answerPoints[idx] = 0;
-    });
-
-    questionVotes.forEach(vote => {
-      const points = vote.rank === 1 ? 3 : vote.rank === 2 ? 2 : 1;
-      if (answerPoints[vote.answerIndex] !== undefined) {
-        answerPoints[vote.answerIndex] += points;
-      }
-    });
-
-    // Find winning answer(s)
-    const maxPoints = Math.max(...Object.values(answerPoints));
-    const winners = questionAnswers.filter((_, idx) => answerPoints[idx] === maxPoints);
-
-    return { winners, answerPoints, questionAnswers };
-  };
 
   return (
     <div className="report-container">
@@ -2742,71 +3314,78 @@ function GameReport({ reportData, onClose }) {
 
       <div className="report-content">
         {questions.map((question, qIdx) => {
-          const { winners, answerPoints, questionAnswers } = getQuestionWinners(question.id);
+          // Extract question data from backend format
+          const questionNumber = question.questionNumber;
+          const questionData = question.questionData || {};
+          const questionAnswers = question.answers || [];
+          const aiSummary = question.aiSummary;
+          
+          // Calculate rankings from backend data
+          const rankedAnswers = questionAnswers.sort((a, b) => b.totalScore - a.totalScore);
+          const topAnswers = rankedAnswers.slice(0, 3); // Show top 3
           
           return (
-            <div key={question.id} className="report-question">
+            <div key={questionNumber} className="report-question">
               <div className="report-question-header">
                 <h3 className="report-lesson-heading">
-                  Lesson {qIdx + 1} - {question.title || question.question}
+                  Lesson {qIdx + 1} - {questionData.title || `Question ${questionNumber}`}
                 </h3>
-                <div className="field-badge">{question.field || question.category}</div>
+                <div className="field-badge">{questionData.category || 'General'}</div>
               </div>
               
-              {question.detail && (
+              {questionData.detail && (
                 <div className="report-lesson-detail">
-                  {question.detail}
+                  {questionData.detail}
                 </div>
               )}
               
               {/* AI Summary for this question */}
-              {aiSummaries && aiSummaries[question.id] && (
+              {aiSummary && (
                 <div className="report-ai-summary">
                   <h4>🤖 AI Analysis</h4>
                   
-                  {/* Debug Prompt Display */}
-                  {aiSummaries[question.id].debugPrompt && (
-                    <div className="debug-prompt">
-                      <div className="debug-prompt-header">🐛 DEBUG: AI Prompt</div>
-                      <div className="debug-prompt-content">{aiSummaries[question.id].debugPrompt}</div>
-                    </div>
-                  )}
-                  
                   <div className="report-ai-content">
-                    {/* Summary */}
-                    <div className="report-ai-text">
-                      <h5>Summary</h5>
-                      <p>{aiSummaries[question.id].summaryText}</p>
-                    </div>
-                    
-                    {/* Conversation Starters */}
-                    {aiSummaries[question.id].discussionQuestions && (
-                      <div className="report-ai-discussion">
-                        <h5>Conversation Starters</h5>
-                        <ul>
-                          {(Array.isArray(aiSummaries[question.id].discussionQuestions) 
-                            ? aiSummaries[question.id].discussionQuestions 
-                            : []
-                          ).map((question, idx) => (
-                            <li key={idx}>{question}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    
-                    {/* Next Steps */}
-                    {aiSummaries[question.id].nextSteps && (
-                      <div className="report-ai-steps">
-                        <h5>Next Steps</h5>
-                        <ul>
-                          {(Array.isArray(aiSummaries[question.id].nextSteps) 
-                            ? aiSummaries[question.id].nextSteps 
-                            : []
-                          ).map((step, idx) => (
-                            <li key={idx}>{step}</li>
-                          ))}
-                        </ul>
-                      </div>
+                    {aiSummary.markdownResponse ? (
+                      // Use Markdown renderer if available
+                      <MarkdownRenderer 
+                        content={aiSummary.markdownResponse} 
+                        className="report-ai-markdown"
+                      />
+                    ) : (
+                      // Fallback to structured display
+                      <>
+                        {/* Summary */}
+                        {aiSummary.summaryText && (
+                          <div className="report-ai-text">
+                            <h5>Summary</h5>
+                            <p>{aiSummary.summaryText}</p>
+                          </div>
+                        )}
+                        
+                        {/* Conversation Starters */}
+                        {aiSummary.discussionQuestions && aiSummary.discussionQuestions.length > 0 && (
+                          <div className="report-ai-discussion">
+                            <h5>Conversation Starters</h5>
+                            <ul>
+                              {aiSummary.discussionQuestions.map((discussionQuestion, idx) => (
+                                <li key={idx}>{discussionQuestion}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        
+                        {/* Next Steps */}
+                        {aiSummary.nextSteps && aiSummary.nextSteps.length > 0 && (
+                          <div className="report-ai-steps">
+                            <h5>Next Steps</h5>
+                            <ul>
+                              {aiSummary.nextSteps.map((step, idx) => (
+                                <li key={idx}>{step}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -2814,21 +3393,23 @@ function GameReport({ reportData, onClose }) {
               
               <div className="report-answers">
                 <h4>Player Applications:</h4>
-                {questionAnswers.map((answer, aIdx) => {
-                  const isWinner = winners.some(w => w.name === answer.name);
-                  const points = answerPoints[aIdx] || 0;
-                  
-                  return (
-                    <div key={aIdx} className={`report-answer ${isWinner ? 'winner' : ''}`}>
-                      {isWinner && <div className="winner-badge">🏆 Best Application</div>}
-                      <div className="answer-text">"{answer.answer}"</div>
+                {questionAnswers.length > 0 ? (
+                  questionAnswers.map((answer, aIdx) => (
+                    <div key={aIdx} className={`report-answer ${answer.rank <= 3 ? 'winner' : ''}`}>
+                      {answer.rank <= 3 && (
+                        <div className="winner-badge">{answer.rankDisplay}</div>
+                      )}
+                      <div className="answer-text">"{answer.answerText}"</div>
                       <div className="answer-meta">
-                        <span className="answer-author">by {answer.name}</span>
-                        <span className="answer-points">{points} point{points !== 1 ? 's' : ''}</span>
+                        <span className="answer-author">by {answer.playerName}</span>
+                        <span className="answer-points">{answer.totalScore} point{answer.totalScore !== 1 ? 's' : ''}</span>
+                        <span className="answer-breakdown">({answer.voteBreakdown})</span>
                       </div>
                     </div>
-                  );
-                })}
+                  ))
+                ) : (
+                  <div className="no-answers">No answers recorded for this question.</div>
+                )}
               </div>
             </div>
           );
@@ -2838,8 +3419,23 @@ function GameReport({ reportData, onClose }) {
           <h3>Final Scores</h3>
           <div className="score-grid">
             {(() => {
-              const rankedPlayers = calculatePlayerRankings(players);
+              // Debug logging to understand data structure
+              console.log('🔍 Players data in report:', players);
+              console.log('🔍 Sample player:', players[0]);
+              
+              // Map backend player data to expected format for calculatePlayerRankings
+              const playersWithScore = players.map(player => ({
+                ...player,
+                name: player.playerName || player.name,
+                score: player.totalScore || player.score || 0
+              }));
+              
+              console.log('🔍 Players with score mapping:', playersWithScore);
+              
+              const rankedPlayers = calculatePlayerRankings(playersWithScore);
+              console.log('🔍 Ranked players:', rankedPlayers);
               const highestScore = rankedPlayers[0]?.score || 0;
+              
               return rankedPlayers.map((player, idx) => {
                 const isChampion = (player.score || 0) === highestScore;
                 const rankEmoji = player.rank === 1 ? '🏆' : player.rank === 2 ? '🥈' : player.rank === 3 ? '🥉' : '📍';

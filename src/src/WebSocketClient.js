@@ -38,10 +38,15 @@ class WebSocketClient {
       this.ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
-          console.log('🔌 WebSocket message received:', message);
+          console.log('🔌 WEBSOCKET DEBUG: Raw WebSocket message received:', message);
+          console.log('🔌 WEBSOCKET DEBUG: Message type:', message.type);
+          console.log('🔌 WEBSOCKET DEBUG: Game ID in message:', message.gameId);
+          console.log('🔌 WEBSOCKET DEBUG: Current client game ID:', this.gameId);
+          console.log('🔌 WEBSOCKET DEBUG: Client is host:', this.isHost);
           this.handleMessage(message);
         } catch (error) {
-          console.error('🔌 Failed to parse WebSocket message:', error, event.data);
+          console.error('🔌 WEBSOCKET DEBUG: Failed to parse WebSocket message:', error);
+          console.error('🔌 WEBSOCKET DEBUG: Raw event data:', event.data);
         }
       };
 
@@ -121,33 +126,41 @@ class WebSocketClient {
   }
 
   handleMessage(message) {
-    console.log('🔌 Raw WebSocket message:', message);
+    console.log('🔌 WEBSOCKET DEBUG: handleMessage called with:', message);
 
     // Handle new clean WebSocket system messages
     if (message.type === 'hostMessage') {
+      console.log('🔌 WEBSOCKET DEBUG: Handling hostMessage');
       this.handleHostMessage(message);
       return;
     }
 
     if (message.type === 'playerMessage') {
+      console.log('🔌 WEBSOCKET DEBUG: Handling playerMessage');
       this.handlePlayerMessage(message);
       return;
     }
 
     // Handle legacy message format (for backward compatibility during transition)
     const { type, data, ...messageData } = message;
+    console.log('🔌 WEBSOCKET DEBUG: Processing legacy message format, type:', type);
+    console.log('🔌 WEBSOCKET DEBUG: Available handlers:', Array.from(this.messageHandlers.keys()));
 
     if (this.messageHandlers.has(type)) {
       const handler = this.messageHandlers.get(type);
+      console.log('🔌 WEBSOCKET DEBUG: Found handler for type:', type);
       try {
         // Pass either the data object or the entire message (excluding type)
         const payload = data || messageData;
+        console.log('🔌 WEBSOCKET DEBUG: Calling handler with payload:', payload);
         handler(payload);
+        console.log('🔌 WEBSOCKET DEBUG: Handler completed successfully for type:', type);
       } catch (error) {
-        console.error(`🔌 Error handling message type '${type}':`, error);
+        console.error(`🔌 WEBSOCKET DEBUG: Error handling message type '${type}':`, error);
       }
     } else {
-      console.warn(`🔌 No handler for message type '${type}'`);
+      console.warn(`🔌 WEBSOCKET DEBUG: No handler for message type '${type}'`);
+      console.warn(`🔌 WEBSOCKET DEBUG: Available handlers:`, Array.from(this.messageHandlers.keys()));
     }
   }
 

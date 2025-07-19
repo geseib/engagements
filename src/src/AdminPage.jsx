@@ -3,6 +3,7 @@ import AIScenarioBuilder from './components/AIScenarioBuilder';
 import TriviaAIBuilder from './components/TriviaAIBuilder';
 import PollAIBuilder from './components/PollAIBuilder';
 import SurveyAIBuilder from './components/SurveyAIBuilder';
+import AIPromptManager from './components/AIPromptManager';
 import './BuilderPage.css';
 
 const API_BASE = window.API_BASE;
@@ -53,7 +54,11 @@ function AdminPage() {
   const [editInstructions, setEditInstructions] = useState('');
   const [editAiContextInstructions, setEditAiContextInstructions] = useState('');
   const [editEngagementType, setEditEngagementType] = useState('call-and-answer');
+  const [editPromptId, setEditPromptId] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
+
+  // Available prompts for selection
+  const [availablePrompts, setAvailablePrompts] = useState([]);
 
   // AI Scenario Builder
   const [showAIScenarioBuilder, setShowAIScenarioBuilder] = useState(false);
@@ -72,6 +77,26 @@ function AdminPage() {
 
   const defaultInstructions = "How would you apply this concept in your current role or organization? Consider the specific challenges and opportunities in your context.";
 
+  // Fetch available AI prompts for selection
+  const fetchAvailablePrompts = async () => {
+    try {
+      const response = await fetch(`${API_BASE}admin/ai-prompts`);
+      if (response.ok) {
+        const data = await response.json();
+        // Filter to only active prompts for the dropdown
+        const activePrompts = (data.prompts || []).filter(prompt => prompt.status === 'active');
+        setAvailablePrompts(activePrompts);
+      }
+    } catch (error) {
+      console.error('Error fetching available prompts:', error);
+    }
+  };
+
+  // Load prompts when component mounts
+  useEffect(() => {
+    fetchAvailablePrompts();
+  }, []);
+
   const handleEditQuestionSet = (questionSet) => {
     setEditMode(true);
     setEditingSetId(questionSet.id);
@@ -80,6 +105,7 @@ function AdminPage() {
     setEditInstructions(questionSet.customInstruction || '');
     setEditAiContextInstructions(questionSet.aiContextInstruction || '');
     setEditEngagementType(questionSet.engagementType || 'call-and-answer');
+    setEditPromptId(questionSet.promptId || '');
     setSaveStatus('');
   };
 
@@ -91,6 +117,7 @@ function AdminPage() {
     setEditInstructions('');
     setEditAiContextInstructions('');
     setEditEngagementType('call-and-answer');
+    setEditPromptId('');
     setSaveStatus('');
   };
 
@@ -103,7 +130,7 @@ function AdminPage() {
     setSaveStatus('Saving...');
     try {
       const response = await fetch(`${API_BASE}admin/edit-question-set/${editingSetId}`, {
-        method: 'POST',
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -111,7 +138,8 @@ function AdminPage() {
           name: editTitle.trim(),
           description: editDescription.trim() || null,
           customInstruction: editInstructions.trim() || null,
-          aiContextInstruction: editAiContextInstructions.trim() || null
+          aiContextInstruction: editAiContextInstructions.trim() || null,
+          promptId: editPromptId.trim() || null
         })
       });
 
@@ -125,6 +153,7 @@ function AdminPage() {
         setEditDescription('');
         setEditInstructions('');
         setEditAiContextInstructions('');
+        setEditPromptId('');
         // Refresh the question sets list
         await fetchQuestionSets();
       } else {
@@ -196,9 +225,11 @@ function AdminPage() {
   };
 
   const handleDeleteQuestionSetFromList = (setId, setName) => {
+    console.log('🗑️ Delete button clicked for:', setId, setName);
     setSelectedQuestionSet(setId);
     setQuestionSetDeleteStatus('');
     setShowQuestionSetDeleteConfirm(true);
+    console.log('🗑️ Should show confirmation modal now');
   };
 
   useEffect(() => {
@@ -210,7 +241,7 @@ function AdminPage() {
       // Use admin endpoint to get all question sets (including inactive)
       const res = await fetch(`${API_BASE}admin/question-sets`);
       const json = await res.json();
-      setQuestionSets(json.sets || []);
+      setQuestionSets(json.questionSets || []);
     } catch (error) {
       console.error('Error fetching question sets:', error);
     }
@@ -223,8 +254,9 @@ function AdminPage() {
       const result = await response.json();
 
       if (response.ok) {
-        // Create and download the CSV file
-        const blob = new Blob([result.content], { type: 'text/csv' });
+        // Create and download the file with appropriate MIME type
+        const mimeType = result.filename.endsWith('.json') ? 'application/json' : 'text/csv';
+        const blob = new Blob([result.content], { type: mimeType });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -423,9 +455,26 @@ function AdminPage() {
 
   const generateScenariosCSV = (scenarios) => {
     const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction';
-    const rows = scenarios.map((scenario, index) => {
-      return `"${scenario.category || 'AI Generated'}","${index + 1}","${scenario.title}","${scenario.detail}","${scenario.school || 'Professional Development'}","${scenario.customInstructions || ''}"`;
+    
+    // First, group scenarios by category
+    const scenariosByCategory = {};
+    scenarios.forEach(scenario => {
+      const category = scenario.category || 'AI Generated';
+      if (!scenariosByCategory[category]) {
+        scenariosByCategory[category] = [];
+      }
+      scenariosByCategory[category].push(scenario);
     });
+    
+    // Generate CSV rows with proper category-relative numbering
+    const rows = [];
+    Object.keys(scenariosByCategory).forEach(category => {
+      scenariosByCategory[category].forEach((scenario, index) => {
+        const questionNumber = index + 1; // Category-relative numbering (1, 2, 3 for each category)
+        rows.push(`"${category}","${questionNumber}","${scenario.title}","${scenario.detail}","${scenario.school || 'Professional Development'}","${scenario.customInstructions || ''}"`);
+      });
+    });
+    
     return headers + '\n' + rows.join('\n');
   };
 
@@ -475,23 +524,41 @@ function AdminPage() {
 
   const generateTriviaCSV = (questions) => {
     const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,CorrectAnswer,WrongAnswer1,WrongAnswer2,WrongAnswer3,WrongAnswer4,WrongAnswer5,Difficulty';
-    const rows = questions.map((trivia, index) => {
-      const wrongAnswers = [
-        trivia.optionA !== trivia.correctAnswer ? trivia.optionA : '',
-        trivia.optionB !== trivia.correctAnswer ? trivia.optionB : '',
-        trivia.optionC !== trivia.correctAnswer ? trivia.optionC : '',
-        trivia.optionD !== trivia.correctAnswer ? trivia.optionD : '',
-        trivia.optionE !== trivia.correctAnswer ? trivia.optionE : '',
-        trivia.optionF !== trivia.correctAnswer ? trivia.optionF : ''
-      ].filter(answer => answer && answer.trim()).slice(0, 5);
-
-      // Pad with empty strings if needed
-      while (wrongAnswers.length < 5) {
-        wrongAnswers.push('');
+    
+    // First, group questions by category
+    const questionsByCategory = {};
+    questions.forEach(trivia => {
+      const category = trivia.category || 'General';
+      if (!questionsByCategory[category]) {
+        questionsByCategory[category] = [];
       }
-
-      return `"${trivia.category}","${index + 1}","${trivia.title}","${trivia.detail || ''}","${trivia.school || 'General'}","${trivia.customInstructions || ''}","${trivia.correctAnswer}","${wrongAnswers[0]}","${wrongAnswers[1]}","${wrongAnswers[2]}","${wrongAnswers[3]}","${wrongAnswers[4]}","${trivia.difficulty}"`;
+      questionsByCategory[category].push(trivia);
     });
+    
+    // Generate CSV rows with proper category-relative numbering
+    const rows = [];
+    Object.keys(questionsByCategory).forEach(category => {
+      questionsByCategory[category].forEach((trivia, index) => {
+        const questionNumber = index + 1; // Category-relative numbering (1, 2, 3 for each category)
+        
+        const wrongAnswers = [
+          trivia.optionA !== trivia.correctAnswer ? trivia.optionA : '',
+          trivia.optionB !== trivia.correctAnswer ? trivia.optionB : '',
+          trivia.optionC !== trivia.correctAnswer ? trivia.optionC : '',
+          trivia.optionD !== trivia.correctAnswer ? trivia.optionD : '',
+          trivia.optionE !== trivia.correctAnswer ? trivia.optionE : '',
+          trivia.optionF !== trivia.correctAnswer ? trivia.optionF : ''
+        ].filter(answer => answer && answer.trim()).slice(0, 5);
+
+        // Pad with empty strings if needed
+        while (wrongAnswers.length < 5) {
+          wrongAnswers.push('');
+        }
+
+        rows.push(`"${category}","${questionNumber}","${trivia.title}","${trivia.detail || ''}","${trivia.school || 'General'}","${trivia.customInstructions || ''}","${trivia.correctAnswer}","${wrongAnswers[0]}","${wrongAnswers[1]}","${wrongAnswers[2]}","${wrongAnswers[3]}","${wrongAnswers[4]}","${trivia.difficulty}"`);
+      });
+    });
+    
     return headers + '\n' + rows.join('\n');
   };
 
@@ -541,14 +608,32 @@ function AdminPage() {
 
   const generatePollCSV = (questions) => {
     const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Option1,Option2,Option3,Option4,Option5,AllowMultiple';
-    const rows = questions.map((poll, index) => {
-      const options = [...poll.options];
-      while (options.length < 5) {
-        options.push('');
+    
+    // First, group questions by category
+    const questionsByCategory = {};
+    questions.forEach(poll => {
+      const category = poll.category || 'General';
+      if (!questionsByCategory[category]) {
+        questionsByCategory[category] = [];
       }
-
-      return `"${poll.category}","${index + 1}","${poll.title}","${poll.detail || ''}","${poll.school || 'General'}","${poll.customInstructions || ''}","${options[0]}","${options[1]}","${options[2]}","${options[3]}","${options[4]}","${poll.allowMultiple ? 'true' : 'false'}"`;
+      questionsByCategory[category].push(poll);
     });
+    
+    // Generate CSV rows with proper category-relative numbering
+    const rows = [];
+    Object.keys(questionsByCategory).forEach(category => {
+      questionsByCategory[category].forEach((poll, index) => {
+        const questionNumber = index + 1; // Category-relative numbering (1, 2, 3 for each category)
+        
+        const options = [...poll.options];
+        while (options.length < 5) {
+          options.push('');
+        }
+
+        rows.push(`"${category}","${questionNumber}","${poll.title}","${poll.detail || ''}","${poll.school || 'General'}","${poll.customInstructions || ''}","${options[0]}","${options[1]}","${options[2]}","${options[3]}","${options[4]}","${poll.allowMultiple ? 'true' : 'false'}"`);
+      });
+    });
+    
     return headers + '\n' + rows.join('\n');
   };
 
@@ -687,8 +772,8 @@ function AdminPage() {
       // Extract setId from the selected question set value
       const setId = selectedQuestionSet;
       
-      const response = await fetch(`${API_BASE}admin/delete-question-set/${setId}`, {
-        method: 'POST',
+      const response = await fetch(`${API_BASE}admin/question-sets/${setId}`, {
+        method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
         }
@@ -732,6 +817,9 @@ function AdminPage() {
         </div>
 
         <div className="admin-content">
+          {/* AI Prompt Management Section */}
+          <AIPromptManager />
+
           {/* API Test Section */}
           <div className="admin-section">
             <h2>🧪 API Endpoint Test</h2>
@@ -776,6 +864,12 @@ function AdminPage() {
                   onClick={() => handleDownloadTemplate('poll')}
                 >
                   📊 Poll Template
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => handleDownloadTemplate('survey')}
+                >
+                  📋 Survey Template
                 </button>
               </div>
             </div>
@@ -1034,6 +1128,27 @@ function AdminPage() {
                   <small className="help-text">
                     This context helps AI provide more relevant analysis based on your specific project, industry, or goals.
                     Leave blank for general analysis.
+                  </small>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="edit-prompt-id">AI Summary Prompt</label>
+                  <select
+                    id="edit-prompt-id"
+                    value={editPromptId}
+                    onChange={(e) => setEditPromptId(e.target.value)}
+                    className="form-select"
+                  >
+                    <option value="">Use default prompt for game type</option>
+                    {availablePrompts.map(prompt => (
+                      <option key={prompt.promptId} value={prompt.promptId}>
+                        {prompt.name} ({prompt.gameType} - {prompt.category})
+                      </option>
+                    ))}
+                  </select>
+                  <small className="help-text">
+                    Choose a specific AI prompt for generating summaries, or leave blank to use the default prompt based on game type.
+                    Only active prompts are shown.
                   </small>
                 </div>
                 

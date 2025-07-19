@@ -1,30 +1,40 @@
 const { createGame } = require('./schema-compliant-manager');
 
 exports.handler = async (event) => {
-  const gameId = event.pathParameters.gameId;
-  const { eventTitle, aiContext, gameType, questionSetId, randomizeQuestions } = JSON.parse(event.body || '{}');
+  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, randomizeQuestions, selectedCategories, hostName, visibility, accessCode } = JSON.parse(event.body || '{}');
+  
+  // Generate a unique 4-digit game ID
+  const gameId = Math.floor(1000 + Math.random() * 9000).toString();
 
-  console.log(`🎮 Creating game ${gameId} with title: ${eventTitle}, questionSetId: ${questionSetId}, randomize: ${randomizeQuestions}`);
+  console.log(`🎮 Creating game ${gameId} with title: ${eventTitle}, questionSetId: ${questionSetId}, randomize: ${randomizeQuestions}, visibility: ${visibility || 'public'}`);
 
   try {
     await createGame(gameId, {
       title: eventTitle || 'Engagement Session',
-      engagementType: gameType || 'trivia',
+      engagementType: gameType || 'call-and-answer',
       questionSetId: questionSetId,
-      selectedCategories: [],
+      selectedCategories: selectedCategories || [],
       hostPreferences: {
         randomizeQuestions: randomizeQuestions !== false // Default to true if not specified
       },
       aiContext: aiContext,
+      details: engagementInfo || '',
+      hostName: hostName || 'Host',
+      visibility: visibility || 'public',
+      accessCode: accessCode || null,
       debugMode: false
     });
 
     console.log(`✅ Game ${gameId} created successfully`);
     return {
-      statusCode: 200,
+      statusCode: 201,
       body: JSON.stringify({
-        message: 'Game created successfully',
-        gameId: gameId
+        gameId: gameId,
+        title: eventTitle || 'Engagement Session',
+        engagementType: gameType || 'call-and-answer',
+        visibility: visibility || 'public',
+        createdAt: new Date().toISOString(),
+        joinUrl: `https://eng.dev.seibtribe.us/play?gameId=${gameId}`
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }
     };

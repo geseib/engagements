@@ -105,6 +105,10 @@ body {
   margin: 0 auto;
   padding: 20px;
   transition: all 0.3s ease;
+  /* Ensure container has white background to cover body gradient */
+  background: white;
+  min-height: 100vh;
+  border-radius: 0 0 12px 12px;
 }
 
 .outer-container.qr-hidden {
@@ -790,6 +794,9 @@ body {
   border-radius: 12px;
   margin-bottom: 20px;
   min-height: 300px;
+  /* Ensure content always covers the body background */
+  position: relative;
+  z-index: 1;
 }
 
 .waiting-state, .question-state, .voting-state, .results-state {
@@ -1191,8 +1198,9 @@ body {
 .player-outer-container-full {
   width: 100%;
   margin: 0;
-  padding: 10px;
+  padding: 10px 10px 120px 10px; /* Added extra bottom padding for mobile toolbars */
   min-height: 100vh;
+  box-sizing: border-box;
 }
 
 /* Make player outer container wider on desktop */
@@ -1201,12 +1209,22 @@ body {
     max-width: 900px;
     padding: 30px;
   }
+  
+  /* Reduce bottom padding on tablets and larger screens */
+  .player-outer-container-full {
+    padding: 20px 20px 60px 20px;
+  }
 }
 
 @media (min-width: 1024px) {
   .player-outer-container {
     max-width: 1200px;
     padding: 40px;
+  }
+  
+  /* Further reduce bottom padding on desktop screens */
+  .player-outer-container-full {
+    padding: 30px 30px 40px 30px;
   }
 }
 
@@ -1790,7 +1808,7 @@ body {
 
 /* Reports Modal Styles */
 .reports-modal {
-  max-width: 600px;
+  max-width: 800px;
   max-height: 80vh;
 }
 
@@ -3433,6 +3451,7 @@ body {
   border-radius: 16px;
   font-size: 0.85rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .status-badge.active {
@@ -4216,6 +4235,7 @@ body {
   padding: 25px;
   background: linear-gradient(135deg, #f8f9fa, #e9ecef);
   border-bottom: 2px solid #dee2e6;
+  position: relative;
 }
 
 .ai-insights-title h3 {
@@ -4231,6 +4251,53 @@ body {
   font-size: 1rem;
   font-weight: 600;
   margin: 0;
+}
+
+/* Regenerate AI Button */
+.regenerate-ai-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: white;
+  border: 2px solid #667eea;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: #667eea;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+}
+
+.regenerate-ai-btn:hover {
+  background: #667eea;
+  color: white;
+  transform: rotate(90deg) scale(1.1);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.regenerate-ai-btn:active {
+  transform: rotate(180deg) scale(0.95);
+}
+
+.regenerate-ai-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.regenerate-ai-btn:disabled:hover {
+  background: white;
+  color: #667eea;
+  transform: none;
+}
+
+.regenerate-ai-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 .ai-insights-body {
@@ -4802,4 +4869,1207 @@ body {
   white-space: normal;
   word-wrap: break-word;
   line-height: 1.4;
+}
+
+/* Enhanced CreateGame Invite Modal Styles */
+.share-url-container {
+  margin-top: 30px;
+  padding: 25px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.share-url-container h3 {
+  color: #10b981;
+  margin-bottom: 15px;
+  font-size: 1.3rem;
+}
+
+.share-url-container > p {
+  color: #6b7280;
+  margin-bottom: 25px;
+}
+
+.invite-section {
+  margin-bottom: 25px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 1px solid #e1e5e9;
+}
+
+.invite-section h4 {
+  margin: 0 0 15px 0;
+  font-size: 1.1rem;
+  color: #2d3748;
+  font-weight: 600;
+}
+
+.url-box {
+  background: white;
+  border: 2px solid #e1e5e9;
+  border-radius: 8px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 8px;
+}
+
+.url-box:hover {
+  border-color: #667eea;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+}
+
+.url-text {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.url-text strong {
+  color: #2d3748;
+}
+
+.url-text small {
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+.copy-icon {
+  font-size: 16px;
+  color: #667eea;
+  margin-left: 10px;
+}
+
+.copy-instruction {
+  display: block;
+  margin-bottom: 20px;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.engagement-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.engagement-actions .btn-large {
+  padding: 18px 36px;
+  font-size: 1.1rem;
+  min-width: 200px;
+  flex: 1;
+}
+
+.additional-actions {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e1e5e9;
+  text-align: center;
+}
+
+.btn-outline {
+  background: transparent;
+  color: #667eea;
+  border: 2px solid #667eea;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-outline:hover {
+  background: #667eea;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* Category Selection Styles */
+.category-selection {
+  margin-top: 10px;
+}
+
+.category-button-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
+.category-button {
+  background: white;
+  border: 2px solid #e1e5e9;
+  border-radius: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  min-height: 48px;
+}
+
+.category-button:hover {
+  border-color: #667eea;
+  background: #f8f9ff;
+  transform: translateY(-1px);
+}
+
+.category-button.selected {
+  border-color: #667eea;
+  background: linear-gradient(45deg, #667eea, #764ba2);
+  color: white;
+}
+
+.category-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.category-name {
+  font-weight: 600;
+  flex-grow: 1;
+  text-align: left;
+}
+
+.category-count {
+  font-size: 12px;
+  opacity: 0.8;
+  margin-left: 8px;
+}
+
+.category-button.selected .category-count {
+  opacity: 0.9;
+}
+
+/* Enhanced Game History Styling */
+
+/* First game item - stand out like large question format */
+.game-history-item.first-game {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  border: none;
+}
+
+.game-history-item.first-game .game-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: white;
+  margin-bottom: 8px;
+}
+
+.game-history-item.first-game .game-id {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.9rem;
+}
+
+.game-history-item.first-game .status-badge {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.game-history-item.first-game .info-label {
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 600;
+}
+
+.game-history-item.first-game .info-value {
+  color: white;
+  font-weight: 500;
+}
+
+.game-history-item.first-game .new-badge,
+.game-history-item.first-game .current-badge {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Category-style buttons for game actions */
+.game-action-btn {
+  background: white;
+  border: 2px solid #e1e5e9;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  margin-right: 8px;
+  margin-bottom: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+}
+
+.game-action-btn:hover {
+  border-color: #667eea;
+  background: #f8f9ff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+}
+
+.game-action-btn:last-child {
+  margin-right: 0;
+}
+
+/* Primary action button styling */
+.primary-action-btn {
+  background: linear-gradient(45deg, #667eea, #764ba2);
+  color: white;
+  border-color: #667eea;
+  font-weight: 700;
+}
+
+.primary-action-btn:hover {
+  background: linear-gradient(45deg, #5a6fd8, #6a42a0);
+  border-color: #5a6fd8;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+}
+
+.start-btn {
+  background: linear-gradient(45deg, #28a745, #20c997);
+  border-color: #28a745;
+}
+
+.start-btn:hover {
+  background: linear-gradient(45deg, #218838, #1ea88a);
+  border-color: #218838;
+}
+
+.continue-btn {
+  background: linear-gradient(45deg, #007bff, #6c5ce7);
+  border-color: #007bff;
+}
+
+.continue-btn:hover {
+  background: linear-gradient(45deg, #0056b3, #5a4fcf);
+  border-color: #0056b3;
+}
+
+/* Special styling for first game buttons */
+.game-history-item.first-game .game-action-btn {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #333;
+}
+
+.game-history-item.first-game .game-action-btn:hover {
+  background: white;
+  border-color: rgba(255, 255, 255, 0.8);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.game-history-item.first-game .primary-action-btn {
+  background: white;
+  color: #667eea;
+  border-color: white;
+  font-weight: 700;
+}
+
+.game-history-item.first-game .primary-action-btn:hover {
+  background: #f8f9ff;
+  color: #5a6fd8;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Responsive game actions */
+@media (max-width: 768px) {
+  .game-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .game-action-btn {
+    flex: 1;
+    min-width: 120px;
+    margin-right: 0;
+  }
+  
+  .primary-action-btn {
+    flex: 2;
+    min-width: 160px;
+  }
+}
+
+/* ============================================================================
+   BIG SCREEN MODE - Conference Room Display Styles
+   ============================================================================ */
+
+/* Main container adjustments for big screen mode */
+.outer-container.big-screen-mode {
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  height: 100vh;
+  /* Remove white background for big screen mode */
+  background: transparent;
+  border-radius: 0;
+}
+
+.outer-container.big-screen-mode .game-host-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Hide parallax background in big screen mode */
+.outer-container.big-screen-mode .parallax {
+  display: none;
+}
+
+/* Adjust players section for big screen */
+.outer-container.big-screen-mode .players-section {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 300px;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  padding: 15px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.outer-container.big-screen-mode .game-title-header {
+  margin-bottom: 15px;
+}
+
+.outer-container.big-screen-mode .game-title-main {
+  font-size: 1.2rem;
+  margin-bottom: 5px;
+}
+
+.outer-container.big-screen-mode .players-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.outer-container.big-screen-mode .player-card {
+  padding: 8px 12px;
+  font-size: 0.9rem;
+}
+
+/* Big screen mode for game content */
+.game-content.big-screen-mode {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  margin: 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  overflow: hidden;
+}
+
+/* Waiting state big screen styling */
+.waiting-state.big-screen-mode {
+  width: 100%;
+  max-width: none;
+  background: white;
+  border-radius: 20px;
+  padding: 60px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  margin-right: 320px; /* Make room for players sidebar */
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+}
+
+.waiting-state.big-screen-mode h2 {
+  font-size: 3rem;
+  color: #2c3e50;
+  margin: 40px 0;
+  font-weight: 700;
+}
+
+.waiting-controls {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin: 30px 0;
+}
+
+.voting-controls {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin: 30px 0;
+}
+
+.results-controls {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin: 30px 0;
+}
+
+.waiting-state.big-screen-mode .waiting-controls {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin: 40px 0;
+}
+
+.waiting-state.big-screen-mode .btn-primary {
+  font-size: 1.5rem;
+  padding: 20px 40px;
+  margin: 30px 0;
+}
+
+.waiting-state.big-screen-mode p {
+  font-size: 1.2rem;
+  color: #666;
+}
+
+/* Question state big screen styling */
+.question-state.big-screen-mode {
+  width: 100%;
+  max-width: none;
+  background: white;
+  border-radius: 20px;
+  padding: 60px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  margin-right: 320px; /* Make room for players sidebar */
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+}
+
+.question-state.big-screen-mode .question-header {
+  margin-bottom: 40px;
+}
+
+.question-state.big-screen-mode .question-header h2 {
+  font-family: 'PP Neue Corp Wide', sans-serif;
+  font-size: 3rem;
+  font-weight: 800;
+  color: #333;
+  margin-bottom: 20px;
+}
+
+.question-state.big-screen-mode .field-badge {
+  font-size: 1.2rem;
+  padding: 12px 24px;
+  border-radius: 25px;
+  background: rgba(102, 126, 234, 0.15);
+  color: #667eea;
+  font-weight: 700;
+  display: inline-block;
+}
+
+.question-state.big-screen-mode .school-name {
+  font-size: 1.1rem;
+  color: #666;
+  margin-top: 10px;
+  font-weight: 600;
+}
+
+.question-state.big-screen-mode .lesson-title {
+  font-family: 'PP Neue Corp Wide', sans-serif;
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #333;
+  line-height: 1.2;
+  margin: 40px 0;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.question-state.big-screen-mode .lesson-title:hover {
+  color: #667eea;
+  transform: scale(1.02);
+}
+
+.question-state.big-screen-mode .lesson-detail {
+  font-size: 1.4rem;
+  color: #555;
+  line-height: 1.6;
+  margin: 30px 0;
+  padding: 30px;
+  background: #f8f9fa;
+  border-left: 6px solid #667eea;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.question-state.big-screen-mode .lesson-detail:hover {
+  background: #f0f3ff;
+  transform: translateX(5px);
+}
+
+.question-state.big-screen-mode .trivia-options {
+  margin: 40px 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 20px;
+  max-width: 1000px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.question-state.big-screen-mode .category-item.trivia-option {
+  padding: 20px 25px;
+  font-size: 1.2rem;
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+}
+
+.question-state.big-screen-mode .option-letter {
+  font-size: 1.5rem;
+  margin-right: 15px;
+}
+
+.question-state.big-screen-mode .application-prompt {
+  font-size: 1.3rem;
+  margin: 40px 0;
+  color: #333;
+}
+
+.question-state.big-screen-mode .answer-progress {
+  font-size: 1.1rem;
+  margin: 30px 0;
+  color: #667eea;
+  font-weight: 600;
+}
+
+.question-state.big-screen-mode .question-controls {
+  margin-top: 40px;
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  align-items: center;
+}
+
+.question-state.big-screen-mode .question-controls .btn-primary {
+  padding: 18px 36px;
+  font-size: 1.2rem;
+  min-width: 200px;
+}
+
+.question-state.big-screen-mode .question-controls .btn-secondary {
+  padding: 15px 30px;
+  font-size: 1.1rem;
+  min-width: 180px;
+}
+
+/* Voting state big screen styling */
+.voting-state.big-screen-mode {
+  width: 100%;
+  max-width: none;
+  background: white;
+  border-radius: 20px;
+  padding: 60px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  margin-right: 320px; /* Make room for players sidebar */
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+}
+
+.voting-state.big-screen-mode h2 {
+  font-family: 'PP Neue Corp Wide', sans-serif;
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #333;
+  margin-bottom: 20px;
+}
+
+.voting-state.big-screen-mode > p {
+  font-size: 1.2rem;
+  color: #666;
+  margin-bottom: 40px;
+}
+
+.voting-state.big-screen-mode .answer-navigator {
+  margin-bottom: 40px;
+}
+
+.voting-state.big-screen-mode .answer-counter {
+  font-size: 1.1rem;
+  color: #667eea;
+  font-weight: 600;
+  margin-bottom: 15px;
+}
+
+.voting-state.big-screen-mode .current-answer {
+  background: #f8f9fa;
+  border-radius: 15px;
+  padding: 40px;
+  margin: 30px 0;
+  border-left: 6px solid #667eea;
+}
+
+.voting-state.big-screen-mode .current-answer .answer-header {
+  margin-bottom: 20px;
+}
+
+.voting-state.big-screen-mode .current-answer .answer-player {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #667eea;
+  margin-bottom: 10px;
+}
+
+.voting-state.big-screen-mode .current-answer .answer-text {
+  font-size: 1.4rem;
+  color: #333;
+  line-height: 1.6;
+  font-weight: 500;
+}
+
+.voting-state.big-screen-mode .navigation-buttons {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin: 30px 0;
+}
+
+.voting-state.big-screen-mode .navigation-buttons .btn-secondary {
+  padding: 15px 30px;
+  font-size: 1.1rem;
+  min-width: 150px;
+}
+
+.voting-state.big-screen-mode .vote-progress {
+  font-size: 1.1rem;
+  color: #667eea;
+  font-weight: 600;
+  margin: 30px 0;
+}
+
+.voting-state.big-screen-mode .voting-controls {
+  margin-top: 40px;
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+}
+
+.voting-state.big-screen-mode .voting-controls .btn-primary {
+  padding: 18px 36px;
+  font-size: 1.2rem;
+  min-width: 200px;
+}
+
+/* Results state big screen styling */
+.results-state.big-screen-mode {
+  width: 100%;
+  max-width: none;
+  background: white;
+  border-radius: 20px;
+  padding: 60px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  margin-right: 320px; /* Make room for players sidebar */
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+}
+
+.results-state.big-screen-mode h2 {
+  font-family: 'PP Neue Corp Wide', sans-serif;
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #333;
+  margin-bottom: 40px;
+}
+
+.results-state.big-screen-mode .trivia-question-recap h3 {
+  font-size: 1.8rem;
+  margin-bottom: 30px;
+}
+
+.results-state.big-screen-mode .trivia-options-results {
+  margin: 40px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.results-state.big-screen-mode .category-item {
+  padding: 20px 25px;
+  font-size: 1.2rem;
+  min-height: 70px;
+}
+
+.results-state.big-screen-mode .trivia-player-scores {
+  margin-top: 40px;
+  padding: 30px;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.results-state.big-screen-mode .trivia-player-scores h4 {
+  font-size: 1.3rem;
+  margin-bottom: 20px;
+}
+
+.results-state.big-screen-mode .trivia-player-result {
+  padding: 15px 20px;
+  margin: 10px 0;
+  font-size: 1.1rem;
+}
+
+.results-state.big-screen-mode .answer-results {
+  margin: 40px 0;
+}
+
+.results-state.big-screen-mode .answer-results h3 {
+  font-size: 1.8rem;
+  margin-bottom: 30px;
+  color: #333;
+}
+
+.results-state.big-screen-mode .podium {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  margin: 40px 0;
+  flex-wrap: wrap;
+}
+
+.results-state.big-screen-mode .podium-item {
+  background: white;
+  border-radius: 15px;
+  padding: 30px 25px;
+  min-width: 200px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+  border: 3px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.results-state.big-screen-mode .podium-item.first-place {
+  border-color: #FFD700;
+  background: linear-gradient(135deg, #FFF9E6, #FFFACD);
+  transform: scale(1.1);
+}
+
+.results-state.big-screen-mode .podium-item.second-place {
+  border-color: #C0C0C0;
+  background: linear-gradient(135deg, #F8F8FF, #F0F0F0);
+}
+
+.results-state.big-screen-mode .podium-item.third-place {
+  border-color: #CD7F32;
+  background: linear-gradient(135deg, #FFF8DC, #F5DEB3);
+}
+
+.results-state.big-screen-mode .rank-emoji {
+  font-size: 3rem;
+  margin-bottom: 15px;
+  display: block;
+}
+
+.results-state.big-screen-mode .winner-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.results-state.big-screen-mode .winner-answer {
+  font-size: 1rem;
+  color: #555;
+  line-height: 1.4;
+  margin-bottom: 15px;
+  font-style: italic;
+}
+
+.results-state.big-screen-mode .vote-breakdown {
+  font-size: 0.9rem;
+  color: #667eea;
+  font-weight: 600;
+}
+
+.results-state.big-screen-mode .results-controls {
+  margin-top: 50px;
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.results-state.big-screen-mode .results-controls .btn-primary {
+  padding: 18px 36px;
+  font-size: 1.2rem;
+  min-width: 200px;
+}
+
+.results-state.big-screen-mode .results-controls .btn-secondary {
+  padding: 15px 30px;
+  font-size: 1.1rem;
+  min-width: 180px;
+}
+
+/* AI Summary section in big screen mode */
+.results-state.big-screen-mode .ai-summary-section {
+  margin: 50px 0;
+  padding: 40px;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: left;
+}
+
+.results-state.big-screen-mode .ai-insights-section {
+  margin: 50px 0;
+  padding: 40px;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: left;
+}
+
+.results-state.big-screen-mode .regenerate-ai-btn {
+  width: 50px;
+  height: 50px;
+  top: 25px;
+  right: 25px;
+}
+
+.results-state.big-screen-mode .regenerate-ai-btn svg {
+  width: 24px;
+  height: 24px;
+}
+
+.results-state.big-screen-mode .ai-summary-section h3 {
+  font-size: 1.6rem;
+  margin-bottom: 25px;
+  text-align: center;
+}
+
+.results-state.big-screen-mode .ai-summary-text {
+  font-size: 1.1rem;
+  line-height: 1.7;
+}
+
+.results-state.big-screen-mode .ai-discussion-questions li,
+.results-state.big-screen-mode .ai-next-steps li {
+  font-size: 1rem;
+  padding: 12px 18px;
+  margin-bottom: 10px;
+}
+
+/* Responsive adjustments for big screen mode */
+@media (max-width: 1400px) {
+  .outer-container.big-screen-mode .players-section {
+    width: 250px;
+  }
+  
+  .question-state.big-screen-mode,
+  .voting-state.big-screen-mode,
+  .results-state.big-screen-mode {
+    margin-right: 270px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .outer-container.big-screen-mode .players-section {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: 100%;
+    margin-bottom: 20px;
+  }
+  
+  .question-state.big-screen-mode,
+  .voting-state.big-screen-mode,
+  .results-state.big-screen-mode {
+    margin-right: 0;
+    padding: 40px;
+  }
+  
+  .question-state.big-screen-mode .lesson-title {
+    font-size: 2rem;
+  }
+  
+  .question-state.big-screen-mode .question-header h2 {
+    font-size: 2.2rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .outer-container.big-screen-mode {
+    height: auto;
+    overflow: visible;
+  }
+  
+  .game-content.big-screen-mode {
+    height: auto;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+  
+  .question-state.big-screen-mode,
+  .voting-state.big-screen-mode,
+  .results-state.big-screen-mode {
+    padding: 30px 20px;
+    margin: 0;
+  }
+  
+  .question-state.big-screen-mode .lesson-title {
+    font-size: 1.8rem;
+  }
+  
+  .question-state.big-screen-mode .question-header h2 {
+    font-size: 2rem;
+  }
+  
+  .voting-state.big-screen-mode h2,
+  .results-state.big-screen-mode h2 {
+    font-size: 2rem;
+  }
+}
+
+/* Enhanced player score display for new score info */
+.player-ranking-display {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.ranking-main {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #667eea;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.ranking-detail {
+  font-size: 1rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.player-scores-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.round-score, .total-score {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.round-score .score-value {
+  color: #28a745;
+  font-weight: 700;
+}
+
+.total-score {
+  border-top: 2px solid #e1e1e1;
+  padding-top: 12px;
+}
+
+.total-score .score-value {
+  font-size: 1.5rem;
+  color: #667eea;
+  font-weight: 800;
+}
+
+/* Big Screen QR Code Styles */
+.big-screen-join-qr {
+  text-align: center;
+  margin: 40px 0;
+  padding: 40px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.big-screen-join-qr .join-qr-code {
+  margin: 0 auto 30px auto;
+  display: block;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.big-screen-join-qr .join-instructions {
+  margin-top: 20px;
+}
+
+.big-screen-join-qr .join-url-text {
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: #2c3e50;
+  margin: 0 0 15px 0;
+}
+
+.big-screen-join-qr .game-id-display {
+  font-size: 1.4rem;
+  color: #667eea;
+  margin: 0;
+  font-weight: 500;
+}
+
+.big-screen-join-qr .game-id-display strong {
+  font-weight: 700;
+  color: #5a67d8;
+}
+
+/* Big screen mode adjustments */
+.host-page.big-screen .big-screen-join-qr {
+  margin: 60px auto;
+  padding: 60px;
+  max-width: 800px;
+}
+
+.host-page.big-screen .big-screen-join-qr .join-url-text {
+  font-size: 2.5rem;
+  margin-bottom: 20px;
+}
+
+.host-page.big-screen .big-screen-join-qr .game-id-display {
+  font-size: 2rem;
+}
+
+/* Mobile responsiveness for QR code */
+@media (max-width: 768px) {
+  .big-screen-join-qr {
+    margin: 20px;
+    padding: 30px 20px;
+  }
+  
+  .big-screen-join-qr .join-url-text {
+    font-size: 1.4rem;
+  }
+  
+  .big-screen-join-qr .game-id-display {
+    font-size: 1.1rem;
+  }
+}
+
+/* Markdown Renderer Styles */
+.markdown-content {
+  line-height: 1.6;
+}
+
+.markdown-h2 {
+  font-size: 1.5rem;
+  color: #2c3e50;
+  margin: 20px 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e1e5e9;
+}
+
+.markdown-h3 {
+  font-size: 1.3rem;
+  color: #34495e;
+  margin: 16px 0 10px 0;
+  font-weight: 600;
+}
+
+.markdown-h4 {
+  font-size: 1.1rem;
+  color: #34495e;
+  margin: 14px 0 8px 0;
+  font-weight: 600;
+}
+
+.markdown-p {
+  margin: 8px 0 12px 0;
+  color: #2c3e50;
+}
+
+.markdown-list {
+  margin: 8px 0 16px 0;
+  padding-left: 20px;
+}
+
+.markdown-li {
+  margin: 4px 0;
+  color: #2c3e50;
+}
+
+/* AI Insights Markdown Styles */
+.ai-insights-markdown .markdown-h2 {
+  font-size: 1.2rem;
+  color: #667eea;
+  margin: 16px 0 10px 0;
+  border-bottom: 1px solid #e1e5e9;
+}
+
+.ai-insights-markdown .markdown-h3 {
+  font-size: 1.1rem;
+  color: #667eea;
+  margin: 14px 0 8px 0;
+}
+
+.ai-insights-markdown .markdown-p {
+  margin: 6px 0 10px 0;
+  font-size: 0.95rem;
+}
+
+.ai-insights-markdown .markdown-list {
+  margin: 6px 0 12px 0;
+  padding-left: 18px;
+}
+
+.ai-insights-markdown .markdown-li {
+  margin: 3px 0;
+  font-size: 0.95rem;
+}
+
+/* Report AI Markdown Styles */
+.report-ai-markdown .markdown-h2 {
+  font-size: 1.1rem;
+  color: #495057;
+  margin: 12px 0 8px 0;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.report-ai-markdown .markdown-h3 {
+  font-size: 1rem;
+  color: #495057;
+  margin: 10px 0 6px 0;
+}
+
+.report-ai-markdown .markdown-p {
+  margin: 4px 0 8px 0;
+  font-size: 0.9rem;
+  color: #495057;
+}
+
+.report-ai-markdown .markdown-list {
+  margin: 4px 0 10px 0;
+  padding-left: 16px;
+}
+
+.report-ai-markdown .markdown-li {
+  margin: 2px 0;
+  font-size: 0.9rem;
+  color: #495057;
 }

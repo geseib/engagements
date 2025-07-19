@@ -96,6 +96,7 @@ Resources:
       Name:
         Fn::Sub: ${StackName}-api-ws
       ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.action
       Tags:
         Environment:
           Ref: Environment
@@ -195,9 +196,9 @@ Resources:
       Handler: create-game.handler
       Events:
         CreateGame:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId:
+            ApiId:
               Ref: RestApi
             Path: /games
             Method: post
@@ -221,9 +222,9 @@ Resources:
       Handler: start-question.handler
       Events:
         StartQuestion:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId:
+            ApiId:
               Ref: RestApi
             Path: /games/{gameId}/start-question
             Method: post
@@ -253,9 +254,9 @@ Resources:
       Handler: start-vote.handler
       Events:
         StartVote:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId:
+            ApiId:
               Ref: RestApi
             Path: /games/{gameId}/start-vote
             Method: post
@@ -277,21 +278,1207 @@ Resources:
     Metadata:
       SamResourceId: StartVoteFunction
   RestApi:
-    Type: AWS::Serverless::Api
+    Type: AWS::Serverless::HttpApi
     Properties:
-      Name:
-        Fn::Sub: ${StackName}-api-rest
       StageName:
         Ref: Environment
-      Cors:
-        AllowMethods: '''GET,POST,PUT,DELETE,OPTIONS'''
-        AllowHeaders: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'''
-        AllowOrigin: '''*'''
+      CorsConfiguration:
+        AllowOrigins:
+        - '*'
+        AllowMethods:
+        - OPTIONS
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        AllowHeaders:
+        - Content-Type
       Tags:
         Environment:
           Ref: Environment
         StackName:
           Ref: StackName
+  AdminGetQuestionSetsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-get-question-sets
+      CodeUri: AdminGetQuestionSetsFunction
+      Handler: get-question-sets.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Events:
+        AdminGetQuestionSetsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/question-sets
+            Method: GET
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminGetQuestionSetsFunction
+  GetQuestionSetsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-get-question-sets
+      CodeUri: GetQuestionSetsFunction
+      Handler: get-question-sets.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Events:
+        GetQuestionSetsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /question-sets
+            Method: GET
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: GetQuestionSetsFunction
+  GetGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-get-game
+      CodeUri: GetGameFunction
+      Handler: get-game.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Events:
+        GetGameEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /games/{gameId}
+            Method: GET
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: GetGameFunction
+  StartGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-start-game
+      CodeUri: StartGameFunction
+      Handler: start-game.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Events:
+        StartGameEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /games/{gameId}/start
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: StartGameFunction
+  NextQuestionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-next-question
+      CodeUri: NextQuestionFunction
+      Handler: next-question.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - execute-api:ManageConnections
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*
+      Events:
+        NextQuestionEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /games/{gameId}/next-question
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: NextQuestionFunction
+  GetQuestionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-get-question
+      CodeUri: GetQuestionFunction
+      Handler: get-question.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Events:
+        GetQuestionEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /games/{gameId}/question
+            Method: GET
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: GetQuestionFunction
+  GetAnswersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-get-answers
+      CodeUri: GetAnswersFunction
+      Handler: get-answers.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Events:
+        GetAnswersEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /games/{gameId}/answers
+            Method: GET
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: GetAnswersFunction
+  GetResultsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-get-results
+      CodeUri: GetResultsFunction
+      Handler: get-results.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Events:
+        GetResultsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /games/get-results
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: GetResultsFunction
+  CreateReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-create-report
+      CodeUri: CreateReportFunction
+      Handler: create-report.handler
+      Events:
+        CreateReportEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /games/{gameId}/report
+            Method: POST
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: CreateReportFunction
+  GetReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-get-report
+      CodeUri: GetReportFunction
+      Handler: get-report.handler
+      Events:
+        GetReportEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /games/{gameId}/report
+            Method: GET
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: GetReportFunction
+  SaveReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-save-report
+      CodeUri: SaveReportFunction
+      Handler: save-report.handler
+      Timeout: 60
+      Events:
+        SaveReportEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /games/{gameId}/save-report
+            Method: POST
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - S3CrudPolicy:
+          BucketName:
+            Ref: ReportsBucket
+      Environment:
+        Variables:
+          REPORTS_BUCKET_NAME:
+            Ref: ReportsBucket
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: SaveReportFunction
+  GetAISummaryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-get-ai-summary
+      CodeUri: GetAISummaryFunction
+      Handler: get-ai-summary.handler
+      Runtime: nodejs18.x
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+          AI_PROMPTS_BUCKET:
+            Ref: AIPromptsBucket
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - S3ReadPolicy:
+          BucketName:
+            Ref: AIPromptsBucket
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - bedrock:InvokeModel
+          - bedrock:InvokeModelWithResponseStream
+          Resource:
+          - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0
+          - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+      Events:
+        GetAISummaryEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /games/{gameId}/ai-summary
+            Method: GET
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: GetAISummaryFunction
+  GetPlayersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-get-players
+      CodeUri: GetPlayersFunction
+      Handler: get-players.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Events:
+        GetPlayersEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /games/{gameId}/players
+            Method: GET
+    Metadata:
+      SamResourceId: GetPlayersFunction
+  GetGamesListFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-get-games-list
+      CodeUri: GetGamesListFunction
+      Handler: get-games-list.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Events:
+        GetGamesListEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /games
+            Method: GET
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: GetGamesListFunction
+  GetGameStateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-get-game-state
+      CodeUri: GetGameStateFunction
+      Handler: get-game-state.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Events:
+        GetGameStateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /games/{gameId}/state
+            Method: GET
+        GetGameStateWithPlayerEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /games/{gameId}/state/{playerId}
+            Method: GET
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: GetGameStateFunction
+  GetCategoriesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-get-categories
+      CodeUri: GetCategoriesFunction
+      Handler: get-categories.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Events:
+        GetCategoriesEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /question-sets/{setId}/categories
+            Method: GET
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: GetCategoriesFunction
+  JoinGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-join-game
+      CodeUri: JoinGameFunction
+      Handler: join-game.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - execute-api:ManageConnections
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*
+      Events:
+        JoinGameEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /games/{gameId}/players
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: JoinGameFunction
+  SubmitVoteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-submit-vote
+      CodeUri: SubmitVoteFunction
+      Handler: submit-vote.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+          WEBSOCKET_API_ENDPOINT:
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - execute-api:ManageConnections
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*
+      Events:
+        SubmitVoteEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /games/{gameId}/votes
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: SubmitVoteFunction
+  GetVotesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-get-votes
+      CodeUri: GetVotesFunction
+      Handler: get-votes.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Events:
+        GetVotesEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /games/{gameId}/votes
+            Method: GET
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: GetVotesFunction
+  AdminAIGenerateQuestionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-ai-generate-questions
+      CodeUri: AdminAIGenerateQuestionsFunction
+      Handler: ai-generate-questions.handler
+      Runtime: nodejs18.x
+      Timeout: 900
+      MemorySize: 1024
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - bedrock:InvokeModel
+          - bedrock:InvokeModelWithResponseStream
+          Resource:
+          - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+      Events:
+        AdminAIGenerateQuestionsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/ai-generate-questions
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminAIGenerateQuestionsFunction
+  AdminAIGenerateScenariosFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-ai-generate-scenarios
+      Handler: index.generateScenarios
+      Runtime: nodejs18.x
+      Timeout: 900
+      MemorySize: 1024
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - bedrock:InvokeModel
+          - bedrock:InvokeModelWithResponseStream
+          Resource:
+          - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+      InlineCode: "const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');\n\
+        \nconst bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });\n\
+        \n// Function to call Claude via Bedrock\nconst invokeClaude = async (prompt)\
+        \ => {\n  const modelId = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';\n\
+        \n  console.log('\U0001F916 Calling Claude for scenario generation...');\n\
+        \n  const payload = {\n    anthropic_version: 'bedrock-2023-05-31',\n    max_tokens:\
+        \ 4000,\n    messages: [\n      {\n        role: 'user',\n        content:\
+        \ [{ type: 'text', text: prompt }],\n      },\n    ],\n  };\n\n  const command\
+        \ = new InvokeModelCommand({\n    contentType: 'application/json',\n    body:\
+        \ JSON.stringify(payload),\n    modelId,\n  });\n\n  const response = await\
+        \ bedrockClient.send(command);\n  const responseBody = JSON.parse(new TextDecoder().decode(response.body));\n\
+        \n  return responseBody.content[0].text;\n};\n\nexports.generateScenarios\
+        \ = async (event) => {\n  try {\n    console.log('\U0001F916 Lambda function\
+        \ started for scenario generation');\n    console.log('Event:', JSON.stringify(event,\
+        \ null, 2));\n\n    // Handle CORS preflight\n    if (event.requestContext?.http?.method\
+        \ === 'OPTIONS') {\n      return {\n        statusCode: 200,\n        headers:\
+        \ {\n          'Access-Control-Allow-Origin': '*',\n          'Access-Control-Allow-Headers':\
+        \ 'Content-Type',\n          'Access-Control-Allow-Methods': 'POST, OPTIONS'\n\
+        \        },\n        body: ''\n      };\n    }\n\n    if (!event.body) {\n\
+        \      throw new Error('No request body provided');\n    }\n\n    const {\
+        \ scenarioType, prompt, count, difficulty, context, audience, customPrompt\
+        \ } = JSON.parse(event.body);\n\n    // Allow up to 100 scenarios with increased\
+        \ timeout\n    const limitedCount = Math.min(count, 100);\n    if (limitedCount\
+        \ !== count) {\n      console.log('\u26A0\uFE0F Limited scenario count from',\
+        \ count, 'to', limitedCount, 'maximum allowed is 100');\n    }\n\n    console.log('\U0001F916\
+        \ Generating scenarios:', { scenarioType, count: limitedCount, difficulty,\
+        \ promptLength: prompt?.length });\n\n    // Build optimized prompt for scenario\
+        \ generation\n    let fullPrompt = 'Create ' + limitedCount + ' workplace\
+        \ scenarios. ';\n\n    // Add scenario type specific context\n    if (scenarioType\
+        \ === 'amazon-principles') {\n      fullPrompt += 'Focus on Amazon Leadership\
+        \ Principles with STAR format examples. ';\n    } else if (scenarioType ===\
+        \ 'interview-prep') {\n      fullPrompt += 'Create interview practice scenarios.\
+        \ ';\n    } else if (scenarioType === 'problem-solving') {\n      fullPrompt\
+        \ += 'Create problem-solving challenges. ';\n    } else if (scenarioType ===\
+        \ 'lessons-learned') {\n      fullPrompt += 'Create lessons learned scenarios.\
+        \ ';\n    } else if (scenarioType === 'team-building') {\n      fullPrompt\
+        \ += 'Create team collaboration scenarios. ';\n    }\n\n    fullPrompt +=\
+        \ prompt;\n    fullPrompt += '\\\\n\\\\nReturn as JSON array: [{\"title\"\
+        : \"Title\", \"category\": \"Category\", \"detail\": \"Description\", \"school\"\
+        : \"Professional Development\", \"customInstructions\": \"Instructions\"}]';\n\
+        \    fullPrompt += '\\\\nReturn ONLY the JSON array.';\n\n    console.log('\U0001F916\
+        \ Sending prompt to Claude...', { promptLength: fullPrompt.length });\n  \
+        \  const aiResponse = await invokeClaude(fullPrompt);\n    console.log('\u2705\
+        \ Received response from Claude', { responseLength: aiResponse?.length });\n\
+        \n    // Parse the JSON response with improved error handling\n    let scenarios;\n\
+        \    try {\n      console.log('\U0001F50D Parsing AI response...');\n    \
+        \  console.log('Raw response length:', aiResponse.length);\n      console.log('First\
+        \ 500 chars:', aiResponse.substring(0, 500));\n\n      // Try multiple parsing\
+        \ strategies\n      let jsonString = aiResponse.trim();\n\n      // Strategy\
+        \ 1: Direct parse if it looks like JSON\n      if (jsonString.startsWith('[')\
+        \ && jsonString.endsWith(']')) {\n        console.log('\u2705 Direct JSON\
+        \ parsing...');\n        scenarios = JSON.parse(jsonString);\n      } else\
+        \ {\n        // Strategy 2: Extract JSON array with regex\n        console.log('\U0001F50D\
+        \ Extracting JSON with regex...');\n        const jsonMatch = jsonString.match(/\\\
+        [[\\s\\S]*\\]/);\n        if (jsonMatch) {\n          console.log('\u2705\
+        \ Found JSON match, parsing...');\n          scenarios = JSON.parse(jsonMatch[0]);\n\
+        \        } else {\n          // Strategy 3: Try to find and clean JSON\n \
+        \         console.log('\U0001F50D Cleaning and extracting JSON...');\n   \
+        \       const startIndex = jsonString.indexOf('[');\n          const endIndex\
+        \ = jsonString.lastIndexOf(']');\n          if (startIndex !== -1 && endIndex\
+        \ !== -1 && endIndex > startIndex) {\n            const extractedJson = jsonString.substring(startIndex,\
+        \ endIndex + 1);\n            console.log('\u2705 Extracted JSON, parsing...');\n\
+        \            scenarios = JSON.parse(extractedJson);\n          } else {\n\
+        \            throw new Error('No JSON array found in response');\n       \
+        \   }\n        }\n      }\n\n      console.log('\u2705 Successfully parsed',\
+        \ scenarios.length, 'scenarios');\n    } catch (parseError) {\n      console.error('\u274C\
+        \ Failed to parse AI response:', parseError);\n      console.log('Raw response:',\
+        \ aiResponse);\n      throw new Error('Failed to parse AI response as JSON:\
+        \ ' + parseError.message);\n    }\n\n    // Add IDs and ensure proper structure\n\
+        \    const processedScenarios = scenarios.map(s => ({\n      id: Date.now()\
+        \ + Math.random(),\n      active: true,\n      ...s\n    }));\n\n    console.log(`\u2705\
+        \ Successfully generated ${processedScenarios.length} scenarios`);\n\n   \
+        \ return {\n      statusCode: 200,\n      body: JSON.stringify({\n       \
+        \ scenarios: processedScenarios,\n        message: `Generated ${processedScenarios.length}\
+        \ scenarios successfully`\n      }),\n      headers: {\n        'Access-Control-Allow-Origin':\
+        \ '*',\n        'Access-Control-Allow-Headers': 'Content-Type',\n        'Access-Control-Allow-Methods':\
+        \ 'POST, OPTIONS'\n      }\n    };\n\n  } catch (error) {\n    console.error('\u274C\
+        \ AI scenario generation error:', error);\n    return {\n      statusCode:\
+        \ 500,\n      body: JSON.stringify({ error: `Failed to generate scenarios:\
+        \ ${error.message}` }),\n      headers: {\n        'Access-Control-Allow-Origin':\
+        \ '*',\n        'Access-Control-Allow-Headers': 'Content-Type',\n        'Access-Control-Allow-Methods':\
+        \ 'POST, OPTIONS'\n      }\n    };\n  }\n};"
+      Events:
+        AdminAIGenerateScenariosEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/ai-generate-scenarios
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+  AdminUploadQuestionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-upload-questions
+      CodeUri: AdminUploadQuestionsFunction
+      Handler: upload-questions.handler
+      Runtime: nodejs18.x
+      Timeout: 60
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+      Events:
+        AdminUploadQuestionsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/upload-questions
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminUploadQuestionsFunction
+  AdminToggleQuestionSetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-toggle-question-set
+      CodeUri: AdminToggleQuestionSetFunction
+      Handler: toggle-question-set.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Events:
+        AdminToggleQuestionSetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/toggle-question-set/{setId}
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminToggleQuestionSetFunction
+  AdminEditQuestionSetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-edit-question-set
+      CodeUri: AdminEditQuestionSetFunction
+      Handler: edit-question-set.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Events:
+        AdminEditQuestionSetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/edit-question-set/{setId}
+            Method: PUT
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminEditQuestionSetFunction
+  AdminDeleteQuestionSetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-delete-question-set
+      CodeUri: AdminDeleteQuestionSetFunction
+      Handler: delete-question-set.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Events:
+        AdminDeleteQuestionSetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/question-sets/{setId}
+            Method: DELETE
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminDeleteQuestionSetFunction
+  AdminClearGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-clear-game
+      CodeUri: AdminClearGameFunction
+      Handler: delete-game.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+      Events:
+        AdminClearGameEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/clear-game/{gameId}
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminClearGameFunction
+  AdminClearAllGamesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-clear-all-games
+      CodeUri: AdminClearAllGamesFunction
+      Handler: clear-all-games.handler
+      Runtime: nodejs18.x
+      Timeout: 300
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+      Events:
+        AdminClearAllGamesEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/clear-all-games
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminClearAllGamesFunction
+  AdminDownloadTemplateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-download-template
+      CodeUri: AdminDownloadTemplateFunction
+      Handler: download-template.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Events:
+        AdminDownloadTemplateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/download-template
+            Method: GET
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminDownloadTemplateFunction
+  AdminGetAIPromptsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-get-ai-prompts
+      CodeUri: AdminGetAIPromptsFunction
+      Handler: get-ai-prompts.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          AI_PROMPTS_BUCKET:
+            Ref: AIPromptsBucket
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - S3CrudPolicy:
+          BucketName:
+            Ref: AIPromptsBucket
+      Events:
+        AdminGetAIPromptsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/ai-prompts
+            Method: GET
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminGetAIPromptsFunction
+  AdminCreateAIPromptFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-create-ai-prompt
+      CodeUri: AdminCreateAIPromptFunction
+      Handler: create-ai-prompt.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          AI_PROMPTS_BUCKET:
+            Ref: AIPromptsBucket
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - S3CrudPolicy:
+          BucketName:
+            Ref: AIPromptsBucket
+      Events:
+        AdminCreateAIPromptEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/ai-prompts
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminCreateAIPromptFunction
+  AdminUpdateAIPromptFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-update-ai-prompt
+      CodeUri: AdminUpdateAIPromptFunction
+      Handler: update-ai-prompt.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          AI_PROMPTS_BUCKET:
+            Ref: AIPromptsBucket
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - S3CrudPolicy:
+          BucketName:
+            Ref: AIPromptsBucket
+      Events:
+        AdminUpdateAIPromptEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/ai-prompts/{promptId}
+            Method: PUT
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminUpdateAIPromptFunction
+  AdminDeleteAIPromptFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-delete-ai-prompt
+      CodeUri: AdminDeleteAIPromptFunction
+      Handler: delete-ai-prompt.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          AI_PROMPTS_BUCKET:
+            Ref: AIPromptsBucket
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - S3CrudPolicy:
+          BucketName:
+            Ref: AIPromptsBucket
+      Events:
+        AdminDeleteAIPromptEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/ai-prompts/{promptId}
+            Method: DELETE
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminDeleteAIPromptFunction
+  AdminAIPromptAdvisorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-ai-prompt-advisor
+      CodeUri: AdminAIPromptAdvisorFunction
+      Handler: ai-prompt-advisor.handler
+      Runtime: nodejs18.x
+      Timeout: 120
+      MemorySize: 512
+      Environment:
+        Variables:
+          AI_PROMPTS_BUCKET:
+            Ref: AIPromptsBucket
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - S3CrudPolicy:
+          BucketName:
+            Ref: AIPromptsBucket
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - bedrock:InvokeModel
+          - bedrock:InvokeModelWithResponseStream
+          Resource:
+          - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+      Events:
+        AdminAIPromptAdvisorEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/ai-prompt-advisor
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminAIPromptAdvisorFunction
+  AdminPopulateDefaultsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-populate-defaults
+      CodeUri: AdminPopulateDefaultsFunction
+      Handler: populate-defaults.handler
+      Runtime: nodejs18.x
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+          AI_PROMPTS_BUCKET:
+            Ref: AIPromptsBucket
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - S3CrudPolicy:
+          BucketName:
+            Ref: AIPromptsBucket
+      Events:
+        PopulateDefaults:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/populate-defaults
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminPopulateDefaultsFunction
   FrontendBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -334,6 +1521,25 @@ Resources:
       - Key: StackName
         Value:
           Ref: StackName
+  AIPromptsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName:
+        Fn::Sub: ${StackName}-ai-prompts
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+      - Key: Environment
+        Value:
+          Ref: Environment
+      - Key: StackName
+        Value:
+          Ref: StackName
   FrontendBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -346,7 +1552,7 @@ Resources:
           Principal: '*'
           Action: s3:GetObject
           Resource:
-            Fn::Sub: ${FrontendBucket}/*
+            Fn::Sub: ${FrontendBucket.Arn}/*
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
     Condition: HasDomain
@@ -371,10 +1577,16 @@ Resources:
           CachedMethods:
           - GET
           - HEAD
-          ForwardedValues:
-            QueryString: false
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
         Enabled: true
         DefaultRootObject: index.html
+        CustomErrorResponses:
+        - ErrorCode: 403
+          ResponseCode: 200
+          ResponsePagePath: /index.html
+        - ErrorCode: 404
+          ResponseCode: 200
+          ResponsePagePath: /index.html
         ViewerCertificate:
           AcmCertificateArn:
             Ref: SSLCertificate
@@ -553,6 +1765,13 @@ Outputs:
     Export:
       Name:
         Fn::Sub: ${StackName}-table-name
+  AIPromptsBucketName:
+    Description: AI Prompts S3 bucket name
+    Value:
+      Ref: AIPromptsBucket
+    Export:
+      Name:
+        Fn::Sub: ${StackName}-ai-prompts-bucket
   Environment:
     Description: Environment name
     Value:

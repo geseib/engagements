@@ -1,5 +1,15 @@
 {
+  "scripts": {
+    "clean": "node scripts/clean-aws-sam.js",
+    "clean:sam": "node scripts/clean-aws-sam.js",
+    "deploy:dev": "./scripts/deploy-dev-full.sh",
+    "deploy:backend": "./scripts/deploy-clean.sh engdev eng.dev.seibtribe.us",
+    "deploy:frontend": "./scripts/deploy-frontend-eng.sh"
+  },
   "dependencies": {
     "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.1"
   }
 }

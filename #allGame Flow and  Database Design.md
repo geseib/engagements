@@ -31,12 +31,15 @@ This document defines the complete DynamoDB table structure for the quiz game. A
 | `GAME#1234` | `STATE#CATS`               | Catagory List    | HostMask1-8: `1111111`, HostMask9-16: `1111111`, HostMask17-24: `00000000`, AvailMask1-8: `1111111`, AvailMask9-16: `1111111`, AvailMask17-24: `00000000`,SubmittedAt, ttl |
 | `GAME#1234` | `CAT#001#ORDER`            | Catagory         | IsRandom: True, QuestionOrder: [3,2,1,5,6,4,7,8,]], SubmittedAt, ttl |
 | `GAME#1234` | `CAT#001#ACTIVE`           | Catagory         | QuestionCount: `8`, ActiveIndex: `3`, SubmittedAt, ttl |
+(non-random games categories will show ORDER as such
+| `GAME#2122` | `CAT#001#ORDER`            | Catagory         | IsRandom: False, ttl |
+| `GAME#2122` | `CAT#001#ACTIVE`           | Catagory         | QuestionCount: `8`, ActiveIndex: `4`, SubmittedAt, ttl |
 
 ### Game Question Management
 
 | PK          | SK                    | Item Type        | Attributes                                                     |
 | ----------- | --------------------- | ---------------- | -------------------------------------------------------------- |
-| `GAME#1234` | `QUESTION#001`        | Question Ref     | SourceQuestionId: `QUESTION#c001#001`, SetId: `GreatestHits`, Category: `Entertainment`, QuestionTitle, QuestionDetail, StartedAt, ttl |
+| `GAME#1234` | `QUESTION#001#REF`        | Question Ref     | SourceQuestionId: `QUESTION#c001#001`, SetId: `GreatestHits`,  StartedAt, ttl |
 
 ### Game Answer Management
 
@@ -151,3 +154,27 @@ button - 📋 View Game History (go to game histroy dialog )
 
 ## Lobby
 Title from game#nnn meta 
+
+
+
+##Game Flow
+  1. createGame(host) + state change: CREATED - Host creates the game
+  2. getGame(both) - Both host and players can get game info (they do this when they join the page, reload, etc)
+  3. startGame(host) + state change: STARTED - Host starts the game
+  4. nextQuestion(host) [Host->WS] + state change: ASK#{questionid} - Host advances to next question
+  5. getQuestion(both) - Both get the current question - THis api calls a function that looks at the gamequestionnumber lookup and pulls the question from the set data
+  6. answer(player) [Player->WS] - Players submit answers - host front end will add a checkmark next to the player card and tally the number of players that answered of the total players
+  7. requestVote(host) [Host->WS] + state change: VOTE#{questionid} - Host starts voting 
+  8. getAnswers(both) - Both get answers to vote on
+  9. vote(player) [Player->WS] - Players vote - host front end will add a checkmark next to the player card and tally the number of players that voted of the total players
+  10. createResults(host) [Host->WS] + state change: RESULTS#{questionid} - Host creates results
+  11. getResults(both) - Both get results
+  12. createReport(host) - Host creates final report
+  13. getReport(both) - Both can get the report
+
+  Extra APIs that can be used in conjunction with the above:
+  1. joinGame(player) - Player joins the game at anytime after start 
+  2. getPlayers(both) - Host can get the list of players
+  3. getGameState(both) - Both can get the current game state
+  4. getQuestionSet(both) - Host can get the question set
+  5. getCategories(both) - Host can get the categories

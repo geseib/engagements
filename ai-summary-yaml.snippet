@@ -1,0 +1,862 @@
+
+  ### Lambda: AI Summary Generation
+  AISummaryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.generateAISummary
+      Runtime: nodejs18.x
+      Timeout: 300
+      MemorySize: 512
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource: 
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/dev/POST/@connections/*'
+      InlineCode: |-
+        const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+        const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+        const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+        const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+        
+        const dynamoClient = new DynamoDBClient({});
+        const db = DynamoDBDocumentClient.from(dynamoClient);
+        const bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });
+        const apigateway = new ApiGatewayManagementApiClient({
+          endpoint: process.env.WEBSOCKET_API_ENDPOINT
+        });
+        
+        // Helper function to broadcast WebSocket message
+        const broadcastToGame = async (gameId, message) => {
+          try {
+            const connectionsResult = await db.query({
+              TableName: process.env.TABLE_NAME,
+              KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+              ExpressionAttributeValues: {
+                ':pk': `GAME#${gameId}`,
+                ':sk': 'CONNECTION#'
+              }
+            }).promise();
+
+            const connections = connectionsResult.Items || [];
+            console.log(`🔌 Broadcasting to ${connections.length} connections for game ${gameId}`);
+
+            const broadcastPromises = connections.map(async (connection) => {
+              try {
+                await apigateway.postToConnection({
+                  ConnectionId: connection.ConnectionId,
+                  Data: JSON.stringify(message)
+                }).promise();
+              } catch (error) {
+                console.log(`🔌 Failed to send to connection ${connection.ConnectionId}:`, error);
+                if (error.statusCode === 410) {
+                  await db.send(new DeleteCommand({
+                    TableName: process.env.TABLE_NAME,
+                    Key: { PK: connection.PK, SK: connection.SK }
+                  }));
+                }
+              }
+            });
+            
+            await Promise.all(broadcastPromises);
+          } catch (error) {
+            console.error('🔌 Broadcast error:', error);
+          }
+        };
+        
+        // Function to call Claude via Bedrock
+        const invokeClaude = async (prompt) => {
+          const modelId = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';
+          
+          console.log('🔍 BEDROCK: Prompt being sent to Claude:');
+          console.log('==========================================');
+          console.log('Prompt length:', prompt.length);
+          console.log('First 500 chars:', prompt.substring(0, 500));
+          console.log('Last 200 chars:', prompt.substring(prompt.length - 200));
+          console.log('==========================================');
+          
+          const payload = {
+            anthropic_version: 'bedrock-2023-05-31',
+            max_tokens: 2000,
+            messages: [
+              {
+                role: 'user',
+                content: [{ type: 'text', text: prompt }],
+              },
+            ],
+          };
+          
+          console.log('🔍 BEDROCK: Payload structure:', JSON.stringify({
+            anthropic_version: payload.anthropic_version,
+            max_tokens: payload.max_tokens,
+            messages: [{
+              role: payload.messages[0].role,
+              content: [{ type: 'text', text: `[${payload.messages[0].content[0].text.length} chars]` }]
+            }]
+          }, null, 2));
+          
+          const command = new InvokeModelCommand({
+            contentType: 'application/json',
+            body: JSON.stringify(payload),
+            modelId,
+          });
+          
+          console.log('🔍 BEDROCK: Sending to model:', modelId);
+          const apiResponse = await bedrockClient.send(command);
+          
+          const decodedResponseBody = new TextDecoder().decode(apiResponse.body);
+          const responseBody = JSON.parse(decodedResponseBody);
+          
+          console.log('🔍 BEDROCK: Raw response structure:', JSON.stringify({
+            usage: responseBody.usage,
+            content_length: responseBody.content?.[0]?.text?.length || 0,
+            first_100_chars: responseBody.content?.[0]?.text?.substring(0, 100) || 'No content'
+          }, null, 2));
+          
+          return responseBody.content[0].text;
+        };
+        
+        // Parse Claude's response into structured sections using the new === FORMAT ===
+        const parseAIResponse = (aiResponse) => {
+          console.log('🔍 PARSING: Full AI response length:', aiResponse.length);
+          console.log('🔍 PARSING: First 300 chars:', aiResponse.substring(0, 300));
+          
+          // Extract summary (content between "=== SUMMARY ===" and next section)
+          let summaryText = '';
+          const summaryMatch = aiResponse.match(/===\s*SUMMARY\s*===\s*\n([\s\S]*?)(?=\n===|$)/i);
+          if (summaryMatch) {
+            summaryText = summaryMatch[1].trim().replace(/^\[|\]$/g, ''); // Remove template brackets
+            console.log('🔍 PARSING: Extracted summary:', summaryText.substring(0, 100) + '...');
+          } else {
+            console.log('⚠️ PARSING: No === SUMMARY === section found');
+          }
+          
+          // Extract discussion questions (content between "=== DISCUSSION QUESTIONS ===" and next section)
+          let discussionQuestions = [];
+          const discussionMatch = aiResponse.match(/===\s*DISCUSSION\s*QUESTIONS\s*===\s*\n([\s\S]*?)(?=\n===|$)/i);
+          if (discussionMatch) {
+            const discussionText = discussionMatch[1];
+            // Extract Q1:, Q2:, Q3: format questions
+            const q1Match = discussionText.match(/Q1:\s*(.*?)(?=\nQ2:|$)/s);
+            const q2Match = discussionText.match(/Q2:\s*(.*?)(?=\nQ3:|$)/s);
+            const q3Match = discussionText.match(/Q3:\s*(.*?)(?=\n|$)/s);
+            
+            if (q1Match) discussionQuestions.push(q1Match[1].trim().replace(/^\[|\]$/g, ''));
+            if (q2Match) discussionQuestions.push(q2Match[1].trim().replace(/^\[|\]$/g, ''));
+            if (q3Match) discussionQuestions.push(q3Match[1].trim().replace(/^\[|\]$/g, ''));
+            
+            console.log('🔍 PARSING: Extracted discussion questions:', discussionQuestions);
+          } else {
+            console.log('⚠️ PARSING: No === DISCUSSION QUESTIONS === section found');
+          }
+          
+          // Extract next steps (content between "=== NEXT STEPS ===" and end)
+          let nextSteps = [];
+          const nextStepsMatch = aiResponse.match(/===\s*NEXT\s*STEPS\s*===\s*\n([\s\S]*?)$/i);
+          if (nextStepsMatch) {
+            const nextStepsText = nextStepsMatch[1];
+            // Extract STEP1:, STEP2:, STEP3:, STEP4: format
+            const step1Match = nextStepsText.match(/STEP1:\s*(.*?)(?=\nSTEP2:|$)/s);
+            const step2Match = nextStepsText.match(/STEP2:\s*(.*?)(?=\nSTEP3:|$)/s);
+            const step3Match = nextStepsText.match(/STEP3:\s*(.*?)(?=\nSTEP4:|$)/s);
+            const step4Match = nextStepsText.match(/STEP4:\s*(.*?)(?=\n|$)/s);
+            
+            if (step1Match) nextSteps.push(step1Match[1].trim().replace(/^\[|\]$/g, ''));
+            if (step2Match) nextSteps.push(step2Match[1].trim().replace(/^\[|\]$/g, ''));
+            if (step3Match) nextSteps.push(step3Match[1].trim().replace(/^\[|\]$/g, ''));
+            if (step4Match) nextSteps.push(step4Match[1].trim().replace(/^\[|\]$/g, ''));
+            
+            console.log('🔍 PARSING: Extracted next steps:', nextSteps);
+          } else {
+            console.log('⚠️ PARSING: No === NEXT STEPS === section found');
+          }
+          
+          // NO FALLBACKS - either we parse correctly or we error
+          if (!summaryText || summaryText.length < 20) {
+            console.log('❌ PARSING FAILED: No valid summary found');
+            throw new Error('AI response parsing failed - invalid summary format');
+          }
+          
+          if (discussionQuestions.length === 0) {
+            console.log('❌ PARSING FAILED: No valid discussion questions found');
+            throw new Error('AI response parsing failed - no discussion questions found');
+          }
+          
+          if (nextSteps.length === 0) {
+            console.log('❌ PARSING FAILED: No valid next steps found');
+            throw new Error('AI response parsing failed - no next steps found');
+          }
+          
+          const result = {
+            summaryText: summaryText,
+            discussionQuestions: discussionQuestions,
+            nextSteps: nextSteps
+          };
+          
+          console.log('✅ PARSING SUCCESS: Summary length:', result.summaryText.length);
+          console.log('✅ PARSING SUCCESS: Discussion questions count:', result.discussionQuestions.length);
+          console.log('✅ PARSING SUCCESS: Next steps count:', result.nextSteps.length);
+          
+          return result;
+        };
+        
+        exports.generateAISummary = async (event) => {
+          try {
+            const gameId = event.pathParameters.gameId;
+            const { questionIds } = JSON.parse(event.body);
+            
+            console.log(`🤖 Generating AI summaries for game ${gameId}, questions: ${questionIds}`);
+            
+            if (!questionIds || questionIds.length === 0) {
+              return {
+                statusCode: 400,
+                body: JSON.stringify({ error: 'No questions selected for AI summary' }),
+                headers: { 'Access-Control-Allow-Origin': '*' }
+              };
+            }
+            
+            // Fetch game metadata to get AI context
+            let gameAiContext = null;
+            try {
+              const gameMetadata = await db.send(new GetCommand({
+                TableName: process.env.TABLE_NAME,
+                Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
+              }));
+              if (gameMetadata.Item && gameMetadata.Item.AIContext) {
+                gameAiContext = gameMetadata.Item.AIContext;
+                console.log('🎯 Found game AI context:', gameAiContext);
+              } else {
+                console.log('🎯 No game AI context found');
+              }
+            } catch (contextError) {
+              console.log('⚠️ Could not fetch game AI context:', contextError.message);
+            }
+            
+            const summaries = [];
+            
+            for (const questionId of questionIds) {
+              console.log(`📝 Processing question ${questionId}...`);
+              
+              // Get question details
+              const questionRes = await db.send(new GetCommand({
+                TableName: process.env.TABLE_NAME,
+                Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionId}` }
+              }));
+              
+              if (!questionRes.Item) {
+                console.log(`⚠️ Question ${questionId} not found, skipping`);
+                continue;
+              }
+              
+              const question = questionRes.Item;
+              console.log('🔍 Question pointer data:', JSON.stringify(question, null, 2));
+              
+              // Fetch actual question data using the QuestionRef - REQUIRED for real prompt
+              console.log(`🔍 DETAILED FETCH: Starting question data fetch for ${questionId}`);
+              console.log(`🔍 DETAILED FETCH: Question pointer has QuestionRef: ${question.QuestionRef}`);
+              console.log(`🔍 DETAILED FETCH: Question pointer has SetId: ${question.SetId}`);
+              
+              let actualQuestionData = null;
+              if (!question.QuestionRef) {
+                console.log(`❌ FATAL: No QuestionRef found in question pointer for ${questionId}`);
+                throw new Error(`Missing QuestionRef for question ${questionId} - cannot build real prompt`);
+              }
+              
+              try {
+                // Try multiple set locations since SetId might not match actual storage location
+                const possibleSetIds = [question.SetId, 'amazonleadershipprinciples', 'lessons', 'greatesthits'].filter(Boolean);
+                console.log(`🔍 DETAILED FETCH: Will try these set IDs: ${possibleSetIds.join(', ')}`);
+                
+                for (const setId of possibleSetIds) {
+                  console.log(`🔍 DETAILED FETCH: Trying SET#${setId} with QuestionRef: ${question.QuestionRef}`);
+                  
+                  const actualQuestionRes = await db.send(new GetCommand({
+                    TableName: process.env.TABLE_NAME,
+                    Key: { PK: `SET#${setId}`, SK: question.QuestionRef }
+                  }));
+                  
+                  console.log(`🔍 DETAILED FETCH: Response from SET#${setId}:`, actualQuestionRes.Item ? 'FOUND' : 'NOT FOUND');
+                  
+                  if (actualQuestionRes.Item) {
+                    actualQuestionData = actualQuestionRes.Item;
+                    console.log(`✅ SUCCESS: Found actual question data in SET#${setId}`);
+                    console.log(`✅ SUCCESS: Question title: ${actualQuestionData.Title}`);
+                    console.log(`✅ SUCCESS: Question detail: ${actualQuestionData.Detail}`);
+                    console.log(`✅ SUCCESS: Question category: ${actualQuestionData.Category}`);
+                    break;
+                  }
+                }
+                
+                if (!actualQuestionData) {
+                  console.log(`❌ FATAL: Actual question data not found for ${question.QuestionRef} in any of these sets: ${possibleSetIds.join(', ')}`);
+                  throw new Error(`Question data not found for ${question.QuestionRef} - cannot build real prompt`);
+                }
+              } catch (fetchError) {
+                console.log(`❌ FATAL: Error fetching actual question data: ${fetchError.message}`);
+                throw new Error(`Failed to fetch question data: ${fetchError.message}`);
+              }
+              
+              // Get all answers for this question
+              const answersRes = await db.send(new QueryCommand({
+                TableName: process.env.TABLE_NAME,
+                KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+                ExpressionAttributeValues: {
+                  ':pk': `GAME#${gameId}`,
+                  ':sk': `ANSWER#${questionId}#`
+                }
+              }));
+              
+              console.log('📋 Answer records found:', answersRes.Items.length);
+              console.log('📋 First answer record:', JSON.stringify(answersRes.Items[0], null, 2));
+              
+              // Get all votes for this question
+              const votesRes = await db.send(new QueryCommand({
+                TableName: process.env.TABLE_NAME,
+                KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+                ExpressionAttributeValues: {
+                  ':pk': `GAME#${gameId}`,
+                  ':sk': `VOTE#${questionId}#`
+                }
+              }));
+              
+              // Calculate vote rankings
+              const voteCount = {};
+              votesRes.Items.forEach(vote => {
+                if (vote.Votes) {
+                  vote.Votes.forEach(v => {
+                    if (!voteCount[v.player]) voteCount[v.player] = 0;
+                    voteCount[v.player] += (4 - v.rank); // Higher score for better rank
+                  });
+                }
+              });
+              
+              // Sort answers by vote score
+              const rankedAnswers = answersRes.Items
+                .map(answer => ({
+                  player: answer.SK.split('#')[3],
+                  answer: answer.Answer || answer.AnswerText || answer.answer || 'No answer provided',
+                  score: voteCount[answer.SK.split('#')[3]] || 0
+                }))
+                .sort((a, b) => b.score - a.score);
+              
+              console.log('🎯 Ranked answers:', JSON.stringify(rankedAnswers, null, 2));
+              
+              // Create AI prompt with clear ranking and instructions (with proper tie handling)
+              let currentRank = 1;
+              const responsesText = rankedAnswers.map((answer, idx) => {
+                // Handle ties: if current score is different from previous, update rank
+                if (idx > 0 && answer.score !== rankedAnswers[idx - 1].score) {
+                  currentRank = idx + 1;
+                }
+                
+                const rank = currentRank === 1 ? '🥇 1st Place' : 
+                           currentRank === 2 ? '🥈 2nd Place' : 
+                           currentRank === 3 ? '🥉 3rd Place' : 
+                           `${currentRank}th Place`;
+                           
+                return `${rank}: ${answer.player} - "${answer.answer}" (${answer.score} vote points)`;
+              }).join('\n\n');
+              
+              // Extract question data from actual question record - NO FALLBACKS, REAL DATA ONLY
+              console.log(`🔍 EXTRACT: Extracting real question data (no fallbacks)`);
+              
+              const questionText = actualQuestionData.Title || actualQuestionData.Prompt;
+              const questionCategory = actualQuestionData.Category;
+              const questionDetail = actualQuestionData.Detail;
+              const questionSetId = question.SetId;
+              
+              // Validate that we have all required data
+              if (!questionText) {
+                console.log(`❌ FATAL: No question title/prompt found in actual question data`);
+                throw new Error(`Missing question title for ${questionId} - cannot build real prompt`);
+              }
+              if (!questionCategory) {
+                console.log(`❌ FATAL: No question category found in actual question data`);
+                throw new Error(`Missing question category for ${questionId} - cannot build real prompt`);
+              }
+              if (!questionDetail) {
+                console.log(`❌ FATAL: No question detail found in actual question data`);
+                throw new Error(`Missing question detail for ${questionId} - cannot build real prompt`);
+              }
+              
+              console.log(`✅ EXTRACT SUCCESS: questionText = "${questionText}"`);
+              console.log(`✅ EXTRACT SUCCESS: questionCategory = "${questionCategory}"`);
+              console.log(`✅ EXTRACT SUCCESS: questionDetail = "${questionDetail}"`);
+              
+              // Fetch custom instruction and AI context from question set if available
+              let customInstruction = null;
+              let questionSetAiContext = null;
+              if (questionSetId) {
+                try {
+                  const setResult = await db.send(new GetCommand({
+                    TableName: process.env.TABLE_NAME,
+                    Key: { PK: 'SETS', SK: `SET#${questionSetId}` }
+                  }));
+                  if (setResult.Item) {
+                    if (setResult.Item.CustomInstruction) {
+                      customInstruction = setResult.Item.CustomInstruction;
+                      console.log('📋 Found custom instruction for AI prompt:', customInstruction);
+                    }
+                    if (setResult.Item.AIContextInstruction) {
+                      questionSetAiContext = setResult.Item.AIContextInstruction;
+                      console.log('🎯 Found question set AI context:', questionSetAiContext);
+                    }
+                  }
+                } catch (fetchError) {
+                  console.log('⚠️ Could not fetch question set context:', fetchError.message);
+                }
+              }
+              
+              // Use custom instruction if available, otherwise default context
+              const sessionContext = customInstruction || 
+                'an "Engagements" strategic thinking session where participants apply lessons to their work context';
+              
+              // Build context sections for the AI prompt
+              const contextSections = [];
+              if (gameAiContext) {
+                contextSections.push(`SESSION BACKGROUND: ${gameAiContext}`);
+              }
+              if (questionSetAiContext) {
+                contextSections.push(`QUESTION SET CONTEXT: ${questionSetAiContext}`);
+              }
+              if (customInstruction) {
+                contextSections.push(`PARTICIPANT INSTRUCTIONS: "${customInstruction}"`);
+              }
+              
+              const prompt = `You are an expert business strategist analyzing responses from ${sessionContext}.\n\n` +
+                'LESSON DETAILS:\n' +
+                'Question: "' + questionText + '"\n' +
+                'Category: ' + questionCategory + '\n' +
+                'Context: ' + questionDetail + '\n' +
+                (contextSections.length > 0 ? ('\nCONTEXT INFORMATION:\n' + contextSections.join('\n') + '\n') : '') +
+                '\n' +
+                'PLAYER RESPONSES (ranked by peer voting):\n' + responsesText + '\n\n' +
+                'ANALYSIS INSTRUCTIONS:\n' +
+                'You are analyzing ' + rankedAnswers.length + ' responses that were peer-voted by the team. The responses above are ranked by total vote points, with the highest-scoring response first.' +
+                (contextSections.length > 0 ? 
+                  '\n\nIMPORTANT: Please tailor your analysis based on the provided context information above. Consider the specific background, goals, and instructions relevant to this session.' : 
+                  '')+
+                '\n\nPlease provide your strategic analysis in this EXACT format for reliable parsing:\n\n' +
+                '=== SUMMARY ===\n' +
+                '[Write 2-3 sentences synthesizing the key strategic themes and insights from these responses. Pay special attention to the top-ranked responses as they represent the team\'s collective wisdom.]\n\n' +
+                '=== DISCUSSION QUESTIONS ===\n' +
+                'Q1: [First thought-provoking question that builds on these specific responses for deeper strategic discussion. Reference specific player insights.]\n' +
+                'Q2: [Second question that facilitates strategic discussion based on the responses.]\n' +
+                'Q3: [Third question for deeper strategic discussion.]\n\n' +
+                '=== NEXT STEPS ===\n' +
+                'STEP1: [First concrete, actionable step the team could take based on these insights.]\n' +
+                'STEP2: [Second actionable step, prioritizing ideas from highest-ranked responses.]\n' +
+                'STEP3: [Third actionable step for implementation.]\n' +
+                'STEP4: [Fourth actionable step (optional but recommended).]\n\n' +
+                'Focus on actionable insights that connect directly to what these players shared and the specific context they were asked to consider. Be specific and insightful.';
+              
+              console.log('🤖 FULL AI PROMPT CONSTRUCTED:');
+              console.log('=====================================');
+              console.log(prompt);
+              console.log('=====================================');
+
+              // Call Claude via Bedrock for real AI analysis
+              console.log('🤖 Calling Claude via Bedrock...');
+              
+              let aiResponse;
+              let parsed;
+              
+              try {
+                // Call real AI - NO FALLBACKS, NO MOCK DATA
+                console.log('🤖 CALLING CLAUDE: Sending prompt to Bedrock...');
+                aiResponse = await invokeClaude(prompt);
+                console.log('✅ CLAUDE SUCCESS: Real AI response received');
+                parsed = parseAIResponse(aiResponse);
+              } catch (aiError) {
+                console.log(`❌ CLAUDE FAILED: ${aiError.message}`);
+                throw new Error(`AI analysis unavailable: ${aiError.message}`);
+              }
+              
+              // Store the summary (filter out undefined values)
+              const summaryRecord = {
+                PK: `GAME#${gameId}`,
+                SK: `SUMMARY#${questionId}`,
+                QuestionId: questionId,
+                SummaryText: parsed.summaryText || 'AI analysis completed',
+                DiscussionQuestions: parsed.discussionQuestions || [],
+                NextSteps: parsed.nextSteps || [],
+                FullAIResponse: aiResponse || 'No response',
+                RankedAnswers: rankedAnswers || [],
+                DebugPrompt: prompt || 'No prompt available',
+                CreatedAt: new Date().toISOString(),
+                CreatedBy: 'Claude AI'
+              };
+              
+              await db.send(new PutCommand({
+                TableName: process.env.TABLE_NAME,
+                Item: summaryRecord
+              }));
+              
+              // Broadcast lightweight AI summary ready notification via WebSocket
+              try {
+                await broadcastToGame(gameId, {
+                  type: 'aiSummaryReady',
+                  gameId,
+                  questionId,
+                  timestamp: new Date().toISOString()
+                });
+              } catch (error) {
+                console.log('🔌 WebSocket broadcast failed for AI summary, continuing...', error.message);
+              }
+              
+              summaries.push({
+                questionId,
+                questionText: questionText,
+                summary: parsed.summaryText,
+                discussionQuestions: parsed.discussionQuestions,
+                nextSteps: parsed.nextSteps
+              });
+              
+              console.log(`✅ AI summary generated for question ${questionId}`);
+            }
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ 
+                message: `Successfully generated AI summaries for ${summaries.length} questions`,
+                summaries: summaries
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+            
+          } catch (error) {
+            console.error('🚨 AI Summary generation failed:', error);
+            
+            // Provide user-friendly error messages based on error type
+            let userMessage = 'AI summary could not be retrieved at this moment.';
+            let statusCode = 500;
+            
+            if (error.message.includes('Question data not found') || error.message.includes('Missing QuestionRef')) {
+              userMessage = 'AI summary unavailable: Question data is incomplete. Please contact support.';
+              statusCode = 400;
+            } else if (error.message.includes('AI analysis unavailable')) {
+              userMessage = 'AI summary could not be retrieved at this moment. Please try again later.';
+              statusCode = 503;
+            } else if (error.message.includes('Missing question title') || error.message.includes('Missing question category')) {
+              userMessage = 'AI summary unavailable: Question information is incomplete. Please contact support.';
+              statusCode = 400;
+            }
+            
+            console.log(`🔄 RETURNING USER-FRIENDLY ERROR: ${userMessage}`);
+            
+            return {
+              statusCode: statusCode,
+              body: JSON.stringify({ 
+                error: userMessage,
+                details: error.message // For debugging, can be removed in production
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        AISummaryEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /admin/ai-summary/{gameId}
+            Method: POST
+
+  ### Lambda: Get AI Summary
+  GetAISummaryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getAISummary
+      Runtime: nodejs18.x
+      Timeout: 10
+      MemorySize: 256
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        
+        exports.getAISummary = async (event) => {
+          try {
+            const gameId = event.pathParameters.gameId;
+            const questionId = event.pathParameters.questionId;
+            const debug = event.queryStringParameters?.debug === 'true';
+            
+            console.log(`📖 Fetching AI summary for game ${gameId}, question ${questionId} (v2)`);
+            
+            // Get the summary from DynamoDB
+            const result = await db.get({
+              TableName: process.env.TABLE_NAME,
+              Key: {
+                PK: `GAME#${gameId}`,
+                SK: `SUMMARY#${questionId}`
+              }
+            }).promise();
+            
+            if (!result.Item) {
+              console.log(`❌ No AI summary found for game ${gameId}, question ${questionId}`);
+              return {
+                statusCode: 404,
+                body: JSON.stringify({ error: 'AI summary not found' }),
+                headers: { 'Access-Control-Allow-Origin': '*' }
+              };
+            }
+            
+            console.log(`✅ Found AI summary for question ${questionId}`);
+            console.log(`📝 Summary preview: ${result.Item.SummaryText?.substring(0, 100)}...`);
+            
+            // Return the summary data
+            const response = {
+              summaryText: result.Item.SummaryText || '',
+              discussionQuestions: result.Item.DiscussionQuestions || [],
+              nextSteps: result.Item.NextSteps || [],
+              createdAt: result.Item.CreatedAt || '',
+              questionId: result.Item.QuestionId || questionId
+            };
+            
+            // Include debug info if requested
+            if (debug) {
+              response.debugPrompt = result.Item.DebugPrompt || '';
+              response.fullAIResponse = result.Item.FullAIResponse || '';
+              response.rankedAnswers = result.Item.RankedAnswers || [];
+            }
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify(response),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+            
+          } catch (error) {
+            console.error('Error fetching AI summary:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: 'Failed to fetch AI summary' }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        GetAISummaryEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/summary/{questionId}
+            Method: GET
+
+  ### Lambda: Test Bedrock Integration
+  TestBedrockFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.testBedrock
+      Runtime: nodejs18.x
+      Timeout: 60
+      MemorySize: 256
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource: 
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+      InlineCode: |-
+        const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+        
+        const bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });
+        
+        // Function to call Claude via Bedrock
+        const invokeClaude = async (prompt) => {
+          const modelId = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';
+          
+          console.log(`🤖 Testing Claude with model: ${modelId}`);
+          console.log(`📝 Prompt: ${prompt.substring(0, 100)}...`);
+          
+          const payload = {
+            anthropic_version: 'bedrock-2023-05-31',
+            max_tokens: 500,
+            messages: [
+              {
+                role: 'user',
+                content: [{ type: 'text', text: prompt }],
+              },
+            ],
+          };
+          
+          const command = new InvokeModelCommand({
+            contentType: 'application/json',
+            body: JSON.stringify(payload),
+            modelId,
+          });
+          
+          console.log('📡 Sending request to Bedrock...');
+          const apiResponse = await bedrockClient.send(command);
+          
+          const decodedResponseBody = new TextDecoder().decode(apiResponse.body);
+          const responseBody = JSON.parse(decodedResponseBody);
+          
+          console.log('✅ Bedrock response received successfully');
+          console.log(`📊 Response length: ${responseBody.content[0].text.length} characters`);
+          
+          return responseBody.content[0].text;
+        };
+        
+        exports.testBedrock = async (event) => {
+          try {
+            console.log('🧪 Starting Bedrock test with inference profile...');
+            
+            // Simple test prompt
+            const testPrompt = 'You are a helpful AI assistant. Please provide a brief business strategy analysis with:\\n\\n1. A 2-sentence summary about the importance of strategic planning\\n2. 2 discussion questions about strategy implementation\\n3. 2 concrete next steps for improving strategic planning\\n\\nKeep your response structured and concise.';
+            
+            console.log('🚀 Calling Claude...');
+            const aiResponse = await invokeClaude(testPrompt);
+            
+            console.log('✅ Test completed successfully!');
+            console.log(`📄 Full response: ${aiResponse}`);
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify({
+                success: true,
+                message: 'Bedrock test completed successfully!',
+                modelId: 'us.anthropic.claude-3-5-sonnet-20241022-v2:0',
+                promptLength: testPrompt.length,
+                responseLength: aiResponse.length,
+                response: aiResponse,
+                timestamp: new Date().toISOString()
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+            
+          } catch (error) {
+            console.error('❌ Bedrock test failed:', error);
+            console.error('Error details:', {
+              name: error.name,
+              message: error.message,
+              code: error.$metadata?.httpStatusCode,
+              requestId: error.$metadata?.requestId
+            });
+            
+            return {
+              statusCode: 500,
+              body: JSON.stringify({
+                success: false,
+                error: error.message,
+                errorName: error.name,
+                errorCode: error.$metadata?.httpStatusCode,
+                timestamp: new Date().toISOString(),
+                troubleshooting: {
+                  modelAccess: 'Check if anthropic.claude-3-5-sonnet-20241022-v2:0 is enabled in Bedrock console',
+                  permissions: 'Verify Lambda has bedrock:InvokeModel permissions',
+                  region: 'Ensure Bedrock is available in us-east-1'
+                }
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        TestBedrockEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /test/bedrock
+            Method: GET
+
+  ### Lambda: Get AI Summary
+  GetAISummaryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.getAISummary
+      Runtime: nodejs16.x
+      Timeout: 30
+      MemorySize: 256
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      InlineCode: |-
+        const AWS = require('aws-sdk');
+        const db = new AWS.DynamoDB.DocumentClient();
+        
+        // Fixed runtime to nodejs16.x for aws-sdk compatibility
+        exports.getAISummary = async (event) => {
+          try {
+            const gameId = event.pathParameters.gameId;
+            const questionId = event.pathParameters.questionId;
+            const debugMode = event.queryStringParameters?.debug === 'true';
+            
+            console.log(`📖 Fetching AI summary for game ${gameId}, question ${questionId}, debug: ${debugMode}`);
+            
+            // Get the AI summary record
+            const result = await db.get({
+              TableName: process.env.TABLE_NAME,
+              Key: { 
+                PK: `GAME#${gameId}`, 
+                SK: `SUMMARY#${questionId}` 
+              }
+            }).promise();
+            
+            if (!result.Item) {
+              return {
+                statusCode: 404,
+                body: JSON.stringify({ error: 'AI summary not found' }),
+                headers: { 'Access-Control-Allow-Origin': '*' }
+              };
+            }
+            
+            const response = {
+              questionId: result.Item.QuestionId,
+              summaryText: result.Item.SummaryText,
+              discussionQuestions: result.Item.DiscussionQuestions || [],
+              nextSteps: result.Item.NextSteps || [],
+              createdAt: result.Item.CreatedAt,
+              createdBy: result.Item.CreatedBy
+            };
+            
+            // Include debug prompt if requested
+            if (debugMode && result.Item.DebugPrompt) {
+              response.debugPrompt = result.Item.DebugPrompt;
+            }
+            
+            return {
+              statusCode: 200,
+              body: JSON.stringify(response),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+            
+          } catch (error) {
+            console.error('Get AI Summary error:', error);
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: `Failed to get AI summary: ${error.message}` }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        };
+      Events:
+        GetAISummaryEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GameApi
+            Path: /games/{gameId}/summary/{questionId}
+            Method: GET

@@ -14,6 +14,7 @@ function BuilderPage() {
     description: '',
     customInstructions: '',
     aiContextInstructions: '',
+    promptId: 'lessons-learned', // Default AI prompt
     questions: []
   });
   const [showAIAssistant, setShowAIAssistant] = useState(false);
@@ -108,6 +109,7 @@ function BuilderPage() {
           customDescription: questionSet.description.trim(),
           customInstructions: questionSet.customInstructions.trim(),
           aiContextInstructions: questionSet.aiContextInstructions.trim(),
+          promptId: questionSet.promptId,
           engagementType: engagementType
         })
       });
@@ -122,6 +124,7 @@ function BuilderPage() {
           description: '',
           customInstructions: '',
           aiContextInstructions: '',
+          promptId: 'lessons-learned',
           questions: []
         });
       } else {
@@ -263,6 +266,32 @@ function BuilderPage() {
               />
             </div>
           </div>
+
+          {engagementType === 'call-and-answer' && (
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="prompt-id">AI Summary Prompt</label>
+                <select
+                  id="prompt-id"
+                  value={questionSet.promptId}
+                  onChange={(e) => setQuestionSet(prev => ({ ...prev, promptId: e.target.value }))}
+                  className="input-field"
+                >
+                  <option value="lessons-learned">Lessons Learned - Strategic Insights</option>
+                  <option value="problem-solving">Problem-Solving - Solution Architecture</option>
+                  <option value="team-building">Team Building - Culture & Collaboration</option>
+                  <option value="strategic-planning">Strategic Planning - Vision & Goals</option>
+                  <option value="innovation">Innovation - Creative Solutions</option>
+                  <option value="leadership">Leadership - Development & Growth</option>
+                  <option value="customer-insights">Customer Experience - Voice of Customer</option>
+                  <option value="process-improvement">Process Improvement - Operational Excellence</option>
+                  <option value="change-management">Change Management - Transformation</option>
+                  <option value="interview-prep">Interview Prep - Best Practices</option>
+                </select>
+                <p className="form-helper">Select the AI analysis style for summarizing player responses</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Questions Section */}

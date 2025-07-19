@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# Deploy All - Backend and Frontend for Engage2 Dev Environment
+# Usage: ./deployall
+
+echo "🚀 Starting full deployment for engage2 dev environment..."
+
+# Deploy backend infrastructure and Lambda functions
+echo "📦 Deploying backend (SAM stack + Lambda functions)..."
+./scripts/deploy-clean.sh engdev eng.dev.seibtribe.us
+
+if [ $? -ne 0 ]; then
+    echo "❌ Backend deployment failed!"
+    exit 1
+fi
+
+echo "✅ Backend deployment completed successfully!"
+
+# Deploy frontend
+echo "🌐 Deploying frontend..."
+./scripts/deploy-frontend-eng.sh
+
+if [ $? -ne 0 ]; then
+    echo "❌ Frontend deployment failed!"
+    exit 1
+fi
+
+echo "✅ Frontend deployment completed successfully!"
+echo "🎉 Full deployment complete!"
+echo ""
+echo "🔗 Frontend URL: https://eng.dev.seibtribe.us"
+echo "🔗 API URL: https://r4c24mqku1.execute-api.us-east-1.amazonaws.com/dev"

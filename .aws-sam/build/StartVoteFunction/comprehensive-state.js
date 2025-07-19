@@ -185,15 +185,23 @@ const getGamePlayers = async (gameId) => {
           lastSeenAt: item.LastSeenAt,
           isActive: item.IsActive !== false
         };
+      } else if (item.SK.includes('#SCORE')) {
+        // Player score record (single source of truth for scoring)
+        const playerName = item.PlayerName;
+        players[playerName] = {
+          ...players[playerName],
+          playerName,
+          totalScore: item.score || 0,
+          lastScoredRound: item.afterRound
+        };
       } else {
-        // Player basic record
+        // Player basic record (no scores here - use SCORE record instead)
         const playerName = item.PlayerName || item.SK.replace('PLAYER#', '');
         players[playerName] = {
           ...players[playerName],
           playerName,
-          totalScore: item.TotalScore || 0,
-          currentRank: item.CurrentRank || 0,
-          joinedAt: item.JoinedAt
+          joinedAt: item.JoinedAt,
+          playerId: item.playerId
         };
       }
     });
@@ -262,6 +270,14 @@ const getPlayerState = async (gameId, playerName) => {
       };
     }
     
+    // Get current total score from the score record (single source of truth)
+    const scoreRecord = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}#SCORE` }
+    }));
+    
+    const currentTotalScore = scoreRecord.Item ? scoreRecord.Item.score || 0 : 0;
+
     return {
       playerName: result.Item.PlayerName,
       currentStage: result.Item.CurrentStage || 'JOINED',
@@ -269,8 +285,7 @@ const getPlayerState = async (gameId, playerName) => {
       lastQuestionVoted: result.Item.LastQuestionVoted,
       answeredQuestions: result.Item.AnsweredQuestions || [],
       votedQuestions: result.Item.VotedQuestions || [],
-      totalScore: result.Item.TotalScore || 0,
-      currentRank: result.Item.CurrentRank || 0,
+      totalScore: currentTotalScore,
       lastSeenAt: result.Item.LastSeenAt,
       isActive: result.Item.IsActive !== false
     };

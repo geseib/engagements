@@ -1,0 +1,219 @@
+/* Host Remote Control Styles */
+
+.host-remote {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: #f8f9fa;
+  min-height: 100vh;
+}
+
+.remote-header {
+  text-align: center;
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #e9ecef;
+}
+
+.remote-header h1 {
+  margin: 0 0 15px 0;
+  color: #2c3e50;
+  font-size: 2rem;
+}
+
+.connection-status {
+  margin-top: 10px;
+}
+
+.status-indicator {
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+}
+
+.status-indicator.connected {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-indicator.disconnected {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.game-id-input {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.game-id-input h2 {
+  margin-bottom: 20px;
+  color: #495057;
+}
+
+.remote-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.game-info {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.game-info h2 {
+  margin: 0 0 15px 0;
+  color: #2c3e50;
+}
+
+.game-details p {
+  margin: 8px 0;
+  color: #6c757d;
+}
+
+.host-page-control {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  text-align: center;
+}
+
+.player-join-section {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  text-align: center;
+}
+
+.player-join-section h3 {
+  margin: 0 0 20px 0;
+  color: #2c3e50;
+}
+
+.qr-code-container {
+  margin: 20px 0;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  display: flex;
+  justify-content: center;
+}
+
+.join-url {
+  margin-top: 20px;
+}
+
+.join-url code {
+  display: block;
+  background: #e9ecef;
+  padding: 10px;
+  border-radius: 4px;
+  margin: 10px 0;
+  word-break: break-all;
+  font-size: 14px;
+}
+
+.scroll-controls,
+.game-controls {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.scroll-controls h3,
+.game-controls h3 {
+  margin: 0 0 20px 0;
+  color: #2c3e50;
+}
+
+.control-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 15px;
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-action {
+  padding: 15px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-primary {
+  background: #007bff;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #0056b3;
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: #6c757d;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background: #545b62;
+  transform: translateY(-1px);
+}
+
+.btn-action {
+  background: #28a745;
+  color: white;
+}
+
+.btn-action:hover {
+  background: #1e7e34;
+  transform: translateY(-1px);
+}
+
+.btn-primary.large {
+  font-size: 18px;
+  padding: 20px 30px;
+}
+
+.help-text {
+  margin-top: 10px;
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.change-game {
+  text-align: center;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .host-remote {
+    padding: 15px;
+  }
+  
+  .control-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .qr-code-container canvas {
+    max-width: 100%;
+    height: auto;
+  }
+}

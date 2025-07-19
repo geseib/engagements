@@ -41,13 +41,22 @@ const getPlayerInstructionText = (customInstruction) => {
 
 function PlayerPage() {
   const [gameId, setGameId] = useState('');
+  
+  // Helper function to check if game is in waiting state
+  const isWaitingState = (state) => {
+    if (!state) return true; // Default to waiting state if no state
+    return state === 'CREATED' || state === 'STARTED' || 
+           (!state.startsWith('ASK#') && !state.startsWith('VOTE#') && !state.startsWith('RESULTS#'));
+  };
   const [playerName, setPlayerName] = useState('');
   const [nameInput, setNameInput] = useState('');
+  const [accessCodeInput, setAccessCodeInput] = useState('');
+  const [needsAccessCode, setNeedsAccessCode] = useState(false);
   const [joined, setJoined] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [answerInput, setAnswerInput] = useState('');
   const [hasAnswered, setHasAnswered] = useState(false);
-  const [gameState, setGameState] = useState('waiting'); // waiting, question, voting, results
+  const [gameState, setGameState] = useState('CREATED'); // CREATED, STARTED, ASK#001, VOTE#001, RESULTS#001
   const [gameType, setGameType] = useState('call-and-answer'); // 'call-and-answer' or 'trivia'
   const [selectedTriviaAnswer, setSelectedTriviaAnswer] = useState(null); // For trivia: stores selected option letter
   const [answers, setAnswers] = useState([]);
@@ -62,6 +71,7 @@ function PlayerPage() {
   const [votingMode, setVotingMode] = useState('quick'); // 'quick' or 'detailed'
   const [playerScore, setPlayerScore] = useState(0);
   const [playerRanking, setPlayerRanking] = useState(null);
+  const [playerScoreInfo, setPlayerScoreInfo] = useState(null);
   const [allPlayers, setAllPlayers] = useState([]);
   const [customInstruction, setCustomInstruction] = useState(null);
   const [lastProcessedQuestionId, setLastProcessedQuestionId] = useState(null);
@@ -129,13 +139,16 @@ function PlayerPage() {
   }, []);
 
   // 🔄 Attempt to automatically join the game
-  const attemptAutoJoin = async (gameId, name) => {
+  const attemptAutoJoin = async (gameId, name, accessCode = null) => {
     try {
       console.log(`🔄 PLAYER: Auto-joining game ${gameId} as ${name}`);
       const joinRes = await fetch(`${API_BASE}games/${gameId}/players`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim() }),
+        body: JSON.stringify({ 
+          playerName: name.trim(),
+          accessCode: accessCode 
+        }),
       });
 
       if (joinRes.ok) {
@@ -161,6 +174,18 @@ function PlayerPage() {
         url.searchParams.set('name', name.trim());
         window.history.replaceState(null, '', url);
       } else {
+        // Check if this is an access code error
+        try {
+          const errorData = await joinRes.json();
+          if (errorData.error === 'Access code required') {
+            console.log(`🔐 PLAYER: Game requires access code - showing access code input`);
+            setNeedsAccessCode(true);
+            setPlayerName(name.trim());
+            return;
+          }
+        } catch (parseError) {
+          // Ignore parse errors for non-JSON responses
+        }
         console.log(`❌ PLAYER: Auto-join failed - will show join form`);
       }
     } catch (e) {
@@ -168,90 +193,7 @@ function PlayerPage() {
     }
   };
 
-  // Save partial vote state to server
-  const savePartialVote = async (playerName, questionId, votes) => {
-    if (!gameId || !playerName || !questionId) return;
-    
-    // Only save if there are actual votes to preserve
-    const hasVotes = Object.values(votes).some(v => v !== '');
-    if (!hasVotes) return;
-    
-    try {
-      const response = await fetch(`${API_BASE}games/${gameId}/partial-votes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          playerName: playerName,
-          questionNumber: questionId,
-          votes: votes
-        })
-      });
-      
-      if (response.ok) {
-        console.log('💾 PLAYER: Partial vote saved to server', { questionId, votes });
-      } else {
-        console.error('Failed to save partial vote:', response.status);
-      }
-    } catch (e) {
-      console.error('Failed to save partial vote:', e);
-    }
-  };
-
-  // Restore partial vote from server
-  const restorePartialVote = async (playerName, questionId) => {
-    if (!gameId || !playerName || !questionId) return;
-    
-    try {
-      const response = await fetch(`${API_BASE}games/${gameId}/partial-votes?playerName=${playerName}&questionNumber=${questionId}`, {
-        // Add headers to suppress console 404 logging in browser
-        headers: {
-          'Accept': 'application/json'
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        
-        // Set protection flags to prevent polling interference
-        setLastVoteInteraction(Date.now());
-        setIsUserVoting(true);
-        
-        // Restore vote state
-        setVotes(data.votes || { first: '', second: '', third: '' });
-        
-        // Clear protection flag
-        setTimeout(() => {
-          setIsUserVoting(false);
-        }, 2000);
-        
-        console.log('🔄 PLAYER: Partial vote restored from server', data.votes);
-        return true;
-      } else if (response.status === 404) {
-        // 404 is expected for first vote - don't log as error
-        console.log('🔄 PLAYER: No partial vote found - starting fresh');
-        return false;
-      } else {
-        // Only log unexpected errors
-        console.error('🚨 PLAYER: Unexpected error restoring partial vote:', response.status);
-        return false;
-      }
-    } catch (e) {
-      console.error('Failed to restore partial vote:', e);
-      return false;
-    }
-  };
-
-  // Clean up partial vote on game end
-  const cleanupPartialVote = async (playerName, questionId) => {
-    if (!gameId || !playerName || !questionId) return;
-    
-    try {
-      // Partial votes have TTL, but we can clean up immediately when votes are submitted
-      console.log('🧹 PLAYER: Partial vote will auto-expire via TTL');
-    } catch (e) {
-      console.error('Failed to cleanup partial vote:', e);
-    }
-  };
+  // REMOVED: Partial vote system - not needed with simplified flow
 
   // REMOVED: HTTP polling - WebSocket handles all state updates
 
@@ -303,14 +245,38 @@ function PlayerPage() {
 
     webSocketClient.onMessage('questionStarted', (data) => {
       console.log('🔌 Player received question started notification:', data);
-      // Fetch current game state from API
-      checkGameState();
+      // Parse the state message to extract question number
+      const stateMessage = data.state; // e.g., "GAME#9402 ASK#001"
+      if (stateMessage && stateMessage.includes('ASK#')) {
+        const questionNumber = stateMessage.split('ASK#')[1]; // Extract "001"
+        console.log(`🎯 Player calling get_question for question ${questionNumber}`);
+        // Update game state first, then fetch question
+        setGameState(`ASK#${questionNumber}`);
+        fetchCurrentQuestion(questionNumber);
+      } else {
+        console.log('⚠️ Player received questionStarted without valid state format');
+      }
     });
 
     webSocketClient.onMessage('votingStarted', (data) => {
       console.log('🔌 Player received voting started notification:', data);
-      // Fetch current game state from API to get voting data
-      checkGameState();
+      // Parse the state message to extract question number
+      const stateMessage = data.state; // e.g., "GAME#9402 VOTE#001"
+      if (stateMessage && stateMessage.includes('VOTE#')) {
+        const questionNumber = stateMessage.split('VOTE#')[1]; // Extract "001"
+        console.log(`🗳️ Player calling voting for question ${questionNumber}`);
+        // Update game state first, then fetch voting data
+        setGameState(`VOTE#${questionNumber}`);
+        // Clear previous votes when starting new voting round
+        setVotes({ first: '', second: '', third: '' });
+        setHasVoted(false);
+        console.log('🔄 Cleared previous votes for new voting round');
+        checkGameState();
+      } else {
+        console.log('⚠️ Player received votingStarted without valid state format');
+        // Fallback to checkGameState
+        checkGameState();
+      }
     });
 
     webSocketClient.onMessage('playerAnswered', (data) => {
@@ -429,6 +395,72 @@ function PlayerPage() {
     }
   };
 
+  // Check if player has already answered this question
+  const checkPlayerAnswer = async (gameId, playerName, questionNumber) => {
+    try {
+      const answerRes = await fetch(`${API_BASE}games/${gameId}/answers?player=${encodeURIComponent(playerName)}&question=${questionNumber}`);
+      if (answerRes.ok) {
+        const answerData = await answerRes.json();
+        return answerData.hasAnswer || false;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error checking player answer:', error);
+      return false;
+    }
+  };
+
+  // Fetch current question using get_question API (same as host)
+  const fetchCurrentQuestion = async (questionNumber) => {
+    if (!gameId) {
+      console.log('⏭️ PLAYER: Skipping fetchCurrentQuestion - no gameId');
+      return;
+    }
+    
+    try {
+      console.log(`🎯 PLAYER: Fetching question ${questionNumber} for game ${gameId}`);
+      const questionRes = await fetch(`${API_BASE}games/${gameId}/question?role=player`);
+      
+      if (!questionRes.ok) {
+        console.error('❌ Failed to fetch question:', questionRes.status);
+        return;
+      }
+      
+      const questionData = await questionRes.json();
+      console.log('✅ PLAYER: Received question data:', questionData);
+      console.log('🔍 PLAYER: Question data keys:', Object.keys(questionData));
+      console.log('🔍 PLAYER: Question title:', questionData.title);
+      console.log('🔍 PLAYER: Current gameState when setting question:', gameState);
+      
+      if (questionData.title) {
+        // Set the question data - question data is at top level, not nested
+        setCurrentQuestion(questionData);
+        console.log('✅ PLAYER: currentQuestion state updated with:', questionData);
+        
+        // Check if player has already answered this question
+        const hasAnswered = await checkPlayerAnswer(gameId, playerName, questionNumber);
+        setHasAnswered(hasAnswered);
+        
+        // Reset answer input for new question
+        if (!hasAnswered) {
+          setAnswerInput('');
+          setSelectedTriviaAnswer('');
+        }
+        
+        // Fetch question set instructions
+        if (questionData.setId) {
+          fetchQuestionSetInstruction(questionData.setId);
+        }
+        
+        console.log(`🎯 PLAYER: Question ${questionNumber} loaded, hasAnswered: ${hasAnswered}`);
+      } else {
+        console.log('⚠️ PLAYER: No question data received');
+      }
+    } catch (error) {
+      console.error('❌ PLAYER: Error fetching question:', error);
+    }
+  };
+
   const checkGameState = async (gameIdOverride = null, playerNameOverride = null) => {
     const currentGameId = gameIdOverride || gameId;
     const currentPlayerName = playerNameOverride || playerName;
@@ -439,11 +471,11 @@ function PlayerPage() {
     }
     
     try {
-      // Check game state from the database
+      // Get game state from the database
       const stateRes = await fetch(`${API_BASE}games/${currentGameId}/state`);
       const stateJson = await stateRes.json();
-      const serverGameState = stateJson.state || 'waiting';
-      const currentQuestionNumber = stateJson.currentQuestion; // Use currentQuestion (sequential number)
+      console.log('🔍 PLAYER: Raw state API response:', stateJson);
+      const serverGameState = stateJson.state || 'CREATED';
       const serverGameType = stateJson.gameType || 'call-and-answer';
       
       // Update game type if changed
@@ -451,124 +483,284 @@ function PlayerPage() {
         setGameType(serverGameType);
       }
       
-      if (serverGameState === 'question' && currentQuestionNumber) {
-        // Get the current question from the game state data
-        const newQuestionData = stateJson.currentQuestionData;
+      console.log(`🔄 PLAYER: Game state is ${serverGameState}`);
+      
+      // Set the game state directly (no mapping needed)
+      setGameState(serverGameState);
+      
+      // Handle different game states
+      if (serverGameState.startsWith('ASK#')) {
+        // Extract question number from ASK#001 format
+        const questionNumber = serverGameState.split('#')[1];
+        console.log(`🎯 PLAYER: ASK state detected, question ${questionNumber}`);
         
-        if (newQuestionData) {
-          console.log(`✅ PLAYER: Found question in state:`, newQuestionData);
-          console.log(`📝 PLAYER: Question number: ${currentQuestionNumber}`);
+        // Use the new fetchCurrentQuestion function (same as WebSocket flow)
+        await fetchCurrentQuestion(questionNumber);
+        
+      } else if (serverGameState.startsWith('VOTE#')) {
+        // Extract question number from VOTE#001 format
+        const questionNumber = serverGameState.split('#')[1];
+        console.log(`🗳️ PLAYER: VOTE state detected, question ${questionNumber}`);
+        
+        // Clear previous votes when moving to new voting round
+        if (gameState !== serverGameState) {
+          setVotes({ first: '', second: '', third: '' });
+          setHasVoted(false);
+          console.log('🔄 Cleared previous votes for new voting round');
+        }
+        
+        // Load voting data for this question
+        await loadVotingData(questionNumber);
+        
+      } else if (serverGameState.startsWith('RESULTS#')) {
+        // Extract question number from RESULTS#001 format
+        const questionNumber = serverGameState.split('#')[1];
+        console.log(`🏆 PLAYER: RESULTS state detected, question ${questionNumber}`);
+        
+        // Load results data for this question
+        await loadResultsData(questionNumber);
+        
+      } else {
+        // CREATED, STARTED, or other states
+        console.log(`⏳ PLAYER: Game in ${serverGameState} state`);
+        setGameState(serverGameState);
+        setCurrentQuestion(null);
+        setAnswers([]);
+        setHasAnswered(false);
+        setHasVoted(false);
+      }
+      
+    } catch (error) {
+      console.error('❌ PLAYER: Error checking game state:', error);
+    }
+  };
+  
+  // Load voting data for the current question
+  const loadVotingData = async (questionNumber) => {
+    if (!gameId || !playerName) {
+      console.log('⏭️ PLAYER: Skipping loadVotingData - no gameId or playerName');
+      return;
+    }
+    
+    try {
+      console.log(`🗳️ PLAYER: Loading voting data for question ${questionNumber} in game ${gameId}`);
+      
+      // First, check if player has already voted by checking game state
+      const hasAlreadyVoted = await checkPlayerVote(gameId, playerName, questionNumber);
+      setHasVoted(hasAlreadyVoted);
+      
+      if (hasAlreadyVoted) {
+        console.log(`✅ PLAYER: Already voted on question ${questionNumber} - showing vote submitted screen`);
+        // Just need to load question data for display
+        const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
+        const stateData = await stateRes.json();
+        
+        if (stateData.currentQuestionData) {
+          setCurrentQuestion(stateData.currentQuestionData);
+        }
+        return; // Don't need to load answers if already voted
+      }
+      
+      // Player hasn't voted yet - load question and answers
+      console.log(`📋 PLAYER: Not voted yet - loading question and answers`);
+      
+      // Get question data from game state
+      const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
+      const stateData = await stateRes.json();
+      
+      if (stateData.currentQuestionData) {
+        setCurrentQuestion(stateData.currentQuestionData);
+        console.log(`✅ PLAYER: Question data loaded: ${stateData.currentQuestionData.title}`);
+      }
+      
+      // Get answers for voting
+      const paddedQuestionNumber = String(questionNumber).padStart(3, '0');
+      const answersRes = await fetch(`${API_BASE}games/${gameId}/answers?role=player&questionId=${paddedQuestionNumber}`);
+      const answersJson = await answersRes.json();
+      
+      if (answersJson.answers && answersJson.answers.length > 0) {
+        setAnswers(answersJson.answers);
+        console.log(`✅ PLAYER: Loaded ${answersJson.answers.length} answers for voting`);
+      } else {
+        console.log(`⚠️ PLAYER: No answers found for voting on question ${questionNumber}`);
+      }
+    } catch (error) {
+      console.error('❌ PLAYER: Error loading voting data:', error);
+    }
+  };
+  
+  // Load results data for the current question
+  const loadResultsData = async (questionNumber) => {
+    if (!gameId) {
+      console.log('⏭️ PLAYER: Skipping loadResultsData - no gameId');
+      return;
+    }
+    
+    try {
+      console.log(`🏆 PLAYER: Loading results data for question ${questionNumber} in game ${gameId}`);
+      
+      // Try to get the current question data, but don't block results if it fails
+      try {
+        const questionRes = await fetch(`${API_BASE}games/${gameId}/question?role=player`);
+        if (questionRes.ok) {
+          const questionData = await questionRes.json();
+          if (questionData.title) {
+            setCurrentQuestion(questionData);
+          }
+        } else {
+          console.log(`ℹ️ PLAYER: Question endpoint not available (${questionRes.status}), proceeding with results only`);
+        }
+      } catch (questionError) {
+        console.log(`ℹ️ PLAYER: Could not fetch question data:`, questionError.message);
+      }
+      
+      // Get results for this question (independent of question data)
+      const resultsRes = await fetch(`${API_BASE}games/get-results`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          gameId: gameId,
+          questionNumber: questionNumber 
+        })
+      });
+      const resultsJson = await resultsRes.json();
+      
+      if (resultsJson.voteTallies) {
+        setResults(resultsJson);
+        console.log(`✅ PLAYER: Results data loaded, voteTallies:`, Object.keys(resultsJson.voteTallies).length);
+        
+        // Get player rankings and score information for RESULTS display
+        await loadPlayerScoreInfo(resultsJson);
+      } else {
+        console.log(`⚠️ PLAYER: No results data found for question ${questionNumber}`, resultsJson);
+        
+        // Still load player score info even if no results for this question
+        await loadPlayerScoreInfo();
+      }
+      
+    } catch (error) {
+      console.error('❌ PLAYER: Error loading results data:', error);
+    }
+  };
+
+  // Load player score info including ranking and total score
+  const loadPlayerScoreInfo = async (currentResults = null) => {
+    if (!gameId || !playerName) {
+      console.log('⏭️ PLAYER: Skipping loadPlayerScoreInfo - no gameId or playerName');
+      return;
+    }
+    
+    try {
+      console.log(`📊 PLAYER: Loading player score info for ${playerName} in game ${gameId}`);
+      
+      // Get all players with current scores and rankings
+      const playersRes = await fetch(`${API_BASE}games/${gameId}/players`);
+      const playersData = await playersRes.json();
+      
+      if (playersData.players) {
+        // Sort players by total score (descending) to determine rankings
+        const rankedPlayers = playersData.players.sort((a, b) => b.totalScore - a.totalScore);
+        
+        // Find current player in the rankings
+        const currentPlayerIndex = rankedPlayers.findIndex(p => p.playerName === playerName);
+        
+        if (currentPlayerIndex !== -1) {
+          const currentPlayer = rankedPlayers[currentPlayerIndex];
           
-          // Check if this is a NEW question by comparing against the last processed question ID
-          const isNewQuestion = lastProcessedQuestionId !== currentQuestionNumber;
-          
-          // Set the current question ID to the sequential number for consistency
-          newQuestionData.id = currentQuestionNumber;
-          
-          setCurrentQuestion(newQuestionData);
-          
-          // Fetch custom instruction for this question's set
-          if (newQuestionData.setId || newQuestionData.SetId) {
-            fetchQuestionSetInstruction(newQuestionData.setId || newQuestionData.SetId);
+          // Calculate ranking with proper tie handling
+          let rank = 1;
+          for (let i = 0; i < currentPlayerIndex; i++) {
+            if (rankedPlayers[i].totalScore > currentPlayer.totalScore) {
+              rank = i + 2; // +2 because we want 1-based indexing and account for ties
+              break;
+            }
           }
           
-          // CRITICAL FIX: Only check answer status and reset state for NEW questions
-          // This prevents race conditions that cause auto-submission
-          if (isNewQuestion) {
-            console.log(`🆕 PLAYER: New question detected (${currentQuestionNumber}) - checking answer status`);
-            
-            // Mark this question as processed to prevent repeated processing
-            setLastProcessedQuestionId(currentQuestionNumber);
-            
-            // Check if player has already answered this question
-            const answersRes = await fetch(`${API_BASE}games/${currentGameId}/answers?questionNumber=${currentQuestionNumber}`);
-            const answersJson = await answersRes.json();
-            const playerAnswer = answersJson.answers?.find(a => 
-              a.name === currentPlayerName && a.questionNumber === currentQuestionNumber
-            );
-            
-            if (playerAnswer) {
-              setHasAnswered(true);
-              console.log(`✅ PLAYER: Already answered this question`);
+          // Alternative simpler ranking: currentPlayerIndex + 1 (since array is sorted)
+          // But using above logic for proper tie handling
+          if (currentPlayerIndex === 0) {
+            rank = 1; // First in sorted array = 1st place
+          } else {
+            // Check if tied with previous player
+            if (rankedPlayers[currentPlayerIndex - 1].totalScore === currentPlayer.totalScore) {
+              // Find the rank of the first player with this score
+              for (let i = 0; i < currentPlayerIndex; i++) {
+                if (rankedPlayers[i].totalScore === currentPlayer.totalScore) {
+                  rank = i + 1;
+                  break;
+                }
+              }
             } else {
-              setHasAnswered(false);
-              // Always reset trivia selection for new questions
-              setSelectedTriviaAnswer(null);
-              console.log(`📝 PLAYER: Ready to answer new question - reset trivia selection`);
+              rank = currentPlayerIndex + 1; // Normal ranking
+            }
+          }
+          
+          // Get round score from current results (use parameter if provided, otherwise state)
+          let roundScore = 0;
+          const resultsToUse = currentResults || results;
+          
+          if (resultsToUse && resultsToUse.voteTallies) {
+            const playerResult = Object.values(resultsToUse.voteTallies).find(tally => 
+              tally.playerName === playerName
+            );
+            if (playerResult) {
+              roundScore = playerResult.totalScore || 0;
+              console.log(`📊 PLAYER: Found round score for ${playerName}: ${roundScore}`);
+            } else {
+              console.log(`📊 PLAYER: No round score found for ${playerName} in voteTallies`);
             }
           } else {
-            console.log(`🔄 PLAYER: Same question (${currentQuestionNumber}) - preserving answer state`);
+            console.log(`📊 PLAYER: No results data available for round score calculation`);
           }
           
-          // Reset voting state for new question (but preserve if user is actively voting)
-          const recentInteraction = Date.now() - lastVoteInteraction < 2000;
-          if (!recentInteraction && !isUserVoting) {
-            setVotes({ first: '', second: '', third: '' });
-          }
-          setHasVoted(false);
+          const scoreInfo = {
+            playerName: currentPlayer.playerName,
+            totalScore: currentPlayer.totalScore,
+            roundScore: roundScore,
+            rank: rank,
+            totalPlayers: rankedPlayers.length,
+            rankDisplay: rank === 1 ? '🥇 1st Place' : 
+                       rank === 2 ? '🥈 2nd Place' : 
+                       rank === 3 ? '🥉 3rd Place' : 
+                       `${rank}th Place`
+          };
           
-          setGameState('question');
+          setPlayerScoreInfo(scoreInfo);
+          console.log(`📊 PLAYER: Score info loaded:`, scoreInfo);
         } else {
-          // Fallback: question not found in state yet, might still be loading
-          console.log(`⚠️ PLAYER: Question ${currentQuestionNumber} not found in game state, waiting...`);
-        }
-      } else if (serverGameState === 'voting') {
-        // Get answers for voting
-        const answersRes = await fetch(`${API_BASE}games/${currentGameId}/answers?questionNumber=${currentQuestionNumber}`);
-        const answersJson = await answersRes.json();
-        const gameAnswers = answersJson.answers || [];
-        
-        // Check if player has already voted for this specific question
-        const votesRes = await fetch(`${API_BASE}games/${currentGameId}/votes?questionNumber=${currentQuestionNumber}`);
-        const votesJson = await votesRes.json();
-        const playerVote = votesJson.votes?.find(v => v.voter === currentPlayerName && v.questionNumber === currentQuestionNumber);
-        
-        if (playerVote) {
-          setHasVoted(true);
-          console.log('✅ PLAYER: Already voted for this question');
-        } else {
-          setHasVoted(false);
-          
-          // Check for partial votes on server if we don't have local votes
-          const hasActiveVotes = Object.values(votes).some(v => v !== '');
-          const recentInteraction = Date.now() - lastVoteInteraction < 5000;
-          
-          if (!hasActiveVotes && !recentInteraction && !isUserVoting) {
-            // Try to restore partial vote from server
-            restorePartialVote(currentPlayerName, currentQuestionNumber).then((restored) => {
-              if (!restored) {
-                // No partial vote found, start fresh
-                setVotes({ first: '', second: '', third: '' });
-                console.log('🗑️ PLAYER: No partial vote - starting fresh');
-              }
-            });
-          }
-        }
-        
-        setAnswers(gameAnswers);
-        setGameState('voting');
-      } else if (serverGameState === 'results') {
-        setGameState('results');
-        // Fetch player ranking and scores for results display
-        fetchPlayerRanking(currentGameId, currentPlayerName);
-      } else {
-        // Waiting state
-        if (gameState !== 'waiting') {
-          setGameState('waiting');
-          setHasAnswered(false);
-          setCurrentQuestion(null);
-          setAnswers([]);
-          
-          // Only reset votes if user isn't actively voting
-          const recentInteraction = Date.now() - lastVoteInteraction < 2000;
-          if (!recentInteraction && !isUserVoting) {
-            setVotes({ first: '', second: '', third: '' });
-          }
-          setHasVoted(false);
+          console.log(`⚠️ PLAYER: Could not find ${playerName} in player rankings`);
         }
       }
-    } catch (e) {
-      console.error('checkGameState error', e);
+    } catch (error) {
+      console.error('❌ PLAYER: Error loading player score info:', error);
+    }
+  };
+  
+  // Check if player has already voted by checking if vote record exists
+  const checkPlayerVote = async (gameId, playerName, questionNumber) => {
+    try {
+      // We need to check if the vote record exists for this player
+      // Since we don't have the playerId, we'll need to use a different approach
+      // The WebSocket system stores votes with the player name, so let's check directly
+      
+      // First, let's try to find the player ID by getting all players and finding by name
+      // But for now, let's use a more direct approach - check if the player is in the hasVoted list
+      
+      const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
+      if (stateRes.ok) {
+        const stateData = await stateRes.json();
+        
+        // Check if this player is in the voters list during voting phase
+        if (stateData.votingProgress && stateData.votingProgress.votersIds) {
+          const hasVoted = stateData.votingProgress.votersIds.includes(playerName);
+          console.log(`🗳️ PLAYER: Vote check for ${playerName}: ${hasVoted ? 'already voted' : 'not voted yet'}`);
+          return hasVoted;
+        }
+      }
+      return false;
+    } catch (error) {
+      console.error('Error checking player vote:', error);
+      return false;
     }
   };
 
@@ -588,7 +780,10 @@ function PlayerPage() {
       const joinRes = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: nameInput.trim() }),
+        body: JSON.stringify({ 
+          playerName: nameInput.trim(),
+          accessCode: accessCodeInput.trim() || null
+        }),
       });
 
       console.log('📡 RESPONSE DEBUGGING:');
@@ -604,7 +799,14 @@ function PlayerPage() {
         try {
           const errorData = await joinRes.json();
           console.log('Join error response:', errorData);
-          alert(errorData.error || 'Failed to join game. Please check the game ID and try again.');
+          
+          // Check if this is an access code error
+          if (errorData.error === 'Access code required') {
+            setNeedsAccessCode(true);
+            return;
+          }
+          
+          alert(errorData.message || errorData.error || 'Failed to join game. Please check the game ID and try again.');
         } catch (parseError) {
           console.error('Failed to parse error response:', parseError);
           alert('Failed to join game. Please check the game ID and try again.');
@@ -647,6 +849,47 @@ function PlayerPage() {
     }
   };
 
+  // Handle access code submission
+  const handleAccessCodeSubmit = async (e) => {
+    e.preventDefault();
+    if (!accessCodeInput.trim()) return;
+    
+    try {
+      const joinRes = await fetch(`${API_BASE}games/${gameId}/players`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          playerName: nameInput.trim(),
+          accessCode: accessCodeInput.trim()
+        }),
+      });
+
+      if (joinRes.ok) {
+        const successData = await joinRes.json();
+        console.log('✅ PLAYER: Access code join success:', successData);
+        
+        setPlayerName(nameInput.trim());
+        setJoined(true);
+        setNeedsAccessCode(false);
+        localStorage.setItem(`playerName_${gameId}`, nameInput.trim());
+        
+        // Check if this was a rejoin
+        if (successData.rejoined) {
+          setRejoinedPlayer(true);
+        }
+        
+        // Immediately check game state to load current question/voting/results
+        setTimeout(() => checkGameState(gameId, nameInput.trim()), 100);
+      } else {
+        const errorData = await joinRes.json();
+        alert(errorData.message || errorData.error || 'Invalid access code. Please try again.');
+      }
+    } catch (error) {
+      console.error('Access code submission error:', error);
+      alert('Network error. Please check your connection and try again.');
+    }
+  };
+
   const handleSubmitAnswer = async (e, triviaAnswer = null) => {
     if (e) e.preventDefault();
     
@@ -666,18 +909,23 @@ function PlayerPage() {
     }
 
     try {
-      await fetch(`${API_BASE}games/${gameId}/answers`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: playerName,
-          questionNumber: currentQuestion.id,
-          answer: answer,
-        }),
+      // Use WebSocket to submit answer (following the ANSWER# pattern)
+      const questionNumber = currentQuestion.questionNumber || currentQuestion.id;
+      const messageType = `ANSWER#${questionNumber}`;
+      
+      console.log(`🎯 PLAYER: Submitting answer via WebSocket - messageType: ${messageType}`);
+      
+      // Send answer via WebSocket
+      webSocketClient.sendCleanMessage(messageType, {
+        answer: answer,
+        answerType: gameType === 'trivia' ? 'trivia' : 'text'
       });
       
       setHasAnswered(true);
       setAnswerInput('');
+      setSelectedTriviaAnswer('');
+      
+      console.log(`✅ PLAYER: Answer submitted successfully`);
     } catch (e) {
       console.error('handleSubmitAnswer error', e);
       alert('Failed to submit answer. Please try again.');
@@ -709,7 +957,7 @@ function PlayerPage() {
     
     // Save partial vote to server immediately after vote change
     if (currentQuestion?.id) {
-      setTimeout(() => savePartialVote(playerName, currentQuestion.id, newVotes), 100);
+      // Vote changes are stored in component state only
     }
     
     // Enhanced logging with mobile detection
@@ -745,6 +993,13 @@ function PlayerPage() {
     if (votes.first !== '') backendVotes[parseInt(votes.first)] = 1;
     if (votes.second !== '') backendVotes[parseInt(votes.second)] = 2;
     if (votes.third !== '') backendVotes[parseInt(votes.third)] = 3;
+    
+    // Validate that we have vote data
+    if (Object.keys(backendVotes).length === 0) {
+      console.error('🚨 PLAYER: No votes to submit!', { votes, backendVotes });
+      alert('No votes selected. Please select your rankings first.');
+      return;
+    }
 
     try {
       // Get current question number from game state
@@ -752,20 +1007,60 @@ function PlayerPage() {
       const stateJson = await stateRes.json();
       const currentQuestionNumber = stateJson.currentQuestion;
 
-      await fetch(`${API_BASE}games/${gameId}/votes`, {
+      if (!currentQuestionNumber) {
+        alert('Unable to determine current question. Please try again.');
+        return;
+      }
+
+      console.log(`🗳️ PLAYER: Submitting votes via HTTP API for question ${currentQuestionNumber}`);
+      console.log(`🗳️ PLAYER: Vote data being sent:`, {
+        playerName: playerName,
+        questionNumber: currentQuestionNumber,
+        votes: backendVotes
+      });
+      
+      // Send vote via HTTP API (following design doc architecture)
+      const voteRes = await fetch(`${API_BASE}games/${gameId}/votes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: playerName,
+          playerName: playerName,
           questionNumber: currentQuestionNumber,
-          votes: backendVotes,
-        }),
+          votes: backendVotes
+        })
       });
       
+      if (!voteRes.ok) {
+        const errorData = await voteRes.json();
+        
+        // Check if voting has closed
+        if (errorData.error === 'Invalid game state for voting' && errorData.currentState && errorData.currentState.startsWith('RESULTS#')) {
+          console.log('⏰ PLAYER: Voting has closed, transitioning to results');
+          alert('Voting has closed. Moving to results...');
+          
+          // Update state to results
+          setGameState(errorData.currentState);
+          setHasVoted(true); // Prevent further vote attempts
+          
+          // Fetch current game state and results, including player score info
+          await checkGameState();
+          
+          // Load player score information for the results display
+          await loadPlayerScoreInfo();
+          return;
+        }
+        
+        throw new Error(errorData.error || 'Failed to submit vote');
+      }
+      
       setHasVoted(true);
+      
+      // Vote submitted successfully
+      
+      console.log(`✅ PLAYER: Vote submitted successfully`);
     } catch (e) {
       console.error('handleSubmitVotes error', e);
-      alert('Failed to submit votes. Please try again.');
+      alert(e.message || 'Failed to submit votes. Please try again.');
     }
   };
 
@@ -874,28 +1169,59 @@ function PlayerPage() {
                 </p>
               </div>
             )}
-            <form onSubmit={handleJoinGame} className="join-form">
-              <input
-                type="text"
-                value={gameId}
-                onChange={(e) => setGameId(e.target.value)}
-                placeholder="Game ID"
-                className="input-field"
-                required
-                readOnly={gameIdFromUrl} // Make read-only if game ID came from URL
-              />
-              <input
-                type="text"
-                value={nameInput}
-                onChange={(e) => setNameInput(e.target.value)}
-                placeholder="Your Name"
-                className="input-field"
-                required
-              />
-              <button type="submit" className="btn-primary btn-large">
-                Join Game
-              </button>
-            </form>
+            {needsAccessCode ? (
+              <div className="access-code-form">
+                <h3>🔐 Private Game</h3>
+                <p>This game requires an access code to join.</p>
+                <form onSubmit={handleAccessCodeSubmit} className="join-form">
+                  <input
+                    type="text"
+                    value={accessCodeInput}
+                    onChange={(e) => setAccessCodeInput(e.target.value)}
+                    placeholder="Enter Access Code"
+                    className="input-field"
+                    required
+                  />
+                  <button type="submit" className="btn-primary btn-large">
+                    Join Game
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn-secondary btn-large"
+                    onClick={() => {
+                      setNeedsAccessCode(false);
+                      setAccessCodeInput('');
+                      setNameInput('');
+                    }}
+                  >
+                    Back
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <form onSubmit={handleJoinGame} className="join-form">
+                <input
+                  type="text"
+                  value={gameId}
+                  onChange={(e) => setGameId(e.target.value)}
+                  placeholder="Game ID"
+                  className="input-field"
+                  required
+                  readOnly={gameIdFromUrl} // Make read-only if game ID came from URL
+                />
+                <input
+                  type="text"
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  placeholder="Your Name"
+                  className="input-field"
+                  required
+                />
+                <button type="submit" className="btn-primary btn-large">
+                  Join Game
+                </button>
+              </form>
+            )}
           </div>
         </div>
       </div>
@@ -935,7 +1261,7 @@ function PlayerPage() {
         </div>
 
       <div className="game-content">
-        {gameState === 'waiting' && (
+        {isWaitingState(gameState) && (
           <div className="waiting-screen">
             <h2>✅ You're in!</h2>
             <p>Waiting for the game to start...</p>
@@ -946,7 +1272,7 @@ function PlayerPage() {
           </div>
         )}
 
-        {gameState === 'question' && currentQuestion && (
+        {gameState.startsWith('ASK#') && currentQuestion && (
           <div className="question-screen">
             <div className="question-header">
               <div className="field-badge">
@@ -1071,7 +1397,7 @@ function PlayerPage() {
           </div>
         )}
 
-        {gameState === 'voting' && answers.length > 0 && (
+        {gameState.startsWith('VOTE#') && answers.length > 0 && (
           <div className="voting-screen">
             <h2>🗳️ Vote for the Best Applications</h2>
             <p>Which applications would be most valuable for teams to implement?</p>
@@ -1166,7 +1492,7 @@ function PlayerPage() {
           </div>
         )}
 
-        {gameState === 'results' && (
+        {gameState.startsWith('RESULTS#') && (
           <div className="results-screen">
             <h2>📊 Round Results</h2>
             
@@ -1229,21 +1555,43 @@ function PlayerPage() {
             ) : (
               <div className="call-and-answer-results">
                 <div className="player-results-summary">
-                  <div className="player-total-score">
-                    <span className="score-label">Total Score:</span>
-                    <span className="score-value">{playerScore} points</span>
-                  </div>
-                  
-                  {playerRanking && playerScore > 0 && (
-                    <div className="player-ranking">
-                      <span className="ranking-label">Your Ranking:</span>
-                      <span className="ranking-value">
-                        {playerRanking.rank === 1 ? '🏆' :
-                         playerRanking.rank === 2 ? '🥈' :
-                         playerRanking.rank === 3 ? '🥉' : '📍'}
-                        {playerRanking.rank} of {playerRanking.total}
-                      </span>
-                    </div>
+                  {playerScoreInfo ? (
+                    <>
+                      <div className="player-ranking-display">
+                        <span className="ranking-main">{playerScoreInfo.rankDisplay}</span>
+                        <span className="ranking-detail">out of {playerScoreInfo.totalPlayers} players</span>
+                      </div>
+                      
+                      <div className="player-scores-breakdown">
+                        <div className="round-score">
+                          <span className="score-label">This Round:</span>
+                          <span className="score-value">+{playerScoreInfo.roundScore} points</span>
+                        </div>
+                        <div className="total-score">
+                          <span className="score-label">Total Score:</span>
+                          <span className="score-value">{playerScoreInfo.totalScore} points</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="player-total-score">
+                        <span className="score-label">Total Score:</span>
+                        <span className="score-value">{playerScore} points</span>
+                      </div>
+                      
+                      {playerRanking && playerScore > 0 && (
+                        <div className="player-ranking">
+                          <span className="ranking-label">Your Ranking:</span>
+                          <span className="ranking-value">
+                            {playerRanking.rank === 1 ? '🏆' :
+                             playerRanking.rank === 2 ? '🥈' :
+                             playerRanking.rank === 3 ? '🥉' : '📍'}
+                            {playerRanking.rank} of {playerRanking.total}
+                          </span>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
                 

@@ -1,0 +1,46 @@
+# Page snapshot
+
+```yaml
+- heading "Engagements" [level=3]
+- heading "How to Play" [level=4]
+- list:
+  - listitem:
+    - strong: "Read the Lesson:"
+    - text: Each round presents a lesson learned from professionals in various fields.
+  - listitem:
+    - strong: "Apply the Lesson:"
+    - text: Players write how they would adapt this lesson to their own work, project, or team.
+  - listitem:
+    - strong: "Vote for Best Applications:"
+    - text: Everyone votes on which applications would be most valuable to implement.
+  - listitem:
+    - strong: "Collaborative Learning:"
+    - text: Share insights and learn from each other's perspectives.
+- heading "Tips" [level=4]
+- list:
+  - listitem: Be specific about your context and situation
+  - listitem: Think about practical implementation steps
+  - listitem: Consider potential challenges and solutions
+  - listitem: Vote for applications that inspire your own work
+- text: ▶ How to Play
+- heading "Join In" [level=3]
+- paragraph: "Players can join at:"
+- text: "https://eng.dev.seibtribe.us/play?gameId=3055 Game ID:"
+- strong: "3055"
+- text: 🔌 WebSocket Connected
+- img
+- paragraph: Scan to join!
+- button "📋 Copy Invite"
+- button "🐛 Debug OFF"
+- button "View Reports"
+- button "Switch Game"
+- heading "📚 Greatest Hits" [level=3]
+- text: 10 questions
+- heading "Categories" [level=4]
+- text: Entertainment 3 Culture 1 Travel 1 Food 1 Sports 1 Literature 1 Innovation 1 Experience 1 Hide ▶
+- heading "Call & Answer" [level=2]
+- heading "Test Game" [level=1]
+- text: Greatest Hits (0 Players)
+- heading "Waiting for players to join..." [level=2]
+- button "Start First Question" [disabled]
+```
