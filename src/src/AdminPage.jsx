@@ -4,6 +4,7 @@ import TriviaAIBuilder from './components/TriviaAIBuilder';
 import PollAIBuilder from './components/PollAIBuilder';
 import SurveyAIBuilder from './components/SurveyAIBuilder';
 import AIPromptManager from './components/AIPromptManager';
+import IssueFab from './components/IssueFab';
 import './BuilderPage.css';
 
 const API_BASE = window.API_BASE;
@@ -20,6 +21,13 @@ function AdminPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteMode, setDeleteMode] = useState('single'); // 'single' or 'all'
+  
+  // Question Set filtering states
+  const [filteredQuestionSets, setFilteredQuestionSets] = useState([]);
+  const [questionSetSearchQuery, setQuestionSetSearchQuery] = useState('');
+  const [selectedQuestionSetType, setSelectedQuestionSetType] = useState('all');
+  const [selectedQuestionSetStatus, setSelectedQuestionSetStatus] = useState('all');
+  const [questionSetSortBy, setQuestionSetSortBy] = useState('newest');
   
   // Upload form fields
   const [customTitle, setCustomTitle] = useState('');
@@ -253,6 +261,11 @@ function AdminPage() {
   useEffect(() => {
     fetchQuestionSets();
   }, []);
+  
+  // Filter question sets when filters change
+  useEffect(() => {
+    filterQuestionSets();
+  }, [questionSets, questionSetSearchQuery, selectedQuestionSetType, selectedQuestionSetStatus, questionSetSortBy]);
 
   const fetchQuestionSets = async () => {
     try {
@@ -263,6 +276,52 @@ function AdminPage() {
     } catch (error) {
       console.error('Error fetching question sets:', error);
     }
+  };
+  
+  const filterQuestionSets = () => {
+    let filtered = [...questionSets];
+    
+    // Apply search filter
+    if (questionSetSearchQuery) {
+      const query = questionSetSearchQuery.toLowerCase();
+      filtered = filtered.filter(set => 
+        set.name?.toLowerCase().includes(query) ||
+        set.description?.toLowerCase().includes(query) ||
+        set.customInstruction?.toLowerCase().includes(query)
+      );
+    }
+    
+    // Apply type filter
+    if (selectedQuestionSetType !== 'all') {
+      filtered = filtered.filter(set => {
+        const setType = set.engagementType || 'call-and-answer';
+        return setType === selectedQuestionSetType;
+      });
+    }
+    
+    // Apply status filter
+    if (selectedQuestionSetStatus !== 'all') {
+      const isActive = selectedQuestionSetStatus === 'active';
+      filtered = filtered.filter(set => set.active === isActive);
+    }
+    
+    // Apply sorting
+    filtered.sort((a, b) => {
+      switch (questionSetSortBy) {
+        case 'newest':
+          return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+        case 'oldest':
+          return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+        case 'name':
+          return (a.name || '').localeCompare(b.name || '');
+        case 'questions':
+          return (b.totalQuestions || 0) - (a.totalQuestions || 0);
+        default:
+          return 0;
+      }
+    });
+    
+    setFilteredQuestionSets(filtered);
   };
 
   const handleDownloadTemplate = async (templateType = 'call-and-answer') => {
@@ -453,15 +512,30 @@ function AdminPage() {
           customDescription: metadata.description,
           customInstructions: metadata.customInstructions,
           aiContextInstructions: metadata.aiContextInstructions,
-          engagementType: 'call-and-answer'
+          engagementType: 'call-and-answer',
+          isAIGenerated: true
         })
       });
 
       const result = await response.json();
 
       if (response.ok) {
-        setUploadStatus(`✅ ${result.message}`);
-        fetchQuestionSets(); // Refresh the list
+        setUploadStatus(`✅ ${result.message} - Opening in editor for review...`);
+        await fetchQuestionSets(); // Refresh the list
+        
+        // Auto-open the newly created question set in the editor
+        setTimeout(() => {
+          const newQuestionSet = {
+            id: result.setId,
+            name: metadata.title,
+            description: metadata.description,
+            customInstruction: metadata.customInstructions,
+            aiContextInstruction: metadata.aiContextInstructions,
+            engagementType: 'call-and-answer',
+            promptId: 'lessons-learned'
+          };
+          handleEditQuestionSet(newQuestionSet);
+        }, 500);
       } else {
         setUploadStatus(`❌ Upload failed: ${result.error || 'Unknown error'}`);
       }
@@ -522,15 +596,30 @@ function AdminPage() {
           customDescription: metadata.description,
           customInstructions: metadata.customInstructions,
           aiContextInstructions: metadata.aiContextInstructions,
-          engagementType: 'trivia'
+          engagementType: 'trivia',
+          isAIGenerated: true
         })
       });
 
       const result = await response.json();
 
       if (response.ok) {
-        setUploadStatus(`✅ ${result.message}`);
-        fetchQuestionSets(); // Refresh the list
+        setUploadStatus(`✅ ${result.message} - Opening in editor for review...`);
+        await fetchQuestionSets(); // Refresh the list
+        
+        // Auto-open the newly created question set in the editor
+        setTimeout(() => {
+          const newQuestionSet = {
+            id: result.setId,
+            name: metadata.title,
+            description: metadata.description,
+            customInstruction: metadata.customInstructions,
+            aiContextInstruction: metadata.aiContextInstructions,
+            engagementType: 'trivia',
+            promptId: 'lessons-learned'
+          };
+          handleEditQuestionSet(newQuestionSet);
+        }, 500);
       } else {
         setUploadStatus(`❌ Upload failed: ${result.error || 'Unknown error'}`);
       }
@@ -606,15 +695,30 @@ function AdminPage() {
           customDescription: metadata.description,
           customInstructions: metadata.customInstructions,
           aiContextInstructions: metadata.aiContextInstructions,
-          engagementType: 'poll'
+          engagementType: 'poll',
+          isAIGenerated: true
         })
       });
 
       const result = await response.json();
 
       if (response.ok) {
-        setUploadStatus(`✅ ${result.message}`);
-        fetchQuestionSets(); // Refresh the list
+        setUploadStatus(`✅ ${result.message} - Opening in editor for review...`);
+        await fetchQuestionSets(); // Refresh the list
+        
+        // Auto-open the newly created question set in the editor
+        setTimeout(() => {
+          const newQuestionSet = {
+            id: result.setId,
+            name: metadata.title,
+            description: metadata.description,
+            customInstruction: metadata.customInstructions,
+            aiContextInstruction: metadata.aiContextInstructions,
+            engagementType: 'poll',
+            promptId: 'lessons-learned'
+          };
+          handleEditQuestionSet(newQuestionSet);
+        }, 500);
       } else {
         setUploadStatus(`❌ Upload failed: ${result.error || 'Unknown error'}`);
       }
@@ -1067,13 +1171,71 @@ function AdminPage() {
           {/* Current Question Sets */}
           <div className="admin-section">
             <h2>📚 Current Question Sets</h2>
+            
+            {/* Filtering Controls */}
+            <div className="filter-controls">
+              <div className="filter-group">
+                <label>Search:</label>
+                <input
+                  type="text"
+                  placeholder="Search by name or description..."
+                  value={questionSetSearchQuery}
+                  onChange={(e) => setQuestionSetSearchQuery(e.target.value)}
+                  className="filter-search"
+                />
+              </div>
+              
+              <div className="filter-group">
+                <label>Type:</label>
+                <select 
+                  value={selectedQuestionSetType} 
+                  onChange={(e) => setSelectedQuestionSetType(e.target.value)}
+                  className="filter-select"
+                >
+                  <option value="all">All Types</option>
+                  <option value="call-and-answer">Call and Answer</option>
+                  <option value="trivia">Trivia</option>
+                  <option value="poll">Poll</option>
+                </select>
+              </div>
+              
+              <div className="filter-group">
+                <label>Status:</label>
+                <select 
+                  value={selectedQuestionSetStatus} 
+                  onChange={(e) => setSelectedQuestionSetStatus(e.target.value)}
+                  className="filter-select"
+                >
+                  <option value="all">All Status</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+              
+              <div className="filter-group">
+                <label>Sort by:</label>
+                <select 
+                  value={questionSetSortBy} 
+                  onChange={(e) => setQuestionSetSortBy(e.target.value)}
+                  className="filter-select"
+                >
+                  <option value="newest">Newest First</option>
+                  <option value="oldest">Oldest First</option>
+                  <option value="name">Name (A-Z)</option>
+                  <option value="questions">Most Questions</option>
+                </select>
+              </div>
+            </div>
+            
             <div className="question-sets-list">
-              {questionSets.length === 0 ? (
+              {filteredQuestionSets.length === 0 ? (
                 <div className="no-sets-message">
-                  <p>No question sets found. Upload your first question set above to get started.</p>
+                  <p>{questionSets.length === 0 
+                    ? 'No question sets found. Upload your first question set above to get started.'
+                    : 'No question sets found matching your filters.'}</p>
                 </div>
               ) : (
-                questionSets.map(set => (
+                filteredQuestionSets.map(set => (
                   <div key={set.id} className="question-set-item">
                     <div className="set-info">
                       <h3>{set.name}</h3>
@@ -1103,6 +1265,11 @@ function AdminPage() {
                       >
                         {set.active ? 'Active' : 'Inactive'}
                       </button>
+                      {set.isAIGenerated && (
+                        <span className="stat-badge ai-generated" title="AI-generated content">
+                          🤖 AI
+                        </span>
+                      )}
                     </div>
                     <div className="set-actions">
                       <button
@@ -1130,6 +1297,21 @@ function AdminPage() {
           {editMode && (
             <div className="admin-section edit-section">
               <h2>✏️ Edit Question Set</h2>
+              {/* AI-Generated Content Warning */}
+              {(() => {
+                const currentSet = questionSets.find(set => set.id === editingSetId);
+                return currentSet?.isAIGenerated && (
+                  <div className="ai-review-banner">
+                    <div className="ai-review-content">
+                      <span className="ai-review-icon">🤖</span>
+                      <div className="ai-review-text">
+                        <strong>AI-Generated Content - Review Required</strong>
+                        <p>This question set was created by AI and is currently inactive. Please review and edit the content, then activate it when ready.</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="edit-form">
                 <div className="form-group">
                   <label htmlFor="edit-title">Title *</label>
@@ -1296,8 +1478,14 @@ function AdminPage() {
                 <button
                   className="btn-primary"
                   onClick={() => {
-                    console.log('🤖 AI Scenario Builder button clicked for', engagementType);
-                    setShowAIScenarioBuilder(true);
+                    console.log('🤖 AI Builder button clicked for', engagementType);
+                    if (engagementType === 'poll') {
+                      setShowPollAIBuilder(true);
+                    } else if (engagementType === 'trivia') {
+                      setShowTriviaAIBuilder(true);
+                    } else {
+                      setShowAIScenarioBuilder(true);
+                    }
                   }}
                 >
                   🤖 AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : 'Scenario'} Builder
@@ -1404,54 +1592,119 @@ function AdminPage() {
               </div>
             )}
           </div>
-        </div>
-        
-        {/* WebSocket Mode Toggle - Moved to bottom */}
-        <div className="admin-section debug-section">
-          <h2>🔌 Real-time Communication</h2>
-          <p className="section-description">Real-time WebSocket communication is now the default. Toggle off to use HTTP polling instead.</p>
-          
-          <div className="debug-controls">
-            <label className="debug-toggle">
-              <input
-                type="checkbox"
-                checked={webSocketMode}
-                onChange={handleToggleWebSocketMode}
-              />
-              <span className="toggle-label">
-                Enable WebSocket Mode (Real-time Updates)
-                {webSocketMode && <span className="debug-active">ACTIVE</span>}
-              </span>
-            </label>
-            <p className="debug-description">
-              When enabled, the game uses WebSocket connections for real-time state updates. 
-              When disabled, uses HTTP polling mode for compatibility with restrictive networks.
-              {!webSocketMode && <strong> Currently using HTTP polling mode.</strong>}
-            </p>
-          </div>
-        </div>
+            </div>
+          )}
 
-        {/* Debug Mode Toggle - Moved to bottom */}
-        <div className="admin-section debug-section">
-          <h2>🐛 Debug Settings</h2>
-          <p className="section-description">Development and debugging tools for AI functionality.</p>
-          
-          <div className="debug-controls">
-            <label className="debug-toggle">
-              <input
-                type="checkbox"
-                checked={debugMode}
-                onChange={handleToggleDebugMode}
-              />
-              <span className="toggle-label">
-                Show AI Prompts in Debug Mode
-                {debugMode && <span className="debug-active">ACTIVE</span>}
-              </span>
-            </label>
-            <p className="debug-description">
-              When enabled, the actual AI prompts sent to the model will be displayed above AI summary outputs in both the AI-ify dialog and results page.
-            </p>
-          </div>
+          {activeTab === 'games' && (
+            <div className="tab-content">
+              {/* Delete Games Section */}
+              <div className="admin-section danger-section">
+                <h2>🎮 Remove Games</h2>
+                <p className="section-description">Delete game data from the database.</p>
+                
+                <div className="delete-controls">
+                  <div className="delete-mode-selector">
+                    <label className="radio-label">
+                      <input
+                        type="radio"
+                        name="deleteMode"
+                        value="single"
+                        checked={deleteMode === 'single'}
+                        onChange={(e) => setDeleteMode(e.target.value)}
+                      />
+                      <span>Single Game</span>
+                    </label>
+                    <label className="radio-label">
+                      <input
+                        type="radio"
+                        name="deleteMode"
+                        value="all"
+                        checked={deleteMode === 'all'}
+                        onChange={(e) => setDeleteMode(e.target.value)}
+                      />
+                      <span>All Games</span>
+                    </label>
+                  </div>
+                  
+                  {deleteMode === 'single' && (
+                    <input
+                      type="text"
+                      placeholder="Enter Game ID"
+                      value={deleteGameId}
+                      onChange={(e) => setDeleteGameId(e.target.value)}
+                      className="input-field"
+                    />
+                  )}
+                  
+                  <button
+                    className="btn-danger"
+                    onClick={handleDeleteGames}
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? '⏳ Deleting...' : deleteMode === 'all' ? '🗑️ Delete All Games' : '🗑️ Delete Game'}
+                  </button>
+                </div>
+                
+                {deleteStatus && (
+                  <div className={`status-message ${deleteStatus.includes('✅') ? 'success' : deleteStatus.includes('❌') ? 'error' : ''}`}>
+                    {deleteStatus}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'settings' && (
+            <div className="tab-content">
+              {/* WebSocket Mode Toggle */}
+              <div className="admin-section debug-section">
+                <h2>🔌 Real-time Communication</h2>
+                <p className="section-description">Real-time WebSocket communication is now the default. Toggle off to use HTTP polling instead.</p>
+                
+                <div className="debug-controls">
+                  <label className="debug-toggle">
+                    <input
+                      type="checkbox"
+                      checked={webSocketMode}
+                      onChange={handleToggleWebSocketMode}
+                    />
+                    <span className="toggle-label">
+                      Enable WebSocket Mode (Real-time Updates)
+                      {webSocketMode && <span className="debug-active">ACTIVE</span>}
+                    </span>
+                  </label>
+                  <p className="debug-description">
+                    When enabled, the game uses WebSocket connections for real-time state updates. 
+                    When disabled, uses HTTP polling mode for compatibility with restrictive networks.
+                    {!webSocketMode && <strong> Currently using HTTP polling mode.</strong>}
+                  </p>
+                </div>
+              </div>
+
+              {/* Debug Mode Toggle */}
+              <div className="admin-section debug-section">
+                <h2>🐛 Debug Settings</h2>
+                <p className="section-description">Development and debugging tools for AI functionality.</p>
+                
+                <div className="debug-controls">
+                  <label className="debug-toggle">
+                    <input
+                      type="checkbox"
+                      checked={debugMode}
+                      onChange={handleToggleDebugMode}
+                    />
+                    <span className="toggle-label">
+                      Show AI Prompts in Debug Mode
+                      {debugMode && <span className="debug-active">ACTIVE</span>}
+                    </span>
+                  </label>
+                  <p className="debug-description">
+                    When enabled, the actual AI prompts sent to the model will be displayed above AI summary outputs in both the AI-ify dialog and results page.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1532,6 +1785,9 @@ function AdminPage() {
           onSurveyGenerated={handleSurveyGenerated}
         />
       )}
+
+      {/* GitHub Issue Reporting FAB */}
+      <IssueFab context="admin" />
     </div>
   );
 }
