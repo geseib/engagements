@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
 const tableName = process.env.TABLE_NAME;
@@ -142,17 +142,46 @@ exports.handler = async (event) => {
       console.log(`🏷️ Setting as default prompt for ${gameType}/${category}`);
       
       try {
-        // Check if there's already a default for this game type and category
-        const defaultLookupKey = `GAMETYPE#${gameType}#CATEGORY#${category}`;
-        const existingDefault = await dynamodb.send(new GetCommand({
+        // First, clear isDefault from all other prompts in the same category
+        console.log(`🧹 Clearing default status from other prompts in ${gameType}/${category}`);
+        
+        const { Items: existingPrompts } = await dynamodb.send(new QueryCommand({
           TableName: tableName,
-          Key: {
-            PK: 'AIPROMPTS',
-            SK: defaultLookupKey
+          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+          FilterExpression: 'gameType = :gameType AND category = :category AND promptId <> :currentPromptId',
+          ExpressionAttributeValues: {
+            ':pk': 'AIPROMPTS',
+            ':sk': 'AIPROMPT#',
+            ':gameType': gameType,
+            ':category': category,
+            ':currentPromptId': promptId
           }
         }));
+        
+        // Clear default status from other prompts
+        const clearDefaultPromises = existingPrompts
+          .filter(prompt => prompt.isDefault)
+          .map(prompt => 
+            dynamodb.send(new UpdateCommand({
+              TableName: tableName,
+              Key: {
+                PK: 'AIPROMPTS',
+                SK: `AIPROMPT#${prompt.promptId}`
+              },
+              UpdateExpression: 'SET isDefault = :false',
+              ExpressionAttributeValues: {
+                ':false': false
+              }
+            }))
+          );
+        
+        if (clearDefaultPromises.length > 0) {
+          await Promise.all(clearDefaultPromises);
+          console.log(`✅ Cleared default status from ${clearDefaultPromises.length} other prompts`);
+        }
 
         // Create/update the default prompt lookup
+        const defaultLookupKey = `GAMETYPE#${gameType}#CATEGORY#${category}`;
         await dynamodb.send(new PutCommand({
           TableName: tableName,
           Item: {
@@ -167,11 +196,7 @@ exports.handler = async (event) => {
           }
         }));
 
-        if (existingDefault.Item) {
-          console.log(`✅ Updated default prompt for ${gameType}/${category} from ${existingDefault.Item.promptId} to ${promptId}`);
-        } else {
-          console.log(`✅ Set new default prompt for ${gameType}/${category}: ${promptId}`);
-        }
+        console.log(`✅ Set new default prompt for ${gameType}/${category}: ${promptId}`);
       } catch (error) {
         console.error('⚠️ Error managing default prompt lookup:', error);
         // Continue anyway - the prompt was still created successfully

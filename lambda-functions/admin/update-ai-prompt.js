@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 
 const tableName = process.env.TABLE_NAME;
@@ -193,6 +193,44 @@ exports.handler = async (event) => {
       console.log(`🏷️ Setting as default prompt for ${currentPrompt.gameType}/${updatedContent.category}`);
       
       try {
+        // First, clear isDefault from all other prompts in the same category
+        console.log(`🧹 Clearing default status from other prompts in ${currentPrompt.gameType}/${updatedContent.category}`);
+        
+        const { Items: existingPrompts } = await dynamodb.send(new QueryCommand({
+          TableName: tableName,
+          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+          FilterExpression: 'gameType = :gameType AND category = :category AND promptId <> :currentPromptId',
+          ExpressionAttributeValues: {
+            ':pk': 'AIPROMPTS',
+            ':sk': 'AIPROMPT#',
+            ':gameType': currentPrompt.gameType,
+            ':category': updatedContent.category,
+            ':currentPromptId': promptId
+          }
+        }));
+        
+        // Clear default status from other prompts
+        const clearDefaultPromises = existingPrompts
+          .filter(prompt => prompt.isDefault)
+          .map(prompt => 
+            dynamodb.send(new UpdateCommand({
+              TableName: tableName,
+              Key: {
+                PK: 'AIPROMPTS',
+                SK: `AIPROMPT#${prompt.promptId}`
+              },
+              UpdateExpression: 'SET isDefault = :false',
+              ExpressionAttributeValues: {
+                ':false': false
+              }
+            }))
+          );
+        
+        if (clearDefaultPromises.length > 0) {
+          await Promise.all(clearDefaultPromises);
+          console.log(`✅ Cleared default status from ${clearDefaultPromises.length} other prompts`);
+        }
+
         // Create/update the default prompt lookup
         const defaultLookupKey = `GAMETYPE#${currentPrompt.gameType}#CATEGORY#${updatedContent.category}`;
         await dynamodb.send(new PutCommand({
