@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, PutCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
 const tableName = process.env.TABLE_NAME;
@@ -110,12 +110,10 @@ exports.handler = async (event) => {
       }
     }));
 
-    // Save metadata to DynamoDB
+    // Save metadata to DynamoDB using new structure
     const dynamoItem = {
-      PK: `AI_PROMPT#${promptId}`,
-      SK: `METADATA`,
-      GSI1PK: 'AI_PROMPT',
-      GSI1SK: `${gameType}#${timestamp}`,
+      PK: 'AIPROMPTS',
+      SK: `AIPROMPT#${promptId}`,
       promptId,
       name,
       description,
@@ -139,11 +137,45 @@ exports.handler = async (event) => {
       Item: dynamoItem
     }));
 
-    // If this is marked as default, we might want to update other defaults
+    // If this is marked as default, handle default prompt lookup structure
     if (isDefault) {
-      console.log(`🏷️ Prompt marked as default for ${gameType}/${category}`);
-      // Note: Implementation for managing default status would go here
-      // For now, we'll allow multiple defaults and let the UI handle selection
+      console.log(`🏷️ Setting as default prompt for ${gameType}/${category}`);
+      
+      try {
+        // Check if there's already a default for this game type and category
+        const defaultLookupKey = `GAMETYPE#${gameType}#CATEGORY#${category}`;
+        const existingDefault = await dynamodb.send(new GetCommand({
+          TableName: tableName,
+          Key: {
+            PK: 'AIPROMPTS',
+            SK: defaultLookupKey
+          }
+        }));
+
+        // Create/update the default prompt lookup
+        await dynamodb.send(new PutCommand({
+          TableName: tableName,
+          Item: {
+            PK: 'AIPROMPTS',
+            SK: defaultLookupKey,
+            defaultPrompt: `PROMPT#${promptId}`,
+            gameType,
+            category,
+            promptId,
+            updatedAt: timestamp,
+            ttl: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60) // 1 year TTL
+          }
+        }));
+
+        if (existingDefault.Item) {
+          console.log(`✅ Updated default prompt for ${gameType}/${category} from ${existingDefault.Item.promptId} to ${promptId}`);
+        } else {
+          console.log(`✅ Set new default prompt for ${gameType}/${category}: ${promptId}`);
+        }
+      } catch (error) {
+        console.error('⚠️ Error managing default prompt lookup:', error);
+        // Continue anyway - the prompt was still created successfully
+      }
     }
 
     const result = {
