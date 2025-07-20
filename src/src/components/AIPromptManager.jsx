@@ -24,17 +24,331 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
 
   // Available template variables
   const templateVariables = [
-    { name: 'sessionContext', description: 'Session/event context and instructions', category: 'Context' },
-    { name: 'questionTitle', description: 'Question title/text', category: 'Question' },
-    { name: 'questionCategory', description: 'Question category', category: 'Question' },
-    { name: 'questionDetail', description: 'Question details/context', category: 'Question' },
-    { name: 'responsesText', description: 'Top player responses ranked by votes', category: 'Responses' },
-    { name: 'responseCount', description: 'Total number of responses', category: 'Responses' },
-    { name: 'contextSections', description: 'Combined context sections', category: 'Context' },
-    { name: 'contextInstructions', description: 'Context-based instructions', category: 'Context' },
-    { name: 'eventTitle', description: 'Game/event title', category: 'Game' },
-    { name: 'gameType', description: 'Game type (call-and-answer, trivia, polls)', category: 'Game' },
-    { name: 'totalParticipants', description: 'Total number of participants', category: 'Game' }
+    // SET INFO
+    { 
+      name: 'questionSetName', 
+      description: 'Name of the question set being used', 
+      category: 'Set Info',
+      example: 'Amazon Leadership Principles, Team Building Icebreakers'
+    },
+    { 
+      name: 'questionSetDescription', 
+      description: 'Description of the question set theme and purpose', 
+      category: 'Set Info',
+      example: 'Questions designed to explore leadership scenarios and decision-making'
+    },
+    { 
+      name: 'categoryCount', 
+      description: 'Number of different categories in the question set', 
+      category: 'Set Info',
+      example: '8 categories, 5 different themes'
+    },
+    { 
+      name: 'totalQuestions', 
+      description: 'Total number of questions available in the set', 
+      category: 'Set Info',
+      example: '45 questions across all categories'
+    },
+    { 
+      name: 'sessionContext', 
+      description: 'Session/event context and instructions', 
+      category: 'Set Info',
+      example: 'Strategic Planning Session for Q4 - Focus on innovation and market expansion'
+    },
+
+    // GAME INFO
+    { 
+      name: 'eventTitle', 
+      description: 'Name/title of the game or event session', 
+      category: 'Game Info',
+      example: 'Q4 Strategy Session, Team Building Workshop, Leadership Development'
+    },
+    { 
+      name: 'gameType', 
+      description: 'Type of engagement activity', 
+      category: 'Game Info',
+      example: 'call-and-answer, trivia, polls, survey'
+    },
+    { 
+      name: 'gameId', 
+      description: 'Unique identifier for the current game session', 
+      category: 'Game Info',
+      example: '1234, ABCD'
+    },
+    { 
+      name: 'sessionDuration', 
+      description: 'How long the game session has been running', 
+      category: 'Game Info',
+      example: '45 minutes, 1 hour 15 minutes'
+    },
+    { 
+      name: 'currentRound', 
+      description: 'Current question number or round being played', 
+      category: 'Game Info',
+      example: 'Round 3 of 8, Question 5'
+    },
+    { 
+      name: 'totalScores', 
+      description: 'Overall leaderboard with cumulative player scores', 
+      category: 'Game Info',
+      example: '1. Sarah: 85 pts, 2. Mike: 72 pts, 3. Alex: 68 pts'
+    },
+
+    // PLAYER INFO
+    { 
+      name: 'totalParticipants', 
+      description: 'Number of people who joined the session', 
+      category: 'Player Info',
+      example: '15 participants, 8 team members'
+    },
+    { 
+      name: 'activeParticipants', 
+      description: 'Number of players currently engaged/responding', 
+      category: 'Player Info',
+      example: '12 of 15 players active this round'
+    },
+    { 
+      name: 'playerNames', 
+      description: 'List of participant names', 
+      category: 'Player Info',
+      example: 'Sarah, Mike, Alex, Jordan, Casey, Taylor'
+    },
+    { 
+      name: 'playerRankings', 
+      description: 'Current player rankings with positions', 
+      category: 'Player Info',
+      example: '1st: Sarah (85 pts), 2nd: Mike (72 pts), 3rd: Alex (68 pts)'
+    },
+    { 
+      name: 'topPerformers', 
+      description: 'Highest scoring players this session', 
+      category: 'Player Info',
+      example: 'Sarah leads with 3 correct answers, Mike close behind'
+    },
+
+    // QUESTION INFO
+    { 
+      name: 'questionTitle', 
+      description: 'Short title or summary of the current question', 
+      category: 'Question Info',
+      example: 'Comfort Food Preferences, Leadership Decision, Innovation Strategy'
+    },
+    { 
+      name: 'questionDetail', 
+      description: 'The full question text or prompt presented to participants', 
+      category: 'Question Info',
+      example: 'What is your favorite comfort food and why does it bring you comfort?'
+    },
+    { 
+      name: 'questionCategory', 
+      description: 'Category/theme of the current question', 
+      category: 'Question Info',
+      example: 'Personal Preferences, Team Building, Strategy, Leadership'
+    },
+    { 
+      name: 'questionContext', 
+      description: 'Additional context or instructions for the question', 
+      category: 'Question Info',
+      example: 'Think about foods that bring you comfort during stressful times...'
+    },
+    { 
+      name: 'questionNumber', 
+      description: 'Current question number in the session', 
+      category: 'Question Info',
+      example: 'Question 3, Round 5, Item 7'
+    },
+    { 
+      name: 'triviaChoices', 
+      description: 'Multiple choice options for trivia questions', 
+      category: 'Question Info',
+      example: 'A) Pizza, B) Burgers, C) Tacos, D) Sushi'
+    },
+    { 
+      name: 'pollOptions', 
+      description: 'Available options for poll questions', 
+      category: 'Question Info',
+      example: 'Option 1: Remote work, Option 2: Hybrid, Option 3: In-office'
+    },
+    { 
+      name: 'correctAnswer', 
+      description: 'The correct answer for trivia questions', 
+      category: 'Question Info',
+      example: 'C) Tacos, Multiple answers: A and C'
+    },
+
+    // ANSWERS
+    { 
+      name: 'playerAnswers', 
+      description: 'Individual responses from each participant', 
+      category: 'Answers',
+      example: 'Sarah: "Pizza - reminds me of family", Mike: "Ice cream - sweet comfort"'
+    },
+    { 
+      name: 'responseCount', 
+      description: 'Total number of participant responses received', 
+      category: 'Answers',
+      example: '12 answers from 15 participants, 8 responses submitted'
+    },
+    { 
+      name: 'uniqueAnswers', 
+      description: 'Distinct/unique responses without duplicates', 
+      category: 'Answers',
+      example: '8 unique answers: Pizza, Ice cream, Chocolate, Mac and cheese...'
+    },
+    { 
+      name: 'answerCategories', 
+      description: 'Grouped answers by theme or similarity', 
+      category: 'Answers',
+      example: 'Sweet foods: 5 responses, Savory: 4 responses, Homemade: 3 responses'
+    },
+    { 
+      name: 'triviaResponses', 
+      description: 'Player selections for trivia questions', 
+      category: 'Answers',
+      example: 'A: 3 players, B: 2 players, C: 7 players (correct), D: 1 player'
+    },
+    { 
+      name: 'responsesText', 
+      description: 'Top player responses ranked by popularity/votes', 
+      category: 'Answers',
+      example: '1. Pizza (5 votes) - "Reminds me of family gatherings"\n2. Mac and cheese (3 votes) - "Ultimate comfort"\n3. Ice cream (2 votes)'
+    },
+
+    // VOTES
+    { 
+      name: 'voteData', 
+      description: 'Complete voting information for call-and-answer questions', 
+      category: 'Votes',
+      example: 'Sarah voted for Mike (1st), Alex (2nd), Jordan (3rd)'
+    },
+    { 
+      name: 'voteCount', 
+      description: 'Total number of votes cast by participants', 
+      category: 'Votes',
+      example: '10 voters participated, 45 total votes cast'
+    },
+    { 
+      name: 'votingParticipation', 
+      description: 'Percentage of players who participated in voting', 
+      category: 'Votes',
+      example: '83% participation (10 of 12 players voted)'
+    },
+    { 
+      name: 'votingPattern', 
+      description: 'Analysis of how votes were distributed', 
+      category: 'Votes',
+      example: 'Close competition, Clear winner, Evenly distributed votes'
+    },
+
+    // VOTE TALLY
+    { 
+      name: 'voteTally', 
+      description: 'Ranked results showing vote counts per answer', 
+      category: 'Vote Tally',
+      example: '1. Pizza (8 votes), 2. Ice cream (5 votes), 3. Chocolate (3 votes)'
+    },
+    { 
+      name: 'topVotedAnswers', 
+      description: 'Highest voted responses with vote counts', 
+      category: 'Vote Tally',
+      example: 'Pizza: 8 votes, Ice cream: 5 votes, Chocolate: 3 votes'
+    },
+    { 
+      name: 'votingBreakdown', 
+      description: 'Detailed breakdown of first, second, third place votes', 
+      category: 'Vote Tally',
+      example: 'Pizza: 5 first-place, 2 second-place, 1 third-place votes'
+    },
+    { 
+      name: 'consensusLevel', 
+      description: 'How much agreement there was in voting', 
+      category: 'Vote Tally',
+      example: 'Strong consensus, Divided opinions, Clear winner emerged'
+    },
+
+    // RESULTS
+    { 
+      name: 'finalResults', 
+      description: 'Complete ranked results with winners and scores', 
+      category: 'Results',
+      example: '🥇 Pizza (8 votes), 🥈 Ice cream (5 votes), 🥉 Chocolate (3 votes)'
+    },
+    { 
+      name: 'winnerInfo', 
+      description: 'Information about the winning answer(s) and player(s)', 
+      category: 'Results',
+      example: 'Winner: Sarah with "Pizza - family memories" (8 votes)'
+    },
+    { 
+      name: 'resultsSummary', 
+      description: 'High-level summary of question outcomes', 
+      category: 'Results',
+      example: 'Clear winner with 50% of votes, competitive race for 2nd place'
+    },
+    { 
+      name: 'participationRate', 
+      description: 'Percentage of players who participated in this question', 
+      category: 'Results',
+      example: '92% answered (11 of 12), 83% voted (10 of 12)'
+    },
+    { 
+      name: 'triviaCorrectness', 
+      description: 'Accuracy results for trivia questions', 
+      category: 'Results',
+      example: '7 of 12 players correct (58%), Average response time: 8 seconds'
+    },
+
+    // SCORES
+    { 
+      name: 'roundScores', 
+      description: 'Points awarded for the current question/round', 
+      category: 'Scores',
+      example: 'Sarah: +5 pts, Mike: +3 pts, Alex: +1 pt'
+    },
+    { 
+      name: 'cumulativeScores', 
+      description: 'Total points accumulated by each player', 
+      category: 'Scores',
+      example: 'Sarah: 25 total, Mike: 18 total, Alex: 15 total'
+    },
+    { 
+      name: 'scoreChanges', 
+      description: 'How scores changed from previous round', 
+      category: 'Scores',
+      example: 'Sarah: +5 (was 20), Mike: +3 (was 15), Alex: +1 (was 14)'
+    },
+    { 
+      name: 'leaderboard', 
+      description: 'Current ranking of all players by total score', 
+      category: 'Scores',
+      example: '1. Sarah (25 pts), 2. Mike (18 pts), 3. Alex (15 pts)'
+    },
+    { 
+      name: 'scoringSystem', 
+      description: 'Explanation of how points are awarded', 
+      category: 'Scores',
+      example: '1st place: 5 pts, 2nd place: 3 pts, 3rd place: 1 pt'
+    },
+    { 
+      name: 'averageScore', 
+      description: 'Average points per player in the current session', 
+      category: 'Scores',
+      example: 'Average: 16.8 points per player, Median: 15 points'
+    },
+
+    // CONTEXT (Kept for backward compatibility)
+    { 
+      name: 'contextSections', 
+      description: 'Combined context from event and question set', 
+      category: 'Context',
+      example: 'Team Building Workshop - Building rapport through personal sharing'
+    },
+    { 
+      name: 'contextInstructions', 
+      description: 'Specific instructions for AI analysis', 
+      category: 'Context',
+      example: 'Focus on team dynamics and provide actionable insights for managers'
+    }
   ];
 
   const insertVariable = (variableName) => {
@@ -210,33 +524,54 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
             <div className="template-editor-container">
               <div className="template-variables-panel">
                 <h4>📝 Available Variables</h4>
-                <p className="variables-help">Click to insert into template:</p>
-                {['Context', 'Question', 'Responses', 'Game'].map(category => (
-                  <div key={category} className="variable-category">
-                    <h5>{category}</h5>
-                    {templateVariables
-                      .filter(v => v.category === category)
-                      .map(variable => (
-                        <button
-                          key={variable.name}
-                          type="button"
-                          className="variable-btn"
-                          onClick={() => insertVariable(variable.name)}
-                          title={variable.description}
-                        >
-                          {'{' + variable.name + '}'}
-                        </button>
-                      ))
-                    }
-                  </div>
-                ))}
+                <p className="variables-help">
+                  Click to insert into template:<br />
+                  <small><strong>💡 Pro Tip:</strong> Use markdown headers (## Header Name) in your prompt to create custom sections that replace the default headers.</small>
+                </p>
+                {['Set Info', 'Game Info', 'Player Info', 'Question Info', 'Answers', 'Votes', 'Vote Tally', 'Results', 'Scores', 'Context'].map(category => {
+                  const categoryVariables = templateVariables.filter(v => v.category === category);
+                  if (categoryVariables.length === 0) return null;
+                  
+                  return (
+                    <div key={category} className="variable-category">
+                      <h5 className="category-header">{category}</h5>
+                      <div className="category-variables">
+                        {categoryVariables.map(variable => (
+                          <button
+                            key={variable.name}
+                            type="button"
+                            className="variable-btn"
+                            onClick={() => insertVariable(variable.name)}
+                            title={`${variable.description}\n\nExample: ${variable.example}`}
+                          >
+                            {'{' + variable.name + '}'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
               <div className="template-textarea-container">
                 <textarea
                   ref={setTemplateTextareaRef}
                   value={formData.template}
                   onChange={(e) => setFormData({ ...formData, template: e.target.value })}
-                  placeholder="Enter your AI prompt template here. Click variable buttons to insert them."
+                  placeholder="Example template:
+
+## 🎯 Key Insights
+Analyze the responses from {eventTitle} where participants answered: {questionTitle}
+
+Based on {responseCount} responses, here are the top insights:
+{responsesText}
+
+## 💡 Strategic Implications
+[Provide 2-3 strategic implications for the team/organization]
+
+## 🚀 Recommended Actions
+[List 3-4 specific next steps the team should consider]
+
+Click variable buttons to insert them into your prompt."
                   rows="12"
                   required
                 />

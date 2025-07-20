@@ -3,6 +3,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import html2pdf from 'html2pdf.js';
 import webSocketClient from './WebSocketClient';
 import MarkdownRenderer from './components/MarkdownRenderer';
+import IssueFab from './components/IssueFab';
 
 const API_BASE = window.API_BASE;
 
@@ -445,9 +446,9 @@ Focus on actionable business strategy insights.`;
     }
   }, [gameState, players.length, playersWhoAnswered.length, lessonExpanded]);
 
-  // Check if all players have voted and trigger flash alert
+  // Check if all players have voted and trigger flash alert (only for call-and-answer)
   useEffect(() => {
-    if (gameState.startsWith('VOTE#') && players.length > 0 && playersWhoVoted.length === players.length && playersWhoVoted.length > 0) {
+    if (gameState.startsWith('VOTE#') && currentGameType !== 'trivia' && players.length > 0 && playersWhoVoted.length === players.length && playersWhoVoted.length > 0) {
       console.log('🗳️ All players have voted! Triggering flash alert.');
       setShowAllVotedAlert(true);
       
@@ -456,7 +457,7 @@ Focus on actionable business strategy insights.`;
         setShowAllVotedAlert(false);
       }, 3000);
     }
-  }, [gameState, players.length, playersWhoVoted.length]);
+  }, [gameState, currentGameType, players.length, playersWhoVoted.length]);
 
   // 🔗 Initialize game ID and event title from URL or generate new one
   useEffect(() => {
@@ -1304,7 +1305,12 @@ Focus on actionable business strategy insights.`;
         // Find the correct option text based on the letter answer
         const optionKey = `option${answer.answer}`;
         const playerAnswerText = questionData[optionKey];
-        const isCorrect = questionData.correctAnswer === playerAnswerText;
+        const playerOptionId = `Option${answer.answer}`;
+        
+        // Handle both array and string correctAnswer formats
+        const correctAnswers = Array.isArray(questionData.correctAnswer) ? 
+          questionData.correctAnswer : [questionData.correctAnswer];
+        const isCorrect = correctAnswers.includes(playerOptionId) || correctAnswers.includes(playerAnswerText);
         
         console.log(`👤 ${answer.name} answered: ${answer.answer} (${playerAnswerText}) - ${isCorrect ? '✅ CORRECT' : '❌ WRONG'}`);
         
@@ -1532,6 +1538,17 @@ Focus on actionable business strategy insights.`;
       setManualStateChange(true);
       setGameState(resultsState);
       console.log(`✅ HOST: Set game state to ${resultsState}`);
+      
+      // Notify players that results are ready
+      if (webSocketClient.isConnected()) {
+        const messageType = `RESULT#${paddedQuestionNumber}`;
+        webSocketClient.sendCleanMessage(messageType, {
+          questionNumber: paddedQuestionNumber,
+          gameState: resultsState,
+          gameType: currentGameType
+        });
+        console.log(`📡 HOST: Sent results notification to players: ${messageType}`);
+      }
     } catch (e) {
       console.error('handleShowResults error', e);
       // Even on error, set to proper results state format
@@ -2043,7 +2060,7 @@ Ready to engage? See you there!`;
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795be09b462b2e8ebf71_osmo-parallax-layer-3.webp" loading="eager" width="800" data-parallax-layer="1" alt="" className="parallax__layer-img" />
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" width="800" data-parallax-layer="2" alt="" className="parallax__layer-img" />
                 <div data-parallax-layer="3" className="parallax__layer-title">
-                  <h2 className="parallax__title">{currentGameType === 'trivia' ? 'Trivia' : 'Call & Answer'}</h2>
+                  <h2 className="parallax__title">{currentGameType === 'trivia' ? 'Trivia' : 'Engagements'}</h2>
                 </div>
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" width="800" data-parallax-layer="4" alt="" className="parallax__layer-img" />
               </div>
@@ -2536,6 +2553,11 @@ Ready to engage? See you there!`;
               <button className="btn-secondary" onClick={handleViewReports}>
                 View Reports
               </button>
+              
+              {/* GitHub Issue Reporting in Sidebar */}
+              <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center' }}>
+                <IssueFab context="host" gameId={gameId} />
+              </div>
               <button className="btn-danger" onClick={handleSwitchGame}>
                 Switch Game
               </button>
@@ -2591,7 +2613,7 @@ Ready to engage? See you there!`;
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795be09b462b2e8ebf71_osmo-parallax-layer-3.webp" loading="eager" width="800" data-parallax-layer="1" alt="" className="parallax__layer-img" />
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" width="800" data-parallax-layer="2" alt="" className="parallax__layer-img" />
                 <div data-parallax-layer="3" className="parallax__layer-title">
-                  <h2 className="parallax__title">{currentGameType === 'trivia' ? 'Trivia' : 'Call & Answer'}</h2>
+                  <h2 className="parallax__title">{currentGameType === 'trivia' ? 'Trivia' : 'Engagements'}</h2>
                 </div>
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" width="800" data-parallax-layer="4" alt="" className="parallax__layer-img" />
               </div>
@@ -2601,6 +2623,18 @@ Ready to engage? See you there!`;
         </div>
 
       <div className="players-section">
+        {bigScreenMode && gameId && (
+          <div className="big-screen-players-qr">
+            <QRCodeSVG 
+              value={`${window.location.origin}/play?gameId=${gameId}`}
+              size={120}
+              level="M"
+              includeMargin={true}
+              className="players-qr-code"
+            />
+            <p className="players-qr-text">Scan to Join</p>
+          </div>
+        )}
         {eventTitle && (
           <div className="game-title-header">
             <h1 className="game-title-main">{eventTitle}</h1>
@@ -2703,7 +2737,10 @@ Ready to engage? See you there!`;
               onClick={() => setLessonExpanded(true)}
               title="Click to expand"
             >
-              {questions[0].title || questions[0].question}
+              {currentGameType === 'trivia' ? 
+                (questions[0].questionDetail || questions[0].title || questions[0].question) :
+                (questions[0].title || questions[0].question)
+              }
             </div>
             {!lessonExpanded && questions[0].detail && currentGameType === 'call-and-answer' && (
               <div 
@@ -2810,7 +2847,7 @@ Ready to engage? See you there!`;
             {currentGameType === 'trivia' ? (
               <div className="trivia-results-display">
                 <div className="trivia-question-recap">
-                  <h3>{questions[0]?.title}</h3>
+                  <h3>{questions[0]?.questionDetail || questions[0]?.title}</h3>
                 </div>
                 
                 <div className="trivia-options-results">
@@ -2818,7 +2855,10 @@ Ready to engage? See you there!`;
                     .filter(key => questions[0]?.[key])
                     .map((key, index) => {
                       const optionLetter = String.fromCharCode(65 + index);
-                      const isCorrect = questions[0]?.correctAnswer === questions[0]?.[key];
+                      const optionId = `Option${optionLetter}`;
+                      const correctAnswers = Array.isArray(questions[0]?.correctAnswer) ? 
+                        questions[0]?.correctAnswer : [questions[0]?.correctAnswer];
+                      const isCorrect = correctAnswers.includes(optionId) || correctAnswers.includes(questions[0]?.[key]);
                       
                       // Calculate how many players selected this option
                       const playersWhoSelectedThis = answers.filter(answer => answer.answer === optionLetter).length;
@@ -2845,7 +2885,10 @@ Ready to engage? See you there!`;
                 <div className="trivia-player-scores">
                   <h4>Player Scores This Round:</h4>
                   {answers.map((answer, idx) => {
-                    const isCorrect = questions[0]?.correctAnswer === questions[0]?.[`option${answer.answer}`];
+                    const playerOptionId = `Option${answer.answer}`;
+                    const correctAnswers = Array.isArray(questions[0]?.correctAnswer) ? 
+                      questions[0]?.correctAnswer : [questions[0]?.correctAnswer];
+                    const isCorrect = correctAnswers.includes(playerOptionId) || correctAnswers.includes(questions[0]?.[`option${answer.answer}`]);
                     const points = isCorrect ? (questions[0]?.points || 10) : 0;
                     const player = players.find(p => p.name === answer.name);
                     
@@ -3096,8 +3139,16 @@ Ready to engage? See you there!`;
               )}
             </div>
             <div className="expanded-lesson-title">
-              {questions[0].title || questions[0].question}
+              {currentGameType === 'trivia' ? 
+                (questions[0].title) :
+                (questions[0].title || questions[0].question)
+              }
             </div>
+            {currentGameType === 'trivia' && questions[0].questionDetail && (
+              <div className="expanded-lesson-detail">
+                {questions[0].questionDetail}
+              </div>
+            )}
             {questions[0].detail && (
               <div className="expanded-lesson-detail">
                 {questions[0].detail}
@@ -3539,6 +3590,7 @@ function GameReport({ reportData, onClose }) {
           </div>
         </div>
       )}
+
     </div>
   );
 }

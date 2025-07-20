@@ -3446,6 +3446,68 @@ body {
   font-weight: 600;
 }
 
+.stat-badge.ai-generated {
+  background: rgba(76, 175, 80, 0.15);
+  color: #2e7d32;
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  font-weight: 700;
+  animation: pulse-ai 2s infinite;
+}
+
+@keyframes pulse-ai {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* AI Review Banner */
+.ai-review-banner {
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.1) 0%, rgba(56, 142, 60, 0.1) 100%);
+  border: 2px solid rgba(76, 175, 80, 0.3);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  animation: subtle-glow 3s infinite;
+}
+
+.ai-review-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.ai-review-icon {
+  font-size: 24px;
+  animation: bounce-subtle 2s infinite;
+}
+
+.ai-review-text {
+  flex: 1;
+}
+
+.ai-review-text strong {
+  color: #2e7d32;
+  font-size: 16px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.ai-review-text p {
+  color: #4caf50;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+@keyframes subtle-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(76, 175, 80, 0.2); }
+  50% { box-shadow: 0 0 16px rgba(76, 175, 80, 0.4); }
+}
+
+@keyframes bounce-subtle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
 .status-badge {
   padding: 4px 12px;
   border-radius: 16px;
@@ -5956,6 +6018,28 @@ body {
   font-size: 2rem;
 }
 
+/* QR Code in Players Section for Big Screen */
+.big-screen-players-qr {
+  text-align: center;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.players-qr-code {
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.players-qr-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #667eea;
+  margin: 0;
+}
+
 /* Mobile responsiveness for QR code */
 @media (max-width: 768px) {
   .big-screen-join-qr {
@@ -6014,33 +6098,78 @@ body {
   color: #2c3e50;
 }
 
-/* AI Insights Markdown Styles */
+/* Enhanced AI Insights Markdown Styles */
 .ai-insights-markdown .markdown-h2 {
-  font-size: 1.2rem;
-  color: #667eea;
-  margin: 16px 0 10px 0;
-  border-bottom: 1px solid #e1e5e9;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #2c3e50;
+  margin: 20px 0 12px 0;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  border-left: 4px solid #667eea;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-insights-markdown .markdown-h2:first-child {
+  margin-top: 0;
 }
 
 .ai-insights-markdown .markdown-h3 {
   font-size: 1.1rem;
-  color: #667eea;
-  margin: 14px 0 8px 0;
+  font-weight: 600;
+  color: #4a5568;
+  margin: 16px 0 8px 0;
+  padding: 4px 8px;
+  background: rgba(102, 126, 234, 0.05);
+  border-radius: 4px;
 }
 
 .ai-insights-markdown .markdown-p {
-  margin: 6px 0 10px 0;
+  margin: 8px 0 12px 0;
   font-size: 0.95rem;
+  line-height: 1.6;
+  color: #4a5568;
 }
 
 .ai-insights-markdown .markdown-list {
-  margin: 6px 0 12px 0;
-  padding-left: 18px;
+  margin: 8px 0 16px 0;
+  padding-left: 0;
 }
 
 .ai-insights-markdown .markdown-li {
-  margin: 3px 0;
+  margin: 6px 0;
   font-size: 0.95rem;
+  line-height: 1.5;
+  padding: 6px 12px;
+  background: rgba(102, 126, 234, 0.03);
+  border-radius: 4px;
+  border-left: 3px solid rgba(102, 126, 234, 0.2);
+  list-style: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.ai-insights-markdown .markdown-li::before {
+  content: "▸";
+  color: #667eea;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+/* Enhanced styling for bold text in markdown */
+.ai-insights-markdown strong {
+  color: #2d3748;
+  font-weight: 600;
+}
+
+/* Special styling for emoji in headers */
+.ai-insights-markdown .markdown-h2:first-letter,
+.ai-insights-markdown .markdown-h3:first-letter {
+  font-size: 1.2em;
 }
 
 /* Report AI Markdown Styles */

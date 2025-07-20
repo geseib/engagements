@@ -678,21 +678,338 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     return `${rank}: ${answer.player} - "${answer.answer}" (${answer.score} vote points)`;
   }).join('\n\n');
   
-  // Prepare template variables
+  // Get question set metadata for additional context
+  let questionSetName = 'Question Set';
+  let questionSetDescription = '';
+  let categoryCount = 0;
+  let totalQuestionsInSet = 0;
+  
+  try {
+    const setMetadata = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: 'SETS', SK: `SET#${questionSetId}` }
+    }));
+    
+    if (setMetadata.Item) {
+      questionSetName = setMetadata.Item.SetName || questionSetName;
+      questionSetDescription = setMetadata.Item.Description || '';
+      
+      // Count categories and questions
+      const allQuestions = await db.send(new QueryCommand({
+        TableName: process.env.TABLE_NAME,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues: {
+          ':pk': `SET#${questionSetId}`,
+          ':sk': 'q'
+        }
+      }));
+      
+      totalQuestionsInSet = allQuestions.Items?.length || 0;
+      const categories = new Set(allQuestions.Items?.map(q => q.Category).filter(c => c));
+      categoryCount = categories.size;
+    }
+  } catch (error) {
+    console.log('⚠️ Could not fetch question set metadata:', error.message);
+  }
+  
+  // Get current scores and leaderboard
+  let leaderboard = [];
+  let totalScores = '';
+  let averageScore = 0;
+  
+  try {
+    const scoresQuery = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: {
+        ':pk': `GAME#${gameId}`,
+        ':sk': 'PLAYER#'
+      }
+    }));
+    
+    if (scoresQuery.Items) {
+      const playerScores = scoresQuery.Items.map(player => ({
+        name: player.PlayerName,
+        score: player.TotalScore || 0
+      })).sort((a, b) => b.score - a.score);
+      
+      leaderboard = playerScores;
+      totalScores = playerScores.slice(0, 5).map((p, idx) => 
+        `${idx + 1}. ${p.name}: ${p.score} pts`
+      ).join(', ');
+      
+      if (playerScores.length > 0) {
+        const totalSum = playerScores.reduce((sum, p) => sum + p.score, 0);
+        averageScore = Math.round(totalSum / playerScores.length);
+      }
+    }
+  } catch (error) {
+    console.log('⚠️ Could not fetch player scores:', error.message);
+  }
+  
+  // Get player names and active participants
+  const playerNames = answers.map(a => a.PlayerName || a.playerName).filter((v, i, a) => a.indexOf(v) === i);
+  const activeParticipants = votes.length;
+  
+  // Format voting data
+  const voteData = votes.map(v => `${v.PlayerName || 'Player'} voted`).join(', ');
+  const votingParticipation = totalParticipants > 0 ? Math.round((activeParticipants / totalParticipants) * 100) : 0;
+  
+  // Determine voting pattern
+  let votingPattern = 'Diverse opinions';
+  if (winners.length === 1 && winners[0].score > (results.totalVotes * 2)) {
+    votingPattern = 'Clear consensus';
+  } else if (winners.length > 1) {
+    votingPattern = 'Split decision';
+  }
+  
+  // Build vote tally string
+  const voteTallyString = sortedAnswers.slice(0, 5).map(([idx, data], rank) => 
+    `${rank + 1}. ${data.answerText} (${data.totalScore} points)`
+  ).join(', ');
+  
+  // Format top voted answers
+  const topVotedAnswers = topAnswers.map(a => 
+    `${a.playerName}: ${a.score} points`
+  ).join(', ');
+  
+  // Calculate consensus level
+  let consensusLevel = 'Mixed opinions';
+  if (winners.length === 1 && winners[0].score > (maxScore * 0.8)) {
+    consensusLevel = 'Strong consensus';
+  } else if (sortedAnswers.length > 1 && sortedAnswers[0][1].totalScore > (sortedAnswers[1][1].totalScore * 2)) {
+    consensusLevel = 'Moderate consensus';
+  }
+  
+  // Format final results
+  const finalResults = sortedAnswers.slice(0, 3).map(([idx, data], rank) => {
+    const emoji = rank === 0 ? '🥇' : rank === 1 ? '🥈' : '🥉';
+    return `${emoji} ${data.answerText} (${data.totalScore} votes)`;
+  }).join(', ');
+  
+  // Winner info
+  const winnerInfo = winners.length > 0 ? 
+    `Winner: ${winners[0].playerName} with "${winners[0].answerText}" (${winners[0].score} votes)` : 
+    'No clear winner';
+  
+  // Results summary
+  const resultsSummary = winners.length === 1 ? 
+    `Clear winner with ${Math.round((winners[0].score / (results.totalVotes * 3)) * 100)}% of possible points` :
+    winners.length > 1 ? 
+    `${winners.length}-way tie for first place` :
+    'No votes recorded';
+  
+  // Participation rate
+  const participationRate = `${Math.round((answers.length / totalParticipants) * 100)}% answered, ${Math.round((activeParticipants / totalParticipants) * 100)}% voted`;
+  
+  // Get unique answers
+  const uniqueAnswers = [...new Set(answers.map(a => a.Answer || a.answer))];
+  const uniqueAnswersText = uniqueAnswers.slice(0, 5).join(', ');
+  
+  // Group answers by theme (simple grouping)
+  const answerCategories = uniqueAnswers.length < 5 ? 
+    `${uniqueAnswers.length} unique responses` :
+    `${uniqueAnswers.length} unique responses across various themes`;
+  
+  // Player rankings
+  const playerRankings = leaderboard.slice(0, 3).map((p, idx) => 
+    `${idx + 1}st: ${p.name} (${p.score} pts)`
+  ).join(', ');
+  
+  // Top performers
+  const topPerformers = leaderboard.length > 0 ?
+    `${leaderboard[0].name} leads with ${leaderboard[0].score} points` :
+    'No scores recorded yet';
+  
+  // Round scores (for current question)
+  const roundScores = sortedAnswers.slice(0, 3).map(([idx, data]) => 
+    `${data.playerName}: +${data.totalScore} pts`
+  ).join(', ');
+  
+  // Score changes (would need previous round data - placeholder for now)
+  const scoreChanges = 'Score tracking for this round';
+  
+  // Current round/question number
+  const currentRound = `Question ${parseInt(paddedQuestionNumber)}`;
+  
+  // Session duration (placeholder - would need game start time)
+  const sessionDuration = 'Current session';
+  
+  // Scoring system explanation
+  const scoringSystem = `1st place: ${scoringConfig.firstPlacePoints} pts, 2nd place: ${scoringConfig.secondPlacePoints} pts, 3rd place: ${scoringConfig.thirdPlacePoints} pt`;
+  
+  // Voting breakdown
+  const votingBreakdown = sortedAnswers.slice(0, 3).map(([idx, data]) => 
+    `${data.answerText}: ${data.firstPlace} first-place, ${data.secondPlace} second-place, ${data.thirdPlace} third-place votes`
+  ).join('; ');
+  
+  // Format trivia/poll specific variables
+  let triviaChoices = '';
+  let pollOptions = '';
+  let correctAnswer = '';
+  let triviaResponses = '';
+  let triviaCorrectness = '';
+  
+  // Check if this is a trivia or poll game
+  if (gameType === 'trivia' && question) {
+    // Format trivia choices
+    const options = [];
+    if (question.optionA) options.push(`A) ${question.optionA}`);
+    if (question.optionB) options.push(`B) ${question.optionB}`);
+    if (question.optionC) options.push(`C) ${question.optionC}`);
+    if (question.optionD) options.push(`D) ${question.optionD}`);
+    triviaChoices = options.join(', ');
+    
+    // Get correct answer(s)
+    if (question.correctAnswer) {
+      correctAnswer = question.correctAnswer;
+      // If it's an option ID, convert to actual text
+      if (correctAnswer.startsWith('Option')) {
+        const optionLetter = correctAnswer.replace('Option', '');
+        const optionField = `option${optionLetter}`;
+        correctAnswer = question[optionField] || correctAnswer;
+      }
+    } else if (question.correctAnswers && Array.isArray(question.correctAnswers)) {
+      // Handle multiple correct answers
+      correctAnswer = question.correctAnswers.map(ans => {
+        if (ans.startsWith('Option')) {
+          const optionLetter = ans.replace('Option', '');
+          const optionField = `option${optionLetter}`;
+          return question[optionField] || ans;
+        }
+        return ans;
+      }).join(', ');
+    }
+    
+    // Calculate trivia response distribution
+    const responseDistribution = {};
+    let correctCount = 0;
+    
+    answers.forEach(answer => {
+      const playerAnswer = answer.Answer || answer.answer;
+      responseDistribution[playerAnswer] = (responseDistribution[playerAnswer] || 0) + 1;
+      
+      // Check if answer is correct
+      if (question.correctAnswer === playerAnswer || 
+          (question.correctAnswers && question.correctAnswers.includes(playerAnswer))) {
+        correctCount++;
+      }
+    });
+    
+    // Format response distribution
+    triviaResponses = Object.entries(responseDistribution)
+      .map(([option, count]) => `${option}: ${count} players`)
+      .join(', ');
+    
+    // Calculate correctness percentage
+    if (totalParticipants > 0) {
+      const correctPercentage = Math.round((correctCount / totalParticipants) * 100);
+      triviaCorrectness = `${correctCount} of ${totalParticipants} players correct (${correctPercentage}%)`;
+    }
+  } else if (gameType === 'polls' && question) {
+    // Format poll options
+    const options = [];
+    if (question.optionA) options.push(`Option 1: ${question.optionA}`);
+    if (question.optionB) options.push(`Option 2: ${question.optionB}`);
+    if (question.optionC) options.push(`Option 3: ${question.optionC}`);
+    if (question.optionD) options.push(`Option 4: ${question.optionD}`);
+    if (question.optionE) options.push(`Option 5: ${question.optionE}`);
+    pollOptions = options.join(', ');
+    
+    // For polls, there's no correct answer, just distribution
+    const responseDistribution = {};
+    answers.forEach(answer => {
+      const playerAnswer = answer.Answer || answer.answer;
+      responseDistribution[playerAnswer] = (responseDistribution[playerAnswer] || 0) + 1;
+    });
+    
+    // Format as a distribution
+    triviaResponses = Object.entries(responseDistribution)
+      .map(([option, count]) => `${option}: ${count} votes`)
+      .join(', ');
+  }
+  
+  // Player answers formatted
+  const playerAnswers = answers.map(a => 
+    `${a.PlayerName || a.playerName}: "${a.Answer || a.answer}"`
+  ).join(', ');
+  
+  // Prepare all template variables (comprehensive set)
   const templateVars = {
+    // SET INFO
+    questionSetName: questionSetName,
+    questionSetDescription: questionSetDescription,
+    categoryCount: categoryCount,
+    totalQuestions: totalQuestionsInSet,
     sessionContext: sessionContext,
-    questionTitle: question.title,
-    questionCategory: question.category,
-    questionDetail: question.detail || 'No additional context provided',
-    contextSections: contextSections.length > 0 ? ('\nCONTEXT INFORMATION:\n' + contextSections.join('\n') + '\n') : '',
-    responsesText: responsesText,
-    responseCount: rankedAnswers.length,
-    contextInstructions: contextSections.length > 0 ? 
-      '\n\nIMPORTANT: Please tailor your analysis based on the provided context information above. Consider the specific background, goals, and instructions relevant to this session.' : 
-      '',
+    
+    // GAME INFO
     eventTitle: eventTitle,
     gameType: gameType,
-    totalParticipants: totalParticipants
+    gameId: gameId,
+    sessionDuration: sessionDuration,
+    currentRound: currentRound,
+    totalScores: totalScores,
+    
+    // PLAYER INFO
+    totalParticipants: totalParticipants,
+    activeParticipants: activeParticipants,
+    playerNames: playerNames.join(', '),
+    playerRankings: playerRankings,
+    topPerformers: topPerformers,
+    
+    // QUESTION INFO
+    questionTitle: question.title,
+    questionDetail: question.detail || 'No additional context provided',
+    questionCategory: question.category,
+    questionContext: question.detail || '',
+    questionNumber: currentRound,
+    triviaChoices: triviaChoices,
+    pollOptions: pollOptions,
+    correctAnswer: correctAnswer,
+    
+    // ANSWERS
+    playerAnswers: playerAnswers,
+    responseCount: rankedAnswers.length,
+    uniqueAnswers: uniqueAnswersText,
+    answerCategories: answerCategories,
+    triviaResponses: triviaResponses,
+    responsesText: responsesText,
+    
+    // VOTES
+    voteData: voteData,
+    voteCount: votes.length,
+    votingParticipation: `${votingParticipation}%`,
+    votingPattern: votingPattern,
+    
+    // VOTE TALLY
+    voteTally: voteTallyString,
+    topVotedAnswers: topVotedAnswers,
+    votingBreakdown: votingBreakdown,
+    consensusLevel: consensusLevel,
+    
+    // RESULTS
+    finalResults: finalResults,
+    winnerInfo: winnerInfo,
+    resultsSummary: resultsSummary,
+    participationRate: participationRate,
+    triviaCorrectness: triviaCorrectness,
+    
+    // SCORES
+    roundScores: roundScores,
+    cumulativeScores: totalScores,
+    scoreChanges: scoreChanges,
+    leaderboard: leaderboard.slice(0, 5).map((p, idx) => 
+      `${idx + 1}. ${p.name} (${p.score} pts)`
+    ).join(', '),
+    scoringSystem: scoringSystem,
+    averageScore: `${averageScore} points`,
+    
+    // CONTEXT (backward compatibility)
+    contextSections: contextSections.length > 0 ? ('\nCONTEXT INFORMATION:\n' + contextSections.join('\n') + '\n') : '',
+    contextInstructions: contextSections.length > 0 ? 
+      '\n\nIMPORTANT: Please tailor your analysis based on the provided context information above. Consider the specific background, goals, and instructions relevant to this session.' : 
+      ''
   };
   
   // Replace template variables
