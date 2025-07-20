@@ -2464,19 +2464,61 @@ Ready to engage? See you there!`;
         <div className="instructions-content">
           <h3>Engagements</h3>
           <h4>How to Play</h4>
-          <ol>
-            <li><strong>Read the Lesson:</strong> Each round presents a lesson learned from professionals in various fields.</li>
-            <li><strong>Apply the Lesson:</strong> Players write how they would adapt this lesson to their own work, project, or team.</li>
-            <li><strong>Vote for Best Applications:</strong> Everyone votes on which applications would be most valuable to implement.</li>
-            <li><strong>Collaborative Learning:</strong> Share insights and learn from each other's perspectives.</li>
-          </ol>
-          <h4>Tips</h4>
-          <ul>
-            <li>Be specific about your context and situation</li>
-            <li>Think about practical implementation steps</li>
-            <li>Consider potential challenges and solutions</li>
-            <li>Vote for applications that inspire your own work</li>
-          </ul>
+          
+          {currentGameType === 'call-and-answer' && (
+            <>
+              <ol>
+                <li><strong>Read the Content:</strong> Each round presents a scenario, lesson, or strategic question.</li>
+                <li><strong>Provide Your Response:</strong> Players write thoughtful responses based on their experience and perspective.</li>
+                <li><strong>Vote for Best Responses:</strong> Everyone votes on which responses are most insightful or valuable.</li>
+                <li><strong>Collaborative Learning:</strong> Share insights and learn from each other's diverse perspectives.</li>
+              </ol>
+              <h4>Tips</h4>
+              <ul>
+                <li>Be specific about your context and situation</li>
+                <li>Think about practical implementation steps</li>
+                <li>Consider potential challenges and solutions</li>
+                <li>Vote for responses that inspire your own work</li>
+              </ul>
+            </>
+          )}
+          
+          {currentGameType === 'trivia' && (
+            <>
+              <ol>
+                <li><strong>Read the Question:</strong> Each round presents a multiple-choice trivia question.</li>
+                <li><strong>Select Your Answer:</strong> Choose the best answer from the available options (A, B, C, D).</li>
+                <li><strong>See Results:</strong> Discover the correct answer and see how everyone performed.</li>
+                <li><strong>Learn Together:</strong> Discuss interesting facts and expand your knowledge as a team.</li>
+              </ol>
+              <h4>Tips</h4>
+              <ul>
+                <li>Read all options carefully before selecting</li>
+                <li>Trust your first instinct if unsure</li>
+                <li>Learn from incorrect answers - they often contain valuable information</li>
+                <li>Discuss interesting questions afterward to reinforce learning</li>
+              </ul>
+            </>
+          )}
+          
+          {currentGameType === 'poll' && (
+            <>
+              <ol>
+                <li><strong>Read the Poll Question:</strong> Each round presents a topic for group input and discussion.</li>
+                <li><strong>Select Your Choice:</strong> Choose from the available options that best represents your view.</li>
+                <li><strong>See Group Results:</strong> View how the group collectively responded to the question.</li>
+                <li><strong>Facilitate Discussion:</strong> Use results as a starting point for meaningful group conversations.</li>
+              </ol>
+              <h4>Tips</h4>
+              <ul>
+                <li>Consider all perspectives before choosing</li>
+                <li>Some polls may allow multiple selections</li>
+                <li>Use results to understand group dynamics and preferences</li>
+                <li>Follow up with discussion to dive deeper into the topic</li>
+              </ul>
+            </>
+          )}
+          
         </div>
       </div>
       <div className="instructions-tab" onClick={() => setInstructionsVisible(!instructionsVisible)}>
