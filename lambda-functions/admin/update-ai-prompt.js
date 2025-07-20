@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 
 const tableName = process.env.TABLE_NAME;
@@ -187,6 +187,49 @@ exports.handler = async (event) => {
     
     updateExpression.push('s3Key = :s3Key');
     expressionAttributeValues[':s3Key'] = newS3Key;
+
+    // If this is being marked as default, clear default status from other prompts in same category
+    if (isDefault === true) {
+      console.log(`🏷️ Setting as default prompt for ${currentPrompt.gameType}/${updatedContent.category}, clearing other defaults...`);
+      
+      try {
+        // Query all prompts for this game type
+        const { Items: existingPrompts } = await dynamodb.send(new QueryCommand({
+          TableName: tableName,
+          IndexName: 'GSI1',
+          KeyConditionExpression: 'GSI1PK = :pk AND begins_with(GSI1SK, :sk)',
+          ExpressionAttributeValues: {
+            ':pk': 'AI_PROMPT',
+            ':sk': `${currentPrompt.gameType}#`
+          }
+        }));
+        
+        // Clear default status from other prompts in same category
+        const updatePromises = existingPrompts
+          .filter(prompt => prompt.category === updatedContent.category && prompt.isDefault && prompt.promptId !== promptId)
+          .map(prompt => 
+            dynamodb.send(new UpdateCommand({
+              TableName: tableName,
+              Key: {
+                PK: `AI_PROMPT#${prompt.promptId}`,
+                SK: 'METADATA'
+              },
+              UpdateExpression: 'SET isDefault = :false',
+              ExpressionAttributeValues: {
+                ':false': false
+              }
+            }))
+          );
+        
+        if (updatePromises.length > 0) {
+          await Promise.all(updatePromises);
+          console.log(`✅ Cleared default status from ${updatePromises.length} other prompts`);
+        }
+      } catch (error) {
+        console.error('⚠️ Error clearing other defaults:', error);
+        // Continue anyway - better to have multiple defaults than fail the update
+      }
+    }
 
     if (updateExpression.length > 0) {
       console.log(`💾 Updating DynamoDB metadata`);
