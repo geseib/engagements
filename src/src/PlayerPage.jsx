@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import webSocketClient from './WebSocketClient';
+import IssueFab from './components/IssueFab';
 
 const API_BASE = window.API_BASE;
 
@@ -75,6 +76,7 @@ function PlayerPage() {
   const [allPlayers, setAllPlayers] = useState([]);
   const [customInstruction, setCustomInstruction] = useState(null);
   const [lastProcessedQuestionId, setLastProcessedQuestionId] = useState(null);
+  const [results, setResults] = useState(null);
 
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
@@ -297,6 +299,31 @@ function PlayerPage() {
       // We don't currently show AI summaries to players, but this is available
     });
 
+    // Results ready handler for trivia and call-and-answer
+    webSocketClient.onMessage('hostMessage', (data) => {
+      if (data.messageType && data.messageType.startsWith('RESULT#')) {
+        console.log('🔌 Player received results ready notification (hostMessage):', data);
+        const questionNumber = data.questionNumber;
+        if (questionNumber) {
+          console.log(`🎯 PLAYER: Results ready for question ${questionNumber}, fetching results...`);
+          checkGameState(); // This will fetch the current game state and show results
+        }
+      }
+    });
+
+    // Direct resultsReady handler for proper WebSocket routing
+    webSocketClient.onMessage('resultsReady', (data) => {
+      console.log('🔌 Player received results ready notification (resultsReady):', data);
+      const questionNumber = data.questionId || data.questionNumber;
+      if (questionNumber) {
+        console.log(`🎯 PLAYER: Results ready for question ${questionNumber}, updating state to RESULTS#${questionNumber}`);
+        // Update local state to show results screen immediately
+        setGameState(`RESULTS#${String(questionNumber).padStart(3, '0')}`);
+        // Then fetch the actual results data
+        checkGameState();
+      }
+    });
+
     // Connect as player - WebSocket is required
     console.log('🔌 PLAYER: Connecting WebSocket for real-time updates');
     webSocketClient.connect(gameId, playerName, false);
@@ -316,6 +343,8 @@ function PlayerPage() {
       webSocketClient.offMessage('playerAnswered');
       webSocketClient.offMessage('playerVoted');
       webSocketClient.offMessage('aiSummaryReady');
+      webSocketClient.offMessage('hostMessage');
+      webSocketClient.offMessage('resultsReady');
     };
   }, [gameId, playerName, joined, useWebSocket]);
 
@@ -625,9 +654,63 @@ function PlayerPage() {
       });
       const resultsJson = await resultsRes.json();
       
-      if (resultsJson.voteTallies) {
+      // Handle both trivia and call-and-answer result formats
+      if (resultsJson.voteTallies || resultsJson.answers) {
         setResults(resultsJson);
-        console.log(`✅ PLAYER: Results data loaded, voteTallies:`, Object.keys(resultsJson.voteTallies).length);
+        
+        // Try to reconstruct question data from results if we don't have it (works for both trivia and call-and-answer)
+        if (!currentQuestion && resultsJson) {
+          console.log(`🔍 PLAYER: Question data missing, checking if results contain question info`);
+          if (resultsJson.question || resultsJson.questionTitle || resultsJson.questionDetail || resultsJson.correctAnswer || resultsJson.optionA) {
+            
+            // For trivia games, if correctAnswer is missing, try to determine it from player answers
+            let correctAnswer = resultsJson.correctAnswer;
+            if (!correctAnswer && resultsJson.gameType === 'trivia' && resultsJson.answers) {
+              const correctPlayerAnswer = resultsJson.answers.find(answer => answer.isCorrect);
+              if (correctPlayerAnswer) {
+                correctAnswer = correctPlayerAnswer.answer;
+                console.log(`🔧 PLAYER: Determined correct answer from player data: ${correctAnswer}`);
+              }
+            }
+            
+            const reconstructedQuestion = {
+              title: resultsJson.question || resultsJson.questionTitle || resultsJson.questionDetail || 'Question',
+              questionDetail: resultsJson.questionDetail || resultsJson.question || resultsJson.questionTitle,
+              correctAnswer: correctAnswer,
+              optionA: resultsJson.optionA,
+              optionB: resultsJson.optionB,
+              optionC: resultsJson.optionC,
+              optionD: resultsJson.optionD,
+              optionE: resultsJson.optionE,
+              optionF: resultsJson.optionF
+            };
+            setCurrentQuestion(reconstructedQuestion);
+            console.log(`🔧 PLAYER: Reconstructed question data from results:`, reconstructedQuestion);
+          }
+        }
+        
+        if (resultsJson.gameType === 'trivia') {
+          console.log(`✅ PLAYER: Trivia results data loaded, answers:`, resultsJson.answers?.length || 0);
+          console.log(`🔍 PLAYER: Full trivia results data:`, resultsJson);
+          
+          // For trivia, populate answers state with the trivia results answers
+          if (resultsJson.answers) {
+            setAnswers(resultsJson.answers.map(answer => ({
+              name: answer.playerName, // Convert to expected format for UI
+              player: answer.playerName,
+              playerName: answer.playerName,
+              answer: answer.answer,
+              isCorrect: answer.isCorrect,
+              points: answer.pointsEarned || 0,
+              basePoints: answer.basePoints || 0,
+              speedBonus: answer.speedBonus || 0,
+              responseTimeMs: answer.responseTimeMs || 0
+            })));
+            console.log(`📊 PLAYER: Set answers state with trivia results for highlighting`);
+          }
+        } else {
+          console.log(`✅ PLAYER: Call-and-answer results data loaded, voteTallies:`, Object.keys(resultsJson.voteTallies || {}).length);
+        }
         
         // Get player rankings and score information for RESULTS display
         await loadPlayerScoreInfo(resultsJson);
@@ -699,15 +782,32 @@ function PlayerPage() {
           let roundScore = 0;
           const resultsToUse = currentResults || results;
           
-          if (resultsToUse && resultsToUse.voteTallies) {
-            const playerResult = Object.values(resultsToUse.voteTallies).find(tally => 
-              tally.playerName === playerName
-            );
-            if (playerResult) {
-              roundScore = playerResult.totalScore || 0;
-              console.log(`📊 PLAYER: Found round score for ${playerName}: ${roundScore}`);
+          // Handle both trivia and call-and-answer result formats for round score
+          if (resultsToUse) {
+            if (resultsToUse.gameType === 'trivia' && resultsToUse.answers) {
+              // Trivia format: find player in answers array
+              const playerResult = resultsToUse.answers.find(answer => 
+                answer.playerName === playerName
+              );
+              if (playerResult) {
+                roundScore = playerResult.pointsEarned || 0;
+                console.log(`📊 PLAYER: Found trivia round score for ${playerName}: ${roundScore}`);
+              } else {
+                console.log(`📊 PLAYER: No trivia round score found for ${playerName} in answers`);
+              }
+            } else if (resultsToUse.voteTallies) {
+              // Call-and-answer format: find player in voteTallies
+              const playerResult = Object.values(resultsToUse.voteTallies).find(tally => 
+                tally.playerName === playerName
+              );
+              if (playerResult) {
+                roundScore = playerResult.totalScore || 0;
+                console.log(`📊 PLAYER: Found call-and-answer round score for ${playerName}: ${roundScore}`);
+              } else {
+                console.log(`📊 PLAYER: No call-and-answer round score found for ${playerName} in voteTallies`);
+              }
             } else {
-              console.log(`📊 PLAYER: No round score found for ${playerName} in voteTallies`);
+              console.log(`📊 PLAYER: No recognized results format for round score calculation`);
             }
           } else {
             console.log(`📊 PLAYER: No results data available for round score calculation`);
@@ -910,12 +1010,21 @@ function PlayerPage() {
 
     try {
       // Use WebSocket to submit answer (following the ANSWER# pattern)
-      const questionNumber = currentQuestion.questionNumber || currentQuestion.id;
+      let questionNumber = currentQuestion.questionNumber || currentQuestion.id;
+      
+      // Fallback: extract from game state if question number is not available
+      if (!questionNumber && gameState && gameState.startsWith('ASK#')) {
+        questionNumber = gameState.split('#')[1]; // Extract from "ASK#001"
+      }
+      
       const messageType = `ANSWER#${questionNumber}`;
       
       console.log(`🎯 PLAYER: Submitting answer via WebSocket - messageType: ${messageType}`);
+      console.log(`🎯 PLAYER: DEBUG currentQuestion object:`, currentQuestion);
+      console.log(`🎯 PLAYER: DEBUG questionNumber extracted: ${questionNumber}, gameState: ${gameState}`);
+      console.log(`🎯 PLAYER: DEBUG answer: ${answer}, answerType: ${gameType === 'trivia' ? 'trivia' : 'text'}`);
       
-      // Send answer via WebSocket
+      // Send answer via WebSocket (same method for both trivia and call-and-answer)
       webSocketClient.sendCleanMessage(messageType, {
         answer: answer,
         answerType: gameType === 'trivia' ? 'trivia' : 'text'
@@ -1283,9 +1392,17 @@ function PlayerPage() {
               )}
             </div>
             <div className="lesson-title">
-              {currentQuestion.title || currentQuestion.question}
+              {gameType === 'trivia' ? 
+                (currentQuestion.title || currentQuestion.question) :
+                (currentQuestion.title || currentQuestion.question)
+              }
             </div>
-            {currentQuestion.detail && (
+            {gameType === 'trivia' && currentQuestion.questionDetail && (
+              <div className="lesson-detail">
+                {currentQuestion.questionDetail}
+              </div>
+            )}
+            {gameType === 'call-and-answer' && currentQuestion.detail && (
               <div className="lesson-detail">
                 {currentQuestion.detail}
               </div>
@@ -1494,12 +1611,12 @@ function PlayerPage() {
 
         {gameState.startsWith('RESULTS#') && (
           <div className="results-screen">
-            <h2>📊 Round Results</h2>
+            <h2>📊 Question {parseInt(gameState.split('#')[1])} Results</h2>
             
             {gameType === 'trivia' ? (
               <div className="trivia-player-results">
                 <div className="trivia-question-recap">
-                  <h3>{currentQuestion?.title}</h3>
+                  <h3>{currentQuestion?.questionDetail || currentQuestion?.title}</h3>
                 </div>
                 
                 <div className="trivia-options-results">
@@ -1507,18 +1624,98 @@ function PlayerPage() {
                     .filter(key => currentQuestion?.[key])
                     .map((key, index) => {
                       const optionLetter = String.fromCharCode(65 + index);
-                      const isCorrect = currentQuestion?.correctAnswer === currentQuestion?.[key];
+                      const optionId = `Option${optionLetter}`;
+                      // Handle different correct answer formats (OptionA vs actual text)
+                      const rawCorrectAnswer = currentQuestion?.correctAnswer;
+                      let correctAnswers = Array.isArray(rawCorrectAnswer) ? rawCorrectAnswer : [rawCorrectAnswer];
                       
-                      // Find player's answer from the answers array
-                      const playerAnswer = answers.find(answer => answer.name === playerName);
-                      const isPlayerChoice = playerAnswer?.answer === optionLetter;
+                      // Filter out null/undefined values
+                      correctAnswers = correctAnswers.filter(ans => ans != null);
+                      
+                      // Comprehensive correct answer checking
+                      let isCorrect = false;
+                      
+                      // Check all possible formats
+                      for (const correctAns of correctAnswers) {
+                        if (!correctAns) continue;
+                        
+                        // Direct matches
+                        if (correctAns === optionId || // "OptionA"
+                            correctAns === optionLetter || // "A"  
+                            correctAns === currentQuestion?.[key]) { // actual option text
+                          isCorrect = true;
+                          break;
+                        }
+                        
+                        // Handle "OptionA" format - convert to actual text and compare
+                        if (typeof correctAns === 'string' && correctAns.startsWith('Option')) {
+                          const correctLetter = correctAns.replace('Option', '');
+                          const correctOptionKey = `option${correctLetter}`;
+                          if (correctOptionKey === key || correctLetter === optionLetter) {
+                            isCorrect = true;
+                            break;
+                          }
+                        }
+                        
+                        // Handle letter format - convert to option key and compare  
+                        if (typeof correctAns === 'string' && correctAns.length === 1 && correctAns.match(/[A-F]/)) {
+                          const correctOptionKey = `option${correctAns}`;
+                          if (correctOptionKey === key || correctAns === optionLetter) {
+                            isCorrect = true;
+                            break;
+                          }
+                        }
+                      }
+                      
+                      // Find player's answer from the answers array (check both name formats)
+                      const playerAnswer = answers.find(answer => 
+                        answer.name === playerName || answer.playerName === playerName || answer.player === playerName
+                      );
+                      
+                      // Player's answer can be in different formats: "A", "Option A", or the actual option text
+                      const playerAnswerValue = playerAnswer?.answer;
+                      const isPlayerChoice = playerAnswerValue === optionLetter || 
+                                           playerAnswerValue === optionId || 
+                                           playerAnswerValue === currentQuestion?.[key];
+                      
+                      // Debug logging for answer highlighting
+                      console.log(`🎯 OPTION ${optionLetter} DEBUG:`);
+                      console.log(`  key: "${key}", optionLetter: "${optionLetter}", optionId: "${optionId}"`);
+                      console.log(`  Option Value: "${currentQuestion?.[key]}"`);
+                      console.log(`  currentQuestion object:`, currentQuestion);
+                      console.log(`  Raw correct answer: ${JSON.stringify(rawCorrectAnswer)}`);
+                      console.log(`  Processed correct answers: ${JSON.stringify(correctAnswers)}`);
+                      console.log(`  isCorrect calculation result: ${isCorrect}`);
+                      console.log(`  Player answer value: "${playerAnswerValue}"`);
+                      console.log(`  Player answer object:`, playerAnswer);
+                      console.log(`  isPlayerChoice: ${isPlayerChoice}`);
+                      console.log(`  Classes to apply: isCorrect=${isCorrect}, isPlayerChoice=${isPlayerChoice}, !isCorrect=${!isCorrect}`);
+                      console.log(`  Will add player-wrong? ${isPlayerChoice && !isCorrect}`);
+                      console.log(`  Will add player-correct? ${isPlayerChoice && isCorrect}`);
                       
                       let className = 'category-item trivia-result-option';
+                      
+                      // Add correct/incorrect base classes
                       if (isCorrect) {
                         className += ' correct';
-                      } else if (isPlayerChoice) {
-                        className += ' player-wrong';
+                        console.log(`  ✅ Adding 'correct' class to option ${optionLetter}`);
+                      } else {
+                        className += ' incorrect';
+                        console.log(`  ⚪ Adding 'incorrect' class to option ${optionLetter}`);
                       }
+                      
+                      // Add player-specific classes (these should have higher specificity)
+                      if (isPlayerChoice && !isCorrect) {
+                        className += ' player-wrong';
+                        console.log(`  ❌ Adding 'player-wrong' class to option ${optionLetter} (player's wrong answer)`);
+                      }
+                      if (isPlayerChoice && isCorrect) {
+                        className += ' player-correct';
+                        console.log(`  🎯 Adding 'player-correct' class to option ${optionLetter} (player's correct answer)`);
+                      }
+                      
+                      console.log(`  Final className: "${className}"`);
+                      console.log(`  ---`);
                       
                       return (
                         <div key={key} className={className}>
@@ -1534,10 +1731,39 @@ function PlayerPage() {
                 </div>
                 
                 <div className="player-results-summary">
+                  {playerScoreInfo?.roundScore > 0 && (
+                    <div className="round-score">
+                      <span className="score-label">This Round:</span>
+                      <span className="score-value">+{playerScoreInfo.roundScore} points</span>
+                      {(() => {
+                        // Find player's answer to show speed bonus breakdown
+                        const playerAnswer = answers.find(answer => 
+                          answer.name === playerName || answer.playerName === playerName || answer.player === playerName
+                        );
+                        if (playerAnswer && playerAnswer.speedBonus > 0) {
+                          return (
+                            <div className="speed-bonus-info">
+                              <small>
+                                ({playerAnswer.basePoints} base + {playerAnswer.speedBonus} speed bonus)
+                                <span className="speed-icon"> ⚡</span>
+                              </small>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  )}
                   <div className="player-total-score">
                     <span className="score-label">Total Score:</span>
-                    <span className="score-value">{playerScore} points</span>
+                    <span className="score-value">{playerScoreInfo?.totalScore || playerScore} points</span>
                   </div>
+                  {playerScoreInfo?.rankDisplay && (
+                    <div className="player-ranking">
+                      <span className="ranking-label">Ranking:</span>
+                      <span className="ranking-value">{playerScoreInfo.rankDisplay} out of {playerScoreInfo.totalPlayers} players</span>
+                    </div>
+                  )}
                   
                   {playerRanking && playerScore > 0 && (
                     <div className="player-ranking">
@@ -1609,6 +1835,9 @@ function PlayerPage() {
         )}
       </div>
       </div>
+
+      {/* GitHub Issue Reporting FAB */}
+      <IssueFab context="player" gameId={gameId} />
     </div>
   );
 }

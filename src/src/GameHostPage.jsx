@@ -253,27 +253,14 @@ function GameHostPage() {
     return Math.floor(1000 + Math.random() * 9000).toString();
   }
 
-  // Handle debug mode toggle
-  const handleToggleGameDebugMode = async () => {
-    if (!gameId) return;
+  // Handle debug mode toggle - client-side only, no server call needed
+  const handleToggleGameDebugMode = () => {
+    const newDebugMode = !gameDebugMode;
+    setGameDebugMode(newDebugMode);
+    console.log(`🐛 Game ${gameId} debug mode ${newDebugMode ? 'ENABLED' : 'DISABLED'}`);
     
-    try {
-      const newDebugMode = !gameDebugMode;
-      const response = await fetch(`${API_BASE}games/${gameId}/debug-mode`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ debugMode: newDebugMode })
-      });
-      
-      if (response.ok) {
-        setGameDebugMode(newDebugMode);
-        console.log(`🐛 Game ${gameId} debug mode ${newDebugMode ? 'ENABLED' : 'DISABLED'}`);
-      } else {
-        console.error('Failed to update game debug mode:', response.status);
-      }
-    } catch (error) {
-      console.error('Error updating game debug mode:', error);
-    }
+    // Store in localStorage for persistence
+    localStorage.setItem(`game_debug_mode_${gameId}`, newDebugMode.toString());
   };
 
   // Fetch AI summary for a specific question from DynamoDB
@@ -329,7 +316,9 @@ function GameHostPage() {
           summary: newSummary.summary,
           discussionTopics: newSummary.discussionQuestions || [],
           nextSteps: newSummary.nextSteps || [],
-          prompt: gameDebugMode ? newSummary.debugPrompt : undefined
+          prompt: gameDebugMode ? newSummary.debugPrompt : undefined,
+          debugPrompt: gameDebugMode ? newSummary.debugPrompt : undefined,
+          debugProvenance: gameDebugMode ? newSummary.debugProvenance : undefined
         });
         // Also update the cached summaries
         setAiSummaries(prev => ({
@@ -405,7 +394,9 @@ Focus on actionable business strategy insights.`;
               discussionTopics: existingSummary.discussionQuestions || [],
               nextSteps: existingSummary.nextSteps || [],
               markdownResponse: existingSummary.markdownResponse || null,
-              prompt: gameDebugMode ? existingSummary.debugPrompt : undefined
+              prompt: gameDebugMode ? existingSummary.debugPrompt : undefined,
+              debugPrompt: gameDebugMode ? existingSummary.debugPrompt : undefined,
+              debugProvenance: gameDebugMode ? existingSummary.debugProvenance : undefined
             });
             setLoadingAIInsights(false);
           } else {
@@ -654,7 +645,9 @@ Focus on actionable business strategy insights.`;
               discussionTopics: summary.discussionQuestions || [],
               nextSteps: summary.nextSteps || [],
               markdownResponse: summary.markdownResponse || null,
-              prompt: gameDebugMode ? summary.debugPrompt : undefined
+              prompt: gameDebugMode ? summary.debugPrompt : undefined,
+              debugPrompt: gameDebugMode ? summary.debugPrompt : undefined,
+              debugProvenance: gameDebugMode ? summary.debugProvenance : undefined
             });
             setLoadingAIInsights(false);
             console.log('🔌 AI Summary state updated');
@@ -850,19 +843,40 @@ Focus on actionable business strategy insights.`;
                 console.log(`🔍 HOST: voteTallies structure:`, resultsData.voteTallies);
                 console.log(`🔍 HOST: voteTallies keys:`, Object.keys(resultsData.voteTallies || {}));
                 
-                // Format results the same way as handleShowResults
-                const formattedAnswers = resultsData.voteTallies && Object.keys(resultsData.voteTallies).length > 0
-                  ? Object.values(resultsData.voteTallies).map((tally, index) => {
-                      console.log(`📊 HOST: Formatting tally ${index}:`, tally);
-                      return {
-                        player: tally.playerName,
-                        answer: tally.answerText,
-                        points: tally.totalScore,
-                        placement: tally.firstPlace > 0 ? 1 : tally.secondPlace > 0 ? 2 : tally.thirdPlace > 0 ? 3 : 0,
-                        votes: tally.firstPlace + tally.secondPlace + tally.thirdPlace
-                      };
-                    })
-                  : [];
+                // Format results based on game type - same logic as handleShowResults
+                let formattedAnswers = [];
+                
+                // Handle different result formats based on game type
+                if (resultsData.gameType === 'trivia') {
+                  // Trivia results format: { answers: [...], leaderboard: [...] }
+                  console.log(`🧠 HOST STATE RESTORE: Processing trivia results with ${resultsData.answers?.length || 0} answers`);
+                  
+                  formattedAnswers = (resultsData.answers || []).map(answer => ({
+                    player: answer.playerName,
+                    answer: answer.answer, // Letter like 'A', 'B', 'C'
+                    points: answer.pointsEarned || 0,
+                    isCorrect: answer.isCorrect || false,
+                    responseTimeMs: answer.responseTimeMs || 0,
+                    speedBonus: answer.speedBonus || 0,
+                    basePoints: answer.basePoints || 0,
+                    submittedAt: answer.submittedAt
+                  }));
+                } else {
+                  // Call-and-answer results format: { voteTallies: {...} }
+                  console.log(`📊 HOST STATE RESTORE: Processing call-and-answer results with voteTallies`);
+                  formattedAnswers = resultsData.voteTallies && Object.keys(resultsData.voteTallies).length > 0
+                    ? Object.values(resultsData.voteTallies).map((tally, index) => {
+                        console.log(`📊 HOST: Formatting tally ${index}:`, tally);
+                        return {
+                          player: tally.playerName,
+                          answer: tally.answerText,
+                          points: tally.totalScore,
+                          placement: tally.firstPlace > 0 ? 1 : tally.secondPlace > 0 ? 2 : tally.thirdPlace > 0 ? 3 : 0,
+                          votes: tally.firstPlace + tally.secondPlace + tally.thirdPlace
+                        };
+                      })
+                    : [];
+                }
                 
                 console.log(`🎯 HOST: Final formatted answers:`, formattedAnswers);
                 setAnswers(formattedAnswers);
@@ -1310,6 +1324,14 @@ Focus on actionable business strategy insights.`;
         // Handle both array and string correctAnswer formats
         const correctAnswers = Array.isArray(questionData.correctAnswer) ? 
           questionData.correctAnswer : [questionData.correctAnswer];
+        
+        // Debug logging
+        console.log(`🔍 Checking answer for ${answer.name}:`);
+        console.log(`  - Player answered: "${answer.answer}"`);
+        console.log(`  - Player option ID: "${playerOptionId}"`);
+        console.log(`  - Correct answer(s): ${JSON.stringify(correctAnswers)}`);
+        console.log(`  - Question data correctAnswer: "${questionData.correctAnswer}"`);
+        
         const isCorrect = correctAnswers.includes(playerOptionId) || correctAnswers.includes(playerAnswerText);
         
         console.log(`👤 ${answer.name} answered: ${answer.answer} (${playerAnswerText}) - ${isCorrect ? '✅ CORRECT' : '❌ WRONG'}`);
@@ -1356,7 +1378,7 @@ Focus on actionable business strategy insights.`;
   };
 
   const handleFinishQuestion = async () => {
-    // For trivia, go straight to results
+    // For trivia, go straight to results using the same unified mechanism as call-and-answer
     if (currentGameType === 'trivia') {
       // Warn if not all players have answered
       if (playersWhoAnswered.length < players.length) {
@@ -1375,34 +1397,9 @@ Focus on actionable business strategy insights.`;
         console.error('Error calculating trivia scores:', e);
       }
       
-      // The backend sets the state to RESULTS#paddedQuestionId, so we need to match that format
-      const paddedQuestionNumber = String(lessonNumber).padStart(3, '0');
-      const resultsState = `RESULTS#${paddedQuestionNumber}`;
-      
-      setManualStateChange(true);
-      setGameState(resultsState);
-      console.log(`✅ HOST: Set trivia game state to ${resultsState}`);
-      
-      // Update game state in database
-      try {
-        const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
-        const currentState = stateRes.ok ? await stateRes.json() : {};
-        
-        await fetch(`${API_BASE}games/${gameId}/state`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            state: 'results',
-            currentQuestion: currentState.currentQuestion,
-            currentQuestionId: currentState.currentQuestion,
-            scoredQuestions: [...(currentState.scoredQuestions || []), currentState.currentQuestion],
-            usedQuestions: currentState.usedQuestions || [],
-            gameType: currentGameType
-          })
-        });
-      } catch (e) {
-        console.error('Error updating game state to results:', e);
-      }
+      // Use the same unified results mechanism as call-and-answer
+      console.log(`🧠 TRIVIA: Using unified handleShowResults() mechanism`);
+      await handleShowResults();
       return;
     }
     
@@ -1456,8 +1453,9 @@ Focus on actionable business strategy insights.`;
   };
 
   const handleShowResults = async () => {
-    // Warn if not all players have voted
-    if (playersWhoVoted.length < players.length) {
+    // For trivia games, no voting phase - skip vote check
+    // For call-and-answer games, warn if not all players have voted
+    if (currentGameType !== 'trivia' && playersWhoVoted.length < players.length) {
       const proceed = await showConfirmation(
         'Show Results?',
         `Only ${playersWhoVoted.length} of ${players.length} players have voted. Do you want to show results anyway?`,
@@ -1492,17 +1490,43 @@ Focus on actionable business strategy insights.`;
       
       const resultsData = await resultsRes.json();
       console.log(`🏆 HOST: Received results for question ${questionNumber}:`, resultsData);
+      console.log(`🎮 HOST: Game type: ${currentGameType}, Results game type: ${resultsData.gameType}`);
       
-      // Update state with results (formatted as answers with scoring)
-      const formattedAnswers = resultsData.voteTallies && Object.keys(resultsData.voteTallies).length > 0
-        ? Object.values(resultsData.voteTallies).map(tally => ({
-            player: tally.playerName,
-            answer: tally.answerText,
-            points: tally.totalScore,
-            placement: tally.firstPlace > 0 ? 1 : tally.secondPlace > 0 ? 2 : tally.thirdPlace > 0 ? 3 : 0,
-            votes: tally.firstPlace + tally.secondPlace + tally.thirdPlace
-          }))
-        : []; // Empty array if no votes
+      let formattedAnswers = [];
+      
+      // Handle different result formats based on game type
+      if (resultsData.gameType === 'trivia') {
+        // Trivia results format: { answers: [...], leaderboard: [...] }
+        console.log(`🧠 HOST: Processing trivia results with ${resultsData.answers?.length || 0} answers`);
+        
+        formattedAnswers = (resultsData.answers || []).map(answer => ({
+          player: answer.playerName,
+          answer: answer.answer, // Letter like 'A', 'B', 'C'
+          points: answer.pointsEarned || 0,
+          isCorrect: answer.isCorrect || false,
+          responseTimeMs: answer.responseTimeMs || 0,
+          speedBonus: answer.speedBonus || 0,
+          basePoints: answer.basePoints || 0,
+          submittedAt: answer.submittedAt
+        }));
+        
+        console.log(`🧠 HOST: Formatted ${formattedAnswers.length} trivia answers:`, 
+          formattedAnswers.map(a => `${a.player}: ${a.answer} (${a.isCorrect ? 'correct' : 'incorrect'}, ${a.points} pts)`));
+        
+      } else {
+        // Call-and-answer results format: { voteTallies: {...} }
+        console.log(`💬 HOST: Processing call-and-answer results with voteTallies`);
+        
+        formattedAnswers = resultsData.voteTallies && Object.keys(resultsData.voteTallies).length > 0
+          ? Object.values(resultsData.voteTallies).map(tally => ({
+              player: tally.playerName,
+              answer: tally.answerText,
+              points: tally.totalScore,
+              placement: tally.firstPlace > 0 ? 1 : tally.secondPlace > 0 ? 2 : tally.thirdPlace > 0 ? 3 : 0,
+              votes: tally.firstPlace + tally.secondPlace + tally.thirdPlace
+            }))
+          : []; // Empty array if no votes
+      }
       
       setAnswers(formattedAnswers);
       console.log(`📊 HOST: Updated answers with ${formattedAnswers.length} results`);
@@ -1745,6 +1769,7 @@ Focus on actionable business strategy insights.`;
           questionSetId: newGameSetId,
           randomizeQuestions: randomizeQuestions,
           selectedCategories: selectedCategories,
+          triviaTimer: engagementType === 'trivia' ? triviaTimer : null,
           hostName: 'Host'
         })
       });
@@ -2780,10 +2805,19 @@ Ready to engage? See you there!`;
               title="Click to expand"
             >
               {currentGameType === 'trivia' ? 
-                (questions[0].questionDetail || questions[0].title || questions[0].question) :
+                (questions[0].title || questions[0].question) :
                 (questions[0].title || questions[0].question)
               }
             </div>
+            {!lessonExpanded && currentGameType === 'trivia' && questions[0].questionDetail && (
+              <div 
+                className="lesson-detail clickable-lesson" 
+                onClick={() => setLessonExpanded(true)}
+                title="Click to expand"
+              >
+                {questions[0].questionDetail}
+              </div>
+            )}
             {!lessonExpanded && questions[0].detail && currentGameType === 'call-and-answer' && (
               <div 
                 className="lesson-detail clickable-lesson" 
@@ -2884,12 +2918,12 @@ Ready to engage? See you there!`;
 
         {gameState.startsWith('RESULTS#') && (
           <div className={`results-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
-            <h2>🏆 Results</h2>
+            <h2>🏆 Question {parseInt(gameState.split('#')[1])} Results</h2>
             
             {currentGameType === 'trivia' ? (
               <div className="trivia-results-display">
                 <div className="trivia-question-recap">
-                  <h3>{questions[0]?.questionDetail || questions[0]?.title}</h3>
+                  <h3>{questions[0]?.questionDetail || questions[0]?.detail || questions[0]?.title}</h3>
                 </div>
                 
                 <div className="trivia-options-results">
@@ -2900,7 +2934,40 @@ Ready to engage? See you there!`;
                       const optionId = `Option${optionLetter}`;
                       const correctAnswers = Array.isArray(questions[0]?.correctAnswer) ? 
                         questions[0]?.correctAnswer : [questions[0]?.correctAnswer];
-                      const isCorrect = correctAnswers.includes(optionId) || correctAnswers.includes(questions[0]?.[key]);
+                      
+                      // Comprehensive correct answer checking (same logic as PlayerPage)
+                      let isCorrect = false;
+                      
+                      for (const correctAns of correctAnswers) {
+                        if (!correctAns) continue;
+                        
+                        // Direct matches
+                        if (correctAns === optionId || // "OptionA"
+                            correctAns === optionLetter || // "A"  
+                            correctAns === questions[0]?.[key]) { // actual option text
+                          isCorrect = true;
+                          break;
+                        }
+                        
+                        // Handle "OptionA" format - convert to actual text and compare
+                        if (typeof correctAns === 'string' && correctAns.startsWith('Option')) {
+                          const correctLetter = correctAns.replace('Option', '');
+                          const correctOptionKey = `option${correctLetter}`;
+                          if (correctOptionKey === key || correctLetter === optionLetter) {
+                            isCorrect = true;
+                            break;
+                          }
+                        }
+                        
+                        // Handle letter format - convert to option key and compare  
+                        if (typeof correctAns === 'string' && correctAns.length === 1 && correctAns.match(/[A-F]/)) {
+                          const correctOptionKey = `option${correctAns}`;
+                          if (correctOptionKey === key || correctAns === optionLetter) {
+                            isCorrect = true;
+                            break;
+                          }
+                        }
+                      }
                       
                       // Calculate how many players selected this option
                       const playersWhoSelectedThis = answers.filter(answer => answer.answer === optionLetter).length;
@@ -2927,18 +2994,19 @@ Ready to engage? See you there!`;
                 <div className="trivia-player-scores">
                   <h4>Player Scores This Round:</h4>
                   {answers.map((answer, idx) => {
-                    const playerOptionId = `Option${answer.answer}`;
-                    const correctAnswers = Array.isArray(questions[0]?.correctAnswer) ? 
-                      questions[0]?.correctAnswer : [questions[0]?.correctAnswer];
-                    const isCorrect = correctAnswers.includes(playerOptionId) || correctAnswers.includes(questions[0]?.[`option${answer.answer}`]);
-                    const points = isCorrect ? (questions[0]?.points || 10) : 0;
-                    const player = players.find(p => p.name === answer.name);
+                    // Use the already calculated data from the API instead of recalculating
+                    const playerName = answer.player; // Correct property name for trivia results
+                    const isCorrect = answer.isCorrect; // From API calculation
+                    const roundPoints = answer.points || 0; // From API calculation (includes speed bonus)
+                    const player = players.find(p => p.name === playerName);
+                    
+                    console.log(`🏆 TRIVIA PLAYER RESULT: ${playerName} answered ${answer.answer}, isCorrect: ${isCorrect}, points: ${roundPoints}, total: ${player?.score}`);
                     
                     return (
                       <div key={idx} className={`trivia-player-result ${isCorrect ? 'correct' : 'incorrect'}`}>
-                        <span className="player-name">{answer.name}</span>
+                        <span className="player-name">{playerName}</span>
                         <span className="player-answer">Answer: {answer.answer}</span>
-                        <span className="player-points">{isCorrect ? '✓' : '✗'} {points} pts</span>
+                        <span className="player-points">{isCorrect ? '✓' : '✗'} +{roundPoints} pts</span>
                         <span className="player-total">Total: {player?.score || 0} pts</span>
                       </div>
                     );
@@ -3067,10 +3135,58 @@ Ready to engage? See you there!`;
                     )}
                     
                     {/* Debug Prompt Display */}
-                    {gameDebugMode && currentAIInsights.prompt && (
+                    {gameDebugMode && (currentAIInsights.prompt || currentAIInsights.debugPrompt || currentAIInsights.debugProvenance) && (
                       <div className="ai-insights-section-item debug-section">
-                        <h4>🐛 Debug: AI Prompt</h4>
-                        <div className="debug-prompt-content">{currentAIInsights.prompt}</div>
+                        <h4>🐛 Debug: AI Prompt Information</h4>
+                        
+                        {/* Prompt Provenance Information */}
+                        {currentAIInsights.debugProvenance && (
+                          <div className="debug-provenance-section">
+                            <h5>📋 Prompt Source</h5>
+                            <div className="provenance-info">
+                              <strong>Source:</strong> {currentAIInsights.debugProvenance.source === 'question_set' ? 'Custom prompt from question set' : 
+                                                       currentAIInsights.debugProvenance.source === 'default_category' ? 'Default prompt for game type + category' :
+                                                       currentAIInsights.debugProvenance.source === 'default_game_type' ? 'Default prompt for game type' :
+                                                       'Fallback prompt'}
+                              <br />
+                              <strong>Details:</strong> {currentAIInsights.debugProvenance.details}
+                              {currentAIInsights.debugProvenance.promptName && (
+                                <>
+                                  <br />
+                                  <strong>Prompt Name:</strong> {currentAIInsights.debugProvenance.promptName}
+                                </>
+                              )}
+                              {currentAIInsights.debugProvenance.category && (
+                                <>
+                                  <br />
+                                  <strong>Category:</strong> {currentAIInsights.debugProvenance.category}
+                                </>
+                              )}
+                            </div>
+                            
+                            {/* Context Hierarchy */}
+                            {currentAIInsights.debugProvenance.hierarchy && currentAIInsights.debugProvenance.hierarchy.length > 0 && (
+                              <div className="context-hierarchy">
+                                <h6>🎯 Context Sources:</h6>
+                                <ul>
+                                  {currentAIInsights.debugProvenance.hierarchy.map((item, idx) => (
+                                    <li key={idx}>
+                                      <strong>{item.type === 'customInstruction' ? 'Custom Instructions' : 'AI Context'}:</strong> 
+                                      <span className="context-source"> from {item.source === 'question_set' ? 'question set' : item.source}</span>
+                                      <div className="context-preview">{item.value.substring(0, 100)}...</div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {/* Full Prompt Display */}
+                        <div className="debug-prompt-content">
+                          <h5>📝 Full AI Prompt</h5>
+                          <div className="prompt-display">{currentAIInsights.debugPrompt || currentAIInsights.prompt}</div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -3186,9 +3302,9 @@ Ready to engage? See you there!`;
                 (questions[0].title || questions[0].question)
               }
             </div>
-            {currentGameType === 'trivia' && questions[0].questionDetail && (
+            {currentGameType === 'trivia' && (questions[0].questionDetail || questions[0].detail) && (
               <div className="expanded-lesson-detail">
-                {questions[0].questionDetail}
+                {questions[0].questionDetail || questions[0].detail}
               </div>
             )}
             {questions[0].detail && (

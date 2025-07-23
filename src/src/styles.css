@@ -4774,6 +4774,20 @@ body {
   color: white !important;
 }
 
+.trivia-result-option.player-correct {
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+  border-color: #10b981 !important;
+  color: white !important;
+  transform: scale(1.05) !important;
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4) !important;
+  font-weight: 600 !important;
+  opacity: 1 !important;
+}
+
+.trivia-result-option.player-correct .category-name {
+  color: white !important;
+}
+
 .correct-indicator {
   color: #10b981;
   font-weight: bold;
@@ -6201,4 +6215,79 @@ body {
   margin: 2px 0;
   font-size: 0.9rem;
   color: #495057;
+}
+
+/* Debug Prompt Provenance Styles */
+.debug-provenance-section {
+  margin-bottom: 20px;
+  padding: 15px;
+  background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+  border-radius: 8px;
+  border: 1px solid #bbdefb;
+}
+
+.provenance-info {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  background: white;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #e1e5e9;
+  margin-top: 10px;
+}
+
+.context-hierarchy {
+  margin-top: 15px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  border: 1px solid #e1e5e9;
+}
+
+.context-hierarchy h6 {
+  margin: 0 0 10px 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.context-hierarchy ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.context-hierarchy li {
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+}
+
+.context-source {
+  color: #667eea;
+  font-style: italic;
+}
+
+.context-preview {
+  margin-top: 5px;
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.8rem;
+  color: #666;
+  border-left: 3px solid #667eea;
+}
+
+.prompt-display {
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 15px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 400px;
+  overflow-y: auto;
+  margin-top: 10px;
 }
