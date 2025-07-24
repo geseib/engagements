@@ -314,8 +314,10 @@ function GameHostPage() {
         const newSummary = await response.json();
         setCurrentAIInsights({
           summary: newSummary.summary,
+          summaryText: newSummary.summaryText,
           discussionTopics: newSummary.discussionQuestions || [],
           nextSteps: newSummary.nextSteps || [],
+          markdownResponse: newSummary.markdownResponse,
           prompt: gameDebugMode ? newSummary.debugPrompt : undefined,
           debugPrompt: gameDebugMode ? newSummary.debugPrompt : undefined,
           debugProvenance: gameDebugMode ? newSummary.debugProvenance : undefined
@@ -1390,15 +1392,8 @@ Focus on actionable business strategy insights.`;
         if (!proceed) return;
       }
       
-      // Calculate trivia scores before showing results
-      try {
-        await calculateTriviaScores();
-      } catch (e) {
-        console.error('Error calculating trivia scores:', e);
-      }
-      
-      // Use the same unified results mechanism as call-and-answer
-      console.log(`🧠 TRIVIA: Using unified handleShowResults() mechanism`);
+      // Skip calculateTriviaScores - the get-results API already handles all scoring
+      console.log(`🧠 TRIVIA: Using unified handleShowResults() mechanism (scoring handled by backend)`);
       await handleShowResults();
       return;
     }
@@ -1552,8 +1547,11 @@ Focus on actionable business strategy insights.`;
       // Make sure currentQuestionId is set to the question number
       setCurrentQuestionId(questionNumber);
       
-      // Fetch AI summary for this question if available
-      await fetchAISummary(questionNumber);
+      // Fetch AI summary for this question if available (non-blocking)
+      // This can happen in the background while results are shown
+      fetchAISummary(questionNumber).catch(err => 
+        console.error('Background AI summary fetch failed:', err)
+      );
       
       // The backend sets the state to RESULTS#paddedQuestionId, so we need to match that format
       const paddedQuestionNumber = String(questionNumber).padStart(3, '0');

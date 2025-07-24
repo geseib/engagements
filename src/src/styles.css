@@ -5465,7 +5465,7 @@ body {
 
 .question-state.big-screen-mode .lesson-title {
   font-family: 'PP Neue Corp Wide', sans-serif;
-  font-size: 2.5rem;
+  font-size: 3.5rem;
   font-weight: 800;
   color: #333;
   line-height: 1.2;
@@ -5480,7 +5480,7 @@ body {
 }
 
 .question-state.big-screen-mode .lesson-detail {
-  font-size: 1.4rem;
+  font-size: 1.8rem;
   color: #555;
   line-height: 1.6;
   margin: 30px 0;
@@ -5509,14 +5509,14 @@ body {
 
 .question-state.big-screen-mode .category-item.trivia-option {
   padding: 20px 25px;
-  font-size: 1.2rem;
+  font-size: 1.5rem;
   min-height: 80px;
   display: flex;
   align-items: center;
 }
 
 .question-state.big-screen-mode .option-letter {
-  font-size: 1.5rem;
+  font-size: 1.8rem;
   margin-right: 15px;
 }
 

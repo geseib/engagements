@@ -4,6 +4,7 @@ import TriviaAIBuilder from './components/TriviaAIBuilder';
 import PollAIBuilder from './components/PollAIBuilder';
 import SurveyAIBuilder from './components/SurveyAIBuilder';
 import AIPromptManager from './components/AIPromptManager';
+import HelpButton from './components/HelpButton';
 import IssueFab from './components/IssueFab';
 import './BuilderPage.css';
 
@@ -34,6 +35,7 @@ function AdminPage() {
   const [customDescription, setCustomDescription] = useState('');
   const [customInstructions, setCustomInstructions] = useState('');
   const [aiContextInstructions, setAiContextInstructions] = useState('');
+  const [selectedPromptId, setSelectedPromptId] = useState(''); // AI prompt selection for upload
   const [showDefaultInstructions, setShowDefaultInstructions] = useState(false);
   const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer', 'trivia', or 'poll'
   
@@ -83,8 +85,6 @@ function AdminPage() {
   // AI Survey Builder
   const [showSurveyAIBuilder, setShowSurveyAIBuilder] = useState(false);
 
-  // Test API endpoints
-  const [testStatus, setTestStatus] = useState('');
 
   const defaultInstructions = "How would you apply this concept in your current role or organization? Consider the specific challenges and opportunities in your context.";
 
@@ -450,6 +450,7 @@ function AdminPage() {
           customDescription: customDescription.trim(),
           customInstructions: customInstructions.trim(),
           aiContextInstructions: aiContextInstructions.trim(),
+          promptId: selectedPromptId.trim(),
           engagementType: engagementType
         })
       });
@@ -463,6 +464,8 @@ function AdminPage() {
         setCustomTitle('');
         setCustomDescription('');
         setCustomInstructions('');
+        setAiContextInstructions('');
+        setSelectedPromptId('');
         // Reset file input
         const fileInput = document.getElementById('file-upload');
         if (fileInput) fileInput.value = '';
@@ -520,22 +523,8 @@ function AdminPage() {
       const result = await response.json();
 
       if (response.ok) {
-        setUploadStatus(`✅ ${result.message} - Opening in editor for review...`);
+        setUploadStatus(`✅ ${result.message} - Question set created successfully! You can edit it in the Question Sets list below.`);
         await fetchQuestionSets(); // Refresh the list
-        
-        // Auto-open the newly created question set in the editor
-        setTimeout(() => {
-          const newQuestionSet = {
-            id: result.setId,
-            name: metadata.title,
-            description: metadata.description,
-            customInstruction: metadata.customInstructions,
-            aiContextInstruction: metadata.aiContextInstructions,
-            engagementType: 'call-and-answer',
-            promptId: 'lessons-learned'
-          };
-          handleEditQuestionSet(newQuestionSet);
-        }, 500);
       } else {
         setUploadStatus(`❌ Upload failed: ${result.error || 'Unknown error'}`);
       }
@@ -604,22 +593,8 @@ function AdminPage() {
       const result = await response.json();
 
       if (response.ok) {
-        setUploadStatus(`✅ ${result.message} - Opening in editor for review...`);
+        setUploadStatus(`✅ ${result.message} - Trivia question set created successfully! You can edit it in the Question Sets list below.`);
         await fetchQuestionSets(); // Refresh the list
-        
-        // Auto-open the newly created question set in the editor
-        setTimeout(() => {
-          const newQuestionSet = {
-            id: result.setId,
-            name: metadata.title,
-            description: metadata.description,
-            customInstruction: metadata.customInstructions,
-            aiContextInstruction: metadata.aiContextInstructions,
-            engagementType: 'trivia',
-            promptId: 'lessons-learned'
-          };
-          handleEditQuestionSet(newQuestionSet);
-        }, 500);
       } else {
         setUploadStatus(`❌ Upload failed: ${result.error || 'Unknown error'}`);
       }
@@ -630,7 +605,8 @@ function AdminPage() {
   };
 
   const generateTriviaCSV = (questions) => {
-    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,CorrectAnswer,WrongAnswer1,WrongAnswer2,WrongAnswer3,WrongAnswer4,WrongAnswer5,Difficulty';
+    // Use the new CSV format that matches upload-questions.js expectations
+    const headers = 'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty';
     
     // First, group questions by category
     const questionsByCategory = {};
@@ -648,21 +624,11 @@ function AdminPage() {
       questionsByCategory[category].forEach((trivia, index) => {
         const questionNumber = index + 1; // Category-relative numbering (1, 2, 3 for each category)
         
-        const wrongAnswers = [
-          trivia.optionA !== trivia.correctAnswer ? trivia.optionA : '',
-          trivia.optionB !== trivia.correctAnswer ? trivia.optionB : '',
-          trivia.optionC !== trivia.correctAnswer ? trivia.optionC : '',
-          trivia.optionD !== trivia.correctAnswer ? trivia.optionD : '',
-          trivia.optionE !== trivia.correctAnswer ? trivia.optionE : '',
-          trivia.optionF !== trivia.correctAnswer ? trivia.optionF : ''
-        ].filter(answer => answer && answer.trim()).slice(0, 5);
-
-        // Pad with empty strings if needed
-        while (wrongAnswers.length < 5) {
-          wrongAnswers.push('');
-        }
-
-        rows.push(`"${category}","${questionNumber}","${trivia.title}","${trivia.detail || ''}","${trivia.school || 'General'}","${trivia.customInstructions || ''}","${trivia.correctAnswer}","${wrongAnswers[0]}","${wrongAnswers[1]}","${wrongAnswers[2]}","${wrongAnswers[3]}","${wrongAnswers[4]}","${trivia.difficulty}"`);
+        // Get the correct answer - keep as OptionA format for backend processing
+        const correctAnswer = Array.isArray(trivia.correctAnswer) ? trivia.correctAnswer.join(',') : trivia.correctAnswer;
+        
+        // Build the row with new format that matches what upload-questions.js expects
+        rows.push(`"${category}","${questionNumber}","${trivia.title}","${trivia.questionDetail || trivia.detail || ''}","${trivia.answerDetails || ''}","${trivia.school || 'General'}","${trivia.optionA || ''}","${trivia.optionB || ''}","${trivia.optionC || ''}","${trivia.optionD || ''}","${trivia.optionE || ''}","${trivia.optionF || ''}","${correctAnswer}","${trivia.difficulty}"`);
       });
     });
     
@@ -703,22 +669,8 @@ function AdminPage() {
       const result = await response.json();
 
       if (response.ok) {
-        setUploadStatus(`✅ ${result.message} - Opening in editor for review...`);
+        setUploadStatus(`✅ ${result.message} - Poll question set created successfully! You can edit it in the Question Sets list below.`);
         await fetchQuestionSets(); // Refresh the list
-        
-        // Auto-open the newly created question set in the editor
-        setTimeout(() => {
-          const newQuestionSet = {
-            id: result.setId,
-            name: metadata.title,
-            description: metadata.description,
-            customInstruction: metadata.customInstructions,
-            aiContextInstruction: metadata.aiContextInstructions,
-            engagementType: 'poll',
-            promptId: 'lessons-learned'
-          };
-          handleEditQuestionSet(newQuestionSet);
-        }, 500);
       } else {
         setUploadStatus(`❌ Upload failed: ${result.error || 'Unknown error'}`);
       }
@@ -793,52 +745,6 @@ function AdminPage() {
     }
   };
 
-  // Test API endpoints
-  const testAPIEndpoints = async () => {
-    setTestStatus('Testing API endpoints...');
-
-    try {
-      // Test the simple endpoint first
-      console.log('🧪 Testing API endpoint:', `${API_BASE}admin/test-ai`);
-      const testResponse = await fetch(`${API_BASE}admin/test-ai`);
-      const testResult = await testResponse.json();
-
-      if (testResponse.ok) {
-        setTestStatus(`✅ API Test Success: ${testResult.message}`);
-
-        // Test AI generation endpoint
-        setTimeout(async () => {
-          try {
-            const aiResponse = await fetch(`${API_BASE}admin/ai-generate-questions`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                engagementType: 'call-and-answer',
-                userInput: 'Test prompt for leadership scenarios',
-                questionCount: 1,
-                context: { title: 'Test' }
-              })
-            });
-
-            if (aiResponse.ok) {
-              setTestStatus(prev => prev + ' | ✅ AI Generation API Working');
-            } else {
-              const errorResult = await aiResponse.json();
-              setTestStatus(prev => prev + ` | ❌ AI Generation Failed: ${errorResult.error}`);
-            }
-          } catch (aiError) {
-            setTestStatus(prev => prev + ` | ❌ AI Generation Error: ${aiError.message}`);
-          }
-        }, 1000);
-
-      } else {
-        setTestStatus(`❌ API Test Failed: ${testResult.error || 'Unknown error'}`);
-      }
-    } catch (error) {
-      setTestStatus(`❌ API Test Error: ${error.message}`);
-      console.error('API Test Error:', error);
-    }
-  };
 
   const confirmDelete = async () => {
     setShowDeleteConfirm(false);
@@ -930,6 +836,7 @@ function AdminPage() {
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" width="800" data-parallax-layer="2" alt="" className="parallax__layer-img" />
                 <div data-parallax-layer="3" className="parallax__layer-title">
                   <h2 className="parallax__title">Admin Dashboard</h2>
+                  <HelpButton section="admin" variant="header" size="medium" />
                 </div>
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" width="800" data-parallax-layer="4" alt="" className="parallax__layer-img" />
               </div>
@@ -980,25 +887,6 @@ function AdminPage() {
           {activeTab === 'questionsets' && (
             <div className="tab-content">
 
-          {/* API Test Section */}
-          <div className="admin-section">
-            <h2>🧪 API Endpoint Test</h2>
-            <p className="section-description">Test if the AI generation API endpoints are working properly. Use this to verify that all AI builders are functioning correctly.</p>
-
-            <div className="test-controls">
-              <button
-                className="btn-secondary"
-                onClick={testAPIEndpoints}
-              >
-                🧪 Test AI API Endpoints
-              </button>
-              {testStatus && (
-                <div className="test-status" style={{ marginTop: '10px', padding: '10px', background: '#f8f9fa', borderRadius: '4px' }}>
-                  {testStatus}
-                </div>
-              )}
-            </div>
-          </div>
 
           {/* CSV Template Download Section */}
           <div className="admin-section">
@@ -1129,6 +1017,30 @@ function AdminPage() {
                     className="input-field textarea-field"
                     rows="4"
                   />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="selected-prompt">AI Summary Prompt (Optional)</label>
+                  <div className="help-text-container">
+                    <small className="help-text">
+                      Select a custom AI prompt for analysis summaries. Leave blank to use the default prompt for this engagement type.
+                    </small>
+                  </div>
+                  <select
+                    id="selected-prompt"
+                    value={selectedPromptId}
+                    onChange={(e) => setSelectedPromptId(e.target.value)}
+                    className="input-field select-field"
+                  >
+                    <option value="">Use default prompt for {engagementType === 'call-and-answer' ? 'call & answer' : engagementType}</option>
+                    {availablePrompts
+                      .filter(prompt => prompt.gameType === (engagementType === 'call-and-answer' ? 'callandanswer' : engagementType))
+                      .map(prompt => (
+                        <option key={prompt.promptId} value={prompt.promptId}>
+                          {prompt.name} {prompt.isDefault ? '(Default)' : ''}
+                        </option>
+                      ))}
+                  </select>
                 </div>
               </div>
 
@@ -1538,60 +1450,6 @@ function AdminPage() {
             </div>
           </div>
 
-          {/* Delete Games Section */}
-          <div className="admin-section danger-section">
-            <h2>🎮 Remove Games</h2>
-            <p className="section-description">Delete game data from the database.</p>
-            
-            <div className="delete-controls">
-              <div className="delete-mode-selector">
-                <label className="radio-label">
-                  <input
-                    type="radio"
-                    name="deleteMode"
-                    value="single"
-                    checked={deleteMode === 'single'}
-                    onChange={(e) => setDeleteMode(e.target.value)}
-                  />
-                  <span>Single Game</span>
-                </label>
-                <label className="radio-label">
-                  <input
-                    type="radio"
-                    name="deleteMode"
-                    value="all"
-                    checked={deleteMode === 'all'}
-                    onChange={(e) => setDeleteMode(e.target.value)}
-                  />
-                  <span>All Games</span>
-                </label>
-              </div>
-              
-              {deleteMode === 'single' && (
-                <input
-                  type="text"
-                  placeholder="Enter Game ID"
-                  value={deleteGameId}
-                  onChange={(e) => setDeleteGameId(e.target.value)}
-                  className="input-field"
-                />
-              )}
-              
-              <button
-                className="btn-danger"
-                onClick={handleDeleteGames}
-                disabled={isDeleting}
-              >
-                {isDeleting ? '⏳ Deleting...' : deleteMode === 'all' ? '🗑️ Delete All Games' : '🗑️ Delete Game'}
-              </button>
-            </div>
-            
-            {deleteStatus && (
-              <div className={`status-message ${deleteStatus.includes('✅') ? 'success' : deleteStatus.includes('❌') ? 'error' : ''}`}>
-                {deleteStatus}
-              </div>
-            )}
-          </div>
             </div>
           )}
 
