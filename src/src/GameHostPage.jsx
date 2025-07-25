@@ -4,6 +4,7 @@ import html2pdf from 'html2pdf.js';
 import webSocketClient from './WebSocketClient';
 import MarkdownRenderer from './components/MarkdownRenderer';
 import IssueFab from './components/IssueFab';
+import QuickstartMenu from './components/QuickstartMenu';
 
 const API_BASE = window.API_BASE;
 
@@ -96,11 +97,12 @@ function GameHostPage() {
   
   // New Game Dialog
   const [showNewGameDialog, setShowNewGameDialog] = useState(false);
+  const [showQuickstartMenu, setShowQuickstartMenu] = useState(false);
   const [newGameSetId, setNewGameSetId] = useState('');
   const [eventTitle, setEventTitle] = useState('');
   const [eventDetails, setEventDetails] = useState('');
   const [gameAiContext, setGameAiContext] = useState('');
-  const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer' or 'trivia'
+  const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer', 'trivia', or 'wavelength'
   const [triviaTimer, setTriviaTimer] = useState(30); // Timer for trivia questions in seconds
   const [randomizeQuestions, setRandomizeQuestions] = useState(true); // Default ON - randomize question order
   
@@ -1847,7 +1849,9 @@ ${eventTitle}
 You're invited to participate in an interactive engagement session!
 
 DETAILS:
-• Type: ${engagementType === 'call-and-answer' ? 'Call and Answer (Discussion + Voting)' : 'Trivia (Questions Only)'}
+• Type: ${engagementType === 'call-and-answer' ? 'Call and Answer (Discussion + Voting)' : 
+                engagementType === 'trivia' ? 'Trivia (Questions Only)' : 
+                'Wavelength (Spectrum-based Guessing)'}
 • Question Set: ${questionSet?.name || questionSet?.title || 'Unknown Set'}
 • Categories: ${catText}
 ${gameAiContext ? `• Context: ${gameAiContext}` : ''}
@@ -2071,6 +2075,23 @@ Ready to engage? See you there!`;
     }
   };
 
+  // Render the quickstart menu if it's being shown
+  if (showQuickstartMenu) {
+    return (
+      <QuickstartMenu
+        onGameCreated={(gameData) => {
+          setShowQuickstartMenu(false);
+          // Extract the gameId and eventTitle from the gameData object
+          setGameId(gameData.gameId);
+          setEventTitle(gameData.eventTitle);
+          setShowWelcomeScreen(false);
+          // The useEffect hook will automatically initialize the game when gameId is set
+        }}
+        onClose={() => setShowQuickstartMenu(false)}
+      />
+    );
+  }
+
   // Render the welcome screen if no game is selected
   if (showWelcomeScreen) {
     return (
@@ -2098,6 +2119,10 @@ Ready to engage? See you there!`;
             <p>Choose how you'd like to begin your collaborative learning session:</p>
             
             <div className="welcome-options">
+              <button className="btn-secondary btn-large welcome-btn" onClick={() => setShowQuickstartMenu(true)}>
+                ⚡ Quick Start
+              </button>
+              
               <button className="btn-primary btn-large welcome-btn" onClick={handleWelcomeNewGame}>
                 🎯 Create Engagement
               </button>
@@ -2350,6 +2375,7 @@ Ready to engage? See you there!`;
               >
                 <option value="call-and-answer">Call and Answer</option>
                 <option value="trivia">Trivia</option>
+                <option value="wavelength">Wavelength</option>
               </select>
             </div>
             
