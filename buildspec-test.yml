@@ -40,11 +40,26 @@ phases:
 
       - echo "Deploying frontend to S3..."
       - BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`FrontendBucketName`].OutputValue' --output text)
+      - echo "Frontend bucket name: $BUCKET_NAME"
+      - |
+        if [ -z "$BUCKET_NAME" ] || [ "$BUCKET_NAME" = "None" ]; then
+          echo "ERROR: Frontend bucket name not found in CloudFormation outputs"
+          aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[].{Key:OutputKey,Value:OutputValue}' --output table
+          exit 1
+        fi
       - aws s3 sync dist/ s3://$BUCKET_NAME/ --delete
 
       - echo "Invalidating CloudFront cache..."
       - DISTRIBUTION_ID=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDistributionId`].OutputValue' --output text)
-      - aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths '/*'
+      - echo "CloudFront distribution ID: $DISTRIBUTION_ID"
+      - |
+        if [ -z "$DISTRIBUTION_ID" ] || [ "$DISTRIBUTION_ID" = "None" ]; then
+          echo "WARNING: CloudFront distribution ID not found in CloudFormation outputs"
+          echo "Skipping CloudFront invalidation step"
+          aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[].{Key:OutputKey,Value:OutputValue}' --output table
+        else
+          aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths '/*'
+        fi
 
       - echo "Deployment complete!"
 
