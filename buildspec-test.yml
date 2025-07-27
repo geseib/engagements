@@ -10,8 +10,8 @@ phases:
   pre_build:
     commands:
       - echo "Pre-build phase started on $(date)"
-      - echo "Environment: $ENVIRONMENT"
-      - echo "Domain: $DOMAIN_NAME"
+      - 'echo "Environment: $ENVIRONMENT"'
+      - 'echo "Domain: $DOMAIN_NAME"'
   build:
     commands:
       - echo "Build phase started on $(date)"
