@@ -27,6 +27,15 @@ Parameters:
     Type: String
     Description: Route53 hosted zone ID
     Default: ZB9TUA073B5SH
+  GitHubToken:
+    Type: String
+    Description: GitHub Personal Access Token for creating issues
+    NoEcho: true
+    Default: ''
+  GitHubRepo:
+    Type: String
+    Description: GitHub repository in format owner/repo-name
+    Default: georgeseib/engage2
 Conditions:
   HasDomain:
     Fn::Not:
@@ -909,8 +918,13 @@ Resources:
           - bedrock:InvokeModelWithResponseStream
           Resource:
           - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0
+          - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0
           - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
           - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
           - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
       Events:
         AdminAIGenerateQuestionsEvent:
@@ -932,7 +946,8 @@ Resources:
     Properties:
       FunctionName:
         Fn::Sub: ${StackName}-admin-ai-generate-scenarios
-      Handler: index.generateScenarios
+      CodeUri: AdminAIGenerateScenariosFunction
+      Handler: ai-generate-scenarios.handler
       Runtime: nodejs18.x
       Timeout: 900
       MemorySize: 1024
@@ -948,95 +963,18 @@ Resources:
           - bedrock:InvokeModelWithResponseStream
           Resource:
           - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0
+          - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0
           - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
           - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
           - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
       Environment:
         Variables:
           TABLE_NAME:
             Ref: GameTable
-      InlineCode: "const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');\n\
-        \nconst bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });\n\
-        \n// Function to call Claude via Bedrock\nconst invokeClaude = async (prompt)\
-        \ => {\n  const modelId = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';\n\
-        \n  console.log('\U0001F916 Calling Claude for scenario generation...');\n\
-        \n  const payload = {\n    anthropic_version: 'bedrock-2023-05-31',\n    max_tokens:\
-        \ 4000,\n    messages: [\n      {\n        role: 'user',\n        content:\
-        \ [{ type: 'text', text: prompt }],\n      },\n    ],\n  };\n\n  const command\
-        \ = new InvokeModelCommand({\n    contentType: 'application/json',\n    body:\
-        \ JSON.stringify(payload),\n    modelId,\n  });\n\n  const response = await\
-        \ bedrockClient.send(command);\n  const responseBody = JSON.parse(new TextDecoder().decode(response.body));\n\
-        \n  return responseBody.content[0].text;\n};\n\nexports.generateScenarios\
-        \ = async (event) => {\n  try {\n    console.log('\U0001F916 Lambda function\
-        \ started for scenario generation');\n    console.log('Event:', JSON.stringify(event,\
-        \ null, 2));\n\n    // Handle CORS preflight\n    if (event.requestContext?.http?.method\
-        \ === 'OPTIONS') {\n      return {\n        statusCode: 200,\n        headers:\
-        \ {\n          'Access-Control-Allow-Origin': '*',\n          'Access-Control-Allow-Headers':\
-        \ 'Content-Type',\n          'Access-Control-Allow-Methods': 'POST, OPTIONS'\n\
-        \        },\n        body: ''\n      };\n    }\n\n    if (!event.body) {\n\
-        \      throw new Error('No request body provided');\n    }\n\n    const {\
-        \ scenarioType, prompt, count, difficulty, context, audience, customPrompt\
-        \ } = JSON.parse(event.body);\n\n    // Allow up to 100 scenarios with increased\
-        \ timeout\n    const limitedCount = Math.min(count, 100);\n    if (limitedCount\
-        \ !== count) {\n      console.log('\u26A0\uFE0F Limited scenario count from',\
-        \ count, 'to', limitedCount, 'maximum allowed is 100');\n    }\n\n    console.log('\U0001F916\
-        \ Generating scenarios:', { scenarioType, count: limitedCount, difficulty,\
-        \ promptLength: prompt?.length });\n\n    // Build optimized prompt for scenario\
-        \ generation\n    let fullPrompt = 'Create ' + limitedCount + ' workplace\
-        \ scenarios. ';\n\n    // Add scenario type specific context\n    if (scenarioType\
-        \ === 'amazon-principles') {\n      fullPrompt += 'Focus on Amazon Leadership\
-        \ Principles with STAR format examples. ';\n    } else if (scenarioType ===\
-        \ 'interview-prep') {\n      fullPrompt += 'Create interview practice scenarios.\
-        \ ';\n    } else if (scenarioType === 'problem-solving') {\n      fullPrompt\
-        \ += 'Create problem-solving challenges. ';\n    } else if (scenarioType ===\
-        \ 'lessons-learned') {\n      fullPrompt += 'Create lessons learned scenarios.\
-        \ ';\n    } else if (scenarioType === 'team-building') {\n      fullPrompt\
-        \ += 'Create team collaboration scenarios. ';\n    }\n\n    fullPrompt +=\
-        \ prompt;\n    fullPrompt += '\\\\n\\\\nReturn as JSON array: [{\"title\"\
-        : \"Title\", \"category\": \"Category\", \"detail\": \"Description\", \"school\"\
-        : \"Professional Development\", \"customInstructions\": \"Instructions\"}]';\n\
-        \    fullPrompt += '\\\\nReturn ONLY the JSON array.';\n\n    console.log('\U0001F916\
-        \ Sending prompt to Claude...', { promptLength: fullPrompt.length });\n  \
-        \  const aiResponse = await invokeClaude(fullPrompt);\n    console.log('\u2705\
-        \ Received response from Claude', { responseLength: aiResponse?.length });\n\
-        \n    // Parse the JSON response with improved error handling\n    let scenarios;\n\
-        \    try {\n      console.log('\U0001F50D Parsing AI response...');\n    \
-        \  console.log('Raw response length:', aiResponse.length);\n      console.log('First\
-        \ 500 chars:', aiResponse.substring(0, 500));\n\n      // Try multiple parsing\
-        \ strategies\n      let jsonString = aiResponse.trim();\n\n      // Strategy\
-        \ 1: Direct parse if it looks like JSON\n      if (jsonString.startsWith('[')\
-        \ && jsonString.endsWith(']')) {\n        console.log('\u2705 Direct JSON\
-        \ parsing...');\n        scenarios = JSON.parse(jsonString);\n      } else\
-        \ {\n        // Strategy 2: Extract JSON array with regex\n        console.log('\U0001F50D\
-        \ Extracting JSON with regex...');\n        const jsonMatch = jsonString.match(/\\\
-        [[\\s\\S]*\\]/);\n        if (jsonMatch) {\n          console.log('\u2705\
-        \ Found JSON match, parsing...');\n          scenarios = JSON.parse(jsonMatch[0]);\n\
-        \        } else {\n          // Strategy 3: Try to find and clean JSON\n \
-        \         console.log('\U0001F50D Cleaning and extracting JSON...');\n   \
-        \       const startIndex = jsonString.indexOf('[');\n          const endIndex\
-        \ = jsonString.lastIndexOf(']');\n          if (startIndex !== -1 && endIndex\
-        \ !== -1 && endIndex > startIndex) {\n            const extractedJson = jsonString.substring(startIndex,\
-        \ endIndex + 1);\n            console.log('\u2705 Extracted JSON, parsing...');\n\
-        \            scenarios = JSON.parse(extractedJson);\n          } else {\n\
-        \            throw new Error('No JSON array found in response');\n       \
-        \   }\n        }\n      }\n\n      console.log('\u2705 Successfully parsed',\
-        \ scenarios.length, 'scenarios');\n    } catch (parseError) {\n      console.error('\u274C\
-        \ Failed to parse AI response:', parseError);\n      console.log('Raw response:',\
-        \ aiResponse);\n      throw new Error('Failed to parse AI response as JSON:\
-        \ ' + parseError.message);\n    }\n\n    // Add IDs and ensure proper structure\n\
-        \    const processedScenarios = scenarios.map(s => ({\n      id: Date.now()\
-        \ + Math.random(),\n      active: true,\n      ...s\n    }));\n\n    console.log(`\u2705\
-        \ Successfully generated ${processedScenarios.length} scenarios`);\n\n   \
-        \ return {\n      statusCode: 200,\n      body: JSON.stringify({\n       \
-        \ scenarios: processedScenarios,\n        message: `Generated ${processedScenarios.length}\
-        \ scenarios successfully`\n      }),\n      headers: {\n        'Access-Control-Allow-Origin':\
-        \ '*',\n        'Access-Control-Allow-Headers': 'Content-Type',\n        'Access-Control-Allow-Methods':\
-        \ 'POST, OPTIONS'\n      }\n    };\n\n  } catch (error) {\n    console.error('\u274C\
-        \ AI scenario generation error:', error);\n    return {\n      statusCode:\
-        \ 500,\n      body: JSON.stringify({ error: `Failed to generate scenarios:\
-        \ ${error.message}` }),\n      headers: {\n        'Access-Control-Allow-Origin':\
-        \ '*',\n        'Access-Control-Allow-Headers': 'Content-Type',\n        'Access-Control-Allow-Methods':\
-        \ 'POST, OPTIONS'\n      }\n    };\n  }\n};"
       Events:
         AdminAIGenerateScenariosEvent:
           Type: HttpApi
@@ -1050,6 +988,164 @@ Resources:
           Ref: Environment
         StackName:
           Ref: StackName
+    Metadata:
+      SamResourceId: AdminAIGenerateScenariosFunction
+  AdminAIGenerateTriviaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-ai-generate-trivia
+      CodeUri: AdminAIGenerateTriviaFunction
+      Handler: ai-generate-trivia.handler
+      Runtime: nodejs18.x
+      Timeout: 900
+      MemorySize: 1024
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - bedrock:InvokeModel
+          - bedrock:InvokeModelWithResponseStream
+          Resource:
+          - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0
+          - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+          REGION:
+            Ref: AWS::Region
+          ENVIRONMENT:
+            Ref: Environment
+      Events:
+        AdminAIGenerateTriviaEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/ai-generate-trivia
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminAIGenerateTriviaFunction
+  AdminAIGeneratePollsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-ai-generate-polls
+      CodeUri: AdminAIGeneratePollsFunction
+      Handler: ai-generate-polls.handler
+      Runtime: nodejs18.x
+      Timeout: 900
+      MemorySize: 1024
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - bedrock:InvokeModel
+          - bedrock:InvokeModelWithResponseStream
+          Resource:
+          - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0
+          - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+          REGION:
+            Ref: AWS::Region
+          ENVIRONMENT:
+            Ref: Environment
+      Events:
+        AdminAIGeneratePollsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/ai-generate-polls
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminAIGeneratePollsFunction
+  AdminAIGenerateSurveyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-ai-generate-survey
+      CodeUri: AdminAIGenerateSurveyFunction
+      Handler: ai-generate-survey.handler
+      Runtime: nodejs18.x
+      Timeout: 900
+      MemorySize: 1024
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - bedrock:InvokeModel
+          - bedrock:InvokeModelWithResponseStream
+          Resource:
+          - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0
+          - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+          REGION:
+            Ref: AWS::Region
+          ENVIRONMENT:
+            Ref: Environment
+      Events:
+        AdminAIGenerateSurveyEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/ai-generate-survey
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminAIGenerateSurveyFunction
   AdminUploadQuestionsFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -1082,6 +1178,42 @@ Resources:
           Ref: StackName
     Metadata:
       SamResourceId: AdminUploadQuestionsFunction
+  AdminCreateGitHubIssueFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-create-github-issue
+      CodeUri: AdminCreateGitHubIssueFunction
+      Handler: create-github-issue.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+          GITHUB_TOKEN:
+            Ref: GitHubToken
+          GITHUB_REPO:
+            Ref: GitHubRepo
+      Events:
+        AdminCreateGitHubIssueEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/create-github-issue
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminCreateGitHubIssueFunction
   AdminToggleQuestionSetFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -1110,6 +1242,34 @@ Resources:
           Ref: StackName
     Metadata:
       SamResourceId: AdminToggleQuestionSetFunction
+  AdminToggleQuickstartFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-toggle-quickstart
+      CodeUri: AdminToggleQuickstartFunction
+      Handler: toggle-quickstart.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Events:
+        AdminToggleQuickstartEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/toggle-quickstart/{setId}
+            Method: POST
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminToggleQuickstartFunction
   AdminEditQuestionSetFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -1198,6 +1358,38 @@ Resources:
           Ref: StackName
     Metadata:
       SamResourceId: AdminClearGameFunction
+  AdminUpdateGameCategoriesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${StackName}-admin-update-game-categories
+      CodeUri: AdminUpdateGameCategoriesFunction
+      Handler: update-game-categories.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GameTable
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: GameTable
+      Events:
+        AdminUpdateGameCategoriesEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: RestApi
+            Path: /admin/games/{gameId}/categories
+            Method: PUT
+      Tags:
+        Environment:
+          Ref: Environment
+        StackName:
+          Ref: StackName
+    Metadata:
+      SamResourceId: AdminUpdateGameCategoriesFunction
   AdminClearAllGamesFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -1423,8 +1615,13 @@ Resources:
           - bedrock:InvokeModelWithResponseStream
           Resource:
           - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0
+          - Fn::Sub: arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0
           - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
           - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
+          - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
+          - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0
           - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0
       Events:
         AdminAIPromptAdvisorEvent:

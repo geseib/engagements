@@ -6,7 +6,7 @@ const db = DynamoDBDocumentClient.from(client);
 
 exports.handler = async (event) => {
   try {
-    const { fileName, fileContent, customTitle, customDescription, customInstructions, aiContextInstructions, promptId, engagementType } = JSON.parse(event.body);
+    const { fileName, fileContent, customTitle, customDescription, customInstructions, aiContextInstructions, promptId, engagementType, isAIGenerated } = JSON.parse(event.body);
 
     console.log(`Processing CSV upload: ${fileName}`);
     console.log(`Custom title: ${customTitle}`);
@@ -55,28 +55,38 @@ exports.handler = async (event) => {
     // Simple and reliable column mapping - support exact greatest-hits.csv format or generic fallback
     const getColumnIndex = (header) => headers.findIndex(h => h.toLowerCase() === header.toLowerCase());
 
-    // Try greatest-hits.csv format first: Category,Question#,Title,Detail_lesson,School,CustomInstruction
+    // Try new format first: Category,Question#,Title,QuestionDetail,AnswerDetails,School
     let categoryIndex = getColumnIndex('Category');
     let questionNumberIndex = getColumnIndex('Question#');
     let titleIndex = getColumnIndex('Title');
-    let detailIndex = getColumnIndex('Detail_lesson');
+    let questionDetailIndex = getColumnIndex('QuestionDetail');
+    let answerDetailsIndex = getColumnIndex('AnswerDetails');
+    let detailIndex = getColumnIndex('Detail_lesson'); // Legacy support
     let schoolIndex = getColumnIndex('School');
     let customInstructionIndex = getColumnIndex('CustomInstruction');
 
     // Engagement-type specific columns
     let correctAnswerIndex = -1;
-    let wrongAnswer1Index = -1;
-    let wrongAnswer2Index = -1;
-    let wrongAnswer3Index = -1;
     let difficultyIndex = -1;
     let optionsIndex = -1;
     let allowMultipleIndex = -1;
+    
+    // Option format indices (for OptionA/B/C/D CSV format)
+    let optionAIndex = -1;
+    let optionBIndex = -1;
+    let optionCIndex = -1;
+    let optionDIndex = -1;
+    let optionEIndex = -1;
+    let optionFIndex = -1;
 
     if (engagementType === 'trivia') {
       correctAnswerIndex = getColumnIndex('CorrectAnswer');
-      wrongAnswer1Index = getColumnIndex('WrongAnswer1');
-      wrongAnswer2Index = getColumnIndex('WrongAnswer2');
-      wrongAnswer3Index = getColumnIndex('WrongAnswer3');
+      optionAIndex = getColumnIndex('OptionA');
+      optionBIndex = getColumnIndex('OptionB');
+      optionCIndex = getColumnIndex('OptionC');
+      optionDIndex = getColumnIndex('OptionD');
+      optionEIndex = getColumnIndex('OptionE');
+      optionFIndex = getColumnIndex('OptionF');
       difficultyIndex = getColumnIndex('Difficulty');
     } else if (engagementType === 'poll') {
       optionsIndex = getColumnIndex('Options');
@@ -86,6 +96,8 @@ exports.handler = async (event) => {
     // Fallback to generic column names if exact matches not found
     if (categoryIndex === -1) categoryIndex = headers.findIndex(h => h.toLowerCase().includes('category'));
     if (titleIndex === -1) titleIndex = headers.findIndex(h => h.toLowerCase().includes('title') && !h.toLowerCase().includes('#'));
+    if (questionDetailIndex === -1) questionDetailIndex = headers.findIndex(h => h.toLowerCase().includes('questiondetail'));
+    if (answerDetailsIndex === -1) answerDetailsIndex = headers.findIndex(h => h.toLowerCase().includes('answerdetails'));
     if (detailIndex === -1) detailIndex = headers.findIndex(h => h.toLowerCase().includes('detail') || h.toLowerCase().includes('lesson'));
     if (schoolIndex === -1) schoolIndex = headers.findIndex(h => h.toLowerCase().includes('school'));
     if (customInstructionIndex === -1) customInstructionIndex = headers.findIndex(h => h.toLowerCase().includes('instruction'));
@@ -124,16 +136,22 @@ exports.handler = async (event) => {
         const category = values[categoryIndex]?.replace(/"/g, '')?.trim();
         const questionNumber = questionNumberIndex >= 0 ? values[questionNumberIndex]?.replace(/"/g, '')?.trim() : '';
         const title = values[titleIndex]?.replace(/"/g, '')?.trim();
-        const detail = detailIndex >= 0 ? values[detailIndex]?.replace(/"/g, '')?.trim() || '' : '';
+        const questionDetail = questionDetailIndex >= 0 ? values[questionDetailIndex]?.replace(/"/g, '')?.trim() : '';
+        const answerDetails = answerDetailsIndex >= 0 ? values[answerDetailsIndex]?.replace(/"/g, '')?.trim() : '';
+        const legacyDetail = detailIndex >= 0 ? values[detailIndex]?.replace(/"/g, '')?.trim() || '' : '';
         const school = schoolIndex >= 0 ? values[schoolIndex]?.replace(/"/g, '')?.trim() || '' : '';
         const questionCustomInstruction = customInstructionIndex >= 0 ? values[customInstructionIndex]?.replace(/"/g, '')?.trim() || '' : '';
+        
+        // Use new fields if available, otherwise fall back to legacy
+        const finalQuestionDetail = questionDetail || legacyDetail || ''; // Use question detail or legacy detail for trivia
+        const finalAnswerDetails = answerDetails || ''; // Use answer details for additional info
 
         if (title && category) {
           questionCount++;
 
           const baseQuestion = {
             Title: title,
-            Detail: detail,
+            Detail: finalQuestionDetail, // For trivia, this should be the question detail/explanation
             Category: category,
             School: school,
             // Use per-question custom instruction if available, otherwise use set-level custom instructions
@@ -142,12 +160,23 @@ exports.handler = async (event) => {
             QuestionNumber: questionNumber ? parseInt(questionNumber) : questionCount // Use Question# from CSV if available, otherwise use global count
           };
 
+          // Remove Prompt field - we use Title and Detail only
+          
+          // For trivia, store additional answer details if available
+          if (engagementType === 'trivia' && finalAnswerDetails) {
+            baseQuestion.AnswerDetails = finalAnswerDetails;
+          }
+
           // Add engagement-type specific fields
           if (engagementType === 'trivia') {
+            // Only support OptionA/B/C/D/E/F format (up to 6 options)
+            baseQuestion.OptionA = optionAIndex >= 0 ? values[optionAIndex]?.replace(/"/g, '')?.trim() || '' : '';
+            baseQuestion.OptionB = optionBIndex >= 0 ? values[optionBIndex]?.replace(/"/g, '')?.trim() || '' : '';
+            baseQuestion.OptionC = optionCIndex >= 0 ? values[optionCIndex]?.replace(/"/g, '')?.trim() || '' : '';
+            baseQuestion.OptionD = optionDIndex >= 0 ? values[optionDIndex]?.replace(/"/g, '')?.trim() || '' : '';
+            baseQuestion.OptionE = optionEIndex >= 0 ? values[optionEIndex]?.replace(/"/g, '')?.trim() || '' : '';
+            baseQuestion.OptionF = optionFIndex >= 0 ? values[optionFIndex]?.replace(/"/g, '')?.trim() || '' : '';
             baseQuestion.CorrectAnswer = correctAnswerIndex >= 0 ? values[correctAnswerIndex]?.replace(/"/g, '')?.trim() || '' : '';
-            baseQuestion.WrongAnswer1 = wrongAnswer1Index >= 0 ? values[wrongAnswer1Index]?.replace(/"/g, '')?.trim() || '' : '';
-            baseQuestion.WrongAnswer2 = wrongAnswer2Index >= 0 ? values[wrongAnswer2Index]?.replace(/"/g, '')?.trim() || '' : '';
-            baseQuestion.WrongAnswer3 = wrongAnswer3Index >= 0 ? values[wrongAnswer3Index]?.replace(/"/g, '')?.trim() || '' : '';
             baseQuestion.Difficulty = difficultyIndex >= 0 ? values[difficultyIndex]?.replace(/"/g, '')?.trim() || 'medium' : 'medium';
           } else if (engagementType === 'poll') {
             const optionsStr = optionsIndex >= 0 ? values[optionsIndex]?.replace(/"/g, '')?.trim() || '' : '';
@@ -203,11 +232,12 @@ exports.handler = async (event) => {
         promptId: promptId || 'lessons-learned', // AI prompt template ID
         questionCount: questions.length,
         categoryCount: categories.size,
-        active: true,
+        active: isAIGenerated ? false : true,  // AI-generated content starts as inactive
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         sourceFile: fileName,
-        engagementType: engagementType || 'call-and-answer'
+        engagementType: engagementType || 'call-and-answer',
+        isAIGenerated: isAIGenerated || false
       }
     }));
 
@@ -260,21 +290,46 @@ exports.handler = async (event) => {
       
       console.log(`📝 Creating ${questionId} - ${question.Title.substring(0, 50)}...`);
       
+      // Base question item
+      const questionItem = {
+        PK: `SET#${setId}`,
+        SK: questionId,
+        Title: question.Title,
+        Detail: question.Detail || '',
+        Category: question.Category,
+        School: question.School || '',
+        CustomInstructions: question.CustomInstructions || '',
+        OrderInCategory: categoryRelativeNumber,
+        QuestionNumber: question.QuestionNumber || categoryCounters[categoryId], // Use CSV value or category counter
+        CategoryQuestionNumber: question.QuestionNumber || categoryCounters[categoryId], // Same as QuestionNumber
+        Active: isAIGenerated ? false : true  // AI-generated questions start as inactive
+      };
+
+      // Add engagement-type specific fields to database item
+      if (engagementType === 'trivia') {
+        // Only support OptionA/B/C/D/E/F format (up to 6 options)
+        console.log(`🎯 Processing trivia question: ${question.Title}`);
+        console.log(`🎯 Options: A="${question.OptionA}", B="${question.OptionB}", C="${question.OptionC}", D="${question.OptionD}"`);
+        console.log(`🎯 Correct answer: "${question.CorrectAnswer}"`);
+        
+        questionItem.optionA = question.OptionA || '';
+        questionItem.optionB = question.OptionB || '';
+        questionItem.optionC = question.OptionC || '';
+        questionItem.optionD = question.OptionD || '';
+        questionItem.optionE = question.OptionE || '';
+        questionItem.optionF = question.OptionF || '';
+        questionItem.correctAnswer = question.CorrectAnswer || '';
+        questionItem.difficulty = question.Difficulty || 'medium';
+        questionItem.points = 10;
+      } else if (engagementType === 'poll') {
+        // Store poll options
+        questionItem.options = question.Options || [];
+        questionItem.allowMultiple = question.AllowMultiple || false;
+      }
+
       questionPromises.push(db.send(new PutCommand({
         TableName: process.env.TABLE_NAME,
-        Item: {
-          PK: `SET#${setId}`,
-          SK: questionId,
-          Title: question.Title,
-          Detail: question.Detail || '',
-          Category: question.Category,
-          School: question.School || '',
-          CustomInstructions: question.CustomInstructions || '',
-          OrderInCategory: categoryRelativeNumber,
-          QuestionNumber: question.QuestionNumber || categoryCounters[categoryId], // Use CSV value or category counter
-          CategoryQuestionNumber: question.QuestionNumber || categoryCounters[categoryId], // Same as QuestionNumber
-          Active: true
-        }
+        Item: questionItem
       })));
     });
 

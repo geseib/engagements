@@ -3572,6 +3572,32 @@ function GameReport({ reportData, onClose }) {
                 </div>
               )}
               
+              {/* Trivia Question Options - show choices with correct answer marked */}
+              {currentGameType === 'trivia' && (
+                <div className="report-trivia-choices">
+                  <h4>Answer Choices:</h4>
+                  <div className="trivia-options-report">
+                    {['A', 'B', 'C', 'D', 'E', 'F'].map(letter => {
+                      const optionField = `option${letter}`;
+                      const optionText = questionData[optionField];
+                      if (!optionText) return null;
+                      
+                      // Check if this option is the correct answer
+                      const correctAnswer = questionData.correctAnswer || questionData.CorrectAnswer;
+                      const isCorrect = correctAnswer === `Option${letter}` || correctAnswer === optionText;
+                      
+                      return (
+                        <div key={letter} className={`trivia-option-report ${isCorrect ? 'correct-answer' : ''}`}>
+                          <span className="option-letter">{letter})</span>
+                          <span className="option-text">{optionText}</span>
+                          {isCorrect && <span className="correct-indicator">✓ Correct Answer</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              
               {/* AI Summary for this question */}
               {aiSummary && (
                 <div className="report-ai-summary">

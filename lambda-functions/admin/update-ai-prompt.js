@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 
 const tableName = process.env.TABLE_NAME;
@@ -47,6 +47,8 @@ exports.handler = async (event) => {
       category,
       scenario,
       template,
+      instructions,
+      outputFormat,
       isDefault,
       status,
       questionSetIds,
@@ -103,7 +105,14 @@ exports.handler = async (event) => {
       description: description !== undefined ? description : currentContent?.description || currentPrompt.description,
       category: category !== undefined ? category : currentContent?.category || currentPrompt.category,
       scenario: scenario !== undefined ? scenario : currentContent?.scenario || currentPrompt.scenario,
-      template: template !== undefined ? template : currentContent?.template,
+      // Support both old and new formats
+      ...(template !== undefined && { template }),
+      ...(instructions !== undefined && { instructions }),
+      ...(outputFormat !== undefined && { outputFormat }),
+      // Preserve existing values if not being updated
+      ...(template === undefined && currentContent?.template && { template: currentContent.template }),
+      ...(instructions === undefined && currentContent?.instructions && { instructions: currentContent.instructions }),
+      ...(outputFormat === undefined && currentContent?.outputFormat && { outputFormat: currentContent.outputFormat }),
       isDefault: isDefault !== undefined ? isDefault : currentContent?.isDefault || currentPrompt.isDefault,
       status: status !== undefined ? status : currentContent?.status || currentPrompt.status,
       questionSetIds: questionSetIds !== undefined ? questionSetIds : currentContent?.questionSetIds || currentPrompt.questionSetIds || [],
@@ -112,7 +121,9 @@ exports.handler = async (event) => {
       metadata: {
         ...currentContent?.metadata,
         lastModifiedBy: 'admin-interface',
-        updateReason: createNewVersion ? 'new-version' : 'edit'
+        updateReason: createNewVersion ? 'new-version' : 'edit',
+        format: (instructions !== undefined || outputFormat !== undefined) ? 'structured' : 
+                currentContent?.metadata?.format || 'legacy'
       }
     };
 
@@ -188,69 +199,90 @@ exports.handler = async (event) => {
     updateExpression.push('s3Key = :s3Key');
     expressionAttributeValues[':s3Key'] = newS3Key;
 
-    // If this is being marked as default, handle default prompt lookup structure
-    if (isDefault === true) {
-      console.log(`🏷️ Setting as default prompt for ${currentPrompt.gameType}/${updatedContent.category}`);
-      
-      try {
-        // First, clear isDefault from all other prompts in the same category
-        console.log(`🧹 Clearing default status from other prompts in ${currentPrompt.gameType}/${updatedContent.category}`);
+    // Handle default prompt management for both setting and unsetting defaults
+    if (isDefault !== undefined) {
+      if (isDefault === true) {
+        console.log(`🏷️ Setting as default prompt for ${currentPrompt.gameType}/${updatedContent.category}`);
         
-        const { Items: existingPrompts } = await dynamodb.send(new QueryCommand({
-          TableName: tableName,
-          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-          FilterExpression: 'gameType = :gameType AND category = :category AND promptId <> :currentPromptId',
-          ExpressionAttributeValues: {
-            ':pk': 'AIPROMPTS',
-            ':sk': 'AIPROMPT#',
-            ':gameType': currentPrompt.gameType,
-            ':category': updatedContent.category,
-            ':currentPromptId': promptId
+        try {
+          // First, clear isDefault from all other prompts in the same category
+          console.log(`🧹 Clearing default status from other prompts in ${currentPrompt.gameType}/${updatedContent.category}`);
+          
+          const { Items: existingPrompts } = await dynamodb.send(new QueryCommand({
+            TableName: tableName,
+            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+            FilterExpression: 'gameType = :gameType AND category = :category AND promptId <> :currentPromptId',
+            ExpressionAttributeValues: {
+              ':pk': 'AIPROMPTS',
+              ':sk': 'AIPROMPT#',
+              ':gameType': currentPrompt.gameType,
+              ':category': updatedContent.category,
+              ':currentPromptId': promptId
+            }
+          }));
+          
+          // Clear default status from other prompts
+          const clearDefaultPromises = existingPrompts
+            .filter(prompt => prompt.isDefault)
+            .map(prompt => 
+              dynamodb.send(new UpdateCommand({
+                TableName: tableName,
+                Key: {
+                  PK: 'AIPROMPTS',
+                  SK: `AIPROMPT#${prompt.promptId}`
+                },
+                UpdateExpression: 'SET isDefault = :false',
+                ExpressionAttributeValues: {
+                  ':false': false
+                }
+              }))
+            );
+          
+          if (clearDefaultPromises.length > 0) {
+            await Promise.all(clearDefaultPromises);
+            console.log(`✅ Cleared default status from ${clearDefaultPromises.length} other prompts`);
           }
-        }));
-        
-        // Clear default status from other prompts
-        const clearDefaultPromises = existingPrompts
-          .filter(prompt => prompt.isDefault)
-          .map(prompt => 
-            dynamodb.send(new UpdateCommand({
-              TableName: tableName,
-              Key: {
-                PK: 'AIPROMPTS',
-                SK: `AIPROMPT#${prompt.promptId}`
-              },
-              UpdateExpression: 'SET isDefault = :false',
-              ExpressionAttributeValues: {
-                ':false': false
-              }
-            }))
-          );
-        
-        if (clearDefaultPromises.length > 0) {
-          await Promise.all(clearDefaultPromises);
-          console.log(`✅ Cleared default status from ${clearDefaultPromises.length} other prompts`);
+
+          // Create/update the default prompt lookup
+          const defaultLookupKey = `GAMETYPE#${currentPrompt.gameType}#CATEGORY#${updatedContent.category}`;
+          await dynamodb.send(new PutCommand({
+            TableName: tableName,
+            Item: {
+              PK: 'AIPROMPTS',
+              SK: defaultLookupKey,
+              defaultPrompt: `PROMPT#${promptId}`,
+              gameType: currentPrompt.gameType,
+              category: updatedContent.category,
+              promptId,
+              updatedAt: timestamp,
+              ttl: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60) // 1 year TTL
+            }
+          }));
+
+          console.log(`✅ Updated default prompt for ${currentPrompt.gameType}/${updatedContent.category}: ${promptId}`);
+        } catch (error) {
+          console.error('⚠️ Error managing default prompt lookup:', error);
+          // Continue anyway - the prompt was still updated successfully
         }
-
-        // Create/update the default prompt lookup
-        const defaultLookupKey = `GAMETYPE#${currentPrompt.gameType}#CATEGORY#${updatedContent.category}`;
-        await dynamodb.send(new PutCommand({
-          TableName: tableName,
-          Item: {
-            PK: 'AIPROMPTS',
-            SK: defaultLookupKey,
-            defaultPrompt: `PROMPT#${promptId}`,
-            gameType: currentPrompt.gameType,
-            category: updatedContent.category,
-            promptId,
-            updatedAt: timestamp,
-            ttl: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60) // 1 year TTL
-          }
-        }));
-
-        console.log(`✅ Updated default prompt for ${currentPrompt.gameType}/${updatedContent.category}: ${promptId}`);
-      } catch (error) {
-        console.error('⚠️ Error managing default prompt lookup:', error);
-        // Continue anyway - the prompt was still updated successfully
+      } else if (isDefault === false && currentPrompt.isDefault === true) {
+        // If we're unsetting a default, remove the default lookup (no default for this category)
+        console.log(`🗑️ Removing default status from ${currentPrompt.gameType}/${updatedContent.category}`);
+        
+        try {
+          const defaultLookupKey = `GAMETYPE#${currentPrompt.gameType}#CATEGORY#${updatedContent.category}`;
+          
+          await dynamodb.send(new DeleteCommand({
+            TableName: tableName,
+            Key: {
+              PK: 'AIPROMPTS',
+              SK: defaultLookupKey
+            }
+          }));
+          
+          console.log(`✅ Removed default lookup for ${currentPrompt.gameType}/${updatedContent.category}`);
+        } catch (error) {
+          console.error('⚠️ Error removing default lookup:', error);
+        }
       }
     }
 

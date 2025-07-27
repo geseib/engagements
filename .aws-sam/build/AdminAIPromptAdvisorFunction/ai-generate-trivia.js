@@ -1,36 +1,7 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+const { invokeClaudeWithRetry } = require('./shared/bedrock-utils');
 
 const bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });
-
-// Function to call Claude via Bedrock
-const invokeClaude = async (prompt) => {
-  const modelId = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';
-
-  console.log('🤖 Calling Claude for trivia generation...');
-  console.log('📝 Prompt length:', prompt.length);
-
-  const payload = {
-    anthropic_version: 'bedrock-2023-05-31',
-    max_tokens: 4000,
-    messages: [
-      {
-        role: 'user',
-        content: [{ type: 'text', text: prompt }],
-      },
-    ],
-  };
-
-  const command = new InvokeModelCommand({
-    contentType: 'application/json',
-    body: JSON.stringify(payload),
-    modelId,
-  });
-
-  const response = await bedrockClient.send(command);
-  const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-
-  return responseBody.content[0].text;
-};
 
 exports.handler = async (event) => {
   try {
@@ -81,14 +52,23 @@ exports.handler = async (event) => {
     }
 
     fullPrompt += 'Return as JSON array with this structure: ';
-    fullPrompt += '[{"title": "Question text", "category": "Category", "detail": "Explanation", "school": "Context", "customInstructions": "Instructions", "optionA": "Choice A", "optionB": "Choice B", "optionC": "Choice C", "optionD": "Choice D"';
+    fullPrompt += '[{"title": "Short descriptive title for the question", "questionDetail": "The actual question text shown to players", "category": "Category", "answerDetails": "Educational explanation about the correct answer", "school": "Context", "optionA": "Choice A", "optionB": "Choice B", "optionC": "Choice C", "optionD": "Choice D"';
     if (numChoices >= 5) fullPrompt += ', "optionE": "Choice E"';
     if (numChoices >= 6) fullPrompt += ', "optionF": "Choice F"';
-    fullPrompt += ', "correctAnswer": "The correct answer text", "difficulty": "' + difficulty + '"}]';
+    
+    if (numCorrect > 1) {
+      fullPrompt += ', "correctAnswer": ["OptionA", "OptionC"]';
+      fullPrompt += ' IMPORTANT: For multiple correct answers, correctAnswer must be an array of option IDs (e.g., ["OptionA", "OptionC"]). ';
+    } else {
+      fullPrompt += ', "correctAnswer": "OptionA"';
+      fullPrompt += ' IMPORTANT: correctAnswer must be the option ID (OptionA, OptionB, OptionC, or OptionD), not the answer text. ';
+    }
+    
+    fullPrompt += ', "difficulty": "' + difficulty + '"}]';
     fullPrompt += ' Return ONLY the JSON array.';
 
     console.log('🤖 Sending prompt to Claude...');
-    const aiResponse = await invokeClaude(fullPrompt);
+    const aiResponse = await invokeClaudeWithRetry(bedrockClient, InvokeModelCommand, fullPrompt, 4000);
     console.log('✅ Received response from Claude');
 
     // Parse the JSON response with improved error handling
@@ -138,17 +118,17 @@ exports.handler = async (event) => {
     const processedQuestions = questions.map((question, index) => ({
       id: Date.now() + index,
       title: question.title || 'Untitled Question',
+      questionDetail: question.questionDetail || question.prompt || question.title || 'No question text',
       category: question.category || category || 'General',
-      detail: question.detail || '',
+      answerDetails: question.answerDetails || question.detail || '',
       school: question.school || 'General Knowledge',
-      customInstructions: question.customInstructions || '',
       optionA: question.optionA || '',
       optionB: question.optionB || '',
       optionC: question.optionC || '',
       optionD: question.optionD || '',
       optionE: question.optionE || '',
       optionF: question.optionF || '',
-      correctAnswer: question.correctAnswer || question.optionA || '',
+      correctAnswer: question.correctAnswer || 'OptionA', // Default to OptionA if not specified, can be string or array
       difficulty: question.difficulty || difficulty || 'medium'
     }));
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import CallAnswerBuilder from './components/CallAnswerBuilder';
 import TriviaBuilder from './components/TriviaBuilder';
 import PollBuilder from './components/PollBuilder';
+import WavelengthBuilder from './components/WavelengthBuilder';
 import AIAssistant from './components/AIAssistant';
 import './BuilderPage.css';
 
@@ -36,12 +37,20 @@ function BuilderPage() {
 
     // Add engagement-type specific fields
     if (engagementType === 'trivia') {
-      newQuestion.correctAnswer = '';
-      newQuestion.wrongAnswers = ['', '', ''];
+      newQuestion.questionDetail = '';
+      newQuestion.optionA = '';
+      newQuestion.optionB = '';
+      newQuestion.optionC = '';
+      newQuestion.optionD = '';
+      newQuestion.correctAnswer = 'OptionA';
+      newQuestion.answerDetails = '';
       newQuestion.difficulty = 'medium';
     } else if (engagementType === 'poll') {
       newQuestion.options = ['', ''];
       newQuestion.allowMultiple = false;
+    } else if (engagementType === 'wavelength') {
+      newQuestion.topic = '';
+      newQuestion.instructions = 'Enter 10 words that come to mind when you think of this topic:';
     }
 
     setQuestionSet(prev => ({
@@ -143,15 +152,20 @@ function BuilderPage() {
     let headers, rows;
 
     if (engagementType === 'trivia') {
-      headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,CorrectAnswer,WrongAnswer1,WrongAnswer2,WrongAnswer3,Difficulty';
+      headers = 'Category,Question#,Title,QuestionDetail,School,CustomInstruction,OptionA,OptionB,OptionC,OptionD,CorrectAnswer,AnswerDetails,Difficulty';
       rows = questionSet.questions.map((q, index) => {
-        return `"${q.category}","${index + 1}","${q.title}","${q.detail}","${q.school}","${q.customInstructions}","${q.correctAnswer}","${q.wrongAnswers[0]}","${q.wrongAnswers[1]}","${q.wrongAnswers[2]}","${q.difficulty}"`;
+        return `"${q.category}","${index + 1}","${q.title}","${q.questionDetail || q.detail}","${q.school}","${q.customInstructions}","${q.optionA}","${q.optionB}","${q.optionC}","${q.optionD}","${q.correctAnswer}","${q.answerDetails}","${q.difficulty}"`;
       });
     } else if (engagementType === 'poll') {
       headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple';
       rows = questionSet.questions.map((q, index) => {
         const options = q.options.join('|');
         return `"${q.category}","${index + 1}","${q.title}","${q.detail}","${q.school}","${q.customInstructions}","${options}","${q.allowMultiple}"`;
+      });
+    } else if (engagementType === 'wavelength') {
+      headers = 'Category,Question#,Title,Topic,Instructions,School,CustomInstruction';
+      rows = questionSet.questions.map((q, index) => {
+        return `"${q.category}","${index + 1}","${q.title}","${q.topic || q.detail}","${q.instructions}","${q.school}","${q.customInstructions}"`;
       });
     } else {
       // call-and-answer
@@ -178,6 +192,8 @@ function BuilderPage() {
         return <TriviaBuilder {...commonProps} />;
       case 'poll':
         return <PollBuilder {...commonProps} />;
+      case 'wavelength':
+        return <WavelengthBuilder {...commonProps} />;
       default:
         return <CallAnswerBuilder {...commonProps} />;
     }
@@ -207,6 +223,7 @@ function BuilderPage() {
                 <option value="call-and-answer">Call and Answer</option>
                 <option value="trivia">Trivia</option>
                 <option value="poll">Poll</option>
+                <option value="wavelength">Wavelength</option>
               </select>
             </div>
           </div>

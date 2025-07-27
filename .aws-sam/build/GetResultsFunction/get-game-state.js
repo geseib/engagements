@@ -5,6 +5,19 @@ const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
 
 exports.handler = async (event) => {
+  // Handle CORS preflight
+  if (event.requestContext?.http?.method === 'OPTIONS' || event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type'
+      },
+      body: ''
+    };
+  }
+
   try {
     const { gameId, playerId } = event.pathParameters || {};
 
@@ -78,22 +91,24 @@ exports.handler = async (event) => {
             currentQuestionData = {
               id: currentQuestionNumber,
               questionNumber: currentQuestionNumber,
-              title: question.Item.Prompt || question.Item.Title,
+              title: question.Item.Title || '',
               detail: question.Item.Detail || '',
+              questionDetail: question.Item.Detail || '',
               category: question.Item.Category,
               field: question.Item.Category,
               school: question.Item.School || '',
               customInstructions: question.Item.CustomInstructions || '',
               setId: questionSetId,
               startedAt: questionRef.Item.StartedAt,
-              // For trivia questions
-              optionA: question.Item.OptionA,
-              optionB: question.Item.OptionB,
-              optionC: question.Item.OptionC,
-              optionD: question.Item.OptionD,
-              optionE: question.Item.OptionE,
-              optionF: question.Item.OptionF,
-              correctAnswer: question.Item.CorrectAnswer
+              // For trivia questions (check both cases)
+              optionA: question.Item.optionA || question.Item.OptionA || '',
+              optionB: question.Item.optionB || question.Item.OptionB || '',
+              optionC: question.Item.optionC || question.Item.OptionC || '',
+              optionD: question.Item.optionD || question.Item.OptionD || '',
+              optionE: question.Item.optionE || question.Item.OptionE || '',
+              optionF: question.Item.optionF || question.Item.OptionF || '',
+              correctAnswer: question.Item.correctAnswer,
+              points: question.Item.points || 10
             };
             
             console.log(`✅ Fetched question data for question ${currentQuestionNumber}: ${currentQuestionData.title}`);

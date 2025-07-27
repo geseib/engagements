@@ -1,0 +1,9 @@
+
+> engagements-frontend@1.0.0 start
+> webpack serve --mode development --open
+
+[webpack-cli] Invalid options object. Dev Server has been initialized using an options object that does not match the API schema.
+ - options.proxy should be an array:
+   [object { … } | function, ...]
+   -> Allows to proxy requests, can be useful when you have a separate API backend development server and you want to send API requests on the same domain.
+   -> Read more at https://webpack.js.org/configuration/dev-server/#devserverproxy

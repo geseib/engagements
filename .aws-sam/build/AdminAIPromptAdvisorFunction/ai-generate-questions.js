@@ -1,35 +1,7 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+const { invokeClaudeWithRetry } = require('./shared/bedrock-utils');
 
 const bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });
-
-// Function to call Claude via Bedrock
-const invokeClaude = async (prompt) => {
-  const modelId = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';
-
-  console.log('🤖 Calling Claude for question generation...');
-
-  const payload = {
-    anthropic_version: 'bedrock-2023-05-31',
-    max_tokens: 3000,
-    messages: [
-      {
-        role: 'user',
-        content: [{ type: 'text', text: prompt }],
-      },
-    ],
-  };
-
-  const command = new InvokeModelCommand({
-    contentType: 'application/json',
-    body: JSON.stringify(payload),
-    modelId,
-  });
-
-  const response = await bedrockClient.send(command);
-  const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-
-  return responseBody.content[0].text;
-};
 
 exports.handler = async (event) => {
   try {
@@ -66,10 +38,21 @@ exports.handler = async (event) => {
       prompt += `Category: ${existingQuestion.category}\n`;
       prompt += `Detail: ${existingQuestion.detail}\n`;
       if (engagementType === 'trivia') {
+        prompt += `Option A: ${existingQuestion.optionA}\n`;
+        prompt += `Option B: ${existingQuestion.optionB}\n`;
+        prompt += `Option C: ${existingQuestion.optionC}\n`;
+        prompt += `Option D: ${existingQuestion.optionD}\n`;
         prompt += `Correct Answer: ${existingQuestion.correctAnswer}\n`;
-        prompt += `Wrong Answers: ${existingQuestion.wrongAnswers.join(', ')}\n`;
+        if (existingQuestion.answerDetails) {
+          prompt += `Answer Explanation: ${existingQuestion.answerDetails}\n`;
+        }
       } else if (engagementType === 'poll') {
         prompt += `Options: ${existingQuestion.options.join(', ')}\n`;
+      } else if (engagementType === 'wavelength') {
+        prompt += `Topic/Word: ${existingQuestion.title}\n`;
+        if (existingQuestion.detail) {
+          prompt += `Instructions: ${existingQuestion.detail}\n`;
+        }
       }
       prompt += `\nUSER FEEDBACK: ${userInput}\n\n`;
     } else {
@@ -82,10 +65,27 @@ exports.handler = async (event) => {
     // Add format instructions based on engagement type
     if (engagementType === 'trivia') {
       prompt += '\n\nPlease format your response as a JSON array with this structure:';
-      prompt += '\n[{"title": "Question text", "category": "Category", "detail": "Context", "school": "School", "customInstructions": "Instructions", "correctAnswer": "Answer", "wrongAnswers": ["Wrong1", "Wrong2", "Wrong3"], "difficulty": "medium"}]';
+      prompt += '\n[{"title": "Question title", "questionDetail": "Full question text", "category": "Category", "school": "School", "customInstructions": "Instructions", "optionA": "First option", "optionB": "Second option", "optionC": "Third option", "optionD": "Fourth option", "correctAnswer": "OptionA", "difficulty": "medium", "answerDetails": "Explanation of correct answer"}]';
+      prompt += '\n\nFor trivia questions:';
+      prompt += '\n- title: Short descriptive title of the question';
+      prompt += '\n- questionDetail: The actual question text shown to players';
+      prompt += '\n- optionA, optionB, optionC, optionD: The four answer choices';
+      prompt += '\n- correctAnswer: Must be exactly "OptionA", "OptionB", "OptionC", or "OptionD"';
+      prompt += '\n- answerDetails: Educational explanation about why the answer is correct';
+      prompt += '\n- difficulty: "easy", "medium", or "hard"';
     } else if (engagementType === 'poll') {
       prompt += '\n\nPlease format your response as a JSON array with this structure:';
       prompt += '\n[{"title": "Poll question", "category": "Category", "detail": "Context", "school": "School", "customInstructions": "Instructions", "options": ["Option1", "Option2"], "allowMultiple": false}]';
+    } else if (engagementType === 'wavelength') {
+      prompt += '\n\nPlease format your response as a JSON array with this structure:';
+      prompt += '\n[{"title": "Word or phrase", "category": "Category", "detail": "Contextual scenario", "school": "Business School", "customInstructions": "What are the first 10 words you think of when you think of this word?"}]';
+      prompt += '\n\nFor wavelength questions:';
+      prompt += '\n- title: The key word or phrase players will associate with (e.g., "Agentic AI", "Leadership", "Innovation")';
+      prompt += '\n- detail: A brief contextual scenario that introduces the word/concept (e.g., "Your product manager stopped you in the hall and said we need to add **Agentic AI** to our dashboard.")';
+      prompt += '\n- category: The broader theme or subject area (e.g., "AI", "Management", "Technology")';
+      prompt += '\n- customInstructions: Always set to "What are the first 10 words you think of when you think of this word?"';
+      prompt += '\n- school: Always set to "Business School"';
+      prompt += '\n\nCreate scenarios that feel realistic and relevant to business/professional contexts. Use **bold** formatting around the key word/phrase in the detail field.';
     } else {
       prompt += '\n\nPlease format your response as a JSON array with this structure:';
       prompt += '\n[{"title": "Question text", "category": "Category", "detail": "Detailed context", "school": "School", "customInstructions": "Instructions"}]';
@@ -94,7 +94,7 @@ exports.handler = async (event) => {
     prompt += '\n\nIMPORTANT: Return ONLY the JSON array, no additional text.';
 
     console.log('🤖 Sending prompt to Claude...');
-    const aiResponse = await invokeClaude(prompt);
+    const aiResponse = await invokeClaudeWithRetry(bedrockClient, InvokeModelCommand, prompt, 3000);
     console.log('✅ Received response from Claude');
 
     // Parse the JSON response with improved error handling

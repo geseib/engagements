@@ -567,13 +567,25 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
 
         <div className="modal-footer">
           {step === 1 && (
-            <button 
-              className="btn-primary" 
-              onClick={handleConfigSubmit}
-              disabled={!surveyConfig.title.trim() || !surveyConfig.topic.trim()}
-            >
-              🤖 Generate Survey
-            </button>
+            <>
+              <button className="btn-secondary" onClick={onClose}>
+                Cancel
+              </button>
+              <button 
+                className="btn-primary" 
+                onClick={handleConfigSubmit}
+                disabled={!surveyConfig.title.trim() || !surveyConfig.topic.trim()}
+              >
+                🤖 Generate Survey
+              </button>
+            </>
+          )}
+          {step === 2 && !isGenerating && generatedSurvey && (
+            <>
+              <button className="btn-secondary" onClick={onClose}>
+                Cancel
+              </button>
+            </>
           )}
         </div>
       </div>

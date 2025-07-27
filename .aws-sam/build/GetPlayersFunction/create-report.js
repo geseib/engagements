@@ -296,6 +296,7 @@ exports.handler = async (event) => {
           discussionQuestions: questionAISummary.DiscussionQuestions || [],
           nextSteps: questionAISummary.NextSteps || [],
           fullResponse: questionAISummary.FullResponse,
+          markdownResponse: questionAISummary.MarkdownResponse,
           generatedAt: questionAISummary.GeneratedAt,
           hasStructuredData: !!(questionAISummary.SummaryText && questionAISummary.DiscussionQuestions)
         } : null,

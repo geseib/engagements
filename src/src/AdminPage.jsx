@@ -37,7 +37,7 @@ function AdminPage() {
   const [aiContextInstructions, setAiContextInstructions] = useState('');
   const [selectedPromptId, setSelectedPromptId] = useState(''); // AI prompt selection for upload
   const [showDefaultInstructions, setShowDefaultInstructions] = useState(false);
-  const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer', 'trivia', or 'poll'
+  const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer', 'trivia', 'poll', or 'wavelength'
   
   // Question set deletion
   const [selectedQuestionSet, setSelectedQuestionSet] = useState('');
@@ -48,6 +48,11 @@ function AdminPage() {
   // Debug mode
   const [debugMode, setDebugMode] = useState(() => {
     return localStorage.getItem('admin_debug_mode') === 'true';
+  });
+
+  // Prompt improvement debug mode
+  const [promptDebugMode, setPromptDebugMode] = useState(() => {
+    return localStorage.getItem('prompt_debug_mode') === 'true';
   });
 
   // WebSocket mode
@@ -202,6 +207,17 @@ function AdminPage() {
     console.log(`🐛 DEBUG MODE ${newDebugMode ? 'ENABLED' : 'DISABLED'}`, { newDebugMode, localStorage: localStorage.getItem('admin_debug_mode'), windowDebugMode: window.DEBUG_MODE });
   };
 
+  const handleTogglePromptDebugMode = () => {
+    const newPromptDebugMode = !promptDebugMode;
+    setPromptDebugMode(newPromptDebugMode);
+    localStorage.setItem('prompt_debug_mode', newPromptDebugMode.toString());
+    
+    // Also set a global variable for other components to access
+    window.PROMPT_DEBUG_MODE = newPromptDebugMode;
+    
+    console.log(`🔍 PROMPT DEBUG MODE ${newPromptDebugMode ? 'ENABLED' : 'DISABLED'}`, { newPromptDebugMode, localStorage: localStorage.getItem('prompt_debug_mode'), windowPromptDebugMode: window.PROMPT_DEBUG_MODE });
+  };
+
   const handleToggleWebSocketMode = () => {
     const newWebSocketMode = !webSocketMode;
     setWebSocketMode(newWebSocketMode);
@@ -216,8 +232,9 @@ function AdminPage() {
   // Set initial global modes
   useEffect(() => {
     window.DEBUG_MODE = debugMode;
+    window.PROMPT_DEBUG_MODE = promptDebugMode;
     window.WEBSOCKET_MODE = webSocketMode;
-  }, [debugMode, webSocketMode]);
+  }, [debugMode, promptDebugMode, webSocketMode]);
 
   const handleToggleActive = async (setId, currentActive) => {
     try {
@@ -247,6 +264,36 @@ function AdminPage() {
     } catch (error) {
       console.error('Toggle active error:', error);
       alert(`Failed to toggle active status: ${error.message}`);
+    }
+  };
+
+  const handleToggleQuickstart = async (setId, quickstartEnabled) => {
+    try {
+      const response = await fetch(`${API_BASE}admin/toggle-quickstart/${setId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ quickstart: quickstartEnabled })
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        // Update the local state immediately for better UX
+        setQuestionSets(prevSets => 
+          prevSets.map(set => 
+            set.id === setId ? { ...set, quickstart: quickstartEnabled } : set
+          )
+        );
+        console.log(`Question set ${setId} quickstart ${quickstartEnabled ? 'enabled' : 'disabled'}`);
+      } else {
+        console.error('Failed to toggle quickstart status:', result.error);
+        alert(`Failed to toggle quickstart status: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Toggle quickstart error:', error);
+      alert(`Failed to toggle quickstart status: ${error.message}`);
     }
   };
 
@@ -915,6 +962,12 @@ function AdminPage() {
                 </button>
                 <button
                   className="btn-secondary"
+                  onClick={() => handleDownloadTemplate('wavelength')}
+                >
+                  📡 Wavelength Template
+                </button>
+                <button
+                  className="btn-secondary"
                   onClick={() => handleDownloadTemplate('survey')}
                 >
                   📋 Survey Template
@@ -969,6 +1022,7 @@ function AdminPage() {
                     <option value="call-and-answer">Call and Answer</option>
                     <option value="trivia">Trivia</option>
                     <option value="poll">Poll</option>
+                    <option value="wavelength">Wavelength</option>
                   </select>
                 </div>
               </div>
@@ -1108,6 +1162,7 @@ function AdminPage() {
                   <option value="call-and-answer">Call and Answer</option>
                   <option value="trivia">Trivia</option>
                   <option value="poll">Poll</option>
+                  <option value="wavelength">Wavelength</option>
                 </select>
               </div>
               
@@ -1168,7 +1223,8 @@ function AdminPage() {
                       <span className="stat-badge">{set.categoryCount} categories</span>
                       <span className="stat-badge">
                         {set.engagementType === 'trivia' ? 'Trivia' :
-                         set.engagementType === 'poll' ? 'Poll' : 'Call and Answer'}
+                         set.engagementType === 'poll' ? 'Poll' :
+                         set.engagementType === 'wavelength' ? 'Wavelength' : 'Call and Answer'}
                       </span>
                       <button
                         className={`status-badge clickable ${set.active ? 'active' : 'inactive'}`}
@@ -1177,6 +1233,14 @@ function AdminPage() {
                       >
                         {set.active ? 'Active' : 'Inactive'}
                       </button>
+                      <label className="quickstart-checkbox" title="Enable for quickstart menu">
+                        <input
+                          type="checkbox"
+                          checked={set.quickstart || false}
+                          onChange={(e) => handleToggleQuickstart(set.id, e.target.checked)}
+                        />
+                        <span className="quickstart-label">⚡ Quickstart</span>
+                      </label>
                       {set.isAIGenerated && (
                         <span className="stat-badge ai-generated" title="AI-generated content">
                           🤖 AI
@@ -1383,6 +1447,7 @@ function AdminPage() {
                   <option value="call-and-answer">Call and Answer</option>
                   <option value="trivia">Trivia</option>
                   <option value="poll">Poll</option>
+                  <option value="wavelength">Wavelength</option>
                 </select>
               </div>
 
@@ -1400,7 +1465,9 @@ function AdminPage() {
                     }
                   }}
                 >
-                  🤖 AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : 'Scenario'} Builder
+                  🤖 AI {engagementType === 'trivia' ? 'Trivia' : 
+                           engagementType === 'poll' ? 'Poll' : 
+                           engagementType === 'wavelength' ? 'Wavelength' : 'Scenario'} Builder
                 </button>
                 {engagementType === 'trivia' && (
                   <button
@@ -1444,7 +1511,9 @@ function AdminPage() {
                   onClick={() => handleDownloadTemplate(engagementType)}
                 >
                   📄 Download {engagementType === 'call-and-answer' ? 'Call & Answer' :
-                              engagementType === 'trivia' ? 'Trivia' : 'Poll'} Template
+                              engagementType === 'trivia' ? 'Trivia' : 
+                              engagementType === 'poll' ? 'Poll' : 
+                              engagementType === 'wavelength' ? 'Wavelength' : 'Template'} Template
                 </button>
               </div>
             </div>
@@ -1558,6 +1627,21 @@ function AdminPage() {
                   </label>
                   <p className="debug-description">
                     When enabled, the actual AI prompts sent to the model will be displayed above AI summary outputs in both the AI-ify dialog and results page.
+                  </p>
+                  
+                  <label className="debug-toggle">
+                    <input
+                      type="checkbox"
+                      checked={promptDebugMode}
+                      onChange={handleTogglePromptDebugMode}
+                    />
+                    <span className="toggle-label">
+                      Prompt Improvement Debug Mode
+                      {promptDebugMode && <span className="debug-active">ACTIVE</span>}
+                    </span>
+                  </label>
+                  <p className="debug-description">
+                    When enabled, shows all prompt variables and their actual data values in a side panel during gameplay on the host screen results page. Useful for debugging and improving AI prompts.
                   </p>
                 </div>
               </div>

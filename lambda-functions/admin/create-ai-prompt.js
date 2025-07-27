@@ -47,15 +47,22 @@ exports.handler = async (event) => {
       category,
       scenario,
       template,
+      instructions,
+      outputFormat,
       isDefault = false,
       status = 'draft',
       questionSetIds = [],
       tags = []
     } = JSON.parse(event.body);
 
-    // Validate required fields
-    if (!name || !gameType || !template) {
-      throw new Error('Missing required fields: name, gameType, and template are required');
+    // Validate required fields - support both old (template) and new (instructions + outputFormat) formats
+    if (!name || !gameType) {
+      throw new Error('Missing required fields: name and gameType are required');
+    }
+    
+    // Either template OR (instructions + outputFormat) must be provided
+    if (!template && (!instructions || !outputFormat)) {
+      throw new Error('Either template OR both instructions and outputFormat are required');
     }
 
     // Validate gameType
@@ -82,7 +89,10 @@ exports.handler = async (event) => {
       gameType,
       category,
       scenario,
-      template,
+      // Support both old and new formats
+      ...(template && { template }),
+      ...(instructions && { instructions }),
+      ...(outputFormat && { outputFormat }),
       isDefault,
       status,
       questionSetIds,
@@ -91,7 +101,8 @@ exports.handler = async (event) => {
       updatedAt: timestamp,
       metadata: {
         author: 'admin', // Could be enhanced with actual user info
-        createdBy: 'admin-interface'
+        createdBy: 'admin-interface',
+        format: template ? 'legacy' : 'structured'
       }
     };
 

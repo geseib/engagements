@@ -22,7 +22,7 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
 
   const [tagInput, setTagInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [templateTextareaRef, setTemplateTextareaRef] = useState(null);
+  const [outputFormatTextareaRef, setOutputFormatTextareaRef] = useState(null);
 
   // Available template variables with game type availability
   const templateVariables = [
@@ -440,21 +440,21 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
   ];
 
   const insertVariable = (variableName) => {
-    if (templateTextareaRef) {
-      const cursorPos = templateTextareaRef.selectionStart;
-      const textBefore = formData.template.substring(0, cursorPos);
-      const textAfter = formData.template.substring(templateTextareaRef.selectionEnd);
-      const newTemplate = textBefore + `{${variableName}}` + textAfter;
+    if (outputFormatTextareaRef) {
+      const cursorPos = outputFormatTextareaRef.selectionStart;
+      const textBefore = formData.outputFormat.substring(0, cursorPos);
+      const textAfter = formData.outputFormat.substring(outputFormatTextareaRef.selectionEnd);
+      const newOutputFormat = textBefore + `{${variableName}}` + textAfter;
       
-      setFormData({ ...formData, template: newTemplate });
+      setFormData({ ...formData, outputFormat: newOutputFormat });
       
       // Move cursor after inserted variable
       setTimeout(() => {
-        templateTextareaRef.setSelectionRange(
+        outputFormatTextareaRef.setSelectionRange(
           cursorPos + variableName.length + 2,
           cursorPos + variableName.length + 2
         );
-        templateTextareaRef.focus();
+        outputFormatTextareaRef.focus();
       }, 0);
     }
   };
@@ -609,14 +609,28 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
             />
           </div>
 
+          <div className="form-group">
+            <label>1. General Instructions *</label>
+            <textarea
+              value={formData.instructions}
+              onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
+              placeholder="Example: You are a Developer Consultant that provides deep thoughtful expertise on how to deploy code and develop products. You provide detailed answers and speak clearly, explaining any jargon to make sure everyone's on the same page."
+              rows="4"
+              required
+            />
+            <small className="form-help">
+              Define the AI's persona, expertise, and communication style.
+            </small>
+          </div>
+
           <div className="form-group template-group">
-            <label>Prompt Template *</label>
+            <label>2. Output Format (Markdown) *</label>
             <div className="template-editor-container">
               <div className="template-variables-panel">
                 <h4>📝 Available Variables</h4>
                 <p className="variables-help">
-                  Click to insert into template:<br />
-                  <small><strong>💡 Pro Tip:</strong> Use markdown headers (## Header Name) in your prompt to create custom sections that replace the default headers.</small>
+                  Click to insert into output format:<br />
+                  <small><strong>💡 Pro Tip:</strong> Use markdown headers (## Header Name) to create custom sections in your output format.</small>
                   <br />
                   <small><strong>🎯 Game Type:</strong> {formData.gameType} - Variables marked with ⚠️ are not available for this game type</small>
                 </p>
@@ -656,10 +670,10 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
               </div>
               <div className="template-textarea-container">
                 <textarea
-                  ref={setTemplateTextareaRef}
-                  value={formData.template}
-                  onChange={(e) => setFormData({ ...formData, template: e.target.value })}
-                  placeholder="Example template:
+                  ref={setOutputFormatTextareaRef}
+                  value={formData.outputFormat}
+                  onChange={(e) => setFormData({ ...formData, outputFormat: e.target.value })}
+                  placeholder="Example output format:
 
 ## 🎯 Key Insights
 Analyze the responses from {eventTitle} where participants answered: {questionTitle}
@@ -673,14 +687,14 @@ Based on {responseCount} responses, here are the top insights:
 ## 🚀 Recommended Actions
 [List 3-4 specific next steps the team should consider]
 
-Click variable buttons to insert them into your prompt."
+Click variable buttons to insert them into your output format."
                   rows="12"
                   required
                 />
               </div>
             </div>
             <small className="form-help">
-              Click the variable buttons to insert them into your template. Variables will be replaced with actual content when the AI summary is generated.
+              Click the variable buttons to insert them into your output format. Variables will be replaced with actual content when the AI summary is generated.
             </small>
           </div>
 
@@ -754,7 +768,7 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          promptText: prompt.template,
+          promptText: prompt.template || (prompt.instructions + '\n\n' + prompt.outputFormat),
           gameType: prompt.gameType,
           scenario: prompt.scenario,
           analysisType,
@@ -973,7 +987,10 @@ function AIPromptManager() {
       // Transform the prompts to include the content from S3
       const transformedPrompts = (data.prompts || []).map(prompt => ({
         ...prompt,
+        // Handle both old (template) and new (instructions + outputFormat) structure
         template: prompt.promptContent?.template || '',
+        instructions: prompt.promptContent?.instructions || '',
+        outputFormat: prompt.promptContent?.outputFormat || '',
         description: prompt.promptContent?.description || prompt.description || '',
         tags: prompt.promptContent?.tags || prompt.tags || []
       }));
@@ -1044,7 +1061,8 @@ function AIPromptManager() {
   const handleApplyImprovedPrompt = (improvedTemplate) => {
     if (advisorPrompt) {
       // Update the prompt in the state and open it for editing
-      const updatedPrompt = { ...advisorPrompt, template: improvedTemplate };
+      // For now, put the improved template in the outputFormat field
+      const updatedPrompt = { ...advisorPrompt, outputFormat: improvedTemplate };
       setEditingPrompt(updatedPrompt);
       setAdvisorPrompt(null);
     }

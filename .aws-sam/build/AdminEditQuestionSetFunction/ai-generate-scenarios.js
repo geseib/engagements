@@ -2,35 +2,6 @@ const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-be
 
 const bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });
 
-// Function to call Claude via Bedrock
-const invokeClaude = async (prompt) => {
-  const modelId = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';
-
-  console.log('🤖 Calling Claude for scenario generation...');
-
-  const payload = {
-    anthropic_version: 'bedrock-2023-05-31',
-    max_tokens: 4000,
-    messages: [
-      {
-        role: 'user',
-        content: [{ type: 'text', text: prompt }],
-      },
-    ],
-  };
-
-  const command = new InvokeModelCommand({
-    contentType: 'application/json',
-    body: JSON.stringify(payload),
-    modelId,
-  });
-
-  const response = await bedrockClient.send(command);
-  const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-
-  return responseBody.content[0].text;
-};
-
 exports.handler = async (event) => {
   try {
     console.log('🤖 Lambda function started for scenario generation');
@@ -93,9 +64,56 @@ exports.handler = async (event) => {
     fullPrompt += '\nReturn ONLY the JSON array.';
 
     console.log('🤖 Sending prompt to Claude...', { promptLength: fullPrompt.length });
-    const aiResponse = await invokeClaude(fullPrompt);
-    console.log('✅ Received response from Claude', { responseLength: aiResponse?.length });
+    
+    // Use Claude 3.5 Sonnet inference profile ARN (same as working ai-generate-questions)
+    let aiResponse;
+    try {
+      const response = await bedrockClient.send(new InvokeModelCommand({
+        modelId: 'arn:aws:bedrock:us-east-1:239601476690:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0',
+        body: JSON.stringify({
+          anthropic_version: 'bedrock-2023-05-31',
+          max_tokens: 4000,
+          temperature: 0.7,
+          messages: [
+            {
+              role: 'user',
+              content: fullPrompt
+            }
+          ]
+        })
+      }));
 
+      const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+      aiResponse = responseBody.content[0].text.trim();
+      
+      console.log('✅ Received response from Claude Sonnet', { responseLength: aiResponse?.length });
+      
+    } catch (error) {
+      console.error('🚨 BEDROCK Sonnet ERROR:', error.message);
+      console.log('🔄 BEDROCK: Trying Claude 3.5 Haiku as fallback...');
+      
+      // Try Claude 3.5 Haiku inference profile ARN as fallback
+      const haikuResponse = await bedrockClient.send(new InvokeModelCommand({
+        modelId: 'arn:aws:bedrock:us-east-1:239601476690:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0',
+        body: JSON.stringify({
+          anthropic_version: 'bedrock-2023-05-31',
+          max_tokens: 4000,
+          temperature: 0.7,
+          messages: [
+            {
+              role: 'user',
+              content: fullPrompt
+            }
+          ]
+        })
+      }));
+
+      const haikuResponseBody = JSON.parse(new TextDecoder().decode(haikuResponse.body));
+      aiResponse = haikuResponseBody.content[0].text.trim();
+      
+      console.log('✅ Received response from Claude Haiku fallback', { responseLength: aiResponse?.length });
+    }
+      
     // Parse the JSON response with improved error handling
     let scenarios;
     try {

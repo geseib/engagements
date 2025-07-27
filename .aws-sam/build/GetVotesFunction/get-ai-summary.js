@@ -8,95 +8,84 @@ const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
 const s3 = new S3Client({ region: 'us-east-1' });
 
-// Parse Claude's response into structured sections using the new === FORMAT ===
+// Parse Claude's response - standardized markdown headers (## Summary, ## Discussion Questions, ## Next Steps)
 const parseAIResponse = (aiResponse) => {
   console.log('🔍 PARSING: Full AI response length:', aiResponse.length);
   console.log('🔍 PARSING: First 300 chars:', aiResponse.substring(0, 300));
   
-  // Convert the response to Markdown format
-  let markdownResponse = aiResponse;
+  // Clean up and normalize any non-standard headers to our expected format
+  let cleanedResponse = aiResponse
+    .replace(/##\s*(Results|Dive\s*Deep|Game\s*Status|Insights?|Analysis)/gim, '## Summary')
+    .replace(/##\s*(Discussion\s*Topics?|Questions?)/gim, '## Discussion Questions')
+    .replace(/##\s*(Next\s*Steps?|Actions?|Recommendations?)/gim, '## Next Steps')
+    .replace(/🎡\s*Next\s*Steps/g, '## Next Steps') // Handle emoji headers
+    .replace(/💬\s*Discussion\s*Topics/g, '## Discussion Questions'); // Handle emoji headers
   
-  // Extract summary (content between "=== SUMMARY ===" and next section)
+  console.log('🔍 PARSING: Cleaned response headers for consistency');
+  
+  // Extract content sections using cleaned markdown headers
   let summaryText = '';
-  const summaryMatch = aiResponse.match(/===\s*SUMMARY\s*===\s*\n([\s\S]*?)(?=\n===|$)/i);
+  let discussionQuestions = [];
+  let nextSteps = [];
+  
+  // Extract summary (content between "## Summary" and next ## section)
+  const summaryMatch = cleanedResponse.match(/##\s*Summary[^\n]*\n([\s\S]*?)(?=\n##|$)/i);
   if (summaryMatch) {
-    summaryText = summaryMatch[1].trim().replace(/^\[|\]$/g, ''); // Remove template brackets
+    summaryText = summaryMatch[1].trim();
+    // Remove any embedded markdown headers from within the summary
+    summaryText = summaryText.replace(/##\s*[^\n]*\n?/g, '').trim();
     console.log('🔍 PARSING: Extracted summary:', summaryText.substring(0, 100) + '...');
-  } else {
-    console.log('⚠️ PARSING: No === SUMMARY === section found');
   }
   
-  // Extract discussion questions (content between "=== DISCUSSION QUESTIONS ===" and next section)
-  let discussionQuestions = [];
-  const discussionMatch = aiResponse.match(/===\s*DISCUSSION\s*QUESTIONS\s*===\s*\n([\s\S]*?)(?=\n===|$)/i);
+  // Extract discussion questions (content between "## Discussion Questions" and next ## section)
+  const discussionMatch = cleanedResponse.match(/##\s*Discussion\s*Questions[^\n]*\n([\s\S]*?)(?=\n##|$)/i);
   if (discussionMatch) {
     const discussionText = discussionMatch[1];
-    // Extract Q1:, Q2:, Q3: format questions
-    const q1Match = discussionText.match(/Q1:\s*(.*?)(?=\nQ2:|$)/s);
-    const q2Match = discussionText.match(/Q2:\s*(.*?)(?=\nQ3:|$)/s);
-    const q3Match = discussionText.match(/Q3:\s*(.*?)(?=\n|$)/s);
-    
-    if (q1Match) discussionQuestions.push(q1Match[1].trim().replace(/^\[|\]$/g, ''));
-    if (q2Match) discussionQuestions.push(q2Match[1].trim().replace(/^\[|\]$/g, ''));
-    if (q3Match) discussionQuestions.push(q3Match[1].trim().replace(/^\[|\]$/g, ''));
-    
+    // Extract numbered list items (1., 2., 3., etc.)
+    const listItems = discussionText.match(/^\d+\.\s*(.*?)(?=\n\d+\.|$)/gm);
+    if (listItems) {
+      discussionQuestions = listItems.map(item => item.replace(/^\d+\.\s*/, '').trim());
+    } else {
+      // Fallback: split by lines and filter non-empty
+      discussionQuestions = discussionText.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0 && !line.startsWith('#'))
+        .slice(0, 3); // Limit to 3 questions
+    }
     console.log('🔍 PARSING: Extracted discussion questions:', discussionQuestions);
-  } else {
-    console.log('⚠️ PARSING: No === DISCUSSION QUESTIONS === section found');
   }
   
-  // Extract next steps (content between "=== NEXT STEPS ===" and end)
-  let nextSteps = [];
-  const nextStepsMatch = aiResponse.match(/===\s*NEXT\s*STEPS\s*===\s*\n([\s\S]*?)$/i);
+  // Extract next steps (content between "## Next Steps" and end)
+  const nextStepsMatch = cleanedResponse.match(/##\s*Next\s*Steps[^\n]*\n([\s\S]*?)$/i);
   if (nextStepsMatch) {
     const nextStepsText = nextStepsMatch[1];
-    // Extract STEP1:, STEP2:, STEP3:, STEP4: format
-    const step1Match = nextStepsText.match(/STEP1:\s*(.*?)(?=\nSTEP2:|$)/s);
-    const step2Match = nextStepsText.match(/STEP2:\s*(.*?)(?=\nSTEP3:|$)/s);
-    const step3Match = nextStepsText.match(/STEP3:\s*(.*?)(?=\nSTEP4:|$)/s);
-    const step4Match = nextStepsText.match(/STEP4:\s*(.*?)(?=\n|$)/s);
-    
-    if (step1Match) nextSteps.push(step1Match[1].trim().replace(/^\[|\]$/g, ''));
-    if (step2Match) nextSteps.push(step2Match[1].trim().replace(/^\[|\]$/g, ''));
-    if (step3Match) nextSteps.push(step3Match[1].trim().replace(/^\[|\]$/g, ''));
-    if (step4Match) nextSteps.push(step4Match[1].trim().replace(/^\[|\]$/g, ''));
-    
+    // Extract numbered list items (1., 2., 3., etc.)
+    const listItems = nextStepsText.match(/^\d+\.\s*(.*?)(?=\n\d+\.|$)/gm);
+    if (listItems) {
+      nextSteps = listItems.map(item => item.replace(/^\d+\.\s*/, '').trim());
+    } else {
+      // Fallback: split by lines and filter non-empty
+      nextSteps = nextStepsText.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0 && !line.startsWith('#'))
+        .slice(0, 4); // Limit to 4 steps
+    }
     console.log('🔍 PARSING: Extracted next steps:', nextSteps);
-  } else {
-    console.log('⚠️ PARSING: No === NEXT STEPS === section found');
   }
   
-  // Fallback to simpler parsing if structured parsing fails
+  // Fallback for summary if empty - use first paragraph that's not a header
   if (!summaryText || summaryText.length < 20) {
-    console.log('⚠️ PARSING: Falling back to simple summary extraction');
-    summaryText = aiResponse.trim();
+    console.log('⚠️ PARSING: Summary too short, using first paragraph as fallback');
+    const firstParagraph = cleanedResponse.split('\n').find(line => line.trim().length > 20 && !line.startsWith('#'));
+    summaryText = firstParagraph ? firstParagraph.trim() : cleanedResponse.trim();
   }
   
-  // Convert the raw response to Markdown format
-  markdownResponse = aiResponse
-    .replace(/===\s*SUMMARY\s*===/gi, '## Summary')
-    .replace(/===\s*DISCUSSION\s*QUESTIONS\s*===/gi, '## Discussion Questions')
-    .replace(/===\s*NEXT\s*STEPS\s*===/gi, '## Next Steps')
-    .replace(/Q1:\s*/g, '1. ')
-    .replace(/Q2:\s*/g, '2. ')
-    .replace(/Q3:\s*/g, '3. ')
-    .replace(/STEP1:\s*/g, '1. ')
-    .replace(/STEP2:\s*/g, '2. ')
-    .replace(/STEP3:\s*/g, '3. ')
-    .replace(/STEP4:\s*/g, '4. ');
-  
-  const result = {
+  return {
     summaryText: summaryText,
     discussionQuestions: discussionQuestions,
     nextSteps: nextSteps,
-    markdownResponse: markdownResponse
+    markdownResponse: cleanedResponse
   };
-  
-  console.log('✅ PARSING: Summary length:', result.summaryText.length);
-  console.log('✅ PARSING: Discussion questions count:', result.discussionQuestions.length);
-  console.log('✅ PARSING: Next steps count:', result.nextSteps.length);
-  
-  return result;
 };
 
 // Fetch AI prompt from S3
@@ -104,12 +93,26 @@ const fetchPromptFromS3 = async (promptId) => {
   try {
     console.log(`📄 Fetching prompt ${promptId} from S3...`);
     
-    // Match the structure used by create-ai-prompt: prompts/{gameType}/{promptId}/v{version}.json
-    const gameType = 'callandanswer'; // Default game type
-    const version = 1; // Default version
+    // First get the prompt record from DynamoDB to get the correct S3 key
+    const dbResult = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: 'AIPROMPTS', SK: `AIPROMPT#${promptId}` }
+    }));
     
-    const s3Key = `prompts/${gameType}/${promptId}/v${version}.json`;
-    console.log(`📄 S3 Key: ${s3Key}`);
+    if (!dbResult.Item) {
+      console.error(`❌ Prompt ${promptId} not found in DynamoDB`);
+      return null;
+    }
+    
+    const promptRecord = dbResult.Item;
+    const s3Key = promptRecord.s3Key;
+    
+    if (!s3Key) {
+      console.error(`❌ No S3 key found in prompt record for ${promptId}`);
+      return null;
+    }
+    
+    console.log(`📄 Using S3 Key from DB record: ${s3Key}`);
     
     const response = await s3.send(new GetObjectCommand({
       Bucket: process.env.AI_PROMPTS_BUCKET,
@@ -117,21 +120,21 @@ const fetchPromptFromS3 = async (promptId) => {
     }));
     
     const promptData = JSON.parse(await response.Body.transformToString());
-    console.log(`✅ Successfully fetched prompt: ${promptData.name}`);
+    console.log(`✅ Successfully fetched prompt: ${promptData.name || 'Unknown'}`);
     
     return promptData;
   } catch (error) {
     console.error(`❌ Error fetching prompt ${promptId}:`, error);
     
-    // Try to get from DynamoDB as fallback
+    // Try to get the DynamoDB record as final fallback
     try {
       const dbResult = await db.send(new GetCommand({
         TableName: process.env.TABLE_NAME,
-        Key: { PK: 'AI_PROMPTS', SK: promptId }
+        Key: { PK: 'AIPROMPTS', SK: `AIPROMPT#${promptId}` }
       }));
       
       if (dbResult.Item) {
-        console.log(`✅ Found prompt in DynamoDB fallback`);
+        console.log(`✅ Using DynamoDB record as fallback for prompt ${promptId}`);
         return dbResult.Item;
       }
     } catch (dbError) {
@@ -145,37 +148,53 @@ const fetchPromptFromS3 = async (promptId) => {
         id: 'lessons-learned',
         name: 'Lessons Learned - Strategic Insights',
         category: 'callandanswer',
-        template: `You are an expert business strategist analyzing responses from {sessionContext}.
+        template: `You are an expert business strategist analyzing team responses from {sessionContext}.
 
-LESSON DETAILS:
+QUESTION ANALYSIS:
 Question: "{questionTitle}"
 Category: {questionCategory}
-Context: {questionDetail}
+Full Context: {questionDetail}
 {contextSections}
 
-PLAYER RESPONSES (ranked by peer voting):
+TOP RESULTS (Team's Collective Choice):
+{winnerInfo}
+{topVotedAnswers}
+
+COMPLETE RESPONSE RANKING ({responseCount} total responses):
 {responsesText}
 
-ANALYSIS INSTRUCTIONS:
-You are analyzing {responseCount} responses that were peer-voted by the team. The responses above are ranked by total vote points, with the highest-scoring response first.{contextInstructions}
+VOTING INSIGHTS:
+- Participation: {votingParticipation} 
+- Pattern: {votingPattern}
+- Consensus Level: {consensusLevel}
+- Vote Distribution: {votingBreakdown}
+
+STRATEGIC ANALYSIS INSTRUCTIONS:
+The team has spoken through their votes. The top-ranked responses above represent their collective judgment on "{questionTitle}". Your role is to extract strategic insights that build on what the team prioritized and provide actionable direction.{contextInstructions}
+
+Key Focus Areas:
+1. Why did the team gravitate toward the top responses?
+2. What strategic themes emerge from their choices?
+3. How can these insights drive concrete action?
+4. What deeper questions does this raise?
 
 Please provide your strategic analysis in this EXACT format for reliable parsing:
 
 === SUMMARY ===
-[Write 2-3 sentences synthesizing the key strategic themes and insights from these responses. Pay special attention to the top-ranked responses as they represent the team's collective wisdom.]
+[Write 2-3 sentences that synthesize the strategic themes from the TOP-RANKED responses. Focus on why the team prioritized these particular insights and what they reveal about strategic thinking. Reference specific winning responses by name/content.]
 
 === DISCUSSION QUESTIONS ===
-Q1: [First thought-provoking question that builds on these specific responses for deeper strategic discussion. Reference specific player insights.]
-Q2: [Second question that facilitates strategic discussion based on the responses.]
-Q3: [Third question for deeper strategic discussion.]
+Q1: [Build directly on the winning response(s). Why did the team choose this direction? What does it reveal about priorities or challenges?]
+Q2: [Explore tensions or trade-offs revealed by comparing the top responses. What strategic choices does this highlight?]
+Q3: [Look forward: How can the team build on these insights? What's the next level of strategic thinking needed?]
 
 === NEXT STEPS ===
-STEP1: [First concrete, actionable step the team could take based on these insights.]
-STEP2: [Second actionable step, prioritizing ideas from highest-ranked responses.]
-STEP3: [Third actionable step for implementation.]
-STEP4: [Fourth actionable step (optional but recommended).]
+STEP1: [Concrete action based on the #1 response. Be specific about what the team can do immediately.]
+STEP2: [Secondary action that leverages other top responses. Show how to integrate multiple winning insights.]
+STEP3: [Strategic follow-up that addresses the question's deeper implications for the organization.]
+STEP4: [Measurement or validation step to track progress on these insights.]
 
-Focus on actionable insights that connect directly to what these players shared and the specific context they were asked to consider. Be specific and insightful.`,
+Ground every insight in the actual responses the team prioritized. Be specific about who said what and why their collective choice matters strategically.`,
         description: 'Strategic insights and actionable next steps based on team responses'
       };
     }
@@ -190,33 +209,43 @@ const findDefaultPromptId = async (gameType) => {
     console.log(`🔍 Finding default prompt for game type: ${gameType}`);
     
     // Normalize game type
-    const normalizedGameType = gameType === 'call-and-answer' ? 'callandanswer' : gameType;
+    const normalizedGameType = gameType === 'call-and-answer' ? 'callandanswer' : 
+                              gameType === 'wavelength' ? 'wavelength' : gameType;
     
     // Scan for default prompts matching the game type
     const scanResult = await db.send(new ScanCommand({
       TableName: process.env.TABLE_NAME,
-      FilterExpression: 'begins_with(PK, :pk) AND gameType = :gameType AND isDefault = :isDefault',
+      FilterExpression: 'PK = :pk AND gameType = :gameType AND isDefault = :isDefault',
       ExpressionAttributeValues: {
-        ':pk': 'AI_PROMPT#',
+        ':pk': 'AIPROMPTS',
         ':gameType': normalizedGameType,
         ':isDefault': true
       }
     }));
 
     if (scanResult.Items && scanResult.Items.length > 0) {
-      // Prefer lessons-learned category for call-and-answer, or take first available
-      let defaultPrompt = scanResult.Items.find(item => item.category === 'lessons-learned') || scanResult.Items[0];
-      console.log(`✅ Found default prompt: ${defaultPrompt.promptId} (${defaultPrompt.name})`);
+      // Prefer category based on game type
+      let defaultPrompt;
+      if (normalizedGameType === 'callandanswer') {
+        defaultPrompt = scanResult.Items.find(item => item.category === 'lessons-learned') || scanResult.Items[0];
+      } else if (normalizedGameType === 'trivia') {
+        defaultPrompt = scanResult.Items.find(item => item.category === 'general') || scanResult.Items[0];
+      } else {
+        defaultPrompt = scanResult.Items[0]; // For polls or other types, just take the first one
+      }
+      console.log(`✅ Found default prompt: ${defaultPrompt.promptId} (${defaultPrompt.name}) for ${normalizedGameType}`);
       return defaultPrompt.promptId;
     }
 
-    // Final fallback - return a hardcoded default
-    console.log(`⚠️ No default prompt found for ${gameType}, using hardcoded fallback`);
-    return 'lessons-learned';
+    // Final fallback - return a hardcoded default based on game type
+    const fallbackPrompt = normalizedGameType === 'trivia' ? 'trivia-basic' : 'lessons-learned';
+    console.log(`⚠️ No default prompt found for ${gameType}, using hardcoded fallback: ${fallbackPrompt}`);
+    return fallbackPrompt;
     
   } catch (error) {
     console.error(`❌ Error finding default prompt for ${gameType}:`, error);
-    return 'lessons-learned'; // Fallback
+    const fallbackPrompt = gameType === 'trivia' ? 'trivia-basic' : 'lessons-learned';
+    return fallbackPrompt; // Fallback
   }
 };
 
@@ -224,7 +253,7 @@ exports.handler = async (event) => {
   try {
     const { gameId } = event.pathParameters || {};
     const queryParams = event.queryStringParameters || {};
-    const { questionId, generateNew } = queryParams;
+    const { questionId, generateNew, debug, promptDebug } = queryParams;
 
     if (!gameId) {
       return {
@@ -299,19 +328,35 @@ exports.handler = async (event) => {
 
       if (existingSummary.Item) {
         console.log(`✅ Returning existing AI summary for ${gameId}: ${targetQuestionId}`);
+        const responseData = {
+          gameId: gameId,
+          questionId: targetQuestionId,
+          summary: existingSummary.Item.Summary || existingSummary.Item.SummaryText,
+          summaryText: existingSummary.Item.SummaryText || existingSummary.Item.Summary,
+          discussionQuestions: existingSummary.Item.DiscussionQuestions || [],
+          nextSteps: existingSummary.Item.NextSteps || [],
+          markdownResponse: existingSummary.Item.MarkdownResponse || null,
+          generatedAt: existingSummary.Item.GeneratedAt,
+          fromCache: true
+        };
+        
+        // Add debug information if debug mode is enabled
+        if (debug === 'true' && existingSummary.Item.DebugInfo) {
+          responseData.debugPrompt = existingSummary.Item.DebugInfo.fullPrompt || 'Debug info not available';
+          responseData.debugProvenance = existingSummary.Item.DebugInfo.promptProvenance || null;
+        }
+        
+        // Add prompt debug information if prompt debug mode is enabled
+        if (promptDebug === 'true' && existingSummary.Item.DebugInfo) {
+          responseData.templateVariables = existingSummary.Item.DebugInfo.templateVariables || {};
+          responseData.promptTemplate = existingSummary.Item.DebugInfo.promptTemplate || '';
+          responseData.promptName = existingSummary.Item.DebugInfo.promptName || '';
+          responseData.promptSource = existingSummary.Item.DebugInfo.promptSource || '';
+        }
+        
         return {
           statusCode: 200,
-          body: JSON.stringify({
-            gameId: gameId,
-            questionId: targetQuestionId,
-            summary: existingSummary.Item.Summary || existingSummary.Item.SummaryText,
-            summaryText: existingSummary.Item.SummaryText || existingSummary.Item.Summary,
-            discussionQuestions: existingSummary.Item.DiscussionQuestions || [],
-            nextSteps: existingSummary.Item.NextSteps || [],
-            markdownResponse: existingSummary.Item.MarkdownResponse || null,
-            generatedAt: existingSummary.Item.GeneratedAt,
-            fromCache: true
-          }),
+          body: JSON.stringify(responseData),
           headers: { 'Access-Control-Allow-Origin': '*' }
         };
       }
@@ -331,7 +376,8 @@ exports.handler = async (event) => {
       };
     }
 
-    // Extract scoring configuration early since it's used in vote processing
+    // Extract scoring configuration and game type early since they're used in vote processing
+    const gameType = gameMetadata.Item.GameType || 'call-and-answer';
     const scoringConfig = gameMetadata.Item.ScoringConfig || {
       firstPlacePoints: 3,
       secondPlacePoints: 2,
@@ -342,6 +388,8 @@ exports.handler = async (event) => {
     // Get question details from question set
     const questionSetId = gameMetadata.Item.QuestionSetId;
     
+    console.log(`🔍 DEBUG: Getting question for AI Summary - gameId: ${gameId}, paddedQuestionNumber: ${paddedQuestionNumber}, questionSetId: ${questionSetId}`);
+    
     // First try to get the question reference to find the source question
     const questionRef = await db.send(new GetCommand({
       TableName: process.env.TABLE_NAME,
@@ -351,6 +399,9 @@ exports.handler = async (event) => {
     let sourceQuestionId = targetQuestionId;
     if (questionRef.Item && questionRef.Item.SourceQuestionId) {
       sourceQuestionId = questionRef.Item.SourceQuestionId;
+      console.log(`📋 Found question reference: ${sourceQuestionId}`);
+    } else {
+      console.log(`⚠️ No question reference found, using targetQuestionId: ${targetQuestionId}`);
     }
     
     const questionInfo = await db.send(new GetCommand({
@@ -360,18 +411,37 @@ exports.handler = async (event) => {
         SK: sourceQuestionId 
       }
     }));
+    
+    console.log(`📋 Question query result:`, questionInfo.Item ? 'Found' : 'Not found');
 
     // If question not found in set, create a fallback question object
     let question;
     if (!questionInfo.Item) {
       console.log(`⚠️ Question ${sourceQuestionId} not found in set ${questionSetId}, using fallback`);
       question = {
+        title: `Question ${paddedQuestionNumber}`,
+        questionDetail: 'Question details not available',
+        category: 'General',
         Title: `Question ${paddedQuestionNumber}`,
         Detail: 'Question details not available',
         Category: 'General'
       };
     } else {
       question = questionInfo.Item;
+      // Normalize field names for consistency (trivia uses lowercase, others use titlecase)
+      question.title = question.title || question.Title;
+      question.questionDetail = question.questionDetail || question.Detail || question.detail;
+      question.category = question.category || question.Category;
+      
+      // Normalize trivia-specific fields
+      question.correctAnswer = question.correctAnswer || question.CorrectAnswer;
+      question.correctAnswers = question.correctAnswers || question.CorrectAnswers;
+      question.optionA = question.optionA || question.OptionA;
+      question.optionB = question.optionB || question.OptionB;
+      question.optionC = question.optionC || question.OptionC;
+      question.optionD = question.optionD || question.OptionD;
+      question.optionE = question.optionE || question.OptionE;
+      question.optionF = question.optionF || question.OptionF;
     }
 
     // Use the sequential question number for answers lookup (already calculated above)
@@ -426,33 +496,63 @@ exports.handler = async (event) => {
       };
     });
 
-    // Process each vote (exact logic from get-results.js)
-    votes.forEach(vote => {
-      const voteData = vote.Votes; // e.g., {"0": 1, "1": 2, "2": 3}
-      
-      Object.entries(voteData).forEach(([answerIndex, rank]) => {
-        const idx = parseInt(answerIndex);
-        const position = parseInt(rank);
+    // Process each vote (exact logic from get-results.js) - skip for trivia and wavelength games
+    if (votes && votes.length > 0 && gameType !== 'trivia' && gameType !== 'wavelength') {
+      votes.forEach(vote => {
+        const voteData = vote.Votes; // e.g., {"0": 1, "1": 2, "2": 3}
         
-        if (voteTallies[idx]) {
-          // Award points using configurable scoring system
-          let points = 0;
-          if (position === 1) {
-            voteTallies[idx].firstPlace++;
-            points = scoringConfig.firstPlacePoints;
-          } else if (position === 2) {
-            voteTallies[idx].secondPlace++;
-            points = scoringConfig.secondPlacePoints;
-          } else if (position === 3) {
-            voteTallies[idx].thirdPlace++;
-            points = scoringConfig.thirdPlacePoints;
-          }
+        Object.entries(voteData).forEach(([answerIndex, rank]) => {
+          const idx = parseInt(answerIndex);
+          const position = parseInt(rank);
           
-          voteTallies[idx].totalScore += points;
-          answerScores[idx] += points;
-        }
+          if (voteTallies[idx]) {
+            // Award points using configurable scoring system
+            let points = 0;
+            if (position === 1) {
+              voteTallies[idx].firstPlace++;
+              points = scoringConfig.firstPlacePoints;
+            } else if (position === 2) {
+              voteTallies[idx].secondPlace++;
+              points = scoringConfig.secondPlacePoints;
+            } else if (position === 3) {
+              voteTallies[idx].thirdPlace++;
+              points = scoringConfig.thirdPlacePoints;
+            }
+            
+            voteTallies[idx].totalScore += points;
+            answerScores[idx] += points;
+          }
+        });
       });
-    });
+    } else if (gameType === 'trivia') {
+      // For trivia games, use actual points earned by players (from get-results.js trivia processing)
+      answers.forEach((answer, index) => {
+        // Use actual points earned from the answer record
+        const pointsEarned = answer.PointsEarned || answer.pointsEarned || 0;
+        const isCorrect = answer.IsCorrect || answer.isCorrect || false;
+        
+        voteTallies[index].totalScore = pointsEarned;
+        answerScores[index] = pointsEarned;
+        voteTallies[index].isCorrect = isCorrect;
+        voteTallies[index].basePoints = answer.BasePoints || answer.basePoints || 0;
+        voteTallies[index].speedBonus = answer.SpeedBonus || answer.speedBonus || 0;
+        voteTallies[index].responseTime = answer.ResponseTimeMs || answer.responseTimeMs || 0;
+        
+        console.log(`🔍 AI TRIVIA DEBUG - Player ${voteTallies[index].playerName}: points=${pointsEarned}, correct=${isCorrect}, base=${voteTallies[index].basePoints}, bonus=${voteTallies[index].speedBonus}`);
+      });
+    } else if (gameType === 'wavelength') {
+      // For wavelength games, everyone gets the same team score (number of common words found)
+      const teamScore = (commonWords && Array.isArray(commonWords)) ? commonWords.length : 0;
+      
+      answers.forEach((answer, index) => {
+        voteTallies[index].totalScore = teamScore;
+        voteTallies[index].teamScore = teamScore;
+        voteTallies[index].wordsSubmitted = (answer.Answer || answer.answer || '').split(',').filter(w => w.trim()).length;
+        answerScores[index] = teamScore;
+        
+        console.log(`🌊 AI WAVELENGTH DEBUG - Player ${voteTallies[index].playerName}: team score=${teamScore}, words submitted=${voteTallies[index].wordsSubmitted}`);
+      });
+    }
 
     // Find winners (highest score) - using same logic as get-results.js
     const maxScore = Math.max(...Object.values(answerScores));
@@ -471,7 +571,7 @@ exports.handler = async (event) => {
     const results = {
       voteTallies: voteTallies,
       winners: winners,
-      totalVotes: votes.length,
+      totalVotes: votes ? votes.length : 0,
       maxScore: maxScore
     };
 
@@ -481,6 +581,11 @@ exports.handler = async (event) => {
     let customInstruction = null;
     let questionSetAiContext = null;
     let promptId = null;
+    let promptProvenance = {
+      source: 'fallback',
+      details: 'Using hardcoded fallback prompt',
+      hierarchy: []
+    };
     
     if (questionSetId) {
       try {
@@ -493,14 +598,31 @@ exports.handler = async (event) => {
           if (setResult.Item.customInstruction) {
             customInstruction = setResult.Item.customInstruction;
             console.log('📋 Found custom instruction for AI prompt:', customInstruction);
+            promptProvenance.hierarchy.push({
+              type: 'customInstruction',
+              source: 'question_set',
+              value: customInstruction
+            });
           }
           if (setResult.Item.aiContextInstruction) {
             questionSetAiContext = setResult.Item.aiContextInstruction;
             console.log('🎯 Found question set AI context:', questionSetAiContext);
+            promptProvenance.hierarchy.push({
+              type: 'aiContext',
+              source: 'question_set',
+              value: questionSetAiContext
+            });
           }
           if (setResult.Item.promptId) {
             promptId = setResult.Item.promptId;
             console.log('🎨 Found custom prompt ID:', promptId);
+            promptProvenance = {
+              source: 'question_set',
+              details: `Custom prompt "${promptId}" attached to question set "${setResult.Item.SetName || questionSetId}"`,
+              promptId: promptId,
+              promptName: setResult.Item.promptName || promptId,
+              hierarchy: promptProvenance.hierarchy
+            };
           }
         }
       } catch (fetchError) {
@@ -512,6 +634,38 @@ exports.handler = async (event) => {
     if (!promptId) {
       promptId = await findDefaultPromptId(metadata.GameType || 'call-and-answer');
       console.log(`📌 Using default prompt ID: ${promptId}`);
+      
+      // Check if this is a default for the category or just the game type
+      try {
+        const defaultPromptInfo = await db.send(new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: 'AIPROMPTS', SK: `AIPROMPT#${promptId}` }
+        }));
+        
+        if (defaultPromptInfo.Item) {
+          const hasCategory = defaultPromptInfo.Item.category && defaultPromptInfo.Item.category !== metadata.GameType;
+          promptProvenance = {
+            source: hasCategory ? 'default_category' : 'default_game_type',
+            details: hasCategory 
+              ? `Default prompt for ${metadata.GameType} games with "${defaultPromptInfo.Item.category}" category`
+              : `Default prompt for ${metadata.GameType} games`,
+            promptId: promptId,
+            promptName: defaultPromptInfo.Item.name || promptId,
+            gameType: metadata.GameType,
+            category: defaultPromptInfo.Item.category,
+            hierarchy: promptProvenance.hierarchy
+          };
+        }
+      } catch (error) {
+        console.log('⚠️ Could not fetch default prompt info:', error.message);
+        promptProvenance = {
+          source: 'default_game_type',
+          details: `Default prompt for ${metadata.GameType} games (details unavailable)`,
+          promptId: promptId,
+          gameType: metadata.GameType,
+          hierarchy: promptProvenance.hierarchy
+        };
+      }
     }
 
     // Prepare data for AI
@@ -522,6 +676,8 @@ exports.handler = async (event) => {
       questionSetAiContext: questionSetAiContext,
       customInstruction: customInstruction,
       promptId: promptId,
+      promptProvenance: promptProvenance,
+      debugMode: debug === 'true',
       questionId: targetQuestionId,
       question: {
         title: question.Title,
@@ -536,7 +692,12 @@ exports.handler = async (event) => {
         voteTallies: results.voteTallies,
         winners: results.winners,
         totalVotes: results.totalVotes
-      }
+      },
+      votes: votes || [],
+      gameId: gameId,
+      questionSetId: questionSetId,
+      paddedQuestionNumber: paddedQuestionNumber,
+      scoringConfig: scoringConfig
     };
 
     // Generate AI summary
@@ -544,39 +705,62 @@ exports.handler = async (event) => {
 
     // Store the enhanced AI summary in DynamoDB (keeping same storage key)
     const now = new Date().toISOString();
+    const dbItem = {
+      PK: `GAME#${gameId}`,
+      SK: `QUESTION#${paddedQuestionNumber}#AISummary`,
+      GameId: gameId,
+      QuestionId: targetQuestionId,
+      Summary: summaryData.summary, // For backwards compatibility
+      SummaryText: summaryData.summaryText,
+      DiscussionQuestions: summaryData.discussionQuestions,
+      NextSteps: summaryData.nextSteps,
+      FullResponse: summaryData.fullResponse,
+      MarkdownResponse: summaryData.markdownResponse,
+      GeneratedAt: now,
+      ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
+    };
+    
+    // Store debug information if available
+    if (summaryData.debugInfo) {
+      dbItem.DebugInfo = summaryData.debugInfo;
+    }
+    
     await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
-      Item: {
-        PK: `GAME#${gameId}`,
-        SK: `QUESTION#${paddedQuestionNumber}#AISummary`,
-        GameId: gameId,
-        QuestionId: targetQuestionId,
-        Summary: summaryData.summary, // For backwards compatibility
-        SummaryText: summaryData.summaryText,
-        DiscussionQuestions: summaryData.discussionQuestions,
-        NextSteps: summaryData.nextSteps,
-        FullResponse: summaryData.fullResponse,
-        MarkdownResponse: summaryData.markdownResponse,
-        GeneratedAt: now,
-        ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
-      }
+      Item: dbItem
     }));
 
     console.log(`✅ Enhanced AI summary generated and stored for ${gameId}: ${targetQuestionId}`);
 
+    const responseData = {
+      gameId: gameId,
+      questionId: targetQuestionId,
+      summary: summaryData.summary,
+      summaryText: summaryData.summaryText,
+      discussionQuestions: summaryData.discussionQuestions,
+      nextSteps: summaryData.nextSteps,
+      markdownResponse: summaryData.markdownResponse,
+      generatedAt: now,
+      fromCache: false
+    };
+    
+    // Add debug information if debug mode is enabled
+    if (debug === 'true' && summaryData.debugInfo) {
+      responseData.debugPrompt = summaryData.debugInfo.fullPrompt;
+      responseData.debugProvenance = summaryData.debugInfo.promptProvenance;
+    }
+    
+    // Add prompt debug information if prompt debug mode is enabled
+    if (promptDebug === 'true' && summaryData.debugInfo) {
+      responseData.templateVariables = summaryData.debugInfo.templateVariables || {};
+      responseData.promptTemplate = summaryData.debugInfo.promptTemplate || '';
+      responseData.promptName = summaryData.debugInfo.promptName || '';
+      responseData.promptSource = summaryData.debugInfo.promptSource || '';
+    }
+
     return {
       statusCode: 200,
-      body: JSON.stringify({
-        gameId: gameId,
-        questionId: targetQuestionId,
-        summary: summaryData.summary,
-        summaryText: summaryData.summaryText,
-        discussionQuestions: summaryData.discussionQuestions,
-        nextSteps: summaryData.nextSteps,
-        markdownResponse: summaryData.markdownResponse,
-        generatedAt: now,
-        fromCache: false
-      }),
+      body: JSON.stringify(responseData),
       headers: { 'Access-Control-Allow-Origin': '*' }
     };
 
@@ -590,7 +774,7 @@ exports.handler = async (event) => {
   }
 };
 
-async function generateAISummary({ eventTitle, gameType, gameAiContext, questionSetAiContext, customInstruction, promptId, questionId, question, answers, results }) {
+async function generateAISummary({ eventTitle, gameType, gameAiContext, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig }) {
   // Prepare the context for AI
   const totalParticipants = answers.length;
   const winners = results.winners || [];
@@ -613,7 +797,7 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
   // Fetch the prompt template
   const promptData = await fetchPromptFromS3(promptId);
   
-  if (!promptData || !promptData.template) {
+  if (!promptData || (!promptData.template && (!promptData.instructions || !promptData.outputFormat))) {
     console.error('❌ Failed to fetch prompt template, using final fallback');
     return {
       statusCode: 500,
@@ -662,7 +846,7 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     };
   }).sort((a, b) => b.score - a.score);
 
-  // Build responses text with proper tie handling
+  // Build responses text with proper tie handling and game-type specific point formatting
   let currentRank = 1;
   const responsesText = rankedAnswers.map((answer, idx) => {
     // Handle ties: if current score is different from previous, update rank
@@ -674,29 +858,591 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
                currentRank === 2 ? '🥈 2nd Place' : 
                currentRank === 3 ? '🥉 3rd Place' : 
                `${currentRank}th Place`;
-               
-    return `${rank}: ${answer.player} - "${answer.answer}" (${answer.score} vote points)`;
+    
+    // Use appropriate point terminology based on game type
+    const pointsLabel = gameType === 'trivia' ? 'points' : 'vote points';
+    return `${rank}: ${answer.player} - "${answer.answer}" (${answer.score} ${pointsLabel})`;
   }).join('\n\n');
   
-  // Prepare template variables
-  const templateVars = {
-    sessionContext: sessionContext,
-    questionTitle: question.title,
-    questionCategory: question.category,
-    questionDetail: question.detail || 'No additional context provided',
-    contextSections: contextSections.length > 0 ? ('\nCONTEXT INFORMATION:\n' + contextSections.join('\n') + '\n') : '',
-    responsesText: responsesText,
-    responseCount: rankedAnswers.length,
-    contextInstructions: contextSections.length > 0 ? 
-      '\n\nIMPORTANT: Please tailor your analysis based on the provided context information above. Consider the specific background, goals, and instructions relevant to this session.' : 
-      '',
-    eventTitle: eventTitle,
-    gameType: gameType,
-    totalParticipants: totalParticipants
+  // Get question set metadata for additional context
+  let questionSetName = 'Question Set';
+  let questionSetDescription = '';
+  let categoryCount = 0;
+  let totalQuestionsInSet = 0;
+  
+  try {
+    const setMetadata = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: 'SETS', SK: `SET#${questionSetId}` }
+    }));
+    
+    if (setMetadata.Item) {
+      questionSetName = setMetadata.Item.SetName || questionSetName;
+      questionSetDescription = setMetadata.Item.Description || '';
+      
+      // Count categories and questions
+      const allQuestions = await db.send(new QueryCommand({
+        TableName: process.env.TABLE_NAME,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues: {
+          ':pk': `SET#${questionSetId}`,
+          ':sk': 'QUESTION#'  // Questions are stored with SK pattern: QUESTION#{categoryId}#{questionNumber}
+        }
+      }));
+      
+      totalQuestionsInSet = allQuestions.Items?.length || 0;
+      const categories = new Set(allQuestions.Items?.map(q => q.Category).filter(c => c));
+      categoryCount = categories.size;
+    }
+  } catch (error) {
+    console.log('⚠️ Could not fetch question set metadata:', error.message);
+  }
+  
+  // Get current scores and leaderboard
+  let leaderboard = [];
+  let totalScores = '';
+  let averageScore = 0;
+  
+  try {
+    // Query for player score records using efficient SK pattern
+    const scoresQuery = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+      ExpressionAttributeValues: {
+        ':pk': `GAME#${gameId}`,
+        ':skPrefix': 'PLAYER#'
+      }
+    }));
+    
+    // Filter for score records only (SK contains '#SCORE')
+    const scoreRecords = scoresQuery.Items?.filter(item => item.SK && item.SK.includes('#SCORE')) || [];
+    
+    if (scoreRecords.length > 0) {
+      console.log(`📊 Found ${scoreRecords.length} player score records`);
+      const playerScores = scoreRecords.map(scoreRecord => ({
+        name: scoreRecord.PlayerName,
+        score: scoreRecord.score || 0  // Note: lowercase 'score' based on get-results.js
+      })).sort((a, b) => b.score - a.score);
+      
+      leaderboard = playerScores;
+      totalScores = playerScores.slice(0, 5).map((p, idx) => 
+        `${idx + 1}. ${p.name}: ${p.score} pts`
+      ).join(', ');
+      
+      if (playerScores.length > 0) {
+        const totalSum = playerScores.reduce((sum, p) => sum + p.score, 0);
+        averageScore = Math.round(totalSum / playerScores.length);
+      }
+      
+      console.log(`📊 Total game scores - Top 5: ${totalScores}`);
+      console.log(`📊 Average score: ${averageScore}`);
+    } else {
+      console.log('⚠️ No player score records found');
+      totalScores = '';  // Empty string when no scores exist (will show as empty in template)
+    }
+  } catch (error) {
+    console.log('⚠️ Could not fetch player scores:', error.message);
+  }
+  
+  // Get player names and active participants
+  const playerNames = answers.map(a => a.PlayerName || a.playerName).filter((v, i, a) => a.indexOf(v) === i);
+  const activeParticipants = (votes && votes.length > 0) ? votes.length : answers.length; // For trivia, use answer count instead of votes
+  
+  // Format voting data (trivia games don't have votes)
+  const voteData = (votes && votes.length > 0) ? 
+    votes.map(v => `${v.PlayerName || 'Player'} voted`).join(', ') : 
+    'No voting for trivia questions';
+  const votingParticipation = totalParticipants > 0 ? Math.round((activeParticipants / totalParticipants) * 100) : 0;
+  
+  // Determine voting pattern
+  let votingPattern = 'Diverse opinions';
+  if (gameType === 'trivia') {
+    votingPattern = 'Trivia scoring - no voting';
+  } else if (gameType === 'wavelength') {
+    votingPattern = 'Wavelength word association - team scoring';
+  } else if (votes && votes.length > 0) {
+    if (winners.length === 1 && winners[0].score > (results.totalVotes * 2)) {
+      votingPattern = 'Clear consensus';
+    } else if (winners.length > 1) {
+      votingPattern = 'Split decision';
+    }
+  }
+  
+  // Build results string (vote tally for call-and-answer, score tally for trivia)
+  const resultsString = gameType === 'trivia' ? 
+    sortedAnswers.slice(0, 5).map(([idx, data], rank) => 
+      `${rank + 1}. ${data.playerName}: ${data.answerText} - ${data.totalScore} points ${data.isCorrect ? '(Correct)' : '(Incorrect)'}`
+    ).join(', ') :
+    sortedAnswers.slice(0, 5).map(([idx, data], rank) => 
+      `${rank + 1}. ${data.answerText} (${data.totalScore} vote points)`
+    ).join(', ');
+  
+  // Format top answers (different for trivia vs voting)
+  const topAnswers_formatted = gameType === 'trivia' ?
+    topAnswers.map(a => 
+      `${a.playerName}: ${a.answer} - ${a.score} points`
+    ).join(', ') :
+    topAnswers.map(a => 
+      `${a.playerName}: ${a.score} vote points`
+    ).join(', ');
+  
+  // Initialize wavelength variables early to avoid undefined errors
+  let commonWords = [];
+  let connectionScore = 0;
+  let totalUniqueWords = 0;
+
+  // Calculate consensus level
+  let consensusLevel = 'Mixed opinions';
+  if (gameType === 'trivia') {
+    consensusLevel = 'Trivia results - no consensus voting';
+  } else if (gameType === 'wavelength') {
+    consensusLevel = `Team collaboration - ${connectionScore}% word connection rate`;
+  } else if (winners.length === 1 && winners[0].score > (results.maxScore * 0.8)) {
+    consensusLevel = 'Strong consensus';
+  } else if (sortedAnswers.length > 1 && sortedAnswers[0][1].totalScore > (sortedAnswers[1][1].totalScore * 2)) {
+    consensusLevel = 'Moderate consensus';
+  }
+  
+  // Format final results (different for trivia vs voting)
+  const finalResults = gameType === 'trivia' ?
+    sortedAnswers.slice(0, 3).map(([idx, data], rank) => {
+      const emoji = rank === 0 ? '🥇' : rank === 1 ? '🥈' : '🥉';
+      return `${emoji} ${data.playerName}: ${data.answerText} (${data.totalScore} points, ${data.isCorrect ? 'Correct' : 'Incorrect'})`;
+    }).join(', ') :
+    sortedAnswers.slice(0, 3).map(([idx, data], rank) => {
+      const emoji = rank === 0 ? '🥇' : rank === 1 ? '🥈' : '🥉';
+      return `${emoji} ${data.answerText} (${data.totalScore} votes)`;
+    }).join(', ');
+  
+  // Winner info (different format for trivia vs voting)
+  const winnerInfo = winners.length > 0 ? 
+    gameType === 'trivia' ?
+      `Winner: ${winners[0].playerName} with "${winners[0].answerText}" (${winners[0].score} points)` :
+      `Winner: ${winners[0].playerName} with "${winners[0].answerText}" (${winners[0].score} vote points)` : 
+    'No clear winner';
+  
+  // Results summary (different for trivia vs wavelength vs voting) - wavelength will be updated later
+  let resultsSummary = '';
+  if (gameType === 'trivia') {
+    resultsSummary = winners.length === 1 ? 
+      `Clear winner with ${winners[0].score} points` :
+      winners.length > 1 ? 
+      `${winners.length}-way tie for first place with ${winners[0].score} points each` :
+      'No correct answers';
+  } else if (gameType === 'wavelength') {
+    resultsSummary = `Team found ${commonWords.length} common words with ${connectionScore}% connection rate`;
+  } else {
+    resultsSummary = winners.length === 1 ? 
+      `Clear winner with ${Math.round((winners[0].score / (results.totalVotes * 3)) * 100)}% of possible vote points` :
+      winners.length > 1 ? 
+      `${winners.length}-way tie for first place` :
+      'No votes recorded';
+  }
+  
+  // Participation rate
+  const participationRate = `${Math.round((answers.length / totalParticipants) * 100)}% answered, ${Math.round((activeParticipants / totalParticipants) * 100)}% voted`;
+  
+  // Get unique answers
+  const uniqueAnswers = [...new Set(answers.map(a => a.Answer || a.answer))];
+  const uniqueAnswersText = uniqueAnswers.slice(0, 5).join(', ');
+  
+  // Group answers by theme (simple grouping)
+  const answerCategories = uniqueAnswers.length < 5 ? 
+    `${uniqueAnswers.length} unique responses` :
+    `${uniqueAnswers.length} unique responses across various themes`;
+  
+  // Player rankings - proper ordinal formatting
+  const getOrdinal = (n) => {
+    const s = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
   };
   
-  // Replace template variables
-  let prompt = promptData.template;
+  const playerRankings = leaderboard.slice(0, 3).map((p, idx) => 
+    `${getOrdinal(idx + 1)}: ${p.name} (${p.score} pts)`
+  ).join(', ');
+  
+  // Top performers
+  const topPerformers = leaderboard.length > 0 ?
+    `${leaderboard[0].name} leads with ${leaderboard[0].score} points` :
+    '';
+  
+  // Round scores (for current question only - not cumulative)
+  const roundScores = sortedAnswers.slice(0, 3).map(([idx, data]) => 
+    `${data.playerName}: +${data.totalScore} pts`
+  ).join(', ') || 'No scores this round';
+  
+  // Score changes - show points earned this round
+  const scoreChanges = gameType === 'trivia' ? 
+    (sortedAnswers.length > 0 ? 
+      sortedAnswers.map(([idx, data]) => 
+        `${data.playerName}: +${data.totalScore} pts ${data.isCorrect ? '(Correct)' : '(Incorrect)'}`
+      ).join(', ') : 'No points earned this round') :
+    (sortedAnswers.length > 0 ? 
+      sortedAnswers.slice(0, 3).map(([idx, data]) => 
+        `${data.playerName}: +${data.totalScore} vote pts`
+      ).join(', ') : 'No vote points this round');
+  
+  // Current round/question number
+  const currentRound = `Question ${parseInt(paddedQuestionNumber)}`;
+  
+  // Session duration - calculate from game metadata if available
+  let sessionDuration = 'Current session';
+  try {
+    if (metadata.CreatedAt) {
+      const gameStart = new Date(metadata.CreatedAt);
+      const now = new Date();
+      const durationMs = now - gameStart;
+      const minutes = Math.floor(durationMs / 60000);
+      const seconds = Math.floor((durationMs % 60000) / 1000);
+      sessionDuration = minutes > 0 ? `${minutes} minutes, ${seconds} seconds` : `${seconds} seconds`;
+    }
+  } catch (error) {
+    console.log('⚠️ Could not calculate session duration:', error.message);
+  }
+  
+  // Scoring system explanation
+  const scoringSystem = `1st place: ${scoringConfig.firstPlacePoints} pts, 2nd place: ${scoringConfig.secondPlacePoints} pts, 3rd place: ${scoringConfig.thirdPlacePoints} pt`;
+  
+  // Voting breakdown
+  const votingBreakdown = sortedAnswers.slice(0, 3).map(([idx, data]) => 
+    `${data.answerText}: ${data.firstPlace} first-place, ${data.secondPlace} second-place, ${data.thirdPlace} third-place votes`
+  ).join('; ');
+  
+  // Format trivia/poll/wavelength specific variables
+  let triviaChoices = '';
+  let pollOptions = '';
+  let correctAnswer = '';
+  let triviaResponses = '';
+  let triviaCorrectness = '';
+  let correctCount = 0; // Initialize correctCount for all game types
+  let correctAnswers = [];
+  
+  // Wavelength-specific variables (already initialized above)
+  let wavelengthTopic = '';
+  let wavelengthWords = '';
+  let wordAnalysis = '';
+  
+  // Check if this is a trivia or poll game
+  if (gameType === 'trivia' && question) {
+    // Format trivia choices with better formatting
+    const options = [];
+    if (question.optionA) options.push(`A) ${question.optionA}`);
+    if (question.optionB) options.push(`B) ${question.optionB}`);
+    if (question.optionC) options.push(`C) ${question.optionC}`);
+    if (question.optionD) options.push(`D) ${question.optionD}`);
+    if (question.optionE) options.push(`E) ${question.optionE}`);
+    if (question.optionF) options.push(`F) ${question.optionF}`);
+    triviaChoices = options.join(', ');
+    
+    console.log('🔍 TRIVIA CHOICES DEBUG:', triviaChoices);
+    
+    // Get correct answer(s) with improved extraction
+    let correctAnswerValue = question.correctAnswer || question.CorrectAnswer;
+    
+    if (correctAnswerValue) {
+      // If it's an option ID (like OptionA), convert to actual text
+      if (correctAnswerValue.startsWith('Option')) {
+        const optionLetter = correctAnswerValue.replace('Option', '');
+        const optionField = `option${optionLetter}`;
+        correctAnswer = question[optionField] || correctAnswerValue;
+        console.log(`🔍 CORRECT ANSWER DEBUG: Converted ${correctAnswerValue} to "${correctAnswer}"`);
+      } else {
+        correctAnswer = correctAnswerValue;
+        console.log(`🔍 CORRECT ANSWER DEBUG: Using direct value "${correctAnswer}"`);
+      }
+    } else if (question.correctAnswers && Array.isArray(question.correctAnswers)) {
+      // Handle multiple correct answers
+      correctAnswer = question.correctAnswers.map(ans => {
+        if (ans.startsWith('Option')) {
+          const optionLetter = ans.replace('Option', '');
+          const optionField = `option${optionLetter}`;
+          return question[optionField] || ans;
+        }
+        return ans;
+      }).join(', ');
+      console.log(`🔍 CORRECT ANSWER DEBUG: Multiple answers converted to "${correctAnswer}"`);
+    } else {
+      console.log('🔍 CORRECT ANSWER DEBUG: No correct answer found in question object');
+    }
+    
+    // Calculate trivia response distribution
+    const responseDistribution = {};
+    
+    answers.forEach(answer => {
+      const playerAnswer = answer.Answer || answer.answer;
+      responseDistribution[playerAnswer] = (responseDistribution[playerAnswer] || 0) + 1;
+      
+      // Check if answer is correct using both field name variants
+      const correctAnswerValue = question.correctAnswer || question.CorrectAnswer;
+      const correctAnswersArray = question.correctAnswers || question.CorrectAnswers;
+      
+      // Handle OptionA format conversion to actual text
+      let actualCorrectAnswer = correctAnswerValue;
+      if (correctAnswerValue && correctAnswerValue.startsWith('Option')) {
+        const optionLetter = correctAnswerValue.replace('Option', '');
+        const optionField = `option${optionLetter}`;
+        actualCorrectAnswer = question[optionField] || correctAnswerValue;
+      }
+      
+      const isCorrect = playerAnswer === actualCorrectAnswer || 
+                       playerAnswer === correctAnswerValue ||
+                       (correctAnswersArray && correctAnswersArray.includes(playerAnswer));
+      
+      if (isCorrect) {
+        correctCount++;
+        correctAnswers.push({
+          playerName: answer.PlayerName || answer.playerName,
+          answer: playerAnswer
+        });
+      }
+    });
+    
+    // Format response distribution
+    triviaResponses = Object.entries(responseDistribution)
+      .map(([option, count]) => `${option}: ${count} players`)
+      .join(', ');
+    
+    // Calculate correctness percentage
+    if (totalParticipants > 0) {
+      const correctPercentage = Math.round((correctCount / totalParticipants) * 100);
+      triviaCorrectness = `${correctCount} of ${totalParticipants} players correct (${correctPercentage}%)`;
+    }
+  } else if (gameType === 'polls' && question) {
+    // Format poll options
+    const options = [];
+    if (question.optionA) options.push(`Option 1: ${question.optionA}`);
+    if (question.optionB) options.push(`Option 2: ${question.optionB}`);
+    if (question.optionC) options.push(`Option 3: ${question.optionC}`);
+    if (question.optionD) options.push(`Option 4: ${question.optionD}`);
+    if (question.optionE) options.push(`Option 5: ${question.optionE}`);
+    pollOptions = options.join(', ');
+    
+    // For polls, there's no correct answer, just distribution
+    const responseDistribution = {};
+    answers.forEach(answer => {
+      const playerAnswer = answer.Answer || answer.answer;
+      responseDistribution[playerAnswer] = (responseDistribution[playerAnswer] || 0) + 1;
+    });
+    
+    // Format as a distribution
+    triviaResponses = Object.entries(responseDistribution)
+      .map(([option, count]) => `${option}: ${count} votes`)
+      .join(', ');
+  } else if (gameType === 'wavelength') {
+    // Handle wavelength word analysis
+    console.log('🌊 Processing wavelength data for AI summary');
+    
+    // Get the topic/prompt from the question
+    wavelengthTopic = question.title || question.topic || 'Word Association';
+    
+    // Process all player words to find common ones
+    const wordCounts = {};
+    const playerWordLists = {};
+    let totalWordsSubmitted = 0;
+    
+    answers.forEach(answer => {
+      const playerName = answer.PlayerName || answer.playerName;
+      const answerText = answer.Answer || answer.answer || '';
+      
+      // Parse words (should already be normalized from message.js processing)
+      const words = answerText.split(',')
+        .map(w => w.trim().toLowerCase())
+        .filter(w => w.length > 0);
+      
+      playerWordLists[playerName] = words;
+      totalWordsSubmitted += words.length;
+      
+      // Count word frequencies
+      words.forEach(word => {
+        wordCounts[word] = (wordCounts[word] || 0) + 1;
+      });
+    });
+    
+    // Find common words (mentioned by 2+ players)
+    commonWords = Object.entries(wordCounts)
+      .filter(([word, count]) => count > 1)
+      .sort((a, b) => b[1] - a[1]) // Sort by frequency
+      .map(([word, count]) => ({ word, count }));
+    
+    totalUniqueWords = Object.keys(wordCounts).length;
+    connectionScore = Math.round((commonWords.length / totalUniqueWords) * 100) || 0;
+    
+    // Format wavelength data for AI
+    wavelengthWords = Object.entries(playerWordLists)
+      .map(([player, words]) => `${player}: [${words.join(', ')}]`)
+      .join('; ');
+    
+    wordAnalysis = `${commonWords.length} common words found out of ${totalUniqueWords} unique words (${connectionScore}% connection rate). ` +
+      `Common words: ${commonWords.map(w => `${w.word} (${w.count}x)`).join(', ')}`;
+    
+    console.log('🌊 Wavelength analysis complete:', {
+      topic: wavelengthTopic,
+      commonWordsCount: commonWords.length,
+      totalUniqueWords: totalUniqueWords,
+      connectionScore: connectionScore
+    });
+    
+    // Update wavelength-specific summary variables now that we have the real values
+    resultsSummary = `Team found ${commonWords.length} common words with ${connectionScore}% connection rate`;
+    consensusLevel = `Team collaboration - ${connectionScore}% word connection rate`;
+  }
+  
+  // Player answers formatted
+  const playerAnswers = answers.map(a => 
+    `${a.PlayerName || a.playerName}: "${a.Answer || a.answer}"`
+  ).join(', ');
+  
+  // Prepare all template variables (comprehensive set)
+  const templateVars = {
+    // SET INFO
+    questionSetName: questionSetName,
+    questionSetDescription: questionSetDescription,
+    categoryCount: categoryCount,
+    totalQuestions: totalQuestionsInSet,
+    sessionContext: sessionContext,
+    
+    // GAME INFO
+    eventTitle: eventTitle,
+    gameType: gameType,
+    gameId: gameId,
+    sessionDuration: sessionDuration,
+    currentRound: currentRound,
+    totalScores: totalScores,
+    gameContext: eventTitle, // Alias for backward compatibility
+    
+    // PLAYER INFO
+    totalParticipants: totalParticipants,
+    totalPlayers: totalParticipants, // Trivia template uses totalPlayers
+    activeParticipants: activeParticipants,
+    playerNames: playerNames.join(', '),
+    playerRankings: playerRankings,
+    topPerformers: topPerformers,
+    
+    // QUESTION INFO
+    question: question.title || question.questionDetail || 'Question not available', // Trivia template uses {question}
+    questionTitle: question.title || 'Question not available',
+    questionDetail: question.questionDetail || question.detail || 'No additional context provided',
+    questionCategory: question.category || 'General',
+    questionContext: question.questionDetail || question.detail || '',
+    questionNumber: currentRound,
+    triviaChoices: triviaChoices,
+    pollOptions: pollOptions,
+    correctAnswer: correctAnswer,
+    answerDetails: question.answerDetails || question.AnswerDetails || 'No explanation provided',
+    difficulty: question.difficulty || question.Difficulty || 'medium',
+    questionExplanation: question.answerDetails || question.AnswerDetails || question.detail || '',
+    
+    // ANSWERS
+    playerAnswers: playerAnswers,
+    playerResponses: playerAnswers, // Trivia template uses playerResponses
+    responseCount: rankedAnswers.length,
+    uniqueAnswers: uniqueAnswersText,
+    answerCategories: answerCategories,
+    triviaResponses: triviaResponses,
+    responsesText: responsesText,
+    correctCount: gameType === 'trivia' ? correctCount : 0, // For trivia templates
+    
+    // VOTES
+    voteData: voteData,
+    voteCount: votes ? votes.length : 0,
+    votingParticipation: `${votingParticipation}%`,
+    votingPattern: votingPattern,
+    
+    // VOTE TALLY / RESULTS
+    voteTally: resultsString,
+    topVotedAnswers: topAnswers_formatted,
+    votingBreakdown: votingBreakdown,
+    consensusLevel: consensusLevel,
+    
+    // RESULTS
+    finalResults: finalResults,
+    winnerInfo: winnerInfo,
+    resultsSummary: resultsSummary,
+    participationRate: participationRate,
+    triviaCorrectness: triviaCorrectness,
+    
+    // SCORES
+    roundScores: roundScores,
+    cumulativeScores: totalScores,
+    scoreChanges: scoreChanges,
+    leaderboard: leaderboard.slice(0, 5).map((p, idx) => 
+      `${getOrdinal(idx + 1)}: ${p.name} (${p.score} pts)`
+    ).join(', '),
+    scoringSystem: scoringSystem,
+    averageScore: `${averageScore} points`,
+    
+    // WAVELENGTH SPECIFIC
+    wavelengthTopic: wavelengthTopic,
+    wavelengthWords: wavelengthWords,
+    commonWords: commonWords.map(w => w.word).join(', '),
+    commonWordsCount: commonWords.length,
+    totalUniqueWords: totalUniqueWords,
+    connectionScore: `${connectionScore}%`,
+    wordAnalysis: wordAnalysis,
+    teamScore: commonWords.length, // Team-based scoring for wavelength
+    
+    // CONTEXT (backward compatibility)
+    contextSections: contextSections.length > 0 ? ('\nCONTEXT INFORMATION:\n' + contextSections.join('\n') + '\n') : '',
+    contextInstructions: contextSections.length > 0 ? 
+      '\n\nIMPORTANT: Please tailor your analysis based on the provided context information above. Consider the specific background, goals, and instructions relevant to this session.' : 
+      ''
+  };
+  
+  // Build the final prompt - support both old (template) and new (instructions + outputFormat) structure
+  let prompt;
+  if (promptData.template) {
+    // Legacy format: use template directly
+    prompt = promptData.template;
+  } else if (promptData.instructions && promptData.outputFormat) {
+    // New format: combine instructions and output format
+    prompt = promptData.instructions + '\n\n' + promptData.outputFormat;
+  } else {
+    console.error('❌ Invalid prompt structure - missing required fields');
+    throw new Error('Prompt must have either template OR both instructions and outputFormat');
+  }
+  
+  // Debug: Log key trivia variables
+  if (gameType === 'trivia') {
+    console.log('🔍 TRIVIA DEBUG - Template variables:');
+    console.log('  question:', templateVars.question);
+    console.log('  questionTitle:', templateVars.questionTitle);
+    console.log('  questionDetail:', templateVars.questionDetail);
+    console.log('  correctAnswer:', templateVars.correctAnswer);
+    console.log('  correctCount:', templateVars.correctCount);
+    console.log('  totalPlayers:', templateVars.totalPlayers);
+    console.log('  triviaChoices:', templateVars.triviaChoices);
+    console.log('  triviaResponses:', templateVars.triviaResponses);
+    console.log('  triviaCorrectness:', templateVars.triviaCorrectness);
+    console.log('  playerResponses:', templateVars.playerResponses);
+    console.log('  scoreChanges:', templateVars.scoreChanges);
+    console.log('  cumulativeScores:', templateVars.cumulativeScores);
+    console.log('  responsesText:', templateVars.responsesText);
+    
+    console.log('🔍 TRIVIA DEBUG - Question object:');
+    console.log('  question.title:', question.title);
+    console.log('  question.correctAnswer:', question.correctAnswer);
+    console.log('  question.optionA:', question.optionA);
+    console.log('  question.optionB:', question.optionB);
+    console.log('  question.optionC:', question.optionC);
+    console.log('  question.optionD:', question.optionD);
+    
+    console.log('🔍 TRIVIA DEBUG - Raw values:');
+    console.log('  triviaChoices raw:', triviaChoices);
+    console.log('  correctAnswer raw:', correctAnswer);
+    console.log('  scoreChanges raw:', scoreChanges);
+  } else if (gameType === 'wavelength') {
+    console.log('🌊 WAVELENGTH DEBUG - Template variables:');
+    console.log('  wavelengthTopic:', templateVars.wavelengthTopic);
+    console.log('  wavelengthWords:', templateVars.wavelengthWords);
+    console.log('  commonWords:', templateVars.commonWords);
+    console.log('  commonWordsCount:', templateVars.commonWordsCount);
+    console.log('  totalUniqueWords:', templateVars.totalUniqueWords);
+    console.log('  connectionScore:', templateVars.connectionScore);
+    console.log('  wordAnalysis:', templateVars.wordAnalysis);
+    console.log('  teamScore:', templateVars.teamScore);
+  }
+  
   for (const [key, value] of Object.entries(templateVars)) {
     const regex = new RegExp(`\\{${key}\\}`, 'g');
     prompt = prompt.replace(regex, value);
@@ -706,6 +1452,19 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
   console.log('=====================================');
   console.log(prompt);
   console.log('=====================================');
+
+  // Prepare debug information
+  const debugInfo = {
+    promptProvenance: promptProvenance,
+    fullPrompt: prompt,
+    templateVariables: templateVars,
+    promptTemplate: promptData.template || (promptData.instructions + '\n\n' + promptData.outputFormat),
+    promptInstructions: promptData.instructions,
+    promptOutputFormat: promptData.outputFormat,
+    promptFormat: promptData.template ? 'legacy' : 'structured',
+    promptName: promptData.name,
+    promptSource: promptProvenance.source
+  };
 
   console.log('🤖 BEDROCK: Attempting to call Claude 3.5 Sonnet...');
   console.log('🤖 BEDROCK: Inference Profile ARN: arn:aws:bedrock:us-east-1:239601476690:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0');
@@ -738,7 +1497,7 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     const parsed = parseAIResponse(aiResponse);
     
     // Return structured data for storage
-    return {
+    const result = {
       summary: parsed.summaryText,
       summaryText: parsed.summaryText, // For backwards compatibility
       discussionQuestions: parsed.discussionQuestions,
@@ -747,6 +1506,13 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
       markdownResponse: parsed.markdownResponse,
       model: 'claude-3.5-sonnet' // Track which model was used
     };
+    
+    // Include debug information if in debug mode
+    if (debugMode) {
+      result.debugInfo = debugInfo;
+    }
+    
+    return result;
 
   } catch (error) {
     console.error('🚨 BEDROCK API ERROR (Claude 3.5 Sonnet):');
@@ -785,7 +1551,7 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
       const parsed = parseAIResponse(haikuAiResponse);
       
       // Return structured data for storage
-      return {
+      const haikuResult = {
         summary: parsed.summaryText,
         summaryText: parsed.summaryText,
         discussionQuestions: parsed.discussionQuestions,
@@ -793,6 +1559,13 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
         fullResponse: haikuAiResponse,
         model: 'claude-3.5-haiku' // Track which model was used
       };
+      
+      // Include debug information if in debug mode
+      if (debugMode) {
+        haikuResult.debugInfo = debugInfo;
+      }
+      
+      return haikuResult;
       
     } catch (haikuError) {
       console.error('🚨 BEDROCK HAIKU ALSO FAILED:');
@@ -806,7 +1579,7 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
       
       console.log(`🚨 BEDROCK FINAL FALLBACK: Using static response. Winner:`, winner, 'TotalParticipants:', totalParticipants);
       
-      return {
+      const fallbackResult = {
         summary: fallbackSummary,
         summaryText: fallbackSummary,
         discussionQuestions: [],
@@ -814,6 +1587,13 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
         fullResponse: fallbackSummary,
         model: 'fallback'
       };
+      
+      // Include debug information if in debug mode
+      if (debugMode) {
+        fallbackResult.debugInfo = debugInfo;
+      }
+      
+      return fallbackResult;
     }
   }
 }

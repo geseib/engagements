@@ -394,13 +394,25 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
 
         <div className="modal-footer">
           {step === 1 && (
-            <button 
-              className="btn-primary" 
-              onClick={handleConfigSubmit}
-              disabled={!pollConfig.topic.trim()}
-            >
-              🤖 Generate Poll Questions
-            </button>
+            <>
+              <button className="btn-secondary" onClick={onClose}>
+                Cancel
+              </button>
+              <button 
+                className="btn-primary" 
+                onClick={handleConfigSubmit}
+                disabled={!pollConfig.topic.trim()}
+              >
+                🤖 Generate Poll Questions
+              </button>
+            </>
+          )}
+          {step === 2 && !isGenerating && generatedPolls.length > 0 && (
+            <>
+              <button className="btn-secondary" onClick={onClose}>
+                Cancel
+              </button>
+            </>
           )}
         </div>
       </div>

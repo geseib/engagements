@@ -1,0 +1,118 @@
+/* Help Button Styles */
+.help-button {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.help-button:hover {
+  background: #2563eb;
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.help-button:active {
+  transform: scale(0.95);
+}
+
+/* Sizes */
+.help-button-small {
+  width: 32px;
+  height: 32px;
+  font-size: 14px;
+}
+
+.help-button-medium {
+  width: 40px;
+  height: 40px;
+  font-size: 16px;
+}
+
+.help-button-large {
+  width: 48px;
+  height: 48px;
+  font-size: 18px;
+}
+
+/* Variants */
+.help-button-floating {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+}
+
+.help-button-inline {
+  position: relative;
+  margin: 0;
+}
+
+.help-button-text {
+  border-radius: 24px;
+  padding: 8px 16px;
+  width: auto;
+  height: auto;
+  gap: 8px;
+}
+
+.help-button-text .help-button-icon {
+  font-size: 16px;
+}
+
+.help-button-text .help-button-text {
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+/* Header variant */
+.help-button-header {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.help-button-header:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.02);
+}
+
+/* Dark mode */
+.help-button-dark {
+  background: #374151;
+  color: white;
+}
+
+.help-button-dark:hover {
+  background: #1f2937;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .help-button-floating {
+    bottom: 20px;
+    right: 20px;
+  }
+  
+  .help-button-small {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .help-button-medium {
+    width: 42px;
+    height: 42px;
+  }
+  
+  .help-button-large {
+    width: 50px;
+    height: 50px;
+  }
+}

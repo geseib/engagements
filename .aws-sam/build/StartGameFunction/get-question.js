@@ -102,27 +102,63 @@ exports.handler = async (event) => {
     const baseQuestionInfo = {
       questionId: sourceQuestionId,
       questionNumber: questionNumber,
-      title: question.Item.Prompt || question.Item.Title,
-      detail: question.Item.Detail || '',
+      title: question.Item.Title || '',
+      questionDetail: question.Item.questionDetail || question.Item.Detail || '',
+      detail: question.Item.Detail || question.Item.questionDetail || '',
+      answerDetails: question.Item.answerDetails || '',
       category: question.Item.Category,
       school: question.Item.School || '',
       customInstructions: question.Item.CustomInstructions || '',
       lessonNumber: lessonNumber,
       gameState: gameStateValue,
-      startedAt: questionRef.Item.StartedAt
+      startedAt: questionRef.Item.StartedAt,
+      // Include trivia options if they exist (check both cases)
+      optionA: question.Item.optionA || question.Item.OptionA || '',
+      optionB: question.Item.optionB || question.Item.OptionB || '',
+      optionC: question.Item.optionC || question.Item.OptionC || '',
+      optionD: question.Item.optionD || question.Item.OptionD || '',
+      optionE: question.Item.optionE || question.Item.OptionE || '',
+      optionF: question.Item.optionF || question.Item.OptionF || ''
     };
+
+    // Include correct answer for both host and player in RESULTS state
+    if (gameStateValue.startsWith('RESULTS#')) {
+      let correctAnswer = question.Item.correctAnswer || '';
+      
+      // Convert option IDs (OptionA, OptionB, etc.) to actual answer text
+      if (typeof correctAnswer === 'string' && correctAnswer.startsWith('Option')) {
+        const optionLetter = correctAnswer.replace('Option', '').toLowerCase();
+        const optionField = `option${optionLetter.toUpperCase()}`;
+        correctAnswer = question.Item[optionField] || correctAnswer;
+      } else if (Array.isArray(correctAnswer)) {
+        // Handle multiple correct answers
+        correctAnswer = correctAnswer.map(answer => {
+          if (typeof answer === 'string' && answer.startsWith('Option')) {
+            const optionLetter = answer.replace('Option', '').toLowerCase();
+            const optionField = `option${optionLetter.toUpperCase()}`;
+            return question.Item[optionField] || answer;
+          }
+          return answer;
+        });
+      }
+      
+      baseQuestionInfo.correctAnswer = correctAnswer;
+    }
 
     // Role-specific information
     if (role === 'host') {
-      // Host gets additional information
+      // Host gets additional information (correct answer only shown in RESULTS state)
       const result = {
         ...baseQuestionInfo,
         gameId: gameId,
         questionSetId: questionSetId,
         orderInCategory: question.Item.OrderInCategory,
         active: question.Item.Active,
-        sourceQuestionId: sourceQuestionId
+        sourceQuestionId: sourceQuestionId,
+        points: question.Item.points || 10 // Points value for trivia
       };
+      
+      // Correct answer is already included in baseQuestionInfo if in RESULTS state
 
       console.log(`✅ Returning host question info for ${gameId}: ${sourceQuestionId} (lesson ${lessonNumber})`);
       return {

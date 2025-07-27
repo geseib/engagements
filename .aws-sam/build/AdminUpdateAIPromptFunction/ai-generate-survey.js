@@ -1,36 +1,7 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+const { invokeClaudeWithRetry } = require('./shared/bedrock-utils');
 
 const bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });
-
-// Function to call Claude via Bedrock
-const invokeClaude = async (prompt) => {
-  const modelId = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';
-
-  console.log('🤖 Calling Claude for survey generation...');
-  console.log('📝 Prompt length:', prompt.length);
-
-  const payload = {
-    anthropic_version: 'bedrock-2023-05-31',
-    max_tokens: 4000,
-    messages: [
-      {
-        role: 'user',
-        content: [{ type: 'text', text: prompt }],
-      },
-    ],
-  };
-
-  const command = new InvokeModelCommand({
-    contentType: 'application/json',
-    body: JSON.stringify(payload),
-    modelId,
-  });
-
-  const response = await bedrockClient.send(command);
-  const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-
-  return responseBody.content[0].text;
-};
 
 exports.handler = async (event) => {
   try {
@@ -100,7 +71,7 @@ exports.handler = async (event) => {
     fullPrompt += ' Return ONLY the JSON object.';
 
     console.log('🤖 Sending prompt to Claude...');
-    const aiResponse = await invokeClaude(fullPrompt);
+    const aiResponse = await invokeClaudeWithRetry(bedrockClient, InvokeModelCommand, fullPrompt, 4000);
     console.log('✅ Received response from Claude');
 
     // Parse the JSON response with improved error handling

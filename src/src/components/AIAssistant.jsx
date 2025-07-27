@@ -62,6 +62,8 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
           return 'e.g., "Create trivia questions about business strategy and leadership for MBA students. Include questions about Porter\'s Five Forces, SWOT analysis, and team management."';
         case 'poll':
           return 'e.g., "Create poll questions to gather feedback about workplace preferences, communication styles, and team collaboration methods."';
+        case 'wavelength':
+          return 'e.g., "Create business scenarios with key terms like AI, Leadership, Innovation, Agile, Strategy. Each should have a realistic workplace context where someone introduces the concept."';
         default:
           return 'e.g., "Create strategic thinking questions about project management and team leadership. Focus on real-world scenarios that encourage discussion and problem-solving."';
       }
@@ -71,6 +73,8 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
           return 'e.g., "Make this question more challenging and add better wrong answers" or "Focus on practical business applications"';
         case 'poll':
           return 'e.g., "Add more diverse options" or "Make this question more specific to remote work preferences"';
+        case 'wavelength':
+          return 'e.g., "Make this topic more specific" or "Choose a word that will generate more interesting associations"';
         default:
           return 'e.g., "Make this question more thought-provoking" or "Add a scenario about team conflict resolution"';
       }
@@ -93,6 +97,13 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
             'Remote work preferences and challenges',
             'Professional development priorities',
             'Communication and collaboration tools'
+          ];
+        case 'wavelength':
+          return [
+            'AI and technology terms with workplace scenarios',
+            'Leadership concepts introduced in business contexts',
+            'Innovation and strategy terms from realistic situations',
+            'Modern business buzzwords with contextual introductions'
           ];
         default:
           return [
@@ -126,9 +137,11 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
             <h3>
               {isBulkGeneration 
                 ? `Generate Multiple ${engagementType === 'call-and-answer' ? 'Call & Answer' : 
-                    engagementType === 'trivia' ? 'Trivia' : 'Poll'} Questions`
+                    engagementType === 'trivia' ? 'Trivia' : 
+                    engagementType === 'wavelength' ? 'Wavelength' : 'Poll'} Questions`
                 : `Improve ${engagementType === 'call-and-answer' ? 'Call & Answer' : 
-                    engagementType === 'trivia' ? 'Trivia' : 'Poll'} Question`
+                    engagementType === 'trivia' ? 'Trivia' : 
+                    engagementType === 'wavelength' ? 'Wavelength' : 'Poll'} Question`
               }
             </h3>
             <p>

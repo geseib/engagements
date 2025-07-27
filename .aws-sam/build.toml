@@ -16,7 +16,7 @@ architecture = "x86_64"
 handler = "get-question-sets.handler"
 manifest_hash = ""
 packagetype = "Zip"
-functions = ["AdminGetQuestionSetsFunction", "AdminAIGenerateQuestionsFunction", "AdminUploadQuestionsFunction", "AdminToggleQuestionSetFunction", "AdminEditQuestionSetFunction", "AdminDeleteQuestionSetFunction", "AdminClearGameFunction", "AdminClearAllGamesFunction", "AdminDownloadTemplateFunction", "AdminGetAIPromptsFunction", "AdminCreateAIPromptFunction", "AdminUpdateAIPromptFunction", "AdminDeleteAIPromptFunction", "AdminAIPromptAdvisorFunction", "AdminPopulateDefaultsFunction"]
+functions = ["AdminGetQuestionSetsFunction", "AdminAIGenerateQuestionsFunction", "AdminAIGenerateScenariosFunction", "AdminAIGenerateTriviaFunction", "AdminAIGeneratePollsFunction", "AdminAIGenerateSurveyFunction", "AdminUploadQuestionsFunction", "AdminCreateGitHubIssueFunction", "AdminToggleQuestionSetFunction", "AdminToggleQuickstartFunction", "AdminEditQuestionSetFunction", "AdminDeleteQuestionSetFunction", "AdminClearGameFunction", "AdminUpdateGameCategoriesFunction", "AdminClearAllGamesFunction", "AdminDownloadTemplateFunction", "AdminGetAIPromptsFunction", "AdminCreateAIPromptFunction", "AdminUpdateAIPromptFunction", "AdminDeleteAIPromptFunction", "AdminAIPromptAdvisorFunction", "AdminPopulateDefaultsFunction"]
 
 [function_build_definitions.4855b623-18da-489d-8e00-7e4647d83693]
 codeuri = "/Users/georgeseib/Documents/projects/engage2/lambda-functions/game"

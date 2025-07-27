@@ -96,6 +96,21 @@ if [ -n "$DOMAIN" ] && [ -n "$HOSTED_ZONE_ID" ]; then
     PARAMETERS="$PARAMETERS DomainName=$DOMAIN HostedZoneId=$HOSTED_ZONE_ID"
 fi
 
+# Add GitHub integration parameters if environment variables are set
+if [ -n "$GITHUB_TOKEN" ]; then
+    print_status "GitHub integration enabled"
+    PARAMETERS="$PARAMETERS GitHubToken=$GITHUB_TOKEN"
+    
+    if [ -n "$GITHUB_REPO" ]; then
+        PARAMETERS="$PARAMETERS GitHubRepo=$GITHUB_REPO"
+    else
+        PARAMETERS="$PARAMETERS GitHubRepo=georgeseib/engage2"
+    fi
+else
+    print_warning "GitHub integration not configured (GITHUB_TOKEN not set)"
+    print_warning "To enable GitHub issue creation, set GITHUB_TOKEN environment variable"
+fi
+
 print_status "Deployment parameters: $PARAMETERS"
 
 # Deploy the stack

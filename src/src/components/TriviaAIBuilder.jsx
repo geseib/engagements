@@ -31,32 +31,90 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
     setStep(2);
 
     try {
-      const response = await fetch(`${API_BASE}admin/ai-generate-trivia`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          topic: triviaConfig.topic,
-          category: triviaConfig.category,
-          audience: triviaConfig.audience,
-          difficulty: triviaConfig.difficulty,
-          count: triviaConfig.count,
-          numChoices: triviaConfig.numChoices,
-          numCorrect: triviaConfig.numCorrect,
-          customPrompt: triviaConfig.customPrompt
-        })
-      });
+      // Break large requests into chunks to avoid timeout and rate limiting
+      const CHUNK_SIZE = 5; // Reduced to 5 questions per request for better rate limiting
+      const totalCount = triviaConfig.count;
+      const chunks = Math.ceil(totalCount / CHUNK_SIZE);
+      
+      let allQuestions = [];
+      
+      // Helper function for batch retry with exponential backoff
+      const retryBatch = async (batchIndex, chunkSize, maxRetries = 3) => {
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          try {
+            const response = await fetch(`${API_BASE}admin/ai-generate-trivia`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                topic: triviaConfig.topic,
+                category: triviaConfig.category,
+                audience: triviaConfig.audience,
+                difficulty: triviaConfig.difficulty,
+                count: chunkSize,
+                numChoices: triviaConfig.numChoices,
+                numCorrect: triviaConfig.numCorrect,
+                customPrompt: triviaConfig.customPrompt
+              })
+            });
 
-      const result = await response.json();
+            const result = await response.json();
 
-      if (response.ok) {
-        setGeneratedTrivia(result.questions);
-        setGenerationStatus(`✅ Generated ${result.questions.length} trivia questions successfully`);
-        setCurrentTriviaIndex(0);
-      } else {
-        setGenerationStatus(`❌ Generation failed: ${result.error || 'Unknown error'}`);
+            if (response.ok) {
+              return result.questions;
+            } else {
+              const error = result.error || 'Unknown error';
+              const isThrottled = error.includes('Too many requests') || 
+                                error.includes('throttle') || 
+                                error.includes('rate limit') ||
+                                response.status === 429;
+              
+              if (isThrottled && attempt < maxRetries) {
+                // For rate limits, wait longer - at least 30 seconds
+                const baseDelay = 30000; // 30 seconds minimum
+                const delay = baseDelay + (attempt * 15000) + Math.random() * 5000; // 30s, 45s, 60s...
+                setGenerationStatus(`⏳ Rate limited! Waiting ${Math.round(delay/1000)}s before retry (Bedrock has per-minute limits)`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+              }
+              
+              throw new Error(`Batch ${batchIndex + 1} failed: ${error}`);
+            }
+          } catch (fetchError) {
+            if (attempt < maxRetries) {
+              const delay = Math.pow(2, attempt) * 2000 + Math.random() * 1000;
+              setGenerationStatus(`⏳ Batch ${batchIndex + 1} error, retrying in ${Math.round(delay/1000)}s (attempt ${attempt + 1}/${maxRetries + 1})`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              continue;
+            }
+            throw fetchError;
+          }
+        }
+      };
+
+      for (let i = 0; i < chunks; i++) {
+        const remainingCount = totalCount - (i * CHUNK_SIZE);
+        const chunkSize = Math.min(CHUNK_SIZE, remainingCount);
+        
+        setGenerationStatus(`🤖 Generating batch ${i + 1} of ${chunks} (${chunkSize} questions)...`);
+        
+        const batchQuestions = await retryBatch(i, chunkSize);
+        allQuestions.push(...batchQuestions);
+        setGenerationStatus(`✅ Generated ${allQuestions.length} of ${totalCount} questions...`);
+        
+        // Much longer delay between successful requests to respect per-minute rate limits
+        if (i < chunks - 1) {
+          const interBatchDelay = 12000; // 12 seconds between batches
+          setGenerationStatus(`⏳ Waiting ${interBatchDelay/1000}s before next batch (respecting rate limits)...`);
+          await new Promise(resolve => setTimeout(resolve, interBatchDelay));
+        }
       }
+
+      setGeneratedTrivia(allQuestions);
+      setGenerationStatus(`✅ Generated ${allQuestions.length} trivia questions successfully`);
+      setCurrentTriviaIndex(0);
+      
     } catch (error) {
       console.error('AI trivia generation error:', error);
       setGenerationStatus(`❌ Generation failed: ${error.message}`);
@@ -99,23 +157,11 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
   };
 
   const generateTriviaCSV = () => {
-    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,CorrectAnswer,WrongAnswer1,WrongAnswer2,WrongAnswer3,WrongAnswer4,WrongAnswer5,Difficulty';
+    const headers = 'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty';
     const rows = generatedTrivia.map((trivia, index) => {
-      const wrongAnswers = [
-        trivia.optionA !== trivia.correctAnswer ? trivia.optionA : '',
-        trivia.optionB !== trivia.correctAnswer ? trivia.optionB : '',
-        trivia.optionC !== trivia.correctAnswer ? trivia.optionC : '',
-        trivia.optionD !== trivia.correctAnswer ? trivia.optionD : '',
-        trivia.optionE !== trivia.correctAnswer ? trivia.optionE : '',
-        trivia.optionF !== trivia.correctAnswer ? trivia.optionF : ''
-      ].filter(answer => answer.trim()).slice(0, 5);
+      const correctAnswer = Array.isArray(trivia.correctAnswer) ? trivia.correctAnswer.join(',') : trivia.correctAnswer;
       
-      // Pad with empty strings if needed
-      while (wrongAnswers.length < 5) {
-        wrongAnswers.push('');
-      }
-      
-      return `"${trivia.category}","${index + 1}","${trivia.title}","${trivia.detail}","${trivia.school || 'General'}","${trivia.customInstructions || ''}","${trivia.correctAnswer}","${wrongAnswers[0]}","${wrongAnswers[1]}","${wrongAnswers[2]}","${wrongAnswers[3]}","${wrongAnswers[4]}","${trivia.difficulty}"`;
+      return `"${trivia.category}","${index + 1}","${trivia.title}","${trivia.questionDetail}","${trivia.answerDetails}","${trivia.school || 'General'}","${trivia.optionA || ''}","${trivia.optionB || ''}","${trivia.optionC || ''}","${trivia.optionD || ''}","${trivia.optionE || ''}","${trivia.optionF || ''}","${correctAnswer}","${trivia.difficulty}"`;
     });
     return headers + '\n' + rows.join('\n');
   };
@@ -299,11 +345,32 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                   {currentTrivia && (
                     <div className="trivia-editor">
                       <div className="form-group">
-                        <label>Question</label>
+                        <label>Question Title</label>
                         <input
                           type="text"
                           value={currentTrivia.title || ''}
                           onChange={(e) => handleTriviaEdit(currentTriviaIndex, 'title', e.target.value)}
+                          placeholder="Short descriptive title"
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label>Question Text</label>
+                        <textarea
+                          value={currentTrivia.questionDetail || ''}
+                          onChange={(e) => handleTriviaEdit(currentTriviaIndex, 'questionDetail', e.target.value)}
+                          placeholder="The actual question shown to players"
+                          rows="3"
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label>Answer Explanation</label>
+                        <textarea
+                          value={currentTrivia.answerDetails || ''}
+                          onChange={(e) => handleTriviaEdit(currentTriviaIndex, 'answerDetails', e.target.value)}
+                          placeholder="Educational explanation about the correct answer"
+                          rows="3"
                         />
                       </div>
 
@@ -333,7 +400,9 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                         <h4>Answer Options</h4>
                         {availableOptions.map((optionKey, index) => {
                           const optionLetter = String.fromCharCode(65 + index);
-                          const isCorrect = currentTrivia.correctAnswer === currentTrivia[optionKey];
+                          const optionId = `Option${optionLetter}`;
+                          const correctAnswers = Array.isArray(currentTrivia.correctAnswer) ? currentTrivia.correctAnswer : [currentTrivia.correctAnswer];
+                          const isCorrect = correctAnswers.includes(optionId);
                           
                           return (
                             <div key={optionKey} className={`option-editor ${isCorrect ? 'correct-option' : ''}`}>
@@ -350,9 +419,19 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                               <button
                                 type="button"
                                 className={`set-correct-btn ${isCorrect ? 'active' : ''}`}
-                                onClick={() => handleTriviaEdit(currentTriviaIndex, 'correctAnswer', currentTrivia[optionKey])}
+                                onClick={() => {
+                                  if (isCorrect) {
+                                    // Remove from correct answers
+                                    const newCorrectAnswers = correctAnswers.filter(id => id !== optionId);
+                                    handleTriviaEdit(currentTriviaIndex, 'correctAnswer', newCorrectAnswers.length === 1 ? newCorrectAnswers[0] : newCorrectAnswers);
+                                  } else {
+                                    // Add to correct answers
+                                    const newCorrectAnswers = [...correctAnswers, optionId];
+                                    handleTriviaEdit(currentTriviaIndex, 'correctAnswer', newCorrectAnswers.length === 1 ? newCorrectAnswers[0] : newCorrectAnswers);
+                                  }
+                                }}
                               >
-                                {isCorrect ? '✓' : 'Set as Correct'}
+                                {isCorrect ? '✗ Remove' : '✓ Set as Correct'}
                               </button>
                             </div>
                           );
@@ -366,10 +445,15 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                             <h3>{currentTrivia.title}</h3>
                             <div className="field-badge">{currentTrivia.category}</div>
                           </div>
+                          <div className="question-text">
+                            <strong>Question:</strong> {currentTrivia.questionDetail}
+                          </div>
                           <div className="trivia-options">
                             {availableOptions.map((optionKey, index) => {
                               const optionLetter = String.fromCharCode(65 + index);
-                              const isCorrect = currentTrivia.correctAnswer === currentTrivia[optionKey];
+                              const optionId = `Option${optionLetter}`;
+                              const correctAnswers = Array.isArray(currentTrivia.correctAnswer) ? currentTrivia.correctAnswer : [currentTrivia.correctAnswer];
+                              const isCorrect = correctAnswers.includes(optionId);
                               
                               return (
                                 <div key={optionKey} className={`category-item trivia-option ${isCorrect ? 'correct' : ''}`}>
@@ -409,13 +493,25 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
 
         <div className="modal-footer">
           {step === 1 && (
-            <button 
-              className="btn-primary" 
-              onClick={handleConfigSubmit}
-              disabled={!triviaConfig.topic.trim()}
-            >
-              🤖 Generate Trivia Questions
-            </button>
+            <>
+              <button className="btn-secondary" onClick={onClose}>
+                Cancel
+              </button>
+              <button 
+                className="btn-primary" 
+                onClick={handleConfigSubmit}
+                disabled={!triviaConfig.topic.trim()}
+              >
+                🤖 Generate Trivia Questions
+              </button>
+            </>
+          )}
+          {step === 2 && !isGenerating && generatedTrivia.length > 0 && (
+            <>
+              <button className="btn-secondary" onClick={onClose}>
+                Cancel
+              </button>
+            </>
           )}
         </div>
       </div>

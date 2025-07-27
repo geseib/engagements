@@ -132,6 +132,13 @@ async function handleRequestVote(gameId, messageData) {
       return;
     }
     
+    // Get game metadata to check game type
+    const gameMetadata = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
+    }));
+    
+    const gameType = gameMetadata.Item?.GameType || 'call-and-answer';
     const currentState = gameState.Item.State;
     const currentQuestionId = gameState.Item.CurrentQuestionId;
     
@@ -141,7 +148,14 @@ async function handleRequestVote(gameId, messageData) {
       return;
     }
     
-    // Transition to VOTE# state
+    // For trivia games, the host will handle the transition directly via handleShowResults()
+    // No special WebSocket handling needed - use unified flow
+    if (gameType === 'trivia') {
+      console.log(`🧠 Trivia game detected - host will handle results transition directly via handleShowResults()`);
+      return;
+    }
+    
+    // For call-and-answer games, transition to VOTE# state
     const newState = `VOTE#${currentQuestionId}`;
     const now = new Date().toISOString();
     
@@ -159,7 +173,7 @@ async function handleRequestVote(gameId, messageData) {
       }
     }));
     
-    console.log(`✅ Game ${gameId} transitioned to voting state: ${newState}`);
+    console.log(`✅ Call-and-answer game ${gameId} transitioned to voting state: ${newState}`);
     
   } catch (error) {
     console.error(`❌ Error handling request vote:`, error);
@@ -272,6 +286,7 @@ async function handleCreateResults(gameId, messageData) {
  */
 async function handlePlayerAnswer(gameId, playerName, messageType, messageData) {
   console.log(`💬 Storing answer from ${playerName} in game ${gameId}`);
+  console.log(`🔥 WEBSOCKET DEBUG: handlePlayerAnswer called with messageType: ${messageType}, gameId: ${gameId}, playerName: ${playerName}`);
   
   try {
     // Extract question number from messageType (ANSWER#4)
@@ -280,6 +295,7 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
     const { answer, answerType = 'text' } = messageData;
     
     console.log(`🎯 Processing answer: messageType=${messageType}, rawQuestionNumber=${rawQuestionNumber}, paddedQuestionNumber=${questionNumber}`);
+    console.log(`🎯 DEBUG TRIVIA ANSWER: playerName=${playerName}, answer=${answer}, answerType=${answerType}, gameId=${gameId}`);
     
     if (!answer) {
       console.log(`⚠️ No answer provided in message data`);
@@ -327,12 +343,111 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
       ttl: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // 7 days TTL
     };
     
+    // Always store the answer in the standard QUESTION#001#ANSWER#PlayerName location
+    // For trivia questions, also calculate correctness and scoring
+    if (answerType === 'trivia') {
+      try {
+        // Get question data to check correct answer
+        const questionRef = await db.send(new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionNumber}#REF` }
+        }));
+        
+        if (questionRef.Item) {
+          const sourceQuestionId = questionRef.Item.SourceQuestionId;
+          const questionSetId = questionRef.Item.SetId;
+          const questionStartTime = questionRef.Item.StartedAt;
+          
+          // Get the actual question to check correct answer
+          const question = await db.send(new GetCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { 
+              PK: `SET#${questionSetId}`, 
+              SK: sourceQuestionId 
+            }
+          }));
+          
+          if (question.Item) {
+            const correctAnswer = question.Item.correctAnswer;
+            const points = question.Item.points || 10;
+            
+            // Check if player's answer is correct
+            // Handle both single correct answers and multiple correct answers
+            let isCorrect = false;
+            if (Array.isArray(correctAnswer)) {
+              // Multiple correct answers: check if player's option ID is in the array
+              isCorrect = correctAnswer.includes(`Option${answer}`);
+            } else if (typeof correctAnswer === 'string') {
+              // Single correct answer: check if it matches the option ID
+              isCorrect = correctAnswer === `Option${answer}`;
+            }
+            
+            console.log(`🔍 TRIVIA CHECK: Player answered "${answer}" -> "Option${answer}", correct answer(s): ${JSON.stringify(correctAnswer)}, isCorrect: ${isCorrect}`);
+            
+            // Calculate response time and speed bonus
+            let responseTimeMs = 0;
+            let speedBonus = 0;
+            
+            if (questionStartTime) {
+              responseTimeMs = new Date(now).getTime() - new Date(questionStartTime).getTime();
+              const responseTimeSeconds = responseTimeMs / 1000;
+              
+              // Speed bonus: max 5 points for answers within 5 seconds, scaling down
+              if (isCorrect && responseTimeSeconds <= 30) {
+                speedBonus = Math.max(0, Math.round(5 * (1 - responseTimeSeconds / 30)));
+              }
+            }
+            
+            const totalPoints = isCorrect ? points + speedBonus : 0;
+            
+            // Add trivia-specific fields to answer record
+            answerRecord.IsCorrect = isCorrect;
+            answerRecord.ResponseTimeMs = responseTimeMs;
+            answerRecord.SpeedBonus = speedBonus;
+            answerRecord.PointsEarned = totalPoints;
+            answerRecord.BasePoints = points;
+            
+            console.log(`🎯 TRIVIA SCORING: ${playerName} answered ${answer} (correct: ${correctAnswer}), isCorrect: ${isCorrect}, time: ${responseTimeMs}ms, points: ${totalPoints}`);
+          }
+        }
+      } catch (triviaError) {
+        console.error('Error calculating trivia scoring:', triviaError);
+        // Continue with basic answer recording even if trivia scoring fails
+      }
+    } else if (answerType === 'wavelength') {
+      // For wavelength questions, process and normalize the word list
+      try {
+        console.log(`🌊 Processing wavelength answer from ${playerName}: ${answer}`);
+        
+        // Parse the comma-separated words and normalize them
+        const words = answer.split(',')
+          .map(word => word.trim().toLowerCase())
+          .filter(word => word.length > 0 && word.length <= 50) // Filter out empty and overly long words
+          .slice(0, 10); // Ensure max 10 words
+        
+        // Store normalized words back in the answer record
+        answerRecord.Answer = words.join(',');
+        answerRecord.WordCount = words.length;
+        answerRecord.ProcessedWords = words; // Store as array for easier processing
+        
+        console.log(`🌊 Processed ${words.length} words for ${playerName}: [${words.join(', ')}]`);
+        
+      } catch (wavelengthError) {
+        console.error('Error processing wavelength answer:', wavelengthError);
+        // Continue with basic answer recording even if wavelength processing fails
+      }
+    }
+    
+    console.log(`📝 STORING ANSWER RECORD:`, JSON.stringify(answerRecord, null, 2));
+    console.log(`🔥 WEBSOCKET DEBUG: About to store answer record with PK: ${answerRecord.PK}, SK: ${answerRecord.SK}`);
+    
     await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
       Item: answerRecord
     }));
     
     console.log(`✅ Answer stored for ${playerName} on question ${questionNumber}`);
+    console.log(`🔥 WEBSOCKET DEBUG: Successfully stored answer record in DynamoDB`);
     
   } catch (error) {
     console.error(`❌ Error storing player answer:`, error);

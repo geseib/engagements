@@ -224,52 +224,87 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         basePrompt += `\nMust include these categories: ${scenarioConfig.mustHaveCategories}`;
       }
 
-      // Break large requests into chunks to avoid timeout
-      const CHUNK_SIZE = 10; // Generate max 10 scenarios per request
+      // Break large requests into chunks to avoid timeout and rate limiting
+      const CHUNK_SIZE = 5; // Reduced to 5 scenarios per request for better rate limiting
       const totalCount = scenarioConfig.count;
       const chunks = Math.ceil(totalCount / CHUNK_SIZE);
       
       let allScenarios = [];
       
+      // Helper function for batch retry with exponential backoff
+      const retryBatch = async (batchIndex, chunkSize, maxRetries = 3) => {
+        const chunkPrompt = basePrompt + `\nNumber of scenarios needed: ${chunkSize}`;
+        
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          try {
+            const response = await fetch(`${API_BASE}admin/ai-generate-scenarios`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                scenarioType: scenarioConfig.type,
+                prompt: chunkPrompt,
+                count: chunkSize,
+                difficulty: scenarioConfig.difficulty,
+                context: scenarioConfig.context,
+                audience: scenarioConfig.audience,
+                customPrompt: scenarioConfig.customPrompt,
+                customTitle: scenarioConfig.customTitle,
+                numberOfCategories: scenarioConfig.numberOfCategories,
+                mustHaveCategories: scenarioConfig.mustHaveCategories
+              })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+              return result.scenarios;
+            } else {
+              const error = result.error || 'Unknown error';
+              const isThrottled = error.includes('Too many requests') || 
+                                error.includes('throttle') || 
+                                error.includes('rate limit') ||
+                                response.status === 429;
+              
+              if (isThrottled && attempt < maxRetries) {
+                // For rate limits, wait longer - at least 30 seconds
+                const baseDelay = 30000; // 30 seconds minimum
+                const delay = baseDelay + (attempt * 15000) + Math.random() * 5000; // 30s, 45s, 60s...
+                setGenerationStatus(`⏳ Rate limited! Waiting ${Math.round(delay/1000)}s before retry (Bedrock has per-minute limits)`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+              }
+              
+              throw new Error(`Batch ${batchIndex + 1} failed: ${error}`);
+            }
+          } catch (fetchError) {
+            if (attempt < maxRetries) {
+              const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+              setGenerationStatus(`⏳ Batch ${batchIndex + 1} error, retrying in ${Math.round(delay/1000)}s (attempt ${attempt + 1}/${maxRetries + 1})`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              continue;
+            }
+            throw fetchError;
+          }
+        }
+      };
+
       for (let i = 0; i < chunks; i++) {
         const remainingCount = totalCount - (i * CHUNK_SIZE);
         const chunkSize = Math.min(CHUNK_SIZE, remainingCount);
         
         setGenerationStatus(`🤖 Generating batch ${i + 1} of ${chunks} (${chunkSize} scenarios)...`);
         
-        const chunkPrompt = basePrompt + `\nNumber of scenarios needed: ${chunkSize}`;
+        const batchScenarios = await retryBatch(i, chunkSize);
+        allScenarios.push(...batchScenarios);
+        setGenerationStatus(`✅ Generated ${allScenarios.length} of ${totalCount} scenarios...`);
         
-        const response = await fetch(`${API_BASE}admin/ai-generate-scenarios`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            scenarioType: scenarioConfig.type,
-            prompt: chunkPrompt,
-            count: chunkSize,
-            difficulty: scenarioConfig.difficulty,
-            context: scenarioConfig.context,
-            audience: scenarioConfig.audience,
-            customPrompt: scenarioConfig.customPrompt,
-            customTitle: scenarioConfig.customTitle,
-            numberOfCategories: scenarioConfig.numberOfCategories,
-            mustHaveCategories: scenarioConfig.mustHaveCategories
-          })
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-          allScenarios.push(...result.scenarios);
-          setGenerationStatus(`✅ Generated ${allScenarios.length} of ${totalCount} scenarios...`);
-        } else {
-          throw new Error(`Batch ${i + 1} failed: ${result.error || 'Unknown error'}`);
-        }
-        
-        // Small delay between requests to avoid overwhelming the API
+        // Much longer delay between successful requests to respect per-minute rate limits
         if (i < chunks - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          const interBatchDelay = 12000; // 12 seconds between batches
+          setGenerationStatus(`⏳ Waiting ${interBatchDelay/1000}s before next batch (respecting rate limits)...`);
+          await new Promise(resolve => setTimeout(resolve, interBatchDelay));
         }
       }
 
@@ -640,6 +675,13 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         </div>
 
         <div className="modal-footer">
+          {step === 1 && (
+            <>
+              <button className="btn-secondary" onClick={onClose}>
+                Cancel
+              </button>
+            </>
+          )}
           {step === 2 && (
             <>
               <button className="btn-secondary" onClick={() => setStep(1)}>
@@ -647,6 +689,13 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
               </button>
               <button className="btn-primary" onClick={handleConfigSubmit}>
                 🤖 Generate Scenarios
+              </button>
+            </>
+          )}
+          {step === 3 && !isGenerating && generatedScenarios.length > 0 && (
+            <>
+              <button className="btn-secondary" onClick={onClose}>
+                Cancel
               </button>
             </>
           )}

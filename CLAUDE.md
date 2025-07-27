@@ -123,6 +123,56 @@ Host Begins Questions → Game states: ASK# → VOTE# → RESULTS#
 - AI summaries stored in DynamoDB with caching
 - Structured prompts for strategic business insights
 
+### Question Format Standards
+
+#### Trivia Question Format
+Both standard and advanced trivia builders create questions with this complete format:
+```javascript
+{
+  id: timestamp,                    // Unique identifier
+  title: "Question title",          // Short descriptive title
+  questionDetail: "Full question text", // Actual question shown to players
+  category: "Category",             // Question category (e.g., "History", "Science")
+  school: "Context",                // School/context (e.g., "Business School")
+  optionA: "First choice",          // Answer option A
+  optionB: "Second choice",         // Answer option B
+  optionC: "Third choice",          // Answer option C
+  optionD: "Fourth choice",         // Answer option D
+  correctAnswer: "OptionA",         // Correct answer ID (OptionA, OptionB, OptionC, or OptionD)
+  answerDetails: "Explanation",     // Educational explanation of correct answer
+  difficulty: "medium",             // Difficulty level: "easy", "medium", "hard"
+  active: true                      // Whether question is active in the set
+}
+```
+
+**Key Requirements:**
+- `questionDetail` field contains the actual question text shown to players
+- `optionA`-`optionD` contain the four multiple choice options
+- `correctAnswer` must be exactly "OptionA", "OptionB", "OptionC", or "OptionD"
+- `answerDetails` provides educational context shown in results
+- Both standard (BuilderPage) and advanced (AdminPage) builders produce identical format
+
+#### Call & Answer Question Format
+Call & Answer questions use this standardized format for open-ended discussion questions:
+```javascript
+{
+  id: timestamp,                    // Unique identifier
+  title: "Question title",          // Main question or prompt shown to players
+  detail: "Detailed context",       // Background information and context
+  category: "Category",             // Question category (e.g., "Leadership", "Strategy")
+  school: "Context",                // School/context (e.g., "Business School")
+  customInstructions: "Instructions", // Specific instructions for this question
+  active: true                      // Whether question is active in the set
+}
+```
+
+**Key Requirements:**
+- `title` field contains the main question shown to players
+- `detail` provides background information and context
+- `category` organizes questions by theme or subject area
+- `customInstructions` can provide specific guidance for responses
+- Players submit open-ended text responses that are then voted on by peers
+
 ## Environment Configuration
 
 ### API Endpoints
@@ -177,4 +227,443 @@ aws dynamodb get-item --table-name engagedev --key '{"PK":{"S":"GAME#1234"},"SK"
 5. **Enhanced Logging**: Debug logs for troubleshooting category selection
 
 ---
-*Last Updated: 2025-07-15*
+
+# Game Flow Documentation
+
+## Trivia Game Flow
+
+### Complete State Flow Diagram
+```
+CREATED (host creates game)
+   ↓ Host clicks "Start Game"
+STARTED (players can join)
+   ↓ Host clicks "Start Question" 
+ASK#001 (question displayed, players answer)
+   ↓ Host clicks "Show Results" (trivia has no voting phase)
+RESULTS#001 (results displayed with scores)
+   ↓ Host clicks "Next Question"
+ASK#002 (next question)
+   ↓ (repeat cycle)
+END (game finished)
+```
+
+### State Management & Data Sources
+
+#### 1. Game State Record (`GAME#{gameId}` / `STATE`)
+**Purpose**: Single source of truth for current game state
+**API Updates**: 
+- `start-question.js` → Sets `ASK#001`
+- `get-results.js` → Sets `RESULTS#001` 
+- `start-question.js` (next question) → Sets `ASK#002`
+
+**Fields**:
+```javascript
+{
+  PK: "GAME#12345",
+  SK: "STATE", 
+  State: "ASK#001",           // Current state
+  LessonNumber: 1,            // Current question number (numeric)
+  CurrentQuestionId: "001",   // Padded question ID
+  UpdatedAt: "2023-..."
+}
+```
+
+#### 2. Question Reference Record (`GAME#{gameId}` / `QUESTION#{questionNumber}#REF`)
+**Purpose**: Links game question numbers to actual question data
+**API Updates**: `start-question.js` creates when starting new question
+
+**Fields**:
+```javascript
+{
+  PK: "GAME#12345",
+  SK: "QUESTION#001#REF",
+  SourceQuestionId: "question-id-from-set", // Original question ID
+  SetId: "trivia-tech-culture",             // Question set ID  
+  StartedAt: "2023-...",                    // When question started
+  GameId: "12345"
+}
+```
+
+### WebSocket Message Flow
+
+#### Host → Players State Changes
+**Sent by**: Host page when state changes via HTTP APIs
+**WebSocket Handler**: `message.js` → `handleHostMessage()`
+**Message Format**:
+```javascript
+{
+  type: 'hostMessage',
+  messageType: 'ASK#001',     // or 'RESULTS#001'
+  gameId: '12345',
+  timestamp: '2023-...'
+}
+```
+
+#### Player → Host Answer Notifications  
+**Sent by**: Player page when answering questions
+**WebSocket Handler**: `message.js` → `handlePlayerMessage()` → `handlePlayerAnswer()`
+**Message Format**:
+```javascript
+// From player to WebSocket
+{
+  messageType: 'ANSWER#1',
+  gameId: '12345', 
+  playerName: 'Alice',
+  answer: 'C',                // Single letter
+  answerType: 'trivia'
+}
+
+// Notification sent to host
+{
+  type: 'playerAnswered',
+  messageType: 'ANSWER#1',
+  gameId: '12345',
+  playerName: 'Alice', 
+  questionNumber: '1'
+}
+```
+
+### Host Page Components & Data Sources
+
+#### GameHostPage.jsx Main State
+**Data Sources**:
+- `gameState` - HTTP GET `/games/{gameId}?role=host`
+- `players` - HTTP GET `/games/{gameId}/players`  
+- `answers` - HTTP GET `/games/{gameId}/answers/{questionNumber}` (trivia only)
+- `results` - HTTP GET `/games/{gameId}/results/{questionNumber}`
+
+#### Question Display Component
+**When**: State = `ASK#001`
+**Data Source**: `gameState.currentQuestionData` from game state API
+**Components**:
+```javascript
+// Large title
+<h2>{currentQuestionData.title}</h2>
+
+// Smaller detail text  
+<p>{currentQuestionData.questionDetail}</p>
+
+// Trivia options (trivia only)
+<div className="trivia-options">
+  <div>A: {currentQuestionData.optionA}</div>
+  <div>B: {currentQuestionData.optionB}</div>
+  <div>C: {currentQuestionData.optionC}</div>
+  <div>D: {currentQuestionData.optionD}</div>
+</div>
+```
+
+#### Answer Progress Component  
+**When**: State = `ASK#001`
+**Data Sources**: 
+- Player count: `players.length` (local state)
+- Answers received: WebSocket `playerAnswered` notifications → updates `answeredPlayers` set
+- OR refresh via HTTP GET `/games/{gameId}/answers/{questionNumber}`
+
+**Display**: "Answers: 3/5 players answered"
+
+#### Results Display Component
+**When**: State = `RESULTS#001` 
+**Data Source**: `results` from HTTP GET `/games/{gameId}/results/{questionNumber}`
+**Components**:
+```javascript
+// Player results with scores
+results.playerResults.map(player => (
+  <div key={player.playerName}>
+    <span>{player.playerName}</span>
+    <span>+{player.pointsEarned} pts</span>
+    <span>Total: {player.totalScore}</span>
+  </div>
+))
+
+// Correct answer highlighting (trivia)
+<div className="trivia-result-option correct">
+  {correctAnswerLetter}: {correctAnswerText}
+</div>
+```
+
+### Player Page Components & Data Sources
+
+#### PlayerPage.jsx Main State
+**Data Sources**:
+- `gameState` - HTTP GET `/games/{gameId}/state/{playerId}` 
+- WebSocket messages for state changes
+
+#### Question Display Component
+**When**: State = `ASK#001`
+**Data Source**: `gameState.currentQuestionData`
+**Components**:
+```javascript
+// Question title and detail
+<h3>{currentQuestionData.title}</h3>
+<p>{currentQuestionData.questionDetail}</p>
+
+// Answer options (trivia)
+{['A', 'B', 'C', 'D'].map(option => (
+  <button 
+    key={option}
+    onClick={() => submitTriviAnswer(option)}
+  >
+    {option}: {currentQuestionData[`option${option}`]}
+  </button>
+))}
+```
+
+#### Answer Submission
+**Trigger**: Player clicks answer button
+**Method**: WebSocket message to `message.js`
+**Message**:
+```javascript
+{
+  messageType: 'ANSWER#1',
+  gameId: gameId,
+  playerName: playerName,
+  answer: 'C',
+  answerType: 'trivia'
+}
+```
+**Storage**: `QUESTION#001#ANSWER#Alice` in DynamoDB
+
+#### Results Display Component
+**When**: State = `RESULTS#001` and WebSocket state change received
+**Data Source**: HTTP GET `/games/{gameId}/results/{questionNumber}`
+**Components**:
+```javascript
+// Show if player was correct/incorrect
+<div className={playerResult.isCorrect ? 'player-correct' : 'player-wrong'}>
+  Your answer: {playerResult.playerAnswer}
+  {playerResult.isCorrect ? '✓ Correct!' : '✗ Incorrect'}
+</div>
+
+// Show correct answer with green highlighting
+<div className="correct-answer">
+  Correct: {correctAnswerLetter}: {correctAnswerText}
+</div>
+
+// Show points earned
+<div>+{playerResult.pointsEarned} points</div>
+<div>Total Score: {playerResult.totalScore}</div>
+```
+
+---
+
+## Poll Game Flow  
+
+### Complete State Flow Diagram
+```
+CREATED (host creates poll)
+   ↓ Host clicks "Start Game"
+STARTED (players can join)
+   ↓ Host clicks "Start Question"
+ASK#001 (question displayed, players submit responses)
+   ↓ Host clicks "Start Voting"
+VOTE#001 (player responses shown, players vote)
+   ↓ Host clicks "Show Results"  
+RESULTS#001 (voting results displayed)
+   ↓ Host clicks "Next Question"
+ASK#002 (next question)
+   ↓ (repeat cycle)
+END (poll finished)
+```
+
+### State Management & Data Sources
+
+#### Poll-Specific Records
+**Player Answers**: `QUESTION#001#ANSWER#{playerName}`
+```javascript
+{
+  PK: "GAME#12345",
+  SK: "QUESTION#001#ANSWER#Alice",
+  PlayerName: "Alice",
+  Answer: "We should focus on mobile-first development",
+  AnswerType: "text",
+  SubmittedAt: "2023-..."
+}
+```
+
+**Player Votes**: `QUESTION#001#VOTE#{voterName}`
+```javascript
+{
+  PK: "GAME#12345", 
+  SK: "QUESTION#001#VOTE#Bob",
+  PlayerName: "Bob",           // Who voted
+  VotedFor: "Alice",          // Who they voted for
+  SubmittedAt: "2023-..."
+}
+```
+
+**Vote Results**: `QUESTION#001#RESULTS`
+```javascript
+{
+  PK: "GAME#12345",
+  SK: "QUESTION#001#RESULTS", 
+  VoteTallies: {
+    "Alice": 3,
+    "Charlie": 2  
+  },
+  Winners: ["Alice"],
+  TotalVotes: 5,
+  CreatedAt: "2023-..."
+}
+```
+
+### WebSocket Message Flow
+
+#### Host → Players State Changes
+**State Changes**:
+- `ASK#001` - Show question, collect answers
+- `VOTE#001` - Show answers, collect votes  
+- `RESULTS#001` - Show voting results
+
+#### Player Messages
+**Answer Submission**:
+```javascript
+{
+  messageType: 'ANSWER#1',
+  gameId: '12345',
+  playerName: 'Alice', 
+  answer: 'Focus on mobile development',
+  answerType: 'text'
+}
+```
+
+**Vote Submission**:
+```javascript
+{
+  messageType: 'VOTE#QUESTION#category#001',
+  gameId: '12345',
+  playerName: 'Bob',
+  votedFor: 'Alice'  // Player name they're voting for
+}
+```
+
+### Host Page Components & Data Sources
+
+#### Answer Collection Phase (`ASK#001`)
+**Data Sources**:
+- Submitted answers: HTTP GET `/games/{gameId}/answers/{questionNumber}`
+- Progress tracking: WebSocket `playerAnswered` notifications
+
+**Display**:
+```javascript
+// Show submitted answers as they come in
+answers.map(answer => (
+  <div key={answer.playerName}>
+    <strong>{answer.playerName}:</strong>
+    <p>{answer.answer}</p>
+  </div>
+))
+
+// Progress indicator  
+<div>Answers: {answers.length}/{players.length}</div>
+```
+
+#### Voting Phase (`VOTE#001`) 
+**Data Sources**:
+- All answers: HTTP GET `/games/{gameId}/answers/{questionNumber}`
+- Vote progress: WebSocket `playerVoted` notifications
+
+**Display**:
+```javascript
+// Show all answers for voting
+answers.map(answer => (
+  <div key={answer.playerName} className="voting-option">
+    <strong>{answer.playerName}:</strong>
+    <p>{answer.answer}</p>
+    <span className="vote-count">{voteTallies[answer.playerName] || 0} votes</span>
+  </div>
+))
+```
+
+#### Results Phase (`RESULTS#001`)
+**Data Source**: HTTP GET `/games/{gameId}/results/{questionNumber}`
+**Display**:
+```javascript
+// Show winners and vote tallies
+<div className="poll-results">
+  <h3>Winners: {results.winners.join(', ')}</h3>
+  {Object.entries(results.voteTallies).map(([player, votes]) => (
+    <div key={player} className={results.winners.includes(player) ? 'winner' : ''}>
+      <span>{player}: {votes} votes</span>
+      <div className="vote-bar" style={{width: `${(votes/results.totalVotes)*100}%`}} />
+    </div>
+  ))}
+</div>
+```
+
+### Player Page Components & Data Sources
+
+#### Answer Submission Phase (`ASK#001`)
+```javascript
+// Text input for open-ended responses
+<textarea 
+  value={playerAnswer}
+  onChange={(e) => setPlayerAnswer(e.target.value)}
+  placeholder="Enter your response..."
+/>
+<button onClick={submitAnswer}>Submit Answer</button>
+```
+
+#### Voting Phase (`VOTE#001`)
+**Data Source**: HTTP GET `/games/{gameId}/answers/{questionNumber}`
+```javascript
+// Show all answers, let player vote
+answers.map(answer => (
+  <div key={answer.playerName} className="voting-option">
+    <p><strong>{answer.playerName}:</strong> {answer.answer}</p>
+    <button 
+      onClick={() => submitVote(answer.playerName)}
+      disabled={answer.playerName === playerName} // Can't vote for self
+    >
+      Vote for this
+    </button>
+  </div>
+))
+```
+
+#### Results Phase (`RESULTS#001`) 
+**Data Source**: HTTP GET `/games/{gameId}/results/{questionNumber}`
+```javascript
+// Show results and highlight if player won
+<div className="poll-results">
+  {results.winners.includes(playerName) && (
+    <div className="player-won">🎉 You won this round!</div>
+  )}
+  
+  <div>Your answer received {results.voteTallies[playerName] || 0} votes</div>
+  
+  {/* Show all results */}
+  {Object.entries(results.voteTallies).map(([player, votes]) => (
+    <div key={player} className={results.winners.includes(player) ? 'winner' : ''}>
+      {player}: {votes} votes
+    </div>
+  ))}
+</div>
+```
+
+---
+
+## Critical Implementation Notes
+
+### State Synchronization
+- **HTTP APIs** handle state persistence (DynamoDB writes)
+- **WebSocket messages** handle real-time notifications (no data writes)
+- **Frontend components** react to WebSocket state changes, then fetch data via HTTP
+
+### Data Flow Pattern
+1. Host action → HTTP API call → DynamoDB state update
+2. HTTP API → WebSocket broadcast → All connected clients notified  
+3. Client receives WebSocket → Updates local state → Fetches fresh data via HTTP
+
+### Error Handling
+- WebSocket disconnection → Auto-reconnect + state refresh via HTTP
+- Failed HTTP calls → Retry with exponential backoff
+- State mismatch → Force refresh from `/games/{gameId}/state`
+
+### Performance Optimizations
+- Cache question data in component state to avoid repeated API calls
+- Batch WebSocket notifications to prevent spam
+- Use connection pooling for DynamoDB operations
+- Implement request deduplication for rapid successive calls
+
+---
+*Last Updated: 2025-07-22*

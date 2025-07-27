@@ -24,10 +24,13 @@ exports.handler = async (event) => {
       promptId: item.promptId,
       engagementType: item.engagementType,
       questionCount: item.questionCount || 0,
+      totalQuestions: item.questionCount || 0, // Add for frontend compatibility
       categoryCount: item.categoryCount || 0,
       active: item.active !== false,
+      quickstart: item.Quickstart || false, // Add quickstart field
       createdAt: item.createdAt,
-      updatedAt: item.updatedAt
+      updatedAt: item.updatedAt,
+      isAIGenerated: item.isAIGenerated || false
     }));
 
     return {

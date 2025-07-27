@@ -60,6 +60,7 @@ function PlayerPage() {
   const [gameState, setGameState] = useState('CREATED'); // CREATED, STARTED, ASK#001, VOTE#001, RESULTS#001
   const [gameType, setGameType] = useState('call-and-answer'); // 'call-and-answer' or 'trivia'
   const [selectedTriviaAnswer, setSelectedTriviaAnswer] = useState(null); // For trivia: stores selected option letter
+  const [wavelengthWords, setWavelengthWords] = useState(Array(10).fill('')); // For wavelength: stores 10 words
   const [answers, setAnswers] = useState([]);
   const [votes, setVotes] = useState({ first: '', second: '', third: '' });
   const [hasVoted, setHasVoted] = useState(false);
@@ -995,8 +996,16 @@ function PlayerPage() {
     
     console.log(`🎯 PLAYER: handleSubmitAnswer called - gameType: ${gameType}, triviaAnswer: ${triviaAnswer}, hasAnswered: ${hasAnswered}`);
     
-    // For trivia, use the provided answer; for call-and-answer, use the text input
-    const answer = gameType === 'trivia' ? triviaAnswer : answerInput.trim();
+    // For trivia, use the provided answer; for wavelength, use words array; for call-and-answer, use the text input
+    let answer;
+    if (gameType === 'trivia') {
+      answer = triviaAnswer;
+    } else if (gameType === 'wavelength') {
+      // Filter out empty words and join with commas
+      answer = wavelengthWords.filter(word => word.trim()).join(',');
+    } else {
+      answer = answerInput.trim();
+    }
     
     if (!answer || !currentQuestion) {
       console.log(`❌ PLAYER: Submit blocked - answer: ${answer}, currentQuestion: ${!!currentQuestion}`);
@@ -1022,17 +1031,18 @@ function PlayerPage() {
       console.log(`🎯 PLAYER: Submitting answer via WebSocket - messageType: ${messageType}`);
       console.log(`🎯 PLAYER: DEBUG currentQuestion object:`, currentQuestion);
       console.log(`🎯 PLAYER: DEBUG questionNumber extracted: ${questionNumber}, gameState: ${gameState}`);
-      console.log(`🎯 PLAYER: DEBUG answer: ${answer}, answerType: ${gameType === 'trivia' ? 'trivia' : 'text'}`);
+      console.log(`🎯 PLAYER: DEBUG answer: ${answer}, answerType: ${gameType === 'trivia' ? 'trivia' : gameType === 'wavelength' ? 'wavelength' : 'text'}`);
       
-      // Send answer via WebSocket (same method for both trivia and call-and-answer)
+      // Send answer via WebSocket
       webSocketClient.sendCleanMessage(messageType, {
         answer: answer,
-        answerType: gameType === 'trivia' ? 'trivia' : 'text'
+        answerType: gameType === 'trivia' ? 'trivia' : gameType === 'wavelength' ? 'wavelength' : 'text'
       });
       
       setHasAnswered(true);
       setAnswerInput('');
       setSelectedTriviaAnswer('');
+      setWavelengthWords(Array(10).fill(''));
       
       console.log(`✅ PLAYER: Answer submitted successfully`);
     } catch (e) {
@@ -1343,6 +1353,13 @@ function PlayerPage() {
         <span className="player-name">👤 {playerName}</span>
         <span className="game-id">Game: {gameId}</span>
         {currentQuestion && <span className="lesson-number">Lesson {currentQuestion.id}</span>}
+        <span 
+          className={`websocket-indicator ${wsConnected ? 'connected' : 'disconnected'}`}
+          onClick={() => window.location.reload()}
+          style={{ cursor: 'pointer' }}
+        >
+          🔌 {wsConnected ? 'Connected' : 'Not Connected'}
+        </span>
       </div>
       
       {rejoinedPlayer && (
@@ -1391,24 +1408,50 @@ function PlayerPage() {
                 <div className="school-name">{currentQuestion.school}</div>
               )}
             </div>
-            <div className="lesson-title">
-              {gameType === 'trivia' ? 
-                (currentQuestion.title || currentQuestion.question) :
-                (currentQuestion.title || currentQuestion.question)
-              }
-            </div>
-            {gameType === 'trivia' && currentQuestion.questionDetail && (
-              <div className="lesson-detail">
-                {currentQuestion.questionDetail}
+            {gameType === 'call-and-answer' ? (
+              <>
+                {/* Only show subtitle if title is different from detail and title is reasonably short */}
+                {currentQuestion.title && 
+                 currentQuestion.title !== (currentQuestion.detail || currentQuestion.question) && 
+                 currentQuestion.title.length < 100 && (
+                  <div className="lesson-subtitle">
+                    {currentQuestion.title}
+                  </div>
+                )}
+                <div className="lesson-title">
+                  {currentQuestion.detail || currentQuestion.question}
+                </div>
+              </>
+            ) : gameType === 'trivia' ? (
+              <>
+                <div className="lesson-title">
+                  {currentQuestion.title || currentQuestion.question}
+                </div>
+                {currentQuestion.questionDetail && (
+                  <div className="lesson-detail">
+                    {currentQuestion.questionDetail}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="lesson-title">
+                {currentQuestion.title || currentQuestion.question}
               </div>
             )}
-            {gameType === 'call-and-answer' && currentQuestion.detail && (
-              <div className="lesson-detail">
-                {currentQuestion.detail}
+            {gameType === 'wavelength' && currentQuestion.topic && (
+              <div className="wavelength-topic lesson-detail">
+                <strong>Topic:</strong> {currentQuestion.topic}
+                {currentQuestion.instructions && (
+                  <div style={{marginTop: '10px', fontWeight: 'normal'}}>
+                    {currentQuestion.instructions}
+                  </div>
+                )}
               </div>
             )}
             <div className="application-prompt">
-              <strong>{gameType === 'trivia' ? 'Select the best answer:' : getPlayerInstructionText(customInstruction)}</strong>
+              <strong>{gameType === 'trivia' ? 'Select the best answer:' : 
+                       gameType === 'wavelength' ? 'Enter 10 words that come to mind:' :
+                       getPlayerInstructionText(customInstruction)}</strong>
             </div>
             
             {!hasAnswered ? (
@@ -1441,6 +1484,38 @@ function PlayerPage() {
                       disabled={!selectedTriviaAnswer}
                     >
                       Submit Answer
+                    </button>
+                  </div>
+                </>
+              ) : gameType === 'wavelength' ? (
+                <>
+                  <div className="wavelength-input-grid">
+                    {wavelengthWords.map((word, index) => (
+                      <div key={index} className="wavelength-word-input">
+                        <label className="word-label">Word {index + 1}</label>
+                        <input
+                          type="text"
+                          value={word}
+                          onChange={(e) => {
+                            const newWords = [...wavelengthWords];
+                            newWords[index] = e.target.value;
+                            setWavelengthWords(newWords);
+                          }}
+                          placeholder={`Word ${index + 1}`}
+                          className="word-input"
+                          maxLength="50"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="wavelength-submit-container">
+                    <button 
+                      className="btn-primary btn-large"
+                      onClick={handleSubmitAnswer}
+                      disabled={wavelengthWords.filter(word => word.trim()).length === 0}
+                    >
+                      Submit Words ({wavelengthWords.filter(word => word.trim()).length}/10)
                     </button>
                   </div>
                 </>
@@ -1507,7 +1582,8 @@ function PlayerPage() {
               )
             ) : (
               <div className="answer-submitted">
-                <h3>✅ {gameType === 'trivia' ? 'Answer Submitted!' : 'Application Submitted!'}</h3>
+                <h3>✅ {gameType === 'trivia' ? 'Answer Submitted!' : 
+                       gameType === 'wavelength' ? 'Words Submitted!' : 'Application Submitted!'}</h3>
                 <p>Waiting for other players...</p>
               </div>
             )}
@@ -1776,6 +1852,108 @@ function PlayerPage() {
                       </span>
                     </div>
                   )}
+                </div>
+              </div>
+            ) : gameType === 'wavelength' ? (
+              <div className="wavelength-results">
+                <div className="wavelength-question-recap">
+                  <h3>{currentQuestion?.title}</h3>
+                  {currentQuestion?.topic && (
+                    <div className="wavelength-topic-display">
+                      <strong>Topic:</strong> {currentQuestion.topic}
+                    </div>
+                  )}
+                </div>
+                
+                <div className="wavelength-common-words">
+                  <h4>🤝 Common Words</h4>
+                  {answers && answers.length > 0 ? (
+                    <div className="common-words-display">
+                      {(() => {
+                        // Process answers to find common words
+                        const allWords = [];
+                        const wordCounts = {};
+                        
+                        answers.forEach(answer => {
+                          if (answer.answer) {
+                            const words = answer.answer.split(',').map(w => w.trim().toLowerCase()).filter(w => w);
+                            allWords.push(...words);
+                            words.forEach(word => {
+                              wordCounts[word] = (wordCounts[word] || 0) + 1;
+                            });
+                          }
+                        });
+                        
+                        // Find words mentioned by 2+ players
+                        const commonWords = Object.entries(wordCounts)
+                          .filter(([word, count]) => count > 1)
+                          .sort((a, b) => b[1] - a[1]);
+                        
+                        if (commonWords.length === 0) {
+                          return <p className="no-common-words">No common words found - everyone had unique responses! 🎨</p>;
+                        }
+                        
+                        return (
+                          <div className="common-words-list">
+                            {commonWords.map(([word, count]) => (
+                              <div key={word} className="common-word-item">
+                                <span className="word">{word}</span>
+                                <span className="count">({count} {count === 1 ? 'player' : 'players'})</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <p>No responses to display</p>
+                  )}
+                </div>
+                
+                <div className="wavelength-your-words">
+                  <h4>📝 Your Words</h4>
+                  {(() => {
+                    const playerAnswer = answers.find(answer => 
+                      answer.name === playerName || answer.playerName === playerName || answer.player === playerName
+                    );
+                    
+                    if (playerAnswer && playerAnswer.answer) {
+                      const words = playerAnswer.answer.split(',').map(w => w.trim()).filter(w => w);
+                      return (
+                        <div className="player-words-display">
+                          {words.map((word, index) => (
+                            <span key={index} className="player-word">{word}</span>
+                          ))}
+                        </div>
+                      );
+                    }
+                    
+                    return <p>No words submitted</p>;
+                  })()}
+                </div>
+                
+                <div className="wavelength-stats">
+                  <div className="stat-item">
+                    <span className="stat-label">Total Responses:</span>
+                    <span className="stat-value">{answers?.length || 0}</span>
+                  </div>
+                  <div className="stat-item">
+                    <span className="stat-label">Unique Words:</span>
+                    <span className="stat-value">
+                      {(() => {
+                        const allWords = new Set();
+                        answers?.forEach(answer => {
+                          if (answer.answer) {
+                            answer.answer.split(',').forEach(word => {
+                              const cleaned = word.trim().toLowerCase();
+                              if (cleaned) allWords.add(cleaned);
+                            });
+                          }
+                        });
+                        return allWords.size;
+                      })()}
+                    </span>
+                  </div>
                 </div>
               </div>
             ) : (

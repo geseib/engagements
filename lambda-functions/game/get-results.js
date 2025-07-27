@@ -66,6 +66,11 @@ exports.handler = async (event) => {
     if (gameType === 'trivia') {
       return await handleTriviaResults(gameId, targetQuestionId);
     }
+    
+    // Handle wavelength results with word comparison logic
+    if (gameType === 'wavelength') {
+      return await handleWavelengthResults(gameId, targetQuestionId);
+    }
 
     // Extract scoring configuration with defaults
     const scoringConfig = gameMetadata.Item?.ScoringConfig || {
@@ -597,6 +602,167 @@ async function handleTriviaResults(gameId, questionId) {
       statusCode: 500,
       body: JSON.stringify({ 
         error: `Failed to get trivia results: ${error.message}`,
+        details: error.stack 
+      }),
+      headers: { 'Access-Control-Allow-Origin': '*' }
+    };
+  }
+}
+
+/**
+ * Handle Wavelength Results - Word Association Analysis
+ * Returns team-based scoring with common word analysis
+ */
+async function handleWavelengthResults(gameId, questionId) {
+  try {
+    console.log(`🌊 Handling wavelength results for game ${gameId}, question ${questionId}`);
+    
+    const paddedQuestionId = String(questionId).padStart(3, '0');
+    
+    // Get the question data for wavelength results
+    console.log(`🔍 Fetching question data for wavelength results`);
+    let question = null;
+    try {
+      // Get question reference record
+      const questionRef = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${paddedQuestionId}#REF` }
+      }));
+
+      if (questionRef.Item) {
+        const sourceQuestionId = questionRef.Item.SourceQuestionId;
+        const questionSetId = questionRef.Item.SetId;
+        
+        console.log(`📋 Found question reference: ${sourceQuestionId} from set ${questionSetId}`);
+
+        // Get the actual question from the question set
+        const questionResponse = await db.send(new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { 
+            PK: `SET#${questionSetId}`, 
+            SK: sourceQuestionId 
+          }
+        }));
+
+        if (questionResponse.Item) {
+          question = questionResponse.Item;
+          console.log(`✅ Question data loaded for wavelength results`);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching question data:', error);
+    }
+
+    // Get all player answers for this question
+    const answersQuery = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: {
+        ':pk': `GAME#${gameId}`,
+        ':sk': `QUESTION#${paddedQuestionId}#ANSWER#`
+      }
+    }));
+
+    const allAnswers = answersQuery.Items || [];
+    console.log(`📝 Found ${allAnswers.length} wavelength answers`);
+
+    // Process word analysis
+    let wordCounts = {};
+    let playerWords = {};
+    let totalWordsSubmitted = 0;
+    let totalUniqueWords = 0;
+    
+    // Process each player's answer
+    allAnswers.forEach(answerItem => {
+      const playerName = answerItem.PlayerName;
+      const answer = answerItem.Answer || '';
+      const processedWords = answerItem.ProcessedWords || answer.split(',').map(w => w.trim().toLowerCase()).filter(w => w);
+      
+      playerWords[playerName] = processedWords;
+      totalWordsSubmitted += processedWords.length;
+      
+      // Count occurrences of each word
+      processedWords.forEach(word => {
+        wordCounts[word] = (wordCounts[word] || 0) + 1;
+      });
+    });
+
+    // Find common words (mentioned by 2+ players)
+    const commonWords = Object.entries(wordCounts)
+      .filter(([word, count]) => count > 1)
+      .sort((a, b) => b[1] - a[1]) // Sort by frequency
+      .map(([word, count]) => ({ word, count }));
+
+    totalUniqueWords = Object.keys(wordCounts).length;
+    
+    console.log(`🤝 Found ${commonWords.length} common words out of ${totalUniqueWords} unique words`);
+
+    // Calculate team-based scoring
+    const teamScore = commonWords.length; // Simple scoring: 1 point per common word
+    const connectionScore = Math.round((commonWords.length / totalUniqueWords) * 100) || 0; // Percentage of words that were common
+    
+    // Team scoring - everyone gets the same score
+    const teamScoring = {};
+    allAnswers.forEach(answerItem => {
+      const playerName = answerItem.PlayerName;
+      teamScoring[playerName] = {
+        roundScore: teamScore,
+        totalScore: 0, // Will be calculated elsewhere
+        wordsSubmitted: playerWords[playerName]?.length || 0,
+        commonWordsFound: playerWords[playerName]?.filter(word => wordCounts[word] > 1).length || 0
+      };
+    });
+
+    const resultsData = {
+      gameId,
+      questionId: paddedQuestionId,
+      gameType: 'wavelength',
+      question,
+      answers: allAnswers.map(answer => ({
+        playerName: answer.PlayerName,
+        name: answer.PlayerName, // For compatibility
+        answer: answer.Answer,
+        words: playerWords[answer.PlayerName] || [],
+        submittedAt: answer.SubmittedAt
+      })),
+      wordAnalysis: {
+        totalAnswers: allAnswers.length,
+        totalWordsSubmitted,
+        totalUniqueWords,
+        commonWords,
+        wordCounts,
+        connectionScore
+      },
+      teamScore,
+      teamScoring,
+      timestamp: new Date().toISOString()
+    };
+
+    console.log(`🏆 Wavelength results calculated: ${commonWords.length} common words, team score: ${teamScore}`);
+
+    // Store results for future retrieval
+    await db.send(new PutCommand({
+      TableName: process.env.TABLE_NAME,
+      Item: {
+        PK: `GAME#${gameId}`,
+        SK: `QUESTION#${paddedQuestionId}#RESULTS`,
+        ...resultsData,
+        ttl: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // 7 days TTL
+      }
+    }));
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify(resultsData),
+      headers: { 'Access-Control-Allow-Origin': '*' }
+    };
+
+  } catch (error) {
+    console.error('🌊 Error getting wavelength results:', error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ 
+        error: `Failed to get wavelength results: ${error.message}`,
         details: error.stack 
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }

@@ -1,0 +1,302 @@
+/* Documentation Content Styles */
+.help-content-doc {
+  max-width: 800px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+.help-doc-header {
+  text-align: center;
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.help-doc-header h1 {
+  color: #1f2937;
+  margin-bottom: 8px;
+  font-size: 2rem;
+}
+
+.help-doc-header p {
+  color: #6b7280;
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.help-doc-section {
+  margin-bottom: 40px;
+}
+
+.help-doc-section h2 {
+  color: #1f2937;
+  margin-bottom: 16px;
+  font-size: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 8px;
+}
+
+.help-doc-section h3 {
+  color: #374151;
+  margin: 24px 0 12px 0;
+  font-size: 1.25rem;
+}
+
+.help-doc-section h4 {
+  color: #4b5563;
+  margin: 16px 0 8px 0;
+  font-size: 1.1rem;
+}
+
+.help-doc-section p {
+  color: #4b5563;
+  margin-bottom: 16px;
+}
+
+.help-doc-section ul, .help-doc-section ol {
+  color: #4b5563;
+  margin-bottom: 16px;
+  padding-left: 24px;
+}
+
+.help-doc-section li {
+  margin-bottom: 4px;
+}
+
+/* Info Boxes */
+.help-info-box, .help-warning-box, .help-tip-box {
+  padding: 16px;
+  border-radius: 8px;
+  margin: 20px 0;
+}
+
+.help-info-box {
+  background: #eff6ff;
+  border-left: 4px solid #3b82f6;
+}
+
+.help-warning-box {
+  background: #fef3c7;
+  border-left: 4px solid #f59e0b;
+}
+
+.help-tip-box {
+  background: #f0fdf4;
+  border-left: 4px solid #10b981;
+}
+
+.help-info-box h4, .help-warning-box h4, .help-tip-box h4 {
+  margin: 0 0 8px 0;
+  color: #1f2937;
+}
+
+.help-info-box p, .help-warning-box p, .help-tip-box p {
+  margin: 0;
+  color: #374151;
+}
+
+.help-info-box ul, .help-warning-box ul, .help-tip-box ul {
+  margin: 8px 0 0 0;
+  color: #374151;
+}
+
+/* Code Blocks */
+.help-code-block {
+  background: #1f2937;
+  color: #f9fafb;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+  overflow-x: auto;
+}
+
+.help-code-block pre {
+  margin: 0;
+  font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.help-code-block code {
+  background: none;
+  color: inherit;
+  padding: 0;
+}
+
+/* Inline Code */
+code {
+  background: #f3f4f6;
+  color: #ef4444;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+/* Variables Grid */
+.help-variables-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.help-variable-item {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.help-variable-item code {
+  background: #374151;
+  color: #f9fafb;
+  font-weight: 600;
+  display: inline-block;
+  width: fit-content;
+}
+
+.help-variable-item span {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+/* Best Practices */
+.help-best-practices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.help-practice-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.help-practice-item h4 {
+  margin: 0 0 8px 0;
+  color: #1e293b;
+  font-size: 1rem;
+}
+
+.help-practice-item p {
+  margin: 0;
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+/* FAQ / Definition List */
+.help-faq {
+  margin: 20px 0;
+}
+
+.help-faq dt {
+  font-weight: 600;
+  color: #1f2937;
+  margin: 16px 0 4px 0;
+  font-size: 1.05rem;
+}
+
+.help-faq dd {
+  color: #4b5563;
+  margin: 0 0 8px 16px;
+  padding-left: 8px;
+  border-left: 2px solid #e5e7eb;
+}
+
+/* Steps List */
+.help-steps {
+  counter-reset: step-counter;
+  list-style: none;
+  padding-left: 0;
+}
+
+.help-steps li {
+  counter-increment: step-counter;
+  position: relative;
+  padding-left: 40px;
+  margin-bottom: 20px;
+}
+
+.help-steps li::before {
+  content: counter(step-counter);
+  position: absolute;
+  left: 0;
+  top: 0;
+  background: #3b82f6;
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Feature Grid */
+.help-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.help-feature-item {
+  text-align: center;
+  padding: 20px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.help-feature-icon {
+  font-size: 2rem;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.help-feature-item h4 {
+  margin: 0 0 8px 0;
+  color: #1f2937;
+}
+
+.help-feature-item p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .help-content-doc {
+    padding: 0 8px;
+  }
+  
+  .help-doc-header h1 {
+    font-size: 1.75rem;
+  }
+  
+  .help-variables-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .help-best-practices {
+    grid-template-columns: 1fr;
+  }
+  
+  .help-feature-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .help-code-block {
+    font-size: 12px;
+  }
+}

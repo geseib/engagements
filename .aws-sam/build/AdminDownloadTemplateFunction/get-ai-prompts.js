@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, QueryCommand, ScanCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, ListObjectsV2Command, GetObjectCommand } = require('@aws-sdk/client-s3');
 
 const tableName = process.env.TABLE_NAME;
@@ -38,13 +38,13 @@ exports.handler = async (event) => {
 
     console.log(`🔍 Fetching AI prompts - gameType: ${gameType}, category: ${category}, status: ${status}`);
 
-    // Get prompt metadata from DynamoDB
-    let dynamoQuery = {
+    // Get prompt metadata from DynamoDB using new structure
+    const dynamoQuery = {
       TableName: tableName,
-      IndexName: 'GSI1', // Assuming GSI1 exists for type-based queries
-      KeyConditionExpression: 'GSI1PK = :gsi1pk',
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
       ExpressionAttributeValues: {
-        ':gsi1pk': 'AI_PROMPT'
+        ':pk': 'AIPROMPTS',
+        ':sk': 'AIPROMPT#'
       }
     };
 
@@ -68,35 +68,8 @@ exports.handler = async (event) => {
       dynamoQuery.FilterExpression = filterExpressions.join(' AND ');
     }
 
-    let promptsMetadata = [];
-    
-    // If no GSI1 exists, fall back to scan
-    try {
-      const response = await dynamodb.send(new QueryCommand(dynamoQuery));
-      promptsMetadata = response.Items || [];
-    } catch (gsiError) {
-      console.log('ℹ️ GSI1 not available, falling back to scan');
-      // Fallback to scan with filter
-      const scanQuery = {
-        TableName: tableName,
-        FilterExpression: 'begins_with(PK, :pk)',
-        ExpressionAttributeValues: {
-          ':pk': 'AI_PROMPT#'
-        }
-      };
-      
-      // Add additional filters
-      if (filterExpressions.length > 0) {
-        scanQuery.FilterExpression += ' AND ' + filterExpressions.join(' AND ');
-        Object.assign(scanQuery.ExpressionAttributeValues, dynamoQuery.ExpressionAttributeValues);
-        if (dynamoQuery.ExpressionAttributeNames) {
-          scanQuery.ExpressionAttributeNames = dynamoQuery.ExpressionAttributeNames;
-        }
-      }
-      
-      const scanResponse = await dynamodb.send(new ScanCommand(scanQuery));
-      promptsMetadata = scanResponse.Items || [];
-    }
+    const response = await dynamodb.send(new QueryCommand(dynamoQuery));
+    const promptsMetadata = response.Items || [];
 
     console.log(`📊 Found ${promptsMetadata.length} prompt metadata records`);
 
