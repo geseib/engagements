@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, ScanCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, ListObjectsV2Command, GetObjectCommand } = require('@aws-sdk/client-s3');
 
 const tableName = process.env.TABLE_NAME;
@@ -38,38 +38,37 @@ exports.handler = async (event) => {
 
     console.log(`🔍 Fetching AI prompts - gameType: ${gameType}, category: ${category}, status: ${status}`);
 
-    // Get prompt metadata from DynamoDB - scan for all AI_PROMPT records
+    // Get prompt metadata from DynamoDB using current structure
     const dynamoQuery = {
       TableName: tableName,
-      FilterExpression: 'begins_with(PK, :pk) AND SK = :sk',
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
       ExpressionAttributeValues: {
-        ':pk': 'AI_PROMPT#',
-        ':sk': 'METADATA'
+        ':pk': 'AIPROMPTS',
+        ':sk': 'AIPROMPT#'
       }
     };
 
-    // Add additional filters if specified
-    const additionalFilters = [];
+    // Add filters if specified
+    const filterExpressions = [];
     if (gameType) {
-      additionalFilters.push('gameType = :gameType');
+      filterExpressions.push('gameType = :gameType');
       dynamoQuery.ExpressionAttributeValues[':gameType'] = gameType;
     }
     if (category) {
-      additionalFilters.push('category = :category');
+      filterExpressions.push('category = :category');
       dynamoQuery.ExpressionAttributeValues[':category'] = category;
     }
     if (status) {
-      additionalFilters.push('#status = :status');
+      filterExpressions.push('#status = :status');
       dynamoQuery.ExpressionAttributeValues[':status'] = status;
       dynamoQuery.ExpressionAttributeNames = { '#status': 'status' };
     }
 
-    // Combine base filter with additional filters
-    if (additionalFilters.length > 0) {
-      dynamoQuery.FilterExpression = dynamoQuery.FilterExpression + ' AND ' + additionalFilters.join(' AND ');
+    if (filterExpressions.length > 0) {
+      dynamoQuery.FilterExpression = filterExpressions.join(' AND ');
     }
 
-    const response = await dynamodb.send(new ScanCommand(dynamoQuery));
+    const response = await dynamodb.send(new QueryCommand(dynamoQuery));
     const promptsMetadata = response.Items || [];
 
     console.log(`📊 Found ${promptsMetadata.length} prompt metadata records`);

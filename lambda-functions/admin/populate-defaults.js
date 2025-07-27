@@ -202,10 +202,10 @@ exports.handler = async (event) => {
             ContentType: 'application/json'
           }));
 
-          // Store metadata in DynamoDB
+          // Store metadata in DynamoDB using current structure
           const metadataRecord = {
-            PK: `AI_PROMPT#${promptId}`,
-            SK: 'METADATA',
+            PK: 'AIPROMPTS',
+            SK: `AIPROMPT#${promptId}`,
             promptId: promptId,
             name: promptData.name,
             description: promptData.description,
