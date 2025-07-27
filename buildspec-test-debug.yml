@@ -1,0 +1,23 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 18
+    commands:
+      - echo "Installing SAM CLI..."
+      - pip3 install aws-sam-cli
+
+  pre_build:
+    commands:
+      - echo "Pre-build phase starting"
+      - echo "Environment is working"
+
+  build:
+    commands:
+      - echo "Build phase starting"
+      - echo "Basic build test"
+
+  post_build:
+    commands:
+      - echo "Post-build phase complete"
