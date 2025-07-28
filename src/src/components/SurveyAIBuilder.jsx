@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import FileUploadPrompt from './FileUploadPrompt';
 
 const API_BASE = window.API_BASE;
 
@@ -465,6 +466,17 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
                     rows="3"
                   />
                 </div>
+
+                <FileUploadPrompt
+                  onContentExtracted={(content) => {
+                    setSurveyConfig(prev => ({
+                      ...prev,
+                      customPrompt: prev.customPrompt + '\n\n' + content
+                    }));
+                  }}
+                  acceptedFormats={['.txt', '.pdf', '.md', '.docx']}
+                  label="Or upload a document with context/examples"
+                />
               </div>
             </div>
           )}
@@ -582,6 +594,9 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
           )}
           {step === 2 && !isGenerating && generatedSurvey && (
             <>
+              <button className="btn-secondary" onClick={() => setStep(1)}>
+                ← Back to Configuration
+              </button>
               <button className="btn-secondary" onClick={onClose}>
                 Cancel
               </button>

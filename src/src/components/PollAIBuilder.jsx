@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import FileUploadPrompt from './FileUploadPrompt';
 
 const API_BASE = window.API_BASE;
 
@@ -249,6 +250,17 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                     rows="3"
                   />
                 </div>
+
+                <FileUploadPrompt
+                  onContentExtracted={(content) => {
+                    setPollConfig(prev => ({
+                      ...prev,
+                      customPrompt: prev.customPrompt + '\n\n' + content
+                    }));
+                  }}
+                  acceptedFormats={['.txt', '.pdf', '.md', '.docx']}
+                  label="Or upload a document with context/examples"
+                />
               </div>
             </div>
           )}
@@ -409,6 +421,9 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
           )}
           {step === 2 && !isGenerating && generatedPolls.length > 0 && (
             <>
+              <button className="btn-secondary" onClick={() => setStep(1)}>
+                ← Back to Configuration
+              </button>
               <button className="btn-secondary" onClick={onClose}>
                 Cancel
               </button>

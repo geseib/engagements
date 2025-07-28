@@ -969,17 +969,46 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: 
+                - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${DomainName}-token*'
+                - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${DomainName}-repo*'
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
           GITHUB_TOKEN: !Ref GitHubToken
           GITHUB_REPO: !Ref GitHubRepo
+          DOMAIN_NAME: !Ref DomainName
       Events:
         AdminCreateGitHubIssueEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
             Path: /admin/create-github-issue
+            Method: POST
+
+  AdminParseDocumentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-parse-document'
+      CodeUri: lambda-functions/admin/
+      Handler: parse-document.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      MemorySize: 512
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Events:
+        AdminParseDocumentEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/parse-document
             Method: POST
       Tags:
         Environment: !Ref Environment

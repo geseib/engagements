@@ -1448,6 +1448,7 @@ function AdminPage() {
                   <option value="trivia">Trivia</option>
                   <option value="poll">Poll</option>
                   <option value="wavelength">Wavelength</option>
+                  <option value="survey">Survey</option>
                 </select>
               </div>
 
@@ -1460,6 +1461,8 @@ function AdminPage() {
                       setShowPollAIBuilder(true);
                     } else if (engagementType === 'trivia') {
                       setShowTriviaAIBuilder(true);
+                    } else if (engagementType === 'survey') {
+                      setShowSurveyAIBuilder(true);
                     } else {
                       setShowAIScenarioBuilder(true);
                     }
@@ -1467,38 +1470,8 @@ function AdminPage() {
                 >
                   🤖 AI {engagementType === 'trivia' ? 'Trivia' : 
                            engagementType === 'poll' ? 'Poll' : 
+                           engagementType === 'survey' ? 'Survey' :
                            engagementType === 'wavelength' ? 'Wavelength' : 'Scenario'} Builder
-                </button>
-                {engagementType === 'trivia' && (
-                  <button
-                    className="btn-primary"
-                    onClick={() => {
-                      console.log('🧠 AI Trivia Builder button clicked');
-                      setShowTriviaAIBuilder(true);
-                    }}
-                  >
-                    🧠 Advanced Trivia Builder
-                  </button>
-                )}
-                {engagementType === 'poll' && (
-                  <button
-                    className="btn-primary"
-                    onClick={() => {
-                      console.log('📊 AI Poll Builder button clicked');
-                      setShowPollAIBuilder(true);
-                    }}
-                  >
-                    📊 Advanced Poll Builder
-                  </button>
-                )}
-                <button
-                  className="btn-primary"
-                  onClick={() => {
-                    console.log('📋 AI Survey Builder button clicked');
-                    setShowSurveyAIBuilder(true);
-                  }}
-                >
-                  📋 AI Survey Builder
                 </button>
                 <button
                   className="btn-secondary"
@@ -1513,7 +1486,8 @@ function AdminPage() {
                   📄 Download {engagementType === 'call-and-answer' ? 'Call & Answer' :
                               engagementType === 'trivia' ? 'Trivia' : 
                               engagementType === 'poll' ? 'Poll' : 
-                              engagementType === 'wavelength' ? 'Wavelength' : 'Template'} Template
+                              engagementType === 'wavelength' ? 'Wavelength' :
+                              engagementType === 'survey' ? 'Survey' : 'Template'} Template
                 </button>
               </div>
             </div>

@@ -1,0 +1,178 @@
+.file-upload-prompt {
+  margin: 20px 0;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.upload-section {
+  margin-bottom: 15px;
+}
+
+.upload-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.upload-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.file-input {
+  display: none;
+}
+
+.file-input-label {
+  display: inline-block;
+  padding: 8px 16px;
+  background: #007bff;
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 14px;
+}
+
+.file-input-label:hover {
+  background: #0056b3;
+}
+
+.selected-file-name {
+  font-size: 14px;
+  color: #666;
+  font-style: italic;
+}
+
+.file-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.upload-status {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.upload-status.error {
+  background: #fee;
+  color: #c33;
+  border: 1px solid #fcc;
+}
+
+.upload-status.success {
+  background: #efe;
+  color: #3c3;
+  border: 1px solid #cfc;
+}
+
+.extracted-content {
+  margin-top: 15px;
+  padding: 15px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.content-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.content-header h4 {
+  margin: 0;
+  color: #333;
+}
+
+.content-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-small {
+  padding: 5px 12px !important;
+  font-size: 13px !important;
+}
+
+.content-preview {
+  font-family: monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #555;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 4px;
+}
+
+.content-stats {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #888;
+  font-family: sans-serif;
+}
+
+.upload-help {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.upload-help p {
+  margin: 5px 0;
+  font-size: 13px;
+  color: #666;
+}
+
+.upload-help strong {
+  color: #444;
+}
+
+/* Button styles to match existing design */
+.btn-primary {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #0056b3;
+}
+
+.btn-primary:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.btn-secondary:hover {
+  background-color: #545b62;
+}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import FileUploadPrompt from './FileUploadPrompt';
 
 const API_BASE = window.API_BASE;
 
@@ -578,6 +579,17 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                     rows="2"
                   />
                 </div>
+
+                <FileUploadPrompt
+                  onContentExtracted={(content) => {
+                    setScenarioConfig(prev => ({
+                      ...prev,
+                      customPrompt: prev.customPrompt + '\n\n' + content
+                    }));
+                  }}
+                  acceptedFormats={['.txt', '.pdf', '.md', '.docx']}
+                  label="Or upload a document with context/examples"
+                />
               </div>
             </div>
           )}
@@ -694,6 +706,9 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
           )}
           {step === 3 && !isGenerating && generatedScenarios.length > 0 && (
             <>
+              <button className="btn-secondary" onClick={() => setStep(2)}>
+                ← Back to Configuration
+              </button>
               <button className="btn-secondary" onClick={onClose}>
                 Cancel
               </button>

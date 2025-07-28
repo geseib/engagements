@@ -9,7 +9,9 @@
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.600.0",
     "@aws-sdk/client-dynamodb": "^3.600.0",
-    "@aws-sdk/lib-dynamodb": "^3.600.0"
+    "@aws-sdk/lib-dynamodb": "^3.600.0",
+    "pdf-parse": "^1.1.1",
+    "mammoth": "^1.6.0"
   },
   "keywords": ["aws", "lambda", "admin", "ai"],
   "author": "Engage2",
