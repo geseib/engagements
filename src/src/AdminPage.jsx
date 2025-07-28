@@ -4,6 +4,7 @@ import TriviaAIBuilder from './components/TriviaAIBuilder';
 import PollAIBuilder from './components/PollAIBuilder';
 import SurveyAIBuilder from './components/SurveyAIBuilder';
 import AIPromptManager from './components/AIPromptManager';
+import ArchivePanel from './components/ArchivePanel';
 import HelpButton from './components/HelpButton';
 import IssueFab from './components/IssueFab';
 import './BuilderPage.css';
@@ -89,6 +90,9 @@ function AdminPage() {
 
   // AI Survey Builder
   const [showSurveyAIBuilder, setShowSurveyAIBuilder] = useState(false);
+
+  // Archive Panel
+  const [showArchivePanel, setShowArchivePanel] = useState(false);
 
 
   const defaultInstructions = "How would you apply this concept in your current role or organization? Consider the specific challenges and opportunities in your context.";
@@ -915,6 +919,12 @@ function AdminPage() {
                 🎮 Game Management
               </button>
               <button 
+                className={`tab-btn ${activeTab === 'archive' ? 'active' : ''}`}
+                onClick={() => setActiveTab('archive')}
+              >
+                🗄️ Archive
+              </button>
+              <button 
                 className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
                 onClick={() => setActiveTab('settings')}
               >
@@ -1621,6 +1631,31 @@ function AdminPage() {
               </div>
             </div>
           )}
+
+          {activeTab === 'archive' && (
+            <div className="tab-content">
+              <div className="admin-section">
+                <h2>📦 Archive Management</h2>
+                <p className="section-description">
+                  Manage content archives for backup, sharing, and cross-environment synchronization.
+                  Store prompts and question sets in archives and sync them between deployments.
+                </p>
+                
+                <div className="archive-launch-section">
+                  <button 
+                    className="btn-primary"
+                    onClick={() => setShowArchivePanel(true)}
+                    style={{ fontSize: '16px', padding: '12px 24px' }}
+                  >
+                    🗃️ Open Archive Manager
+                  </button>
+                  <p className="help-text" style={{ marginTop: '10px', color: '#666' }}>
+                    Launch the archive management interface to transfer content between your current environment and archives.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1699,6 +1734,13 @@ function AdminPage() {
         <SurveyAIBuilder
           onClose={() => setShowSurveyAIBuilder(false)}
           onSurveyGenerated={handleSurveyGenerated}
+        />
+      )}
+
+      {/* Archive Panel Modal */}
+      {showArchivePanel && (
+        <ArchivePanel
+          onClose={() => setShowArchivePanel(false)}
         />
       )}
 
