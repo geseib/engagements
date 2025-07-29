@@ -1219,33 +1219,37 @@ function AdminPage() {
                       )}
                     </div>
                     <div className="set-stats">
-                      <span className="stat-badge">{set.totalQuestions} questions</span>
-                      <span className="stat-badge">{set.categoryCount} categories</span>
-                      <span className="stat-badge">
-                        {set.engagementType === 'trivia' ? 'Trivia' :
-                         set.engagementType === 'poll' ? 'Poll' :
-                         set.engagementType === 'wavelength' ? 'Wavelength' : 'Call and Answer'}
-                      </span>
-                      <button
-                        className={`status-badge clickable ${set.active ? 'active' : 'inactive'}`}
-                        onClick={() => handleToggleActive(set.id, set.active)}
-                        title={`Click to ${set.active ? 'deactivate' : 'activate'} this question set`}
-                      >
-                        {set.active ? 'Active' : 'Inactive'}
-                      </button>
-                      <label className="quickstart-checkbox" title="Enable for quickstart menu">
-                        <input
-                          type="checkbox"
-                          checked={set.quickstart || false}
-                          onChange={(e) => handleToggleQuickstart(set.id, e.target.checked)}
-                        />
-                        <span className="quickstart-label">⚡ Quickstart</span>
-                      </label>
-                      {set.isAIGenerated && (
-                        <span className="stat-badge ai-generated" title="AI-generated content">
-                          🤖 AI
+                      <div className="stats-row-1">
+                        <span className="stat-badge">{set.totalQuestions} questions</span>
+                        <span className="stat-badge">{set.categoryCount} categories</span>
+                        <span className="stat-badge">
+                          {set.engagementType === 'trivia' ? 'Trivia' :
+                           set.engagementType === 'poll' ? 'Poll' :
+                           set.engagementType === 'wavelength' ? 'Wavelength' : 'Call and Answer'}
                         </span>
-                      )}
+                      </div>
+                      <div className="stats-row-2">
+                        <button
+                          className={`status-badge clickable ${set.active ? 'active' : 'inactive'}`}
+                          onClick={() => handleToggleActive(set.id, set.active)}
+                          title={`Click to ${set.active ? 'deactivate' : 'activate'} this question set`}
+                        >
+                          {set.active ? 'Active' : 'Inactive'}
+                        </button>
+                        <label className="quickstart-checkbox" title="Enable for quickstart menu">
+                          <input
+                            type="checkbox"
+                            checked={set.quickstart || false}
+                            onChange={(e) => handleToggleQuickstart(set.id, e.target.checked)}
+                          />
+                          <span className="quickstart-label">⚡ Quickstart</span>
+                        </label>
+                        {set.isAIGenerated && (
+                          <span className="stat-badge ai-generated" title="AI-generated content">
+                            🤖 AI
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="set-actions">
                       <button
