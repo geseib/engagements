@@ -564,7 +564,7 @@ function AdminPage() {
           customDescription: metadata.description,
           customInstructions: metadata.customInstructions,
           aiContextInstructions: metadata.aiContextInstructions,
-          engagementType: 'call-and-answer',
+          engagementType: engagementType,
           isAIGenerated: true
         })
       });
