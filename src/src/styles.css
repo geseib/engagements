@@ -3421,6 +3421,74 @@ body {
   font-size: 1.05rem;
 }
 
+/* Expandable Upload Section */
+.expandable-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e1e8ed;
+  margin-bottom: 20px;
+  transition: all 0.3s ease;
+}
+
+.expandable-header:hover {
+  background: rgba(52, 152, 219, 0.05);
+  border-radius: 8px;
+  padding: 10px;
+  margin: -10px -10px 10px -10px;
+}
+
+.expand-arrow {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: #666;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+  padding: 8px;
+  border-radius: 50%;
+}
+
+.expand-arrow:hover {
+  background: rgba(52, 152, 219, 0.1);
+  color: #3498db;
+}
+
+.expand-arrow.expanded {
+  transform: rotate(180deg);
+}
+
+/* Fixed-size Scrollable Question Sets List */
+.question-sets-list-container {
+  max-height: 800px; /* Approximately 8 items at ~100px each */
+  overflow-y: auto;
+  border: 1px solid #e1e8ed;
+  border-radius: 8px;
+  background: #fafbfc;
+  padding: 10px;
+}
+
+.question-sets-list-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.question-sets-list-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.question-sets-list-container::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.question-sets-list-container::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
 .upload-controls {
   display: flex;
   gap: 20px;

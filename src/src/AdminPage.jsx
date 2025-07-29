@@ -90,6 +90,8 @@ function AdminPage() {
   // AI Survey Builder
   const [showSurveyAIBuilder, setShowSurveyAIBuilder] = useState(false);
 
+  // Upload section expand/collapse
+  const [isUploadSectionExpanded, setIsUploadSectionExpanded] = useState(false);
 
   const defaultInstructions = "How would you apply this concept in your current role or organization? Consider the specific challenges and opportunities in your context.";
 
@@ -978,8 +980,18 @@ function AdminPage() {
 
           {/* Upload Question Set Section */}
           <div className="admin-section">
-            <h2>📤 Upload Question Set</h2>
-            <p className="section-description">Upload a CSV file containing questions to create a new question set with custom title and instructions.</p>
+            <div 
+              className="section-header expandable-header"
+              onClick={() => setIsUploadSectionExpanded(!isUploadSectionExpanded)}
+            >
+              <h2>📤 Upload Question Set</h2>
+              <button className={`expand-arrow ${isUploadSectionExpanded ? 'expanded' : ''}`}>
+                ▼
+              </button>
+            </div>
+            {isUploadSectionExpanded && (
+              <>
+                <p className="section-description">Upload a CSV file containing questions to create a new question set with custom title and instructions.</p>
             
             <div className="upload-form">
               <div className="form-row">
@@ -1127,10 +1139,12 @@ function AdminPage() {
               </div>
             </div>
             
-            {uploadStatus && (
-              <div className={`status-message ${uploadStatus.includes('✅') ? 'success' : uploadStatus.includes('❌') ? 'error' : ''}`}>
-                {uploadStatus}
-              </div>
+                {uploadStatus && (
+                  <div className={`status-message ${uploadStatus.includes('✅') ? 'success' : uploadStatus.includes('❌') ? 'error' : ''}`}>
+                    {uploadStatus}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -1194,15 +1208,16 @@ function AdminPage() {
               </div>
             </div>
             
-            <div className="question-sets-list">
-              {filteredQuestionSets.length === 0 ? (
-                <div className="no-sets-message">
-                  <p>{questionSets.length === 0 
-                    ? 'No question sets found. Upload your first question set above to get started.'
-                    : 'No question sets found matching your filters.'}</p>
-                </div>
-              ) : (
-                filteredQuestionSets.map(set => (
+            <div className="question-sets-list-container">
+              <div className="question-sets-list">
+                {filteredQuestionSets.length === 0 ? (
+                  <div className="no-sets-message">
+                    <p>{questionSets.length === 0 
+                      ? 'No question sets found. Upload your first question set above to get started.'
+                      : 'No question sets found matching your filters.'}</p>
+                  </div>
+                ) : (
+                  filteredQuestionSets.map(set => (
                   <div key={set.id} className="question-set-item">
                     <div className="set-info">
                       <h3>{set.name}</h3>
@@ -1268,8 +1283,9 @@ function AdminPage() {
                       </button>
                     </div>
                   </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
           </div>
 
