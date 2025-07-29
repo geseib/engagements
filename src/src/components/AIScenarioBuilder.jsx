@@ -93,6 +93,45 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
           }
         ];
 
+      case 'wavelength':
+        return [
+          {
+            id: 'tech-terms',
+            title: 'Technology Terms',
+            description: 'Technical terms and concepts for word association',
+            prompt: 'Create wavelength questions using technology and software development terms that teams can associate words with'
+          },
+          {
+            id: 'business-concepts',
+            title: 'Business Concepts',
+            description: 'Business and management terms for exploration',
+            prompt: 'Generate wavelength questions using business, strategy, and management concepts'
+          },
+          {
+            id: 'industry-specific',
+            title: 'Industry-Specific Terms',
+            description: 'Terms specific to your industry or domain',
+            prompt: 'Create wavelength questions using terms specific to the target industry or professional domain'
+          },
+          {
+            id: 'leadership-themes',
+            title: 'Leadership & Culture',
+            description: 'Leadership principles and cultural concepts',
+            prompt: 'Generate wavelength questions around leadership themes, company culture, and team dynamics'
+          },
+          {
+            id: 'abstract-concepts',
+            title: 'Abstract Concepts',
+            description: 'Ideas and concepts that spark creativity',
+            prompt: 'Create wavelength questions using abstract concepts that encourage creative thinking and diverse associations'
+          },
+          {
+            id: 'custom',
+            title: 'Custom Terms',
+            description: 'Define your own specific terms or topics',
+            prompt: 'Create wavelength questions based on the custom terms and topics provided'
+          }
+        ];
       case 'call-and-answer':
       default:
         return [
@@ -176,9 +215,45 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         numberOfCategories: 3,
         mustHaveCategories: 'Communication, Trust Building, Conflict Resolution'
       },
+      // Wavelength-specific templates
+      'tech-terms': {
+        customTitle: 'Technology Terms Wavelength',
+        context: 'Word association exercise using technology and software development concepts',
+        audience: 'Software developers, technical teams, and technology professionals',
+        numberOfCategories: 4,
+        mustHaveCategories: 'Programming, Cloud Computing, Development Tools, Architecture'
+      },
+      'business-concepts': {
+        customTitle: 'Business Concepts Wavelength',
+        context: 'Explore business and management terms through creative word association',
+        audience: 'Business professionals, managers, and leadership teams',
+        numberOfCategories: 4,
+        mustHaveCategories: 'Strategy, Operations, Finance, Leadership'
+      },
+      'industry-specific': {
+        customTitle: 'Industry Terms Wavelength',
+        context: 'Domain-specific terminology and concepts for your industry',
+        audience: 'Industry professionals and subject matter experts',
+        numberOfCategories: 3,
+        mustHaveCategories: 'Core Concepts, Tools & Methods, Industry Trends'
+      },
+      'leadership-themes': {
+        customTitle: 'Leadership & Culture Wavelength',
+        context: 'Leadership principles and cultural concepts through word association',
+        audience: 'Leaders, managers, and teams focused on culture building',
+        numberOfCategories: 4,
+        mustHaveCategories: 'Leadership Styles, Team Dynamics, Company Culture, Values'
+      },
+      'abstract-concepts': {
+        customTitle: 'Creative Concepts Wavelength',
+        context: 'Abstract ideas and concepts that encourage diverse thinking and creativity',
+        audience: 'Creative teams, brainstorming groups, and innovation-focused professionals',
+        numberOfCategories: 5,
+        mustHaveCategories: 'Innovation, Creativity, Future Thinking, Abstract Ideas, Inspiration'
+      },
       'custom': {
-        customTitle: 'Custom Scenario Workshop',
-        context: 'Tailored scenarios based on specific organizational needs and requirements',
+        customTitle: 'Custom Wavelength Workshop',
+        context: 'Custom word association exercise based on specific terms and topics',
         audience: 'Customized based on requirements',
         numberOfCategories: 3,
         mustHaveCategories: ''
@@ -245,6 +320,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
               },
               body: JSON.stringify({
                 scenarioType: scenarioConfig.type,
+                engagementType: engagementType,
                 prompt: chunkPrompt,
                 count: chunkSize,
                 difficulty: scenarioConfig.difficulty,
@@ -449,14 +525,14 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
       <div className="modal-overlay" onClick={onClose}></div>
       <div className="modal-content scenario-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>🤖 AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : 'Scenario'} Builder</h2>
+          <h2>🤖 AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : engagementType === 'wavelength' ? 'Wavelength' : 'Scenario'} Builder</h2>
           <button className="close-button" onClick={onClose}>✕</button>
         </div>
 
         <div className="modal-body">
           {step === 1 && (
             <div className="scenario-type-selection">
-              <h3>What type of {engagementType === 'trivia' ? 'trivia questions' : engagementType === 'poll' ? 'poll questions' : 'scenarios'} do you want to create?</h3>
+              <h3>What type of {engagementType === 'trivia' ? 'trivia questions' : engagementType === 'poll' ? 'poll questions' : engagementType === 'wavelength' ? 'wavelength topics' : 'scenarios'} do you want to create?</h3>
               <div className="scenario-types-grid">
                 {scenarioTypes.map(type => (
                   <div
