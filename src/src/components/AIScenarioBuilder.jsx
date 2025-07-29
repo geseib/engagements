@@ -126,10 +126,40 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
             prompt: 'Create wavelength questions using abstract concepts that encourage creative thinking and diverse associations'
           },
           {
+            id: 'lists-favorites',
+            title: 'Lists & Favorites',
+            description: 'Personal preferences and recommendations',
+            prompt: 'Create wavelength prompts asking people to list their favorites: books, movies, songs, restaurants, vacation spots, tools, resources, mentors, etc. Format: "List 10 of your favorite [category]"'
+          },
+          {
+            id: 'brainstorming',
+            title: 'Brainstorming Sessions',
+            description: 'Ideas and solutions for team challenges',
+            prompt: 'Generate wavelength prompts for brainstorming: ways to improve products, potential solutions, feature ideas, process improvements. Format: "List 10 ways to [improve/solve/enhance something]"'
+          },
+          {
+            id: 'team-building',
+            title: 'Team Building & Culture',
+            description: 'Shared experiences and team connections',
+            prompt: 'Create wavelength prompts for team building: memorable moments, things to appreciate, team values, shared goals. Format: "List 10 [experiences/values/goals] related to our team"'
+          },
+          {
+            id: 'reflection-retrospective',
+            title: 'Reflection & Learning',
+            description: 'Lessons learned and growth opportunities',
+            prompt: 'Generate wavelength prompts for reflection: lessons learned, achievements, challenges overcome, areas for improvement. Format: "List 10 things you learned/achieved/improved"'
+          },
+          {
+            id: 'icebreakers-fun',
+            title: 'Icebreakers & Fun',
+            description: 'Getting to know each other better',
+            prompt: 'Create fun wavelength prompts: hidden talents, dream jobs, bucket list items, interesting facts about yourself. Format: "List 10 [fun/interesting/surprising] things about you"'
+          },
+          {
             id: 'custom',
-            title: 'Custom Terms',
-            description: 'Define your own specific terms or topics',
-            prompt: 'Create wavelength questions based on the custom terms and topics provided'
+            title: 'Custom Lists',
+            description: 'Define your own list-based prompts',
+            prompt: 'Create wavelength questions based on the custom list topics provided'
           }
         ];
       case 'call-and-answer':
@@ -251,9 +281,44 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         numberOfCategories: 5,
         mustHaveCategories: 'Innovation, Creativity, Future Thinking, Abstract Ideas, Inspiration'
       },
+      'lists-favorites': {
+        customTitle: 'Lists & Favorites Workshop',
+        context: 'Share personal preferences and recommendations with your team through curated lists',
+        audience: 'All team members looking to connect and share interests',
+        numberOfCategories: 5,
+        mustHaveCategories: 'Entertainment, Professional Resources, Places & Travel, Personal Growth, Hobbies & Interests'
+      },
+      'brainstorming': {
+        customTitle: 'Team Brainstorming Session',
+        context: 'Collaborative ideation session for generating solutions and innovations',
+        audience: 'Cross-functional teams, product teams, and innovation groups',
+        numberOfCategories: 4,
+        mustHaveCategories: 'Product Ideas, Process Improvements, Problem Solutions, Future Opportunities'
+      },
+      'team-building': {
+        customTitle: 'Team Connection Workshop',
+        context: 'Build stronger team bonds through shared experiences and values',
+        audience: 'Teams looking to strengthen relationships and culture',
+        numberOfCategories: 4,
+        mustHaveCategories: 'Shared Experiences, Team Values, Appreciation, Common Goals'
+      },
+      'reflection-retrospective': {
+        customTitle: 'Reflection & Growth Session',
+        context: 'Reflect on experiences and identify opportunities for growth and improvement',
+        audience: 'Teams conducting retrospectives or personal development sessions',
+        numberOfCategories: 4,
+        mustHaveCategories: 'Lessons Learned, Achievements, Challenges, Future Growth'
+      },
+      'icebreakers-fun': {
+        customTitle: 'Fun Icebreakers Session',
+        context: 'Get to know your teammates better through fun and engaging prompts',
+        audience: 'New teams, remote teams, or groups looking to build rapport',
+        numberOfCategories: 5,
+        mustHaveCategories: 'Personal Interests, Fun Facts, Dreams & Aspirations, Hidden Talents, Life Experiences'
+      },
       'custom': {
         customTitle: 'Custom Wavelength Workshop',
-        context: 'Custom word association exercise based on specific terms and topics',
+        context: 'Custom list-based exercise tailored to your specific needs',
         audience: 'Customized based on requirements',
         numberOfCategories: 3,
         mustHaveCategories: ''
