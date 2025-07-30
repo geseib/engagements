@@ -107,36 +107,53 @@ async function importQuestionSets(selectedArchiveIds, environment, conflictResol
       // Extract the actual item data
       const archiveItem = archiveData.item || archiveData;
       
-      // Download the actual CSV content
-      // Try multiple download URL patterns until we find one that works
-      let csvContent = '';
-      const downloadUrls = [
-        archiveItem.downloadUrl,
-        `https://archive.seibtribe.us/archive/items/${archiveId}/content`,
-        `https://archive.seibtribe.us/archive/content/${archiveId}`,
-        `https://archive.seibtribe.us/download/${archiveId}`,
-        `https://archive.seibtribe.us/api/download/${archiveId}`
-      ].filter(Boolean); // Remove null/undefined values
+      // Get download URL from archive service
+      console.log(`📥 Requesting download URL for archive item: ${archiveId}`);
       
-      let contentResponse;
-      for (const url of downloadUrls) {
-        try {
-          console.log(`📥 Trying download URL: ${url}`);
-          contentResponse = await fetch(url);
+      const downloadUrlResponse = await fetch(`${ARCHIVE_SERVICE_URL}/archive/download/${archiveId}`);
+      
+      let csvContent = '';
+      
+      if (downloadUrlResponse.ok) {
+        const downloadData = await downloadUrlResponse.json();
+        console.log(`📄 Got download response:`, downloadData);
+        
+        if (downloadData.downloadUrl) {
+          // Use the provided download URL (likely a signed S3 URL)
+          console.log(`📥 Downloading from signed URL: ${downloadData.downloadUrl}`);
+          const contentResponse = await fetch(downloadData.downloadUrl);
           if (contentResponse.ok) {
             csvContent = await contentResponse.text();
-            console.log(`✅ Successfully downloaded from: ${url}, size: ${csvContent.length} characters`);
-            if (csvContent.trim().length > 0) {
-              break; // Found valid content
-            }
+          } else {
+            throw new Error(`Failed to download from signed URL: ${contentResponse.status}`);
           }
-        } catch (error) {
-          console.log(`❌ Failed to download from ${url}: ${error.message}`);
+        } else if (downloadData.content) {
+          // Content returned directly
+          csvContent = downloadData.content;
+        } else {
+          throw new Error('Download response missing downloadUrl and content');
+        }
+      } else {
+        // Fallback: try to get content directly from the item endpoint with a content query param
+        console.log(`📥 Trying alternative approach: ${ARCHIVE_SERVICE_URL}/archive/items/${archiveId}?includeContent=true`);
+        const altResponse = await fetch(`${ARCHIVE_SERVICE_URL}/archive/items/${archiveId}?includeContent=true`);
+        
+        if (altResponse.ok) {
+          const altData = await altResponse.json();
+          if (altData.content) {
+            csvContent = altData.content;
+          } else if (altData.item && altData.item.content) {
+            csvContent = altData.item.content;
+          } else {
+            throw new Error('Unable to retrieve content from archive service');
+          }
+        } else {
+          throw new Error(`Archive service not accessible: ${altResponse.status} - ${altResponse.statusText}`);
         }
       }
       
       if (!csvContent || csvContent.trim().length === 0) {
-        throw new Error(`Unable to download content from archive service for item ${archiveId}`);
+        throw new Error(`Downloaded content is empty for item ${archiveId}`);
       }
       
       console.log(`📄 Downloaded CSV content, size: ${csvContent.length} characters`);
@@ -226,36 +243,53 @@ async function importPrompts(selectedArchiveIds, environment, conflictResolution
       // Extract the actual item data
       const archiveItem = archiveData.item || archiveData;
       
-      // Download the actual content
-      // Try multiple download URL patterns until we find one that works
-      let contentText = '';
-      const downloadUrls = [
-        archiveItem.downloadUrl,
-        `https://archive.seibtribe.us/archive/items/${archiveId}/content`,
-        `https://archive.seibtribe.us/archive/content/${archiveId}`,
-        `https://archive.seibtribe.us/download/${archiveId}`,
-        `https://archive.seibtribe.us/api/download/${archiveId}`
-      ].filter(Boolean); // Remove null/undefined values
+      // Get download URL from archive service  
+      console.log(`📥 Requesting download URL for archive item: ${archiveId}`);
       
-      let contentResponse;
-      for (const url of downloadUrls) {
-        try {
-          console.log(`📥 Trying download URL: ${url}`);
-          contentResponse = await fetch(url);
+      const downloadUrlResponse = await fetch(`${ARCHIVE_SERVICE_URL}/archive/download/${archiveId}`);
+      
+      let contentText = '';
+      
+      if (downloadUrlResponse.ok) {
+        const downloadData = await downloadUrlResponse.json();
+        console.log(`📄 Got download response:`, downloadData);
+        
+        if (downloadData.downloadUrl) {
+          // Use the provided download URL (likely a signed S3 URL)
+          console.log(`📥 Downloading from signed URL: ${downloadData.downloadUrl}`);
+          const contentResponse = await fetch(downloadData.downloadUrl);
           if (contentResponse.ok) {
             contentText = await contentResponse.text();
-            console.log(`✅ Successfully downloaded from: ${url}, size: ${contentText.length} characters`);
-            if (contentText.trim().length > 0) {
-              break; // Found valid content
-            }
+          } else {
+            throw new Error(`Failed to download from signed URL: ${contentResponse.status}`);
           }
-        } catch (error) {
-          console.log(`❌ Failed to download from ${url}: ${error.message}`);
+        } else if (downloadData.content) {
+          // Content returned directly
+          contentText = downloadData.content;
+        } else {
+          throw new Error('Download response missing downloadUrl and content');
+        }
+      } else {
+        // Fallback: try to get content directly from the item endpoint with a content query param
+        console.log(`📥 Trying alternative approach: ${ARCHIVE_SERVICE_URL}/archive/items/${archiveId}?includeContent=true`);
+        const altResponse = await fetch(`${ARCHIVE_SERVICE_URL}/archive/items/${archiveId}?includeContent=true`);
+        
+        if (altResponse.ok) {
+          const altData = await altResponse.json();
+          if (altData.content) {
+            contentText = altData.content;
+          } else if (altData.item && altData.item.content) {
+            contentText = altData.item.content;
+          } else {
+            throw new Error('Unable to retrieve content from archive service');
+          }
+        } else {
+          throw new Error(`Archive service not accessible: ${altResponse.status} - ${altResponse.statusText}`);
         }
       }
       
       if (!contentText || contentText.trim().length === 0) {
-        throw new Error(`Unable to download content from archive service for item ${archiveId}`);
+        throw new Error(`Downloaded content is empty for item ${archiveId}`);
       }
       const contentData = JSON.parse(contentText);
 
