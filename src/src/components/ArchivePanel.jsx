@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { archiveService, ARCHIVE_SERVICE_CONFIG } from '../config/archive-config';
 
 const ArchivePanel = ({ onQuestionSetImport }) => {
   const [activeTab, setActiveTab] = useState('browse');
