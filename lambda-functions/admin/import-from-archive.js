@@ -102,10 +102,14 @@ async function importQuestionSets(selectedArchiveIds, environment, conflictResol
         throw new Error(`Failed to fetch from archive: ${archiveResponse.status}`);
       }
 
-      const archiveItem = await archiveResponse.json();
+      const archiveData = await archiveResponse.json();
       
-      // Download the actual CSV content
-      const contentResponse = await fetch(archiveItem.downloadUrl);
+      // Extract the actual item data
+      const archiveItem = archiveData.item || archiveData;
+      
+      // Download the actual CSV content using the S3 download URL
+      const downloadUrl = archiveItem.downloadUrl || `https://archive.seibtribe.us/download/${archiveId}`;
+      const contentResponse = await fetch(downloadUrl);
       const csvContent = await contentResponse.text();
       
       console.log(`📄 Downloaded CSV content, size: ${csvContent.length} characters`);
@@ -114,7 +118,7 @@ async function importQuestionSets(selectedArchiveIds, environment, conflictResol
       const metadata = {
         name: archiveItem.Title.replace(' (dev)', '').replace(' (test)', '').replace(' (prod)', ''),
         description: archiveItem.Description,
-        engagementType: archiveItem.Category, // trivia, call-and-answer, etc.
+        engagementType: extractEngagementType(archiveItem.Tags || []), // Extract from tags
         sourceEnvironment: extractSourceEnvironment(archiveItem.Tags || [])
       };
       
@@ -190,10 +194,14 @@ async function importPrompts(selectedArchiveIds, environment, conflictResolution
         throw new Error(`Failed to fetch from archive: ${archiveResponse.status}`);
       }
 
-      const archiveItem = await archiveResponse.json();
+      const archiveData = await archiveResponse.json();
+      
+      // Extract the actual item data
+      const archiveItem = archiveData.item || archiveData;
       
       // Download the actual content
-      const contentResponse = await fetch(archiveItem.downloadUrl);
+      const downloadUrl = archiveItem.downloadUrl || `https://archive.seibtribe.us/download/${archiveId}`;
+      const contentResponse = await fetch(downloadUrl);
       const contentText = await contentResponse.text();
       const contentData = JSON.parse(contentText);
 
@@ -267,6 +275,13 @@ async function importPrompts(selectedArchiveIds, environment, conflictResolution
 function extractSourceEnvironment(tags) {
   const envTags = tags.filter(tag => ['dev', 'test', 'prod'].includes(tag.toLowerCase()));
   return envTags.length > 0 ? envTags[0] : 'unknown';
+}
+
+function extractEngagementType(tags) {
+  // Look for engagement type in tags (e.g., 'call-and-answer', 'trivia', 'poll', 'wavelength')
+  const engagementTypes = ['call-and-answer', 'trivia', 'poll', 'wavelength', 'survey'];
+  const typeTags = tags.filter(tag => engagementTypes.includes(tag.toLowerCase()));
+  return typeTags.length > 0 ? typeTags[0] : 'call-and-answer'; // Default to call-and-answer
 }
 
 function countCategories(questions) {
