@@ -4,6 +4,7 @@ import TriviaAIBuilder from './components/TriviaAIBuilder';
 import PollAIBuilder from './components/PollAIBuilder';
 import SurveyAIBuilder from './components/SurveyAIBuilder';
 import AIPromptManager from './components/AIPromptManager';
+import ArchivePanel from './components/ArchivePanel';
 import HelpButton from './components/HelpButton';
 import IssueFab from './components/IssueFab';
 import './BuilderPage.css';
@@ -917,6 +918,12 @@ function AdminPage() {
                 🎮 Game Management
               </button>
               <button 
+                className={`tab-btn ${activeTab === 'archive' ? 'active' : ''}`}
+                onClick={() => setActiveTab('archive')}
+              >
+                📦 Archive
+              </button>
+              <button 
                 className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
                 onClick={() => setActiveTab('settings')}
               >
@@ -1572,6 +1579,12 @@ function AdminPage() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {activeTab === 'archive' && (
+            <div className="tab-content">
+              <ArchivePanel />
             </div>
           )}
 
