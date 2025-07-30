@@ -385,39 +385,57 @@ exports.handler = async (event) => {
       participationPoints: 0
     };
 
-    // Get question details from question set
-    const questionSetId = gameMetadata.Item.QuestionSetId;
+    console.log(`🔍 DEBUG: Getting question for AI Summary - gameId: ${gameId}, paddedQuestionNumber: ${paddedQuestionNumber}`);
     
-    console.log(`🔍 DEBUG: Getting question for AI Summary - gameId: ${gameId}, paddedQuestionNumber: ${paddedQuestionNumber}, questionSetId: ${questionSetId}`);
-    
-    // First try to get the question reference to find the source question
-    const questionRef = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${paddedQuestionNumber}#REF` }
-    }));
-    
-    let sourceQuestionId = targetQuestionId;
-    if (questionRef.Item && questionRef.Item.SourceQuestionId) {
-      sourceQuestionId = questionRef.Item.SourceQuestionId;
-      console.log(`📋 Found question reference: ${sourceQuestionId}`);
-    } else {
-      console.log(`⚠️ No question reference found, using targetQuestionId: ${targetQuestionId}`);
+    // Use the same question retrieval logic as get-results.js
+    let question = null;
+    let questionSetId = null;
+    try {
+      // Get question reference record (same as get-results.js)
+      const questionRef = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${paddedQuestionNumber}#REF` }
+      }));
+      
+      if (questionRef.Item) {
+        const sourceQuestionId = questionRef.Item.SourceQuestionId;
+        questionSetId = questionRef.Item.SetId;
+        
+        console.log(`📋 Found question reference: ${sourceQuestionId} from set ${questionSetId}`);
+        
+        // Get the actual question from the question set (same as get-results.js)
+        const questionResponse = await db.send(new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { 
+            PK: `SET#${questionSetId}`, 
+            SK: sourceQuestionId 
+          }
+        }));
+        question = questionResponse.Item;
+        console.log(`📋 Question data fetched from question set:`, question ? 'Success' : 'Not found');
+      } else {
+        console.log(`❌ Question reference not found: QUESTION#${paddedQuestionNumber}#REF`);
+      }
+    } catch (error) {
+      console.error(`❌ Error fetching question data:`, error);
     }
     
-    const questionInfo = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { 
-        PK: `SET#${questionSetId}`, 
-        SK: sourceQuestionId 
-      }
-    }));
-    
-    console.log(`📋 Question query result:`, questionInfo.Item ? 'Found' : 'Not found');
+    console.log(`📋 Question query result:`, question ? 'Found' : 'Not found');
+    if (question) {
+      console.log('🔍 RAW QUESTION DATA FIELDS:', Object.keys(question));
+      console.log('🔍 RAW QUESTION DATA SAMPLE:', {
+        correctAnswer: question.correctAnswer,
+        CorrectAnswer: question.CorrectAnswer,
+        optionA: question.optionA,
+        OptionA: question.OptionA,
+        answerDetails: question.answerDetails,
+        AnswerDetails: question.AnswerDetails
+      });
+    }
 
     // If question not found in set, create a fallback question object
-    let question;
-    if (!questionInfo.Item) {
-      console.log(`⚠️ Question ${sourceQuestionId} not found in set ${questionSetId}, using fallback`);
+    if (!question) {
+      console.log(`⚠️ Question not found, using fallback`);
       question = {
         title: `Question ${paddedQuestionNumber}`,
         questionDetail: 'Question details not available',
@@ -426,9 +444,16 @@ exports.handler = async (event) => {
         Detail: 'Question details not available',
         Category: 'General'
       };
-    } else {
-      question = questionInfo.Item;
-      // Normalize field names for consistency (trivia uses lowercase, others use titlecase)
+    }
+    
+    // Use questionSetId from game metadata as fallback if not found in reference
+    if (!questionSetId) {
+      questionSetId = gameMetadata.Item.QuestionSetId;
+      console.log(`📋 Using fallback questionSetId from game metadata: ${questionSetId}`);
+    }
+    
+    // Normalize field names for consistency (trivia uses lowercase, others use titlecase)
+    if (question) {
       question.title = question.title || question.Title;
       question.questionDetail = question.questionDetail || question.Detail || question.detail;
       question.category = question.category || question.Category;
@@ -442,6 +467,7 @@ exports.handler = async (event) => {
       question.optionD = question.optionD || question.OptionD;
       question.optionE = question.optionE || question.OptionE;
       question.optionF = question.optionF || question.OptionF;
+      question.answerDetails = question.answerDetails || question.AnswerDetails;
     }
 
     // Use the sequential question number for answers lookup (already calculated above)
@@ -871,29 +897,44 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
   let totalQuestionsInSet = 0;
   
   try {
+    // Try the current metadata structure first (SET#{id} / METADATA)
     const setMetadata = await db.send(new GetCommand({
       TableName: process.env.TABLE_NAME,
-      Key: { PK: 'SETS', SK: `SET#${questionSetId}` }
+      Key: { PK: `SET#${questionSetId}`, SK: 'METADATA' }
     }));
     
-    if (setMetadata.Item) {
-      questionSetName = setMetadata.Item.SetName || questionSetName;
-      questionSetDescription = setMetadata.Item.Description || '';
-      
-      // Count categories and questions
-      const allQuestions = await db.send(new QueryCommand({
+    if (setMetadata.Item && setMetadata.Item.metadata) {
+      questionSetName = setMetadata.Item.metadata.name || questionSetName;
+      questionSetDescription = setMetadata.Item.metadata.description || '';
+      categoryCount = setMetadata.Item.metadata.categoryCount || 0;
+      console.log(`📚 Found question set metadata: ${questionSetName} - ${questionSetDescription}`);
+    } else {
+      // Fallback to old structure
+      const oldSetMetadata = await db.send(new GetCommand({
         TableName: process.env.TABLE_NAME,
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-        ExpressionAttributeValues: {
-          ':pk': `SET#${questionSetId}`,
-          ':sk': 'QUESTION#'  // Questions are stored with SK pattern: QUESTION#{categoryId}#{questionNumber}
-        }
+        Key: { PK: 'SETS', SK: `SET#${questionSetId}` }
       }));
       
-      totalQuestionsInSet = allQuestions.Items?.length || 0;
-      const categories = new Set(allQuestions.Items?.map(q => q.Category).filter(c => c));
-      categoryCount = categories.size;
+      if (oldSetMetadata.Item) {
+        questionSetName = oldSetMetadata.Item.SetName || questionSetName;
+        questionSetDescription = oldSetMetadata.Item.Description || '';
+        console.log(`📚 Found question set metadata (old structure): ${questionSetName} - ${questionSetDescription}`);
+      }
     }
+    
+    // Count questions in the set
+    const allQuestions = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: {
+        ':pk': `SET#${questionSetId}`,
+        ':sk': 'QUESTION#'  // Questions are stored with SK pattern: QUESTION#{categoryId}#{questionNumber}
+      }
+    }));
+    
+    totalQuestionsInSet = allQuestions.Items?.length || 0;
+    const categories = new Set(allQuestions.Items?.map(q => q.Category).filter(c => c));
+    categoryCount = categories.size;
   } catch (error) {
     console.log('⚠️ Could not fetch question set metadata:', error.message);
   }
@@ -1145,7 +1186,12 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
       if (correctAnswerValue.startsWith('Option')) {
         const optionLetter = correctAnswerValue.replace('Option', '');
         const optionField = `option${optionLetter}`;
-        correctAnswer = question[optionField] || correctAnswerValue;
+        const optionText = question[optionField];
+        if (optionText) {
+          correctAnswer = `The correct answer is ${optionLetter}: ${optionText}`;
+        } else {
+          correctAnswer = `The correct answer is ${optionLetter}`;
+        }
         console.log(`🔍 CORRECT ANSWER DEBUG: Converted ${correctAnswerValue} to "${correctAnswer}"`);
       } else {
         correctAnswer = correctAnswerValue;
@@ -1185,9 +1231,22 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
         actualCorrectAnswer = question[optionField] || correctAnswerValue;
       }
       
-      const isCorrect = playerAnswer === actualCorrectAnswer || 
-                       playerAnswer === correctAnswerValue ||
-                       (correctAnswersArray && correctAnswersArray.includes(playerAnswer));
+      // Check if player's answer is correct (handle both letter and full text matching)
+      let isCorrect = false;
+      if (correctAnswersArray && correctAnswersArray.includes(playerAnswer)) {
+        isCorrect = true;
+      } else if (correctAnswerValue) {
+        if (correctAnswerValue.startsWith('Option')) {
+          // For OptionA format, compare the letter (A, B, C, D)
+          const correctLetter = correctAnswerValue.replace('Option', '');
+          isCorrect = playerAnswer === correctLetter;
+        } else {
+          // Direct comparison for non-Option format
+          isCorrect = playerAnswer === correctAnswerValue || playerAnswer === actualCorrectAnswer;
+        }
+      }
+      
+      console.log(`🔍 CORRECTNESS CHECK: Player "${answer.PlayerName || answer.playerName}" answered "${playerAnswer}", correct="${correctAnswerValue}", isCorrect=${isCorrect}`);
       
       if (isCorrect) {
         correctCount++;
@@ -1208,6 +1267,19 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
       const correctPercentage = Math.round((correctCount / totalParticipants) * 100);
       triviaCorrectness = `${correctCount} of ${totalParticipants} players correct (${correctPercentage}%)`;
     }
+    
+    console.log('🔍 TRIVIA PROCESSING COMPLETE:');
+    console.log('  question.correctAnswer:', question.correctAnswer);
+    console.log('  question.optionA:', question.optionA);
+    console.log('  question.optionB:', question.optionB);
+    console.log('  question.optionC:', question.optionC);
+    console.log('  question.optionD:', question.optionD);
+    console.log('  question.answerDetails:', question.answerDetails);
+    console.log('  triviaChoices:', triviaChoices);
+    console.log('  correctAnswer:', correctAnswer);
+    console.log('  correctCount:', correctCount);
+    console.log('  triviaResponses:', triviaResponses);
+    console.log('  triviaCorrectness:', triviaCorrectness);
   } else if (gameType === 'polls' && question) {
     // Format poll options
     const options = [];

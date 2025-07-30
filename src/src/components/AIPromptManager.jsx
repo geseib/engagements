@@ -670,7 +670,7 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
                 <h4>📝 Available Variables</h4>
                 <p className="variables-help">
                   Click to insert into output format:<br />
-                  <small><strong>💡 Pro Tip:</strong> Use markdown headers (## Header Name) to create custom sections in your output format.</small>
+                  <small><strong>💡 Markdown Support:</strong> Use ## Headers, **bold**, *italic*, `code`, and | tables | for | formatting |</small>
                   <br />
                   <small><strong>🎯 Game Type:</strong> {formData.gameType} - Variables marked with ⚠️ are not available for this game type</small>
                 </p>
@@ -713,19 +713,31 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
                   ref={setOutputFormatTextareaRef}
                   value={formData.outputFormat}
                   onChange={(e) => setFormData({ ...formData, outputFormat: e.target.value })}
-                  placeholder="Example output format:
+                  placeholder="Example output format with Markdown formatting:
 
-## 🎯 Key Insights
-Analyze the responses from {eventTitle} where participants answered: {questionTitle}
+## 🎯 Key Insights from {eventTitle}
+Analyze the **{responseCount} responses** from participants who answered: *{questionTitle}*
 
-Based on {responseCount} responses, here are the top insights:
+### Top Responses:
 {responsesText}
 
 ## 💡 Strategic Implications
-[Provide 2-3 strategic implications for the team/organization]
+Based on the **{winnerInfo}**, here are strategic implications:
+
+1. **Leadership Alignment**: How responses demonstrate team thinking
+2. **Process Improvement**: Areas for operational enhancement  
+3. **Culture Insights**: What responses reveal about team culture
 
 ## 🚀 Recommended Actions
-[List 3-4 specific next steps the team should consider]
+Priority actions based on `{sessionContext}`:
+
+| Priority | Action | Owner | Timeline |
+|----------|--------|--------|----------|
+| High | Follow up on winning response | Team Lead | 1 week |
+| Medium | Address common themes | Manager | 2 weeks |
+| Low | Document lessons learned | Team | 1 month |
+
+**Bold text**, *italic text*, `inline code`, and tables are supported!
 
 Click variable buttons to insert them into your output format."
                   rows="12"
@@ -734,7 +746,7 @@ Click variable buttons to insert them into your output format."
               </div>
             </div>
             <small className="form-help">
-              Click the variable buttons to insert them into your output format. Variables will be replaced with actual content when the AI summary is generated.
+              Click the variable buttons to insert them into your output format. Variables will be replaced with actual content when the AI summary is generated. Supports full Markdown formatting including headers, bold, italic, code, and tables.
             </small>
           </div>
 
