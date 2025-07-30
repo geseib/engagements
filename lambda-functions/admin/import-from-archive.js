@@ -107,49 +107,22 @@ async function importQuestionSets(selectedArchiveIds, environment, conflictResol
       // Extract the actual item data
       const archiveItem = archiveData.item || archiveData;
       
-      // Get download URL from archive service
-      console.log(`📥 Requesting download URL for archive item: ${archiveId}`);
-      
-      const downloadUrlResponse = await fetch(`${ARCHIVE_SERVICE_URL}/archive/download/${archiveId}`);
-      
+      // Check if the archive item response already includes a downloadUrl
       let csvContent = '';
       
-      if (downloadUrlResponse.ok) {
-        const downloadData = await downloadUrlResponse.json();
-        console.log(`📄 Got download response:`, downloadData);
+      if (archiveData.downloadUrl) {
+        // Use the signed S3 URL from the archive item response
+        console.log(`📥 Downloading content from signed URL: ${archiveData.downloadUrl}`);
+        const contentResponse = await fetch(archiveData.downloadUrl);
         
-        if (downloadData.downloadUrl) {
-          // Use the provided download URL (likely a signed S3 URL)
-          console.log(`📥 Downloading from signed URL: ${downloadData.downloadUrl}`);
-          const contentResponse = await fetch(downloadData.downloadUrl);
-          if (contentResponse.ok) {
-            csvContent = await contentResponse.text();
-          } else {
-            throw new Error(`Failed to download from signed URL: ${contentResponse.status}`);
-          }
-        } else if (downloadData.content) {
-          // Content returned directly
-          csvContent = downloadData.content;
+        if (contentResponse.ok) {
+          csvContent = await contentResponse.text();
+          console.log(`📄 Downloaded CSV content, size: ${csvContent.length} characters`);
         } else {
-          throw new Error('Download response missing downloadUrl and content');
+          throw new Error(`Failed to download from signed URL: ${contentResponse.status} - ${contentResponse.statusText}`);
         }
       } else {
-        // Fallback: try to get content directly from the item endpoint with a content query param
-        console.log(`📥 Trying alternative approach: ${ARCHIVE_SERVICE_URL}/archive/items/${archiveId}?includeContent=true`);
-        const altResponse = await fetch(`${ARCHIVE_SERVICE_URL}/archive/items/${archiveId}?includeContent=true`);
-        
-        if (altResponse.ok) {
-          const altData = await altResponse.json();
-          if (altData.content) {
-            csvContent = altData.content;
-          } else if (altData.item && altData.item.content) {
-            csvContent = altData.item.content;
-          } else {
-            throw new Error('Unable to retrieve content from archive service');
-          }
-        } else {
-          throw new Error(`Archive service not accessible: ${altResponse.status} - ${altResponse.statusText}`);
-        }
+        throw new Error('Archive item response missing downloadUrl');
       }
       
       if (!csvContent || csvContent.trim().length === 0) {
@@ -243,49 +216,22 @@ async function importPrompts(selectedArchiveIds, environment, conflictResolution
       // Extract the actual item data
       const archiveItem = archiveData.item || archiveData;
       
-      // Get download URL from archive service  
-      console.log(`📥 Requesting download URL for archive item: ${archiveId}`);
-      
-      const downloadUrlResponse = await fetch(`${ARCHIVE_SERVICE_URL}/archive/download/${archiveId}`);
-      
+      // Check if the archive item response already includes a downloadUrl
       let contentText = '';
       
-      if (downloadUrlResponse.ok) {
-        const downloadData = await downloadUrlResponse.json();
-        console.log(`📄 Got download response:`, downloadData);
+      if (archiveData.downloadUrl) {
+        // Use the signed S3 URL from the archive item response
+        console.log(`📥 Downloading content from signed URL: ${archiveData.downloadUrl}`);
+        const contentResponse = await fetch(archiveData.downloadUrl);
         
-        if (downloadData.downloadUrl) {
-          // Use the provided download URL (likely a signed S3 URL)
-          console.log(`📥 Downloading from signed URL: ${downloadData.downloadUrl}`);
-          const contentResponse = await fetch(downloadData.downloadUrl);
-          if (contentResponse.ok) {
-            contentText = await contentResponse.text();
-          } else {
-            throw new Error(`Failed to download from signed URL: ${contentResponse.status}`);
-          }
-        } else if (downloadData.content) {
-          // Content returned directly
-          contentText = downloadData.content;
+        if (contentResponse.ok) {
+          contentText = await contentResponse.text();
+          console.log(`📄 Downloaded prompt content, size: ${contentText.length} characters`);
         } else {
-          throw new Error('Download response missing downloadUrl and content');
+          throw new Error(`Failed to download from signed URL: ${contentResponse.status} - ${contentResponse.statusText}`);
         }
       } else {
-        // Fallback: try to get content directly from the item endpoint with a content query param
-        console.log(`📥 Trying alternative approach: ${ARCHIVE_SERVICE_URL}/archive/items/${archiveId}?includeContent=true`);
-        const altResponse = await fetch(`${ARCHIVE_SERVICE_URL}/archive/items/${archiveId}?includeContent=true`);
-        
-        if (altResponse.ok) {
-          const altData = await altResponse.json();
-          if (altData.content) {
-            contentText = altData.content;
-          } else if (altData.item && altData.item.content) {
-            contentText = altData.item.content;
-          } else {
-            throw new Error('Unable to retrieve content from archive service');
-          }
-        } else {
-          throw new Error(`Archive service not accessible: ${altResponse.status} - ${altResponse.statusText}`);
-        }
+        throw new Error('Archive item response missing downloadUrl');
       }
       
       if (!contentText || contentText.trim().length === 0) {
