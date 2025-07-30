@@ -358,9 +358,7 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
           >
             <option value="">All Types</option>
             <option value="questionset">Question Sets</option>
-            <option value="document">Documents</option>
-            <option value="template">Templates</option>
-            <option value="report">Reports</option>
+            <option value="prompt">Prompts</option>
           </select>
 
           <select
@@ -481,14 +479,14 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                       onClick={() => handleExportSelected('questionsets')}
                       disabled={selectedQuestionSets.size === 0}
                     >
-                      Export Selected ({selectedQuestionSets.size})
+                      📤 Export Selected ({selectedQuestionSets.size})
                     </button>
                   </div>
                 </div>
                 
-                <div className="export-grid">
+                <div className="archive-grid">
                   {localQuestionSets.map((qs) => (
-                    <div key={qs.id} className="export-item">
+                    <div key={qs.id} className="archive-item">
                       <div className="item-checkbox">
                         <input
                           type="checkbox"
@@ -504,15 +502,43 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                           }}
                         />
                       </div>
-                      <div className="item-info">
-                        <h6>{qs.name}</h6>
-                        <p>{qs.description}</p>
-                        <div className="item-tags">
-                          <span className="tag">{qs.engagementType}</span>
-                          <span className="tag">{qs.totalQuestions} questions</span>
-                          {qs.active && <span className="tag active">Active</span>}
-                          {qs.isAIGenerated && <span className="tag ai">AI Generated</span>}
-                        </div>
+                      <div className="item-header">
+                        <h4>{qs.name}</h4>
+                        <span className="item-type">Question Set</span>
+                      </div>
+                      
+                      {qs.description && (
+                        <p className="item-description">{qs.description}</p>
+                      )}
+                      
+                      <div className="item-meta">
+                        <span>🎮 {qs.engagementType}</span>
+                        <span>❓ {qs.totalQuestions} questions</span>
+                        <span>📅 {qs.createdAt ? formatDate(qs.createdAt) : 'Unknown'}</span>
+                      </div>
+
+                      <div className="item-tags">
+                        {qs.active && <span className="tag active">Active</span>}
+                        {qs.isAIGenerated && <span className="tag ai">AI Generated</span>}
+                      </div>
+
+                      <div className="item-actions">
+                        <button 
+                          className="btn-primary"
+                          onClick={() => {
+                            if (selectedQuestionSets.has(qs.id)) {
+                              const newSet = new Set(selectedQuestionSets);
+                              newSet.delete(qs.id);
+                              setSelectedQuestionSets(newSet);
+                            } else {
+                              const newSet = new Set(selectedQuestionSets);
+                              newSet.add(qs.id);
+                              setSelectedQuestionSets(newSet);
+                            }
+                          }}
+                        >
+                          {selectedQuestionSets.has(qs.id) ? '✓ Selected' : '📤 Select for Export'}
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -544,14 +570,14 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                       onClick={() => handleExportSelected('prompts')}
                       disabled={selectedPrompts.size === 0}
                     >
-                      Export Selected ({selectedPrompts.size})
+                      📤 Export Selected ({selectedPrompts.size})
                     </button>
                   </div>
                 </div>
                 
-                <div className="export-grid">
+                <div className="archive-grid">
                   {localPrompts.map((prompt) => (
-                    <div key={prompt.promptId || prompt.id} className="export-item">
+                    <div key={prompt.promptId || prompt.id} className="archive-item">
                       <div className="item-checkbox">
                         <input
                           type="checkbox"
@@ -568,15 +594,44 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                           }}
                         />
                       </div>
-                      <div className="item-info">
-                        <h6>{prompt.name}</h6>
-                        <p>{prompt.description}</p>
-                        <div className="item-tags">
-                          <span className="tag">{prompt.gameType}</span>
-                          <span className="tag">{prompt.category}</span>
-                          <span className={`tag ${prompt.status}`}>{prompt.status}</span>
-                          {prompt.isDefault && <span className="tag default">Default</span>}
-                        </div>
+                      <div className="item-header">
+                        <h4>{prompt.name}</h4>
+                        <span className="item-type">AI Prompt</span>
+                      </div>
+                      
+                      {prompt.description && (
+                        <p className="item-description">{prompt.description}</p>
+                      )}
+                      
+                      <div className="item-meta">
+                        <span>🎮 {prompt.gameType}</span>
+                        <span>📁 {prompt.category}</span>
+                        <span>📅 {prompt.createdAt ? formatDate(prompt.createdAt) : 'Unknown'}</span>
+                      </div>
+
+                      <div className="item-tags">
+                        <span className={`tag ${prompt.status}`}>{prompt.status}</span>
+                        {prompt.isDefault && <span className="tag default">Default</span>}
+                      </div>
+
+                      <div className="item-actions">
+                        <button 
+                          className="btn-primary"
+                          onClick={() => {
+                            const id = prompt.promptId || prompt.id;
+                            if (selectedPrompts.has(id)) {
+                              const newSet = new Set(selectedPrompts);
+                              newSet.delete(id);
+                              setSelectedPrompts(newSet);
+                            } else {
+                              const newSet = new Set(selectedPrompts);
+                              newSet.add(id);
+                              setSelectedPrompts(newSet);
+                            }
+                          }}
+                        >
+                          {selectedPrompts.has(prompt.promptId || prompt.id) ? '✓ Selected' : '📤 Select for Export'}
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -614,7 +669,7 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                 onClick={handleImportSelected}
                 disabled={selectedArchiveItems.size === 0}
               >
-                Import Selected ({selectedArchiveItems.size})
+                📥 Import Selected ({selectedArchiveItems.size})
               </button>
             </div>
           </div>
@@ -622,12 +677,12 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
           {loading ? (
             <div className="loading">Loading archive items...</div>
           ) : (
-            <div className="import-grid">
+            <div className="archive-grid">
               {archiveItems.length === 0 ? (
                 <div className="no-items">No archive items found</div>
               ) : (
                 archiveItems.map((item) => (
-                  <div key={item.ArchiveId} className="import-item">
+                  <div key={item.ArchiveId} className="archive-item">
                     <div className="item-checkbox">
                       <input
                         type="checkbox"
@@ -643,26 +698,46 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                         }}
                       />
                     </div>
-                    <div className="item-info">
-                      <div className="item-header">
-                        <h6>{item.Title}</h6>
-                        <span className="item-type">{item.ContentType}</span>
+                    <div className="item-header">
+                      <h4>{item.Title}</h4>
+                      <span className="item-type">{item.ContentType}</span>
+                    </div>
+                    
+                    {item.Description && (
+                      <p className="item-description">{item.Description}</p>
+                    )}
+                    
+                    <div className="item-meta">
+                      <span>📁 {item.Category}</span>
+                      <span>📄 {formatFileSize(item.FileSize)}</span>
+                      <span>📅 {formatDate(item.CreatedAt)}</span>
+                    </div>
+
+                    {item.Tags && item.Tags.length > 0 && (
+                      <div className="item-tags">
+                        {item.Tags.map((tag, index) => (
+                          <span key={index} className="tag">{tag}</span>
+                        ))}
                       </div>
-                      {item.Description && (
-                        <p className="item-description">{item.Description}</p>
-                      )}
-                      <div className="item-meta">
-                        <span>📁 {item.Category}</span>
-                        <span>📄 {formatFileSize(item.FileSize)}</span>
-                        <span>📅 {formatDate(item.CreatedAt)}</span>
-                      </div>
-                      {item.Tags && item.Tags.length > 0 && (
-                        <div className="item-tags">
-                          {item.Tags.map((tag, index) => (
-                            <span key={index} className="tag">{tag}</span>
-                          ))}
-                        </div>
-                      )}
+                    )}
+
+                    <div className="item-actions">
+                      <button 
+                        className="btn-primary"
+                        onClick={() => {
+                          if (selectedArchiveItems.has(item.ArchiveId)) {
+                            const newSet = new Set(selectedArchiveItems);
+                            newSet.delete(item.ArchiveId);
+                            setSelectedArchiveItems(newSet);
+                          } else {
+                            const newSet = new Set(selectedArchiveItems);
+                            newSet.add(item.ArchiveId);
+                            setSelectedArchiveItems(newSet);
+                          }
+                        }}
+                      >
+                        {selectedArchiveItems.has(item.ArchiveId) ? '✓ Selected' : '📥 Select for Import'}
+                      </button>
                     </div>
                   </div>
                 ))
