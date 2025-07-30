@@ -1418,6 +1418,86 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  AdminExportToArchiveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-export-to-archive'
+      CodeUri: lambda-functions/admin/
+      Handler: export-to-archive.handler
+      Runtime: nodejs18.x
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          ARCHIVE_SERVICE_URL: 'https://archive.seibtribe.us'
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        ExportToArchive:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/export-to-archive
+            Method: POST
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  AdminImportFromArchiveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-import-from-archive'
+      CodeUri: lambda-functions/admin/
+      Handler: import-from-archive.handler
+      Runtime: nodejs18.x
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          ARCHIVE_SERVICE_URL: 'https://archive.seibtribe.us'
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        ImportFromArchive:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/import-from-archive
+            Method: POST
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  AdminListLocalArchiveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-list-local-archive'
+      CodeUri: lambda-functions/admin/
+      Handler: list-local-archive.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        ListLocalArchive:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/list-local-archive
+            Method: GET
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   ### S3 Buckets with Simple Naming
   FrontendBucket:
     Type: AWS::S3::Bucket
