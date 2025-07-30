@@ -107,10 +107,37 @@ async function importQuestionSets(selectedArchiveIds, environment, conflictResol
       // Extract the actual item data
       const archiveItem = archiveData.item || archiveData;
       
-      // Download the actual CSV content using the S3 download URL
-      const downloadUrl = archiveItem.downloadUrl || `https://archive.seibtribe.us/download/${archiveId}`;
-      const contentResponse = await fetch(downloadUrl);
-      const csvContent = await contentResponse.text();
+      // Download the actual CSV content
+      // Try multiple download URL patterns until we find one that works
+      let csvContent = '';
+      const downloadUrls = [
+        archiveItem.downloadUrl,
+        `https://archive.seibtribe.us/archive/items/${archiveId}/content`,
+        `https://archive.seibtribe.us/archive/content/${archiveId}`,
+        `https://archive.seibtribe.us/download/${archiveId}`,
+        `https://archive.seibtribe.us/api/download/${archiveId}`
+      ].filter(Boolean); // Remove null/undefined values
+      
+      let contentResponse;
+      for (const url of downloadUrls) {
+        try {
+          console.log(`📥 Trying download URL: ${url}`);
+          contentResponse = await fetch(url);
+          if (contentResponse.ok) {
+            csvContent = await contentResponse.text();
+            console.log(`✅ Successfully downloaded from: ${url}, size: ${csvContent.length} characters`);
+            if (csvContent.trim().length > 0) {
+              break; // Found valid content
+            }
+          }
+        } catch (error) {
+          console.log(`❌ Failed to download from ${url}: ${error.message}`);
+        }
+      }
+      
+      if (!csvContent || csvContent.trim().length === 0) {
+        throw new Error(`Unable to download content from archive service for item ${archiveId}`);
+      }
       
       console.log(`📄 Downloaded CSV content, size: ${csvContent.length} characters`);
       
@@ -200,9 +227,36 @@ async function importPrompts(selectedArchiveIds, environment, conflictResolution
       const archiveItem = archiveData.item || archiveData;
       
       // Download the actual content
-      const downloadUrl = archiveItem.downloadUrl || `https://archive.seibtribe.us/download/${archiveId}`;
-      const contentResponse = await fetch(downloadUrl);
-      const contentText = await contentResponse.text();
+      // Try multiple download URL patterns until we find one that works
+      let contentText = '';
+      const downloadUrls = [
+        archiveItem.downloadUrl,
+        `https://archive.seibtribe.us/archive/items/${archiveId}/content`,
+        `https://archive.seibtribe.us/archive/content/${archiveId}`,
+        `https://archive.seibtribe.us/download/${archiveId}`,
+        `https://archive.seibtribe.us/api/download/${archiveId}`
+      ].filter(Boolean); // Remove null/undefined values
+      
+      let contentResponse;
+      for (const url of downloadUrls) {
+        try {
+          console.log(`📥 Trying download URL: ${url}`);
+          contentResponse = await fetch(url);
+          if (contentResponse.ok) {
+            contentText = await contentResponse.text();
+            console.log(`✅ Successfully downloaded from: ${url}, size: ${contentText.length} characters`);
+            if (contentText.trim().length > 0) {
+              break; // Found valid content
+            }
+          }
+        } catch (error) {
+          console.log(`❌ Failed to download from ${url}: ${error.message}`);
+        }
+      }
+      
+      if (!contentText || contentText.trim().length === 0) {
+        throw new Error(`Unable to download content from archive service for item ${archiveId}`);
+      }
       const contentData = JSON.parse(contentText);
 
       const { metadata, prompt } = contentData;
