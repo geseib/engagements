@@ -110,8 +110,24 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
       if (selectedType) filters.contentType = selectedType;
       if (selectedCategory) filters.category = selectedCategory;
       
-      const response = await archiveService.search(searchQuery, filters);
-      setArchiveItems(response.items || []);
+      const archiveServiceUrl = 'https://archive.seibtribe.us';
+      const response = await fetch(`${archiveServiceUrl}/archive/search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query: searchQuery,
+          filters: filters
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setArchiveItems(data.items || []);
+      } else {
+        throw new Error(`HTTP ${response.status}`);
+      }
     } catch (err) {
       console.error('Search failed:', err);
       setError('Search failed. Please try again.');
@@ -122,11 +138,17 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
 
   const handleDownload = async (item) => {
     try {
-      const response = await archiveService.getItem(item.ArchiveId);
+      const archiveServiceUrl = 'https://archive.seibtribe.us';
+      const response = await fetch(`${archiveServiceUrl}/archive/items/${item.ArchiveId}`);
       
-      if (response.downloadUrl) {
-        // Open download URL in new tab
-        window.open(response.downloadUrl, '_blank');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.downloadUrl) {
+          // Open download URL in new tab
+          window.open(data.downloadUrl, '_blank');
+        }
+      } else {
+        throw new Error(`HTTP ${response.status}`);
       }
     } catch (err) {
       console.error('Download failed:', err);
@@ -141,21 +163,27 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
     }
 
     try {
-      const response = await archiveService.getItem(item.ArchiveId);
+      const archiveServiceUrl = 'https://archive.seibtribe.us';
+      const response = await fetch(`${archiveServiceUrl}/archive/items/${item.ArchiveId}`);
       
-      if (response.downloadUrl) {
-        // Fetch the content from the download URL
-        const contentResponse = await fetch(response.downloadUrl);
-        const content = await contentResponse.text();
-        
-        // Pass to parent component for import
-        if (onQuestionSetImport) {
-          onQuestionSetImport({
-            content: content,
-            fileName: item.FileName,
-            title: item.Title
-          });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.downloadUrl) {
+          // Fetch the content from the download URL
+          const contentResponse = await fetch(data.downloadUrl);
+          const content = await contentResponse.text();
+          
+          // Pass to parent component for import
+          if (onQuestionSetImport) {
+            onQuestionSetImport({
+              content: content,
+              fileName: item.FileName,
+              title: item.Title
+            });
+          }
         }
+      } else {
+        throw new Error(`HTTP ${response.status}`);
       }
     } catch (err) {
       console.error('Import failed:', err);
@@ -173,18 +201,30 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
     setError(null);
 
     try {
-      await archiveService.uploadItem(uploadData);
-      alert('Item uploaded successfully!');
-      setShowUploadModal(false);
-      setUploadData({
-        title: '',
-        description: '',
-        content: '',
-        contentType: 'questionset',
-        category: 'general',
-        tags: []
+      const archiveServiceUrl = 'https://archive.seibtribe.us';
+      const response = await fetch(`${archiveServiceUrl}/archive/items`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(uploadData)
       });
-      loadArchiveItems();
+
+      if (response.ok) {
+        alert('Item uploaded successfully!');
+        setShowUploadModal(false);
+        setUploadData({
+          title: '',
+          description: '',
+          content: '',
+          contentType: 'questionset',
+          category: 'general',
+          tags: []
+        });
+        loadArchiveItems();
+      } else {
+        throw new Error(`HTTP ${response.status}`);
+      }
     } catch (err) {
       console.error('Upload failed:', err);
       alert('Failed to upload item. Please try again.');
@@ -199,9 +239,17 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
     }
 
     try {
-      await archiveService.deleteItem(item.ArchiveId);
-      alert('Item deleted successfully');
-      loadArchiveItems();
+      const archiveServiceUrl = 'https://archive.seibtribe.us';
+      const response = await fetch(`${archiveServiceUrl}/archive/items/${item.ArchiveId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        alert('Item deleted successfully');
+        loadArchiveItems();
+      } else {
+        throw new Error(`HTTP ${response.status}`);
+      }
     } catch (err) {
       console.error('Delete failed:', err);
       alert('Failed to delete item. Please try again.');
