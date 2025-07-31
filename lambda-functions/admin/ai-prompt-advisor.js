@@ -17,34 +17,86 @@ const dynamodb = DynamoDBDocumentClient.from(dynamoClient, {
 
 const s3Client = new S3Client({});
 
-// Function to call Claude via Bedrock
+// Function to call Claude via Bedrock using cross-region inference profiles (same as ai-summary)
 const invokeClaude = async (prompt) => {
-  const modelId = 'arn:aws:bedrock:us-east-1:239601476690:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0';
+  console.log('🤖 BEDROCK: Calling Claude for prompt analysis via inference profile...');
+  
+  let response;
+  let responseBody;
+  
+  try {
+    // Use Claude 3.5 Sonnet inference profile ARN (cross-region) - primary for analysis tasks
+    const sonnetProfileArn = `arn:aws:bedrock:us-east-1:${process.env.AWS_ACCOUNT_ID || '239601476690'}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0`;
+    console.log('🤖 BEDROCK: Sonnet Inference Profile ARN:', sonnetProfileArn);
+    console.log('🤖 BEDROCK: Prompt length:', prompt.length);
+    
+    const payload = {
+      anthropic_version: 'bedrock-2023-05-31',
+      max_tokens: 4000,
+      temperature: 0.7,
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: prompt }],
+        },
+      ],
+    };
 
-  console.log('🤖 Calling Claude for prompt analysis...');
+    const command = new InvokeModelCommand({
+      contentType: 'application/json',
+      body: JSON.stringify(payload),
+      modelId: sonnetProfileArn,
+    });
 
-  const payload = {
-    anthropic_version: 'bedrock-2023-05-31',
-    max_tokens: 4000,
-    temperature: 0.7,
-    messages: [
-      {
-        role: 'user',
-        content: [{ type: 'text', text: prompt }],
-      },
-    ],
-  };
+    response = await bedrockClient.send(command);
+    responseBody = JSON.parse(new TextDecoder().decode(response.body));
+    
+    console.log('✅ Successfully called Claude 3.5 Sonnet via inference profile');
+    console.log('📝 Claude response length:', responseBody.content[0].text.length);
+    
+    return responseBody.content[0].text;
+    
+  } catch (primaryError) {
+    console.error('❌ Error with Claude 3.5 Sonnet:', primaryError);
+    
+    // Fallback to Claude 3.5 Haiku inference profile
+    console.log('🔄 BEDROCK: Trying Claude 3.5 Haiku as fallback...');
+    
+    try {
+      const haikuProfileArn = `arn:aws:bedrock:us-east-1:${process.env.AWS_ACCOUNT_ID || '239601476690'}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0`;
+      console.log('🤖 BEDROCK: Haiku Inference Profile ARN:', haikuProfileArn);
+      
+      const payload = {
+        anthropic_version: 'bedrock-2023-05-31',
+        max_tokens: 4000,
+        temperature: 0.7,
+        messages: [
+          {
+            role: 'user',
+            content: [{ type: 'text', text: prompt }],
+          },
+        ],
+      };
 
-  const command = new InvokeModelCommand({
-    contentType: 'application/json',
-    body: JSON.stringify(payload),
-    modelId,
-  });
+      const command = new InvokeModelCommand({
+        contentType: 'application/json',
+        body: JSON.stringify(payload),
+        modelId: haikuProfileArn,
+      });
 
-  const response = await bedrockClient.send(command);
-  const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-
-  return responseBody.content[0].text;
+      response = await bedrockClient.send(command);
+      responseBody = JSON.parse(new TextDecoder().decode(response.body));
+      
+      console.log('✅ Successfully called Claude 3.5 Haiku as fallback');
+      console.log('📝 Claude response length:', responseBody.content[0].text.length);
+      
+      return responseBody.content[0].text;
+      
+    } catch (fallbackError) {
+      console.error('❌ Both models failed:', fallbackError);
+      throw new Error(`All Bedrock models failed. Primary: ${primaryError.message}, Fallback: ${fallbackError.message}`);
+    }
+  }
 };
 
 exports.handler = async (event) => {
@@ -127,82 +179,80 @@ exports.handler = async (event) => {
 
     if (analysisType === 'improve') {
       analysisPrompt = `
-You are an expert AI prompt engineer specializing in engagement platform prompts. Analyze and improve the following prompt template.
+You are an expert AI prompt engineer specializing in enhancing existing engagement platform prompts while preserving the admin's original vision and intent.
 
-**Current Prompt Template:**
+**Current Prompt Template to Enhance:**
 \`\`\`
 ${currentPromptText}
 \`\`\`
 
-**Context:**
+**Admin Context:**
+- Prompt Name: ${currentContext.name || 'Not provided'}
+- Description: ${currentContext.description || 'Not provided'}
 - Game Type: ${gameType || currentContext.gameType || 'Unknown'}
 - Scenario: ${scenario || currentContext.scenario || 'General engagement'}
 - Target Audience: ${targetAudience || 'Professional teams'}
 - Goals: ${goals || 'Effective engagement and meaningful insights'}
 
-**Analysis Request:** Provide comprehensive improvement suggestions including:
+**Enhancement Request:** Analyze and provide improvements that PRESERVE the admin's original purpose and direction:
 
-1. **Clarity & Structure**: How to make the prompt clearer and better organized
-2. **Engagement Optimization**: Ways to increase participant engagement
-3. **Output Quality**: Improvements for better AI-generated content
-4. **Specificity**: Areas where more specific instructions would help
-5. **Edge Cases**: Potential issues and how to handle them
-6. **Alternative Approaches**: Different prompt strategies to consider
+1. **Preserve Intent**: Identify and maintain the core purpose and direction
+2. **Enhance Clarity**: Make existing content clearer without changing meaning
+3. **Add Detail**: Expand on existing concepts with more specificity
+4. **Improve Structure**: Better organize existing content
+5. **Template Variables**: Suggest relevant variables for the game type
+6. **Professional Polish**: Enhance language and presentation
+
+**IMPORTANT**: Do not change the fundamental approach or purpose. Enhance what exists.
 
 **Response Format:**
 Provide your analysis as JSON with this structure:
 \`\`\`json
 {
   "overallScore": 8.5,
-  "strengths": ["Clear objectives", "Good structure"],
+  "adminIntent": "What the admin was trying to achieve",
+  "strengths": ["Aspects that work well and should be preserved"],
   "improvements": [
     {
-      "category": "Clarity",
-      "priority": "high",
-      "issue": "Description of the issue",
-      "suggestion": "Specific improvement suggestion",
-      "example": "Example of improved text"
+      "category": "Enhancement type (Clarity/Detail/Structure/etc.)",
+      "priority": "high|medium|low",
+      "currentText": "Existing text that needs enhancement",
+      "enhancedText": "Improved version that preserves intent",
+      "rationale": "Why this enhancement helps"
     }
   ],
-  "improvedPrompt": "Complete rewritten prompt incorporating suggestions",
-  "alternativeApproaches": [
-    {
-      "approach": "Name of approach",
-      "description": "How this approach differs",
-      "pros": ["Advantage 1", "Advantage 2"],
-      "cons": ["Limitation 1"]
-    }
-  ],
-  "contextualRecommendations": {
-    "callandanswer": "Specific advice for call-and-answer games",
-    "trivia": "Specific advice for trivia games",
-    "polls": "Specific advice for polls"
-  }
+  "enhancedPrompt": "Enhanced version that builds on the original, not replaces it",
+  "templateVariableSuggestions": ["Relevant variables for this game type"],
+  "preservationNotes": "Key elements that must remain unchanged"
 }
 \`\`\`
 `;
 
     } else if (analysisType === 'validate') {
       analysisPrompt = `
-You are an expert AI prompt validator. Thoroughly validate the following prompt template for potential issues.
+You are an expert AI prompt validator. Thoroughly validate the admin's prompt template while respecting their intended approach and goals.
 
-**Prompt Template to Validate:**
+**Admin's Prompt Template to Validate:**
 \`\`\`
 ${currentPromptText}
 \`\`\`
 
-**Context:**
+**Admin Context:**
+- Prompt Name: ${currentContext.name || 'Not provided'}
+- Description: ${currentContext.description || 'Not provided'}
 - Game Type: ${gameType || currentContext.gameType || 'Unknown'}
 - Scenario: ${scenario || currentContext.scenario || 'General engagement'}
 
-**Validation Request:** Check for:
+**Validation Request:** Check for potential issues while respecting the admin's vision:
 
-1. **Technical Issues**: Syntax, formatting, token limits
-2. **Logic Problems**: Contradictions, unclear instructions
-3. **Bias & Fairness**: Potential biases or exclusions
-4. **Safety Concerns**: Inappropriate content generation risks
-5. **Performance Issues**: Likely AI interpretation problems
-6. **Completeness**: Missing essential components
+1. **Technical Issues**: Syntax, formatting, token limits that could cause failures
+2. **Logic Problems**: Internal contradictions or unclear instructions
+3. **Bias & Fairness**: Potential biases that conflict with inclusive engagement
+4. **Safety Concerns**: Risks of inappropriate content generation
+5. **Performance Issues**: Elements that might confuse AI interpretation
+6. **Template Variables**: Missing or incorrect variable usage for the game type
+
+**Important:** Focus on technical and safety validation, not changing the admin's approach.
 
 **Response Format:**
 Provide validation results as JSON:
@@ -210,63 +260,73 @@ Provide validation results as JSON:
 {
   "isValid": true,
   "overallScore": 8.5,
+  "adminApproachAssessment": "Assessment of the admin's intended approach",
   "issues": [
     {
       "severity": "high|medium|low",
-      "category": "technical|logic|bias|safety|performance|completeness",
-      "issue": "Description of the issue",
-      "location": "Where in the prompt",
-      "recommendation": "How to fix it"
+      "category": "technical|logic|bias|safety|performance|variables",
+      "issue": "Description of the specific issue",
+      "location": "Where in the prompt this occurs",
+      "adminImpact": "How this affects the admin's intended outcome",
+      "fixSuggestion": "How to fix while preserving intent"
     }
   ],
   "safetyScore": 9.0,
   "biasScore": 8.5,
   "clarityScore": 8.0,
-  "recommendations": ["Key recommendations for improvement"]
+  "technicalScore": 8.5,
+  "strengths": ["What works well in the admin's approach"],
+  "recommendations": ["Technical fixes that preserve the admin's vision"]
 }
 \`\`\`
 `;
 
     } else if (analysisType === 'optimize') {
       analysisPrompt = `
-You are an AI prompt optimization specialist. Optimize the following prompt for maximum effectiveness and efficiency.
+You are an AI prompt optimization specialist. Optimize the admin's prompt while preserving their core approach and intent.
 
-**Current Prompt:**
+**Admin's Current Prompt:**
 \`\`\`
 ${currentPromptText}
 \`\`\`
 
-**Context:**
+**Admin Context:**
+- Prompt Name: ${currentContext.name || 'Not provided'}
+- Description: ${currentContext.description || 'Not provided'}
 - Game Type: ${gameType || currentContext.gameType || 'Unknown'}
 - Target Audience: ${targetAudience || 'Professional teams'}
 - Performance Goals: ${goals || 'High-quality, engaging content'}
 
-**Optimization Request:** Focus on:
+**Optimization Request:** Improve efficiency while preserving the admin's vision:
 
-1. **Token Efficiency**: Reduce unnecessary words while maintaining clarity
-2. **Performance**: Optimize for consistent, high-quality AI responses
-3. **Scalability**: Ensure prompt works across different scenarios
-4. **User Experience**: Optimize for end-user engagement
-5. **Maintainability**: Make prompt easy to update and modify
+1. **Token Efficiency**: Reduce unnecessary words without changing meaning or approach
+2. **Performance**: Optimize for consistent AI responses in the admin's intended style
+3. **Clarity**: Make instructions clearer without changing the fundamental approach
+4. **Template Variables**: Ensure proper variable usage for the game type
+5. **Maintainability**: Organize content better while preserving all key elements
+
+**Critical:** Do not change the admin's fundamental approach, just make it more efficient.
 
 **Response Format:**
 \`\`\`json
 {
-  "optimizedPrompt": "Fully optimized version of the prompt",
+  "adminIntent": "Summary of what the admin was trying to achieve",
+  "optimizedPrompt": "Optimized version that preserves the admin's approach",
   "optimizations": [
     {
-      "type": "token-reduction|clarity|performance|scalability",
-      "change": "Description of what was changed",
-      "benefit": "Expected improvement",
-      "impact": "high|medium|low"
+      "type": "token-reduction|clarity|organization|variables",
+      "originalText": "Text that was optimized",
+      "optimizedText": "Improved version",
+      "benefit": "Why this optimization helps",
+      "preservedElements": "Key admin elements that remained unchanged"
     }
   ],
   "metrics": {
-    "tokenReduction": "25%",
-    "expectedPerformanceGain": "15%",
-    "maintainabilityScore": 9.0
+    "tokenReduction": "Percentage reduced",
+    "clarityImprovement": "How clarity was enhanced",
+    "preservationScore": "How well admin intent was maintained"
   },
-  "testingSuggestions": ["How to test the optimized prompt"]
+  "adminApprovalNotes": "What the admin should review before accepting changes"
 }
 \`\`\`
 `;

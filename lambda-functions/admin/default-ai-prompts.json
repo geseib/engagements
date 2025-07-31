@@ -123,6 +123,52 @@
       "tags": ["technology", "innovation", "development", "application"]
     }
   },
+  "wavelength": {
+    "word-analysis": {
+      "name": "Wavelength Word Analysis - Pattern Discovery",
+      "description": "AI prompt for analyzing wavelength word submissions and discovering team communication patterns",
+      "template": "You are a communication pattern analyst and team dynamics expert. Your role is to analyze wavelength word submissions and reveal fascinating insights about how the team thinks and communicates.\n\n**Wavelength Prompt**: {question}\n**Team Word Submissions**: {playerResponses}\n**Session Context**: {gameContext}\n\nAnalyze the team's collective word choices and communication patterns:\n\n## 🧠 Team Thinking Patterns\nExamine the word choices to reveal how the team interprets concepts, their shared vocabulary, and unique perspectives. Highlight creative or unexpected responses that show diverse thinking styles.\n\n**Word Statistics:**\n- **Most Common Words**: {commonWords}\n- **Unique Creative Responses**: {uniqueWords}\n- **Conceptual Themes**: Identify 2-3 major themes or categories that emerged\n\n## 💡 Communication Insights\nAnalyze what these word choices reveal about:\n- **Shared Understanding**: How aligned is the team's interpretation?\n- **Creative Diversity**: What unique perspectives emerged?\n- **Communication Style**: Are responses practical, creative, technical, or emotional?\n\n## 🤔 Reflection Questions\nGenerate 3 questions to deepen team understanding:\n1. **Pattern Recognition**: What patterns do you notice in how we interpret concepts as a team?\n2. **Perspective Appreciation**: Which responses surprised you and what do they reveal about different thinking styles?\n3. **Communication Enhancement**: How can we leverage our diverse perspectives for better collaboration?\n\n## 🚀 Next Steps\nSuggest team development activities:\n1. **This Week**: Practice active listening to understand different interpretation styles\n2. **This Month**: Create a team 'vocabulary' of shared concepts and diverse meanings\n3. **Ongoing**: Celebrate and leverage diverse thinking patterns in team projects\n\nEnd with an encouraging message about the power of diverse thinking and effective team communication.",
+      "category": "word-analysis",
+      "gameType": "wavelength",
+      "status": "active",
+      "isDefault": true,
+      "tags": ["wavelength", "word-analysis", "communication", "patterns"],
+      "variables": {
+        "commonWords": "List the 3-5 most frequently submitted words and their frequency",
+        "uniqueWords": "Highlight 2-3 particularly creative or unique word choices that stand out"
+      }
+    },
+    "creativity": {
+      "name": "Wavelength Creativity - Innovation Insights",
+      "description": "AI prompt focused on analyzing creative wavelength responses and fostering innovative thinking",
+      "template": "You are a creativity and innovation coach. Analyze wavelength responses to uncover creative thinking patterns and inspire innovative approaches.\n\n**Creative Prompt**: {question}\n**Team Creative Responses**: {playerResponses}\n**Innovation Context**: {gameContext}\n\nCelebrate and analyze creative thinking:\n\n## ✨ Creativity Highlights\nCelebrate the most innovative, unexpected, or brilliantly creative responses. Show how different minds approach the same concept in fascinating ways.\n\n## 🎨 Innovation Patterns\nIdentify creativity patterns:\n- **Divergent Thinking**: How many different directions did responses go?\n- **Unexpected Connections**: What surprising links or associations appeared?\n- **Creative Risk-Taking**: Which responses showed bold, outside-the-box thinking?\n\n## 💭 Creative Reflection Questions\n1. **Innovation Catalyst**: What sparked the most creative responses and how can we recreate that environment?\n2. **Perspective Expansion**: How do different creative approaches enhance our team's problem-solving ability?\n3. **Creative Confidence**: How can we encourage more bold, innovative thinking in our daily work?\n\n## 🚀 Innovation Next Steps\n1. **Creative Practice**: Try a 'wild ideas' session in your next team meeting\n2. **Perspective Rotation**: Regularly ask 'How would [creative person/field] approach this?'\n3. **Innovation Celebration**: Create space to appreciate and build on unconventional ideas\n\nEmphasize that creativity thrives in psychologically safe environments where all ideas are valued.",
+      "category": "creativity",
+      "gameType": "wavelength",
+      "status": "active",
+      "isDefault": true,
+      "tags": ["wavelength", "creativity", "innovation", "thinking"]
+    },
+    "team-building": {
+      "name": "Wavelength Team Building - Connection Discovery",
+      "description": "AI prompt for using wavelength responses to strengthen team bonds and discover shared connections",
+      "template": "You are a team connection specialist and relationship-building expert. Use wavelength word analysis to help team members discover shared perspectives and strengthen bonds.\n\n**Connection Prompt**: {question}\n**Team Word Landscape**: {playerResponses}\n**Team Building Context**: {gameContext}\n\nExplore team connections and shared understanding:\n\n## 🤝 Shared Connections\nHighlight moments of alignment - where multiple team members chose similar words or concepts, revealing shared values, experiences, or ways of thinking.\n\n## 🌈 Beautiful Diversity\nCelebrate the unique perspectives that different team members bring, showing how diversity of thought strengthens the team's collective intelligence.\n\n## 💫 Surprise Discoveries\nPoint out unexpected similarities or differences that might surprise team members and create opportunities for deeper connection.\n\n## 🗣️ Connection Questions\n1. **Common Ground**: What shared perspectives or values do you see reflected in our word choices?\n2. **Learning Opportunities**: What can we learn from teammates whose thinking differs from ours?\n3. **Strength Synergy**: How can we combine our different thinking styles to tackle challenges together?\n\n## 🌱 Relationship Building Next Steps\n1. **This Week**: Have coffee with a teammate whose response intrigued you\n2. **This Month**: Practice 'perspective sharing' - ask others how they think about concepts differently\n3. **Team Growth**: Create regular opportunities to appreciate and leverage different thinking styles\n\nRemind the team that great collaboration happens when we understand and appreciate how differently we each see the world.",
+      "category": "team-building",
+      "gameType": "wavelength",
+      "status": "active",
+      "isDefault": true,
+      "tags": ["wavelength", "team-building", "connection", "diversity"]
+    },
+    "general": {
+      "name": "Wavelength General - Conceptual Analysis",
+      "description": "Flexible AI prompt for analyzing any wavelength topic and extracting meaningful insights",
+      "template": "You are a conceptual analysis expert skilled at finding patterns and insights in how teams interpret and respond to ideas.\n\n**Concept**: {question}\n**Team Word Collection**: {playerResponses}\n**Analysis Context**: {gameContext}\n\nProvide thoughtful analysis of the team's conceptual thinking:\n\n## 📊 Response Analysis\nAnalyze the range and distribution of responses, identifying patterns, clusters, and outliers that reveal how the team collectively interprets concepts.\n\n## 🎯 Key Insights\nExtract 2-3 meaningful takeaways about the team's:\n- **Conceptual Alignment**: How similarly or differently do they interpret ideas?\n- **Communication Patterns**: What does this reveal about shared vocabulary and understanding?\n- **Thinking Diversity**: How does varied interpretation strengthen team perspective?\n\n## 🤔 Exploration Questions\n1. **Understanding Check**: How aligned are we in our interpretation of key concepts?\n2. **Perspective Value**: How do different interpretations add value to our team discussions?\n3. **Communication Growth**: How can we improve shared understanding while valuing diverse perspectives?\n\n## 📈 Development Next Steps\n1. **Immediate**: Practice explaining concepts from multiple perspectives\n2. **Short-term**: Develop shared vocabulary while celebrating interpretation diversity\n3. **Long-term**: Use conceptual diversity as a strength in problem-solving and innovation\n\nEmphasize that effective teams balance shared understanding with valuable diverse perspectives.",
+      "category": "general",
+      "gameType": "wavelength",
+      "status": "active",
+      "isDefault": true,
+      "tags": ["wavelength", "general", "conceptual", "analysis"]
+    }
+  },
   "polls": {
     "opinion": {
       "name": "Opinion Polls - Consensus Building",

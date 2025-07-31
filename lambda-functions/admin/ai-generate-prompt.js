@@ -16,6 +16,12 @@ const TEMPLATE_VARIABLES = {
     'triviaResponses', 'correctCount', 'triviaCorrectness', 'playerRankings',
     'leaderboard', 'cumulativeScores', 'sessionDuration'
   ],
+  wavelength: [
+    'questionTitle', 'questionDetail', 'questionCategory', 'eventTitle', 'sessionContext',
+    'totalParticipants', 'responseCount', 'playerResponses', 'responsesText', 'wordFrequency',
+    'commonWords', 'uniqueWords', 'wordStats', 'conceptualThemes', 'finalResults',
+    'participationRate', 'sessionDuration', 'customInstructions'
+  ],
   polls: [
     'questionTitle', 'questionDetail', 'pollOptions', 'questionCategory', 'eventTitle',
     'totalParticipants', 'responseCount', 'playerAnswers', 'uniqueAnswers',
@@ -74,64 +80,113 @@ exports.handler = async (event) => {
     const categoryContext = CATEGORY_CONTEXTS[category] || 'providing comprehensive analysis and actionable insights';
 
     // Build the AI generation prompt
-    const aiPrompt = `You are an expert AI prompt engineer specializing in creating effective prompts for analyzing engagement activities and team interactions.
+    const aiPrompt = `You are an expert AI prompt engineer specializing in enhancing and improving prompts for analyzing engagement activities and team interactions.
 
-TASK: Generate a professional AI prompt for ${gameType} activities in the ${category} category.
+TASK: Enhance and improve the existing AI prompt sections for ${gameType} activities in the ${category} category.
 
-CONTEXT:
+ADMIN PROVIDED CONTEXT:
+- Prompt Name: ${promptName || 'Not provided'}
+- Description: ${description || 'Not provided'}
 - Game Type: ${gameType}
 - Category: ${category} (focused on ${categoryContext})
-- Purpose: ${description || 'Analyzing team responses and providing strategic insights'}
-- Current Instructions: ${currentInstructions || 'None provided'}
-- Current Output Format: ${currentOutputFormat || 'None provided'}
+
+EXISTING CONTENT TO ENHANCE:
+- Current Instructions: ${currentInstructions || 'None provided - please create from scratch'}
+- Current Output Format: ${currentOutputFormat || 'None provided - please create from scratch'}
 
 AVAILABLE TEMPLATE VARIABLES:
 ${availableVariables.map(variable => `{${variable}}`).join(', ')}
 
-REQUIREMENTS:
-1. Generate BOTH "instructions" and "outputFormat" sections
-2. Instructions should define the AI's role, expertise, and analysis approach
-3. Output format should use markdown structure with clear sections
-4. Include relevant template variables from the available list
-5. Make it specific to ${gameType} activities and ${category} scenarios
-6. Focus on actionable insights and strategic thinking
+ENHANCEMENT REQUIREMENTS:
+1. PRESERVE the admin's original intent and purpose - do not change the core direction
+2. If instructions exist, enhance them with more detail, specificity, and expertise
+3. If output format exists, improve structure and add relevant template variables
+4. If sections are missing, create them based on the description and category context
+5. Add specific expertise and domain knowledge relevant to ${category}
+6. Include appropriate template variables from the available list
 7. Maintain professional tone suitable for business contexts
+8. Focus on actionable insights and strategic thinking
 
-EXAMPLE STRUCTURE:
-Instructions: "You are a [specific role] expert specializing in [domain expertise]..."
-Output Format: "## Summary\\n[analysis]\\n\\n## Discussion Questions\\n1. [question]\\n\\n## Next Steps\\n1. [action]"
-
-Generate a comprehensive prompt that will produce high-quality analysis for ${category} scenarios in ${gameType} activities.
+ENHANCEMENT APPROACH:
+- For existing content: Add detail, improve clarity, enhance with domain expertise
+- For missing content: Create based on description and category focus
+- Always respect the admin's vision while making it more effective
 
 RESPONSE FORMAT (return as JSON):
 {
-  "instructions": "Your generated instructions here",
-  "outputFormat": "Your generated output format here"
+  "instructions": "Enhanced/created instructions that preserve admin intent",
+  "outputFormat": "Enhanced/created output format with better structure and template variables"
 }`;
 
-    // Call Claude via Bedrock
-    const modelId = 'anthropic.claude-3-haiku-20240307-v1:0';
-    const request = {
-      modelId,
-      contentType: 'application/json',
-      accept: 'application/json',
-      body: JSON.stringify({
-        anthropic_version: 'bedrock-2023-05-31',
-        max_tokens: 2000,
-        messages: [
-          {
-            role: 'user',
-            content: aiPrompt
-          }
-        ]
-      })
-    };
-
-    console.log('🤖 Calling Claude via Bedrock...');
-    const response = await bedrockClient.send(new InvokeModelCommand(request));
-    const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+    // Call Claude via Bedrock using cross-region inference profiles (same as ai-summary)
+    console.log('🤖 BEDROCK: Calling Claude 3.5 Haiku via inference profile...');
     
-    console.log('📝 Claude response:', responseBody);
+    let response;
+    let responseBody;
+    
+    try {
+      // Use Claude 3.5 Haiku inference profile ARN (cross-region)
+      const haikuProfileArn = `arn:aws:bedrock:us-east-1:${process.env.AWS_ACCOUNT_ID || '239601476690'}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0`;
+      console.log('🤖 BEDROCK: Haiku Inference Profile ARN:', haikuProfileArn);
+      console.log('🤖 BEDROCK: Prompt length:', aiPrompt.length);
+      
+      response = await bedrockClient.send(new InvokeModelCommand({
+        modelId: haikuProfileArn,
+        body: JSON.stringify({
+          anthropic_version: 'bedrock-2023-05-31',
+          max_tokens: 2000,
+          temperature: 0.7,
+          messages: [
+            {
+              role: 'user',
+              content: aiPrompt
+            }
+          ]
+        })
+      }));
+      
+      responseBody = JSON.parse(new TextDecoder().decode(response.body));
+      console.log('✅ Successfully called Claude 3.5 Haiku via inference profile');
+      console.log('📝 Claude response:', responseBody);
+      
+    } catch (primaryError) {
+      console.error('❌ Error with Claude 3.5 Haiku:', primaryError);
+      
+      // Fallback to Claude 3.5 Sonnet inference profile
+      console.log('🔄 BEDROCK: Trying Claude 3.5 Sonnet as fallback...');
+      
+      try {
+        const sonnetProfileArn = `arn:aws:bedrock:us-east-1:${process.env.AWS_ACCOUNT_ID || '239601476690'}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0`;
+        console.log('🤖 BEDROCK: Sonnet Inference Profile ARN:', sonnetProfileArn);
+        
+        response = await bedrockClient.send(new InvokeModelCommand({
+          modelId: sonnetProfileArn,
+          body: JSON.stringify({
+            anthropic_version: 'bedrock-2023-05-31',
+            max_tokens: 2000,
+            temperature: 0.7,
+            messages: [
+              {
+                role: 'user',
+                content: aiPrompt
+              }
+            ]
+          })
+        }));
+        
+        responseBody = JSON.parse(new TextDecoder().decode(response.body));
+        console.log('✅ Successfully called Claude 3.5 Sonnet as fallback');
+        console.log('📝 Claude response:', responseBody);
+        
+      } catch (fallbackError) {
+        console.error('❌ Both models failed:', fallbackError);
+        throw new Error(`All Bedrock models failed. Primary: ${primaryError.message}, Fallback: ${fallbackError.message}`);
+      }
+    }
+    
+    if (!responseBody) {
+      throw new Error('No response received from Bedrock');
+    }
 
     let generatedContent;
     try {
