@@ -969,17 +969,46 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: 
+                - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${DomainName}-token*'
+                - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${DomainName}-repo*'
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
           GITHUB_TOKEN: !Ref GitHubToken
           GITHUB_REPO: !Ref GitHubRepo
+          DOMAIN_NAME: !Ref DomainName
       Events:
         AdminCreateGitHubIssueEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
             Path: /admin/create-github-issue
+            Method: POST
+
+  AdminParseDocumentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-parse-document'
+      CodeUri: lambda-functions/admin/
+      Handler: parse-document.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      MemorySize: 512
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Events:
+        AdminParseDocumentEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/parse-document
             Method: POST
       Tags:
         Environment: !Ref Environment
@@ -1321,6 +1350,45 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  AdminAIGeneratePromptFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-ai-generate-prompt'
+      CodeUri: lambda-functions/admin/
+      Handler: ai-generate-prompt.handler
+      Runtime: nodejs18.x
+      Timeout: 60
+      MemorySize: 512
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource:
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-haiku-20240307-v1:0'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-haiku-20240307-v1:0'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-haiku-20240307-v1:0'
+      Events:
+        AIGeneratePrompt:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/ai-generate-prompt
+            Method: POST
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   AdminPopulateDefaultsFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -1346,6 +1414,93 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/populate-defaults
             Method: POST
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  AdminExportToArchiveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-export-to-archive'
+      CodeUri: lambda-functions/admin/
+      Handler: export-to-archive.handler
+      Runtime: nodejs18.x
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          ARCHIVE_SERVICE_URL: 'https://archive.seibtribe.us'
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        ExportToArchive:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/export-to-archive
+            Method: POST
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  AdminImportFromArchiveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-import-from-archive'
+      CodeUri: lambda-functions/admin/
+      Handler: import-from-archive.handler
+      Runtime: nodejs18.x
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          ARCHIVE_SERVICE_URL: 'https://archive.seibtribe.us'
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource:
+                - 'arn:aws:s3:::engage2-archive-content/*'
+      Events:
+        ImportFromArchive:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/import-from-archive
+            Method: POST
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  AdminListLocalArchiveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-list-local-archive'
+      CodeUri: lambda-functions/admin/
+      Handler: list-local-archive.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        ListLocalArchive:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/list-local-archive
+            Method: GET
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName

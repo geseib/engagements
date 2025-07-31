@@ -23,8 +23,11 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
   const [tagInput, setTagInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [outputFormatTextareaRef, setOutputFormatTextareaRef] = useState(null);
+  const [isGeneratingWithAI, setIsGeneratingWithAI] = useState(false);
+  const [savedInstructions, setSavedInstructions] = useState('');
+  const [savedOutputFormat, setSavedOutputFormat] = useState('');
 
-  // Available template variables with game type availability
+  // Complete template variables definitions for AI Summary prompts
   const templateVariables = [
     // SET INFO - Available for all game types
     { 
@@ -50,392 +53,343 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
     },
     { 
       name: 'totalQuestions', 
-      description: 'Total number of questions available in the set', 
+      description: 'Total number of questions in the question set', 
       category: 'Set Info',
       gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '45 questions across all categories'
+      example: '25 questions, 120 total questions'
     },
     { 
       name: 'sessionContext', 
-      description: 'Session/event context and instructions', 
+      description: 'Combined context about the session including set name and description', 
       category: 'Set Info',
       gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Strategic Planning Session for Q4 - Focus on innovation and market expansion'
+      example: 'a Team Building session using Amazon Leadership Principles'
     },
-
+    
     // GAME INFO - Available for all game types
     { 
       name: 'eventTitle', 
-      description: 'Name/title of the game or event session', 
+      description: 'Title of the game/event as entered by the host', 
       category: 'Game Info',
       gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Q4 Strategy Session, Team Building Workshop, Leadership Development'
+      example: 'Q4 Leadership Workshop, Friday Team Building'
     },
     { 
       name: 'gameType', 
-      description: 'Type of engagement activity', 
+      description: 'Type of engagement game being played', 
       category: 'Game Info',
       gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'call-and-answer, trivia, polls, survey'
+      example: 'call-and-answer, trivia, polls, wavelength'
     },
     { 
       name: 'gameId', 
-      description: 'Unique identifier for the current game session', 
+      description: 'Unique identifier for this game session', 
       category: 'Game Info',
       gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '1234, ABCD'
+      example: '1234, 5678'
     },
     { 
       name: 'sessionDuration', 
       description: 'How long the game session has been running', 
       category: 'Game Info',
       gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '45 minutes, 1 hour 15 minutes'
+      example: '15 minutes, 32 seconds, 1 hour, 45 minutes'
     },
     { 
       name: 'currentRound', 
-      description: 'Current question number or round being played', 
+      description: 'Current question number being analyzed', 
       category: 'Game Info',
       gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Round 3 of 8, Question 5'
+      example: '1, 3, 15'
     },
-    { 
-      name: 'totalScores', 
-      description: 'Overall leaderboard with cumulative player scores (Top 5)', 
-      category: 'Game Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '1. Sarah: 85 pts, 2. Mike: 72 pts, 3. Alex: 68 pts'
-    },
-    { 
-      name: 'gameContext', 
-      description: 'Alias for eventTitle - backward compatibility', 
-      category: 'Game Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Q4 Strategy Session, Team Building Workshop'
-    },
-
+    
     // PLAYER INFO - Available for all game types
     { 
       name: 'totalParticipants', 
-      description: 'Number of people who joined the session', 
+      description: 'Total number of players who joined the game', 
       category: 'Player Info',
       gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '15 participants, 8 team members'
-    },
-    { 
-      name: 'totalPlayers', 
-      description: 'Alias for totalParticipants - used in trivia templates', 
-      category: 'Player Info',
-      gameTypes: ['trivia'],
-      example: '15 participants, 8 team members'
+      example: '12 players, 8 participants'
     },
     { 
       name: 'activeParticipants', 
-      description: 'Number of players currently engaged/responding', 
+      description: 'Number of players who participated in voting (call-and-answer only)', 
       category: 'Player Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '12 of 15 players active this round'
+      gameTypes: ['callandanswer'],
+      example: '8 players voted, 6 active voters'
     },
     { 
       name: 'playerNames', 
-      description: 'List of participant names', 
+      description: 'Comma-separated list of all player names', 
       category: 'Player Info',
       gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Sarah, Mike, Alex, Jordan, Casey, Taylor'
+      example: 'Alice, Bob, Charlie, Diana'
     },
     { 
       name: 'playerRankings', 
-      description: 'Current player rankings with positions', 
+      description: 'Formatted leaderboard with player rankings and scores', 
       category: 'Player Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '1st: Sarah (85 pts), 2nd: Mike (72 pts), 3rd: Alex (68 pts)'
+      gameTypes: ['callandanswer', 'trivia'],
+      example: '1st: Alice (15 pts), 2nd: Bob (12 pts), 3rd: Charlie (8 pts)'
     },
     { 
       name: 'topPerformers', 
-      description: 'Highest scoring players this session', 
+      description: 'Top 3 players with highest scores', 
       category: 'Player Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Sarah leads with 3 correct answers, Mike close behind'
+      gameTypes: ['callandanswer', 'trivia'],
+      example: 'Alice (15 pts), Bob (12 pts), Charlie (8 pts)'
     },
-
-    // QUESTION INFO - Availability varies by game type
+    
+    // QUESTION INFO - Available for all game types
     { 
       name: 'question', 
-      description: 'Main question text - used in trivia templates', 
+      description: 'The main question text (title or questionDetail)', 
       category: 'Question Info',
-      gameTypes: ['trivia'],
-      example: 'What is the capital of France?'
+      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
+      example: 'Tell me about a time when you had to work with ambiguity'
     },
     { 
       name: 'questionTitle', 
-      description: 'Short title or summary of the current question', 
+      description: 'The question title or main prompt', 
       category: 'Question Info',
       gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Comfort Food Preferences, Leadership Decision, Innovation Strategy'
+      example: 'Working with Ambiguity, Leadership Challenge'
     },
     { 
       name: 'questionDetail', 
-      description: 'The full question text or prompt presented to participants', 
+      description: 'Additional context and details about the question', 
       category: 'Question Info',
       gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'What is your favorite comfort food and why does it bring you comfort?'
+      example: 'In this scenario, consider times when you didn\'t have all the information...'
     },
     { 
       name: 'questionCategory', 
-      description: 'Category/theme of the current question', 
+      description: 'Category or theme of the current question', 
       category: 'Question Info',
       gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Personal Preferences, Team Building, Strategy, Leadership'
-    },
-    { 
-      name: 'questionContext', 
-      description: 'Additional context or instructions for the question', 
-      category: 'Question Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Think about foods that bring you comfort during stressful times...'
+      example: 'Leadership, Problem Solving, Team Dynamics'
     },
     { 
       name: 'questionNumber', 
       description: 'Current question number in the session', 
       category: 'Question Info',
       gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Question 3, Round 5, Item 7'
-    },
-    { 
-      name: 'triviaChoices', 
-      description: 'Multiple choice options for trivia questions (A, B, C, D format)', 
-      category: 'Question Info',
-      gameTypes: ['trivia'],
-      example: 'A) Pizza, B) Burgers, C) Tacos, D) Sushi'
-    },
-    { 
-      name: 'pollOptions', 
-      description: 'Available options for poll questions', 
-      category: 'Question Info',
-      gameTypes: ['polls'],
-      example: 'Option 1: Remote work, Option 2: Hybrid, Option 3: In-office'
+      example: '1, 5, 12'
     },
     { 
       name: 'correctAnswer', 
-      description: 'The correct answer for trivia questions (actual text, not option ID)', 
+      description: 'The correct answer for trivia questions', 
       category: 'Question Info',
       gameTypes: ['trivia'],
-      example: 'Tacos, Multiple answers: Pizza and Tacos'
+      example: 'The correct answer is B: Machine Learning'
     },
-
-    // ANSWERS - Available for all game types with some variations
+    { 
+      name: 'triviaChoices', 
+      description: 'All multiple choice options for trivia questions', 
+      category: 'Question Info',
+      gameTypes: ['trivia'],
+      example: 'A: Artificial Intelligence, B: Machine Learning, C: Deep Learning, D: Neural Networks'
+    },
+    { 
+      name: 'answerDetails', 
+      description: 'Explanation of why the trivia answer is correct', 
+      category: 'Question Info',
+      gameTypes: ['trivia'],
+      example: 'Machine Learning is a subset of AI that focuses on learning from data...'
+    },
+    { 
+      name: 'difficulty', 
+      description: 'Difficulty level of the question', 
+      category: 'Question Info',
+      gameTypes: ['trivia'],
+      example: 'easy, medium, hard'
+    },
+    
+    // ANSWERS - Available for call-and-answer and trivia
     { 
       name: 'playerAnswers', 
-      description: 'Individual responses from each participant', 
+      description: 'All player responses to the question', 
       category: 'Answers',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Sarah: "Pizza - reminds me of family", Mike: "Ice cream - sweet comfort"'
-    },
-    { 
-      name: 'playerResponses', 
-      description: 'Alias for playerAnswers - used in trivia templates', 
-      category: 'Answers',
-      gameTypes: ['trivia'],
-      example: 'Sarah: "A", Mike: "C", Alex: "B"'
+      gameTypes: ['callandanswer', 'trivia'],
+      example: 'Alice: "I approached the customer concern by...", Bob: "In my experience..."'
     },
     { 
       name: 'responseCount', 
-      description: 'Total number of participant responses received', 
+      description: 'Number of players who submitted responses', 
       category: 'Answers',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '12 answers from 15 participants, 8 responses submitted'
-    },
-    { 
-      name: 'uniqueAnswers', 
-      description: 'Distinct/unique responses without duplicates', 
-      category: 'Answers',
-      gameTypes: ['callandanswer', 'polls'],
-      example: '8 unique answers: Pizza, Ice cream, Chocolate, Mac and cheese...'
-    },
-    { 
-      name: 'answerCategories', 
-      description: 'Grouped answers by theme or similarity', 
-      category: 'Answers',
-      gameTypes: ['callandanswer', 'polls'],
-      example: 'Sweet foods: 5 responses, Savory: 4 responses, Homemade: 3 responses'
-    },
-    { 
-      name: 'triviaResponses', 
-      description: 'Player answer distribution for trivia questions', 
-      category: 'Answers',
-      gameTypes: ['trivia'],
-      example: 'A: 3 players, B: 2 players, C: 7 players (correct), D: 1 player'
+      gameTypes: ['callandanswer', 'trivia', 'polls'],
+      example: '8 responses, 12 participants answered'
     },
     { 
       name: 'responsesText', 
-      description: 'Top player responses ranked by popularity/votes or points', 
+      description: 'Formatted list of all player responses with names', 
       category: 'Answers',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '1st Place: Pizza (5 votes), 2nd Place: Mac and cheese (3 votes)'
+      gameTypes: ['callandanswer'],
+      example: '1. Alice: "I approached this by...", 2. Bob: "My strategy was..."'
+    },
+    { 
+      name: 'triviaResponses', 
+      description: 'Trivia answers showing which choice each player selected', 
+      category: 'Answers',
+      gameTypes: ['trivia'],
+      example: 'Alice: A (Incorrect), Bob: B (Correct), Charlie: C (Incorrect)'
     },
     { 
       name: 'correctCount', 
-      description: 'Number of players who answered correctly (trivia only)', 
+      description: 'Number of players who got the trivia question correct', 
       category: 'Answers',
       gameTypes: ['trivia'],
-      example: '7 of 12 players got it right'
+      example: '5 out of 8 players answered correctly'
     },
-
-    // VOTES - Only available for call-and-answer games
-    { 
-      name: 'voteData', 
-      description: 'Complete voting information for call-and-answer questions', 
-      category: 'Votes',
-      gameTypes: ['callandanswer'],
-      example: 'Sarah voted for Mike (1st), Alex (2nd), Jordan (3rd)'
-    },
+    
+    // VOTES - Available for call-and-answer only
     { 
       name: 'voteCount', 
-      description: 'Total number of votes cast by participants', 
+      description: 'Total number of votes cast', 
       category: 'Votes',
       gameTypes: ['callandanswer'],
-      example: '10 voters participated, 45 total votes cast'
+      example: '24 total votes, 8 voting players'
     },
     { 
       name: 'votingParticipation', 
       description: 'Percentage of players who participated in voting', 
       category: 'Votes',
       gameTypes: ['callandanswer'],
-      example: '83% participation (10 of 12 players voted)'
-    },
-    { 
-      name: 'votingPattern', 
-      description: 'Analysis of how votes were distributed', 
-      category: 'Votes',
-      gameTypes: ['callandanswer'],
-      example: 'Close competition, Clear winner, Evenly distributed votes'
-    },
-
-    // VOTE TALLY - Only available for call-and-answer games
-    { 
-      name: 'voteTally', 
-      description: 'Ranked results showing vote counts per answer', 
-      category: 'Vote Tally',
-      gameTypes: ['callandanswer'],
-      example: '1. Pizza (8 votes), 2. Ice cream (5 votes), 3. Chocolate (3 votes)'
-    },
-    { 
-      name: 'topVotedAnswers', 
-      description: 'Highest voted responses with vote counts', 
-      category: 'Vote Tally',
-      gameTypes: ['callandanswer'],
-      example: 'Pizza: 8 votes, Ice cream: 5 votes, Chocolate: 3 votes'
-    },
-    { 
-      name: 'votingBreakdown', 
-      description: 'Detailed breakdown of first, second, third place votes', 
-      category: 'Vote Tally',
-      gameTypes: ['callandanswer'],
-      example: 'Pizza: 5 first-place, 2 second-place, 1 third-place votes'
+      example: '75% voting participation, 100% participated'
     },
     { 
       name: 'consensusLevel', 
-      description: 'How much agreement there was in voting', 
+      description: 'Level of agreement among voters', 
+      category: 'Votes',
+      gameTypes: ['callandanswer'],
+      example: 'Strong consensus, Moderate agreement, Diverse opinions'
+    },
+    
+    // VOTE TALLY - Available for call-and-answer only
+    { 
+      name: 'voteTally', 
+      description: 'Detailed breakdown of votes received by each response', 
       category: 'Vote Tally',
       gameTypes: ['callandanswer'],
-      example: 'Strong consensus, Divided opinions, Clear winner emerged'
+      example: 'Alice: 3 first-place, 2 second-place votes (13 points), Bob: 1 first-place, 3 third-place votes (6 points)'
     },
-
-    // RESULTS - Available for all game types
+    { 
+      name: 'topVotedAnswers', 
+      description: 'Top 3 most voted responses with vote details', 
+      category: 'Vote Tally',
+      gameTypes: ['callandanswer'],
+      example: '🥇 Alice\'s response (13 points), 🥈 Bob\'s response (8 points), 🥉 Charlie\'s response (5 points)'
+    },
+    
+    // RESULTS - Available for call-and-answer and trivia
     { 
       name: 'finalResults', 
-      description: 'Complete ranked results with winners and scores/votes', 
+      description: 'Top 3 results with rankings and scores/correctness', 
       category: 'Results',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '🥇 Pizza (8 votes), 🥈 Ice cream (5 votes), 🥉 Chocolate (3 votes)'
+      gameTypes: ['callandanswer', 'trivia'],
+      example: '🥇 Alice: Leadership approach (13 points), 🥈 Bob: Process improvement (8 points)'
     },
     { 
       name: 'winnerInfo', 
-      description: 'Information about the winning answer(s) and player(s)', 
+      description: 'Information about the winner(s) of this round', 
       category: 'Results',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Winner: Sarah with "Pizza - family memories" (8 votes)'
+      gameTypes: ['callandanswer', 'trivia'],
+      example: 'Winner: Alice with "I approached the problem by..." (13 vote points)'
     },
     { 
       name: 'resultsSummary', 
-      description: 'High-level summary of question outcomes', 
+      description: 'Summary of round results and participation', 
       category: 'Results',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Clear winner with 50% of votes, competitive race for 2nd place'
+      gameTypes: ['callandanswer', 'trivia', 'wavelength'],
+      example: 'Clear winner with 54% of possible vote points, 5 out of 8 players answered correctly'
     },
     { 
       name: 'participationRate', 
-      description: 'Percentage of players who participated in this question', 
+      description: 'Participation statistics for answering and voting', 
       category: 'Results',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '92% answered (11 of 12), 83% voted (10 of 12)'
+      gameTypes: ['callandanswer', 'trivia'],
+      example: '100% answered, 75% voted'
     },
     { 
       name: 'triviaCorrectness', 
-      description: 'Accuracy results for trivia questions', 
+      description: 'Correctness summary for trivia questions', 
       category: 'Results',
       gameTypes: ['trivia'],
-      example: '7 of 12 players correct (58%), Average response time: 8 seconds'
+      example: '5 correct answers, 3 incorrect answers (62% accuracy)'
     },
-
-    // SCORES - Available for all game types
-    { 
-      name: 'roundScores', 
-      description: 'Points awarded for the current question/round only', 
-      category: 'Scores',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Sarah: +5 pts, Mike: +3 pts, Alex: +1 pt'
-    },
+    
+    // SCORES - Available for call-and-answer and trivia
     { 
       name: 'cumulativeScores', 
-      description: 'Total points accumulated by each player (same as totalScores)', 
+      description: 'All player scores accumulated across all rounds', 
       category: 'Scores',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Sarah: 25 total, Mike: 18 total, Alex: 15 total'
+      gameTypes: ['callandanswer', 'trivia'],
+      example: 'Alice: 28 points, Bob: 22 points, Charlie: 15 points'
     },
     { 
       name: 'scoreChanges', 
-      description: 'How scores changed from previous round', 
+      description: 'Points earned by each player in this specific round', 
       category: 'Scores',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Sarah: +5 (was 20), Mike: +3 (was 15), Alex: +1 (was 14)'
+      gameTypes: ['callandanswer', 'trivia'],
+      example: 'Alice: +13 points, Bob: +8 points, Charlie: +5 points'
     },
     { 
       name: 'leaderboard', 
-      description: 'Current ranking of all players by total score (Top 5)', 
+      description: 'Current top 5 players with rankings and total scores', 
       category: 'Scores',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '1. Sarah (25 pts), 2. Mike (18 pts), 3. Alex (15 pts)'
-    },
-    { 
-      name: 'scoringSystem', 
-      description: 'Explanation of how points are awarded', 
-      category: 'Scores',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '1st place: 5 pts, 2nd place: 3 pts, 3rd place: 1 pt'
+      gameTypes: ['callandanswer', 'trivia'],
+      example: '1st: Alice (28 pts), 2nd: Bob (22 pts), 3rd: Charlie (15 pts)'
     },
     { 
       name: 'averageScore', 
-      description: 'Average points per player in the current session', 
+      description: 'Average score across all players', 
       category: 'Scores',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Average: 16.8 points per player, Median: 15 points'
+      gameTypes: ['callandanswer', 'trivia'],
+      example: '18.5 points, 12.3 points'
     },
-
-    // CONTEXT - Available for all game types (backward compatibility)
+    
+    // WAVELENGTH SPECIFIC - Available for wavelength only
     { 
-      name: 'contextSections', 
-      description: 'Combined context from event and question set', 
-      category: 'Context',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Team Building Workshop - Building rapport through personal sharing'
+      name: 'wavelengthTopic', 
+      description: 'The topic or prompt players associated words with', 
+      category: 'Wavelength',
+      gameTypes: ['wavelength'],
+      example: 'Innovation, Leadership, Teamwork'
     },
     { 
-      name: 'contextInstructions', 
-      description: 'Specific instructions for AI analysis', 
-      category: 'Context',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Focus on team dynamics and provide actionable insights for managers'
+      name: 'wavelengthWords', 
+      description: 'All words submitted by players for the wavelength topic', 
+      category: 'Wavelength',
+      gameTypes: ['wavelength'],
+      example: 'Alice: creativity, solutions, breakthrough; Bob: change, ideas, progress'
+    },
+    { 
+      name: 'commonWords', 
+      description: 'Words that multiple players thought of (team alignment)', 
+      category: 'Wavelength',
+      gameTypes: ['wavelength'],
+      example: 'creativity, innovation, ideas, solutions'
+    },
+    { 
+      name: 'commonWordsCount', 
+      description: 'Number of words that showed team alignment', 
+      category: 'Wavelength',
+      gameTypes: ['wavelength'],
+      example: '4 common words, 7 shared concepts'
+    },
+    { 
+      name: 'connectionScore', 
+      description: 'Percentage showing how aligned the team\'s thinking was', 
+      category: 'Wavelength',
+      gameTypes: ['wavelength'],
+      example: '65% connection rate, 42% team alignment'
+    },
+    { 
+      name: 'teamScore', 
+      description: 'Team\'s collective score for the wavelength round', 
+      category: 'Wavelength',
+      gameTypes: ['wavelength'],
+      example: '4 points (one per common word), 7 team points'
     }
   ];
 
@@ -525,6 +479,69 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
     setFormData({ ...formData, tags: formData.tags.filter(t => t !== tag) });
   };
 
+  // Magic wand AI generation handler
+  const handleGenerateWithAI = async () => {
+    if (!formData.gameType) {
+      alert('Please select a game type first');
+      return;
+    }
+
+    setIsGeneratingWithAI(true);
+    
+    // Save current values for revert functionality
+    setSavedInstructions(formData.instructions);
+    setSavedOutputFormat(formData.outputFormat);
+
+    try {
+      const response = await fetch(`${API_BASE}admin/ai-generate-prompt`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          gameType: formData.gameType,
+          category: formData.category || 'general',
+          currentInstructions: formData.instructions,
+          currentOutputFormat: formData.outputFormat,
+          promptName: formData.name,
+          description: formData.description
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate AI prompt');
+      }
+
+      const result = await response.json();
+      
+      // Update the form with generated content
+      setFormData(prev => ({
+        ...prev,
+        instructions: result.instructions || prev.instructions,
+        outputFormat: result.outputFormat || prev.outputFormat
+      }));
+
+    } catch (error) {
+      console.error('Error generating AI prompt:', error);
+      alert('Failed to generate AI prompt: ' + error.message);
+    } finally {
+      setIsGeneratingWithAI(false);
+    }
+  };
+
+  // Revert to saved values
+  const handleRevert = () => {
+    setFormData(prev => ({
+      ...prev,
+      instructions: savedInstructions,
+      outputFormat: savedOutputFormat
+    }));
+    
+    // Clear saved values
+    setSavedInstructions('');
+    setSavedOutputFormat('');
+  };
+
   return (
     <div className="prompt-editor-overlay">
       <div className="prompt-editor-modal">
@@ -610,7 +627,30 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
           </div>
 
           <div className="form-group">
-            <label>1. General Instructions *</label>
+            <div className="label-with-actions">
+              <label>1. General Instructions *</label>
+              <div className="magic-wand-actions">
+                <button 
+                  type="button" 
+                  className="magic-wand-btn"
+                  onClick={handleGenerateWithAI}
+                  disabled={isGeneratingWithAI || !formData.gameType}
+                  title="Generate AI-powered prompt based on game type and category"
+                >
+                  {isGeneratingWithAI ? '⏳' : '🪄'} AI Generate
+                </button>
+                {(savedInstructions || savedOutputFormat) && (
+                  <button 
+                    type="button" 
+                    className="revert-btn"
+                    onClick={handleRevert}
+                    title="Restore your original text"
+                  >
+                    ↶ Revert
+                  </button>
+                )}
+              </div>
+            </div>
             <textarea
               value={formData.instructions}
               onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
@@ -619,7 +659,7 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
               required
             />
             <small className="form-help">
-              Define the AI's persona, expertise, and communication style.
+              Define the AI's persona, expertise, and communication style. Click "AI Generate" to create a prompt based on your game type and category.
             </small>
           </div>
 
@@ -630,7 +670,7 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
                 <h4>📝 Available Variables</h4>
                 <p className="variables-help">
                   Click to insert into output format:<br />
-                  <small><strong>💡 Pro Tip:</strong> Use markdown headers (## Header Name) to create custom sections in your output format.</small>
+                  <small><strong>💡 Markdown Support:</strong> Use ## Headers, **bold**, *italic*, `code`, and | tables | for | formatting |</small>
                   <br />
                   <small><strong>🎯 Game Type:</strong> {formData.gameType} - Variables marked with ⚠️ are not available for this game type</small>
                 </p>
@@ -673,19 +713,31 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
                   ref={setOutputFormatTextareaRef}
                   value={formData.outputFormat}
                   onChange={(e) => setFormData({ ...formData, outputFormat: e.target.value })}
-                  placeholder="Example output format:
+                  placeholder="Example output format with Markdown formatting:
 
-## 🎯 Key Insights
-Analyze the responses from {eventTitle} where participants answered: {questionTitle}
+## 🎯 Key Insights from {eventTitle}
+Analyze the **{responseCount} responses** from participants who answered: *{questionTitle}*
 
-Based on {responseCount} responses, here are the top insights:
+### Top Responses:
 {responsesText}
 
 ## 💡 Strategic Implications
-[Provide 2-3 strategic implications for the team/organization]
+Based on the **{winnerInfo}**, here are strategic implications:
+
+1. **Leadership Alignment**: How responses demonstrate team thinking
+2. **Process Improvement**: Areas for operational enhancement  
+3. **Culture Insights**: What responses reveal about team culture
 
 ## 🚀 Recommended Actions
-[List 3-4 specific next steps the team should consider]
+Priority actions based on `{sessionContext}`:
+
+| Priority | Action | Owner | Timeline |
+|----------|--------|--------|----------|
+| High | Follow up on winning response | Team Lead | 1 week |
+| Medium | Address common themes | Manager | 2 weeks |
+| Low | Document lessons learned | Team | 1 month |
+
+**Bold text**, *italic text*, `inline code`, and tables are supported!
 
 Click variable buttons to insert them into your output format."
                   rows="12"
@@ -694,7 +746,7 @@ Click variable buttons to insert them into your output format."
               </div>
             </div>
             <small className="form-help">
-              Click the variable buttons to insert them into your output format. Variables will be replaced with actual content when the AI summary is generated.
+              Click the variable buttons to insert them into your output format. Variables will be replaced with actual content when the AI summary is generated. Supports full Markdown formatting including headers, bold, italic, code, and tables.
             </small>
           </div>
 

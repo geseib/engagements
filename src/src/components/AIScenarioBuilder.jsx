@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import FileUploadPrompt from './FileUploadPrompt';
 
 const API_BASE = window.API_BASE;
 
@@ -92,6 +93,75 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
           }
         ];
 
+      case 'wavelength':
+        return [
+          {
+            id: 'tech-terms',
+            title: 'Technology Terms',
+            description: 'Technical terms and concepts for word association',
+            prompt: 'Create wavelength questions using technology and software development terms that teams can associate words with'
+          },
+          {
+            id: 'business-concepts',
+            title: 'Business Concepts',
+            description: 'Business and management terms for exploration',
+            prompt: 'Generate wavelength questions using business, strategy, and management concepts'
+          },
+          {
+            id: 'industry-specific',
+            title: 'Industry-Specific Terms',
+            description: 'Terms specific to your industry or domain',
+            prompt: 'Create wavelength questions using terms specific to the target industry or professional domain'
+          },
+          {
+            id: 'leadership-themes',
+            title: 'Leadership & Culture',
+            description: 'Leadership principles and cultural concepts',
+            prompt: 'Generate wavelength questions around leadership themes, company culture, and team dynamics'
+          },
+          {
+            id: 'abstract-concepts',
+            title: 'Abstract Concepts',
+            description: 'Ideas and concepts that spark creativity',
+            prompt: 'Create wavelength questions using abstract concepts that encourage creative thinking and diverse associations'
+          },
+          {
+            id: 'lists-favorites',
+            title: 'Lists & Favorites',
+            description: 'Personal preferences and recommendations',
+            prompt: 'Create wavelength prompts asking people to list their favorites: books, movies, songs, restaurants, vacation spots, tools, resources, mentors, etc. Format: "List 10 of your favorite [category]"'
+          },
+          {
+            id: 'brainstorming',
+            title: 'Brainstorming Sessions',
+            description: 'Ideas and solutions for team challenges',
+            prompt: 'Generate wavelength prompts for brainstorming: ways to improve products, potential solutions, feature ideas, process improvements. Format: "List 10 ways to [improve/solve/enhance something]"'
+          },
+          {
+            id: 'team-building',
+            title: 'Team Building & Culture',
+            description: 'Shared experiences and team connections',
+            prompt: 'Create wavelength prompts for team building: memorable moments, things to appreciate, team values, shared goals. Format: "List 10 [experiences/values/goals] related to our team"'
+          },
+          {
+            id: 'reflection-retrospective',
+            title: 'Reflection & Learning',
+            description: 'Lessons learned and growth opportunities',
+            prompt: 'Generate wavelength prompts for reflection: lessons learned, achievements, challenges overcome, areas for improvement. Format: "List 10 things you learned/achieved/improved"'
+          },
+          {
+            id: 'icebreakers-fun',
+            title: 'Icebreakers & Fun',
+            description: 'Getting to know each other better',
+            prompt: 'Create fun wavelength prompts: hidden talents, dream jobs, bucket list items, interesting facts about yourself. Format: "List 10 [fun/interesting/surprising] things about you"'
+          },
+          {
+            id: 'custom',
+            title: 'Custom Lists',
+            description: 'Define your own list-based prompts',
+            prompt: 'Create wavelength questions based on the custom list topics provided'
+          }
+        ];
       case 'call-and-answer':
       default:
         return [
@@ -175,9 +245,80 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         numberOfCategories: 3,
         mustHaveCategories: 'Communication, Trust Building, Conflict Resolution'
       },
+      // Wavelength-specific templates
+      'tech-terms': {
+        customTitle: 'Technology Terms Wavelength',
+        context: 'Word association exercise using technology and software development concepts',
+        audience: 'Software developers, technical teams, and technology professionals',
+        numberOfCategories: 4,
+        mustHaveCategories: 'Programming, Cloud Computing, Development Tools, Architecture'
+      },
+      'business-concepts': {
+        customTitle: 'Business Concepts Wavelength',
+        context: 'Explore business and management terms through creative word association',
+        audience: 'Business professionals, managers, and leadership teams',
+        numberOfCategories: 4,
+        mustHaveCategories: 'Strategy, Operations, Finance, Leadership'
+      },
+      'industry-specific': {
+        customTitle: 'Industry Terms Wavelength',
+        context: 'Domain-specific terminology and concepts for your industry',
+        audience: 'Industry professionals and subject matter experts',
+        numberOfCategories: 3,
+        mustHaveCategories: 'Core Concepts, Tools & Methods, Industry Trends'
+      },
+      'leadership-themes': {
+        customTitle: 'Leadership & Culture Wavelength',
+        context: 'Leadership principles and cultural concepts through word association',
+        audience: 'Leaders, managers, and teams focused on culture building',
+        numberOfCategories: 4,
+        mustHaveCategories: 'Leadership Styles, Team Dynamics, Company Culture, Values'
+      },
+      'abstract-concepts': {
+        customTitle: 'Creative Concepts Wavelength',
+        context: 'Abstract ideas and concepts that encourage diverse thinking and creativity',
+        audience: 'Creative teams, brainstorming groups, and innovation-focused professionals',
+        numberOfCategories: 5,
+        mustHaveCategories: 'Innovation, Creativity, Future Thinking, Abstract Ideas, Inspiration'
+      },
+      'lists-favorites': {
+        customTitle: 'Lists & Favorites Workshop',
+        context: 'Share personal preferences and recommendations with your team through curated lists',
+        audience: 'All team members looking to connect and share interests',
+        numberOfCategories: 5,
+        mustHaveCategories: 'Entertainment, Professional Resources, Places & Travel, Personal Growth, Hobbies & Interests'
+      },
+      'brainstorming': {
+        customTitle: 'Team Brainstorming Session',
+        context: 'Collaborative ideation session for generating solutions and innovations',
+        audience: 'Cross-functional teams, product teams, and innovation groups',
+        numberOfCategories: 4,
+        mustHaveCategories: 'Product Ideas, Process Improvements, Problem Solutions, Future Opportunities'
+      },
+      'team-building': {
+        customTitle: 'Team Connection Workshop',
+        context: 'Build stronger team bonds through shared experiences and values',
+        audience: 'Teams looking to strengthen relationships and culture',
+        numberOfCategories: 4,
+        mustHaveCategories: 'Shared Experiences, Team Values, Appreciation, Common Goals'
+      },
+      'reflection-retrospective': {
+        customTitle: 'Reflection & Growth Session',
+        context: 'Reflect on experiences and identify opportunities for growth and improvement',
+        audience: 'Teams conducting retrospectives or personal development sessions',
+        numberOfCategories: 4,
+        mustHaveCategories: 'Lessons Learned, Achievements, Challenges, Future Growth'
+      },
+      'icebreakers-fun': {
+        customTitle: 'Fun Icebreakers Session',
+        context: 'Get to know your teammates better through fun and engaging prompts',
+        audience: 'New teams, remote teams, or groups looking to build rapport',
+        numberOfCategories: 5,
+        mustHaveCategories: 'Personal Interests, Fun Facts, Dreams & Aspirations, Hidden Talents, Life Experiences'
+      },
       'custom': {
-        customTitle: 'Custom Scenario Workshop',
-        context: 'Tailored scenarios based on specific organizational needs and requirements',
+        customTitle: 'Custom Wavelength Workshop',
+        context: 'Custom list-based exercise tailored to your specific needs',
         audience: 'Customized based on requirements',
         numberOfCategories: 3,
         mustHaveCategories: ''
@@ -244,6 +385,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
               },
               body: JSON.stringify({
                 scenarioType: scenarioConfig.type,
+                engagementType: engagementType,
                 prompt: chunkPrompt,
                 count: chunkSize,
                 difficulty: scenarioConfig.difficulty,
@@ -448,14 +590,14 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
       <div className="modal-overlay" onClick={onClose}></div>
       <div className="modal-content scenario-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>🤖 AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : 'Scenario'} Builder</h2>
+          <h2>🤖 AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : engagementType === 'wavelength' ? 'Wavelength' : 'Scenario'} Builder</h2>
           <button className="close-button" onClick={onClose}>✕</button>
         </div>
 
         <div className="modal-body">
           {step === 1 && (
             <div className="scenario-type-selection">
-              <h3>What type of {engagementType === 'trivia' ? 'trivia questions' : engagementType === 'poll' ? 'poll questions' : 'scenarios'} do you want to create?</h3>
+              <h3>What type of {engagementType === 'trivia' ? 'trivia questions' : engagementType === 'poll' ? 'poll questions' : engagementType === 'wavelength' ? 'wavelength topics' : 'scenarios'} do you want to create?</h3>
               <div className="scenario-types-grid">
                 {scenarioTypes.map(type => (
                   <div
@@ -578,6 +720,17 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                     rows="2"
                   />
                 </div>
+
+                <FileUploadPrompt
+                  onContentExtracted={(content) => {
+                    setScenarioConfig(prev => ({
+                      ...prev,
+                      customPrompt: prev.customPrompt + '\n\n' + content
+                    }));
+                  }}
+                  acceptedFormats={['.txt', '.pdf', '.md', '.docx']}
+                  label="Or upload a document with context/examples"
+                />
               </div>
             </div>
           )}
@@ -694,6 +847,9 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
           )}
           {step === 3 && !isGenerating && generatedScenarios.length > 0 && (
             <>
+              <button className="btn-secondary" onClick={() => setStep(2)}>
+                ← Back to Configuration
+              </button>
               <button className="btn-secondary" onClick={onClose}>
                 Cancel
               </button>

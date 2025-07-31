@@ -2851,6 +2851,11 @@ Ready to engage? See you there!`;
                 {questions[0].detail}
               </div>
             )}
+            {!lessonExpanded && currentGameType === 'wavelength' && questions[0].topic && (
+              <div className="wavelength-topic-display lesson-detail">
+                <strong>Topic:</strong> {questions[0].topic}
+              </div>
+            )}
             
             {currentGameType === 'trivia' && questions[0] && (
               <div className="trivia-options">
@@ -3331,9 +3336,14 @@ Ready to engage? See you there!`;
                 {questions[0].questionDetail || questions[0].detail}
               </div>
             )}
-            {questions[0].detail && (
+            {questions[0].detail && currentGameType !== 'wavelength' && (
               <div className="expanded-lesson-detail">
                 {questions[0].detail}
+              </div>
+            )}
+            {currentGameType === 'wavelength' && questions[0].topic && (
+              <div className="expanded-lesson-detail wavelength-topic-expanded">
+                <strong>Topic:</strong> {questions[0].topic}
               </div>
             )}
             <div className="expanded-lesson-prompt">

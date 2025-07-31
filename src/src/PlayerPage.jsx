@@ -1441,16 +1441,16 @@ function PlayerPage() {
             {gameType === 'wavelength' && currentQuestion.topic && (
               <div className="wavelength-topic lesson-detail">
                 <strong>Topic:</strong> {currentQuestion.topic}
-                {currentQuestion.instructions && (
+                {(customInstruction || currentQuestion.instructions) && (
                   <div style={{marginTop: '10px', fontWeight: 'normal'}}>
-                    {currentQuestion.instructions}
+                    {customInstruction || currentQuestion.instructions}
                   </div>
                 )}
               </div>
             )}
             <div className="application-prompt">
               <strong>{gameType === 'trivia' ? 'Select the best answer:' : 
-                       gameType === 'wavelength' ? 'Enter 10 words that come to mind:' :
+                       gameType === 'wavelength' ? (customInstruction || 'Enter 10 words that come to mind:') :
                        getPlayerInstructionText(customInstruction)}</strong>
             </div>
             

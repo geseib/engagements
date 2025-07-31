@@ -4,6 +4,7 @@ import TriviaAIBuilder from './components/TriviaAIBuilder';
 import PollAIBuilder from './components/PollAIBuilder';
 import SurveyAIBuilder from './components/SurveyAIBuilder';
 import AIPromptManager from './components/AIPromptManager';
+import ArchivePanel from './components/ArchivePanel';
 import HelpButton from './components/HelpButton';
 import IssueFab from './components/IssueFab';
 import './BuilderPage.css';
@@ -90,6 +91,8 @@ function AdminPage() {
   // AI Survey Builder
   const [showSurveyAIBuilder, setShowSurveyAIBuilder] = useState(false);
 
+  // Upload section expand/collapse
+  const [isUploadSectionExpanded, setIsUploadSectionExpanded] = useState(false);
 
   const defaultInstructions = "How would you apply this concept in your current role or organization? Consider the specific challenges and opportunities in your context.";
 
@@ -562,7 +565,7 @@ function AdminPage() {
           customDescription: metadata.description,
           customInstructions: metadata.customInstructions,
           aiContextInstructions: metadata.aiContextInstructions,
-          engagementType: 'call-and-answer',
+          engagementType: engagementType,
           isAIGenerated: true
         })
       });
@@ -915,6 +918,12 @@ function AdminPage() {
                 🎮 Game Management
               </button>
               <button 
+                className={`tab-btn ${activeTab === 'archive' ? 'active' : ''}`}
+                onClick={() => setActiveTab('archive')}
+              >
+                📦 Archive
+              </button>
+              <button 
                 className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
                 onClick={() => setActiveTab('settings')}
               >
@@ -978,8 +987,18 @@ function AdminPage() {
 
           {/* Upload Question Set Section */}
           <div className="admin-section">
-            <h2>📤 Upload Question Set</h2>
-            <p className="section-description">Upload a CSV file containing questions to create a new question set with custom title and instructions.</p>
+            <div 
+              className="section-header expandable-header"
+              onClick={() => setIsUploadSectionExpanded(!isUploadSectionExpanded)}
+            >
+              <h2>📤 Upload Question Set</h2>
+              <button className={`expand-arrow ${isUploadSectionExpanded ? 'expanded' : ''}`}>
+                ▼
+              </button>
+            </div>
+            {isUploadSectionExpanded && (
+              <>
+                <p className="section-description">Upload a CSV file containing questions to create a new question set with custom title and instructions.</p>
             
             <div className="upload-form">
               <div className="form-row">
@@ -1127,10 +1146,12 @@ function AdminPage() {
               </div>
             </div>
             
-            {uploadStatus && (
-              <div className={`status-message ${uploadStatus.includes('✅') ? 'success' : uploadStatus.includes('❌') ? 'error' : ''}`}>
-                {uploadStatus}
-              </div>
+                {uploadStatus && (
+                  <div className={`status-message ${uploadStatus.includes('✅') ? 'success' : uploadStatus.includes('❌') ? 'error' : ''}`}>
+                    {uploadStatus}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -1194,15 +1215,16 @@ function AdminPage() {
               </div>
             </div>
             
-            <div className="question-sets-list">
-              {filteredQuestionSets.length === 0 ? (
-                <div className="no-sets-message">
-                  <p>{questionSets.length === 0 
-                    ? 'No question sets found. Upload your first question set above to get started.'
-                    : 'No question sets found matching your filters.'}</p>
-                </div>
-              ) : (
-                filteredQuestionSets.map(set => (
+            <div className="question-sets-list-container">
+              <div className="question-sets-list">
+                {filteredQuestionSets.length === 0 ? (
+                  <div className="no-sets-message">
+                    <p>{questionSets.length === 0 
+                      ? 'No question sets found. Upload your first question set above to get started.'
+                      : 'No question sets found matching your filters.'}</p>
+                  </div>
+                ) : (
+                  filteredQuestionSets.map(set => (
                   <div key={set.id} className="question-set-item">
                     <div className="set-info">
                       <h3>{set.name}</h3>
@@ -1219,33 +1241,37 @@ function AdminPage() {
                       )}
                     </div>
                     <div className="set-stats">
-                      <span className="stat-badge">{set.totalQuestions} questions</span>
-                      <span className="stat-badge">{set.categoryCount} categories</span>
-                      <span className="stat-badge">
-                        {set.engagementType === 'trivia' ? 'Trivia' :
-                         set.engagementType === 'poll' ? 'Poll' :
-                         set.engagementType === 'wavelength' ? 'Wavelength' : 'Call and Answer'}
-                      </span>
-                      <button
-                        className={`status-badge clickable ${set.active ? 'active' : 'inactive'}`}
-                        onClick={() => handleToggleActive(set.id, set.active)}
-                        title={`Click to ${set.active ? 'deactivate' : 'activate'} this question set`}
-                      >
-                        {set.active ? 'Active' : 'Inactive'}
-                      </button>
-                      <label className="quickstart-checkbox" title="Enable for quickstart menu">
-                        <input
-                          type="checkbox"
-                          checked={set.quickstart || false}
-                          onChange={(e) => handleToggleQuickstart(set.id, e.target.checked)}
-                        />
-                        <span className="quickstart-label">⚡ Quickstart</span>
-                      </label>
-                      {set.isAIGenerated && (
-                        <span className="stat-badge ai-generated" title="AI-generated content">
-                          🤖 AI
+                      <div className="stats-row-1">
+                        <span className="stat-badge">{set.totalQuestions} questions</span>
+                        <span className="stat-badge">{set.categoryCount} categories</span>
+                        <span className="stat-badge">
+                          {set.engagementType === 'trivia' ? 'Trivia' :
+                           set.engagementType === 'poll' ? 'Poll' :
+                           set.engagementType === 'wavelength' ? 'Wavelength' : 'Call and Answer'}
                         </span>
-                      )}
+                      </div>
+                      <div className="stats-row-2">
+                        <button
+                          className={`status-badge clickable ${set.active ? 'active' : 'inactive'}`}
+                          onClick={() => handleToggleActive(set.id, set.active)}
+                          title={`Click to ${set.active ? 'deactivate' : 'activate'} this question set`}
+                        >
+                          {set.active ? 'Active' : 'Inactive'}
+                        </button>
+                        <label className="quickstart-checkbox" title="Enable for quickstart menu">
+                          <input
+                            type="checkbox"
+                            checked={set.quickstart || false}
+                            onChange={(e) => handleToggleQuickstart(set.id, e.target.checked)}
+                          />
+                          <span className="quickstart-label">⚡ Quickstart</span>
+                        </label>
+                        {set.isAIGenerated && (
+                          <span className="stat-badge ai-generated" title="AI-generated content">
+                            🤖 AI
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="set-actions">
                       <button
@@ -1264,8 +1290,9 @@ function AdminPage() {
                       </button>
                     </div>
                   </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
           </div>
 
@@ -1448,6 +1475,7 @@ function AdminPage() {
                   <option value="trivia">Trivia</option>
                   <option value="poll">Poll</option>
                   <option value="wavelength">Wavelength</option>
+                  <option value="survey">Survey</option>
                 </select>
               </div>
 
@@ -1460,6 +1488,8 @@ function AdminPage() {
                       setShowPollAIBuilder(true);
                     } else if (engagementType === 'trivia') {
                       setShowTriviaAIBuilder(true);
+                    } else if (engagementType === 'survey') {
+                      setShowSurveyAIBuilder(true);
                     } else {
                       setShowAIScenarioBuilder(true);
                     }
@@ -1467,38 +1497,8 @@ function AdminPage() {
                 >
                   🤖 AI {engagementType === 'trivia' ? 'Trivia' : 
                            engagementType === 'poll' ? 'Poll' : 
+                           engagementType === 'survey' ? 'Survey' :
                            engagementType === 'wavelength' ? 'Wavelength' : 'Scenario'} Builder
-                </button>
-                {engagementType === 'trivia' && (
-                  <button
-                    className="btn-primary"
-                    onClick={() => {
-                      console.log('🧠 AI Trivia Builder button clicked');
-                      setShowTriviaAIBuilder(true);
-                    }}
-                  >
-                    🧠 Advanced Trivia Builder
-                  </button>
-                )}
-                {engagementType === 'poll' && (
-                  <button
-                    className="btn-primary"
-                    onClick={() => {
-                      console.log('📊 AI Poll Builder button clicked');
-                      setShowPollAIBuilder(true);
-                    }}
-                  >
-                    📊 Advanced Poll Builder
-                  </button>
-                )}
-                <button
-                  className="btn-primary"
-                  onClick={() => {
-                    console.log('📋 AI Survey Builder button clicked');
-                    setShowSurveyAIBuilder(true);
-                  }}
-                >
-                  📋 AI Survey Builder
                 </button>
                 <button
                   className="btn-secondary"
@@ -1513,7 +1513,8 @@ function AdminPage() {
                   📄 Download {engagementType === 'call-and-answer' ? 'Call & Answer' :
                               engagementType === 'trivia' ? 'Trivia' : 
                               engagementType === 'poll' ? 'Poll' : 
-                              engagementType === 'wavelength' ? 'Wavelength' : 'Template'} Template
+                              engagementType === 'wavelength' ? 'Wavelength' :
+                              engagementType === 'survey' ? 'Survey' : 'Template'} Template
                 </button>
               </div>
             </div>
@@ -1578,6 +1579,12 @@ function AdminPage() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {activeTab === 'archive' && (
+            <div className="tab-content">
+              <ArchivePanel />
             </div>
           )}
 

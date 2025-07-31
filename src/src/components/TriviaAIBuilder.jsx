@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import FileUploadPrompt from './FileUploadPrompt';
 
 const API_BASE = window.API_BASE;
 
@@ -6,12 +7,13 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
   const [step, setStep] = useState(1);
   const [triviaConfig, setTriviaConfig] = useState({
     topic: '',
-    category: '',
     audience: '',
     difficulty: 'medium',
     count: 10,
     numChoices: 4,
     numCorrect: 1,
+    numberOfCategories: 3,
+    mustHaveCategories: '',
     customPrompt: ''
   });
   const [generatedTrivia, setGeneratedTrivia] = useState([]);
@@ -49,12 +51,13 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
               },
               body: JSON.stringify({
                 topic: triviaConfig.topic,
-                category: triviaConfig.category,
                 audience: triviaConfig.audience,
                 difficulty: triviaConfig.difficulty,
                 count: chunkSize,
                 numChoices: triviaConfig.numChoices,
                 numCorrect: triviaConfig.numCorrect,
+                numberOfCategories: triviaConfig.numberOfCategories,
+                mustHaveCategories: triviaConfig.mustHaveCategories,
                 customPrompt: triviaConfig.customPrompt
               })
             });
@@ -208,15 +211,6 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                       placeholder="e.g., American History, Science, Business Strategy"
                     />
                   </div>
-                  <div className="form-group">
-                    <label>Category</label>
-                    <input
-                      type="text"
-                      value={triviaConfig.category}
-                      onChange={(e) => setTriviaConfig(prev => ({ ...prev, category: e.target.value }))}
-                      placeholder="e.g., History, Science, Business"
-                    />
-                  </div>
                 </div>
 
                 <div className="form-row">
@@ -297,6 +291,48 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                   </div>
                 </div>
 
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Number of Categories: <strong>{triviaConfig.numberOfCategories}</strong></label>
+                    <div className="quantity-controls">
+                      <input
+                        type="range"
+                        min="1"
+                        max="24"
+                        value={triviaConfig.numberOfCategories}
+                        onChange={(e) => setTriviaConfig(prev => ({ ...prev, numberOfCategories: parseInt(e.target.value) }))}
+                        className="quantity-slider"
+                      />
+                      <input
+                        type="number"
+                        min="1"
+                        max="24"
+                        value={triviaConfig.numberOfCategories}
+                        onChange={(e) => setTriviaConfig(prev => ({ ...prev, numberOfCategories: Math.min(24, Math.max(1, parseInt(e.target.value) || 1)) }))}
+                        className="quantity-input"
+                      />
+                    </div>
+                    <div className="quantity-note" style={{fontSize: '0.9em', color: '#666', marginTop: '5px'}}>
+                      Recommended: 1-8 categories for optimal organization
+                    </div>
+                    <div className="quantity-presets">
+                      <button type="button" className="preset-btn" onClick={() => setTriviaConfig(prev => ({ ...prev, numberOfCategories: 3 }))}>3</button>
+                      <button type="button" className="preset-btn" onClick={() => setTriviaConfig(prev => ({ ...prev, numberOfCategories: 5 }))}>5</button>
+                      <button type="button" className="preset-btn" onClick={() => setTriviaConfig(prev => ({ ...prev, numberOfCategories: 8 }))}>8</button>
+                      <button type="button" className="preset-btn" onClick={() => setTriviaConfig(prev => ({ ...prev, numberOfCategories: 12 }))}>12</button>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Must Have Categories</label>
+                    <input
+                      type="text"
+                      value={triviaConfig.mustHaveCategories}
+                      onChange={(e) => setTriviaConfig(prev => ({ ...prev, mustHaveCategories: e.target.value }))}
+                      placeholder="History, Science, Sports, Entertainment..."
+                    />
+                  </div>
+                </div>
+
                 <div className="form-group">
                   <label>Additional Requirements (Optional)</label>
                   <textarea
@@ -306,6 +342,17 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                     rows="3"
                   />
                 </div>
+
+                <FileUploadPrompt
+                  onContentExtracted={(content) => {
+                    setTriviaConfig(prev => ({
+                      ...prev,
+                      customPrompt: prev.customPrompt + '\n\n' + content
+                    }));
+                  }}
+                  acceptedFormats={['.txt', '.pdf', '.md', '.docx']}
+                  label="Or upload a document with context/examples"
+                />
               </div>
             </div>
           )}
@@ -508,6 +555,9 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
           )}
           {step === 2 && !isGenerating && generatedTrivia.length > 0 && (
             <>
+              <button className="btn-secondary" onClick={() => setStep(1)}>
+                ← Back to Configuration
+              </button>
               <button className="btn-secondary" onClick={onClose}>
                 Cancel
               </button>

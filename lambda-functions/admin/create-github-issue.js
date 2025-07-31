@@ -72,19 +72,56 @@ exports.handler = async (event) => {
         labels.push('admin-panel');
         break;
     }
+    
+    // Add environment label (will be determined after URL parsing)
+    let environmentLabel = null;
+
+    // Extract environment/site information from URL
+    let environment = 'unknown';
+    let siteName = 'unknown';
+    
+    if (url) {
+      try {
+        const urlObj = new URL(url);
+        siteName = urlObj.hostname;
+        
+        // Determine environment based on hostname
+        if (urlObj.hostname.includes('.dev.')) {
+          environment = 'Development';
+          environmentLabel = 'dev-environment';
+        } else if (urlObj.hostname.includes('.test.')) {
+          environment = 'Test';
+          environmentLabel = 'test-environment';
+        } else if (urlObj.hostname.includes('.prod.') || urlObj.hostname === 'eng.seibtribe.us') {
+          environment = 'Production';
+          environmentLabel = 'prod-environment';
+        } else if (urlObj.hostname.includes('localhost') || urlObj.hostname.includes('127.0.0.1')) {
+          environment = 'Local Development';
+          environmentLabel = 'local-dev';
+        }
+      } catch (e) {
+        console.warn('Failed to parse URL:', url);
+      }
+    }
 
     // Build issue body with metadata
     let issueBody = description;
     
+    // Add environment information prominently at the top
+    issueBody += '\n\n---\n**Environment Information:**\n';
+    issueBody += `- **Site:** ${siteName}\n`;
+    issueBody += `- **Environment:** ${environment}\n`;
+    issueBody += `- **Context:** ${context.charAt(0).toUpperCase() + context.slice(1)} screen\n`;
+    
     if (gameId || userAgent || url || additionalInfo) {
-      issueBody += '\n\n---\n**Technical Details:**\n';
+      issueBody += '\n**Technical Details:**\n';
       
       if (gameId) {
         issueBody += `- **Game ID:** ${gameId}\n`;
       }
       
       if (url) {
-        issueBody += `- **Page URL:** ${url}\n`;
+        issueBody += `- **Full URL:** ${url}\n`;
       }
       
       if (userAgent) {
@@ -96,13 +133,18 @@ exports.handler = async (event) => {
       }
     }
 
+    // Add environment label if determined
+    if (environmentLabel) {
+      labels.push(environmentLabel);
+    }
+
     // Add context information
     issueBody += `\n**Reported from:** ${context.charAt(0).toUpperCase() + context.slice(1)} screen`;
     issueBody += `\n**Issue type:** ${issueType}`;
     issueBody += `\n**Submitted:** ${new Date().toISOString()}`;
 
     const githubIssue = {
-      title: `[${issueType.toUpperCase()}] ${title}`,
+      title: `[${issueType.toUpperCase()}][${environment.toUpperCase()}] ${title}`,
       body: issueBody,
       labels: labels
     };
@@ -144,6 +186,8 @@ exports.handler = async (event) => {
       Description: description,
       IssueType: issueType,
       Context: context,
+      Environment: environment,
+      SiteName: siteName,
       GameId: gameId || null,
       GitHubUrl: createdIssue.html_url,
       Status: 'open',
