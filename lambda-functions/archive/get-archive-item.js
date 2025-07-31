@@ -79,7 +79,12 @@ exports.handler = async (event) => {
         item: item,
         downloadUrl: downloadUrl
       }),
-      headers: { 'Access-Control-Allow-Origin': '*' }
+      headers: { 
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
     };
     
   } catch (error) {
