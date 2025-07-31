@@ -118,6 +118,8 @@ async function importQuestionSets(selectedArchiveIds, environment, conflictResol
         if (contentResponse.ok) {
           csvContent = await contentResponse.text();
           console.log(`📄 Downloaded CSV content, size: ${csvContent.length} characters`);
+          console.log(`📄 Content preview (first 500 chars): ${csvContent.substring(0, 500)}`);
+          console.log(`📄 Content type from response: ${contentResponse.headers.get('content-type')}`);
         } else {
           throw new Error(`Failed to download from signed URL: ${contentResponse.status} - ${contentResponse.statusText}`);
         }
@@ -227,6 +229,8 @@ async function importPrompts(selectedArchiveIds, environment, conflictResolution
         if (contentResponse.ok) {
           contentText = await contentResponse.text();
           console.log(`📄 Downloaded prompt content, size: ${contentText.length} characters`);
+          console.log(`📄 Content preview (first 500 chars): ${contentText.substring(0, 500)}`);
+          console.log(`📄 Content type from response: ${contentResponse.headers.get('content-type')}`);
         } else {
           throw new Error(`Failed to download from signed URL: ${contentResponse.status} - ${contentResponse.statusText}`);
         }
