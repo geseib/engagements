@@ -1947,6 +1947,7 @@ Ready to engage? See you there!`;
       const gameData = {
         gameId: targetGameId,
         eventTitle: finalEventTitle,
+        gameType: report.gameType, // Include gameType from the report
         players: report.playerPerformance || [],
         questions: report.detailedQuestions || [],
         allAnswers: [],
@@ -3583,7 +3584,7 @@ function GameReport({ reportData, onClose }) {
               )}
               
               {/* Trivia Question Options - show choices with correct answer marked */}
-              {currentGameType === 'trivia' && (
+              {reportData.gameType === 'trivia' && (
                 <div className="report-trivia-choices">
                   <h4>Answer Choices:</h4>
                   <div className="trivia-options-report">
