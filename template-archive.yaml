@@ -1,0 +1,271 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  engage2-archive
+  Shared Archive Service for Engage2 Platform
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: archive.seibtribe.us
+    Description: Domain name for the archive service
+  
+  HostedZoneId:
+    Type: String
+    Default: ZB9TUA073B5SH
+    Description: Route53 Hosted Zone ID
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: nodejs18.x
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref ArchiveTable
+        ARCHIVE_BUCKET_NAME: !Ref ArchiveBucket
+        CORS_ALLOWED_ORIGINS: "*"  # Will restrict this in production
+
+Resources:
+  # DynamoDB Table for Archive Metadata
+  ArchiveTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: engage2-archive
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Application
+          Value: engage2-archive
+
+  # S3 Bucket for Archive Content Storage
+  ArchiveBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: engage2-archive-content
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 90
+      Tags:
+        - Key: Application
+          Value: engage2-archive
+
+  # API Gateway for Archive Service
+  ArchiveApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"  # Will restrict this in production
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - "*"
+        ExposeHeaders:
+          - "*"
+
+  # Lambda Functions
+  ListArchiveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-functions/archive/
+      Handler: list-archive.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ArchiveTable
+      Events:
+        ListArchive:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ArchiveApi
+            Path: /archive/items
+            Method: GET
+
+  GetArchiveItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-functions/archive/
+      Handler: get-archive-item.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ArchiveTable
+        - S3ReadPolicy:
+            BucketName: !Ref ArchiveBucket
+      Events:
+        GetArchiveItem:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ArchiveApi
+            Path: /archive/items/{archiveId}
+            Method: GET
+
+  UploadArchiveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-functions/archive/
+      Handler: upload-archive.handler
+      Policies:
+        - DynamoDBWritePolicy:
+            TableName: !Ref ArchiveTable
+        - S3WritePolicy:
+            BucketName: !Ref ArchiveBucket
+      Events:
+        UploadArchive:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ArchiveApi
+            Path: /archive/items
+            Method: POST
+
+  UpdateArchiveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-functions/archive/
+      Handler: update-archive.handler
+      Policies:
+        - DynamoDBWritePolicy:
+            TableName: !Ref ArchiveTable
+        - S3WritePolicy:
+            BucketName: !Ref ArchiveBucket
+      Events:
+        UpdateArchive:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ArchiveApi
+            Path: /archive/items/{archiveId}
+            Method: PUT
+
+  DeleteArchiveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-functions/archive/
+      Handler: delete-archive.handler
+      Policies:
+        - DynamoDBWritePolicy:
+            TableName: !Ref ArchiveTable
+        - S3CrudPolicy:
+            BucketName: !Ref ArchiveBucket
+      Events:
+        DeleteArchive:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ArchiveApi
+            Path: /archive/items/{archiveId}
+            Method: DELETE
+
+  SearchArchiveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-functions/archive/
+      Handler: search-archive.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ArchiveTable
+      Events:
+        SearchArchive:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ArchiveApi
+            Path: /archive/search
+            Method: POST
+
+  # CloudFront Distribution for Archive API
+  ArchiveCloudFront:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: Archive Service API Distribution
+        Aliases:
+          - !Ref DomainName
+        ViewerCertificate:
+          AcmCertificateArn: !Ref ArchiveCertificate
+          SslSupportMethod: sni-only
+        Origins:
+          - Id: ArchiveApiOrigin
+            DomainName: !Sub "${ArchiveApi}.execute-api.${AWS::Region}.amazonaws.com"
+            OriginPath: ""
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+        DefaultCacheBehavior:
+          TargetOriginId: ArchiveApiOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+            - PUT
+            - POST
+            - PATCH
+            - DELETE
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          Compress: true
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # CachingDisabled policy
+          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf  # CORS-S3Origin policy
+
+  # SSL Certificate for Archive Domain
+  ArchiveCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZoneId
+
+  # Route53 Record
+  ArchiveDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt ArchiveCloudFront.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2  # CloudFront Hosted Zone ID
+
+Outputs:
+  ArchiveApiUrl:
+    Description: Archive API Gateway endpoint URL
+    Value: !Sub "https://${ArchiveApi}.execute-api.${AWS::Region}.amazonaws.com"
+  
+  ArchiveDomainUrl:
+    Description: Archive service domain URL
+    Value: !Sub "https://${DomainName}"
+  
+  ArchiveTableName:
+    Description: DynamoDB table name for archive metadata
+    Value: !Ref ArchiveTable
+  
+  ArchiveBucketName:
+    Description: S3 bucket name for archive content
+    Value: !Ref ArchiveBucket
