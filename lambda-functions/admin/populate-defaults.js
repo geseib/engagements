@@ -92,6 +92,40 @@ const defaultPrompts = {
       "isDefault": true,
       "tags": ["custom", "flexible", "adaptive", "general"]
     }
+  },
+  "trivia": {
+    "general": {
+      "name": "Trivia Basic - Learning Analysis",
+      "description": "AI prompt for analyzing trivia results focusing on learning insights and knowledge retention",
+      "template": "You are an educational expert analyzing trivia game results to identify learning opportunities and knowledge gaps.\n\n**Trivia Question**: {questionTitle}\n**Category**: {questionCategory}\n**Correct Answer**: {correctAnswer}\n**Player Results**: {triviaResults}\n\nAnalyze the learning outcomes:\n\n## Summary\nAssess the team's knowledge level in this area and identify key learning patterns from correct and incorrect responses.\n\n## Discussion Questions\nGenerate 3 questions to reinforce learning:\n1. [Knowledge application question based on the trivia topic]\n2. [Deeper understanding question to explore the subject further]\n3. [Practical application question for real-world context]\n\n## Next Steps\nSuggest learning actions:\n1. [Immediate knowledge reinforcement activity]\n2. [Deeper study recommendation for knowledge gaps]\n3. [Practical application or follow-up learning opportunity]\n\nFocus on turning trivia moments into lasting knowledge and practical understanding.",
+      "category": "general",
+      "gameType": "trivia",
+      "status": "active",
+      "isDefault": true,
+      "tags": ["trivia", "learning", "knowledge", "education"]
+    },
+    "business": {
+      "name": "Business Trivia - Strategic Knowledge",
+      "description": "AI prompt for analyzing business trivia results and connecting knowledge to strategic thinking",
+      "template": "You are a business strategy expert analyzing trivia results to connect factual knowledge with strategic insights.\n\n**Business Question**: {questionTitle}\n**Topic Area**: {questionCategory}\n**Correct Answer**: {correctAnswer}\n**Team Performance**: {triviaResults}\n\nConnect knowledge to business strategy:\n\n## Summary\nAnalyze how this knowledge area relates to business decision-making and strategic thinking, noting team strengths and knowledge gaps.\n\n## Discussion Questions\nCreate 3 strategic thinking questions:\n1. [Strategic application question connecting the trivia topic to business decisions]\n2. [Market or competitive analysis question related to this knowledge area]\n3. [Innovation or opportunity question building on this topic]\n\n## Next Steps\nRecommend strategic learning actions:\n1. [Immediate business application of this knowledge]\n2. [Strategic research or analysis opportunity]\n3. [Long-term strategic development in this area]\n\nEmphasize how factual knowledge supports better strategic thinking and business decision-making.",
+      "category": "business",
+      "gameType": "trivia",
+      "status": "active",
+      "isDefault": true,
+      "tags": ["business", "strategy", "knowledge", "decision-making"]
+    }
+  },
+  "polls": {
+    "general": {
+      "name": "Poll Analysis - Team Preferences",
+      "description": "AI prompt for analyzing poll results and understanding team preferences and decision patterns",
+      "template": "You are a team dynamics analyst examining poll results to understand collective preferences and decision-making patterns.\n\n**Poll Question**: {questionTitle}\n**Category**: {questionCategory}\n**Poll Results**: {pollResults}\n**Team Context**: {gameContext}\n\nAnalyze team preferences and decision patterns:\n\n## Summary\nExamine the distribution of responses and what they reveal about team preferences, consensus areas, and diverse viewpoints.\n\n## Discussion Questions\nFacilitate team understanding with 3 questions:\n1. [Preference exploration question to understand the reasoning behind choices]\n2. [Consensus-building question to find common ground]\n3. [Decision-making question to move from preferences to action]\n\n## Next Steps\nSuggest actions based on poll insights:\n1. [Immediate action based on majority preference or consensus]\n2. [Process improvement based on decision patterns]\n3. [Follow-up polling or discussion to refine understanding]\n\nFocus on using poll data to improve team decision-making and build stronger consensus.",
+      "category": "general",
+      "gameType": "polls",
+      "status": "active",
+      "isDefault": true,
+      "tags": ["polls", "preferences", "consensus", "decision-making"]
+    }
   }
 };
 
@@ -180,19 +214,30 @@ exports.handler = async (event) => {
           const version = 1;
           const s3Key = `prompts/${gameType}/${promptId}/v${version}.json`;
           
+          // Use the same structure as create-ai-prompt.js for consistency
           const s3Data = {
             id: promptId,
+            version,
             name: promptData.name,
             description: promptData.description,
-            template: promptData.template,
-            category: promptData.category,
             gameType: gameType,
-            version: version,
-            status: 'active',
+            category: promptData.category,
+            scenario: categoryKey,
+            // Map the old template field to the new structured format
+            template: promptData.template,
+            instructions: promptData.template, // Use template as instructions for legacy prompts
+            outputFormat: "Provide your analysis in the specified format with clear sections and actionable insights.",
             isDefault: true,
+            status: 'active',
+            questionSetIds: [],
             tags: promptData.tags || [],
             createdAt: timestamp,
-            updatedAt: timestamp
+            updatedAt: timestamp,
+            metadata: {
+              author: 'system',
+              createdBy: 'populate-defaults',
+              format: 'legacy'
+            }
           };
           
           await s3Client.send(new PutObjectCommand({
