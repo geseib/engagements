@@ -120,29 +120,14 @@ async function exportQuestionSets(selectedIds, environment, results) {
 
       const questions = questionsResponse.Items || [];
       
+      // Convert questions to CSV format for import compatibility
+      const csvContent = convertQuestionsToCSV(questions, questionSet.engagementType);
+      
       // Transform to archive format
       const archiveData = {
         title: `${questionSet.name} (${environment})`,
         description: `${questionSet.description || 'Question set'} - Exported from ${environment} environment`,
-        content: JSON.stringify({
-          metadata: {
-            id: setId,
-            name: questionSet.name,
-            description: questionSet.description,
-            customInstruction: questionSet.customInstruction,
-            aiContextInstruction: questionSet.aiContextInstruction,
-            engagementType: questionSet.engagementType || 'call-and-answer',
-            promptId: questionSet.promptId,
-            active: questionSet.active,
-            quickstart: questionSet.quickstart,
-            totalQuestions: questionSet.totalQuestions,
-            categoryCount: questionSet.categoryCount,
-            createdAt: questionSet.createdAt,
-            isAIGenerated: questionSet.isAIGenerated,
-            sourceEnvironment: environment
-          },
-          questions: questions
-        }, null, 2),
+        content: csvContent,
         contentType: 'questionset',
         category: questionSet.engagementType || 'general',
         tags: [
@@ -196,7 +181,7 @@ async function exportQuestionSets(selectedIds, environment, results) {
         ContentType: archiveData.contentType,
         Category: archiveData.category,
         Tags: archiveData.tags,
-        FileName: `${setId}.json`,
+        FileName: `${setId}.csv`,
         FileSize: JSON.stringify(archiveData).length,
         CreatedAt: timestamp,
         UpdatedAt: timestamp,
@@ -339,5 +324,46 @@ async function exportPrompts(selectedIds, environment, results) {
         error: error.message
       });
     }
+  }
+}
+
+function convertQuestionsToCSV(questions, engagementType) {
+  if (!questions || questions.length === 0) {
+    return '';
+  }
+
+  // Determine CSV format based on engagement type
+  if (engagementType === 'trivia') {
+    // Trivia format: Category,Title,Detail,OptionA,OptionB,OptionC,OptionD,CorrectAnswer,AnswerDetails,Difficulty
+    const headers = ['Category', 'Title', 'Detail', 'OptionA', 'OptionB', 'OptionC', 'OptionD', 'CorrectAnswer', 'AnswerDetails', 'Difficulty'];
+    const rows = questions.map(q => [
+      q.Category || '',
+      q.Title || q.Prompt || '',
+      q.Detail || '',
+      q.optionA || '',
+      q.optionB || '',
+      q.optionC || '',
+      q.optionD || '',
+      q.correctAnswer || '',
+      q.AnswerDetails || '',
+      q.difficulty || 'medium'
+    ]);
+    
+    return [headers, ...rows]
+      .map(row => row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+  } else {
+    // Call-and-answer format: Category,Title,Detail,CustomInstructions
+    const headers = ['Category', 'Title', 'Detail', 'CustomInstructions'];
+    const rows = questions.map(q => [
+      q.Category || '',
+      q.Title || q.Prompt || '',
+      q.Detail || '',
+      q.CustomInstructions || ''
+    ]);
+    
+    return [headers, ...rows]
+      .map(row => row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','))
+      .join('\n');
   }
 }
