@@ -270,12 +270,25 @@ exports.handler = async (event) => {
         questionNumber,
         questionId: questionResults?.QuestionId || questionNumber,
         
-        // Question metadata
+        // Question metadata (enhanced for trivia games)
         questionData: {
           title: questionDetails?.Title || `Question ${questionNumber}`,
-          detail: questionDetails?.Detail || '',
+          detail: questionDetails?.Detail || questionDetails?.QuestionDetail || '',
           category: questionDetails?.Category || 'General',
-          sourceQuestionId: sourceQuestionId
+          sourceQuestionId: sourceQuestionId,
+          
+          // Trivia-specific fields
+          ...(gameMetadata.Item.GameType === 'trivia' && questionDetails ? {
+            questionDetail: questionDetails.QuestionDetail || questionDetails.Detail,
+            optionA: questionDetails.OptionA,
+            optionB: questionDetails.OptionB, 
+            optionC: questionDetails.OptionC,
+            optionD: questionDetails.OptionD,
+            optionE: questionDetails.OptionE,
+            optionF: questionDetails.OptionF,
+            correctAnswer: questionDetails.CorrectAnswer,
+            answerDetails: questionDetails.AnswerDetails
+          } : {})
         },
         
         // Answer data ranked by vote results
