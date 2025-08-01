@@ -102,13 +102,37 @@ exports.handler = async (event) => {
     // Get question set details for question metadata
     const questionSetId = gameMetadata.Item.QuestionSetId;
     let questionSetData = null;
+    let useNewFormat = false; // Track which format is being used
+    
     if (questionSetId) {
       try {
-        const setResult = await db.send(new GetCommand({
+        // Try the new metadata structure first (SET#{id} / METADATA)
+        console.log(`📊 Attempting to fetch question set metadata for ${questionSetId} using new format...`);
+        const newFormatResult = await db.send(new GetCommand({
           TableName: process.env.TABLE_NAME,
-          Key: { PK: 'SETS', SK: `SET#${questionSetId}` }
+          Key: { PK: `SET#${questionSetId}`, SK: 'METADATA' }
         }));
-        questionSetData = setResult.Item;
+        
+        if (newFormatResult.Item && newFormatResult.Item.metadata) {
+          console.log(`📊 Found question set in NEW format`);
+          questionSetData = newFormatResult.Item.metadata;
+          useNewFormat = true;
+        } else {
+          // Fallback to old structure (SETS / SET#{id})
+          console.log(`📊 New format not found, trying old format...`);
+          const oldFormatResult = await db.send(new GetCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: 'SETS', SK: `SET#${questionSetId}` }
+          }));
+          
+          if (oldFormatResult.Item) {
+            console.log(`📊 Found question set in OLD format`);
+            questionSetData = oldFormatResult.Item;
+            useNewFormat = false;
+          }
+        }
+        
+        console.log(`📊 Question set data: ${questionSetData ? 'Found' : 'Not found'} for setId: ${questionSetId}`);
       } catch (error) {
         console.log('Could not fetch question set data:', error.message);
       }
@@ -172,20 +196,52 @@ exports.handler = async (event) => {
         }
       }
       
-      if (questionSetData && sourceQuestionId) {
-        try {
-          const questionResult = await db.send(new GetCommand({
-            TableName: process.env.TABLE_NAME,
-            Key: { 
-              PK: `SET#${questionSetId}`, 
-              SK: sourceQuestionId 
+      if (sourceQuestionId) {
+        console.log(`📊 Source question ID: ${sourceQuestionId || 'Not found'} for question ${questionNumber}`);
+        
+        if (useNewFormat && questionSetId) {
+          // For new format, questions are stored with PK=SET#{setId}
+          try {
+            console.log(`📊 Fetching question details using NEW format...`);
+            const questionResult = await db.send(new GetCommand({
+              TableName: process.env.TABLE_NAME,
+              Key: { 
+                PK: `SET#${questionSetId}`, 
+                SK: sourceQuestionId 
+              }
+            }));
+            questionDetails = questionResult.Item;
+            console.log(`📊 Question details (new format): ${questionDetails ? 'Found' : 'Not found'} for sourceId: ${sourceQuestionId}`);
+          } catch (error) {
+            console.log(`Could not fetch question details (new format) for ${sourceQuestionId}:`, error.message);
+          }
+        } else if (questionSetData) {
+          // For old format, we need to search through the question set data
+          // or try a different query pattern
+          console.log(`📊 Fetching question details using OLD format...`);
+          try {
+            // Try querying for questions in the old format
+            const questionsQuery = await db.send(new QueryCommand({
+              TableName: process.env.TABLE_NAME,
+              KeyConditionExpression: 'PK = :pk AND SK = :sk',
+              ExpressionAttributeValues: {
+                ':pk': `SET#${questionSetId}`,
+                ':sk': sourceQuestionId
+              }
+            }));
+            
+            if (questionsQuery.Items && questionsQuery.Items.length > 0) {
+              questionDetails = questionsQuery.Items[0];
+              console.log(`📊 Question details (old format): Found for sourceId: ${sourceQuestionId}`);
+            } else {
+              console.log(`📊 Question details (old format): Not found for sourceId: ${sourceQuestionId}`);
             }
-          }));
-          questionDetails = questionResult.Item;
-          console.log(`📊 Found question details: ${questionDetails?.Title || 'No title'}`);
-        } catch (error) {
-          console.log(`Could not fetch question details for ${sourceQuestionId}:`, error.message);
+          } catch (error) {
+            console.log(`Could not fetch question details (old format) for ${sourceQuestionId}:`, error.message);
+          }
         }
+        
+        console.log(`📊 Question details final result: ${questionDetails ? 'Found' : 'Not found'}, Title: ${questionDetails?.Title || 'N/A'}`);
       }
 
       // Calculate vote tallies for ranking (same logic as get-ai-summary.js)
@@ -265,6 +321,19 @@ exports.handler = async (event) => {
                            `${currentRank}th Place`;
       });
 
+      // Debug logging for trivia games
+      if (gameMetadata.Item.GameType === 'trivia') {
+        console.log(`🎯 TRIVIA DEBUG - Question ${questionNumber}:`);
+        console.log(`  - GameType: ${gameMetadata.Item.GameType}`);
+        console.log(`  - questionDetails exists: ${!!questionDetails}`);
+        console.log(`  - questionDetails keys: ${questionDetails ? Object.keys(questionDetails).join(', ') : 'N/A'}`);
+        if (questionDetails) {
+          console.log(`  - optionA: ${questionDetails.optionA || questionDetails.OptionA || 'missing'}`);
+          console.log(`  - optionB: ${questionDetails.optionB || questionDetails.OptionB || 'missing'}`);
+          console.log(`  - correctAnswer: ${questionDetails.correctAnswer || questionDetails.CorrectAnswer || 'missing'}`);
+        }
+      }
+
       // Compile complete question data
       detailedQuestions.push({
         questionNumber,
@@ -280,14 +349,14 @@ exports.handler = async (event) => {
           // Trivia-specific fields
           ...(gameMetadata.Item.GameType === 'trivia' && questionDetails ? {
             questionDetail: questionDetails.QuestionDetail || questionDetails.Detail,
-            optionA: questionDetails.OptionA,
-            optionB: questionDetails.OptionB, 
-            optionC: questionDetails.OptionC,
-            optionD: questionDetails.OptionD,
-            optionE: questionDetails.OptionE,
-            optionF: questionDetails.OptionF,
-            correctAnswer: questionDetails.CorrectAnswer,
-            answerDetails: questionDetails.AnswerDetails
+            optionA: questionDetails.optionA || questionDetails.OptionA,
+            optionB: questionDetails.optionB || questionDetails.OptionB, 
+            optionC: questionDetails.optionC || questionDetails.OptionC,
+            optionD: questionDetails.optionD || questionDetails.OptionD,
+            optionE: questionDetails.optionE || questionDetails.OptionE,
+            optionF: questionDetails.optionF || questionDetails.OptionF,
+            correctAnswer: questionDetails.correctAnswer || questionDetails.CorrectAnswer,
+            answerDetails: questionDetails.answerDetails || questionDetails.AnswerDetails
           } : {})
         },
         
@@ -438,11 +507,11 @@ exports.handler = async (event) => {
       
       // Question set metadata
       questionSetData: questionSetData ? {
-        title: questionSetData.Title,
-        description: questionSetData.Description,
-        category: questionSetData.Category,
-        aiContext: questionSetData.AIContextInstruction,
-        customInstruction: questionSetData.CustomInstruction
+        title: questionSetData.title || questionSetData.Title || questionSetData.name,
+        description: questionSetData.description || questionSetData.Description,
+        category: questionSetData.category || questionSetData.Category,
+        aiContext: questionSetData.aiContextInstruction || questionSetData.AIContextInstruction,
+        customInstruction: questionSetData.customInstruction || questionSetData.CustomInstruction
       } : null,
       
       // Metadata
