@@ -21,11 +21,28 @@ const getRequestsInLastMinute = () => {
 const calculateWaitTime = () => {
   if (requestHistory.length === 0) return 0;
   
+  // Calculate optimal spacing: 60 seconds / 25 requests = 2.4 seconds per request
+  const optimalSpacing = MINUTE_IN_MS / REQUESTS_PER_MINUTE;
+  
+  // If we have fewer requests than the limit, use optimal spacing
+  if (requestHistory.length < REQUESTS_PER_MINUTE) {
+    const now = Date.now();
+    const lastRequest = Math.max(...requestHistory);
+    const timeSinceLastRequest = now - lastRequest;
+    
+    // Wait for optimal spacing if we're going too fast
+    if (timeSinceLastRequest < optimalSpacing) {
+      return optimalSpacing - timeSinceLastRequest + 100; // 100ms buffer
+    }
+    return 0;
+  }
+  
+  // If at capacity, wait for oldest request to expire (fallback behavior)
   const now = Date.now();
   const oldestRequest = Math.min(...requestHistory);
   const timeUntilOldestExpires = (oldestRequest + MINUTE_IN_MS) - now;
   
-  // Add 0.5 second buffer to ensure we're past the rate limit window (optimized from 2s)
+  // Add small buffer to ensure we're past the rate limit window
   return Math.max(0, timeUntilOldestExpires + 500);
 };
 
