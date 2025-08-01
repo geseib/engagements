@@ -5,7 +5,7 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Track request timestamps for rate limiting (per Lambda instance)
 let requestHistory = [];
-const REQUESTS_PER_MINUTE = 5; // Conservative limit for Bedrock
+const REQUESTS_PER_MINUTE = 25; // Optimized limit for Bedrock (gradual rollout from 5)
 const MINUTE_IN_MS = 60000;
 
 const getRequestsInLastMinute = () => {
@@ -25,8 +25,8 @@ const calculateWaitTime = () => {
   const oldestRequest = Math.min(...requestHistory);
   const timeUntilOldestExpires = (oldestRequest + MINUTE_IN_MS) - now;
   
-  // Add 2 second buffer to ensure we're past the rate limit window
-  return Math.max(0, timeUntilOldestExpires + 2000);
+  // Add 0.5 second buffer to ensure we're past the rate limit window (optimized from 2s)
+  return Math.max(0, timeUntilOldestExpires + 500);
 };
 
 const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000) => {
@@ -59,8 +59,8 @@ const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000) => {
       if (isThrottled && attempt < maxRetries) {
         // For rate limit errors, wait until next minute window
         const waitTime = calculateWaitTime();
-        // Ensure minimum 30 second wait for rate limit errors
-        const actualWait = Math.max(waitTime, 30000);
+        // Ensure minimum 2 second wait for rate limit errors (optimized from 30s)
+        const actualWait = Math.max(waitTime, 2000);
         
         console.log(`⏳ Rate limited! Waiting ${Math.round(actualWait/1000)}s until next minute window (attempt ${attempt + 1}/${maxRetries + 1})`);
         await sleep(actualWait);
