@@ -91,6 +91,10 @@ const initializeCategoryState = async (gameId, selectedCategories, questionSetId
     }));
     
     console.log(`✅ Category state initialized for game ${gameId}`);
+    
+    // Initialize category counts for dynamic management
+    await initializeCategoryCounts(gameId, selectedCategories, availableCategories, questionSetId);
+    
     return true;
   } catch (error) {
     console.error(`❌ Error initializing category state for game ${gameId}:`, error);
@@ -329,6 +333,87 @@ const getAvailableCategoriesFromSet = async (questionSetId) => {
 const getCategoryNumberFromName = (categoryName, availableCategories) => {
   const category = availableCategories.find(cat => cat.name === categoryName);
   return category ? category.number : 1; // Default to 1 if not found
+};
+
+// Initialize category counts for dynamic management using array-based approach
+const initializeCategoryCounts = async (gameId, selectedCategories, availableCategories, questionSetId) => {
+  try {
+    console.log(`📊 Initializing category counts for game ${gameId} using array-based approach`);
+    
+    const ttl = Math.floor(Date.now() / 1000) + TTL_ACTIVE_PHASE;
+    
+    // Initialize arrays for three bitmask groups
+    const counts1_8 = new Array(8).fill(0);
+    const counts9_16 = new Array(8).fill(0);
+    const counts17_24 = new Array(8).fill(0);
+    
+    let totalQuestions = 0;
+    
+    for (const categoryName of selectedCategories) {
+      const categoryNumber = getCategoryNumberFromName(categoryName, availableCategories);
+      const categoryInfo = availableCategories.find(cat => cat.name === categoryName);
+      
+      // Get actual question count for this category
+      const questionCount = await getCategoryQuestionCount(questionSetId, categoryInfo?.id || categoryName);
+      
+      // Place count in appropriate array based on position
+      if (categoryNumber >= 1 && categoryNumber <= 8) {
+        counts1_8[categoryNumber - 1] = questionCount;
+      } else if (categoryNumber >= 9 && categoryNumber <= 16) {
+        counts9_16[categoryNumber - 9] = questionCount;
+      } else if (categoryNumber >= 17 && categoryNumber <= 24) {
+        counts17_24[categoryNumber - 17] = questionCount;
+      }
+      
+      totalQuestions += questionCount;
+    }
+    
+    // Store category counts state with array-based structure
+    await db.send(new PutCommand({
+      TableName: process.env.TABLE_NAME,
+      Item: {
+        PK: `GAME#${gameId}`,
+        SK: 'STATE#CATS#COUNTS',
+        Version: 1,
+        '1-8': counts1_8,
+        '9-16': counts9_16,
+        '17-24': counts17_24,
+        TotalEnabled: totalQuestions,
+        TotalRemaining: totalQuestions,
+        CreatedAt: new Date().toISOString(),
+        UpdatedAt: new Date().toISOString(),
+        ttl
+      }
+    }));
+    
+    console.log(`✅ Category counts initialized using arrays: ${totalQuestions} total questions across ${selectedCategories.length} categories`);
+    console.log(`📊 Counts - 1-8: [${counts1_8.join(',')}], 9-16: [${counts9_16.join(',')}], 17-24: [${counts17_24.join(',')}]`);
+    return true;
+  } catch (error) {
+    console.error(`❌ Error initializing category counts for game ${gameId}:`, error);
+    // Don't throw - this is an enhancement, shouldn't break existing flow
+    return false;
+  }
+};
+
+// Get actual question count for a category
+const getCategoryQuestionCount = async (questionSetId, categoryId) => {
+  try {
+    // Query questions for this category
+    const result = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: {
+        ':pk': `SET#${questionSetId}`,
+        ':sk': `QUESTION#${categoryId}#`
+      }
+    }));
+    
+    return result.Items?.length || 5; // Default to 5 if not found
+  } catch (error) {
+    console.error(`Error getting question count for category ${categoryId}:`, error);
+    return 5; // Default fallback
+  }
 };
 
 module.exports = {

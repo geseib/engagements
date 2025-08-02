@@ -370,6 +370,28 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  ToggleCategoryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-toggle-category'
+      CodeUri: lambda-functions/game/
+      Handler: toggle-category.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        ToggleCategoryEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/toggle-category
+            Method: POST
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   GetQuestionFunction:
     Type: AWS::Serverless::Function
     Properties:

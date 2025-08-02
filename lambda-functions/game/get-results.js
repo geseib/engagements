@@ -4,6 +4,12 @@ const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand, UpdateComm
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
 
+// Helper function to check if a bit is set in a bitmask
+const isBitSet = (mask, position) => {
+  const pos = position - 1; // Convert to 0-based index
+  return mask[pos] === '1';
+};
+
 exports.handler = async (event) => {
   try {
     // Handle POST request with body containing gameId and questionNumber
@@ -301,6 +307,10 @@ exports.handler = async (event) => {
       }
     }));
 
+    // Decrement category counts after results are calculated (prevent duplicates)
+    console.log(`🔢 Calling decrementCategoryCount for ${gameId}, question ${paddedQuestionId}`);
+    await decrementCategoryCount(gameId, paddedQuestionId);
+
     console.log(`✅ Calculated results for ${gameId}: ${winners.length} winner(s) with ${maxScore} points`);
     return {
       statusCode: 200,
@@ -497,6 +507,10 @@ async function handleTriviaResults(gameId, questionId) {
   });
 
   await Promise.all(playerUpdatePromises);
+
+  // Decrement category counts after trivia results are calculated (prevent duplicates)
+  console.log(`🔢 Calling decrementCategoryCount for trivia ${gameId}, question ${paddedQuestionId}`);
+  await decrementCategoryCount(gameId, paddedQuestionId);
 
   // Update game state to RESULTS (important for trivia flow!)
   console.log(`🏷️ Updating game state to RESULTS#${paddedQuestionId}`);
@@ -767,5 +781,252 @@ async function handleWavelengthResults(gameId, questionId) {
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }
     };
+  }
+}
+
+/**
+ * Decrement category count when a question is completed
+ * Uses atomic updates with version control for concurrent safety
+ */
+async function decrementCategoryCount(gameId, questionId) {
+  try {
+    console.log(`🔢 Decrementing category count for completed question ${questionId} in game ${gameId}`);
+    
+    // Check if this question has already been decremented (prevent duplicates)
+    const resultsCheck = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionId}#RESULTS` }
+    }));
+    
+    if (resultsCheck.Item && resultsCheck.Item.CategoryCountDecremented) {
+      console.log(`⚠️ Question ${questionId} already processed for category count decrement, skipping`);
+      return;
+    }
+    
+    // Get the question reference to determine which category was used
+    const questionRef = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionId}#REF` }
+    }));
+
+    if (!questionRef.Item || !questionRef.Item.SourceQuestionId) {
+      console.log(`⚠️ Question reference not found for ${questionId}, skipping category count decrement`);
+      return;
+    }
+
+    // Extract category from source question ID (format: QUESTION#{categoryId}#{questionNumber})
+    const sourceQuestionId = questionRef.Item.SourceQuestionId;
+    const categoryMatch = sourceQuestionId.match(/^QUESTION#([^#]+)#/);
+    
+    if (!categoryMatch) {
+      console.log(`⚠️ Could not extract category from source question ID: ${sourceQuestionId}`);
+      return;
+    }
+
+    const categoryId = categoryMatch[1];
+    console.log(`🎯 Identified category ${categoryId} for completed question`);
+
+    // Get current category counts with retry logic for concurrent updates
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts) {
+      try {
+        const countsResult = await db.send(new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: 'STATE#CATS#COUNTS' }
+        }));
+
+        if (!countsResult.Item) {
+          console.log(`📊 No category counts found for game ${gameId}, skipping decrement`);
+          return;
+        }
+
+        // Get the position of this category from the game's category state
+        const categoryStateResult = await db.send(new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: 'STATE#CATS' }
+        }));
+
+        if (!categoryStateResult.Item) {
+          console.log(`⚠️ Category state not found for game ${gameId}, skipping decrement`);
+          return;
+        }
+
+        // Find category position by querying question set categories
+        const categoriesQuery = await db.send(new QueryCommand({
+          TableName: process.env.TABLE_NAME,
+          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+          ExpressionAttributeValues: {
+            ':pk': questionRef.Item.SetId ? `SET#${questionRef.Item.SetId}` : `SET#unknown`,
+            ':sk': 'CATEGORY#'
+          }
+        }));
+
+        const allCategories = categoriesQuery.Items || [];
+        let categoryPosition = null;
+        
+        for (let i = 0; i < allCategories.length; i++) {
+          const catId = allCategories[i].SK.replace('CATEGORY#', '');
+          if (catId === categoryId) {
+            categoryPosition = i + 1; // 1-based position
+            break;
+          }
+        }
+
+        if (!categoryPosition) {
+          console.log(`⚠️ Could not determine position for category ${categoryId}, skipping decrement`);
+          return;
+        }
+
+        console.log(`📋 Found category ${categoryId} at position ${categoryPosition}`);
+
+        const currentCounts = countsResult.Item;
+        console.log(`🔍 Current counts record:`, JSON.stringify(currentCounts, null, 2));
+        
+        // Check for Version field
+        if (typeof currentCounts.Version !== 'number') {
+          console.log(`⚠️ Version field missing or invalid: ${currentCounts.Version}, initializing to 1`);
+          currentCounts.Version = 1;
+        }
+        
+        const counts1_8 = [...(currentCounts['1-8'] || [])];
+        const counts9_16 = [...(currentCounts['9-16'] || [])];
+        const counts17_24 = [...(currentCounts['17-24'] || [])];
+        
+        console.log(`📊 Current counts - 1-8: [${counts1_8}], 9-16: [${counts9_16}], 17-24: [${counts17_24}]`);
+        
+        // Determine which array and index to update
+        let arrayIndex, targetArray, arrayName;
+        if (categoryPosition >= 1 && categoryPosition <= 8) {
+          arrayIndex = categoryPosition - 1;
+          targetArray = counts1_8;
+          arrayName = '1-8';
+        } else if (categoryPosition >= 9 && categoryPosition <= 16) {
+          arrayIndex = categoryPosition - 9;
+          targetArray = counts9_16;
+          arrayName = '9-16';
+        } else if (categoryPosition >= 17 && categoryPosition <= 24) {
+          arrayIndex = categoryPosition - 17;
+          targetArray = counts17_24;
+          arrayName = '17-24';
+        } else {
+          console.log(`⚠️ Invalid category position ${categoryPosition}, skipping decrement`);
+          return;
+        }
+
+        const currentRemaining = targetArray[arrayIndex] || 0;
+        console.log(`🎯 Target: ${categoryId} at position ${categoryPosition} → ${arrayName}[${arrayIndex}] = ${currentRemaining}`);
+        
+        // Check if already at 0
+        if (currentRemaining <= 0) {
+          console.log(`⚠️ Category ${categoryId} already at 0 remaining questions`);
+          return;
+        }
+
+        // Update the array
+        const newCount = Math.max(0, currentRemaining - 1);
+        targetArray[arrayIndex] = newCount;
+        console.log(`🔄 Decrementing ${categoryId}: ${currentRemaining} → ${newCount}`);
+
+        // Recalculate totalRemaining from enabled categories only (should match totalEnabled)
+        const totalRemaining = totalEnabled;
+        
+        // Calculate total enabled (need to check bitmasks)
+        const hostMask1_8 = categoryStateResult.Item['HostMask1-8'];
+        const hostMask9_16 = categoryStateResult.Item['HostMask9-16'];
+        const hostMask17_24 = categoryStateResult.Item['HostMask17-24'];
+        
+        let totalEnabled = 0;
+        
+        // Count enabled questions from 1-8
+        for (let i = 0; i < 8; i++) {
+          if (isBitSet(hostMask1_8, i + 1)) {
+            totalEnabled += counts1_8[i] || 0;
+          }
+        }
+        
+        // Count enabled questions from 9-16
+        for (let i = 0; i < 8; i++) {
+          if (isBitSet(hostMask9_16, i + 1)) {
+            totalEnabled += counts9_16[i] || 0;
+          }
+        }
+        
+        // Count enabled questions from 17-24
+        for (let i = 0; i < 8; i++) {
+          if (isBitSet(hostMask17_24, i + 1)) {
+            totalEnabled += counts17_24[i] || 0;
+          }
+        }
+
+        // Atomic update with optimistic locking
+        await db.send(new UpdateCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: 'STATE#CATS#COUNTS' },
+          UpdateExpression: 'SET #ver = :newVer, #c1_8 = :c1_8, #c9_16 = :c9_16, #c17_24 = :c17_24, #totEnabled = :totEnabled, #totRemaining = :totRemaining, #updated = :updated',
+          ConditionExpression: 'Version = :expectedVer',
+          ExpressionAttributeNames: {
+            '#ver': 'Version',
+            '#c1_8': '1-8',
+            '#c9_16': '9-16',
+            '#c17_24': '17-24',
+            '#totEnabled': 'TotalEnabled',
+            '#totRemaining': 'TotalRemaining',
+            '#updated': 'UpdatedAt'
+          },
+          ExpressionAttributeValues: {
+            ':newVer': currentCounts.Version + 1,
+            ':c1_8': counts1_8,
+            ':c9_16': counts9_16,
+            ':c17_24': counts17_24,
+            ':totEnabled': totalEnabled,
+            ':totRemaining': totalRemaining,
+            ':updated': new Date().toISOString(),
+            ':expectedVer': currentCounts.Version
+          }
+        }));
+
+        console.log(`✅ Decremented ${categoryId} (position ${categoryPosition}, ${arrayName}[${arrayIndex}]): ${currentRemaining} → ${currentRemaining - 1}`);
+        console.log(`📊 Updated totals - Enabled: ${totalEnabled}, Total Remaining: ${totalRemaining}`);
+        
+        // Mark this question's results as having been processed for category count
+        try {
+          await db.send(new UpdateCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionId}#RESULTS` },
+            UpdateExpression: 'SET CategoryCountDecremented = :flag',
+            ExpressionAttributeValues: {
+              ':flag': true
+            }
+          }));
+          console.log(`🏷️ Marked question ${questionId} as processed for category count`);
+        } catch (markError) {
+          console.log(`⚠️ Failed to mark question as processed, but decrement succeeded:`, markError.message);
+        }
+        
+        return; // Success, exit retry loop
+
+      } catch (error) {
+        attempts++;
+        
+        if (error.name === 'ConditionalCheckFailedException') {
+          console.log(`🔄 Concurrent update detected, retrying (${attempts}/${maxAttempts})`);
+          if (attempts < maxAttempts) {
+            // Brief delay before retry
+            await new Promise(resolve => setTimeout(resolve, 100 * attempts));
+            continue;
+          }
+        }
+        
+        throw error; // Re-throw non-retryable errors or max attempts reached
+      }
+    }
+    
+    console.log(`❌ Failed to decrement category count after ${maxAttempts} attempts`);
+    
+  } catch (error) {
+    console.error(`❌ Error decrementing category count for game ${gameId}, question ${questionId}:`, error);
+    // Don't throw - this shouldn't block results processing
   }
 }
