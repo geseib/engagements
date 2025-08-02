@@ -84,6 +84,9 @@ function GameHostPage() {
   const [gamesList, setGamesList] = useState([]);
   const [reportsModalMode, setReportsModalMode] = useState('reports'); // 'reports' or 'select'
   
+  // Final Report State
+  const [showFinalReport, setShowFinalReport] = useState(false);
+  
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
   const [useWebSocket, setUseWebSocket] = useState(true); // Always use WebSocket
@@ -111,6 +114,11 @@ function GameHostPage() {
   const [selectedSetId, setSelectedSetId] = useState('');
   const [categories, setCategories] = useState([]);
   const [activeCategoryIds, setActiveCategoryIds] = useState(new Set());
+  
+  // Dynamic Category Management (for active games)
+  const [categoryCounts, setCategoryCounts] = useState(null);
+  const [categoryBitmasks, setCategoryBitmasks] = useState(null);
+  const [isTogglingCategory, setIsTogglingCategory] = useState(false);
 
 
   // Confirmation modals
@@ -377,6 +385,14 @@ Focus on actionable business strategy insights.`;
 
   // Removed loadAIInsights and generateNewAISummary - now handled directly in useEffect
 
+  // Reload category counts when transitioning to ASK state (new question starts)
+  useEffect(() => {
+    if (gameState.startsWith('ASK#') && gameId) {
+      console.log('📊 ASK state detected - reloading category counts for updated question counts');
+      loadCategoryCounts();
+    }
+  }, [gameState, gameId]);
+
   // Load AI insights when in results state and we have answers
   useEffect(() => {
     if (gameState.startsWith('RESULTS#') && currentQuestionIndex >= 0 && answers.length > 0) {
@@ -384,6 +400,12 @@ Focus on actionable business strategy insights.`;
       console.log(`🤖 Starting AI insights load for question ${questionId} with ${answers.length} answers`);
       setLoadingAIInsights(true);
       setCurrentAIInsights(null);
+      
+      // Reload category counts to reflect decremented values after question completion
+      if (categoryCounts) {
+        console.log('📊 Reloading category counts after question completion');
+        loadCategoryCounts();
+      }
       
       // In WebSocket mode, we still need to trigger AI generation but rely on WebSocket for completion notification
       if (useWebSocket) {
@@ -665,6 +687,28 @@ Focus on actionable business strategy insights.`;
       }
     });
 
+    webSocketClient.onMessage('gameEnded', (data) => {
+      console.log('🔌 Game ended notification:', data);
+      // Show stylized modal and transition to final report
+      showConfirmation(
+        '🏁 End of Game!',
+        'All questions have been completed. Would you like to view the final report?',
+        'View Report'
+      ).then((confirmed) => {
+        if (confirmed) {
+          // Set game state to ended and navigate to report
+          setGameState('ENDED');
+          setShowFinalReport(true);
+          setShowSidebar(false);
+          setShowAdminSidebar(false);
+          setShowHostControls(false);
+          setShowSetSelector(false);
+          setShowCategoryManager(false);
+          console.log('🔌 Navigating to final report after game end');
+        }
+      });
+    });
+
     // Connect as host - WebSocket is required
     console.log('🔌 HOST: Connecting WebSocket for real-time updates');
     webSocketClient.connect(gameId, null, true);
@@ -894,6 +938,9 @@ Focus on actionable business strategy insights.`;
         
         // Fetch current players with scores
         await fetchPlayers('state-restore');
+        
+        // Load dynamic category management data for active games
+        await loadCategoryCounts();
         
         setIsRestoringState(false); // End restoration
         return true; // Successfully restored existing game
@@ -1126,6 +1173,70 @@ Focus on actionable business strategy insights.`;
     });
   };
 
+  // Load dynamic category counts and bitmasks for active games
+  const loadCategoryCounts = async () => {
+    if (!gameId) return;
+    
+    try {
+      // Get category counts
+      const countsRes = await fetch(`${API_BASE}games/${gameId}/state?includeHostData=true`);
+      if (countsRes.ok) {
+        const stateData = await countsRes.json();
+        
+        if (stateData.categoryCounts) {
+          setCategoryCounts(stateData.categoryCounts);
+          console.log(`📊 Loaded category counts:`, stateData.categoryCounts);
+        }
+        
+        if (stateData.categoryState) {
+          setCategoryBitmasks(stateData.categoryState);
+          console.log(`🔢 Loaded category bitmasks:`, stateData.categoryState);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Failed to load category counts:', error);
+    }
+  };
+
+  // Toggle category during active game using backend API
+  const toggleCategoryDuringGame = async (categoryId, categoryName, enabled) => {
+    if (!gameId || isTogglingCategory) return;
+    
+    setIsTogglingCategory(true);
+    try {
+      console.log(`🎯 Toggling category ${categoryId} (${categoryName}) to ${enabled} for game ${gameId}`);
+      
+      const response = await fetch(`${API_BASE}games/${gameId}/toggle-category`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categoryId,
+          categoryName,
+          enabled
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to toggle category');
+      }
+      
+      const result = await response.json();
+      console.log(`✅ Category toggle successful:`, result);
+      
+      // Reload category counts to get updated state
+      await loadCategoryCounts();
+      
+      return result;
+    } catch (error) {
+      console.error('❌ Failed to toggle category:', error);
+      alert(`Failed to toggle category: ${error.message}`);
+      throw error;
+    } finally {
+      setIsTogglingCategory(false);
+    }
+  };
+
 
   const checkAnswerStatus = async () => {
     try {
@@ -1276,6 +1387,9 @@ Focus on actionable business strategy insights.`;
       
       // Refresh players to show any updated status
       await fetchPlayers('after-next-question');
+      
+      // Reload category counts after transitioning to new question
+      await loadCategoryCounts();
       
       // Reset manual state change flag after a delay to allow polling to resume
       setTimeout(() => {
@@ -1544,6 +1658,9 @@ Focus on actionable business strategy insights.`;
       
       // Refresh player data to show updated scores
       await fetchPlayers('after-start-question');
+      
+      // Reload category counts after showing results (categories may have been decremented)
+      await loadCategoryCounts();
       
       
       // Make sure currentQuestionId is set to the question number
@@ -2663,26 +2780,93 @@ Ready to engage? See you there!`;
                 <div className="question-set-header">
                   <h3>📚 {questionSets.find(set => set.id === selectedSetId)?.name || 'Unknown Set'}</h3>
                   <div className="set-details">
-                    {questionSets.find(set => set.id === selectedSetId)?.totalQuestions || 0} questions
+                    {categoryCounts ? (
+                      // Show dynamic total for active games
+                      categories.reduce((total, category, index) => {
+                        const position = index + 1;
+                        let enabled = false;
+                        let remaining = 0;
+                        
+                        // Check if category is enabled from bitmasks
+                        if (position <= 8) {
+                          enabled = categoryBitmasks['HostMask1-8']?.charAt(position - 1) === '1';
+                          remaining = categoryCounts['1-8']?.[position - 1] || 0;
+                        } else if (position <= 16) {
+                          enabled = categoryBitmasks['HostMask9-16']?.charAt(position - 9) === '1';
+                          remaining = categoryCounts['9-16']?.[position - 9] || 0;
+                        } else if (position <= 24) {
+                          enabled = categoryBitmasks['HostMask17-24']?.charAt(position - 17) === '1';
+                          remaining = categoryCounts['17-24']?.[position - 17] || 0;
+                        }
+                        
+                        // Only count questions from enabled categories
+                        return enabled ? total + remaining : total;
+                      }, 0)
+                    ) : (
+                      // Show static total for game setup
+                      questionSets.find(set => set.id === selectedSetId)?.totalQuestions || 0
+                    )} questions remaining
                   </div>
                 </div>
                 
                 {categories.length > 0 && (
                   <div className="categories-section">
                     <h4>Categories</h4>
-                    <div className="categories-list">
-                      {categories.map(category => (
-                        <div 
-                          key={category.name} 
-                          className={`category-item ${activeCategoryIds.has(category.name) ? 'active' : 'inactive'}`}
-                          onClick={() => toggleCategoryActive(category.name)}
-                          title={`Click to ${activeCategoryIds.has(category.name) ? 'disable' : 'enable'} ${category.name} questions`}
-                        >
-                          <span className="category-name">{category.name}</span>
-                          <span className="category-count">{category.questionCount}</span>
-                        </div>
-                      ))}
+                    <div className="category-button-grid">
+                      {categories.map((category, index) => {
+                        const position = index + 1;
+                        let enabled = false;
+                        let questionCount = category.questionCount;
+                        let isClickable = false;
+
+                        // For active games with dynamic counts, get live data
+                        if (categoryCounts && categoryBitmasks) {
+                          // Determine enabled state from bitmasks
+                          if (position <= 8) {
+                            enabled = categoryBitmasks['HostMask1-8']?.charAt(position - 1) === '1';
+                            questionCount = categoryCounts['1-8']?.[position - 1] || 0;
+                          } else if (position <= 16) {
+                            enabled = categoryBitmasks['HostMask9-16']?.charAt(position - 9) === '1';
+                            questionCount = categoryCounts['9-16']?.[position - 9] || 0;
+                          } else if (position <= 24) {
+                            enabled = categoryBitmasks['HostMask17-24']?.charAt(position - 17) === '1';
+                            questionCount = categoryCounts['17-24']?.[position - 17] || 0;
+                          }
+                          isClickable = true;
+                        } else {
+                          // For game setup, use static selection
+                          enabled = activeCategoryIds.has(category.name);
+                        }
+
+                        return (
+                          <button
+                            key={category.name}
+                            type="button"
+                            className={`category-button ${enabled ? 'selected' : ''} ${questionCount === 0 ? 'exhausted' : ''}`}
+                            onClick={() => {
+                              if (isClickable) {
+                                console.log(`🔘 Category toggle clicked: position=${position}, name=${category.name}, enabled=${enabled}, remaining=${questionCount}`);
+                                toggleCategoryDuringGame(position.toString(), category.name, !enabled);
+                              } else {
+                                toggleCategoryActive(category.name);
+                              }
+                            }}
+                            disabled={isTogglingCategory}
+                          >
+                            <span className="category-name">{category.name}</span>
+                            <span className="category-count">({questionCount})</span>
+                          </button>
+                        );
+                      })}
                     </div>
+                    {!categoryCounts && (
+                      <small>
+                        {activeCategoryIds.size === 0 
+                          ? 'No categories selected - all categories will be included'
+                          : `${activeCategoryIds.size} category(ies) selected`
+                        }
+                      </small>
+                    )}
                   </div>
                 )}
               </div>

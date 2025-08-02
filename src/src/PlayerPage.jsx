@@ -79,6 +79,11 @@ function PlayerPage() {
   const [lastProcessedQuestionId, setLastProcessedQuestionId] = useState(null);
   const [results, setResults] = useState(null);
 
+  // Game end modal state
+  const [showGameEndModal, setShowGameEndModal] = useState(false);
+  const [reportAvailable, setReportAvailable] = useState(false);
+  const [reportUrl, setReportUrl] = useState(null);
+
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
   const [useWebSocket, setUseWebSocket] = useState(true); // Always use WebSocket
@@ -325,6 +330,13 @@ function PlayerPage() {
       }
     });
 
+    // Game ended handler
+    webSocketClient.onMessage('gameEnded', (data) => {
+      console.log('🔌 Player received game ended notification:', data);
+      setGameState('ENDED');
+      setShowGameEndModal(true);
+    });
+
     // Connect as player - WebSocket is required
     console.log('🔌 PLAYER: Connecting WebSocket for real-time updates');
     webSocketClient.connect(gameId, playerName, false);
@@ -346,6 +358,7 @@ function PlayerPage() {
       webSocketClient.offMessage('aiSummaryReady');
       webSocketClient.offMessage('hostMessage');
       webSocketClient.offMessage('resultsReady');
+      webSocketClient.offMessage('gameEnded');
     };
   }, [gameId, playerName, joined, useWebSocket]);
 
@@ -1183,6 +1196,39 @@ function PlayerPage() {
     }
   };
 
+  // Check for report availability and handle download
+  const checkAndDownloadReport = async () => {
+    try {
+      console.log('📊 PLAYER: Checking for report availability...');
+      const response = await fetch(`${API_BASE}admin/reports/${gameId}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.downloadUrl) {
+          console.log('📊 PLAYER: Report available, opening download...');
+          setReportAvailable(true);
+          setReportUrl(data.downloadUrl);
+          // Open the report in a new tab
+          window.open(data.downloadUrl, '_blank');
+        } else {
+          console.log('📊 PLAYER: Report not yet available');
+          setReportAvailable(false);
+        }
+      } else {
+        console.log('📊 PLAYER: Report not available (404)');
+        setReportAvailable(false);
+      }
+    } catch (error) {
+      console.error('📊 PLAYER: Error checking report:', error);
+      setReportAvailable(false);
+    }
+  };
+
+  // Close game end modal
+  const closeGameEndModal = () => {
+    setShowGameEndModal(false);
+  };
+
   // Detailed voting component
   const DetailedVotingMode = ({ answers, votes, onVoteChange, onSubmitVotes, playerName, requiredVotes }) => {
     const handleVoteClick = (answerIndex, position) => {
@@ -2013,6 +2059,38 @@ function PlayerPage() {
         )}
       </div>
       </div>
+
+      {/* Game End Modal */}
+      {showGameEndModal && (
+        <div className="modal-overlay" onClick={closeGameEndModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>🏁 Game Complete!</h3>
+            <p>All questions have been completed. Thank you for playing!</p>
+            <div className="modal-actions">
+              <button 
+                className="btn-primary" 
+                onClick={() => {
+                  closeGameEndModal();
+                  checkAndDownloadReport();
+                }}
+              >
+                Download Report
+              </button>
+              <button 
+                className="btn-secondary" 
+                onClick={closeGameEndModal}
+              >
+                Close
+              </button>
+            </div>
+            {!reportAvailable && (
+              <div className="report-status">
+                <p><em>If the report isn't ready yet, please ask the host to generate it.</em></p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* GitHub Issue Reporting FAB */}
       <IssueFab context="player" gameId={gameId} />
