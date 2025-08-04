@@ -1159,13 +1159,24 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
   let correctCount = 0; // Initialize correctCount for all game types
   let correctAnswers = [];
   
+  console.log('🎯 BEFORE GAME TYPE PROCESSING:');
+  console.log('  gameType:', gameType);
+  console.log('  question exists:', !!question);
+  if (question) {
+    console.log('  question has correctAnswer:', !!question.correctAnswer);
+    console.log('  question has optionA:', !!question.optionA);
+    console.log('  question has optionB:', !!question.optionB);
+  }
+  
   // Wavelength-specific variables (already initialized above)
   let wavelengthTopic = '';
   let wavelengthWords = '';
   let wordAnalysis = '';
   
   // Check if this is a trivia or poll game
+  console.log('🎮 GAME TYPE CHECK: gameType=', gameType, 'question exists=', !!question);
   if (gameType === 'trivia' && question) {
+    console.log('📋 ENTERING TRIVIA PROCESSING BLOCK');
     // Format trivia choices with better formatting
     const options = [];
     if (question.optionA) options.push(`A) ${question.optionA}`);
@@ -1269,6 +1280,8 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     }
     
     console.log('🔍 TRIVIA PROCESSING COMPLETE:');
+    console.log('  gameType:', gameType);
+    console.log('  question exists:', !!question);
     console.log('  question.correctAnswer:', question.correctAnswer);
     console.log('  question.optionA:', question.optionA);
     console.log('  question.optionB:', question.optionB);
@@ -1280,7 +1293,7 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     console.log('  correctCount:', correctCount);
     console.log('  triviaResponses:', triviaResponses);
     console.log('  triviaCorrectness:', triviaCorrectness);
-  } else if (gameType === 'polls' && question) {
+  } else if ((gameType === 'polls' || gameType === 'poll') && question) {
     // Format poll options
     const options = [];
     if (question.optionA) options.push(`Option 1: ${question.optionA}`);
@@ -1398,9 +1411,37 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     questionCategory: question.category || 'General',
     questionContext: question.questionDetail || question.detail || '',
     questionNumber: currentRound,
-    triviaChoices: triviaChoices,
+    triviaChoices: triviaChoices || (() => {
+      // Fallback if trivia processing didn't run
+      if (question && gameType === 'trivia') {
+        const opts = [];
+        if (question.optionA) opts.push(`A) ${question.optionA}`);
+        if (question.optionB) opts.push(`B) ${question.optionB}`);
+        if (question.optionC) opts.push(`C) ${question.optionC}`);
+        if (question.optionD) opts.push(`D) ${question.optionD}`);
+        if (question.optionE) opts.push(`E) ${question.optionE}`);
+        if (question.optionF) opts.push(`F) ${question.optionF}`);
+        console.log('⚠️ FALLBACK: Building triviaChoices in template vars');
+        return opts.join(', ');
+      }
+      return '';
+    })(),
     pollOptions: pollOptions,
-    correctAnswer: correctAnswer,
+    correctAnswer: correctAnswer || (() => {
+      // Fallback if trivia processing didn't run
+      if (question && gameType === 'trivia' && question.correctAnswer) {
+        const correctAnswerValue = question.correctAnswer;
+        if (correctAnswerValue.startsWith('Option')) {
+          const optionLetter = correctAnswerValue.replace('Option', '');
+          const optionField = `option${optionLetter}`;
+          const optionText = question[optionField];
+          console.log('⚠️ FALLBACK: Building correctAnswer in template vars');
+          return optionText ? `The correct answer is ${optionLetter}: ${optionText}` : `The correct answer is ${optionLetter}`;
+        }
+        return correctAnswerValue;
+      }
+      return '';
+    })(),
     answerDetails: question.answerDetails || question.AnswerDetails || 'No explanation provided',
     difficulty: question.difficulty || question.Difficulty || 'medium',
     questionExplanation: question.answerDetails || question.AnswerDetails || question.detail || '',
