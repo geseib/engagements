@@ -468,6 +468,11 @@ exports.handler = async (event) => {
       question.optionE = question.optionE || question.OptionE;
       question.optionF = question.optionF || question.OptionF;
       question.answerDetails = question.answerDetails || question.AnswerDetails;
+      
+      console.log('🔧 AFTER NORMALIZATION:');
+      console.log('  question.correctAnswer:', question.correctAnswer);
+      console.log('  question.optionA:', question.optionA);
+      console.log('  question.optionB:', question.optionB);
     }
 
     // Use the sequential question number for answers lookup (already calculated above)
@@ -1163,9 +1168,12 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
   console.log('  gameType:', gameType);
   console.log('  question exists:', !!question);
   if (question) {
-    console.log('  question has correctAnswer:', !!question.correctAnswer);
-    console.log('  question has optionA:', !!question.optionA);
-    console.log('  question has optionB:', !!question.optionB);
+    console.log('  🔍 ALL QUESTION FIELDS:', Object.keys(question));
+    console.log('  question.correctAnswer:', question.correctAnswer);
+    console.log('  question.optionA:', question.optionA);
+    console.log('  question.optionB:', question.optionB);
+    console.log('  question.optionC:', question.optionC);
+    console.log('  question.optionD:', question.optionD);
   }
   
   // Wavelength-specific variables (already initialized above)

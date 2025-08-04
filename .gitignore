@@ -161,6 +161,11 @@ docs/.doctrees/
 # Session files
 .session
 
+# MCP and Claude configuration
+.mcp.json
+.augment/
+.claude/
+
 # Lock files (optional - you may want to keep these)
 # package-lock.json
 # yarn.lock

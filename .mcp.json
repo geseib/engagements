@@ -8,7 +8,7 @@
       ],
       "env": {
         "PATH": "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:~/.local/bin",
-        "OPENAI_API_KEY": "AIzaSyAVFJzQvXOqloF8I_QZwK5GLoyS6sYcxxM"
+        "OPENAI_API_KEY": "AIzaSyATAo-JuOkfmOdTMDmTNzPHNysYeklVxPg"
       }
     }
   }
