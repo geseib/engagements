@@ -507,24 +507,19 @@ exports.handler = async (event) => {
 
     // Get randomization preference from any category ORDER record
     let isRandomized = true; // Default to true
-    const firstCategoryOrderQuery = await db.send(new QueryCommand({
+    const categoryOrderQuery = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
       KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
       ExpressionAttributeValues: {
         ':pk': `GAME#${gameId}`,
         ':sk': 'CATEGORY#'
-      },
-      FilterExpression: 'contains(SK, :orderSuffix)',
-      ExpressionAttributeValues: {
-        ':pk': `GAME#${gameId}`,
-        ':sk': 'CATEGORY#',
-        ':orderSuffix': '#ORDER'
-      },
-      Limit: 1
+      }
     }));
     
-    if (firstCategoryOrderQuery.Items && firstCategoryOrderQuery.Items.length > 0) {
-      isRandomized = firstCategoryOrderQuery.Items[0].IsRandom !== false;
+    // Find the first ORDER record
+    const orderRecords = (categoryOrderQuery.Items || []).filter(item => item.SK.includes('#ORDER'));
+    if (orderRecords.length > 0) {
+      isRandomized = orderRecords[0].IsRandom !== false;
       console.log(`🎲 Randomization preference: ${isRandomized ? 'RANDOM' : 'IN ORDER'}`);
     }
 
