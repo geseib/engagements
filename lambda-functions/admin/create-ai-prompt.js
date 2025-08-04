@@ -40,33 +40,46 @@ exports.handler = async (event) => {
       throw new Error('Request body is required');
     }
 
+    const requestBody = JSON.parse(event.body);
+    
+    // Support both old and new formats
     const {
       name,
       description,
       gameType,
+      promptType = 'generation',
+      // Old format fields
       category,
       scenario,
+      scenarioType, // Make optional - not required anymore
       template,
       instructions,
+      // New format fields from AIGenerationPromptEditor
+      basePrompt,
+      contextTemplate,
+      audienceTemplate,
+      categoryTemplate,
       outputFormat,
+      defaultSettings = {},
+      // Common fields
       isDefault = false,
-      status = 'draft',
+      status = 'active',
       questionSetIds = [],
       tags = []
-    } = JSON.parse(event.body);
+    } = requestBody;
 
     // Validate required fields - support both old (template) and new (instructions + outputFormat) formats
     if (!name || !gameType) {
       throw new Error('Missing required fields: name and gameType are required');
     }
     
-    // Either template OR (instructions + outputFormat) must be provided
-    if (!template && (!instructions || !outputFormat)) {
-      throw new Error('Either template OR both instructions and outputFormat are required');
+    // Either template OR (instructions + outputFormat) OR basePrompt must be provided
+    if (!template && (!instructions || !outputFormat) && !basePrompt) {
+      throw new Error('Either template OR both instructions and outputFormat OR basePrompt are required');
     }
 
-    // Validate gameType
-    const validGameTypes = ['callandanswer', 'trivia', 'polls'];
+    // Validate gameType - support both old and new format names
+    const validGameTypes = ['callandanswer', 'call-and-answer', 'trivia', 'polls', 'poll', 'wavelength'];
     if (!validGameTypes.includes(gameType)) {
       throw new Error(`Invalid gameType. Must be one of: ${validGameTypes.join(', ')}`);
     }
@@ -87,12 +100,20 @@ exports.handler = async (event) => {
       name,
       description,
       gameType,
-      category,
-      scenario,
-      // Support both old and new formats
+      promptType,
+      // Old format fields (optional)
+      ...(category && { category }),
+      ...(scenario && { scenario }),
+      ...(scenarioType && { scenarioType }),
       ...(template && { template }),
       ...(instructions && { instructions }),
+      // New format fields (optional)
+      ...(basePrompt && { basePrompt }),
+      ...(contextTemplate && { contextTemplate }),
+      ...(audienceTemplate && { audienceTemplate }),
+      ...(categoryTemplate && { categoryTemplate }),
       ...(outputFormat && { outputFormat }),
+      ...(Object.keys(defaultSettings).length > 0 && { defaultSettings }),
       isDefault,
       status,
       questionSetIds,
@@ -100,9 +121,9 @@ exports.handler = async (event) => {
       createdAt: timestamp,
       updatedAt: timestamp,
       metadata: {
-        author: 'admin', // Could be enhanced with actual user info
+        author: 'admin',
         createdBy: 'admin-interface',
-        format: template ? 'legacy' : 'structured'
+        format: basePrompt ? 'generation' : (template ? 'legacy' : 'structured')
       }
     };
 
@@ -129,8 +150,18 @@ exports.handler = async (event) => {
       name,
       description,
       gameType,
-      category,
-      scenario,
+      promptType,
+      // Old format fields (optional)
+      ...(category && { category }),
+      ...(scenario && { scenario }),
+      ...(scenarioType && { scenarioType }),
+      // New format fields (optional) 
+      ...(basePrompt && { basePrompt }),
+      ...(contextTemplate && { contextTemplate }),
+      ...(audienceTemplate && { audienceTemplate }),
+      ...(categoryTemplate && { categoryTemplate }),
+      ...(outputFormat && { outputFormat }),
+      ...(Object.keys(defaultSettings).length > 0 && { defaultSettings }),
       isDefault,
       status,
       questionSetIds,

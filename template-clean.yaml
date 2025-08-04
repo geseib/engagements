@@ -1270,6 +1270,12 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-prompts
             Method: POST
+        AdminSaveAIPromptEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/ai-prompts/save
+            Method: POST
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
