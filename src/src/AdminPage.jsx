@@ -953,7 +953,7 @@ function AdminPage() {
                     <div className="section-header">
                       <h3>📝 Question Set Generator AI Prompts</h3>
                       <div className="section-header-right">
-                        <HelpButton section="generation-prompts" variant="inline" size="small" tooltip="Help: Question Set Generator Prompts" />
+                        <HelpButton section="ai-prompts" variant="inline" size="small" tooltip="Help: AI Prompts Management" />
                         <span className="section-icon">🏗️</span>
                       </div>
                     </div>
@@ -977,7 +977,7 @@ function AdminPage() {
                     <div className="section-header">
                       <h3>🤖 Engagement Results AI Analysis (Workie)</h3>
                       <div className="section-header-right">
-                        <HelpButton section="analysis-prompts" variant="inline" size="small" tooltip="Help: Engagement Results Analysis" />
+                        <HelpButton section="ai-prompts" variant="inline" size="small" tooltip="Help: AI Prompts Management" />
                         <span className="section-icon">
                           <img src="/workie.png" alt="Workie" className="workie-icon-small" />
                         </span>

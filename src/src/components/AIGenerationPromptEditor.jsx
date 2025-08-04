@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import './AIPromptManager.css';
 
 const API_BASE = window.API_BASE;
 

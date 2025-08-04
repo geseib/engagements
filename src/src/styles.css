@@ -5751,6 +5751,15 @@ body {
   box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
 }
 
+.workie-icon-small {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #667eea;
+  margin-right: 8px;
+}
+
 .ai-insights-content h3 {
   font-family: 'PP Neue Corp Wide', sans-serif;
   font-size: 1.4rem;
