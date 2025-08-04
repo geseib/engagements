@@ -710,11 +710,7 @@ exports.handler = async (event) => {
       promptProvenance: promptProvenance,
       debugMode: debug === 'true',
       questionId: targetQuestionId,
-      question: {
-        title: question.Title,
-        detail: question.Detail || '',
-        category: question.Category
-      },
+      question: question, // Pass the normalized question object with all fields
       answers: answers.map(answer => ({
         playerName: answer.PlayerName,
         answer: answer.Answer
@@ -1204,8 +1200,8 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     
     console.log('🔍 TRIVIA CHOICES DEBUG:', triviaChoices);
     
-    // Get correct answer(s) with improved extraction
-    let correctAnswerValue = question.correctAnswer || question.CorrectAnswer;
+    // Get correct answer(s) with improved extraction (use normalized field only)
+    let correctAnswerValue = question.correctAnswer;
     
     if (correctAnswerValue) {
       // If it's an option ID (like OptionA), convert to actual text
@@ -1245,9 +1241,9 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
       const playerAnswer = answer.Answer || answer.answer;
       responseDistribution[playerAnswer] = (responseDistribution[playerAnswer] || 0) + 1;
       
-      // Check if answer is correct using both field name variants
-      const correctAnswerValue = question.correctAnswer || question.CorrectAnswer;
-      const correctAnswersArray = question.correctAnswers || question.CorrectAnswers;
+      // Check if answer is correct using normalized fields only
+      const correctAnswerValue = question.correctAnswer;
+      const correctAnswersArray = question.correctAnswers;
       
       // Handle OptionA format conversion to actual text
       let actualCorrectAnswer = correctAnswerValue;
@@ -1457,9 +1453,9 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
       }
       return '';
     })(),
-    answerDetails: question.answerDetails || question.AnswerDetails || 'No explanation provided',
-    difficulty: question.difficulty || question.Difficulty || 'medium',
-    questionExplanation: question.answerDetails || question.AnswerDetails || question.detail || '',
+    answerDetails: question.answerDetails || 'No explanation provided',
+    difficulty: question.difficulty || 'medium',
+    questionExplanation: question.answerDetails || question.detail || '',
     
     // ANSWERS
     playerAnswers: playerAnswers,
