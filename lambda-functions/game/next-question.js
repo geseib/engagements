@@ -21,7 +21,7 @@ const setBitToZero = (mask, position) => {
 };
 
 // Helper function to select next question from enhanced counts (array-based)
-const selectNextQuestionFromCounts = async (gameId, countsState, questionSetId) => {
+const selectNextQuestionFromCounts = async (gameId, countsState, questionSetId, isRandomized = true) => {
   const counts1_8 = countsState['1-8'] || [];
   const counts9_16 = countsState['9-16'] || [];
   const counts17_24 = countsState['17-24'] || [];
@@ -99,9 +99,17 @@ const selectNextQuestionFromCounts = async (gameId, countsState, questionSetId) 
     return null;
   }
   
-  // Randomly select from available categories
-  const selectedCategory = availableCategories[Math.floor(Math.random() * availableCategories.length)];
-  console.log(`🎲 Selected category at position ${selectedCategory.position} (${selectedCategory.remaining} remaining)`);
+  // Select category based on randomization setting
+  let selectedCategory;
+  if (isRandomized) {
+    // Randomly select from available categories
+    selectedCategory = availableCategories[Math.floor(Math.random() * availableCategories.length)];
+    console.log(`🎲 Selected category at position ${selectedCategory.position} (${selectedCategory.remaining} remaining) - RANDOM`);
+  } else {
+    // Select the first available category (lowest position number)
+    selectedCategory = availableCategories.sort((a, b) => a.position - b.position)[0];
+    console.log(`📋 Selected category at position ${selectedCategory.position} (${selectedCategory.remaining} remaining) - IN ORDER`);
+  }
   
   // Get all categories from question set for position to categoryId mapping
   const categoriesQuery = await db.send(new QueryCommand({
@@ -181,7 +189,7 @@ const selectNextQuestionFromCounts = async (gameId, countsState, questionSetId) 
 };
 
 // Helper function to select next question based on bitmasks
-const selectNextQuestion = async (gameId, categoryState, questionSetId) => {
+const selectNextQuestion = async (gameId, categoryState, questionSetId, isRandomized = true) => {
   console.log(`🎯 Selecting next question for game ${gameId}`);
   
   // Check if we have enhanced category counts (new feature)
@@ -193,7 +201,7 @@ const selectNextQuestion = async (gameId, categoryState, questionSetId) => {
   if (countsResult.Item && (countsResult.Item['1-8'] || countsResult.Item['9-16'] || countsResult.Item['17-24'])) {
     // Use enhanced category management
     console.log(`📊 Using enhanced array-based category counts for selection`);
-    return selectNextQuestionFromCounts(gameId, countsResult.Item, questionSetId);
+    return selectNextQuestionFromCounts(gameId, countsResult.Item, questionSetId, isRandomized);
   }
   
   // Fallback to bitmask-based selection
@@ -260,9 +268,17 @@ const selectNextQuestion = async (gameId, categoryState, questionSetId) => {
     return null;
   }
 
-  // Randomly select from available categories
-  const selectedCategory = availableCategories[Math.floor(Math.random() * availableCategories.length)];
-  console.log(`🎲 Selected category: ${selectedCategory.name} (${selectedCategory.categoryId})`);
+  // Select category based on randomization setting
+  let selectedCategory;
+  if (isRandomized) {
+    // Randomly select from available categories
+    selectedCategory = availableCategories[Math.floor(Math.random() * availableCategories.length)];
+    console.log(`🎲 Selected category: ${selectedCategory.name} (${selectedCategory.categoryId}) - RANDOM`);
+  } else {
+    // Select the first available category (lowest position number)
+    selectedCategory = availableCategories.sort((a, b) => a.position - b.position)[0];
+    console.log(`📋 Selected category: ${selectedCategory.name} (${selectedCategory.categoryId}) - IN ORDER`);
+  }
 
   // Get the next question from this category
   const categoryOrderQuery = await db.send(new GetCommand({
@@ -489,8 +505,31 @@ exports.handler = async (event) => {
       };
     }
 
+    // Get randomization preference from any category ORDER record
+    let isRandomized = true; // Default to true
+    const firstCategoryOrderQuery = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: {
+        ':pk': `GAME#${gameId}`,
+        ':sk': 'CATEGORY#'
+      },
+      FilterExpression: 'contains(SK, :orderSuffix)',
+      ExpressionAttributeValues: {
+        ':pk': `GAME#${gameId}`,
+        ':sk': 'CATEGORY#',
+        ':orderSuffix': '#ORDER'
+      },
+      Limit: 1
+    }));
+    
+    if (firstCategoryOrderQuery.Items && firstCategoryOrderQuery.Items.length > 0) {
+      isRandomized = firstCategoryOrderQuery.Items[0].IsRandom !== false;
+      console.log(`🎲 Randomization preference: ${isRandomized ? 'RANDOM' : 'IN ORDER'}`);
+    }
+
     // Select next question
-    const nextQuestion = await selectNextQuestion(gameId, categoryState.Item, gameMetadata.Item.QuestionSetId);
+    const nextQuestion = await selectNextQuestion(gameId, categoryState.Item, gameMetadata.Item.QuestionSetId, isRandomized);
 
     if (!nextQuestion) {
       // Game is finished - update state to ENDED and broadcast

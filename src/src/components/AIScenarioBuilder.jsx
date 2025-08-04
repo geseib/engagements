@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 
 const API_BASE = window.API_BASE;
@@ -9,7 +9,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     type: '',
     context: '',
     audience: '',
-    difficulty: 'medium',
+    difficulty: engagementType === 'trivia' ? 'medium' : 'detailed',
     count: 5,
     customPrompt: '',
     customTitle: '',
@@ -21,9 +21,46 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   const [currentScenarioIndex, setCurrentScenarioIndex] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStatus, setGenerationStatus] = useState('');
+  const [availablePrompts, setAvailablePrompts] = useState([]);
+  const [loadingPrompts, setLoadingPrompts] = useState(true);
+  const [promptsError, setPromptsError] = useState(null);
 
-  // Define scenario types based on engagement type
-  const getScenarioTypes = (engagementType) => {
+  // Fetch available prompts from database
+  useEffect(() => {
+    fetchAvailablePrompts();
+  }, [engagementType]);
+
+  const fetchAvailablePrompts = async () => {
+    try {
+      setLoadingPrompts(true);
+      const params = new URLSearchParams({
+        promptType: 'generation',
+        gameType: engagementType,
+        status: 'active'
+      });
+      
+      const response = await fetch(`${API_BASE}admin/ai-prompts?${params}`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        setAvailablePrompts(data.prompts || []);
+        setPromptsError(null);
+      } else {
+        console.error('Failed to fetch prompts:', data.error);
+        setPromptsError(data.error || 'Failed to load prompts');
+        setAvailablePrompts([]);
+      }
+    } catch (error) {
+      console.error('Error fetching prompts:', error);
+      setPromptsError('Failed to load prompts');
+      setAvailablePrompts([]);
+    } finally {
+      setLoadingPrompts(false);
+    }
+  };
+
+  // Define hardcoded scenario types based on engagement type (fallback if database empty)
+  const getHardcodedScenarioTypes = (engagementType) => {
     switch (engagementType) {
       case 'trivia':
         return [
@@ -56,6 +93,12 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
             title: 'Custom Trivia Topics',
             description: 'Define your own trivia topic and requirements',
             prompt: 'Create trivia questions based on the specific topic and requirements provided'
+          },
+          {
+            id: 'custom',
+            title: 'Custom Scenarios',
+            description: 'Define your own specific scenario requirements with minimal pre-prompt info',
+            prompt: 'Create scenarios based on the custom requirements provided'
           }
         ];
 
@@ -90,6 +133,12 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
             title: 'Custom Poll Topics',
             description: 'Define your own poll topic and requirements',
             prompt: 'Create poll questions based on the specific topic and requirements provided'
+          },
+          {
+            id: 'custom',
+            title: 'Custom Scenarios',
+            description: 'Define your own specific scenario requirements with minimal pre-prompt info',
+            prompt: 'Create scenarios based on the custom requirements provided'
           }
         ];
 
@@ -205,127 +254,71 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     }
   };
 
+  // Combine database prompts with hardcoded types (additive, not replacement)
+  const getScenarioTypes = (engagementType) => {
+    const hardcodedTypes = getHardcodedScenarioTypes(engagementType);
+    
+    // Each database prompt gets its own card with unique ID
+    const databaseTypes = availablePrompts.map(prompt => ({
+      id: `db-${prompt.SK}`, // Use unique database ID
+      title: prompt.name,
+      description: prompt.description,
+      prompt: prompt.basePrompt,
+      source: 'database',
+      dbPrompt: prompt // Store full prompt data for pre-filling form
+    }));
+    
+    // Start with database prompts (each gets its own card)
+    const combined = [...databaseTypes];
+    
+    // Add hardcoded types, but skip any that would duplicate database functionality
+    hardcodedTypes.forEach(hardcoded => {
+      // Always add the generic "custom" option for starting from scratch
+      if (hardcoded.id === 'custom') {
+        combined.push({ ...hardcoded, source: 'hardcoded' });
+      } else {
+        // Add other hardcoded types only if they don't have database equivalents
+        const hasDbEquivalent = databaseTypes.some(db => db.dbPrompt.scenarioType === hardcoded.id);
+        if (!hasDbEquivalent) {
+          combined.push({ ...hardcoded, source: 'hardcoded' });
+        }
+      }
+    });
+    
+    return combined;
+  };
+
   const scenarioTypes = getScenarioTypes(engagementType);
 
-  // Template prefilling based on scenario type
-  const getTemplateDefaults = (scenarioType) => {
-    const templates = {
-      'lessons-learned': {
-        customTitle: 'Lessons Learned Workshop',
-        context: 'Professional development workshop focusing on real-world challenges and the valuable lessons learned from them',
-        audience: 'Team leaders, project managers, and experienced professionals',
-        numberOfCategories: 4,
-        mustHaveCategories: 'Leadership, Project Management, Team Dynamics, Problem Resolution'
-      },
-      'problem-solving': {
-        customTitle: 'Problem-Solving Challenge Session',
-        context: 'Interactive session designed to tackle current workplace challenges through collaborative problem-solving',
-        audience: 'Cross-functional teams, managers, and solution-oriented professionals',
-        numberOfCategories: 5,
-        mustHaveCategories: 'Technical Challenges, Process Improvement, Team Collaboration, Innovation, Risk Management'
-      },
-      'interview-prep': {
-        customTitle: 'Interview Preparation Workshop',
-        context: 'Comprehensive practice session for job interviews with scenario-based questions',
-        audience: 'Job seekers, career changers, and professionals seeking advancement',
-        numberOfCategories: 3,
-        mustHaveCategories: 'Behavioral Questions, Technical Skills, Situational Judgment'
-      },
-      'amazon-principles': {
-        customTitle: 'Amazon Leadership Principles Workshop',
-        context: 'Deep dive into Amazon\'s 16 Leadership Principles through real-world scenarios and STAR method practice',
-        audience: 'Amazon employees, leadership candidates, and professionals interested in Amazon culture',
-        numberOfCategories: 4,
-        mustHaveCategories: 'Customer Obsession, Ownership, Invent & Simplify, Bias for Action'
-      },
-      'team-building': {
-        customTitle: 'Team Building Workshop',
-        context: 'Collaborative exercises designed to strengthen team bonds and improve communication',
-        audience: 'Team members, project groups, and departments looking to improve collaboration',
-        numberOfCategories: 3,
-        mustHaveCategories: 'Communication, Trust Building, Conflict Resolution'
-      },
-      // Wavelength-specific templates
-      'tech-terms': {
-        customTitle: 'Technology Terms Wavelength',
-        context: 'Word association exercise using technology and software development concepts',
-        audience: 'Software developers, technical teams, and technology professionals',
-        numberOfCategories: 4,
-        mustHaveCategories: 'Programming, Cloud Computing, Development Tools, Architecture'
-      },
-      'business-concepts': {
-        customTitle: 'Business Concepts Wavelength',
-        context: 'Explore business and management terms through creative word association',
-        audience: 'Business professionals, managers, and leadership teams',
-        numberOfCategories: 4,
-        mustHaveCategories: 'Strategy, Operations, Finance, Leadership'
-      },
-      'industry-specific': {
-        customTitle: 'Industry Terms Wavelength',
-        context: 'Domain-specific terminology and concepts for your industry',
-        audience: 'Industry professionals and subject matter experts',
-        numberOfCategories: 3,
-        mustHaveCategories: 'Core Concepts, Tools & Methods, Industry Trends'
-      },
-      'leadership-themes': {
-        customTitle: 'Leadership & Culture Wavelength',
-        context: 'Leadership principles and cultural concepts through word association',
-        audience: 'Leaders, managers, and teams focused on culture building',
-        numberOfCategories: 4,
-        mustHaveCategories: 'Leadership Styles, Team Dynamics, Company Culture, Values'
-      },
-      'abstract-concepts': {
-        customTitle: 'Creative Concepts Wavelength',
-        context: 'Abstract ideas and concepts that encourage diverse thinking and creativity',
-        audience: 'Creative teams, brainstorming groups, and innovation-focused professionals',
-        numberOfCategories: 5,
-        mustHaveCategories: 'Innovation, Creativity, Future Thinking, Abstract Ideas, Inspiration'
-      },
-      'lists-favorites': {
-        customTitle: 'Lists & Favorites Workshop',
-        context: 'Share personal preferences and recommendations with your team through curated lists',
-        audience: 'All team members looking to connect and share interests',
-        numberOfCategories: 5,
-        mustHaveCategories: 'Entertainment, Professional Resources, Places & Travel, Personal Growth, Hobbies & Interests'
-      },
-      'brainstorming': {
-        customTitle: 'Team Brainstorming Session',
-        context: 'Collaborative ideation session for generating solutions and innovations',
-        audience: 'Cross-functional teams, product teams, and innovation groups',
-        numberOfCategories: 4,
-        mustHaveCategories: 'Product Ideas, Process Improvements, Problem Solutions, Future Opportunities'
-      },
-      'team-building': {
-        customTitle: 'Team Connection Workshop',
-        context: 'Build stronger team bonds through shared experiences and values',
-        audience: 'Teams looking to strengthen relationships and culture',
-        numberOfCategories: 4,
-        mustHaveCategories: 'Shared Experiences, Team Values, Appreciation, Common Goals'
-      },
-      'reflection-retrospective': {
-        customTitle: 'Reflection & Growth Session',
-        context: 'Reflect on experiences and identify opportunities for growth and improvement',
-        audience: 'Teams conducting retrospectives or personal development sessions',
-        numberOfCategories: 4,
-        mustHaveCategories: 'Lessons Learned, Achievements, Challenges, Future Growth'
-      },
-      'icebreakers-fun': {
-        customTitle: 'Fun Icebreakers Session',
-        context: 'Get to know your teammates better through fun and engaging prompts',
-        audience: 'New teams, remote teams, or groups looking to build rapport',
-        numberOfCategories: 5,
-        mustHaveCategories: 'Personal Interests, Fun Facts, Dreams & Aspirations, Hidden Talents, Life Experiences'
-      },
-      'custom': {
-        customTitle: 'Custom Wavelength Workshop',
-        context: 'Custom list-based exercise tailored to your specific needs',
-        audience: 'Customized based on requirements',
-        numberOfCategories: 3,
-        mustHaveCategories: ''
-      }
+  // Get template defaults from selected scenario type (database prompt or hardcoded)
+  const getTemplateDefaults = (scenarioTypeId) => {
+    // Find the selected scenario type
+    const selectedType = scenarioTypes.find(t => t.id === scenarioTypeId);
+    
+    if (selectedType && selectedType.source === 'database' && selectedType.dbPrompt) {
+      // Pre-fill with database prompt information
+      const prompt = selectedType.dbPrompt;
+      return {
+        customTitle: prompt.name,
+        context: prompt.description || '', // Use the prompt's description as context
+        audience: '', // Leave blank for admin to specify
+        numberOfCategories: prompt.defaultSettings?.numberOfCategories || 3,
+        mustHaveCategories: prompt.defaultSettings?.mustHaveCategories || '',
+        difficulty: prompt.defaultSettings?.difficulty || (engagementType === 'trivia' ? 'medium' : 'detailed'),
+        customPrompt: prompt.basePrompt || '' // Pre-fill with the base prompt so admin can see and edit
+      };
+    }
+    
+    // Fallback for hardcoded types or when no database prompt found
+    return {
+      customTitle: selectedType?.title || 'Custom Session',
+      context: '',
+      audience: '',
+      numberOfCategories: 3,
+      mustHaveCategories: '',
+      difficulty: engagementType === 'trivia' ? 'medium' : 'detailed',
+      customPrompt: ''
     };
-
-    return templates[scenarioType] || templates['custom'];
   };
 
   const handleTypeSelection = (type) => {
@@ -346,23 +339,70 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
 
     try {
       const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
+      let basePrompt;
       
-      let basePrompt = selectedType.prompt;
-      if (scenarioConfig.context) {
-        basePrompt += `\n\nContext: ${scenarioConfig.context}`;
-      }
-      if (scenarioConfig.audience) {
-        basePrompt += `\nAudience: ${scenarioConfig.audience}`;
-      }
-      if (scenarioConfig.customPrompt) {
-        basePrompt += `\n\nAdditional Requirements: ${scenarioConfig.customPrompt}`;
+      if (selectedType && selectedType.source === 'database' && selectedType.dbPrompt) {
+        // Use database prompt with templates
+        const selectedPrompt = selectedType.dbPrompt;
+        basePrompt = selectedPrompt.basePrompt;
+        
+        // Apply templates if provided (custom prompts may have empty templates)
+        if (scenarioConfig.context && selectedPrompt.contextTemplate) {
+          basePrompt += selectedPrompt.contextTemplate.replace('{context}', scenarioConfig.context);
+        } else if (scenarioConfig.context && !selectedPrompt.contextTemplate) {
+          // For minimal custom prompts, add context directly
+          basePrompt += `\n\nContext: ${scenarioConfig.context}`;
+        }
+        
+        if (scenarioConfig.audience && selectedPrompt.audienceTemplate) {
+          basePrompt += selectedPrompt.audienceTemplate.replace('{audience}', scenarioConfig.audience);
+        } else if (scenarioConfig.audience && !selectedPrompt.audienceTemplate) {
+          // For minimal custom prompts, add audience directly
+          basePrompt += `\nAudience: ${scenarioConfig.audience}`;
+        }
+        
+        if (selectedPrompt.categoryTemplate) {
+          let categoryText = selectedPrompt.categoryTemplate;
+          categoryText = categoryText.replace('{numberOfCategories}', scenarioConfig.numberOfCategories);
+          if (scenarioConfig.mustHaveCategories) {
+            categoryText = categoryText.replace('{mustHaveCategories}', scenarioConfig.mustHaveCategories);
+          }
+          basePrompt += categoryText;
+        } else {
+          // For minimal custom prompts, add category info directly if needed
+          if (scenarioConfig.numberOfCategories > 1) {
+            basePrompt += `\nNumber of categories needed: ${scenarioConfig.numberOfCategories}`;
+          }
+          if (scenarioConfig.mustHaveCategories) {
+            basePrompt += `\nMust include these categories: ${scenarioConfig.mustHaveCategories}`;
+          }
+        }
+        
+        // Add difficulty/detail level
+        const levelLabel = engagementType === 'trivia' ? 'Difficulty Level' : 'Level of Detail';
+        basePrompt += `\n\n${levelLabel}: ${scenarioConfig.difficulty}`;
+        
+      } else {
+        // Fallback to hardcoded prompt structure
+        basePrompt = selectedType.prompt;
+        if (scenarioConfig.context) {
+          basePrompt += `\n\nContext: ${scenarioConfig.context}`;
+        }
+        if (scenarioConfig.audience) {
+          basePrompt += `\nAudience: ${scenarioConfig.audience}`;
+        }
+        
+        const levelLabel = engagementType === 'trivia' ? 'Difficulty Level' : 'Level of Detail';
+        basePrompt += `\n\n${levelLabel}: ${scenarioConfig.difficulty}`;
+        basePrompt += `\nNumber of categories needed: ${scenarioConfig.numberOfCategories}`;
+        
+        if (scenarioConfig.mustHaveCategories) {
+          basePrompt += `\nMust include these categories: ${scenarioConfig.mustHaveCategories}`;
+        }
       }
 
-      basePrompt += `\n\nDifficulty Level: ${scenarioConfig.difficulty}`;
-      basePrompt += `\nNumber of categories needed: ${scenarioConfig.numberOfCategories}`;
-      
-      if (scenarioConfig.mustHaveCategories) {
-        basePrompt += `\nMust include these categories: ${scenarioConfig.mustHaveCategories}`;
+      if (scenarioConfig.customPrompt) {
+        basePrompt += `\n\nAdditional Requirements: ${scenarioConfig.customPrompt}`;
       }
 
       // Break large requests into chunks to avoid timeout and rate limiting
@@ -378,13 +418,19 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
           try {
+            // Determine the correct scenarioType for the backend
+            const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
+            const backendScenarioType = selectedType?.source === 'database' && selectedType.dbPrompt 
+              ? selectedType.dbPrompt.scenarioType 
+              : scenarioConfig.type;
+
             const response = await fetch(`${API_BASE}admin/ai-generate-scenarios`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
-                scenarioType: scenarioConfig.type,
+                scenarioType: backendScenarioType,
                 engagementType: engagementType,
                 prompt: chunkPrompt,
                 count: chunkSize,
@@ -475,7 +521,12 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${scenarioConfig.type}-scenarios-${Date.now()}.csv`;
+    
+    // Use a meaningful filename based on the selected type
+    const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
+    const typeName = selectedType?.title?.replace(/[^a-zA-Z0-9]/g, '-') || 'scenarios';
+    a.download = `${typeName}-scenarios-${Date.now()}.csv`;
+    
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -529,16 +580,9 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
       return scenarioConfig.customTitle.trim();
     }
 
-    const typeNames = {
-      'amazon-principles': 'Amazon Leadership Principles',
-      'interview-prep': 'Interview Preparation',
-      'problem-solving': 'Problem-Solving Challenges',
-      'lessons-learned': 'Lessons Learned',
-      'team-building': 'Team Building Exercises',
-      'custom': 'Custom Scenarios'
-    };
-
-    const typeName = typeNames[scenarioConfig.type] || 'Professional Development';
+    // Find the selected type and use its title
+    const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
+    const typeName = selectedType?.title || 'Professional Development';
     const audienceText = scenarioConfig.audience ? ` for ${scenarioConfig.audience}` : '';
 
     return `${typeName}${audienceText}`;
@@ -554,6 +598,12 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
 
   // Generate custom instructions based on scenario type
   const generateCustomInstructions = () => {
+    // Check if it's a database prompt with specific scenario type
+    const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
+    const actualScenarioType = selectedType?.source === 'database' && selectedType.dbPrompt 
+      ? selectedType.dbPrompt.scenarioType 
+      : scenarioConfig.type;
+
     const typeInstructions = {
       'amazon-principles': 'Answer using the STAR format (Situation, Task, Action, Results). Focus on demonstrating specific leadership principles through real examples.',
       'interview-prep': 'Practice answering these questions with specific examples from your experience. Be prepared to provide concrete details and measurable results.',
@@ -563,14 +613,20 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
       'custom': 'Follow the specific guidelines provided for your scenario type.'
     };
 
-    return typeInstructions[scenarioConfig.type] || 'Engage thoughtfully with each scenario and share your experiences and insights.';
+    return typeInstructions[actualScenarioType] || 'Engage thoughtfully with each scenario and share your experiences and insights.';
   };
 
   // Generate AI context instructions
   const generateAIContextInstructions = () => {
     const audienceContext = scenarioConfig.audience ? ` The target audience is ${scenarioConfig.audience}.` : '';
     const difficultyContext = ` These are ${scenarioConfig.difficulty}-level scenarios.`;
-    const typeContext = scenarioConfig.type === 'amazon-principles' ? ' Focus on Amazon Leadership Principles and STAR format responses.' : '';
+    
+    // Check if it's Amazon Leadership Principles for special context
+    const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
+    const actualScenarioType = selectedType?.source === 'database' && selectedType.dbPrompt 
+      ? selectedType.dbPrompt.scenarioType 
+      : scenarioConfig.type;
+    const typeContext = actualScenarioType === 'amazon-principles' ? ' Focus on Amazon Leadership Principles and STAR format responses.' : '';
 
     return `These scenarios are designed for professional development and learning.${audienceContext}${difficultyContext}${typeContext} Provide constructive feedback and encourage specific, detailed responses.`;
   };
@@ -585,6 +641,59 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
 
   const currentScenario = generatedScenarios[currentScenarioIndex];
 
+  // Helper functions for context-aware placeholders
+  const getContextPlaceholder = () => {
+    const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
+    if (selectedType && selectedType.source === 'database' && selectedType.dbPrompt) {
+      const prompt = selectedType.dbPrompt;
+      // Use database-stored context placeholder if available
+      if (prompt.defaultSettings?.contextPlaceholder) {
+        return prompt.defaultSettings.contextPlaceholder;
+      }
+      // Fallback to prompt-specific defaults
+      if (prompt.scenarioType === 'amazon-principles') {
+        return 'e.g., Startup environment, large enterprise, remote team...';
+      } else if (prompt.scenarioType === 'interview-prep') {
+        return 'e.g., Software engineering roles, management positions, entry-level...';
+      }
+    }
+    return 'Describe the context, industry, or specific situation...';
+  };
+
+  const getAudiencePlaceholder = () => {
+    const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
+    if (selectedType && selectedType.source === 'database' && selectedType.dbPrompt) {
+      const prompt = selectedType.dbPrompt;
+      // Use database-stored audience placeholder if available
+      if (prompt.defaultSettings?.audiencePlaceholder) {
+        return prompt.defaultSettings.audiencePlaceholder;
+      }
+      // Fallback to prompt-specific defaults
+      if (prompt.scenarioType === 'amazon-principles') {
+        return 'e.g., Engineering managers, senior engineers, leadership team...';
+      } else if (prompt.scenarioType === 'interview-prep') {
+        return 'e.g., Job candidates, hiring managers, recent graduates...';
+      }
+    }
+    return 'e.g., Software Engineers, Managers, New Hires...';
+  };
+
+  const getMustHaveCategoriesPlaceholder = () => {
+    const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
+    if (selectedType && selectedType.source === 'database' && selectedType.dbPrompt) {
+      const prompt = selectedType.dbPrompt;
+      // Use database-stored sample categories if available
+      if (prompt.defaultSettings?.sampleCategories) {
+        return prompt.defaultSettings.sampleCategories;
+      }
+      // Fallback to prompt-specific defaults
+      if (prompt.scenarioType === 'amazon-principles') {
+        return 'Customer Obsession, Ownership, Invent and Simplify...';
+      }
+    }
+    return 'Leadership, Management, Communication...';
+  };
+
   return (
     <div className="ai-scenario-builder-modal">
       <div className="modal-overlay" onClick={onClose}></div>
@@ -598,6 +707,26 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
           {step === 1 && (
             <div className="scenario-type-selection">
               <h3>What type of {engagementType === 'trivia' ? 'trivia questions' : engagementType === 'poll' ? 'poll questions' : engagementType === 'wavelength' ? 'wavelength topics' : 'scenarios'} do you want to create?</h3>
+              
+              {loadingPrompts ? (
+                <div className="loading-prompts">
+                  <div className="spinner"></div>
+                  <p>Loading available prompt templates...</p>
+                </div>
+              ) : promptsError ? (
+                <div className="prompts-error">
+                  <p>⚠️ {promptsError}</p>
+                  <p>Using default templates as fallback.</p>
+                  <button onClick={fetchAvailablePrompts} className="btn-secondary">
+                    Retry Loading
+                  </button>
+                </div>
+              ) : availablePrompts.length === 0 ? (
+                <div className="no-prompts">
+                  <p>ℹ️ No database prompts found for {engagementType}. Using default templates.</p>
+                </div>
+              ) : null}
+              
               <div className="scenario-types-grid">
                 {scenarioTypes.map(type => (
                   <div
@@ -607,6 +736,12 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                   >
                     <h4>{type.title}</h4>
                     <p>{type.description}</p>
+                    {type.source === 'database' && (
+                      <span className="prompt-source">📊 Database Template</span>
+                    )}
+                    {type.source === 'hardcoded' && (
+                      <span className="prompt-source">🏗️ Built-in Template</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -615,15 +750,15 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
 
           {step === 2 && (
             <div className="scenario-configuration">
-              <h3>Configure Your Scenarios</h3>
+              <h3>Configure Your {engagementType === 'trivia' ? 'Trivia Questions' : engagementType === 'poll' ? 'Poll Questions' : engagementType === 'wavelength' ? 'Wavelength Prompts' : 'Scenarios'}</h3>
               <div className="config-form">
                 <div className="form-group">
-                  <label>Workshop Title</label>
+                  <label>Question Set Title</label>
                   <input
                     type="text"
                     value={scenarioConfig.customTitle}
                     onChange={(e) => setScenarioConfig(prev => ({ ...prev, customTitle: e.target.value }))}
-                    placeholder="Enter a title for your workshop..."
+                    placeholder={`Enter a title for your ${engagementType === 'trivia' ? 'trivia set' : engagementType === 'poll' ? 'poll set' : engagementType === 'wavelength' ? 'wavelength set' : 'question set'}...`}
                   />
                 </div>
 
@@ -632,7 +767,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                   <textarea
                     value={scenarioConfig.context}
                     onChange={(e) => setScenarioConfig(prev => ({ ...prev, context: e.target.value }))}
-                    placeholder="Describe the context, industry, or specific situation..."
+                    placeholder={getContextPlaceholder()}
                     rows="3"
                   />
                 </div>
@@ -643,7 +778,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                     type="text"
                     value={scenarioConfig.audience}
                     onChange={(e) => setScenarioConfig(prev => ({ ...prev, audience: e.target.value }))}
-                    placeholder="e.g., Software Engineers, Managers, New Hires..."
+                    placeholder={getAudiencePlaceholder()}
                   />
                 </div>
 
@@ -664,26 +799,38 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                       type="text"
                       value={scenarioConfig.mustHaveCategories}
                       onChange={(e) => setScenarioConfig(prev => ({ ...prev, mustHaveCategories: e.target.value }))}
-                      placeholder="Leadership, Management, Communication..."
+                      placeholder={getMustHaveCategoriesPlaceholder()}
                     />
                   </div>
                 </div>
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Difficulty Level</label>
+                    <label>
+                      {engagementType === 'trivia' ? 'Difficulty Level' : 'Level of Detail'}
+                    </label>
                     <select
                       value={scenarioConfig.difficulty}
                       onChange={(e) => setScenarioConfig(prev => ({ ...prev, difficulty: e.target.value }))}
                     >
-                      <option value="easy">Easy</option>
-                      <option value="medium">Medium</option>
-                      <option value="hard">Hard</option>
+                      {engagementType === 'trivia' ? (
+                        <>
+                          <option value="easy">Easy</option>
+                          <option value="medium">Medium</option>
+                          <option value="hard">Hard</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="brief">Brief</option>
+                          <option value="detailed">Detailed</option>
+                          <option value="comprehensive">Comprehensive</option>
+                        </>
+                      )}
                     </select>
                   </div>
 
                   <div className="form-group">
-                    <label>Number of Scenarios: <strong>{scenarioConfig.count}</strong></label>
+                    <label>Number of {engagementType === 'trivia' ? 'Questions' : engagementType === 'poll' ? 'Polls' : engagementType === 'wavelength' ? 'Prompts' : 'Scenarios'}: <strong>{scenarioConfig.count}</strong></label>
                     <div className="quantity-controls">
                       <input
                         type="range"
@@ -712,13 +859,16 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                 </div>
 
                 <div className="form-group">
-                  <label>Additional Requirements (Optional)</label>
+                  <label>Base Prompt & Additional Requirements</label>
                   <textarea
                     value={scenarioConfig.customPrompt}
                     onChange={(e) => setScenarioConfig(prev => ({ ...prev, customPrompt: e.target.value }))}
-                    placeholder="Any specific requirements, themes, or constraints..."
-                    rows="2"
+                    placeholder="Edit the base generation prompt or add specific requirements, themes, or constraints..."
+                    rows="4"
                   />
+                  <small style={{color: '#666', fontSize: '12px'}}>
+                    This shows the base prompt from your selected template. You can edit it or add additional requirements.
+                  </small>
                 </div>
 
                 <FileUploadPrompt

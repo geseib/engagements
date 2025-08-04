@@ -236,10 +236,24 @@ function GameHostPage() {
   
   // Get instruction text based on question set
   const getInstructionText = () => {
+    // First check if we have a current question with custom instructions
+    const currentQuestion = questions.find(q => q.id === currentQuestionId);
+    if (currentQuestion && currentQuestion.customInstructions) {
+      return currentQuestion.customInstructions;
+    }
+    
     // Try to get setId from current question first, then fall back to selectedSetId
     const setId = questions[0]?.setId || selectedSetId;
     
-    if (!setId) return 'How could you adapt this lesson to your work, project, or team?';
+    // Default instructions based on game type
+    const gameTypeDefaults = {
+      'trivia': 'Select the best answer:',
+      'poll': 'Share your opinion:',
+      'wavelength': 'Complete this sentence:',
+      'call-and-answer': 'How could you adapt this lesson to your work, project, or team?'
+    };
+    
+    if (!setId) return gameTypeDefaults[currentGameType] || 'Share your response:';
     
     // Get current question set info
     const currentSet = questionSets.find(set => set.id === setId);
@@ -252,7 +266,7 @@ function GameHostPage() {
       'AmazonBP': 'How could you adapt this Amazon leadership principle to your work, project, or team?',
       'amazonleadershipprinciples': 'How could you adapt this Amazon leadership principle to your work, project, or team?',
       'greatest-hits': 'How could you adapt this lesson to your work, project, or team?',
-      'default': 'How could you adapt this lesson to your work, project, or team?'
+      'default': gameTypeDefaults[currentGameType] || 'How could you adapt this lesson to your work, project, or team?'
     };
     
     return setInstructions[setId] || setInstructions['default'];

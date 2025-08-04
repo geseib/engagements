@@ -1,6 +1,15 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 
 const bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });
+const tableName = process.env.TABLE_NAME;
+const dynamoClient = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(dynamoClient, {
+  marshallOptions: {
+    removeUndefinedValues: true
+  }
+});
 
 exports.handler = async (event) => {
   try {
@@ -23,7 +32,7 @@ exports.handler = async (event) => {
       throw new Error('No request body provided');
     }
 
-    const { scenarioType, prompt, count, difficulty, context, audience, customPrompt, customTitle, numberOfCategories, mustHaveCategories } = JSON.parse(event.body);
+    const { scenarioType, engagementType = 'call-and-answer', prompt, count, difficulty, context, audience, customPrompt, customTitle, numberOfCategories, mustHaveCategories } = JSON.parse(event.body);
 
     // Allow up to 100 scenarios with increased timeout
     const limitedCount = Math.min(count, 100);
@@ -31,37 +40,84 @@ exports.handler = async (event) => {
       console.log('⚠️ Limited scenario count from', count, 'to', limitedCount, 'maximum allowed is 100');
     }
 
-    console.log('🤖 Generating scenarios:', { scenarioType, count: limitedCount, difficulty, promptLength: prompt?.length });
+    console.log('🤖 Generating scenarios:', { scenarioType, engagementType, count: limitedCount, difficulty, promptLength: prompt?.length });
 
-    // Build optimized prompt for scenario generation
-    let fullPrompt = 'Create ' + limitedCount + ' workplace scenarios. ';
+    // Fetch prompt template from database
+    const promptSortKey = `AIPROMPT#GENERATION#${scenarioType}#${engagementType}`;
+    console.log('🔍 Fetching prompt template:', promptSortKey);
+    
+    let promptTemplate;
+    try {
+      const promptResponse = await dynamodb.send(new GetCommand({
+        TableName: tableName,
+        Key: {
+          PK: 'AIPROMPTS',
+          SK: promptSortKey
+        }
+      }));
 
-    // Add scenario type specific context
-    if (scenarioType === 'amazon-principles') {
-      fullPrompt += 'Focus on Amazon Leadership Principles with STAR format examples. ';
-    } else if (scenarioType === 'interview-prep') {
-      fullPrompt += 'Create interview practice scenarios. ';
-    } else if (scenarioType === 'problem-solving') {
-      fullPrompt += 'Create problem-solving challenges. ';
-    } else if (scenarioType === 'lessons-learned') {
-      fullPrompt += 'Create lessons learned scenarios. ';
-    } else if (scenarioType === 'team-building') {
-      fullPrompt += 'Create team collaboration scenarios. ';
+      promptTemplate = promptResponse.Item;
+      if (!promptTemplate) {
+        console.warn(`⚠️ No prompt template found for ${scenarioType}/${engagementType}, using fallback`);
+        // Fallback to basic prompt construction (removed business defaults)
+        promptTemplate = {
+          basePrompt: prompt || 'Create scenarios based on the requirements provided',
+          contextTemplate: '\n\nContext: {context}',
+          audienceTemplate: '\nAudience: {audience}',
+          categoryTemplate: '\nOrganize scenarios into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}',
+          outputFormat: '\n\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "customInstructions": "Instructions"}]\nReturn ONLY the JSON array.'
+        };
+      }
+    } catch (dbError) {
+      console.error('❌ Error fetching prompt template:', dbError);
+      // Use fallback prompt (removed business defaults)
+      promptTemplate = {
+        basePrompt: prompt || 'Create scenarios based on the requirements provided',
+        contextTemplate: '\n\nContext: {context}',
+        audienceTemplate: '\nAudience: {audience}',
+        categoryTemplate: '\nOrganize scenarios into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}',
+        outputFormat: '\n\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "customInstructions": "Instructions"}]\nReturn ONLY the JSON array.'
+      };
     }
 
-    fullPrompt += prompt;
+    // Build prompt using template (remove hardcoded business context)
+    let fullPrompt = `Create ${limitedCount} scenarios. ${promptTemplate.basePrompt}`;
+
+    // Add context if provided
+    if (context && promptTemplate.contextTemplate) {
+      fullPrompt += promptTemplate.contextTemplate.replace('{context}', context);
+    }
+
+    // Add audience if provided  
+    if (audience && promptTemplate.audienceTemplate) {
+      fullPrompt += promptTemplate.audienceTemplate.replace('{audience}', audience);
+    }
+
+    // Add custom requirements
+    if (customPrompt) {
+      fullPrompt += `\n\nAdditional Requirements: ${customPrompt}`;
+    }
+
+    // Add difficulty/detail level
+    const levelLabel = engagementType === 'trivia' ? 'Difficulty Level' : 'Level of Detail';
+    fullPrompt += `\n\n${levelLabel}: ${difficulty}`;
     
-    // Add category requirements
-    if (numberOfCategories) {
-      fullPrompt += `\n\nOrganize scenarios into ${numberOfCategories} categories.`;
+    // Add category requirements using template (only if categories are specified)
+    if (promptTemplate.categoryTemplate && (numberOfCategories || mustHaveCategories)) {
+      let categoryText = promptTemplate.categoryTemplate;
+      if (numberOfCategories) {
+        categoryText = categoryText.replace('{numberOfCategories}', numberOfCategories);
+      }
+      if (mustHaveCategories) {
+        categoryText = categoryText.replace('{mustHaveCategories}', mustHaveCategories);
+      }
+      fullPrompt += `\n${categoryText}`;
     }
     
-    if (mustHaveCategories) {
-      fullPrompt += `\nMust include these categories: ${mustHaveCategories}`;
+    // Add output format
+    if (promptTemplate.outputFormat) {
+      fullPrompt += promptTemplate.outputFormat;
     }
-    
-    fullPrompt += '\n\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "school": "Professional Development", "customInstructions": "Instructions"}]';
-    fullPrompt += '\nReturn ONLY the JSON array.';
 
     console.log('🤖 Sending prompt to Claude...', { promptLength: fullPrompt.length });
     

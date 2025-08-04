@@ -1589,7 +1589,10 @@ function PlayerPage() {
                           <textarea
                             value={answerInput}
                             onChange={(e) => setAnswerInput(e.target.value)}
-                            placeholder="Describe how you would apply this lesson to your work, project, or team..."
+                            placeholder={currentQuestion?.customInstructions || 
+                              (gameType === 'wavelength' ? 'Complete this sentence...' : 
+                               gameType === 'poll' ? 'Share your opinion...' :
+                               'Describe how you would apply this lesson to your work, project, or team...')}
                             className="mobile-answer-input"
                             rows={12}
                             required
@@ -1611,7 +1614,10 @@ function PlayerPage() {
                     value={answerInput}
                     onChange={(e) => setAnswerInput(e.target.value)}
                     onFocus={() => !isDesktop && setIsAnswerInputFocused(true)}
-                    placeholder="Describe how you would apply this lesson to your work, project, or team..."
+                    placeholder={currentQuestion?.customInstructions || 
+                      (gameType === 'wavelength' ? 'Complete this sentence...' : 
+                       gameType === 'poll' ? 'Share your opinion...' :
+                       'Describe how you would apply this lesson to your work, project, or team...')}
                     className="answer-input"
                     rows={isDesktop ? 6 : 4}
                     required
