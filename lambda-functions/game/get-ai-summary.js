@@ -1185,6 +1185,11 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
   console.log('🎮 GAME TYPE CHECK: gameType=', gameType, 'question exists=', !!question);
   if (gameType === 'trivia' && question) {
     console.log('📋 ENTERING TRIVIA PROCESSING BLOCK');
+    console.log('🔍 QUESTION OBJECT IN TRIVIA BLOCK:');
+    console.log('  correctAnswer:', question.correctAnswer);
+    console.log('  optionA:', question.optionA);
+    console.log('  optionB:', question.optionB);
+    console.log('  All fields:', Object.keys(question));
     // Format trivia choices with better formatting
     const options = [];
     if (question.optionA) options.push(`A) ${question.optionA}`);
