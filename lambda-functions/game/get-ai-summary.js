@@ -1169,11 +1169,13 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
   console.log('  question exists:', !!question);
   if (question) {
     console.log('  🔍 ALL QUESTION FIELDS:', Object.keys(question));
-    console.log('  question.correctAnswer:', question.correctAnswer);
-    console.log('  question.optionA:', question.optionA);
-    console.log('  question.optionB:', question.optionB);
-    console.log('  question.optionC:', question.optionC);
-    console.log('  question.optionD:', question.optionD);
+    console.log('  question.correctAnswer value:', JSON.stringify(question.correctAnswer));
+    console.log('  question.optionA value:', JSON.stringify(question.optionA));
+    console.log('  question.optionB value:', JSON.stringify(question.optionB));
+    console.log('  question.optionC value:', JSON.stringify(question.optionC));
+    console.log('  question.optionD value:', JSON.stringify(question.optionD));
+    console.log('  typeof correctAnswer:', typeof question.correctAnswer);
+    console.log('  typeof optionA:', typeof question.optionA);
   }
   
   // Wavelength-specific variables (already initialized above)
