@@ -784,14 +784,17 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Number of Categories</label>
+                    <label>Number of Categories (Max: 24)</label>
                     <input
                       type="number"
                       min="1"
-                      max="10"
+                      max="24"
                       value={scenarioConfig.numberOfCategories}
-                      onChange={(e) => setScenarioConfig(prev => ({ ...prev, numberOfCategories: Math.min(10, Math.max(1, parseInt(e.target.value) || 1)) }))}
+                      onChange={(e) => setScenarioConfig(prev => ({ ...prev, numberOfCategories: Math.min(24, Math.max(1, parseInt(e.target.value) || 1)) }))}
                     />
+                    <small style={{color: '#666', fontSize: '12px'}}>
+                      System supports maximum 24 categories due to bitmask limitations
+                    </small>
                   </div>
                   <div className="form-group">
                     <label>Must Have Categories</label>

@@ -11,10 +11,75 @@ exports.handler = async (event) => {
     console.log(`Processing CSV upload: ${fileName}`);
     console.log(`Custom title: ${customTitle}`);
     console.log(`Engagement type: ${engagementType}`);
+    console.log(`CSV content length: ${fileContent.length} characters`);
 
-    // Parse CSV content with better CSV parsing
-    const lines = fileContent.split('\n').filter(line => line.trim());
-    if (lines.length < 2) {
+    // Parse CSV content with proper multi-line field support
+    // First, we need to properly parse CSV with quoted fields that may contain newlines
+    const parseCSV = (csvContent) => {
+      const rows = [];
+      let currentRow = [];
+      let currentField = '';
+      let inQuotes = false;
+      let i = 0;
+      
+      while (i < csvContent.length) {
+        const char = csvContent[i];
+        const nextChar = i + 1 < csvContent.length ? csvContent[i + 1] : null;
+        
+        if (char === '"') {
+          if (inQuotes && nextChar === '"') {
+            // Escaped quote
+            currentField += '"';
+            i += 2;
+            continue;
+          } else {
+            // Toggle quote state
+            inQuotes = !inQuotes;
+            i++;
+            continue;
+          }
+        }
+        
+        if (!inQuotes && char === ',') {
+          // End of field
+          currentRow.push(currentField.trim());
+          currentField = '';
+          i++;
+          continue;
+        }
+        
+        if (!inQuotes && char === '\n') {
+          // End of row
+          currentRow.push(currentField.trim());
+          if (currentRow.some(field => field !== '')) {
+            rows.push(currentRow);
+          }
+          currentRow = [];
+          currentField = '';
+          i++;
+          continue;
+        }
+        
+        // Regular character (including newlines within quotes)
+        currentField += char;
+        i++;
+      }
+      
+      // Don't forget the last field and row
+      if (currentField !== '' || currentRow.length > 0) {
+        currentRow.push(currentField.trim());
+        if (currentRow.some(field => field !== '')) {
+          rows.push(currentRow);
+        }
+      }
+      
+      return rows;
+    };
+    
+    const rows = parseCSV(fileContent);
+    console.log(`📊 Parsed ${rows.length} rows from CSV`);
+    
+    if (rows.length < 2) {
       return {
         statusCode: 400,
         body: JSON.stringify({ error: 'CSV file must have at least a header and one data row' }),
@@ -27,29 +92,8 @@ exports.handler = async (event) => {
     const setId = setName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const setDescription = customDescription?.trim() || `Imported from ${fileName}`;
 
-    // Enhanced CSV parsing function
-    const parseCSVLine = (line) => {
-      const result = [];
-      let current = '';
-      let inQuotes = false;
-
-      for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (char === '"') {
-          inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
-          result.push(current.trim());
-          current = '';
-        } else {
-          current += char;
-        }
-      }
-      result.push(current.trim());
-      return result;
-    };
-
     // Parse header with flexible mapping
-    const headers = parseCSVLine(lines[0]).map(h => h.replace(/"/g, '').trim());
+    const headers = rows[0].map(h => h.replace(/"/g, '').trim());
     console.log('📋 Detected CSV Headers:', headers);
 
     // Simple and reliable column mapping - support exact greatest-hits.csv format or generic fallback
@@ -127,10 +171,10 @@ exports.handler = async (event) => {
     const categories = new Set();
     let questionCount = 0;
 
-    for (let i = 1; i < lines.length; i++) {
+    for (let i = 1; i < rows.length; i++) {
       try {
-        const values = parseCSVLine(lines[i]);
-        if (values.length < 2) continue; // Skip empty lines
+        const values = rows[i];
+        if (values.length < 2) continue; // Skip empty rows
 
         // Extract values using mapped indices
         const category = values[categoryIndex]?.replace(/"/g, '')?.trim();
@@ -189,9 +233,12 @@ exports.handler = async (event) => {
           categories.add(category);
 
           console.log(`  ✅ Question ${questionCount}: ${category} - ${title.substring(0, 50)}...`);
+          if (engagementType === 'call-and-answer' && finalQuestionDetail.length > 200) {
+            console.log(`    📝 Long detail field (${finalQuestionDetail.length} chars)`);
+          }
         }
       } catch (e) {
-        console.log(`⚠️ Skipping malformed line ${i}: ${lines[i].substring(0, 100)}...`);
+        console.log(`⚠️ Skipping malformed row ${i}: ${JSON.stringify(values).substring(0, 100)}...`);
       }
     }
 
