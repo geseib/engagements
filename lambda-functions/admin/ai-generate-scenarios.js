@@ -40,7 +40,13 @@ exports.handler = async (event) => {
       console.log('⚠️ Limited scenario count from', count, 'to', limitedCount, 'maximum allowed is 100');
     }
 
-    console.log('🤖 Generating scenarios:', { scenarioType, engagementType, count: limitedCount, difficulty, promptLength: prompt?.length });
+    // Enforce 24-category system limit due to bitmask constraints
+    const limitedCategories = Math.min(numberOfCategories || 3, 24);
+    if (limitedCategories !== numberOfCategories) {
+      console.log('⚠️ Limited category count from', numberOfCategories, 'to', limitedCategories, 'maximum allowed is 24 (bitmask limitation)');
+    }
+
+    console.log('🤖 Generating scenarios:', { scenarioType, engagementType, count: limitedCount, difficulty, categories: limitedCategories, promptLength: prompt?.length });
 
     // Fetch prompt template from database
     const promptSortKey = `AIPROMPT#GENERATION#${scenarioType}#${engagementType}`;
@@ -64,8 +70,8 @@ exports.handler = async (event) => {
           basePrompt: prompt || 'Create scenarios based on the requirements provided',
           contextTemplate: '\n\nContext: {context}',
           audienceTemplate: '\nAudience: {audience}',
-          categoryTemplate: '\nOrganize scenarios into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}',
-          outputFormat: '\n\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "customInstructions": "Instructions"}]\nReturn ONLY the JSON array.'
+          categoryTemplate: '\nIMPORTANT: Organize scenarios into EXACTLY {numberOfCategories} categories - no more, no less.\nMust include these categories: {mustHaveCategories}',
+          outputFormat: '\n\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "customInstructions": "Instructions"}]\nIMPORTANT: Use EXACTLY the specified number of categories. Return ONLY the JSON array.'
         };
       }
     } catch (dbError) {
@@ -75,8 +81,8 @@ exports.handler = async (event) => {
         basePrompt: prompt || 'Create scenarios based on the requirements provided',
         contextTemplate: '\n\nContext: {context}',
         audienceTemplate: '\nAudience: {audience}',
-        categoryTemplate: '\nOrganize scenarios into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}',
-        outputFormat: '\n\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "customInstructions": "Instructions"}]\nReturn ONLY the JSON array.'
+        categoryTemplate: '\nIMPORTANT: Organize scenarios into EXACTLY {numberOfCategories} categories - no more, no less.\nMust include these categories: {mustHaveCategories}',
+        outputFormat: '\n\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "customInstructions": "Instructions"}]\nIMPORTANT: Use EXACTLY the specified number of categories. Return ONLY the JSON array.'
       };
     }
 
@@ -103,10 +109,10 @@ exports.handler = async (event) => {
     fullPrompt += `\n\n${levelLabel}: ${difficulty}`;
     
     // Add category requirements using template (only if categories are specified)
-    if (promptTemplate.categoryTemplate && (numberOfCategories || mustHaveCategories)) {
+    if (promptTemplate.categoryTemplate && (limitedCategories || mustHaveCategories)) {
       let categoryText = promptTemplate.categoryTemplate;
-      if (numberOfCategories) {
-        categoryText = categoryText.replace('{numberOfCategories}', numberOfCategories);
+      if (limitedCategories) {
+        categoryText = categoryText.replace('{numberOfCategories}', limitedCategories);
       }
       if (mustHaveCategories) {
         categoryText = categoryText.replace('{mustHaveCategories}', mustHaveCategories);
@@ -205,6 +211,20 @@ exports.handler = async (event) => {
       }
 
       console.log('✅ Successfully parsed', scenarios.length, 'scenarios');
+      
+      // Validate category count if specified
+      if (limitedCategories) {
+        const uniqueCategories = [...new Set(scenarios.map(s => s.category))];
+        console.log(`🔍 Category validation: Expected ${limitedCategories}, got ${uniqueCategories.length} categories:`, uniqueCategories);
+        
+        if (uniqueCategories.length > limitedCategories) {
+          console.warn(`⚠️ AI generated ${uniqueCategories.length} categories but only ${limitedCategories} were requested. This exceeds system limit of 24.`);
+          // Truncate to requested number of categories
+          const allowedCategories = uniqueCategories.slice(0, limitedCategories);
+          scenarios = scenarios.filter(s => allowedCategories.includes(s.category));
+          console.log(`✅ Filtered scenarios to use only first ${limitedCategories} categories, now have ${scenarios.length} scenarios`);
+        }
+      }
     } catch (parseError) {
       console.error('❌ Failed to parse AI response:', parseError);
       console.log('Raw response:', aiResponse);
