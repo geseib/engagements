@@ -514,11 +514,20 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
 
       const result = await response.json();
       
+      // Ensure response fields are strings, not objects
+      const safeInstructions = typeof result.instructions === 'string' 
+        ? result.instructions 
+        : (result.instructions ? JSON.stringify(result.instructions, null, 2) : '');
+      
+      const safeOutputFormat = typeof result.outputFormat === 'string' 
+        ? result.outputFormat 
+        : (result.outputFormat ? JSON.stringify(result.outputFormat, null, 2) : '');
+      
       // Update the form with generated content
       setFormData(prev => ({
         ...prev,
-        instructions: result.instructions || prev.instructions,
-        outputFormat: result.outputFormat || prev.outputFormat
+        instructions: safeInstructions || prev.instructions,
+        outputFormat: safeOutputFormat || prev.outputFormat
       }));
 
     } catch (error) {
