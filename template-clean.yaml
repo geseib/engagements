@@ -41,10 +41,23 @@ Parameters:
     Description: GitHub repository in format owner/repo-name
     Default: "georgeseib/engage2"
 
+  GoogleClientIdParameter:
+    Type: String
+    Description: AWS Systems Manager Parameter Store path for Google OAuth Client ID
+    Default: ""
+
+  GoogleClientSecretParameter:
+    Type: String
+    Description: AWS Systems Manager Parameter Store path for Google OAuth Client Secret
+    Default: ""
+
 Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
   HasSecondaryDomain: !Not [!Equals [!Ref SecondaryDomainName, ""]]
   IsProd: !Equals [!Ref Environment, "prod"]
+  HasGoogleOAuth: !And 
+    - !Not [!Equals [!Ref GoogleClientIdParameter, ""]]
+    - !Not [!Equals [!Ref GoogleClientSecretParameter, ""]]
 
 Globals:
   Function:
@@ -247,7 +260,19 @@ Resources:
       CorsConfiguration:
         AllowOrigins: ["*"]
         AllowMethods: ["OPTIONS","GET","POST","PUT","DELETE"]
-        AllowHeaders: ["Content-Type"]
+        AllowHeaders: ["Content-Type", "Authorization"]
+        ExposeHeaders: ["Content-Length", "X-Request-Id"]
+      # Auth:
+      #   Authorizers:
+      #     CognitoAuthorizer:
+      #       AuthorizerPayloadFormatVersion: "2.0"
+      #       EnableSimpleResponses: true
+      #       FunctionArn: !GetAtt AuthorizerFunction.Arn
+      #       Identity:
+      #         Headers:
+      #           - Authorization
+      # # Commented out for now to avoid circular dependency
+      #   # DefaultAuthorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1760,6 +1785,345 @@ Resources:
       FunctionName: !Ref MessageFunction
       Principal: apigateway.amazonaws.com
 
+  ### Cognito Resources for Authentication
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub '${StackName}-users'
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Required: true
+          Mutable: false
+        - Name: name
+          AttributeDataType: String
+          Required: true
+          Mutable: true
+        - Name: status
+          AttributeDataType: String
+          Mutable: true
+        - Name: role
+          AttributeDataType: String
+          Mutable: true
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+      # PostConfirmation trigger will be configured after deployment to avoid circular dependency
+      UserPoolTags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub '${StackName}-web-client'
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      SupportedIdentityProviders: !If
+        - HasGoogleOAuth
+        - [COGNITO, Google]
+        - [COGNITO]
+        # Social providers commented out - configure manually in Cognito Console after deployment
+        # - Facebook  
+        # - LoginWithAmazon
+        # - SignInWithApple
+      CallbackURLs:
+        - !If 
+          - HasDomain
+          - !Sub 'https://${DomainName}/auth/callback'
+          - !Sub 'http://localhost:3000/auth/callback'
+        - !If
+          - HasSecondaryDomain
+          - !Sub 'https://${SecondaryDomainName}/auth/callback'
+          - !Ref AWS::NoValue
+      LogoutURLs:
+        - !If 
+          - HasDomain
+          - !Sub 'https://${DomainName}'
+          - !Sub 'http://localhost:3000'
+        - !If
+          - HasSecondaryDomain
+          - !Sub 'https://${SecondaryDomainName}'
+          - !Ref AWS::NoValue
+      AllowedOAuthFlows:
+        - code
+        - implicit
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - profile
+      AllowedOAuthFlowsUserPoolClient: true
+      PreventUserExistenceErrors: ENABLED
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      RefreshTokenValidity: 30
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      TokenValidityUnits:
+        RefreshToken: days
+        AccessToken: hours
+        IdToken: hours
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub '${StackName}-auth'
+      UserPoolId: !Ref UserPool
+
+  # User Groups
+  AdminUserGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: admins
+      Description: Administrator users with full access
+      UserPoolId: !Ref UserPool
+      Precedence: 1
+
+  HostUserGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: hosts
+      Description: Host users who can create and manage games
+      UserPoolId: !Ref UserPool
+      Precedence: 2
+
+  PendingUserGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: pending
+      Description: Users awaiting approval
+      UserPoolId: !Ref UserPool
+      Precedence: 3
+
+  # Google Identity Provider
+  GoogleIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Condition: HasGoogleOAuth
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        client_id: !Sub "{{resolve:ssm:${GoogleClientIdParameter}}}"
+        client_secret: !Sub "{{resolve:ssm-secure:${GoogleClientSecretParameter}}}"
+        authorize_scopes: email openid profile
+      AttributeMapping:
+        email: email
+        name: name
+        picture: picture
+        given_name: given_name
+        family_name: family_name
+
+# Temporarily commented out Identity Pool to resolve circular dependency
+  # # Identity Pool for authenticated and unauthenticated access
+  # IdentityPool:
+  #   Type: AWS::Cognito::IdentityPool
+  #   Properties:
+  #     IdentityPoolName: !Sub '${StackName}-identity-pool'
+  #     AllowUnauthenticatedIdentities: true
+  #     CognitoIdentityProviders:
+  #       - ClientId: !Ref UserPoolClient
+  #         ProviderName: !GetAtt UserPool.ProviderName
+
+# # IAM Roles for Identity Pool
+  # CognitoAuthenticatedRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     RoleName: !Sub '${StackName}-cognito-authenticated'
+  #     AssumeRolePolicyDocument:
+  #       Version: '2012-10-17'
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Federated: cognito-identity.amazonaws.com
+  #           Action: sts:AssumeRoleWithWebIdentity
+  #           Condition:
+  #             StringEquals:
+  #               cognito-identity.amazonaws.com:aud: !Ref IdentityPool
+  #             ForAnyValue:StringLike:
+  #               cognito-identity.amazonaws.com:amr: authenticated
+  #     Policies:
+  #       - PolicyName: AuthenticatedUserPolicy
+  #         PolicyDocument:
+  #           Version: '2012-10-17'
+  #           Statement:
+  #             - Effect: Allow
+  #               Action:
+  #                 - execute-api:Invoke
+  #               Resource:
+  #                 - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/*/*'
+  #                 - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*'
+
+  # CognitoUnauthenticatedRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     RoleName: !Sub '${StackName}-cognito-unauthenticated'
+  #     AssumeRolePolicyDocument:
+  #       Version: '2012-10-17'
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Federated: cognito-identity.amazonaws.com
+  #           Action: sts:AssumeRoleWithWebIdentity
+  #           Condition:
+  #             StringEquals:
+  #               cognito-identity.amazonaws.com:aud: !Ref IdentityPool
+  #             ForAnyValue:StringLike:
+  #               cognito-identity.amazonaws.com:amr: unauthenticated
+  #     Policies:
+  #       - PolicyName: UnauthenticatedUserPolicy
+  #         PolicyDocument:
+  #           Version: '2012-10-17'
+  #           Statement:
+  #             - Effect: Allow
+  #               Action:
+  #                 - execute-api:Invoke
+  #               Resource:
+  #                 # Only allow player endpoints
+  #                 - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/GET/games/*'
+  #                 - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/games/*/join'
+  #                 - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/games/*/answer'
+  #                 - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/games/*/vote'
+  #                 - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*'
+
+  # # Attach roles to Identity Pool
+  # IdentityPoolRoleAttachment:
+  #   Type: AWS::Cognito::IdentityPoolRoleAttachment
+  #   Properties:
+  #     IdentityPoolId: !Ref IdentityPool
+  #     Roles:
+  #       authenticated: !GetAtt CognitoAuthenticatedRole.Arn
+  #       unauthenticated: !GetAtt CognitoUnauthenticatedRole.Arn
+  #     RoleMappings:
+  #       CognitoProvider:
+  #         IdentityProvider: !Sub '${UserPool.ProviderName}:${UserPoolClient}'
+  #         Type: Token
+  #         AmbiguousRoleResolution: AuthenticatedRole
+
+  # Lambda Authorizer for API Gateway (temporarily commented to resolve circular dependency)
+  # Uncomment after initial deployment if needed
+  # AuthorizerFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     FunctionName: !Sub '${StackName}-authorizer'
+  #     CodeUri: lambda-functions/auth/
+  #     Handler: authorizer.handler
+  #     Runtime: nodejs18.x
+  #     Environment:
+  #       Variables:
+  #         USER_POOL_ID: !Ref UserPool
+  #         CLIENT_ID: !Ref UserPoolClient
+  #         REGION: !Ref AWS::Region
+  #     Policies:
+  #       - Version: '2012-10-17'
+  #         Statement:
+  #           - Effect: Allow
+  #             Action:
+  #               - cognito-idp:AdminGetUser
+  #               - cognito-idp:ListUsersInGroup
+  #             Resource: !GetAtt UserPool.Arn
+  #     Tags:
+  #       Environment: !Ref Environment
+  #       StackName: !Ref StackName
+
+  # User Management Lambda
+  UserManagementFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-user-management'
+      CodeUri: lambda-functions/admin/
+      Handler: manage-users.handler
+      Runtime: nodejs18.x
+      Timeout: 60
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          USER_POOL_ID: !Ref UserPool
+          REGION: !Ref AWS::Region
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:ListUsers
+                - cognito-idp:AdminGetUser
+                - cognito-idp:AdminListGroupsForUser
+                - cognito-idp:AdminEnableUser
+                - cognito-idp:AdminDisableUser
+                - cognito-idp:AdminDeleteUser
+                - cognito-idp:AdminUpdateUserAttributes
+                - cognito-idp:AdminAddUserToGroup
+                - cognito-idp:AdminRemoveUserFromGroup
+              Resource: !GetAtt UserPool.Arn
+      Events:
+        ListUsers:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/users/list
+            Method: POST
+        ChangeUserState:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/users/{username}/state
+            Method: PUT
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  # Post-confirmation Lambda for user registration workflow
+  PostConfirmationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-post-confirmation'
+      CodeUri: lambda-functions/auth/
+      Handler: post-confirmation.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          USER_POOL_ID: !Ref UserPool
+          REGION: !Ref AWS::Region
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:AdminGetUser
+                - cognito-idp:AdminListGroupsForUser
+                - cognito-idp:AdminAddUserToGroup
+                - cognito-idp:AdminUpdateUserAttributes
+              Resource: !GetAtt UserPool.Arn
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  # Lambda permission for post-confirmation trigger (commented to avoid circular dependency)
+  # Configure manually after deployment or via separate stack update
+  # PostConfirmationLambdaPermission:
+  #   Type: AWS::Lambda::Permission
+  #   Properties:
+  #     Action: lambda:InvokeFunction
+  #     FunctionName: !Ref PostConfirmationFunction
+  #     Principal: cognito-idp.amazonaws.com
+  #     SourceArn: !GetAtt UserPool.Arn
+
 Outputs:
   # API Endpoints
   RestApiUrl:
@@ -1816,3 +2180,28 @@ Outputs:
     Value: !Ref AWS::StackName
     Export:
       Name: !Sub '${StackName}-stack-name'
+
+  # Cognito Outputs
+  UserPoolId:
+    Description: Cognito User Pool ID (copy to src/.env as REACT_APP_USER_POOL_ID)
+    Value: !Ref UserPool
+    Export:
+      Name: !Sub '${StackName}-user-pool-id'
+
+  UserPoolClientId:
+    Description: Cognito User Pool Client ID (copy to src/.env as REACT_APP_CLIENT_ID)
+    Value: !Ref UserPoolClient
+    Export:
+      Name: !Sub '${StackName}-user-pool-client-id'
+
+  UserPoolDomain:
+    Description: Cognito User Pool Domain
+    Value: !Sub '${StackName}-auth'
+    Export:
+      Name: !Sub '${StackName}-user-pool-domain'
+
+  # IdentityPoolId:
+  #   Description: Cognito Identity Pool ID
+  #   Value: !Ref IdentityPool
+  #   Export:
+  #     Name: !Sub '${StackName}-identity-pool-id'

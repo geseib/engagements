@@ -6,8 +6,10 @@ import SurveyAIBuilder from './components/SurveyAIBuilder';
 import AIPromptManager from './components/AIPromptManager';
 import AIGenerationPromptEditor from './components/AIGenerationPromptEditor';
 import ArchivePanel from './components/ArchivePanel';
+import UserManagement from './components/UserManagement';
 import HelpButton from './components/HelpButton';
 import IssueFab from './components/IssueFab';
+import { useAuth } from './auth/AuthContext';
 import './BuilderPage.css';
 
 const API_BASE = window.API_BASE;
@@ -15,6 +17,7 @@ const API_BASE = window.API_BASE;
 function AdminPage() {
   console.log('🔧 AdminPage component loading with AI builders...');
 
+  const { currentUser, signOut } = useAuth();
   const [questionSets, setQuestionSets] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadStatus, setUploadStatus] = useState('');
@@ -102,6 +105,14 @@ function AdminPage() {
   const [showAnalysisPrompts, setShowAnalysisPrompts] = useState(false);
 
   const defaultInstructions = "How would you apply this concept in your current role or organization? Consider the specific challenges and opportunities in your context.";
+
+  // Sign-out handler
+  const handleSignOut = () => {
+    if (window.confirm('Are you sure you want to sign out?')) {
+      signOut();
+      window.location.href = '/auth';
+    }
+  };
 
   // Fetch available AI prompts for selection
   const fetchAvailablePrompts = async () => {
@@ -892,8 +903,54 @@ function AdminPage() {
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795be09b462b2e8ebf71_osmo-parallax-layer-3.webp" loading="eager" width="800" data-parallax-layer="1" alt="" className="parallax__layer-img" />
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" width="800" data-parallax-layer="2" alt="" className="parallax__layer-img" />
                 <div data-parallax-layer="3" className="parallax__layer-title">
-                  <h2 className="parallax__title">Admin Dashboard</h2>
-                  <HelpButton section="admin" variant="header" size="medium" />
+                  <div className="admin-title-row">
+                    <div className="admin-title-left">
+                      <h2 className="parallax__title">Admin Dashboard</h2>
+                      <HelpButton section="admin" variant="header" size="medium" />
+                    </div>
+                    
+                    {/* User Info and Sign Out */}
+                    {currentUser && (
+                      <div className="admin-user-info" style={{
+                        position: 'absolute',
+                        top: '10px',
+                        right: '20px',
+                        color: 'white',
+                        fontSize: '14px',
+                        textAlign: 'right',
+                        background: 'rgba(0,0,0,0.3)',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        backdropFilter: 'blur(4px)'
+                      }}>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>{currentUser.attributes?.name || 'User'}</strong>
+                        </div>
+                        {currentUser.groups?.includes('admins') && (
+                          <div style={{ color: '#ffd700', fontWeight: '500', fontSize: '12px', marginBottom: '6px' }}>
+                            Administrator
+                          </div>
+                        )}
+                        <button 
+                          onClick={handleSignOut}
+                          style={{
+                            padding: '4px 8px',
+                            backgroundColor: 'rgba(255,255,255,0.2)',
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            borderRadius: '4px',
+                            color: 'white',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.2s'
+                          }}
+                          onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.3)'}
+                          onMouseOut={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+                        >
+                          Sign Out
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" width="800" data-parallax-layer="4" alt="" className="parallax__layer-img" />
               </div>
@@ -929,6 +986,12 @@ function AdminPage() {
                 onClick={() => setActiveTab('archive')}
               >
                 📦 Archive
+              </button>
+              <button 
+                className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`}
+                onClick={() => setActiveTab('users')}
+              >
+                👥 Users
               </button>
               <button 
                 className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
@@ -1588,6 +1651,12 @@ function AdminPage() {
           {activeTab === 'archive' && (
             <div className="tab-content">
               <ArchivePanel />
+            </div>
+          )}
+
+          {activeTab === 'users' && (
+            <div className="tab-content">
+              <UserManagement />
             </div>
           )}
 

@@ -182,8 +182,8 @@ const HelpSystem = ({ section, onClose }) => {
   const renderHome = () => (
     <div className="help-home">
       <div className="help-home-header">
-        <h1>📚 Engage2 Platform Documentation</h1>
-        <p>Welcome to the comprehensive help system for the Engage2 real-time engagement platform. 
+        <h1>📚 Engagements Platform Documentation</h1>
+        <p>Welcome to the comprehensive help system for the Engagements real-time engagement platform. 
            Select your role below to get started with role-specific documentation.</p>
       </div>
       

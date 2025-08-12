@@ -94,6 +94,27 @@ curl -X DELETE https://api.dev.domain.com/admin/clear-all-games
 | Test | https://api.test.seibtribe.us | https://eng.test.seibtribe.us |
 | Prod | https://api.seibtribe.us | https://eng.seibtribe.us |
 
+## Authentication System
+- **AWS Cognito** for user authentication and authorization
+- **User Groups**: `admins`, `hosts`, `pending`
+- **Public Access**: Players can join sessions without login
+- **Protected Routes**: Host/admin features require authentication
+- **Social Providers**: Google, Facebook, Amazon, Apple (configured via Cognito Console)
+
+### Setup Authentication
+1. Deploy SAM template: `./deployall` or `./scripts/deploy-clean.sh engdev eng.dev.seibtribe.us`
+2. Update frontend environment: `./scripts/update-frontend-env.sh engdev`
+3. **Configure Social Providers (Optional)**: In AWS Cognito Console, add Google/Facebook/Amazon/Apple providers
+4. **Update UserPoolClient**: Add social providers to SupportedIdentityProviders in template-clean.yaml if configured
+5. Create admin user via Cognito Console or registration form
+6. Add user to `admins` group
+
+### User Management
+- **Admins**: Can create/manage users, access all features
+- **Hosts**: Can create and manage game sessions
+- **Pending**: Newly registered users awaiting approval
+- **Registration**: Users register → pending group → admin approval → hosts/admins group
+
 ## AI Integration
 - AWS Bedrock (Claude 3 Haiku) for result summaries
 - Prompt generation and customization via admin UI

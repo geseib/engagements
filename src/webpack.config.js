@@ -2,6 +2,11 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
+const webpack = require('webpack');
+const dotenv = require('dotenv');
+
+// Load environment variables from .env file
+const envFile = dotenv.config().parsed || {};
 
 module.exports = (env, argv) => {
   const isProd = argv.mode === 'production';
@@ -39,6 +44,13 @@ module.exports = (env, argv) => {
     },
 
     plugins: [
+      // Define environment variables for the app
+      new webpack.DefinePlugin({
+        'process.env': JSON.stringify({
+          ...envFile,
+          NODE_ENV: argv.mode || 'development'
+        })
+      }),
       new HtmlWebpackPlugin({
         template: path.resolve(__dirname, 'public', 'index.html'),
         filename: 'index.html',

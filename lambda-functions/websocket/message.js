@@ -17,6 +17,11 @@ const apigateway = new ApiGatewayManagementApiClient({
  * 3. Future: Player → Player (not implemented)
  * 
  * Flow: Sender → HTTP API (update DynamoDB) → WebSocket → Receiver → HTTP API (fetch data)
+ * 
+ * Game Type Flows:
+ * - Call-and-Answer: ASK# → VOTE# → RESULTS#
+ * - Trivia: ASK# → RESULTS# (skip voting)
+ * - Wavelength: ASK# → RESULTS# (skip voting)
  */
 exports.handler = async (event) => {
   const connectionId = event.requestContext.connectionId;
@@ -148,10 +153,15 @@ async function handleRequestVote(gameId, messageData) {
       return;
     }
     
-    // For trivia games, the host will handle the transition directly via handleShowResults()
+    // For trivia and wavelength games, the host will handle the transition directly via handleShowResults()
     // No special WebSocket handling needed - use unified flow
     if (gameType === 'trivia') {
       console.log(`🧠 Trivia game detected - host will handle results transition directly via handleShowResults()`);
+      return;
+    }
+    
+    if (gameType === 'wavelength') {
+      console.log(`🌊 Wavelength game detected - host will handle results transition directly via handleShowResults()`);
       return;
     }
     

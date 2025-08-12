@@ -2,12 +2,18 @@ version = 0.1
 [default]
 [default.deploy]
 [default.deploy.parameters]
-stack_name = "engagements-v1"
-s3_bucket = "samcli021891573713"
-s3_prefix = "engagements-v1"
+stack_name = "engdev"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-1l75z8h0vbqdr"
+s3_prefix = "engdev"
 region = "us-east-1"
+confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
-disable_rollback = true
-confirm_changeset = false
-fail_on_empty_changeset = false
-parameter_overrides = "DomainName=engagements.sb.seibtribe.us HostedZoneId=Z03473042HSYD8BUY4XSL"
+parameter_overrides = [
+    "Environment=dev",
+    "StackName=engdev", 
+    "DomainName=eng.dev.seibtribe.us",
+    "HostedZoneId=ZB9TUA073B5SH",
+    "GitHubRepo=georgeseib/engage2",
+    "GoogleClientIdParameter=/engdev/oauth/google/client-id",
+    "GoogleClientSecretParameter=/engdev/oauth/google/client-secret"
+]

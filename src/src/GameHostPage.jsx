@@ -5,6 +5,7 @@ import webSocketClient from './WebSocketClient';
 import MarkdownRenderer from './components/MarkdownRenderer';
 import IssueFab from './components/IssueFab';
 import QuickstartMenu from './components/QuickstartMenu';
+import { useAuth } from './auth/AuthContext';
 
 const API_BASE = window.API_BASE;
 
@@ -36,6 +37,9 @@ const calculatePlayerRankings = (players) => {
 };
 
 function GameHostPage() {
+  // 🎯 AUTHENTICATION
+  const { currentUser, signOut } = useAuth();
+  
   // 🎯 GAME ID MANAGEMENT: Use URL as single source of truth
   const [gameId, setGameId] = useState('');
   
@@ -93,6 +97,14 @@ function GameHostPage() {
 
   // Flag to prevent auto-selection during game state restoration
   const [isRestoringState, setIsRestoringState] = useState(false);
+
+  // Sign-out handler
+  const handleSignOut = () => {
+    if (window.confirm('Are you sure you want to sign out?')) {
+      signOut();
+      window.location.href = '/auth';
+    }
+  };
 
   // Welcome Screen
   const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
@@ -2283,6 +2295,39 @@ Ready to engage? See you there!`;
               <button className="btn-secondary btn-large welcome-btn" onClick={handleViewGameHistory}>
                 📋 View Game History
               </button>
+              
+              {/* User Info and Sign Out */}
+              {currentUser && (
+                <div className="welcome-user-info" style={{
+                  marginTop: '20px',
+                  padding: '12px',
+                  backgroundColor: '#f8f9fa',
+                  border: '1px solid #dee2e6',
+                  borderRadius: '6px',
+                  textAlign: 'center',
+                  fontSize: '14px'
+                }}>
+                  <div style={{ marginBottom: '6px' }}>
+                    <strong>{currentUser.attributes?.name || 'User'}</strong>
+                  </div>
+                  {currentUser.groups?.includes('admins') && (
+                    <div style={{ color: '#007bff', fontWeight: '500', fontSize: '12px', marginBottom: '8px' }}>
+                      Administrator
+                    </div>
+                  )}
+                  <button 
+                    onClick={handleSignOut}
+                    className="btn-secondary"
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: '12px',
+                      minHeight: 'auto'
+                    }}
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2700,6 +2745,41 @@ Ready to engage? See you there!`;
             </>
           )}
           
+          {/* User Info and Sign Out */}
+          <div style={{ 
+            marginTop: 'auto', 
+            paddingTop: '20px', 
+            borderTop: '1px solid #e5e5e5',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px'
+          }}>
+            {currentUser && (
+              <div style={{ fontSize: '14px', color: '#666' }}>
+                <strong>{currentUser.attributes?.name || 'User'}</strong>
+                <div>{currentUser.attributes?.email}</div>
+                {currentUser.groups?.includes('admins') && (
+                  <div style={{ color: '#007bff', fontWeight: '500' }}>Administrator</div>
+                )}
+              </div>
+            )}
+            <button 
+              onClick={handleSignOut}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#f8f9fa',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                color: '#666',
+                fontSize: '14px',
+                cursor: 'pointer',
+                width: '100%'
+              }}
+            >
+              Sign Out
+            </button>
+          </div>
+          
         </div>
       </div>
       <div className="instructions-tab" onClick={() => setInstructionsVisible(!instructionsVisible)}>
@@ -2784,6 +2864,39 @@ Ready to engage? See you there!`;
               <button className="btn-danger" onClick={handleSwitchGame}>
                 Switch Game
               </button>
+              
+              {/* User Info and Sign Out */}
+              {currentUser && (
+                <div style={{ 
+                  marginTop: '16px',
+                  padding: '12px',
+                  backgroundColor: '#f8f9fa',
+                  borderRadius: '4px',
+                  fontSize: '12px'
+                }}>
+                  <div style={{ marginBottom: '8px', color: '#666' }}>
+                    <strong>{currentUser.attributes?.name || 'User'}</strong>
+                    {currentUser.groups?.includes('admins') && (
+                      <div style={{ color: '#007bff', fontWeight: '500' }}>Admin</div>
+                    )}
+                  </div>
+                  <button 
+                    onClick={handleSignOut}
+                    style={{
+                      padding: '6px 12px',
+                      backgroundColor: '#fff',
+                      border: '1px solid #ddd',
+                      borderRadius: '3px',
+                      color: '#666',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      width: '100%'
+                    }}
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

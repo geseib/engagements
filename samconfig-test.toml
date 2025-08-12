@@ -2,12 +2,19 @@ version = 0.1
 [default]
 [default.deploy]
 [default.deploy.parameters]
-stack_name = "eng-test"
+stack_name = "engtest"
 s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-4qhkoy6cytdp"
-s3_prefix = "engagements-test"
+s3_prefix = "engtest"
 region = "us-east-1"
+confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
-disable_rollback = true
-confirm_changeset = false
-fail_on_empty_changeset = false
-parameter_overrides = "DomainName=eng.test.seibtribe.us HostedZoneId=ZB9TUA073B5SH"
+parameter_overrides = [
+    "Environment=test",
+    "StackName=engtest", 
+    "DomainName=eng.test.seibtribe.us",
+    "HostedZoneId=ZB9TUA073B5SH",
+    "GitHubToken=",
+    "GitHubRepo=georgeseib/engage2",
+    "GoogleClientIdParameter=/engtest/oauth/google/client-id",
+    "GoogleClientSecretParameter=/engtest/oauth/google/client-secret"
+]
