@@ -127,8 +127,8 @@ const RegisterForm = ({ onToggleMode, onSuccess }) => {
     
     // Build Cognito hosted UI URL for Google sign-up
     // Extract environment from user pool ID format: us-east-1_XXXXXXX
-    const environment = userPoolId.includes('QAsrTnPpj') ? 'engdev' : 
-                       userPoolId.includes('testPoolId') ? 'test' : 'prod'; // Update with actual test/prod pool IDs
+    // TEMP: Force engdev environment for testing
+    const environment = 'engdev';
     const domainSuffix = environment === 'engdev' ? '-v2' : ''; // Only dev uses v2 suffix
     const cognitoDomain = `${environment}-auth${domainSuffix}.auth.${region}.amazoncognito.com`;
     const redirectUri = encodeURIComponent(window.location.origin + '/auth/callback');
@@ -139,6 +139,7 @@ const RegisterForm = ({ onToggleMode, onSuccess }) => {
       `response_type=token&` +
       `client_id=${clientId}&` +
       `scope=openid+email+profile+aws.cognito.signin.user.admin&` +
+      `prompt=select_account&` +
       `state=register`;
     
     console.log('📍 Built OAuth URL:', googleSignUpUrl);

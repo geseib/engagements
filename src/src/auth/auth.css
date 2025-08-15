@@ -723,3 +723,67 @@
     }
   }
 }
+
+/* Admin Bypass Styles (Development Only) */
+.admin-bypass-section {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.admin-bypass-divider {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.admin-bypass-divider::before,
+.admin-bypass-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.admin-bypass-divider span {
+  padding: 0 16px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.admin-bypass-button {
+  width: 100%;
+  padding: 12px 20px;
+  background: linear-gradient(45deg, #ff6b35, #f7931e);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.admin-bypass-button:hover {
+  background: linear-gradient(45deg, #e85a2b, #e6851b);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);
+}
+
+.admin-bypass-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(255, 107, 53, 0.3);
+}
+
+.admin-bypass-help {
+  margin-top: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.4;
+}

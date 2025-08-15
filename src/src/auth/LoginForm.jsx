@@ -137,11 +137,13 @@ const LoginForm = ({ onToggleMode, onSuccess, initialError }) => {
     
     // Build Cognito hosted UI URL for Google sign-in
     // Extract environment from user pool ID format: us-east-1_XXXXXXX
-    const environment = userPoolId.includes('QAsrTnPpj') ? 'engdev' : 
-                       userPoolId.includes('testPoolId') ? 'test' : 'prod'; // Update with actual test/prod pool IDs
+    // TEMP: Force engdev environment for testing
+    const environment = 'engdev';
     const domainSuffix = environment === 'engdev' ? '-v2' : ''; // Only dev uses v2 suffix
     const cognitoDomain = `${environment}-auth${domainSuffix}.auth.${region}.amazoncognito.com`;
     const redirectUri = encodeURIComponent(window.location.origin + '/auth/callback');
+    
+    console.log('🔍 Environment detection:', { userPoolId, environment, domainSuffix, cognitoDomain });
     
     const googleSignInUrl = `https://${cognitoDomain}/oauth2/authorize?` +
       `identity_provider=Google&` +
@@ -149,6 +151,7 @@ const LoginForm = ({ onToggleMode, onSuccess, initialError }) => {
       `response_type=token&` +
       `client_id=${clientId}&` +
       `scope=openid+email+profile+aws.cognito.signin.user.admin&` +
+      `prompt=select_account&` +
       `state=login`;
     
     console.log('📍 Built OAuth URL:', googleSignInUrl);
@@ -285,6 +288,57 @@ const LoginForm = ({ onToggleMode, onSuccess, initialError }) => {
           </button>
         </div>
       </form>
+
+      {/* Admin Bypass Section (Development Only) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="admin-bypass-section">
+          <div className="admin-bypass-divider">
+            <span>Development Tools</span>
+          </div>
+          
+          <button
+            type="button"
+            onClick={async () => {
+              console.log('🔧 Admin bypass clicked');
+              
+              try {
+                // Call the admin bypass API
+                const response = await fetch('/api/admin/bypass', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    action: 'create_admin',
+                    email: 'george.seib@gmail.com'
+                  }),
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                  console.log('🔧 Admin bypass successful:', result);
+                  alert(`Admin user created!\nEmail: ${result.credentials.email}\nPassword: ${result.credentials.password}\n\nYou can now sign in with these credentials.`);
+                } else {
+                  console.error('🔧 Admin bypass failed:', result.error);
+                  alert(`Admin bypass failed: ${result.error}`);
+                }
+              } catch (error) {
+                console.error('🔧 Admin bypass error:', error);
+                alert(`Admin bypass error: ${error.message}`);
+              }
+            }}
+            className="admin-bypass-button"
+            title="Creates admin user for development (george.seib@gmail.com)"
+          >
+            🔧 Create Admin User (Dev)
+          </button>
+          
+          <p className="admin-bypass-help">
+            This creates an admin user for development. Use the provided credentials to sign in.
+          </p>
+        </div>
+      )}
 
       <div className="auth-footer">
         <p className="help-text">

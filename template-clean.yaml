@@ -299,6 +299,39 @@ Resources:
         StackName: !Ref StackName
 
 
+  ## Admin Bypass Function (temporary access for first admin)
+  AdminBypassLoginFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-bypass'
+      CodeUri: lambda-functions/auth/
+      Handler: admin-bypass.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          USER_POOL_ID: !Ref UserPoolV2
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - cognito-idp:AdminCreateUser
+              - cognito-idp:AdminSetUserPassword
+              - cognito-idp:AdminAddUserToGroup
+              - cognito-idp:AdminRemoveUserFromGroup
+              - cognito-idp:AdminUpdateUserAttributes
+            Resource: !GetAtt UserPoolV2.Arn
+      Events:
+        AdminBypassEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/bypass
+            Method: POST
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   ## Main Question Sets Function (for game creation)
   GetQuestionSetsFunction:
     Type: AWS::Serverless::Function

@@ -316,8 +316,8 @@ const OAuthCallback = ({ onSuccess, onError }) => {
           const userPoolId = process.env.REACT_APP_USER_POOL_ID;
           const clientId = process.env.REACT_APP_CLIENT_ID;
           const region = userPoolId.split('_')[0];
-          const environment = userPoolId.includes('QAsrTnPpj') ? 'engdev' : 
-                             userPoolId.includes('testPoolId') ? 'test' : 'prod';
+          // TEMP: Force engdev environment for testing
+          const environment = 'engdev';
           const domainSuffix = environment === 'engdev' ? '-v2' : '';
           const cognitoDomain = `${environment}-auth${domainSuffix}.auth.${region}.amazoncognito.com`;
           
