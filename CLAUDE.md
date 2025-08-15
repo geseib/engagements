@@ -1,5 +1,9 @@
 # CLAUDE.md - Engage2 Project Context
 
+## **🚨 CRITICAL DEPLOYMENT RULE 🚨**
+**ALWAYS LET USER DEPLOY - NEVER AUTO-DEPLOY OR SUGGEST DEPLOYMENT**
+User handles all deployments manually. Claude should never attempt to deploy.
+
 ## Project Overview
 Real-time engagement platform for strategic thinking sessions with AWS serverless architecture.
 
@@ -151,6 +155,11 @@ curl -X DELETE https://api.dev.domain.com/admin/clear-all-games
 - Category bitmask showing zeros (debug logging added)
 - Categories flashing then deactivating
 - Player dates showing 1969 epoch time
+
+## Recent Changes
+- **Authentication System**: Upgraded to UserPoolV2 with mutable email attributes to fix Google OAuth
+- **Documentation**: See `docs/AUTHENTICATION_RECOVERY.md` for post-deployment steps
+- **Domain Change**: Cognito domain changed from `engdev-auth` to `engdev-auth-v2`
 
 ## Data Flow Pattern
 1. **Action**: Host triggers via HTTP API

@@ -500,7 +500,17 @@ exports.handler = async (event) => {
     const votes = votesQuery.Items || [];
     const answers = answersQuery.Items || [];
     
-    console.log(`📊 Found ${answers.length} answers and ${votes.length} votes for question ${paddedQuestionNumber}`);
+    // Get stored results data if available (contains wavelength commonWords)
+    const storedResultsQuery = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { 
+        PK: `GAME#${gameId}`, 
+        SK: `QUESTION#${paddedQuestionNumber}#RESULTS` 
+      }
+    }));
+    
+    const storedResults = storedResultsQuery.Item || null;
+    console.log(`📊 Found ${answers.length} answers, ${votes.length} votes, stored results: ${storedResults ? 'YES' : 'NO'} for question ${paddedQuestionNumber}`);
     
     if (answers.length === 0) {
       return {
@@ -1332,52 +1342,92 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     // Get the topic/prompt from the question
     wavelengthTopic = question.title || question.topic || 'Word Association';
     
-    // Process all player words to find common ones
-    const wordCounts = {};
-    const playerWordLists = {};
-    let totalWordsSubmitted = 0;
-    
-    answers.forEach(answer => {
-      const playerName = answer.PlayerName || answer.playerName;
-      const answerText = answer.Answer || answer.answer || '';
+    // Use stored results data if available (contains pre-calculated commonWords)
+    if (storedResults && storedResults.wordAnalysis && storedResults.wordAnalysis.commonWords) {
+      console.log('✅ Using stored wavelength results data for AI summary');
       
-      // Parse words (should already be normalized from message.js processing)
-      const words = answerText.split(',')
-        .map(w => w.trim().toLowerCase())
-        .filter(w => w.length > 0);
+      commonWords = storedResults.wordAnalysis.commonWords;
+      const wordCounts = storedResults.wordAnalysis.wordCounts || {};
+      totalUniqueWords = storedResults.wordAnalysis.totalUniqueWords || 0;
+      connectionScore = storedResults.wordAnalysis.connectionScore || 0;
       
-      playerWordLists[playerName] = words;
-      totalWordsSubmitted += words.length;
+      // Extract player word lists from stored data
+      const playerWordLists = {};
+      if (storedResults.playerAnswers) {
+        storedResults.playerAnswers.forEach(playerAnswer => {
+          const playerName = playerAnswer.playerName || playerAnswer.PlayerName;
+          const answerText = playerAnswer.answer || playerAnswer.Answer || '';
+          const words = answerText.split(',')
+            .map(w => w.trim().toLowerCase())
+            .filter(w => w.length > 0);
+          playerWordLists[playerName] = words;
+        });
+      }
       
-      // Count word frequencies
-      words.forEach(word => {
-        wordCounts[word] = (wordCounts[word] || 0) + 1;
+      // Format wavelength data for AI
+      wavelengthWords = Object.entries(playerWordLists)
+        .map(([player, words]) => `${player}: [${words.join(', ')}]`)
+        .join('; ');
+      
+      wordAnalysis = `${commonWords.length} common words found out of ${totalUniqueWords} unique words (${connectionScore}% connection rate). ` +
+        `Common words: ${commonWords.map(w => `${w.word} (${w.count}x)`).join(', ')}`;
+      
+      console.log('🌊 Using stored wavelength analysis:', {
+        commonWordsCount: commonWords.length,
+        totalUniqueWords,
+        connectionScore
       });
-    });
-    
-    // Find common words (mentioned by 2+ players)
-    commonWords = Object.entries(wordCounts)
-      .filter(([word, count]) => count > 1)
-      .sort((a, b) => b[1] - a[1]) // Sort by frequency
-      .map(([word, count]) => ({ word, count }));
-    
-    totalUniqueWords = Object.keys(wordCounts).length;
-    connectionScore = Math.round((commonWords.length / totalUniqueWords) * 100) || 0;
-    
-    // Format wavelength data for AI
-    wavelengthWords = Object.entries(playerWordLists)
-      .map(([player, words]) => `${player}: [${words.join(', ')}]`)
-      .join('; ');
-    
-    wordAnalysis = `${commonWords.length} common words found out of ${totalUniqueWords} unique words (${connectionScore}% connection rate). ` +
-      `Common words: ${commonWords.map(w => `${w.word} (${w.count}x)`).join(', ')}`;
-    
-    console.log('🌊 Wavelength analysis complete:', {
-      topic: wavelengthTopic,
-      commonWordsCount: commonWords.length,
-      totalUniqueWords: totalUniqueWords,
-      connectionScore: connectionScore
-    });
+      
+    } else {
+      console.log('⚠️ No stored results found, calculating wavelength data from scratch');
+      
+      // Fallback: Process all player words to find common ones
+      const wordCounts = {};
+      const playerWordLists = {};
+      let totalWordsSubmitted = 0;
+      
+      answers.forEach(answer => {
+        const playerName = answer.PlayerName || answer.playerName;
+        const answerText = answer.Answer || answer.answer || '';
+        
+        // Parse words (should already be normalized from message.js processing)
+        const words = answerText.split(',')
+          .map(w => w.trim().toLowerCase())
+          .filter(w => w.length > 0);
+        
+        playerWordLists[playerName] = words;
+        totalWordsSubmitted += words.length;
+        
+        // Count word frequencies
+        words.forEach(word => {
+          wordCounts[word] = (wordCounts[word] || 0) + 1;
+        });
+      });
+      
+      // Find common words (mentioned by 2+ players)
+      commonWords = Object.entries(wordCounts)
+        .filter(([word, count]) => count > 1)
+        .sort((a, b) => b[1] - a[1]) // Sort by frequency
+        .map(([word, count]) => ({ word, count }));
+      
+      totalUniqueWords = Object.keys(wordCounts).length;
+      connectionScore = Math.round((commonWords.length / totalUniqueWords) * 100) || 0;
+      
+      // Format wavelength data for AI
+      wavelengthWords = Object.entries(playerWordLists)
+        .map(([player, words]) => `${player}: [${words.join(', ')}]`)
+        .join('; ');
+      
+      wordAnalysis = `${commonWords.length} common words found out of ${totalUniqueWords} unique words (${connectionScore}% connection rate). ` +
+        `Common words: ${commonWords.map(w => `${w.word} (${w.count}x)`).join(', ')}`;
+      
+      console.log('🌊 Fallback wavelength analysis complete:', {
+        topic: wavelengthTopic,
+        commonWordsCount: commonWords.length,
+        totalUniqueWords: totalUniqueWords,
+        connectionScore: connectionScore
+      });
+    }
     
     // Update wavelength-specific summary variables now that we have the real values
     resultsSummary = `Team found ${commonWords.length} common words with ${connectionScore}% connection rate`;

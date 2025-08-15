@@ -7320,6 +7320,48 @@ body {
   color: #5a67d8;
 }
 
+/* Regular QR Code Styles (non-big-screen) */
+.join-qr {
+  text-align: center;
+  margin: 20px 0;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.join-qr .join-qr-code {
+  margin: 0 auto 15px auto;
+  display: block;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.join-qr .join-instructions {
+  text-align: center;
+}
+
+.join-qr .join-url-text {
+  font-size: 1.1rem;
+  color: #4a5568;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.join-qr .game-id-display {
+  font-size: 1.2rem;
+  color: #2d3748;
+  font-weight: 500;
+}
+
+.join-qr .game-id-display strong {
+  font-weight: 700;
+  color: #5a67d8;
+}
+
 /* Big screen mode adjustments */
 .host-page.big-screen .big-screen-join-qr {
   margin: 60px auto;

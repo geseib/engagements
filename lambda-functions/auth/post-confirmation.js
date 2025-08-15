@@ -17,12 +17,17 @@ const TABLE_NAME = process.env.TABLE_NAME;
 exports.handler = async (event) => {
   console.log('Post-confirmation event:', JSON.stringify(event, null, 2));
 
-  // Only process confirmed users
-  if (event.request.userAttributes.email_verified !== 'true' && 
-      event.request.userAttributes.phone_number_verified !== 'true') {
-    console.log('User not verified, skipping');
+  // Check if user is verified (email/phone verified OR external provider)
+  const isEmailVerified = event.request.userAttributes.email_verified === 'true';
+  const isPhoneVerified = event.request.userAttributes.phone_number_verified === 'true';
+  const isExternalProvider = event.request.userAttributes['cognito:user_status'] === 'EXTERNAL_PROVIDER';
+  
+  if (!isEmailVerified && !isPhoneVerified && !isExternalProvider) {
+    console.log('User not verified and not external provider, skipping');
     return event;
   }
+  
+  console.log('User verification status:', { isEmailVerified, isPhoneVerified, isExternalProvider });
 
   try {
     const username = event.userName;

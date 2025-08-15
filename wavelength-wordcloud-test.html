@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wavelength Word Cloud Test - d3-cloud</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/jasondavies/d3-cloud/build/d3.layout.cloud.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8fafc;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            color: #1f2937;
+            margin: 0 0 10px 0;
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+        
+        .header p {
+            color: #6b7280;
+            font-size: 1.1rem;
+            margin: 0;
+        }
+        
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group:last-child {
+            margin-bottom: 0;
+        }
+        
+        .control-label {
+            font-weight: 600;
+            color: #374151;
+            margin-right: 15px;
+            margin-bottom: 8px;
+            display: inline-block;
+        }
+        
+        .control-buttons {
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .control-button {
+            padding: 8px 16px;
+            border: 2px solid #e5e7eb;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            text-transform: capitalize;
+        }
+        
+        .control-button:hover {
+            border-color: #d1d5db;
+            background: #f9fafb;
+        }
+        
+        .control-button.active {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+        
+        .control-button.active:hover {
+            background: #2563eb;
+            border-color: #2563eb;
+        }
+        
+        .wordcloud-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            text-align: center;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        
+        .wordcloud-container svg {
+            display: block;
+            margin: 0 auto;
+        }
+        
+        .info-panel {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .info-panel h3 {
+            margin: 0 0 15px 0;
+            font-size: 1.3rem;
+        }
+        
+        .info-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .info-list li {
+            margin-bottom: 8px;
+            padding-left: 20px;
+            position: relative;
+        }
+        
+        .info-list li::before {
+            content: '✨';
+            position: absolute;
+            left: 0;
+        }
+        
+        .word-cloud-text {
+            cursor: pointer;
+            transition: opacity 0.2s ease;
+        }
+        
+        .word-cloud-text:hover {
+            opacity: 0.7 !important;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .control-buttons {
+                flex-direction: column;
+            }
+            
+            .control-button {
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎨 Wavelength Word Cloud Test</h1>
+        <p>Testing d3-cloud for visualizing wavelength game responses</p>
+    </div>
+
+    <div class="controls">
+        <div class="control-group">
+            <div class="control-label">Sample Dataset:</div>
+            <div class="control-buttons" id="dataset-buttons">
+                <button class="control-button active" data-dataset="emotions">Emotions</button>
+                <button class="control-button" data-dataset="technology">Technology</button>
+                <button class="control-button" data-dataset="nature">Nature</button>
+                <button class="control-button" data-dataset="custom">Custom Words</button>
+                <button class="control-button" data-dataset="dominant">Dominant Prompt</button>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <div class="control-label">Color Scheme:</div>
+            <div class="control-buttons" id="color-buttons">
+                <button class="control-button active" data-color="category10">Vibrant</button>
+                <button class="control-button" data-color="blues">Ocean Blue</button>
+                <button class="control-button" data-color="warm">Sunset</button>
+                <button class="control-button" data-color="cool">Cool Tones</button>
+                <button class="control-button" data-color="viridis">Forest</button>
+                <button class="control-button" data-color="engage">Engage Theme</button>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <div class="control-label">Layout Style:</div>
+            <div class="control-buttons" id="layout-buttons">
+                <button class="control-button active" data-layout="mixed">Mixed Rotation</button>
+                <button class="control-button" data-layout="horizontal">Horizontal</button>
+                <button class="control-button" data-layout="random">Random Angles</button>
+                <button class="control-button" data-layout="spiral">Spiral</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="wordcloud-container">
+        <svg id="wordcloud" width="900" height="500"></svg>
+    </div>
+
+    <div class="info-panel">
+        <h3>🔍 Current Configuration</h3>
+        <ul class="info-list">
+            <li><strong>Dataset:</strong> <span id="current-dataset">emotions</span> (<span id="word-count">10</span> words)</li>
+            <li><strong>Color Scheme:</strong> <span id="current-color">category10</span></li>
+            <li><strong>Layout Style:</strong> <span id="current-layout">mixed</span></li>
+            <li><strong>Font:</strong> Impact (optimized for readability)</li>
+            <li><strong>Interactions:</strong> Hover effects and click logging</li>
+            <li><strong>Animation:</strong> Smooth fade-in on render</li>
+        </ul>
+    </div>
+
+    <script>
+        // Sample data for different wavelength categories (20 words each)
+        const sampleData = {
+            emotions: [
+                { text: 'love', size: 70, weight: 20 },
+                { text: 'happiness', size: 68, weight: 19 },
+                { text: 'joy', size: 65, weight: 18 },
+                { text: 'peace', size: 62, weight: 17 },
+                { text: 'harmony', size: 58, weight: 16 },
+                { text: 'bliss', size: 55, weight: 15 },
+                { text: 'contentment', size: 52, weight: 14 },
+                { text: 'serenity', size: 48, weight: 13 },
+                { text: 'delight', size: 45, weight: 12 },
+                { text: 'warmth', size: 42, weight: 11 },
+                { text: 'compassion', size: 38, weight: 10 },
+                { text: 'gratitude', size: 35, weight: 9 },
+                { text: 'kindness', size: 32, weight: 8 },
+                { text: 'hope', size: 30, weight: 7 },
+                { text: 'empathy', size: 28, weight: 6 },
+                { text: 'trust', size: 25, weight: 5 },
+                { text: 'comfort', size: 22, weight: 4 },
+                { text: 'affection', size: 20, weight: 3 },
+                { text: 'excitement', size: 18, weight: 2 },
+                { text: 'enthusiasm', size: 15, weight: 1 }
+            ],
+            technology: [
+                { text: 'innovation', size: 72, weight: 20 },
+                { text: 'artificial intelligence', size: 68, weight: 19 },
+                { text: 'automation', size: 65, weight: 18 },
+                { text: 'digital transformation', size: 62, weight: 17 },
+                { text: 'future', size: 58, weight: 16 },
+                { text: 'progress', size: 55, weight: 15 },
+                { text: 'advancement', size: 52, weight: 14 },
+                { text: 'efficiency', size: 48, weight: 13 },
+                { text: 'connectivity', size: 45, weight: 12 },
+                { text: 'smart', size: 42, weight: 11 },
+                { text: 'data', size: 38, weight: 10 },
+                { text: 'cloud', size: 35, weight: 9 },
+                { text: 'cybersecurity', size: 32, weight: 8 },
+                { text: 'blockchain', size: 30, weight: 7 },
+                { text: 'quantum', size: 28, weight: 6 },
+                { text: 'robotics', size: 25, weight: 5 },
+                { text: 'virtual reality', size: 22, weight: 4 },
+                { text: 'machine learning', size: 20, weight: 3 },
+                { text: 'disruption', size: 18, weight: 2 },
+                { text: 'algorithm', size: 15, weight: 1 }
+            ],
+            nature: [
+                { text: 'forest', size: 70, weight: 20 },
+                { text: 'ocean', size: 68, weight: 19 },
+                { text: 'mountains', size: 65, weight: 18 },
+                { text: 'wildlife', size: 62, weight: 17 },
+                { text: 'rivers', size: 58, weight: 16 },
+                { text: 'trees', size: 55, weight: 15 },
+                { text: 'flowers', size: 52, weight: 14 },
+                { text: 'sunshine', size: 48, weight: 13 },
+                { text: 'fresh air', size: 45, weight: 12 },
+                { text: 'green', size: 42, weight: 11 },
+                { text: 'natural', size: 38, weight: 10 },
+                { text: 'ecosystem', size: 35, weight: 9 },
+                { text: 'biodiversity', size: 32, weight: 8 },
+                { text: 'rainforest', size: 30, weight: 7 },
+                { text: 'meadow', size: 28, weight: 6 },
+                { text: 'breeze', size: 25, weight: 5 },
+                { text: 'waterfall', size: 22, weight: 4 },
+                { text: 'sunset', size: 20, weight: 3 },
+                { text: 'wilderness', size: 18, weight: 2 },
+                { text: 'landscape', size: 15, weight: 1 }
+            ],
+            custom: [
+                { text: 'creativity', size: 75, weight: 20 },
+                { text: 'imagination', size: 70, weight: 19 },
+                { text: 'inspiration', size: 66, weight: 18 },
+                { text: 'dreams', size: 62, weight: 17 },
+                { text: 'vision', size: 58, weight: 16 },
+                { text: 'passion', size: 55, weight: 15 },
+                { text: 'energy', size: 52, weight: 14 },
+                { text: 'spark', size: 48, weight: 13 },
+                { text: 'flow', size: 45, weight: 12 },
+                { text: 'magic', size: 42, weight: 11 },
+                { text: 'wonder', size: 38, weight: 10 },
+                { text: 'discovery', size: 35, weight: 9 },
+                { text: 'breakthrough', size: 32, weight: 8 },
+                { text: 'possibility', size: 30, weight: 7 },
+                { text: 'adventure', size: 28, weight: 6 },
+                { text: 'freedom', size: 25, weight: 5 },
+                { text: 'expression', size: 22, weight: 4 },
+                { text: 'brilliance', size: 20, weight: 3 },
+                { text: 'transformation', size: 18, weight: 2 },
+                { text: 'enlightenment', size: 15, weight: 1 }
+            ],
+            dominant: [
+                // The prompt word "HAPPINESS" has size equal to sum of all others
+                { text: 'HAPPINESS', size: 150, weight: 210 }, // Sum of all other weights (1+2+3...+20 = 210)
+                // Player responses - 20 related words
+                { text: 'joy', size: 35, weight: 20 },
+                { text: 'smile', size: 33, weight: 19 },
+                { text: 'laughter', size: 31, weight: 18 },
+                { text: 'cheerful', size: 29, weight: 17 },
+                { text: 'sunny', size: 27, weight: 16 },
+                { text: 'delight', size: 25, weight: 15 },
+                { text: 'pleasure', size: 23, weight: 14 },
+                { text: 'fun', size: 21, weight: 13 },
+                { text: 'excited', size: 19, weight: 12 },
+                { text: 'positive', size: 17, weight: 11 },
+                { text: 'optimistic', size: 16, weight: 10 },
+                { text: 'content', size: 15, weight: 9 },
+                { text: 'satisfied', size: 14, weight: 8 },
+                { text: 'peaceful', size: 13, weight: 7 },
+                { text: 'grateful', size: 12, weight: 6 },
+                { text: 'blessed', size: 11, weight: 5 },
+                { text: 'fortunate', size: 10, weight: 4 },
+                { text: 'elated', size: 9, weight: 3 },
+                { text: 'euphoric', size: 8, weight: 2 },
+                { text: 'blissful', size: 7, weight: 1 }
+            ]
+        };
+
+        // Current settings
+        let currentDataset = 'emotions';
+        let currentColor = 'category10';
+        let currentLayout = 'mixed';
+
+        // Color schemes
+        const colorSchemes = {
+            category10: d3.scaleOrdinal(d3.schemeCategory10),
+            blues: d3.scaleSequential(d3.interpolateBlues),
+            warm: d3.scaleSequential(d3.interpolateWarm),
+            cool: d3.scaleSequential(d3.interpolateCool),
+            viridis: d3.scaleSequential(d3.interpolateViridis),
+            engage: function(i, total) {
+                // Custom Engage theme colors matching website gradient
+                const engageColors = [
+                    '#667eea', // Primary indigo
+                    '#764ba2', // Primary purple
+                    '#8b5cf6', // Violet
+                    '#a855f7', // Light purple
+                    '#6366f1', // Indigo variation
+                    '#818cf8', // Light indigo
+                    '#c084fc', // Light violet
+                    '#9333ea', // Deep purple
+                    '#7c3aed', // Mid purple
+                    '#5b21b6', // Dark purple
+                    '#667eea', // Repeat for consistency
+                    '#764ba2'
+                ];
+                // For ordinal scale, cycle through colors
+                if (typeof i === 'number') {
+                    return engageColors[i % engageColors.length];
+                }
+                // For sequential, interpolate between primary colors
+                return d3.interpolateRgb('#667eea', '#764ba2')(i / (total || 1));
+            }
+        };
+
+        // Layout rotation functions
+        const layoutStyles = {
+            mixed: () => ~~(Math.random() * 2) * 90, // 0 or 90 degrees
+            horizontal: () => 0, // All horizontal
+            random: () => ~~(Math.random() * 6) * 30, // 0, 30, 60, 90, 120, 150 degrees
+            spiral: (d, i) => (i % 8) * 45 // Spiral pattern
+        };
+
+        function createWordCloud(words, colorScheme = 'category10', layoutStyle = 'mixed') {
+            // Clear previous content
+            d3.select('#wordcloud').selectAll('*').remove();
+
+            const svg = d3.select('#wordcloud');
+            const width = +svg.attr('width');
+            const height = +svg.attr('height');
+
+            // Set up color scale
+            const colorScale = colorSchemes[colorScheme];
+            if (colorScheme !== 'category10' && colorScheme !== 'engage') {
+                colorScale.domain([0, words.length - 1]);
+            }
+
+            // Create layout
+            const layout = d3.layout.cloud()
+                .size([width, height])
+                .words(words.map(d => ({...d})))
+                .padding(8)
+                .rotate(layoutStyles[layoutStyle])
+                .font('Impact')
+                .fontSize(d => Math.max(12, d.size))
+                .on('end', draw);
+
+            layout.start();
+
+            function draw(words) {
+                const g = svg.append('g')
+                    .attr('transform', `translate(${width/2},${height/2})`);
+
+                const text = g.selectAll('text')
+                    .data(words)
+                    .enter().append('text')
+                    .style('font-size', d => `${d.size}px`)
+                    .style('font-family', 'Impact')
+                    .style('font-weight', 'bold')
+                    .style('fill', (d, i) => {
+                        if (colorScheme === 'category10') {
+                            return colorScale(i % 10);
+                        } else if (colorScheme === 'engage') {
+                            return colorScale(i, words.length);
+                        } else {
+                            return colorScale(i);
+                        }
+                    })
+                    .style('cursor', 'pointer')
+                    .attr('text-anchor', 'middle')
+                    .attr('class', 'word-cloud-text')
+                    .attr('transform', d => `translate(${d.x},${d.y})rotate(${d.rotate})`)
+                    .text(d => d.text)
+                    .on('mouseover', function(event, d) {
+                        d3.select(this).style('opacity', 0.7);
+                        // Could add tooltip here
+                        console.log(`Hovering: ${d.text} (weight: ${d.weight})`);
+                    })
+                    .on('mouseout', function(event, d) {
+                        d3.select(this).style('opacity', 1);
+                    })
+                    .on('click', function(event, d) {
+                        console.log(`Clicked: ${d.text} (size: ${d.size}, weight: ${d.weight})`);
+                        // Could trigger drill-down or word details here
+                    });
+
+                // Animate in
+                text.style('opacity', 0)
+                    .transition()
+                    .duration(1000)
+                    .delay((d, i) => i * 50)
+                    .style('opacity', 1);
+            }
+        }
+
+        // Button event handlers
+        function setupEventHandlers() {
+            // Dataset buttons
+            document.querySelectorAll('#dataset-buttons .control-button').forEach(button => {
+                button.addEventListener('click', function() {
+                    // Update active state
+                    document.querySelectorAll('#dataset-buttons .control-button').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    currentDataset = this.dataset.dataset;
+                    updateInfo();
+                    createWordCloud(sampleData[currentDataset], currentColor, currentLayout);
+                });
+            });
+
+            // Color buttons
+            document.querySelectorAll('#color-buttons .control-button').forEach(button => {
+                button.addEventListener('click', function() {
+                    // Update active state
+                    document.querySelectorAll('#color-buttons .control-button').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    currentColor = this.dataset.color;
+                    updateInfo();
+                    createWordCloud(sampleData[currentDataset], currentColor, currentLayout);
+                });
+            });
+
+            // Layout buttons
+            document.querySelectorAll('#layout-buttons .control-button').forEach(button => {
+                button.addEventListener('click', function() {
+                    // Update active state
+                    document.querySelectorAll('#layout-buttons .control-button').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    currentLayout = this.dataset.layout;
+                    updateInfo();
+                    createWordCloud(sampleData[currentDataset], currentColor, currentLayout);
+                });
+            });
+        }
+
+        function updateInfo() {
+            document.getElementById('current-dataset').textContent = currentDataset;
+            document.getElementById('current-color').textContent = currentColor;
+            document.getElementById('current-layout').textContent = currentLayout;
+            document.getElementById('word-count').textContent = sampleData[currentDataset].length;
+        }
+
+        // Initialize
+        setupEventHandlers();
+        updateInfo();
+        createWordCloud(sampleData[currentDataset], currentColor, currentLayout);
+
+        console.log('🎨 Wavelength Word Cloud Test loaded successfully!');
+        console.log('💡 Try different datasets, color schemes, and layouts using the controls above');
+        console.log('🖱️ Click on words to see their data in the console');
+    </script>
+</body>
+</html>

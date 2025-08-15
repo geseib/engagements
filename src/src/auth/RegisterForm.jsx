@@ -117,8 +117,8 @@ const RegisterForm = ({ onToggleMode, onSuccess }) => {
     sessionStorage.setItem('authMode', 'register');
     
     // Use hardcoded values for now since env vars aren't working
-    const userPoolId = 'us-east-1_bKTK5F5Jm';
-    const clientId = '5brt6hub6e2gmi7hmuuidfi3nc';
+    const userPoolId = process.env.REACT_APP_USER_POOL_ID;
+    const clientId = process.env.REACT_APP_CLIENT_ID;
     
     console.log('Using Cognito config:', { userPoolId, clientId });
 
@@ -126,16 +126,20 @@ const RegisterForm = ({ onToggleMode, onSuccess }) => {
     const region = userPoolId.split('_')[0];
     
     // Build Cognito hosted UI URL for Google sign-up
-    const cognitoDomain = `engdev-auth.auth.${region}.amazoncognito.com`;
+    // Extract environment from user pool ID format: us-east-1_XXXXXXX
+    const environment = userPoolId.includes('QAsrTnPpj') ? 'engdev' : 
+                       userPoolId.includes('testPoolId') ? 'test' : 'prod'; // Update with actual test/prod pool IDs
+    const domainSuffix = environment === 'engdev' ? '-v2' : ''; // Only dev uses v2 suffix
+    const cognitoDomain = `${environment}-auth${domainSuffix}.auth.${region}.amazoncognito.com`;
     const redirectUri = encodeURIComponent(window.location.origin + '/auth/callback');
     
     const googleSignUpUrl = `https://${cognitoDomain}/oauth2/authorize?` +
       `identity_provider=Google&` +
       `redirect_uri=${redirectUri}&` +
-      `response_type=CODE&` +
+      `response_type=token&` +
       `client_id=${clientId}&` +
-      `scope=email+openid+profile&` +
-      `prompt=select_account`;
+      `scope=openid+email+profile+aws.cognito.signin.user.admin&` +
+      `state=register`;
     
     console.log('📍 Built OAuth URL:', googleSignUpUrl);
     console.log('📍 About to redirect...');

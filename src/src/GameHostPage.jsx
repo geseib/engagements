@@ -5,6 +5,7 @@ import webSocketClient from './WebSocketClient';
 import MarkdownRenderer from './components/MarkdownRenderer';
 import IssueFab from './components/IssueFab';
 import QuickstartMenu from './components/QuickstartMenu';
+import WavelengthWordCloud from './components/WavelengthWordCloud';
 import { useAuth } from './auth/AuthContext';
 
 const API_BASE = window.API_BASE;
@@ -1522,8 +1523,8 @@ Focus on actionable business strategy insights.`;
   };
 
   const handleFinishQuestion = async () => {
-    // For trivia, go straight to results using the same unified mechanism as call-and-answer
-    if (currentGameType === 'trivia') {
+    // For trivia and wavelength, go straight to results using the same unified mechanism as call-and-answer
+    if (currentGameType === 'trivia' || currentGameType === 'wavelength') {
       // Warn if not all players have answered
       if (playersWhoAnswered.length < players.length) {
         const proceed = await showConfirmation(
@@ -1534,8 +1535,8 @@ Focus on actionable business strategy insights.`;
         if (!proceed) return;
       }
       
-      // Skip calculateTriviaScores - the get-results API already handles all scoring
-      console.log(`🧠 TRIVIA: Using unified handleShowResults() mechanism (scoring handled by backend)`);
+      // Skip voting phase for both trivia and wavelength
+      console.log(`🧠 ${currentGameType.toUpperCase()}: Using unified handleShowResults() mechanism (skipping voting phase)`);
       await handleShowResults();
       return;
     }
@@ -1590,9 +1591,9 @@ Focus on actionable business strategy insights.`;
   };
 
   const handleShowResults = async () => {
-    // For trivia games, no voting phase - skip vote check
+    // For trivia and wavelength games, no voting phase - skip vote check
     // For call-and-answer games, warn if not all players have voted
-    if (currentGameType !== 'trivia' && playersWhoVoted.length < players.length) {
+    if (currentGameType !== 'trivia' && currentGameType !== 'wavelength' && playersWhoVoted.length < players.length) {
       const proceed = await showConfirmation(
         'Show Results?',
         `Only ${playersWhoVoted.length} of ${players.length} players have voted. Do you want to show results anyway?`,
@@ -1649,6 +1650,19 @@ Focus on actionable business strategy insights.`;
         
         console.log(`🧠 HOST: Formatted ${formattedAnswers.length} trivia answers:`, 
           formattedAnswers.map(a => `${a.player}: ${a.answer} (${a.isCorrect ? 'correct' : 'incorrect'}, ${a.points} pts)`));
+        
+      } else if (resultsData.gameType === 'wavelength' || currentGameType === 'wavelength') {
+        // Wavelength results format: Just the raw answers with words
+        console.log(`🌊 HOST: Processing wavelength results with ${resultsData.answers?.length || 0} answers`);
+        
+        formattedAnswers = (resultsData.answers || []).map(answer => ({
+          player: answer.playerName,
+          answer: answer.answer || answer.ProcessedWords?.join(',') || '', // Comma-separated words
+          points: 0, // No points in wavelength
+          submittedAt: answer.submittedAt
+        }));
+        
+        console.log(`🌊 HOST: Formatted ${formattedAnswers.length} wavelength answers for word cloud`);
         
       } else {
         // Call-and-answer results format: { voteTallies: {...} }
@@ -2836,13 +2850,6 @@ Ready to engage? See you there!`;
                 📋 {inviteCopied ? 'Copied!' : 'Copy Invite'}
               </button>
               <button 
-                className={`btn-${gameDebugMode ? 'primary' : 'secondary'}`} 
-                onClick={handleToggleGameDebugMode}
-                title="Toggle debug mode to show AI prompts in results"
-              >
-                🐛 Debug {gameDebugMode ? 'ON' : 'OFF'}
-              </button>
-              <button 
                 className={`btn-${bigScreenMode ? 'primary' : 'secondary'}`} 
                 onClick={() => {
                   const newMode = !bigScreenMode;
@@ -3091,8 +3098,8 @@ Ready to engage? See you there!`;
       <div className={`game-content ${bigScreenMode ? 'big-screen-mode' : ''}`}>
         {isWaitingState(gameState) && (
           <div className={`waiting-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
-            {bigScreenMode && gameId && (
-              <div className="big-screen-join-qr">
+            {gameId && (
+              <div className={bigScreenMode ? "big-screen-join-qr" : "join-qr"}>
                 <QRCodeSVG 
                   value={`${window.location.origin}/play?gameId=${gameId}`}
                   size={bigScreenMode ? 300 : 200}
@@ -3195,7 +3202,7 @@ Ready to engage? See you there!`;
                 onClick={() => { closeAllSidePanels(); handleFinishQuestion(); }}
                 disabled={answers.length === 0}
               >
-                {currentGameType === 'trivia' ? 'Show Results' : 'Vote'}
+                {currentGameType === 'trivia' || currentGameType === 'wavelength' ? 'Show Results' : 'Vote'}
               </button>
               <button 
                 className="btn-secondary" 
@@ -3352,6 +3359,39 @@ Ready to engage? See you there!`;
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            ) : currentGameType === 'wavelength' ? (
+              <div className="wavelength-results-display">
+                <WavelengthWordCloud 
+                  answers={answers}
+                  promptWord={questions[0]?.topic || questions[0]?.title || 'WAVELENGTH'}
+                  gameState={gameState}
+                />
+                
+                {/* Show individual player contributions below the cloud */}
+                <div className="wavelength-player-list" style={{ marginTop: '20px' }}>
+                  <h4>Player Contributions:</h4>
+                  <div className="results-display">
+                    {answers.map((answer, idx) => {
+                      const player = players.find(p => p.name === answer.player);
+                      const playerTotalScore = player?.score || 0;
+                      
+                      return (
+                        <div key={idx} className="result-item wavelength-contribution">
+                          <div className="result-player-header">
+                            <div className="result-player-name">{answer.player}</div>
+                            <div className="result-points">
+                              <span className="points-total">Score: {playerTotalScore} pts</span>
+                            </div>
+                          </div>
+                          <div className="result-answer" style={{ fontSize: '14px', color: '#666' }}>
+                            Words: {answer.answer || '(no words submitted)'}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             ) : (

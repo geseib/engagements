@@ -9,6 +9,7 @@ import PlayerPage from './PlayerPage';
 import AdminPage from './AdminPage';
 import BuilderPage from './BuilderPage';
 import HostRemote from './HostRemote';
+import WordCloudTest from './WordCloudTest';
 
 // Protected route component that requires authentication
 function ProtectedRoute({ children, requireAdmin = false }) {
@@ -144,6 +145,11 @@ function AppRouter() {
   // Player routes (no authentication required)
   if (path.startsWith('/play')) {
     return <PlayerPage />;
+  }
+
+  // Test routes (no authentication required for development)
+  if (path === '/test/wordcloud') {
+    return <WordCloudTest />;
   }
 
   // OAuth callback route

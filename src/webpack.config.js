@@ -73,18 +73,14 @@ module.exports = (env, argv) => {
       historyApiFallback: true,
       port: 3000,
       open: true,
-      proxy: {
-        '/games': {
-          target: 'https://<your-api-id>.execute-api.us-east-1.amazonaws.com',
+      proxy: [
+        {
+          context: ['/games', '/questions'],
+          target: envFile.REACT_APP_API_URL || 'https://h1jcmja0w1.execute-api.us-east-1.amazonaws.com/dev',
           changeOrigin: true,
           secure: true,
-        },
-        '/questions': {
-          target: 'https://<your-api-id>.execute-api.us-east-1.amazonaws.com',
-          changeOrigin: true,
-          secure: true,
-        },
-      },
+        }
+      ],
     },
 
     devtool: isProd ? false : 'source-map',

@@ -32,7 +32,12 @@ const calculatePlayerRankings = (players) => {
 };
 
 // Helper function to get instruction text
-const getPlayerInstructionText = (customInstruction) => {
+const getPlayerInstructionText = (customInstruction, currentQuestion) => {
+  // Question-level custom instructions take priority
+  if (currentQuestion && currentQuestion.customInstructions) {
+    return currentQuestion.customInstructions;
+  }
+  // Then question set level custom instruction
   if (customInstruction) {
     return customInstruction;
   }
@@ -1487,17 +1492,17 @@ function PlayerPage() {
             {gameType === 'wavelength' && currentQuestion.topic && (
               <div className="wavelength-topic lesson-detail">
                 <strong>Topic:</strong> {currentQuestion.topic}
-                {(customInstruction || currentQuestion.instructions) && (
+                {(customInstruction || currentQuestion.customInstructions) && (
                   <div style={{marginTop: '10px', fontWeight: 'normal'}}>
-                    {customInstruction || currentQuestion.instructions}
+                    <strong>Instructions:</strong> {customInstruction || currentQuestion.customInstructions}
                   </div>
                 )}
               </div>
             )}
             <div className="application-prompt">
               <strong>{gameType === 'trivia' ? 'Select the best answer:' : 
-                       gameType === 'wavelength' ? (customInstruction || 'Enter 10 words that come to mind:') :
-                       getPlayerInstructionText(customInstruction)}</strong>
+                       gameType === 'wavelength' ? (currentQuestion?.customInstructions || customInstruction || 'Enter 10 words that come to mind:') :
+                       getPlayerInstructionText(customInstruction, currentQuestion)}</strong>
             </div>
             
             {!hasAnswered ? (

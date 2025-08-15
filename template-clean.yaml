@@ -44,20 +44,18 @@ Parameters:
   GoogleClientIdParameter:
     Type: String
     Description: AWS Systems Manager Parameter Store path for Google OAuth Client ID
-    Default: ""
+    Default: "/engdev/google/client-id"
 
   GoogleClientSecretParameter:
     Type: String
     Description: AWS Systems Manager Parameter Store path for Google OAuth Client Secret
-    Default: ""
+    Default: "/engdev/google/client-secret"
 
 Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
   HasSecondaryDomain: !Not [!Equals [!Ref SecondaryDomainName, ""]]
   IsProd: !Equals [!Ref Environment, "prod"]
-  HasGoogleOAuth: !And 
-    - !Not [!Equals [!Ref GoogleClientIdParameter, ""]]
-    - !Not [!Equals [!Ref GoogleClientSecretParameter, ""]]
+  HasGoogleOAuth: !Equals [!Ref Environment, "never"]
 
 Globals:
   Function:
@@ -299,6 +297,7 @@ Resources:
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
+
 
   ## Main Question Sets Function (for game creation)
   GetQuestionSetsFunction:
@@ -1786,7 +1785,7 @@ Resources:
       Principal: apigateway.amazonaws.com
 
   ### Cognito Resources for Authentication
-  UserPool:
+  UserPoolV2:
     Type: AWS::Cognito::UserPool
     Properties:
       UserPoolName: !Sub '${StackName}-users'
@@ -1798,7 +1797,7 @@ Resources:
         - Name: email
           AttributeDataType: String
           Required: true
-          Mutable: false
+          Mutable: true
         - Name: name
           AttributeDataType: String
           Required: true
@@ -1825,7 +1824,7 @@ Resources:
     Type: AWS::Cognito::UserPoolClient
     Properties:
       ClientName: !Sub '${StackName}-web-client'
-      UserPoolId: !Ref UserPool
+      UserPoolId: !Ref UserPoolV2
       GenerateSecret: false
       SupportedIdentityProviders: !If
         - HasGoogleOAuth
@@ -1860,6 +1859,7 @@ Resources:
         - email
         - openid
         - profile
+        - aws.cognito.signin.user.admin
       AllowedOAuthFlowsUserPoolClient: true
       PreventUserExistenceErrors: ENABLED
       ExplicitAuthFlows:
@@ -1874,11 +1874,11 @@ Resources:
         AccessToken: hours
         IdToken: hours
 
-  UserPoolDomain:
+  UserPoolDomainV2:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
-      Domain: !Sub '${StackName}-auth'
-      UserPoolId: !Ref UserPool
+      Domain: !Sub '${StackName}-auth-v2'
+      UserPoolId: !Ref UserPoolV2
 
   # User Groups
   AdminUserGroup:
@@ -1886,7 +1886,7 @@ Resources:
     Properties:
       GroupName: admins
       Description: Administrator users with full access
-      UserPoolId: !Ref UserPool
+      UserPoolId: !Ref UserPoolV2
       Precedence: 1
 
   HostUserGroup:
@@ -1894,7 +1894,7 @@ Resources:
     Properties:
       GroupName: hosts
       Description: Host users who can create and manage games
-      UserPoolId: !Ref UserPool
+      UserPoolId: !Ref UserPoolV2
       Precedence: 2
 
   PendingUserGroup:
@@ -1902,7 +1902,7 @@ Resources:
     Properties:
       GroupName: pending
       Description: Users awaiting approval
-      UserPoolId: !Ref UserPool
+      UserPoolId: !Ref UserPoolV2
       Precedence: 3
 
   # Google Identity Provider
@@ -1910,7 +1910,7 @@ Resources:
     Type: AWS::Cognito::UserPoolIdentityProvider
     Condition: HasGoogleOAuth
     Properties:
-      UserPoolId: !Ref UserPool
+      UserPoolId: !Ref UserPoolV2
       ProviderName: Google
       ProviderType: Google
       ProviderDetails:
@@ -1920,9 +1920,7 @@ Resources:
       AttributeMapping:
         email: email
         name: name
-        picture: picture
-        given_name: given_name
-        family_name: family_name
+        username: sub
 
 # Temporarily commented out Identity Pool to resolve circular dependency
   # # Identity Pool for authenticated and unauthenticated access
@@ -2048,7 +2046,7 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
-          USER_POOL_ID: !Ref UserPool
+          USER_POOL_ID: !Ref UserPoolV2
           REGION: !Ref AWS::Region
       Policies:
         - DynamoDBCrudPolicy:
@@ -2066,7 +2064,7 @@ Resources:
                 - cognito-idp:AdminUpdateUserAttributes
                 - cognito-idp:AdminAddUserToGroup
                 - cognito-idp:AdminRemoveUserFromGroup
-              Resource: !GetAtt UserPool.Arn
+              Resource: !GetAtt UserPoolV2.Arn
       Events:
         ListUsers:
           Type: HttpApi
@@ -2096,7 +2094,7 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
-          USER_POOL_ID: !Ref UserPool
+          USER_POOL_ID: !Ref UserPoolV2
           REGION: !Ref AWS::Region
       Policies:
         - DynamoDBCrudPolicy:
@@ -2109,7 +2107,7 @@ Resources:
                 - cognito-idp:AdminListGroupsForUser
                 - cognito-idp:AdminAddUserToGroup
                 - cognito-idp:AdminUpdateUserAttributes
-              Resource: !GetAtt UserPool.Arn
+              Resource: !GetAtt UserPoolV2.Arn
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -2184,7 +2182,7 @@ Outputs:
   # Cognito Outputs
   UserPoolId:
     Description: Cognito User Pool ID (copy to src/.env as REACT_APP_USER_POOL_ID)
-    Value: !Ref UserPool
+    Value: !Ref UserPoolV2
     Export:
       Name: !Sub '${StackName}-user-pool-id'
 
@@ -2196,7 +2194,7 @@ Outputs:
 
   UserPoolDomain:
     Description: Cognito User Pool Domain
-    Value: !Sub '${StackName}-auth'
+    Value: !Sub '${StackName}-auth-v2'
     Export:
       Name: !Sub '${StackName}-user-pool-domain'
 
