@@ -7,8 +7,9 @@ const db = DynamoDBDocumentClient.from(client);
 exports.handler = async (event) => {
   try {
     const setId = event.pathParameters?.setId;
+    const category = event.queryStringParameters?.category;
     
-    console.log(`Getting questions for set: ${setId}`);
+    console.log(`Getting questions for set: ${setId}, category: ${category || 'all'}`);
     
     if (!setId) {
       return {
@@ -32,20 +33,39 @@ exports.handler = async (event) => {
       };
     }
     
-    // Get all questions for this set
-    const questionsRes = await db.send(new QueryCommand({
+    // Build query parameters
+    let queryParams = {
       TableName: process.env.TABLE_NAME,
       KeyConditionExpression: 'PK = :setpk AND begins_with(SK, :questionPrefix)',
       ExpressionAttributeValues: { 
         ':setpk': `SET#${setId}`,
         ':questionPrefix': 'QUESTION#'
       }
-    }));
+    };
+
+    // Add category filter if specified
+    if (category) {
+      queryParams.FilterExpression = '(#category = :category OR #Category = :category)';
+      queryParams.ExpressionAttributeNames = { 
+        '#category': 'category',
+        '#Category': 'Category'
+      };
+      queryParams.ExpressionAttributeValues[':category'] = category;
+    }
+    
+    // Get questions for this set
+    const questionsRes = await db.send(new QueryCommand(queryParams));
+    
+    // DEBUG: Log the first raw item to see what fields are available
+    if (questionsRes.Items && questionsRes.Items.length > 0) {
+      console.log('🔍 Raw database item fields:', Object.keys(questionsRes.Items[0]));
+      console.log('🔍 Sample raw item:', questionsRes.Items[0]);
+    }
     
     const questions = (questionsRes.Items || []).map(item => ({
       id: item.SK.replace('QUESTION#', ''),
       title: item.title || item.Title,
-      questionDetail: item.questionDetail || item.QuestionDetail || item.detail,
+      questionDetail: item.questionDetail || item.QuestionDetail || item.detail || item.Detail,
       category: item.category || item.Category,
       // Trivia question fields
       optionA: item.optionA || item.OptionA,
@@ -60,7 +80,18 @@ exports.handler = async (event) => {
       // Common fields
       engagementType: item.engagementType || item.EngagementType,
       setId: setId,
-      sortOrder: item.sortOrder || 0
+      sortOrder: item.sortOrder || 0,
+      // Pass through any additional fields that might exist
+      ...Object.keys(item).reduce((acc, key) => {
+        if (!['SK', 'PK', 'title', 'Title', 'questionDetail', 'QuestionDetail', 'detail', 'Detail', 
+              'category', 'Category', 'optionA', 'OptionA', 'optionB', 'OptionB', 'optionC', 'OptionC', 
+              'optionD', 'OptionD', 'correctAnswer', 'CorrectAnswer', 'answerDetails', 'AnswerDetails',
+              'difficulty', 'Difficulty', 'customInstructions', 'CustomInstructions', 'engagementType', 
+              'EngagementType', 'sortOrder'].includes(key)) {
+          acc[key] = item[key];
+        }
+        return acc;
+      }, {})
     }));
     
     // Sort questions by sortOrder, then by title

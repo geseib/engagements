@@ -99,6 +99,12 @@ function GameHostPage() {
   // Flag to prevent auto-selection during game state restoration
   const [isRestoringState, setIsRestoringState] = useState(false);
 
+  // Question Browser State
+  const [showQuestionBrowser, setShowQuestionBrowser] = useState(false);
+  const [browsingQuestions, setBrowsingQuestions] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
+
   // Sign-out handler
   const handleSignOut = () => {
     if (window.confirm('Are you sure you want to sign out?')) {
@@ -1263,6 +1269,198 @@ Focus on actionable business strategy insights.`;
       setIsTogglingCategory(false);
     }
   };
+
+  // Fetch questions for browsing by category
+  const fetchQuestionsForBrowsing = async (category = '') => {
+    // Try to get setId from current questions first, then fall back to selectedSetId
+    const setId = questions[0]?.setId || selectedSetId;
+    
+    if (!setId) {
+      console.error('No question set available for browsing - neither selectedSetId nor current game questions found');
+      console.log('Current state:', { selectedSetId, questionsCount: questions?.length, firstQuestion: questions?.[0] });
+      return;
+    }
+
+    console.log(`📚 Using question set ID for browsing: "${setId}" (source: ${questions[0]?.setId ? 'current game' : 'selectedSetId'})`);
+    
+    setLoadingQuestions(true);
+    try {
+      const url = category 
+        ? `${API_BASE}question-sets/${setId}/questions?category=${encodeURIComponent(category)}`
+        : `${API_BASE}question-sets/${setId}/questions`;
+      
+      console.log(`🔍 Browsing questions: ${url}`);
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        console.error(`❌ Failed to fetch questions: ${response.status}`);
+        setBrowsingQuestions([]);
+        setSelectedCategory(category);
+        return;
+      }
+      
+      const data = await response.json();
+      console.log(`📚 API Response:`, data);
+      console.log(`🔍 Sample question fields:`, data.questions?.[0] ? Object.keys(data.questions[0]) : 'No questions');
+      console.log(`🔍 Sample question data:`, data.questions?.[0]);
+      setBrowsingQuestions(data.questions || []);
+      setSelectedCategory(category);
+      console.log(`✅ Loaded ${data.questions?.length || 0} questions for browsing`);
+    } catch (error) {
+      console.error('❌ Failed to fetch questions for browsing:', error);
+      setBrowsingQuestions([]);
+      setSelectedCategory(category);
+    } finally {
+      setLoadingQuestions(false);
+    }
+  };
+
+  // Open question browser
+  const openQuestionBrowser = (category = '') => {
+    console.log(`🔍 Opening question browser for category: "${category}"`);
+    console.log(`📚 Selected set ID: "${selectedSetId}"`);
+    console.log(`🎮 Current game questions:`, questions?.length || 0);
+    
+    console.log(`🔄 About to set showQuestionBrowser to true...`);
+    setShowQuestionBrowser(true);
+    console.log(`✅ Set showQuestionBrowser to true`);
+    
+    // Force a re-render check
+    setTimeout(() => {
+      console.log(`⏱️ State check after timeout - showQuestionBrowser should be true`);
+    }, 100);
+    fetchQuestionsForBrowsing(category);
+  };
+
+  // Close question browser  
+  const closeQuestionBrowser = () => {
+    setShowQuestionBrowser(false);
+    setBrowsingQuestions([]);
+    setSelectedCategory('');
+  };
+
+  // Select a specific question to trigger as the next question
+  const selectQuestion = async (selectedQuestion) => {
+    try {
+      console.log(`🎯 HOST: Selecting specific question:`, selectedQuestion);
+      
+      // Close the question browser first so confirmation modal appears on top
+      setShowQuestionBrowser(false);
+      
+      // Show confirmation when skipping to next question during Ask/Vote phase (same as handleNextQuestion)
+      if (gameState.startsWith('ASK#') || gameState.startsWith('VOTE#')) {
+        const proceed = await showConfirmation(
+          'Skip to Selected Question?',
+          'Do you want to skip the current question and move to the selected question?',
+          'Skip to Question'
+        );
+        if (!proceed) return;
+      }
+      
+      // Show loading overlay (same as handleNextQuestion)
+      setIsLoadingData(true);
+      setLoadingMessage('Loading Selected Question...');
+      
+      console.log(`🎯 HOST: Requesting specific question, current state: ${gameState}`);
+      
+      // Include skip action if we're forcing advancement from ASK/VOTE states (same logic as handleNextQuestion)
+      const requestBody = {
+        questionId: selectedQuestion.id,
+        action: 'select_specific'
+      };
+      if (gameState.startsWith('ASK#') || gameState.startsWith('VOTE#')) {
+        requestBody.action = 'skip_to_specific';
+      }
+      
+      // Use the same next-question API that handleNextQuestion uses
+      const nextQuestionRes = await fetch(`${API_BASE}games/${gameId}/next-question`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+      
+      if (!nextQuestionRes.ok) {
+        const errorData = await nextQuestionRes.json();
+        console.error('Failed to select specific question:', errorData);
+        alert(`Failed to select question: ${errorData.error || 'Unknown error'}`);
+        return;
+      }
+      
+      const nextQuestionData = await nextQuestionRes.json();
+      console.log(`📝 HOST: Selected question response:`, nextQuestionData);
+      
+      const questionId = nextQuestionData.questionId;
+      const lessonNumber = nextQuestionData.lessonNumber;
+      const newState = nextQuestionData.state; // Use actual state from API (e.g., ASK#001)
+      
+      // Get the actual question details (same as handleNextQuestion)
+      const questionLookupRes = await fetch(`${API_BASE}games/${gameId}/question?role=host`);
+      
+      if (!questionLookupRes.ok) {
+        console.error('Failed to get question details:', questionLookupRes.status);
+        return;
+      }
+      
+      const questionData = await questionLookupRes.json();
+      console.log(`🎲 HOST: Selected question data:`, questionData);
+      
+      // Use the exact same state management as handleNextQuestion
+      setManualStateChange(true);
+      setGameState(newState);
+      setQuestions([questionData]);
+      setLessonNumber(lessonNumber);
+      
+      // Notify players via WebSocket (exactly like handleNextQuestion)
+      if (webSocketClient.isConnected()) {
+        const messageType = newState;
+        webSocketClient.sendCleanMessage(messageType, {
+          lessonNumber,
+          gameState: newState,
+          currentQuestion: questionData
+        });
+        console.log(`📡 HOST: Sent WebSocket message - ${messageType}`);
+      }
+      
+      // Close any open panels
+      closeAllSidePanels();
+      
+      console.log(`✅ HOST: Successfully selected question ${questionId}, state: ${newState}`);
+      
+    } catch (error) {
+      console.error('Error selecting question:', error);
+      alert(`Error selecting question: ${error.message}`);
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
+  // DEBUG: Track all modal state changes
+  useEffect(() => {
+    console.log('🔍 MODAL STATE CHANGE - All modal states:', {
+      showQuestionBrowser,
+      showExpandedQR,
+      showNewGameDialog,
+      showConfirmModal,
+      gameState,
+      isConnected: webSocketClient?.isConnected?.() || false
+    });
+  }, [showQuestionBrowser, showExpandedQR, showNewGameDialog, showConfirmModal]);
+
+  // DEBUG: Track component mounting/updating
+  useEffect(() => {
+    console.log('🔄 GameHostPage component mounted/updated');
+    console.log('📊 showQuestionBrowser on mount:', showQuestionBrowser);
+  }, []);
+
+  // DEBUG: Specific tracking of showQuestionBrowser changes
+  useEffect(() => {
+    console.log('🎯 showQuestionBrowser changed to:', showQuestionBrowser);
+    if (showQuestionBrowser) {
+      console.log('👀 Modal should be VISIBLE now!');
+    } else {
+      console.log('👻 Modal should be HIDDEN now');
+    }
+  }, [showQuestionBrowser]);
 
 
   const checkAnswerStatus = async () => {
@@ -2697,7 +2895,11 @@ Ready to engage? See you there!`;
     );
   }
 
+  // DEBUG: Track every render with modal state
+  console.log(`🎨 RENDER: showQuestionBrowser=${showQuestionBrowser}, showExpandedQR=${showExpandedQR}`);
+
   return (
+    <>
     <div className="main-layout">
       {/* Instructions Sidebar */}
       <div className={`instructions-sidebar ${instructionsVisible ? 'visible' : ''}`}>
@@ -2946,7 +3148,7 @@ Ready to engage? See you there!`;
                 {categories.length > 0 && (
                   <div className="categories-section">
                     <h4>Categories</h4>
-                    <div className="category-button-grid">
+                    <div className="category-items-list">
                       {categories.map((category, index) => {
                         const position = index + 1;
                         let enabled = false;
@@ -2973,23 +3175,36 @@ Ready to engage? See you there!`;
                         }
 
                         return (
-                          <button
-                            key={category.name}
-                            type="button"
-                            className={`category-button ${enabled ? 'selected' : ''} ${questionCount === 0 ? 'exhausted' : ''}`}
-                            onClick={() => {
-                              if (isClickable) {
-                                console.log(`🔘 Category toggle clicked: position=${position}, name=${category.name}, enabled=${enabled}, remaining=${questionCount}`);
-                                toggleCategoryDuringGame(position.toString(), category.name, !enabled);
-                              } else {
-                                toggleCategoryActive(category.name);
-                              }
-                            }}
-                            disabled={isTogglingCategory}
-                          >
-                            <span className="category-name">{category.name}</span>
-                            <span className="category-count">({questionCount})</span>
-                          </button>
+                          <div key={category.name} className="category-item">
+                            <button
+                              type="button"
+                              className={`category-button ${enabled ? 'selected' : ''} ${questionCount === 0 ? 'exhausted' : ''}`}
+                              onClick={() => {
+                                if (isClickable) {
+                                  console.log(`🔘 Category toggle clicked: position=${position}, name=${category.name}, enabled=${enabled}, remaining=${questionCount}`);
+                                  toggleCategoryDuringGame(position.toString(), category.name, !enabled);
+                                } else {
+                                  toggleCategoryActive(category.name);
+                                }
+                              }}
+                              disabled={isTogglingCategory}
+                            >
+                              <span className="category-name">{category.name}</span>
+                              <span className="category-count">({questionCount})</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="category-browse-btn"
+                              onClick={(e) => {
+                                console.log(`🖱️ Browse button clicked for category: ${category.name}`);
+                                e.stopPropagation();
+                                openQuestionBrowser(category.name);
+                              }}
+                              title={`Browse questions in ${category.name} category`}
+                            >
+                              🔍
+                            </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -3732,8 +3947,98 @@ Ready to engage? See you there!`;
           </div>
         </div>
       )}
-      
+
     </div>
+    
+    {/* MODAL PORTAL - OUTSIDE ALL PARALLAX CONTAINERS */}
+    {showQuestionBrowser && (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        zIndex: 999999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <div className="question-browser-modal">
+          <div className="question-browser-header">
+            <h2>🔍 Browse Questions - {selectedCategory}</h2>
+            <p className="question-count">{browsingQuestions?.length || 0} questions found</p>
+          </div>
+          
+          {loadingQuestions ? (
+            <div className="loading-indicator">
+              <div className="spinner"></div>
+              <span>Loading questions...</span>
+            </div>
+          ) : browsingQuestions?.length > 0 ? (
+            <div className="questions-table-container">
+              <table className="questions-table">
+                <thead>
+                  <tr>
+                    <th>Question</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {browsingQuestions.map((question, index) => (
+                    <tr key={question.id || index} className="question-row">
+                      <td className="question-cell">
+                        <div className="question-title">{question.title || question.Title}</div>
+                        {(question.questionDetail || question.QuestionDetail || question.detail || question.Detail || question.customInstructions || question.CustomInstructions) && (
+                          <div className="question-detail">
+                            {question.questionDetail || question.QuestionDetail || question.detail || question.Detail || question.customInstructions || question.CustomInstructions}
+                          </div>
+                        )}
+                        {(question.optionA || question.OptionA) && (
+                          <div className="question-options">
+                            <div>A) {question.optionA || question.OptionA}</div>
+                            <div>B) {question.optionB || question.OptionB}</div>
+                            <div>C) {question.optionC || question.OptionC}</div>
+                            <div>D) {question.optionD || question.OptionD}</div>
+                            {(question.correctAnswer || question.CorrectAnswer) && (
+                              <div className="correct-answer">✓ Correct: {question.correctAnswer || question.CorrectAnswer}</div>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="action-cell">
+                        <button 
+                          className="btn-primary select-question-btn"
+                          onClick={() => selectQuestion(question)}
+                          title="Select this question as the next question"
+                        >
+                          Select
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="no-questions">
+              <p>No questions found for the "{selectedCategory}" category.</p>
+              <p>Try browsing a different category or check your question sets.</p>
+            </div>
+          )}
+          
+          <div className="question-browser-footer">
+            <button 
+              className="btn-secondary"
+              onClick={() => setShowQuestionBrowser(false)}
+            >
+              Close Browser
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -3857,6 +4162,7 @@ function GameReport({ reportData, onClose }) {
 
 
   return (
+    <>
     <div className="report-container">
       <div className="report-header">
         <div className="parallax">
@@ -4072,6 +4378,7 @@ function GameReport({ reportData, onClose }) {
           </div>
         </div>
       </div>
+    </div>
       
       {/* Save Report Modal */}
       {showSaveReportModal && (
@@ -4160,8 +4467,7 @@ function GameReport({ reportData, onClose }) {
           </div>
         </div>
       )}
-
-    </div>
+    </>
   );
 }
 

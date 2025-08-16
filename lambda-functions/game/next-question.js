@@ -403,7 +403,7 @@ exports.handler = async (event) => {
   try {
     const { gameId } = event.pathParameters || {};
     const body = JSON.parse(event.body || '{}');
-    const { action } = body; // Allow 'skip' action to force progression
+    const { action, questionId } = body; // Allow 'skip' action to force progression, questionId for specific selection
     
     if (!gameId) {
       return {
@@ -413,7 +413,7 @@ exports.handler = async (event) => {
       };
     }
 
-    console.log(`➡️ Getting next question for game ${gameId}, action: ${action || 'normal'}`);
+    console.log(`➡️ Getting next question for game ${gameId}, action: ${action || 'normal'}, questionId: ${questionId || 'auto-select'}`);
 
     // Get game state
     const gameState = await db.send(new GetCommand({
@@ -447,7 +447,7 @@ exports.handler = async (event) => {
                         currentState.startsWith('VOTE#') || 
                         currentState.startsWith('RESULTS#');
     
-    if (!isValidState && action !== 'skip') {
+    if (!isValidState && action !== 'skip' && action !== 'select_specific' && action !== 'skip_to_specific') {
       return {
         statusCode: 400,
         body: JSON.stringify({ 
@@ -460,7 +460,7 @@ exports.handler = async (event) => {
     }
 
     // Prevent duplicate calls - if currently processing a question, return current state
-    if (currentState.startsWith('ASK#') && action !== 'skip') {
+    if (currentState.startsWith('ASK#') && action !== 'skip' && action !== 'skip_to_specific') {
       const currentQuestionNumber = currentState.replace('ASK#', '');
       console.log(`⚠️ Already in ASK state for question ${currentQuestionNumber}, not advancing (use action:'skip' to force)`);
       return {
@@ -505,26 +505,105 @@ exports.handler = async (event) => {
       };
     }
 
-    // Get randomization preference from any category ORDER record
-    let isRandomized = true; // Default to true
-    const categoryOrderQuery = await db.send(new QueryCommand({
-      TableName: process.env.TABLE_NAME,
-      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-      ExpressionAttributeValues: {
-        ':pk': `GAME#${gameId}`,
-        ':sk': 'CATEGORY#'
-      }
-    }));
-    
-    // Find the first ORDER record
-    const orderRecords = (categoryOrderQuery.Items || []).filter(item => item.SK.includes('#ORDER'));
-    if (orderRecords.length > 0) {
-      isRandomized = orderRecords[0].IsRandom !== false;
-      console.log(`🎲 Randomization preference: ${isRandomized ? 'RANDOM' : 'IN ORDER'}`);
-    }
+    let nextQuestion;
 
-    // Select next question
-    const nextQuestion = await selectNextQuestion(gameId, categoryState.Item, gameMetadata.Item.QuestionSetId, isRandomized);
+    // Check if specific question was requested
+    if (questionId && (action === 'select_specific' || action === 'skip_to_specific')) {
+      console.log(`🎯 Specific question requested: ${questionId}`);
+      
+      // Validate that the requested question exists
+      const specificQuestionQuery = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `SET#${gameMetadata.Item.QuestionSetId}`, SK: `QUESTION#${questionId}` }
+      }));
+
+      if (!specificQuestionQuery.Item) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: `Question ${questionId} not found in set ${gameMetadata.Item.QuestionSetId}` }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+
+      // For specific question selection, we need to determine the category
+      const questionCategory = specificQuestionQuery.Item.category || specificQuestionQuery.Item.Category;
+      
+      if (!questionCategory) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: `Question ${questionId} has no category` }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+
+      // Find the categoryId and position for the specific question
+      const categoriesQuery = await db.send(new QueryCommand({
+        TableName: process.env.TABLE_NAME,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues: {
+          ':pk': `SET#${gameMetadata.Item.QuestionSetId}`,
+          ':sk': 'CATEGORY#'
+        }
+      }));
+
+      const allCategories = categoriesQuery.Items || [];
+      let categoryPosition = null;
+      let categoryId = null;
+
+      for (let i = 0; i < allCategories.length; i++) {
+        const category = allCategories[i];
+        const catId = category.SK.replace('CATEGORY#', '');
+        const categoryName = category.Name || category.name;
+        
+        if (categoryName === questionCategory) {
+          categoryPosition = i + 1;
+          categoryId = catId;
+          break;
+        }
+      }
+
+      if (!categoryId || !categoryPosition) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: `Category ${questionCategory} not found` }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+
+      console.log(`📋 Specific question ${questionId} mapped to category ${categoryId} at position ${categoryPosition}`);
+
+      // Create nextQuestion object for specific selection
+      nextQuestion = {
+        questionId: `QUESTION#${questionId}`,
+        categoryId: categoryId,
+        categoryPosition: categoryPosition,
+        activeIndex: 0, // Will be updated when we increment it
+        questionCount: 1, // Not relevant for specific selection
+        questionNumber: parseInt(questionId)
+      };
+
+    } else {
+      // Get randomization preference from any category ORDER record
+      let isRandomized = true; // Default to true
+      const categoryOrderQuery = await db.send(new QueryCommand({
+        TableName: process.env.TABLE_NAME,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues: {
+          ':pk': `GAME#${gameId}`,
+          ':sk': 'CATEGORY#'
+        }
+      }));
+      
+      // Find the first ORDER record
+      const orderRecords = (categoryOrderQuery.Items || []).filter(item => item.SK.includes('#ORDER'));
+      if (orderRecords.length > 0) {
+        isRandomized = orderRecords[0].IsRandom !== false;
+        console.log(`🎲 Randomization preference: ${isRandomized ? 'RANDOM' : 'IN ORDER'}`);
+      }
+
+      // Select next question automatically
+      nextQuestion = await selectNextQuestion(gameId, categoryState.Item, gameMetadata.Item.QuestionSetId, isRandomized);
+    }
 
     if (!nextQuestion) {
       // Game is finished - update state to ENDED and broadcast
