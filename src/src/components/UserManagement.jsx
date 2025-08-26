@@ -15,9 +15,9 @@ const UserManagement = () => {
   
   const { getAuthToken, isAdmin } = useAuth();
 
-  // Get API endpoint from environment or use default dev endpoint
+  // Get API endpoint from window config or fallback to dev
   const getApiEndpoint = () => {
-    return process.env.REACT_APP_API_URL || 'https://h1jcmja0w1.execute-api.us-east-1.amazonaws.com/dev';
+    return window.API_BASE?.replace(/\/$/, '') || 'https://h1jcmja0w1.execute-api.us-east-1.amazonaws.com/dev';
   };
 
   // Fetch users from API
