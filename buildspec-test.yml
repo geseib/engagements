@@ -14,8 +14,6 @@ phases:
     commands:
       - echo "Pre-build phase for $ENVIRONMENT environment"
       - 'echo "Domain: $DOMAIN_NAME"'
-      
-      # Retrieve GitHub token from Secrets Manager
       - echo "Retrieving GitHub token from Secrets Manager..."
       - export GITHUB_TOKEN=$(aws secretsmanager get-secret-value --secret-id engage/test/github-token --query SecretString --output text | jq -r .GITHUB_TOKEN)
       - if [ -z "$GITHUB_TOKEN" ]; then echo "ERROR: Failed to retrieve GitHub token"; exit 1; else echo "Successfully retrieved GitHub token"; fi
