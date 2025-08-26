@@ -298,6 +298,30 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  AdminGetQuestionSetQuestionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-get-question-set-questions'
+      CodeUri: lambda-functions/admin/
+      Handler: get-question-set-questions.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        AdminGetQuestionSetQuestionsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /question-sets/{setId}/questions
+            Method: GET
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
 
   ## Admin Bypass Function (temporary access for first admin)
   AdminBypassLoginFunction:

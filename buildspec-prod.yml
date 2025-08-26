@@ -12,6 +12,12 @@ phases:
       - echo "Pre-build phase started on $(date)"
       - echo "Environment: $ENVIRONMENT"
       - echo "Domain: $DOMAIN_NAME"
+      
+      # Retrieve GitHub token from Secrets Manager
+      - echo "Retrieving GitHub token from Secrets Manager..."
+      - export GITHUB_TOKEN=$(aws secretsmanager get-secret-value --secret-id engage/prod/github-token --query SecretString --output text | jq -r .GITHUB_TOKEN)
+      - if [ -z "$GITHUB_TOKEN" ]; then echo "ERROR: Failed to retrieve GitHub token"; exit 1; else echo "Successfully retrieved GitHub token"; fi
+      - export GITHUB_REPO="${GITHUB_REPO:-georgeseib/engage2}"
   build:
     commands:
       - echo "Build phase started on $(date)"
