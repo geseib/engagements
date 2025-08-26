@@ -30,7 +30,7 @@ phases:
       - "WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)"
       - "USER_POOL_ID=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`UserPoolId`].OutputValue' --output text)"
       - "USER_POOL_CLIENT_ID=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`UserPoolClientId`].OutputValue' --output text)"
-      - "COGNITO_DOMAIN=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`CognitoDomain`].OutputValue' --output text)"
+      - "COGNITO_DOMAIN=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`UserPoolDomain`].OutputValue' --output text)"
       - "echo 'Creating config.js with API endpoints and Cognito configuration...'"
       - "printf 'window.API_BASE = \"%s/\";\\n' \"$API_URL\" > public/config.js"
       - "printf 'window.WS_URL = \"%s\";\\n' \"$WS_URL\" >> public/config.js"
