@@ -16,7 +16,7 @@ phases:
       - 'echo "Domain: $DOMAIN_NAME"'
       - echo "Retrieving GitHub token from Secrets Manager..."
       - export GITHUB_TOKEN=$(aws secretsmanager get-secret-value --secret-id engage/test/github-token --query SecretString --output text | jq -r .GITHUB_TOKEN)
-      - if [ -z "$GITHUB_TOKEN" ]; then echo "ERROR: Failed to retrieve GitHub token"; exit 1; else echo "Successfully retrieved GitHub token"; fi
+      - '[ -n "$GITHUB_TOKEN" ] && echo "Successfully retrieved GitHub token" || (echo "ERROR: Failed to retrieve GitHub token" && exit 1)'
       - export GITHUB_REPO="${GITHUB_REPO:-georgeseib/engage2}"
 
   build:
