@@ -6,9 +6,9 @@ import {
   CognitoUserAttribute 
 } from 'amazon-cognito-identity-js';
 
-// Configure Cognito User Pool
-const userPoolId = process.env.REACT_APP_USER_POOL_ID || 'us-east-1_PLACEHOLDER';
-const clientId = process.env.REACT_APP_CLIENT_ID || 'PLACEHOLDER_CLIENT_ID';
+// Configure Cognito User Pool  
+const userPoolId = window.USER_POOL_ID || process.env.REACT_APP_USER_POOL_ID || 'us-east-1_PLACEHOLDER';
+const clientId = window.USER_POOL_CLIENT_ID || process.env.REACT_APP_CLIENT_ID || 'PLACEHOLDER_CLIENT_ID';
 
 const poolData = {
   UserPoolId: userPoolId,
