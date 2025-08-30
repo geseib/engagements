@@ -29,8 +29,8 @@ const OAuthCallback = ({ onSuccess, onError }) => {
         console.log('🔍 OAuth Callback: Checking localStorage tokens...');
         
         // Debug localStorage contents
-        const userPoolId = process.env.REACT_APP_USER_POOL_ID;
-        const clientId = process.env.REACT_APP_CLIENT_ID;
+        const userPoolId = window.USER_POOL_ID || process.env.REACT_APP_USER_POOL_ID;
+        const clientId = window.USER_POOL_CLIENT_ID || process.env.REACT_APP_CLIENT_ID;
         const tokenKey = `CognitoIdentityServiceProvider.${clientId}`;
         const lastAuthUser = localStorage.getItem(`${tokenKey}.LastAuthUser`);
         
@@ -243,7 +243,7 @@ const OAuthCallback = ({ onSuccess, onError }) => {
             });
             
             // Check if it's a proper Cognito access token
-            const expectedIss = `https://cognito-idp.us-east-1.amazonaws.com/${process.env.REACT_APP_USER_POOL_ID}`;
+            const expectedIss = `https://cognito-idp.us-east-1.amazonaws.com/${window.USER_POOL_ID || process.env.REACT_APP_USER_POOL_ID}`;
             const isValidCognitoToken = accessTokenPayload.iss === expectedIss && 
                                        accessTokenPayload.token_use === 'access';
             
@@ -275,8 +275,8 @@ const OAuthCallback = ({ onSuccess, onError }) => {
           const username = idTokenPayload['cognito:username'] || idTokenPayload.sub;
           
           // Store the tokens for Cognito SDK with proper format
-          const userPoolId = process.env.REACT_APP_USER_POOL_ID;
-          const clientId = process.env.REACT_APP_CLIENT_ID;
+          const userPoolId = window.USER_POOL_ID || process.env.REACT_APP_USER_POOL_ID;
+          const clientId = window.USER_POOL_CLIENT_ID || process.env.REACT_APP_CLIENT_ID;
           const tokenKey = `CognitoIdentityServiceProvider.${clientId}`;
           
           // Store in the format expected by Cognito SDK
@@ -313,15 +313,12 @@ const OAuthCallback = ({ onSuccess, onError }) => {
           });
           
           // Exchange authorization code for tokens via Cognito token endpoint
-          const userPoolId = process.env.REACT_APP_USER_POOL_ID;
-          const clientId = process.env.REACT_APP_CLIENT_ID;
+          const userPoolId = window.USER_POOL_ID || process.env.REACT_APP_USER_POOL_ID;
+          const clientId = window.USER_POOL_CLIENT_ID || process.env.REACT_APP_CLIENT_ID;
           const region = userPoolId.split('_')[0];
-          // TEMP: Force engdev environment for testing
-          const environment = 'engdev';
-          const domainSuffix = environment === 'engdev' ? '-v2' : '';
-          const cognitoDomain = `${environment}-auth${domainSuffix}.auth.${region}.amazoncognito.com`;
+          const cognitoDomain = window.COGNITO_DOMAIN;
           
-          const tokenEndpoint = `https://${cognitoDomain}/oauth2/token`;
+          const tokenEndpoint = `https://${cognitoDomain}.auth.${region}.amazoncognito.com/oauth2/token`;
           const redirectUri = window.location.origin + '/auth/callback';
           
           const tokenParams = {

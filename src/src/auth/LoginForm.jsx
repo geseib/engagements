@@ -126,26 +126,18 @@ const LoginForm = ({ onToggleMode, onSuccess, initialError }) => {
     // Track that we're in login mode
     sessionStorage.setItem('authMode', 'login');
     
-    // Use environment variables for Cognito configuration
-    const userPoolId = process.env.REACT_APP_USER_POOL_ID;
-    const clientId = process.env.REACT_APP_CLIENT_ID;
+    // Use window variables with fallback to env variables (same as AuthContext)
+    const userPoolId = window.USER_POOL_ID || process.env.REACT_APP_USER_POOL_ID;
+    const clientId = window.USER_POOL_CLIENT_ID || process.env.REACT_APP_CLIENT_ID;
+    const cognitoDomain = window.COGNITO_DOMAIN;
     
-    console.log('Using Cognito config:', { userPoolId, clientId });
+    console.log('Using Cognito config:', { userPoolId, clientId, cognitoDomain });
 
     // Extract region from User Pool ID
     const region = userPoolId.split('_')[0];
-    
-    // Build Cognito hosted UI URL for Google sign-in
-    // Extract environment from user pool ID format: us-east-1_XXXXXXX
-    // TEMP: Force engdev environment for testing
-    const environment = 'engdev';
-    const domainSuffix = environment === 'engdev' ? '-v2' : ''; // Only dev uses v2 suffix
-    const cognitoDomain = `${environment}-auth${domainSuffix}.auth.${region}.amazoncognito.com`;
     const redirectUri = encodeURIComponent(window.location.origin + '/auth/callback');
     
-    console.log('🔍 Environment detection:', { userPoolId, environment, domainSuffix, cognitoDomain });
-    
-    const googleSignInUrl = `https://${cognitoDomain}/oauth2/authorize?` +
+    const googleSignInUrl = `https://${cognitoDomain}.auth.${region}.amazoncognito.com/oauth2/authorize?` +
       `identity_provider=Google&` +
       `redirect_uri=${redirectUri}&` +
       `response_type=token&` +
