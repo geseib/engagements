@@ -1,3 +1,19 @@
+# Cognito Configuration Issues & Solutions
+## Critical Fixes Applied to Prevent Authentication Breaking
+
+### ✅ RESOLVED: Hard-coded Environment References
+**Issue**: Frontend components using wrong Cognito/API endpoints across environments
+
+**Root Cause**: Components using `process.env.REACT_APP_*` or hard-coded URLs instead of environment-specific `window.*` variables
+
+**Files Fixed**:
+- `src/src/auth/AuthContext.jsx`: Now uses `window.USER_POOL_ID || process.env.REACT_APP_USER_POOL_ID`
+- `src/src/components/UserManagement.jsx`: Now uses `window.API_BASE` instead of hard-coded dev URL
+
+**Impact**: Test environment was showing dev users in admin panel, wrong authentication endpoints
+
+---
+
 # Cognito Validation Checklist
 ## Prevent Breaking Authentication During Deployments
 
