@@ -38,6 +38,12 @@ phases:
       - COGNITO_DOMAIN=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`UserPoolDomain`].OutputValue' --output text)
 
       - echo "Creating config.js with API endpoints and Cognito configuration..."
+      - echo "Values retrieved from CloudFormation:"
+      - echo "  API_URL=$API_URL"
+      - echo "  WS_URL=$WS_URL"
+      - echo "  USER_POOL_ID=$USER_POOL_ID"
+      - echo "  USER_POOL_CLIENT_ID=$USER_POOL_CLIENT_ID"
+      - echo "  COGNITO_DOMAIN=$COGNITO_DOMAIN"
       - printf 'window.API_BASE = "%s/";\n' "$API_URL" > public/config.js
       - printf 'window.WS_URL = "%s";\n' "$WS_URL" >> public/config.js
       - printf 'window.USER_POOL_ID = "%s";\n' "$USER_POOL_ID" >> public/config.js
@@ -45,8 +51,15 @@ phases:
       - printf 'window.COGNITO_DOMAIN = "%s";\n' "$COGNITO_DOMAIN" >> public/config.js
       - printf 'window.ENV = "test";\n' >> public/config.js
       - printf 'console.log("TEST Environment loaded");\n' >> public/config.js
+      - echo "Generated config.js contents:"
+      - cat public/config.js
 
       - npm run build
+
+      - echo "Verifying config.js in dist folder..."
+      - ls -la dist/config.js
+      - echo "Contents of dist/config.js:"
+      - cat dist/config.js
 
       - echo "Deploying frontend to S3..."
       - BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`FrontendBucketName`].OutputValue' --output text)

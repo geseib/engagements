@@ -55,6 +55,11 @@ phases:
 
       - npm run build
 
+      - echo "Verifying config.js in dist folder..."
+      - ls -la dist/config.js
+      - echo "Contents of dist/config.js:"
+      - cat dist/config.js
+
       - echo "Deploying frontend to S3..."
       - BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`FrontendBucketName`].OutputValue' --output text)
       - echo "Frontend bucket name is $BUCKET_NAME"
