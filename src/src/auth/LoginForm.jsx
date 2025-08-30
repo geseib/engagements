@@ -135,11 +135,14 @@ const LoginForm = ({ onToggleMode, onSuccess, initialError }) => {
 
     // Extract region from User Pool ID
     const region = userPoolId.split('_')[0];
-    const redirectUri = encodeURIComponent(window.location.origin + '/auth/callback');
+    
+    // When using identity_provider=Google, Cognito handles the redirect internally
+    // The redirect_uri here is where Cognito will redirect AFTER Google auth
+    const appCallbackUrl = encodeURIComponent(window.location.origin + '/auth/callback');
     
     const googleSignInUrl = `https://${cognitoDomain}.auth.${region}.amazoncognito.com/oauth2/authorize?` +
       `identity_provider=Google&` +
-      `redirect_uri=${redirectUri}&` +
+      `redirect_uri=${appCallbackUrl}&` +
       `response_type=token&` +
       `client_id=${clientId}&` +
       `scope=openid+email+profile+aws.cognito.signin.user.admin&` +
