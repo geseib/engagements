@@ -55,22 +55,50 @@ WS_URL=$(aws cloudformation describe-stacks \
     --output text \
     --profile $AWS_PROFILE)
 
-echo "📝 Updating API_BASE to use direct API Gateway URL for DEV..."
-# Update the public/config.js file with dev API endpoint
+# Get Cognito configuration from CloudFormation outputs
+USER_POOL_ID=$(aws cloudformation describe-stacks \
+    --stack-name $STACK_NAME \
+    --query 'Stacks[0].Outputs[?OutputKey==`UserPoolId`].OutputValue' \
+    --output text \
+    --profile $AWS_PROFILE)
+
+USER_POOL_CLIENT_ID=$(aws cloudformation describe-stacks \
+    --stack-name $STACK_NAME \
+    --query 'Stacks[0].Outputs[?OutputKey==`UserPoolClientId`].OutputValue' \
+    --output text \
+    --profile $AWS_PROFILE)
+
+COGNITO_DOMAIN=$(aws cloudformation describe-stacks \
+    --stack-name $STACK_NAME \
+    --query 'Stacks[0].Outputs[?OutputKey==`UserPoolDomain`].OutputValue' \
+    --output text \
+    --profile $AWS_PROFILE)
+
+echo "📝 Updating config.js with API endpoints and Cognito configuration for DEV..."
+# Update the public/config.js file with dev API endpoint and Cognito config
 cat > public/config.js << EOF
 // Development environment configuration
 window.API_BASE = '$API_URL/';
 window.WS_URL = '$WS_URL';
+window.USER_POOL_ID = '$USER_POOL_ID';
+window.USER_POOL_CLIENT_ID = '$USER_POOL_CLIENT_ID';
+window.COGNITO_DOMAIN = '$COGNITO_DOMAIN';
 window.ENV = 'development';
 
 console.log('🔧 DEV Environment loaded:');
 console.log('  API_BASE:', window.API_BASE);
 console.log('  WS_URL:', window.WS_URL);
+console.log('  USER_POOL_ID:', window.USER_POOL_ID);
+console.log('  USER_POOL_CLIENT_ID:', window.USER_POOL_CLIENT_ID);
+console.log('  COGNITO_DOMAIN:', window.COGNITO_DOMAIN);
 console.log('  ENV:', window.ENV);
 EOF
 
 echo "✅ Updated DEV API_BASE to: $API_URL/"
 echo "✅ Updated DEV WS_URL to: $WS_URL"
+echo "✅ Updated DEV USER_POOL_ID to: $USER_POOL_ID"
+echo "✅ Updated DEV USER_POOL_CLIENT_ID to: $USER_POOL_CLIENT_ID"
+echo "✅ Updated DEV COGNITO_DOMAIN to: $COGNITO_DOMAIN"
 
 # Build the frontend
 echo "🔨 Building frontend for DEV environment..."
@@ -128,6 +156,10 @@ if [ $? -eq 0 ]; then
     echo "   Frontend: $CLOUDFRONT_URL"
     echo "   API: $API_URL"
     echo "   WebSocket: $WS_URL"
+    echo "🔐 DEV Cognito Configuration:"
+    echo "   User Pool ID: $USER_POOL_ID"
+    echo "   Client ID: $USER_POOL_CLIENT_ID"
+    echo "   Domain: $COGNITO_DOMAIN"
 else
     echo "❌ S3 upload failed"
     exit 1
