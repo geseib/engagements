@@ -55,6 +55,7 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
     }
   };
 
+
   const createQuickGame = async (questionSet) => {
     if (creating) return;
     
@@ -191,8 +192,12 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
     <div className="quickstart-overlay" onClick={onClose}>
       <div className="quickstart-modal" onClick={(e) => e.stopPropagation()}>
         <div className="quickstart-header">
-          <h2>⚡ Quickstart Menu</h2>
-          <p>Create and start a game instantly with pre-configured question sets</p>
+          <div className="quickstart-title">
+            <h2>⚡ Quickstart Menu</h2>
+            <p>Create and start a game instantly with pre-configured question sets</p>
+          </div>
+          
+          
           <button className="quickstart-close" onClick={onClose}>×</button>
         </div>
 

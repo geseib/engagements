@@ -468,6 +468,11 @@ exports.handler = async (event) => {
       question.optionE = question.optionE || question.OptionE;
       question.optionF = question.optionF || question.OptionF;
       question.answerDetails = question.answerDetails || question.AnswerDetails;
+      
+      console.log('🔧 AFTER NORMALIZATION:');
+      console.log('  question.correctAnswer:', question.correctAnswer);
+      console.log('  question.optionA:', question.optionA);
+      console.log('  question.optionB:', question.optionB);
     }
 
     // Use the sequential question number for answers lookup (already calculated above)
@@ -495,7 +500,17 @@ exports.handler = async (event) => {
     const votes = votesQuery.Items || [];
     const answers = answersQuery.Items || [];
     
-    console.log(`📊 Found ${answers.length} answers and ${votes.length} votes for question ${paddedQuestionNumber}`);
+    // Get stored results data if available (contains wavelength commonWords)
+    const storedResultsQuery = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { 
+        PK: `GAME#${gameId}`, 
+        SK: `QUESTION#${paddedQuestionNumber}#RESULTS` 
+      }
+    }));
+    
+    const storedResults = storedResultsQuery.Item || null;
+    console.log(`📊 Found ${answers.length} answers, ${votes.length} votes, stored results: ${storedResults ? 'YES' : 'NO'} for question ${paddedQuestionNumber}`);
     
     if (answers.length === 0) {
       return {
@@ -705,11 +720,7 @@ exports.handler = async (event) => {
       promptProvenance: promptProvenance,
       debugMode: debug === 'true',
       questionId: targetQuestionId,
-      question: {
-        title: question.Title,
-        detail: question.Detail || '',
-        category: question.Category
-      },
+      question: question, // Pass the normalized question object with all fields
       answers: answers.map(answer => ({
         playerName: answer.PlayerName,
         answer: answer.Answer
@@ -1159,13 +1170,34 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
   let correctCount = 0; // Initialize correctCount for all game types
   let correctAnswers = [];
   
+  console.log('🎯 BEFORE GAME TYPE PROCESSING:');
+  console.log('  gameType:', gameType);
+  console.log('  question exists:', !!question);
+  if (question) {
+    console.log('  🔍 ALL QUESTION FIELDS:', Object.keys(question));
+    console.log('  question.correctAnswer value:', JSON.stringify(question.correctAnswer));
+    console.log('  question.optionA value:', JSON.stringify(question.optionA));
+    console.log('  question.optionB value:', JSON.stringify(question.optionB));
+    console.log('  question.optionC value:', JSON.stringify(question.optionC));
+    console.log('  question.optionD value:', JSON.stringify(question.optionD));
+    console.log('  typeof correctAnswer:', typeof question.correctAnswer);
+    console.log('  typeof optionA:', typeof question.optionA);
+  }
+  
   // Wavelength-specific variables (already initialized above)
   let wavelengthTopic = '';
   let wavelengthWords = '';
   let wordAnalysis = '';
   
   // Check if this is a trivia or poll game
+  console.log('🎮 GAME TYPE CHECK: gameType=', gameType, 'question exists=', !!question);
   if (gameType === 'trivia' && question) {
+    console.log('📋 ENTERING TRIVIA PROCESSING BLOCK');
+    console.log('🔍 QUESTION OBJECT IN TRIVIA BLOCK:');
+    console.log('  correctAnswer:', question.correctAnswer);
+    console.log('  optionA:', question.optionA);
+    console.log('  optionB:', question.optionB);
+    console.log('  All fields:', Object.keys(question));
     // Format trivia choices with better formatting
     const options = [];
     if (question.optionA) options.push(`A) ${question.optionA}`);
@@ -1178,8 +1210,8 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     
     console.log('🔍 TRIVIA CHOICES DEBUG:', triviaChoices);
     
-    // Get correct answer(s) with improved extraction
-    let correctAnswerValue = question.correctAnswer || question.CorrectAnswer;
+    // Get correct answer(s) with improved extraction (use normalized field only)
+    let correctAnswerValue = question.correctAnswer;
     
     if (correctAnswerValue) {
       // If it's an option ID (like OptionA), convert to actual text
@@ -1219,9 +1251,9 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
       const playerAnswer = answer.Answer || answer.answer;
       responseDistribution[playerAnswer] = (responseDistribution[playerAnswer] || 0) + 1;
       
-      // Check if answer is correct using both field name variants
-      const correctAnswerValue = question.correctAnswer || question.CorrectAnswer;
-      const correctAnswersArray = question.correctAnswers || question.CorrectAnswers;
+      // Check if answer is correct using normalized fields only
+      const correctAnswerValue = question.correctAnswer;
+      const correctAnswersArray = question.correctAnswers;
       
       // Handle OptionA format conversion to actual text
       let actualCorrectAnswer = correctAnswerValue;
@@ -1269,6 +1301,8 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     }
     
     console.log('🔍 TRIVIA PROCESSING COMPLETE:');
+    console.log('  gameType:', gameType);
+    console.log('  question exists:', !!question);
     console.log('  question.correctAnswer:', question.correctAnswer);
     console.log('  question.optionA:', question.optionA);
     console.log('  question.optionB:', question.optionB);
@@ -1280,7 +1314,7 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     console.log('  correctCount:', correctCount);
     console.log('  triviaResponses:', triviaResponses);
     console.log('  triviaCorrectness:', triviaCorrectness);
-  } else if (gameType === 'polls' && question) {
+  } else if ((gameType === 'polls' || gameType === 'poll') && question) {
     // Format poll options
     const options = [];
     if (question.optionA) options.push(`Option 1: ${question.optionA}`);
@@ -1308,52 +1342,92 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     // Get the topic/prompt from the question
     wavelengthTopic = question.title || question.topic || 'Word Association';
     
-    // Process all player words to find common ones
-    const wordCounts = {};
-    const playerWordLists = {};
-    let totalWordsSubmitted = 0;
-    
-    answers.forEach(answer => {
-      const playerName = answer.PlayerName || answer.playerName;
-      const answerText = answer.Answer || answer.answer || '';
+    // Use stored results data if available (contains pre-calculated commonWords)
+    if (storedResults && storedResults.wordAnalysis && storedResults.wordAnalysis.commonWords) {
+      console.log('✅ Using stored wavelength results data for AI summary');
       
-      // Parse words (should already be normalized from message.js processing)
-      const words = answerText.split(',')
-        .map(w => w.trim().toLowerCase())
-        .filter(w => w.length > 0);
+      commonWords = storedResults.wordAnalysis.commonWords;
+      const wordCounts = storedResults.wordAnalysis.wordCounts || {};
+      totalUniqueWords = storedResults.wordAnalysis.totalUniqueWords || 0;
+      connectionScore = storedResults.wordAnalysis.connectionScore || 0;
       
-      playerWordLists[playerName] = words;
-      totalWordsSubmitted += words.length;
+      // Extract player word lists from stored data
+      const playerWordLists = {};
+      if (storedResults.playerAnswers) {
+        storedResults.playerAnswers.forEach(playerAnswer => {
+          const playerName = playerAnswer.playerName || playerAnswer.PlayerName;
+          const answerText = playerAnswer.answer || playerAnswer.Answer || '';
+          const words = answerText.split(',')
+            .map(w => w.trim().toLowerCase())
+            .filter(w => w.length > 0);
+          playerWordLists[playerName] = words;
+        });
+      }
       
-      // Count word frequencies
-      words.forEach(word => {
-        wordCounts[word] = (wordCounts[word] || 0) + 1;
+      // Format wavelength data for AI
+      wavelengthWords = Object.entries(playerWordLists)
+        .map(([player, words]) => `${player}: [${words.join(', ')}]`)
+        .join('; ');
+      
+      wordAnalysis = `${commonWords.length} common words found out of ${totalUniqueWords} unique words (${connectionScore}% connection rate). ` +
+        `Common words: ${commonWords.map(w => `${w.word} (${w.count}x)`).join(', ')}`;
+      
+      console.log('🌊 Using stored wavelength analysis:', {
+        commonWordsCount: commonWords.length,
+        totalUniqueWords,
+        connectionScore
       });
-    });
-    
-    // Find common words (mentioned by 2+ players)
-    commonWords = Object.entries(wordCounts)
-      .filter(([word, count]) => count > 1)
-      .sort((a, b) => b[1] - a[1]) // Sort by frequency
-      .map(([word, count]) => ({ word, count }));
-    
-    totalUniqueWords = Object.keys(wordCounts).length;
-    connectionScore = Math.round((commonWords.length / totalUniqueWords) * 100) || 0;
-    
-    // Format wavelength data for AI
-    wavelengthWords = Object.entries(playerWordLists)
-      .map(([player, words]) => `${player}: [${words.join(', ')}]`)
-      .join('; ');
-    
-    wordAnalysis = `${commonWords.length} common words found out of ${totalUniqueWords} unique words (${connectionScore}% connection rate). ` +
-      `Common words: ${commonWords.map(w => `${w.word} (${w.count}x)`).join(', ')}`;
-    
-    console.log('🌊 Wavelength analysis complete:', {
-      topic: wavelengthTopic,
-      commonWordsCount: commonWords.length,
-      totalUniqueWords: totalUniqueWords,
-      connectionScore: connectionScore
-    });
+      
+    } else {
+      console.log('⚠️ No stored results found, calculating wavelength data from scratch');
+      
+      // Fallback: Process all player words to find common ones
+      const wordCounts = {};
+      const playerWordLists = {};
+      let totalWordsSubmitted = 0;
+      
+      answers.forEach(answer => {
+        const playerName = answer.PlayerName || answer.playerName;
+        const answerText = answer.Answer || answer.answer || '';
+        
+        // Parse words (should already be normalized from message.js processing)
+        const words = answerText.split(',')
+          .map(w => w.trim().toLowerCase())
+          .filter(w => w.length > 0);
+        
+        playerWordLists[playerName] = words;
+        totalWordsSubmitted += words.length;
+        
+        // Count word frequencies
+        words.forEach(word => {
+          wordCounts[word] = (wordCounts[word] || 0) + 1;
+        });
+      });
+      
+      // Find common words (mentioned by 2+ players)
+      commonWords = Object.entries(wordCounts)
+        .filter(([word, count]) => count > 1)
+        .sort((a, b) => b[1] - a[1]) // Sort by frequency
+        .map(([word, count]) => ({ word, count }));
+      
+      totalUniqueWords = Object.keys(wordCounts).length;
+      connectionScore = Math.round((commonWords.length / totalUniqueWords) * 100) || 0;
+      
+      // Format wavelength data for AI
+      wavelengthWords = Object.entries(playerWordLists)
+        .map(([player, words]) => `${player}: [${words.join(', ')}]`)
+        .join('; ');
+      
+      wordAnalysis = `${commonWords.length} common words found out of ${totalUniqueWords} unique words (${connectionScore}% connection rate). ` +
+        `Common words: ${commonWords.map(w => `${w.word} (${w.count}x)`).join(', ')}`;
+      
+      console.log('🌊 Fallback wavelength analysis complete:', {
+        topic: wavelengthTopic,
+        commonWordsCount: commonWords.length,
+        totalUniqueWords: totalUniqueWords,
+        connectionScore: connectionScore
+      });
+    }
     
     // Update wavelength-specific summary variables now that we have the real values
     resultsSummary = `Team found ${commonWords.length} common words with ${connectionScore}% connection rate`;
@@ -1398,12 +1472,40 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     questionCategory: question.category || 'General',
     questionContext: question.questionDetail || question.detail || '',
     questionNumber: currentRound,
-    triviaChoices: triviaChoices,
+    triviaChoices: triviaChoices || (() => {
+      // Fallback if trivia processing didn't run
+      if (question && gameType === 'trivia') {
+        const opts = [];
+        if (question.optionA) opts.push(`A) ${question.optionA}`);
+        if (question.optionB) opts.push(`B) ${question.optionB}`);
+        if (question.optionC) opts.push(`C) ${question.optionC}`);
+        if (question.optionD) opts.push(`D) ${question.optionD}`);
+        if (question.optionE) opts.push(`E) ${question.optionE}`);
+        if (question.optionF) opts.push(`F) ${question.optionF}`);
+        console.log('⚠️ FALLBACK: Building triviaChoices in template vars');
+        return opts.join(', ');
+      }
+      return '';
+    })(),
     pollOptions: pollOptions,
-    correctAnswer: correctAnswer,
-    answerDetails: question.answerDetails || question.AnswerDetails || 'No explanation provided',
-    difficulty: question.difficulty || question.Difficulty || 'medium',
-    questionExplanation: question.answerDetails || question.AnswerDetails || question.detail || '',
+    correctAnswer: correctAnswer || (() => {
+      // Fallback if trivia processing didn't run
+      if (question && gameType === 'trivia' && question.correctAnswer) {
+        const correctAnswerValue = question.correctAnswer;
+        if (correctAnswerValue.startsWith('Option')) {
+          const optionLetter = correctAnswerValue.replace('Option', '');
+          const optionField = `option${optionLetter}`;
+          const optionText = question[optionField];
+          console.log('⚠️ FALLBACK: Building correctAnswer in template vars');
+          return optionText ? `The correct answer is ${optionLetter}: ${optionText}` : `The correct answer is ${optionLetter}`;
+        }
+        return correctAnswerValue;
+      }
+      return '';
+    })(),
+    answerDetails: question.answerDetails || 'No explanation provided',
+    difficulty: question.difficulty || 'medium',
+    questionExplanation: question.answerDetails || question.detail || '',
     
     // ANSWERS
     playerAnswers: playerAnswers,

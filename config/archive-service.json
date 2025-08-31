@@ -1,0 +1,7 @@
+{
+  "archiveServiceUrl": "https://archive.seibtribe.us",
+  "archiveApiUrl": "https://9gi7xpycsf.execute-api.us-east-1.amazonaws.com",
+  "tableName": "engage2-archive",
+  "bucketName": "engage2-archive-content",
+  "region": "us-east-1"
+}

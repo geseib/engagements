@@ -196,6 +196,12 @@ const createGame = async (gameId, gameData) => {
           }
         }));
 
+        // Initialize category counts arrays for dynamic management
+        const counts1_8 = new Array(8).fill(0);
+        const counts9_16 = new Array(8).fill(0);
+        const counts17_24 = new Array(8).fill(0);
+        let totalQuestions = 0;
+
         // Query the question set to get questions for ALL categories (not just selected ones)
         const questionSetQueries = await Promise.all(
           allCategories.map(async (category) => {
@@ -258,8 +264,48 @@ const createGame = async (gameId, gameData) => {
             }));
 
             console.log(`✅ Category ${categoryNumber} (${categoryId}) set up with ${questions.length} questions`);
+            
+            // Populate counts array based on category position (for ALL categories, regardless of selection)
+            const categoryIndex = i;
+            const categoryName = allCategories[categoryIndex]?.CategoryName || allCategories[categoryIndex]?.Name || '';
+            const isSelected = effectiveSelectedCategories.includes(categoryId) || 
+                             effectiveSelectedCategories.includes(categoryName);
+            
+            // Set actual question count for ALL categories (enabled and disabled)
+            if (categoryIndex < 8) {
+              counts1_8[categoryIndex] = questions.length;
+            } else if (categoryIndex < 16) {
+              counts9_16[categoryIndex - 8] = questions.length;
+            } else if (categoryIndex < 24) {
+              counts17_24[categoryIndex - 16] = questions.length;
+            }
+            
+            // Only add to totalQuestions if category is selected/enabled
+            if (isSelected) {
+              totalQuestions += questions.length;
+            }
           }
         }
+        
+        // Create STATE#CATS#COUNTS record for dynamic category management
+        console.log(`📊 Creating category counts: total=${totalQuestions}, 1-8=[${counts1_8}], 9-16=[${counts9_16}], 17-24=[${counts17_24}]`);
+        
+        await db.send(new PutCommand({
+          TableName: process.env.TABLE_NAME,
+          Item: {
+            PK: `GAME#${gameId}`,
+            SK: 'STATE#CATS#COUNTS',
+            Version: 1,
+            '1-8': counts1_8,
+            '9-16': counts9_16,
+            '17-24': counts17_24,
+            TotalEnabled: totalQuestions,
+            TotalRemaining: totalQuestions, // Same as TotalEnabled - only count enabled categories
+            CreatedAt: now,
+            UpdatedAt: now,
+            ttl
+          }
+        }));
       }
     }
     

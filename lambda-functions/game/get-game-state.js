@@ -204,6 +204,39 @@ exports.handler = async (event) => {
 
     // If host is requesting, get additional host-specific data
     if (!playerId || event.queryStringParameters?.includeHostData === 'true') {
+      // Get category counts and state for dynamic management
+      try {
+        const categoryCountsResult = await db.send(new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: 'STATE#CATS#COUNTS' }
+        }));
+
+        const categoryStateResult = await db.send(new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: 'STATE#CATS' }
+        }));
+
+        if (categoryCountsResult.Item) {
+          response.categoryCounts = {
+            '1-8': categoryCountsResult.Item['1-8'] || [],
+            '9-16': categoryCountsResult.Item['9-16'] || [],
+            '17-24': categoryCountsResult.Item['17-24'] || [],
+            totalRemaining: categoryCountsResult.Item.TotalRemaining || 0
+          };
+        }
+
+        if (categoryStateResult.Item) {
+          response.categoryState = {
+            'HostMask1-8': categoryStateResult.Item['HostMask1-8'] || '00000000',
+            'HostMask9-16': categoryStateResult.Item['HostMask9-16'] || '00000000',
+            'HostMask17-24': categoryStateResult.Item['HostMask17-24'] || '00000000'
+          };
+        }
+      } catch (error) {
+        console.error('Error fetching category data:', error);
+        // Don't fail the request if category data is unavailable
+      }
+
       // Get voting progress if in voting state
       if (frontendState.startsWith('VOTE#') && currentQuestionNumber) {
         const questionNumberStr = currentQuestionNumber.toString().padStart(3, '0');

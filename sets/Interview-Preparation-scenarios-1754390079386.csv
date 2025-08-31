@@ -1,0 +1,189 @@
+Category,Question#,Title,Detail_lesson,School,CustomInstruction
+"Dive Deep","1","Tell me about a time when you had to make a decision without all the information you needed","Interviewer: Tell me about a time when you had to make a decision without all the information you needed.
+
+Candidate: In my current role, we faced a critical production issue where our payment processing system was failing intermittently. With 30% of transactions failing and no clear root cause, I had to act quickly. I first implemented logging to capture more data points, then analyzed patterns in the failed transactions. While waiting for complete data, I made the decision to roll back the recent deployment based on the correlation I observed between the issues and the latest release. This reduced failures to 2%. After gathering more data, we discovered a race condition in the code and implemented a permanent fix.
+
+Interviewer: How did you validate your decision to roll back?
+
+Candidate: I monitored key metrics like transaction success rate, response times, and error logs. I also set up automated alerts to notify us if failure rates exceeded 5%.","Professional Development","Look for data-driven decision making, risk assessment, and validation steps"
+"Dive Deep","2","Tell me about a time you discovered and solved a complex technical issue","Interviewer: What was the problem and your approach?
+
+Candidate: We had intermittent production outages. I analyzed logs, created reproducible test cases, and found a memory leak in our caching layer. I implemented automated memory monitoring and reduced outages by 98%.
+
+Interviewer: How did you verify the root cause?
+
+Candidate: I looked at the logs and it seemed like a memory issue.
+
+Interviewer: What monitoring did you implement?
+
+Candidate: Just basic memory usage alerts.","Technical Problem Solving","Evaluate systematic problem solving and validation approach"
+"Dive Deep","3","Tell me about a time you found the root cause of a critical production issue","Interviewer: Tell me about a time you found the root cause of a critical production issue.
+
+Candidate: Our payment processing system experienced intermittent failures affecting 15% of transactions. I led the investigation using distributed tracing and log analysis. Identified a race condition in our database connection pooling that occurred under high load. Created reproduction in staging environment, verified fix reduced error rate to 0%, and implemented automated testing to prevent regression.
+
+Interviewer: How did you validate your hypothesis?
+
+Candidate: Built load testing framework to simulate concurrent users, measured connection pool metrics, and correlated with failure patterns. Data showed clear correlation between pool exhaustion and failures.","Professional Development","Evaluate candidate's technical depth, analytical approach, and problem-solving methodology"
+"Dive Deep","4","Tell me about a time when you had to make a decision without all the data you wanted","Interviewer: Can you share a specific example?
+
+Candidate: At my previous company, we needed to decide whether to migrate our authentication system. We had two weeks to decide due to security compliance deadlines. I only had partial usage metrics and incomplete cost projections.
+
+I created a decision matrix comparing our current system versus alternatives. I interviewed 5 team leads about their authentication pain points and gathered 3 months of support tickets. Though we lacked long-term data, the short-term metrics showed 40% of incidents were auth-related.
+
+I recommended migrating to Auth0 based on the data we had. To mitigate risks, I proposed a phased rollout starting with non-critical systems.
+
+Interviewer: What was the outcome?
+
+Candidate: The migration reduced auth incidents by 85% in the first quarter. Team productivity improved as they spent less time debugging auth issues.","Professional Development","Look for: Data-driven approach, mitigation strategies, clear metrics"
+"Invent and Simplify","1","Describe a time when you helped improve a technical process","Interviewer: Describe a time when you helped improve a technical process.
+
+Candidate: Well, we had this deployment process that everyone complained about. I thought it was slow, so I changed it. Now it's better.
+
+Interviewer: Can you elaborate on the specific changes you made?
+
+Candidate: I just automated some stuff and removed some steps. It's faster now.
+
+Interviewer: Do you have any metrics on the improvement?
+
+Candidate: I think it's maybe twice as fast? People seem happier with it.","Professional Development","Evaluate candidate's ability to quantify impact and demonstrate process improvement"
+"Invent and Simplify","2","Tell me about a time you simplified a complex technical problem","Interviewer: What was the original problem?
+
+Candidate: Our deployment process took 4 hours and had a 30% failure rate. I analyzed the pipeline and found redundant steps. I introduced parallel processing for independent tasks and implemented caching for build artifacts. This reduced deployment time to 45 minutes with 95% success rate.
+
+Interviewer: How did you ensure quality wasn't compromised?
+
+Candidate: I added comprehensive integration tests and monitored production metrics for 2 weeks after each change. We saw no increase in production issues.","Professional Development","Look for: Problem identification, measurable improvements, quality considerations"
+"Deliver Results","1","Tell me about a time you had to deliver results under tight constraints","Interviewer: Tell me about a time you had to deliver results under tight constraints.
+
+Candidate: Last quarter, our team needed to migrate our authentication service to a new platform within 6 weeks due to security requirements. I led the 4-person team, breaking down the work into 2-week sprints. We identified critical paths using dependency mapping and automated 80% of the migration testing. We completed the migration 2 days early, with zero downtime and 100% of our 2M users successfully transferred. The new system reduced login latency by 40%.
+
+Interviewer: How did you handle unexpected challenges during the migration?
+
+Candidate: We maintained a daily risk register and had contingency plans for our top 3 risks. When we hit a data sync issue in week 4, we already had a rollback plan ready, which we used while implementing the fix.","Professional Development","Assess planning, execution, and risk management capabilities"
+"Deliver Results","2","Describe a time when you had to deliver results under tight constraints","Interviewer: What were the constraints?
+
+Candidate: Um, we had a project that needed to be done fast. I worked really hard and stayed late. We finished it.
+
+Interviewer: Can you share specific metrics?
+
+Candidate: It was successful because the client was happy.
+
+Interviewer: What trade-offs did you consider?
+
+Candidate: We just focused on getting it done.","Professional Development","Look for: Prioritization, trade-off analysis, specific metrics"
+"Hire and Develop the Best","1","How do you identify and develop talent in your team?","Interviewer: How do you identify and develop talent in your team?
+
+Candidate: I believe in regular 1:1s with team members. For example, I noticed one of my engineers was particularly interested in system architecture. I assigned them to lead the design of our new microservices architecture, while providing mentorship. They've since grown to become our team's technical lead, improving our system design processes and mentoring three junior engineers.
+
+Interviewer: How do you measure the effectiveness of your development efforts?
+
+Candidate: I track both quantitative metrics like project delivery times and qualitative feedback through peer reviews and team surveys. We've seen a 25% improvement in team velocity and 90% positive feedback on growth opportunities.","Professional Development","Look for systematic approach to development and measurable outcomes"
+"Hire and Develop the Best","2","Describe a situation where you had to coach a technically strong but difficult team member","Interviewer: What was the specific challenge?
+
+Candidate: I managed a senior engineer who was brilliant but wouldn't document code or participate in code reviews. I created a growth plan, set clear expectations, and measured progress through peer feedback. After 3 months, team velocity increased 40% and collaboration scores in team surveys improved from 2.1 to 4.2 out of 5.
+
+Interviewer: What would you do differently?
+
+Candidate: I'd start performance discussions earlier and document more clearly.","People Management","Evaluate coaching approach and measurable outcomes"
+"Hire and Develop the Best","3","Describe a situation where you had to coach an underperforming team member","Interviewer: Describe a situation where you had to coach an underperforming team member.
+
+Candidate: Well, there was this junior developer who wasn't meeting deadlines.
+
+Interviewer: What specific actions did you take?
+
+Candidate: I just told them to work faster and meet their deadlines. Eventually they left the team.
+
+Interviewer: Were there any other approaches you considered?
+
+Candidate: Not really, some people just aren't cut out for the job.","Professional Development","Evaluate candidate's leadership approach, empathy, and development mindset"
+"Hire and Develop the Best","4","Describe a time when you helped improve a team member's performance","Interviewer: Tell me more about the situation.
+
+Candidate: Well, there was this junior developer who was struggling. I just told them to read the documentation and figure it out themselves. They eventually quit.
+
+Interviewer: How did you measure their progress?
+
+Candidate: I didn't really track anything specific. I just knew they weren't doing well.
+
+Interviewer: What would you do differently now?
+
+Candidate: Maybe spend more time helping them.","Professional Development","Look for: Mentorship approach, specific metrics, long-term impact"
+"Customer Obsession","1","Describe a time when you used customer feedback to drive a technical change","Interviewer: Describe a time when you used customer feedback to drive a technical change.
+
+Candidate: Um, customers were complaining about our app being slow. So we made some changes to make it faster.
+
+Interviewer: What specific changes did you implement?
+
+Candidate: We optimized some database queries and added caching.
+
+Interviewer: How did you measure the impact?
+
+Candidate: The customers stopped complaining as much.","Professional Development","Evaluate customer focus, problem-solving approach, and impact measurement"
+"Customer Obsession","2","Tell me about a time when you had to make a technical decision that impacted customers directly","Interviewer: Can you share a specific example?
+
+Candidate: Last year, we needed to migrate our authentication system. I pushed to do it gradually over weekends instead of a big bang approach. We monitored customer support tickets and saw only 0.1% increase in login issues, compared to projected 5%. The migration completed with minimal customer impact.
+
+Interviewer: How did you decide on that approach?
+
+Candidate: Well, I just thought weekends would be better for users.
+
+Interviewer: What metrics did you use to validate success?
+
+Candidate: Mainly looked at support tickets and system logs.","Technical Leadership","Look for data-driven decision making and customer impact measurement"
+"Customer Obsession","3","Tell me about a time you had to make a technical decision that impacted customers directly","Interviewer: Tell me about a time you had to make a technical decision that impacted customers directly.
+
+Candidate: Last year, we needed to migrate our authentication system. I led the initiative to move from our legacy system to OAuth2.
+
+Interviewer: Walk me through your decision process.
+
+Candidate: The legacy system was causing 2% of users to experience login failures. I gathered data showing customer support tickets had increased 40% due to authentication issues. I evaluated three solutions: patching existing system, building custom auth, or implementing OAuth2. After analyzing costs, security implications, and implementation time, OAuth2 emerged as best option. Migration impacted 2M users but reduced login failures to 0.1%.
+
+Interviewer: How did you handle the migration?
+
+Candidate: Created detailed rollback plan, implemented dark launch capability, and migrated users in 10% increments. Monitored error rates and support tickets throughout. Completed migration two weeks ahead of schedule.","Professional Development","Evaluate candidate's customer focus, data-driven decision making, and technical depth"
+"Think Big","1","Share an example of when you proposed and implemented a significant architectural change","Interviewer: What was the motivation?
+
+Candidate: I proposed moving from monolith to microservices. Created POC, documented trade-offs, and presented TCO analysis showing 45% cost reduction over 3 years. Led implementation across 5 teams, resulting in 60% faster deployments and 30% improved availability.
+
+Interviewer: How did you get buy-in?
+
+Candidate: Showed the benefits to management and teams.
+
+Interviewer: What were the risks and how did you mitigate them?
+
+Candidate: We did gradual migration to reduce risks.","System Design","Look for strategic thinking and execution at scale"
+"Think Big","2","Share an example of how you've helped shape the technical direction of your organization","Interviewer: Share an example of how you've helped shape the technical direction of your organization.
+
+Candidate: I proposed and led our migration to microservices architecture. Analyzed system bottlenecks, created 5-year scalability projection showing current monolith would limit growth. Developed POC, presented TCO analysis to leadership showing 40% cost reduction. Now leading phased implementation across 12 teams.
+
+Interviewer: What challenges did you encounter?
+
+Candidate: Initial resistance from teams comfortable with monolith. Created training program, held architecture workshops, measured and shared performance improvements. 90% team buy-in achieved within 6 months.","Professional Development","Evaluate candidate's strategic thinking, influence, and technical vision"
+"Learn and Be Curious","1","Tell me about a time you learned a new technology to solve a problem","Interviewer: What was the context?
+
+Candidate: We needed real-time analytics but our SQL solution wasn't scaling. I researched stream processing, learned Apache Kafka, built a prototype, and led the team in implementation. Result was 99.9% real-time data availability vs previous 85%.
+
+Interviewer: How did you choose Kafka?
+
+Candidate: It seemed popular and had good documentation.
+
+Interviewer: What alternatives did you consider?
+
+Candidate: Didn't really look at alternatives.","Technical Learning","Evaluate learning approach and technical decision making"
+"Learn and Be Curious","2","Describe a new technology you've recently learned and applied to your work","Interviewer: Describe a new technology you've recently learned and applied to your work.
+
+Candidate: I heard Kubernetes is popular so I watched some YouTube videos.
+
+Interviewer: How did you apply this learning?
+
+Candidate: Haven't really used it yet, but might someday.
+
+Interviewer: What specific aspects interested you?
+
+Candidate: Just seemed like something good to know about.","Professional Development","Evaluate candidate's learning mindset, initiative, and practical application of knowledge"
+"Learn and be Curious","1","Share an example of when you had to learn something new quickly","Interviewer: What was the situation?
+
+Candidate: Our team needed to implement machine learning for fraud detection. I had no ML experience but volunteered to lead it. I completed Andrew Ng's course in 2 weeks, built 3 proof-of-concepts, and consulted with 2 ML experts. Within 6 weeks, we had a working model with 92% accuracy.
+
+Interviewer: How did you validate your learning?
+
+Candidate: I documented my learning process and created a knowledge base for the team. I also mentored 2 team members on ML basics.","Professional Development","Look for: Learning strategy, knowledge sharing, practical application"

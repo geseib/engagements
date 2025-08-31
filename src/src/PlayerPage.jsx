@@ -32,7 +32,12 @@ const calculatePlayerRankings = (players) => {
 };
 
 // Helper function to get instruction text
-const getPlayerInstructionText = (customInstruction) => {
+const getPlayerInstructionText = (customInstruction, currentQuestion) => {
+  // Question-level custom instructions take priority
+  if (currentQuestion && currentQuestion.customInstructions) {
+    return currentQuestion.customInstructions;
+  }
+  // Then question set level custom instruction
   if (customInstruction) {
     return customInstruction;
   }
@@ -78,6 +83,11 @@ function PlayerPage() {
   const [customInstruction, setCustomInstruction] = useState(null);
   const [lastProcessedQuestionId, setLastProcessedQuestionId] = useState(null);
   const [results, setResults] = useState(null);
+
+  // Game end modal state
+  const [showGameEndModal, setShowGameEndModal] = useState(false);
+  const [reportAvailable, setReportAvailable] = useState(false);
+  const [reportUrl, setReportUrl] = useState(null);
 
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
@@ -325,6 +335,13 @@ function PlayerPage() {
       }
     });
 
+    // Game ended handler
+    webSocketClient.onMessage('gameEnded', (data) => {
+      console.log('🔌 Player received game ended notification:', data);
+      setGameState('ENDED');
+      setShowGameEndModal(true);
+    });
+
     // Connect as player - WebSocket is required
     console.log('🔌 PLAYER: Connecting WebSocket for real-time updates');
     webSocketClient.connect(gameId, playerName, false);
@@ -346,6 +363,7 @@ function PlayerPage() {
       webSocketClient.offMessage('aiSummaryReady');
       webSocketClient.offMessage('hostMessage');
       webSocketClient.offMessage('resultsReady');
+      webSocketClient.offMessage('gameEnded');
     };
   }, [gameId, playerName, joined, useWebSocket]);
 
@@ -1183,6 +1201,39 @@ function PlayerPage() {
     }
   };
 
+  // Check for report availability and handle download
+  const checkAndDownloadReport = async () => {
+    try {
+      console.log('📊 PLAYER: Checking for report availability...');
+      const response = await fetch(`${API_BASE}admin/reports/${gameId}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.downloadUrl) {
+          console.log('📊 PLAYER: Report available, opening download...');
+          setReportAvailable(true);
+          setReportUrl(data.downloadUrl);
+          // Open the report in a new tab
+          window.open(data.downloadUrl, '_blank');
+        } else {
+          console.log('📊 PLAYER: Report not yet available');
+          setReportAvailable(false);
+        }
+      } else {
+        console.log('📊 PLAYER: Report not available (404)');
+        setReportAvailable(false);
+      }
+    } catch (error) {
+      console.error('📊 PLAYER: Error checking report:', error);
+      setReportAvailable(false);
+    }
+  };
+
+  // Close game end modal
+  const closeGameEndModal = () => {
+    setShowGameEndModal(false);
+  };
+
   // Detailed voting component
   const DetailedVotingMode = ({ answers, votes, onVoteChange, onSubmitVotes, playerName, requiredVotes }) => {
     const handleVoteClick = (answerIndex, position) => {
@@ -1441,17 +1492,17 @@ function PlayerPage() {
             {gameType === 'wavelength' && currentQuestion.topic && (
               <div className="wavelength-topic lesson-detail">
                 <strong>Topic:</strong> {currentQuestion.topic}
-                {(customInstruction || currentQuestion.instructions) && (
+                {(customInstruction || currentQuestion.customInstructions) && (
                   <div style={{marginTop: '10px', fontWeight: 'normal'}}>
-                    {customInstruction || currentQuestion.instructions}
+                    <strong>Instructions:</strong> {customInstruction || currentQuestion.customInstructions}
                   </div>
                 )}
               </div>
             )}
             <div className="application-prompt">
               <strong>{gameType === 'trivia' ? 'Select the best answer:' : 
-                       gameType === 'wavelength' ? (customInstruction || 'Enter 10 words that come to mind:') :
-                       getPlayerInstructionText(customInstruction)}</strong>
+                       gameType === 'wavelength' ? (currentQuestion?.customInstructions || customInstruction || 'Enter 10 words that come to mind:') :
+                       getPlayerInstructionText(customInstruction, currentQuestion)}</strong>
             </div>
             
             {!hasAnswered ? (
@@ -1543,7 +1594,10 @@ function PlayerPage() {
                           <textarea
                             value={answerInput}
                             onChange={(e) => setAnswerInput(e.target.value)}
-                            placeholder="Describe how you would apply this lesson to your work, project, or team..."
+                            placeholder={currentQuestion?.customInstructions || 
+                              (gameType === 'wavelength' ? 'Complete this sentence...' : 
+                               gameType === 'poll' ? 'Share your opinion...' :
+                               'Describe how you would apply this lesson to your work, project, or team...')}
                             className="mobile-answer-input"
                             rows={12}
                             required
@@ -1565,7 +1619,10 @@ function PlayerPage() {
                     value={answerInput}
                     onChange={(e) => setAnswerInput(e.target.value)}
                     onFocus={() => !isDesktop && setIsAnswerInputFocused(true)}
-                    placeholder="Describe how you would apply this lesson to your work, project, or team..."
+                    placeholder={currentQuestion?.customInstructions || 
+                      (gameType === 'wavelength' ? 'Complete this sentence...' : 
+                       gameType === 'poll' ? 'Share your opinion...' :
+                       'Describe how you would apply this lesson to your work, project, or team...')}
                     className="answer-input"
                     rows={isDesktop ? 6 : 4}
                     required
@@ -2013,6 +2070,38 @@ function PlayerPage() {
         )}
       </div>
       </div>
+
+      {/* Game End Modal */}
+      {showGameEndModal && (
+        <div className="modal-overlay" onClick={closeGameEndModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>🏁 Game Complete!</h3>
+            <p>All questions have been completed. Thank you for playing!</p>
+            <div className="modal-actions">
+              <button 
+                className="btn-primary" 
+                onClick={() => {
+                  closeGameEndModal();
+                  checkAndDownloadReport();
+                }}
+              >
+                Download Report
+              </button>
+              <button 
+                className="btn-secondary" 
+                onClick={closeGameEndModal}
+              >
+                Close
+              </button>
+            </div>
+            {!reportAvailable && (
+              <div className="report-status">
+                <p><em>If the report isn't ready yet, please ask the host to generate it.</em></p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* GitHub Issue Reporting FAB */}
       <IssueFab context="player" gameId={gameId} />

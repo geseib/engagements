@@ -17,10 +17,6 @@ Parameters:
     Default: engagements
     Description: GitHub repository name
 
-  GitHubToken:
-    Type: String
-    NoEcho: true
-    Description: GitHub personal access token
 
   # Domain Configuration
   DevDomain:
@@ -42,6 +38,7 @@ Parameters:
     Type: String
     Default: ZB9TUA073B5SH
     Description: Route53 hosted zone ID for all environments
+
 
 Resources:
 
@@ -71,6 +68,13 @@ Resources:
           Value: !Ref ProjectName
         - Key: Purpose
           Value: CICD-Artifacts
+
+  ### GitHub Connection (CodeStar Connection)
+  GitHubConnection:
+    Type: AWS::CodeStarConnections::Connection
+    Properties:
+      ConnectionName: !Sub '${ProjectName}-github-connection'
+      ProviderType: GitHub
 
   ### CodeBuild Service Role
   CodeBuildServiceRole:
@@ -112,6 +116,14 @@ Resources:
                 Action:
                   - iam:PassRole
                 Resource: '*'
+              # Secrets Manager permissions for secure GitHub token retrieval
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource:
+                  - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:engage/test/*'
+                  - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:engage/prod/*'
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -150,6 +162,10 @@ Resources:
                   - !GetAtt DevBuildProject.Arn
                   - !GetAtt TestBuildProject.Arn
                   - !GetAtt ProdBuildProject.Arn
+              - Effect: Allow
+                Action:
+                  - codestar-connections:UseConnection
+                Resource: !Ref GitHubConnection
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -263,15 +279,14 @@ Resources:
             - Name: SourceAction
               ActionTypeId:
                 Category: Source
-                Owner: ThirdParty
-                Provider: GitHub
+                Owner: AWS
+                Provider: CodeStarSourceConnection
                 Version: '1'
               Configuration:
-                Owner: !Ref GitHubOwner
-                Repo: !Ref GitHubRepo
-                Branch: dev
-                OAuthToken: !Ref GitHubToken
-                PollForSourceChanges: false
+                ConnectionArn: !Ref GitHubConnection
+                FullRepositoryId: !Sub '${GitHubOwner}/${GitHubRepo}'
+                BranchName: dev
+                OutputArtifactFormat: CODE_ZIP
               OutputArtifacts:
                 - Name: SourceOutput
 
@@ -305,15 +320,14 @@ Resources:
             - Name: SourceAction
               ActionTypeId:
                 Category: Source
-                Owner: ThirdParty
-                Provider: GitHub
+                Owner: AWS
+                Provider: CodeStarSourceConnection
                 Version: '1'
               Configuration:
-                Owner: !Ref GitHubOwner
-                Repo: !Ref GitHubRepo
-                Branch: test
-                OAuthToken: !Ref GitHubToken
-                PollForSourceChanges: false
+                ConnectionArn: !Ref GitHubConnection
+                FullRepositoryId: !Sub '${GitHubOwner}/${GitHubRepo}'
+                BranchName: test
+                OutputArtifactFormat: CODE_ZIP
               OutputArtifacts:
                 - Name: SourceOutput
 
@@ -347,15 +361,14 @@ Resources:
             - Name: SourceAction
               ActionTypeId:
                 Category: Source
-                Owner: ThirdParty
-                Provider: GitHub
+                Owner: AWS
+                Provider: CodeStarSourceConnection
                 Version: '1'
               Configuration:
-                Owner: !Ref GitHubOwner
-                Repo: !Ref GitHubRepo
-                Branch: prod
-                OAuthToken: !Ref GitHubToken
-                PollForSourceChanges: false
+                ConnectionArn: !Ref GitHubConnection
+                FullRepositoryId: !Sub '${GitHubOwner}/${GitHubRepo}'
+                BranchName: prod
+                OutputArtifactFormat: CODE_ZIP
               OutputArtifacts:
                 - Name: SourceOutput
 
@@ -391,50 +404,6 @@ Resources:
 
   ### GitHub Webhooks - One per Branch/Pipeline
 
-  ## Dev Branch Webhook
-  DevGitHubWebhook:
-    Type: AWS::CodePipeline::Webhook
-    Properties:
-      Authentication: GITHUB_HMAC
-      AuthenticationConfiguration:
-        SecretToken: !Ref GitHubToken
-      Filters:
-        - JsonPath: $.ref
-          MatchEquals: refs/heads/dev
-      TargetPipeline: !Ref DevPipeline
-      TargetAction: SourceAction
-      TargetPipelineVersion: !GetAtt DevPipeline.Version
-      RegisterWithThirdParty: true
-
-  ## Test Branch Webhook
-  TestGitHubWebhook:
-    Type: AWS::CodePipeline::Webhook
-    Properties:
-      Authentication: GITHUB_HMAC
-      AuthenticationConfiguration:
-        SecretToken: !Ref GitHubToken
-      Filters:
-        - JsonPath: $.ref
-          MatchEquals: refs/heads/test
-      TargetPipeline: !Ref TestPipeline
-      TargetAction: SourceAction
-      TargetPipelineVersion: !GetAtt TestPipeline.Version
-      RegisterWithThirdParty: true
-
-  ## Prod Branch Webhook
-  ProdGitHubWebhook:
-    Type: AWS::CodePipeline::Webhook
-    Properties:
-      Authentication: GITHUB_HMAC
-      AuthenticationConfiguration:
-        SecretToken: !Ref GitHubToken
-      Filters:
-        - JsonPath: $.ref
-          MatchEquals: refs/heads/prod
-      TargetPipeline: !Ref ProdPipeline
-      TargetAction: SourceAction
-      TargetPipelineVersion: !GetAtt ProdPipeline.Version
-      RegisterWithThirdParty: true
 
 Outputs:
   # Pipeline Names

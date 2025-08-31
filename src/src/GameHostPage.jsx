@@ -5,6 +5,8 @@ import webSocketClient from './WebSocketClient';
 import MarkdownRenderer from './components/MarkdownRenderer';
 import IssueFab from './components/IssueFab';
 import QuickstartMenu from './components/QuickstartMenu';
+import WavelengthWordCloud from './components/WavelengthWordCloud';
+import { useAuth } from './auth/AuthContext';
 
 const API_BASE = window.API_BASE;
 
@@ -36,6 +38,9 @@ const calculatePlayerRankings = (players) => {
 };
 
 function GameHostPage() {
+  // 🎯 AUTHENTICATION
+  const { currentUser, signOut } = useAuth();
+  
   // 🎯 GAME ID MANAGEMENT: Use URL as single source of truth
   const [gameId, setGameId] = useState('');
   
@@ -84,12 +89,29 @@ function GameHostPage() {
   const [gamesList, setGamesList] = useState([]);
   const [reportsModalMode, setReportsModalMode] = useState('reports'); // 'reports' or 'select'
   
+  // Final Report State
+  const [showFinalReport, setShowFinalReport] = useState(false);
+  
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
   const [useWebSocket, setUseWebSocket] = useState(true); // Always use WebSocket
 
   // Flag to prevent auto-selection during game state restoration
   const [isRestoringState, setIsRestoringState] = useState(false);
+
+  // Question Browser State
+  const [showQuestionBrowser, setShowQuestionBrowser] = useState(false);
+  const [browsingQuestions, setBrowsingQuestions] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
+
+  // Sign-out handler
+  const handleSignOut = () => {
+    if (window.confirm('Are you sure you want to sign out?')) {
+      signOut();
+      window.location.href = '/auth';
+    }
+  };
 
   // Welcome Screen
   const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
@@ -111,6 +133,11 @@ function GameHostPage() {
   const [selectedSetId, setSelectedSetId] = useState('');
   const [categories, setCategories] = useState([]);
   const [activeCategoryIds, setActiveCategoryIds] = useState(new Set());
+  
+  // Dynamic Category Management (for active games)
+  const [categoryCounts, setCategoryCounts] = useState(null);
+  const [categoryBitmasks, setCategoryBitmasks] = useState(null);
+  const [isTogglingCategory, setIsTogglingCategory] = useState(false);
 
 
   // Confirmation modals
@@ -228,10 +255,24 @@ function GameHostPage() {
   
   // Get instruction text based on question set
   const getInstructionText = () => {
+    // First check if we have a current question with custom instructions
+    const currentQuestion = questions.find(q => q.id === currentQuestionId);
+    if (currentQuestion && currentQuestion.customInstructions) {
+      return currentQuestion.customInstructions;
+    }
+    
     // Try to get setId from current question first, then fall back to selectedSetId
     const setId = questions[0]?.setId || selectedSetId;
     
-    if (!setId) return 'How could you adapt this lesson to your work, project, or team?';
+    // Default instructions based on game type
+    const gameTypeDefaults = {
+      'trivia': 'Select the best answer:',
+      'poll': 'Share your opinion:',
+      'wavelength': 'Complete this sentence:',
+      'call-and-answer': 'How could you adapt this lesson to your work, project, or team?'
+    };
+    
+    if (!setId) return gameTypeDefaults[currentGameType] || 'Share your response:';
     
     // Get current question set info
     const currentSet = questionSets.find(set => set.id === setId);
@@ -244,7 +285,7 @@ function GameHostPage() {
       'AmazonBP': 'How could you adapt this Amazon leadership principle to your work, project, or team?',
       'amazonleadershipprinciples': 'How could you adapt this Amazon leadership principle to your work, project, or team?',
       'greatest-hits': 'How could you adapt this lesson to your work, project, or team?',
-      'default': 'How could you adapt this lesson to your work, project, or team?'
+      'default': gameTypeDefaults[currentGameType] || 'How could you adapt this lesson to your work, project, or team?'
     };
     
     return setInstructions[setId] || setInstructions['default'];
@@ -377,6 +418,14 @@ Focus on actionable business strategy insights.`;
 
   // Removed loadAIInsights and generateNewAISummary - now handled directly in useEffect
 
+  // Reload category counts when transitioning to ASK state (new question starts)
+  useEffect(() => {
+    if (gameState.startsWith('ASK#') && gameId) {
+      console.log('📊 ASK state detected - reloading category counts for updated question counts');
+      loadCategoryCounts();
+    }
+  }, [gameState, gameId]);
+
   // Load AI insights when in results state and we have answers
   useEffect(() => {
     if (gameState.startsWith('RESULTS#') && currentQuestionIndex >= 0 && answers.length > 0) {
@@ -384,6 +433,12 @@ Focus on actionable business strategy insights.`;
       console.log(`🤖 Starting AI insights load for question ${questionId} with ${answers.length} answers`);
       setLoadingAIInsights(true);
       setCurrentAIInsights(null);
+      
+      // Reload category counts to reflect decremented values after question completion
+      if (categoryCounts) {
+        console.log('📊 Reloading category counts after question completion');
+        loadCategoryCounts();
+      }
       
       // In WebSocket mode, we still need to trigger AI generation but rely on WebSocket for completion notification
       if (useWebSocket) {
@@ -665,6 +720,28 @@ Focus on actionable business strategy insights.`;
       }
     });
 
+    webSocketClient.onMessage('gameEnded', (data) => {
+      console.log('🔌 Game ended notification:', data);
+      // Show stylized modal and transition to final report
+      showConfirmation(
+        '🏁 End of Game!',
+        'All questions have been completed. Would you like to view the final report?',
+        'View Report'
+      ).then((confirmed) => {
+        if (confirmed) {
+          // Set game state to ended and navigate to report
+          setGameState('ENDED');
+          setShowFinalReport(true);
+          setShowSidebar(false);
+          setShowAdminSidebar(false);
+          setShowHostControls(false);
+          setShowSetSelector(false);
+          setShowCategoryManager(false);
+          console.log('🔌 Navigating to final report after game end');
+        }
+      });
+    });
+
     // Connect as host - WebSocket is required
     console.log('🔌 HOST: Connecting WebSocket for real-time updates');
     webSocketClient.connect(gameId, null, true);
@@ -894,6 +971,9 @@ Focus on actionable business strategy insights.`;
         
         // Fetch current players with scores
         await fetchPlayers('state-restore');
+        
+        // Load dynamic category management data for active games
+        await loadCategoryCounts();
         
         setIsRestoringState(false); // End restoration
         return true; // Successfully restored existing game
@@ -1126,6 +1206,262 @@ Focus on actionable business strategy insights.`;
     });
   };
 
+  // Load dynamic category counts and bitmasks for active games
+  const loadCategoryCounts = async () => {
+    if (!gameId) return;
+    
+    try {
+      // Get category counts
+      const countsRes = await fetch(`${API_BASE}games/${gameId}/state?includeHostData=true`);
+      if (countsRes.ok) {
+        const stateData = await countsRes.json();
+        
+        if (stateData.categoryCounts) {
+          setCategoryCounts(stateData.categoryCounts);
+          console.log(`📊 Loaded category counts:`, stateData.categoryCounts);
+        }
+        
+        if (stateData.categoryState) {
+          setCategoryBitmasks(stateData.categoryState);
+          console.log(`🔢 Loaded category bitmasks:`, stateData.categoryState);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Failed to load category counts:', error);
+    }
+  };
+
+  // Toggle category during active game using backend API
+  const toggleCategoryDuringGame = async (categoryId, categoryName, enabled) => {
+    if (!gameId || isTogglingCategory) return;
+    
+    setIsTogglingCategory(true);
+    try {
+      console.log(`🎯 Toggling category ${categoryId} (${categoryName}) to ${enabled} for game ${gameId}`);
+      
+      const response = await fetch(`${API_BASE}games/${gameId}/toggle-category`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categoryId,
+          categoryName,
+          enabled
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to toggle category');
+      }
+      
+      const result = await response.json();
+      console.log(`✅ Category toggle successful:`, result);
+      
+      // Reload category counts to get updated state
+      await loadCategoryCounts();
+      
+      return result;
+    } catch (error) {
+      console.error('❌ Failed to toggle category:', error);
+      alert(`Failed to toggle category: ${error.message}`);
+      throw error;
+    } finally {
+      setIsTogglingCategory(false);
+    }
+  };
+
+  // Fetch questions for browsing by category
+  const fetchQuestionsForBrowsing = async (category = '') => {
+    // Try to get setId from current questions first, then fall back to selectedSetId
+    const setId = questions[0]?.setId || selectedSetId;
+    
+    if (!setId) {
+      console.error('No question set available for browsing - neither selectedSetId nor current game questions found');
+      console.log('Current state:', { selectedSetId, questionsCount: questions?.length, firstQuestion: questions?.[0] });
+      return;
+    }
+
+    console.log(`📚 Using question set ID for browsing: "${setId}" (source: ${questions[0]?.setId ? 'current game' : 'selectedSetId'})`);
+    
+    setLoadingQuestions(true);
+    try {
+      const url = category 
+        ? `${API_BASE}question-sets/${setId}/questions?category=${encodeURIComponent(category)}`
+        : `${API_BASE}question-sets/${setId}/questions`;
+      
+      console.log(`🔍 Browsing questions: ${url}`);
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        console.error(`❌ Failed to fetch questions: ${response.status}`);
+        setBrowsingQuestions([]);
+        setSelectedCategory(category);
+        return;
+      }
+      
+      const data = await response.json();
+      console.log(`📚 API Response:`, data);
+      console.log(`🔍 Sample question fields:`, data.questions?.[0] ? Object.keys(data.questions[0]) : 'No questions');
+      console.log(`🔍 Sample question data:`, data.questions?.[0]);
+      setBrowsingQuestions(data.questions || []);
+      setSelectedCategory(category);
+      console.log(`✅ Loaded ${data.questions?.length || 0} questions for browsing`);
+    } catch (error) {
+      console.error('❌ Failed to fetch questions for browsing:', error);
+      setBrowsingQuestions([]);
+      setSelectedCategory(category);
+    } finally {
+      setLoadingQuestions(false);
+    }
+  };
+
+  // Open question browser
+  const openQuestionBrowser = (category = '') => {
+    console.log(`🔍 Opening question browser for category: "${category}"`);
+    console.log(`📚 Selected set ID: "${selectedSetId}"`);
+    console.log(`🎮 Current game questions:`, questions?.length || 0);
+    
+    console.log(`🔄 About to set showQuestionBrowser to true...`);
+    setShowQuestionBrowser(true);
+    console.log(`✅ Set showQuestionBrowser to true`);
+    
+    // Force a re-render check
+    setTimeout(() => {
+      console.log(`⏱️ State check after timeout - showQuestionBrowser should be true`);
+    }, 100);
+    fetchQuestionsForBrowsing(category);
+  };
+
+  // Close question browser  
+  const closeQuestionBrowser = () => {
+    setShowQuestionBrowser(false);
+    setBrowsingQuestions([]);
+    setSelectedCategory('');
+  };
+
+  // Select a specific question to trigger as the next question
+  const selectQuestion = async (selectedQuestion) => {
+    try {
+      console.log(`🎯 HOST: Selecting specific question:`, selectedQuestion);
+      
+      // Close the question browser first so confirmation modal appears on top
+      setShowQuestionBrowser(false);
+      
+      // Show confirmation when skipping to next question during Ask/Vote phase (same as handleNextQuestion)
+      if (gameState.startsWith('ASK#') || gameState.startsWith('VOTE#')) {
+        const proceed = await showConfirmation(
+          'Skip to Selected Question?',
+          'Do you want to skip the current question and move to the selected question?',
+          'Skip to Question'
+        );
+        if (!proceed) return;
+      }
+      
+      // Show loading overlay (same as handleNextQuestion)
+      setIsLoadingData(true);
+      setLoadingMessage('Loading Selected Question...');
+      
+      console.log(`🎯 HOST: Requesting specific question, current state: ${gameState}`);
+      
+      // Include skip action if we're forcing advancement from ASK/VOTE states (same logic as handleNextQuestion)
+      const requestBody = {
+        questionId: selectedQuestion.id,
+        action: 'select_specific'
+      };
+      if (gameState.startsWith('ASK#') || gameState.startsWith('VOTE#')) {
+        requestBody.action = 'skip_to_specific';
+      }
+      
+      // Use the same next-question API that handleNextQuestion uses
+      const nextQuestionRes = await fetch(`${API_BASE}games/${gameId}/next-question`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+      
+      if (!nextQuestionRes.ok) {
+        const errorData = await nextQuestionRes.json();
+        console.error('Failed to select specific question:', errorData);
+        alert(`Failed to select question: ${errorData.error || 'Unknown error'}`);
+        return;
+      }
+      
+      const nextQuestionData = await nextQuestionRes.json();
+      console.log(`📝 HOST: Selected question response:`, nextQuestionData);
+      
+      const questionId = nextQuestionData.questionId;
+      const lessonNumber = nextQuestionData.lessonNumber;
+      const newState = nextQuestionData.state; // Use actual state from API (e.g., ASK#001)
+      
+      // Get the actual question details (same as handleNextQuestion)
+      const questionLookupRes = await fetch(`${API_BASE}games/${gameId}/question?role=host`);
+      
+      if (!questionLookupRes.ok) {
+        console.error('Failed to get question details:', questionLookupRes.status);
+        return;
+      }
+      
+      const questionData = await questionLookupRes.json();
+      console.log(`🎲 HOST: Selected question data:`, questionData);
+      
+      // Use the exact same state management as handleNextQuestion
+      setManualStateChange(true);
+      setGameState(newState);
+      setQuestions([questionData]);
+      setLessonNumber(lessonNumber);
+      
+      // Notify players via WebSocket (exactly like handleNextQuestion)
+      if (webSocketClient.isConnected()) {
+        const messageType = newState;
+        webSocketClient.sendCleanMessage(messageType, {
+          lessonNumber,
+          gameState: newState,
+          currentQuestion: questionData
+        });
+        console.log(`📡 HOST: Sent WebSocket message - ${messageType}`);
+      }
+      
+      // Close any open panels
+      closeAllSidePanels();
+      
+      console.log(`✅ HOST: Successfully selected question ${questionId}, state: ${newState}`);
+      
+    } catch (error) {
+      console.error('Error selecting question:', error);
+      alert(`Error selecting question: ${error.message}`);
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
+  // DEBUG: Track all modal state changes
+  useEffect(() => {
+    console.log('🔍 MODAL STATE CHANGE - All modal states:', {
+      showQuestionBrowser,
+      showExpandedQR,
+      showNewGameDialog,
+      showConfirmModal,
+      gameState,
+      isConnected: webSocketClient?.isConnected?.() || false
+    });
+  }, [showQuestionBrowser, showExpandedQR, showNewGameDialog, showConfirmModal]);
+
+  // DEBUG: Track component mounting/updating
+  useEffect(() => {
+    console.log('🔄 GameHostPage component mounted/updated');
+    console.log('📊 showQuestionBrowser on mount:', showQuestionBrowser);
+  }, []);
+
+  // DEBUG: Specific tracking of showQuestionBrowser changes
+  useEffect(() => {
+    console.log('🎯 showQuestionBrowser changed to:', showQuestionBrowser);
+    if (showQuestionBrowser) {
+      console.log('👀 Modal should be VISIBLE now!');
+    } else {
+      console.log('👻 Modal should be HIDDEN now');
+    }
+  }, [showQuestionBrowser]);
+
 
   const checkAnswerStatus = async () => {
     try {
@@ -1277,6 +1613,9 @@ Focus on actionable business strategy insights.`;
       // Refresh players to show any updated status
       await fetchPlayers('after-next-question');
       
+      // Reload category counts after transitioning to new question
+      await loadCategoryCounts();
+      
       // Reset manual state change flag after a delay to allow polling to resume
       setTimeout(() => {
         setManualStateChange(false);
@@ -1382,8 +1721,8 @@ Focus on actionable business strategy insights.`;
   };
 
   const handleFinishQuestion = async () => {
-    // For trivia, go straight to results using the same unified mechanism as call-and-answer
-    if (currentGameType === 'trivia') {
+    // For trivia and wavelength, go straight to results using the same unified mechanism as call-and-answer
+    if (currentGameType === 'trivia' || currentGameType === 'wavelength') {
       // Warn if not all players have answered
       if (playersWhoAnswered.length < players.length) {
         const proceed = await showConfirmation(
@@ -1394,8 +1733,8 @@ Focus on actionable business strategy insights.`;
         if (!proceed) return;
       }
       
-      // Skip calculateTriviaScores - the get-results API already handles all scoring
-      console.log(`🧠 TRIVIA: Using unified handleShowResults() mechanism (scoring handled by backend)`);
+      // Skip voting phase for both trivia and wavelength
+      console.log(`🧠 ${currentGameType.toUpperCase()}: Using unified handleShowResults() mechanism (skipping voting phase)`);
       await handleShowResults();
       return;
     }
@@ -1450,9 +1789,9 @@ Focus on actionable business strategy insights.`;
   };
 
   const handleShowResults = async () => {
-    // For trivia games, no voting phase - skip vote check
+    // For trivia and wavelength games, no voting phase - skip vote check
     // For call-and-answer games, warn if not all players have voted
-    if (currentGameType !== 'trivia' && playersWhoVoted.length < players.length) {
+    if (currentGameType !== 'trivia' && currentGameType !== 'wavelength' && playersWhoVoted.length < players.length) {
       const proceed = await showConfirmation(
         'Show Results?',
         `Only ${playersWhoVoted.length} of ${players.length} players have voted. Do you want to show results anyway?`,
@@ -1510,6 +1849,19 @@ Focus on actionable business strategy insights.`;
         console.log(`🧠 HOST: Formatted ${formattedAnswers.length} trivia answers:`, 
           formattedAnswers.map(a => `${a.player}: ${a.answer} (${a.isCorrect ? 'correct' : 'incorrect'}, ${a.points} pts)`));
         
+      } else if (resultsData.gameType === 'wavelength' || currentGameType === 'wavelength') {
+        // Wavelength results format: Just the raw answers with words
+        console.log(`🌊 HOST: Processing wavelength results with ${resultsData.answers?.length || 0} answers`);
+        
+        formattedAnswers = (resultsData.answers || []).map(answer => ({
+          player: answer.playerName,
+          answer: answer.answer || answer.ProcessedWords?.join(',') || '', // Comma-separated words
+          points: 0, // No points in wavelength
+          submittedAt: answer.submittedAt
+        }));
+        
+        console.log(`🌊 HOST: Formatted ${formattedAnswers.length} wavelength answers for word cloud`);
+        
       } else {
         // Call-and-answer results format: { voteTallies: {...} }
         console.log(`💬 HOST: Processing call-and-answer results with voteTallies`);
@@ -1544,6 +1896,9 @@ Focus on actionable business strategy insights.`;
       
       // Refresh player data to show updated scores
       await fetchPlayers('after-start-question');
+      
+      // Reload category counts after showing results (categories may have been decremented)
+      await loadCategoryCounts();
       
       
       // Make sure currentQuestionId is set to the question number
@@ -1947,6 +2302,7 @@ Ready to engage? See you there!`;
       const gameData = {
         gameId: targetGameId,
         eventTitle: finalEventTitle,
+        gameType: report.gameType, // Include gameType from the report
         players: report.playerPerformance || [],
         questions: report.detailedQuestions || [],
         allAnswers: [],
@@ -2151,6 +2507,39 @@ Ready to engage? See you there!`;
               <button className="btn-secondary btn-large welcome-btn" onClick={handleViewGameHistory}>
                 📋 View Game History
               </button>
+              
+              {/* User Info and Sign Out */}
+              {currentUser && (
+                <div className="welcome-user-info" style={{
+                  marginTop: '20px',
+                  padding: '12px',
+                  backgroundColor: '#f8f9fa',
+                  border: '1px solid #dee2e6',
+                  borderRadius: '6px',
+                  textAlign: 'center',
+                  fontSize: '14px'
+                }}>
+                  <div style={{ marginBottom: '6px' }}>
+                    <strong>{currentUser.attributes?.name || 'User'}</strong>
+                  </div>
+                  {currentUser.groups?.includes('admins') && (
+                    <div style={{ color: '#007bff', fontWeight: '500', fontSize: '12px', marginBottom: '8px' }}>
+                      Administrator
+                    </div>
+                  )}
+                  <button 
+                    onClick={handleSignOut}
+                    className="btn-secondary"
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: '12px',
+                      minHeight: 'auto'
+                    }}
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2506,7 +2895,11 @@ Ready to engage? See you there!`;
     );
   }
 
+  // DEBUG: Track every render with modal state
+  console.log(`🎨 RENDER: showQuestionBrowser=${showQuestionBrowser}, showExpandedQR=${showExpandedQR}`);
+
   return (
+    <>
     <div className="main-layout">
       {/* Instructions Sidebar */}
       <div className={`instructions-sidebar ${instructionsVisible ? 'visible' : ''}`}>
@@ -2568,6 +2961,41 @@ Ready to engage? See you there!`;
             </>
           )}
           
+          {/* User Info and Sign Out */}
+          <div style={{ 
+            marginTop: 'auto', 
+            paddingTop: '20px', 
+            borderTop: '1px solid #e5e5e5',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px'
+          }}>
+            {currentUser && (
+              <div style={{ fontSize: '14px', color: '#666' }}>
+                <strong>{currentUser.attributes?.name || 'User'}</strong>
+                <div>{currentUser.attributes?.email}</div>
+                {currentUser.groups?.includes('admins') && (
+                  <div style={{ color: '#007bff', fontWeight: '500' }}>Administrator</div>
+                )}
+              </div>
+            )}
+            <button 
+              onClick={handleSignOut}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#f8f9fa',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                color: '#666',
+                fontSize: '14px',
+                cursor: 'pointer',
+                width: '100%'
+              }}
+            >
+              Sign Out
+            </button>
+          </div>
+          
         </div>
       </div>
       <div className="instructions-tab" onClick={() => setInstructionsVisible(!instructionsVisible)}>
@@ -2624,13 +3052,6 @@ Ready to engage? See you there!`;
                 📋 {inviteCopied ? 'Copied!' : 'Copy Invite'}
               </button>
               <button 
-                className={`btn-${gameDebugMode ? 'primary' : 'secondary'}`} 
-                onClick={handleToggleGameDebugMode}
-                title="Toggle debug mode to show AI prompts in results"
-              >
-                🐛 Debug {gameDebugMode ? 'ON' : 'OFF'}
-              </button>
-              <button 
                 className={`btn-${bigScreenMode ? 'primary' : 'secondary'}`} 
                 onClick={() => {
                   const newMode = !bigScreenMode;
@@ -2652,6 +3073,39 @@ Ready to engage? See you there!`;
               <button className="btn-danger" onClick={handleSwitchGame}>
                 Switch Game
               </button>
+              
+              {/* User Info and Sign Out */}
+              {currentUser && (
+                <div style={{ 
+                  marginTop: '16px',
+                  padding: '12px',
+                  backgroundColor: '#f8f9fa',
+                  borderRadius: '4px',
+                  fontSize: '12px'
+                }}>
+                  <div style={{ marginBottom: '8px', color: '#666' }}>
+                    <strong>{currentUser.attributes?.name || 'User'}</strong>
+                    {currentUser.groups?.includes('admins') && (
+                      <div style={{ color: '#007bff', fontWeight: '500' }}>Admin</div>
+                    )}
+                  </div>
+                  <button 
+                    onClick={handleSignOut}
+                    style={{
+                      padding: '6px 12px',
+                      backgroundColor: '#fff',
+                      border: '1px solid #ddd',
+                      borderRadius: '3px',
+                      color: '#666',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      width: '100%'
+                    }}
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -2662,26 +3116,106 @@ Ready to engage? See you there!`;
                 <div className="question-set-header">
                   <h3>📚 {questionSets.find(set => set.id === selectedSetId)?.name || 'Unknown Set'}</h3>
                   <div className="set-details">
-                    {questionSets.find(set => set.id === selectedSetId)?.totalQuestions || 0} questions
+                    {categoryCounts ? (
+                      // Show dynamic total for active games
+                      categories.reduce((total, category, index) => {
+                        const position = index + 1;
+                        let enabled = false;
+                        let remaining = 0;
+                        
+                        // Check if category is enabled from bitmasks
+                        if (position <= 8) {
+                          enabled = categoryBitmasks['HostMask1-8']?.charAt(position - 1) === '1';
+                          remaining = categoryCounts['1-8']?.[position - 1] || 0;
+                        } else if (position <= 16) {
+                          enabled = categoryBitmasks['HostMask9-16']?.charAt(position - 9) === '1';
+                          remaining = categoryCounts['9-16']?.[position - 9] || 0;
+                        } else if (position <= 24) {
+                          enabled = categoryBitmasks['HostMask17-24']?.charAt(position - 17) === '1';
+                          remaining = categoryCounts['17-24']?.[position - 17] || 0;
+                        }
+                        
+                        // Only count questions from enabled categories
+                        return enabled ? total + remaining : total;
+                      }, 0)
+                    ) : (
+                      // Show static total for game setup
+                      questionSets.find(set => set.id === selectedSetId)?.totalQuestions || 0
+                    )} questions remaining
                   </div>
                 </div>
                 
                 {categories.length > 0 && (
                   <div className="categories-section">
                     <h4>Categories</h4>
-                    <div className="categories-list">
-                      {categories.map(category => (
-                        <div 
-                          key={category.name} 
-                          className={`category-item ${activeCategoryIds.has(category.name) ? 'active' : 'inactive'}`}
-                          onClick={() => toggleCategoryActive(category.name)}
-                          title={`Click to ${activeCategoryIds.has(category.name) ? 'disable' : 'enable'} ${category.name} questions`}
-                        >
-                          <span className="category-name">{category.name}</span>
-                          <span className="category-count">{category.questionCount}</span>
-                        </div>
-                      ))}
+                    <div className="category-items-list">
+                      {categories.map((category, index) => {
+                        const position = index + 1;
+                        let enabled = false;
+                        let questionCount = category.questionCount;
+                        let isClickable = false;
+
+                        // For active games with dynamic counts, get live data
+                        if (categoryCounts && categoryBitmasks) {
+                          // Determine enabled state from bitmasks
+                          if (position <= 8) {
+                            enabled = categoryBitmasks['HostMask1-8']?.charAt(position - 1) === '1';
+                            questionCount = categoryCounts['1-8']?.[position - 1] || 0;
+                          } else if (position <= 16) {
+                            enabled = categoryBitmasks['HostMask9-16']?.charAt(position - 9) === '1';
+                            questionCount = categoryCounts['9-16']?.[position - 9] || 0;
+                          } else if (position <= 24) {
+                            enabled = categoryBitmasks['HostMask17-24']?.charAt(position - 17) === '1';
+                            questionCount = categoryCounts['17-24']?.[position - 17] || 0;
+                          }
+                          isClickable = true;
+                        } else {
+                          // For game setup, use static selection
+                          enabled = activeCategoryIds.has(category.name);
+                        }
+
+                        return (
+                          <div key={category.name} className="category-item">
+                            <button
+                              type="button"
+                              className={`category-button ${enabled ? 'selected' : ''} ${questionCount === 0 ? 'exhausted' : ''}`}
+                              onClick={() => {
+                                if (isClickable) {
+                                  console.log(`🔘 Category toggle clicked: position=${position}, name=${category.name}, enabled=${enabled}, remaining=${questionCount}`);
+                                  toggleCategoryDuringGame(position.toString(), category.name, !enabled);
+                                } else {
+                                  toggleCategoryActive(category.name);
+                                }
+                              }}
+                              disabled={isTogglingCategory}
+                            >
+                              <span className="category-name">{category.name}</span>
+                              <span className="category-count">({questionCount})</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="category-browse-btn"
+                              onClick={(e) => {
+                                console.log(`🖱️ Browse button clicked for category: ${category.name}`);
+                                e.stopPropagation();
+                                openQuestionBrowser(category.name);
+                              }}
+                              title={`Browse questions in ${category.name} category`}
+                            >
+                              🔍
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
+                    {!categoryCounts && (
+                      <small>
+                        {activeCategoryIds.size === 0 
+                          ? 'No categories selected - all categories will be included'
+                          : `${activeCategoryIds.size} category(ies) selected`
+                        }
+                      </small>
+                    )}
                   </div>
                 )}
               </div>
@@ -2779,8 +3313,8 @@ Ready to engage? See you there!`;
       <div className={`game-content ${bigScreenMode ? 'big-screen-mode' : ''}`}>
         {isWaitingState(gameState) && (
           <div className={`waiting-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
-            {bigScreenMode && gameId && (
-              <div className="big-screen-join-qr">
+            {gameId && (
+              <div className={bigScreenMode ? "big-screen-join-qr" : "join-qr"}>
                 <QRCodeSVG 
                   value={`${window.location.origin}/play?gameId=${gameId}`}
                   size={bigScreenMode ? 300 : 200}
@@ -2883,7 +3417,7 @@ Ready to engage? See you there!`;
                 onClick={() => { closeAllSidePanels(); handleFinishQuestion(); }}
                 disabled={answers.length === 0}
               >
-                {currentGameType === 'trivia' ? 'Show Results' : 'Vote'}
+                {currentGameType === 'trivia' || currentGameType === 'wavelength' ? 'Show Results' : 'Vote'}
               </button>
               <button 
                 className="btn-secondary" 
@@ -3040,6 +3574,39 @@ Ready to engage? See you there!`;
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            ) : currentGameType === 'wavelength' ? (
+              <div className="wavelength-results-display">
+                <WavelengthWordCloud 
+                  answers={answers}
+                  promptWord={questions[0]?.topic || questions[0]?.title || 'WAVELENGTH'}
+                  gameState={gameState}
+                />
+                
+                {/* Show individual player contributions below the cloud */}
+                <div className="wavelength-player-list" style={{ marginTop: '20px' }}>
+                  <h4>Player Contributions:</h4>
+                  <div className="results-display">
+                    {answers.map((answer, idx) => {
+                      const player = players.find(p => p.name === answer.player);
+                      const playerTotalScore = player?.score || 0;
+                      
+                      return (
+                        <div key={idx} className="result-item wavelength-contribution">
+                          <div className="result-player-header">
+                            <div className="result-player-name">{answer.player}</div>
+                            <div className="result-points">
+                              <span className="points-total">Score: {playerTotalScore} pts</span>
+                            </div>
+                          </div>
+                          <div className="result-answer" style={{ fontSize: '14px', color: '#666' }}>
+                            Words: {answer.answer || '(no words submitted)'}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             ) : (
@@ -3380,8 +3947,98 @@ Ready to engage? See you there!`;
           </div>
         </div>
       )}
-      
+
     </div>
+    
+    {/* MODAL PORTAL - OUTSIDE ALL PARALLAX CONTAINERS */}
+    {showQuestionBrowser && (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        zIndex: 999999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <div className="question-browser-modal">
+          <div className="question-browser-header">
+            <h2>🔍 Browse Questions - {selectedCategory}</h2>
+            <p className="question-count">{browsingQuestions?.length || 0} questions found</p>
+          </div>
+          
+          {loadingQuestions ? (
+            <div className="loading-indicator">
+              <div className="spinner"></div>
+              <span>Loading questions...</span>
+            </div>
+          ) : browsingQuestions?.length > 0 ? (
+            <div className="questions-table-container">
+              <table className="questions-table">
+                <thead>
+                  <tr>
+                    <th>Question</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {browsingQuestions.map((question, index) => (
+                    <tr key={question.id || index} className="question-row">
+                      <td className="question-cell">
+                        <div className="question-title">{question.title || question.Title}</div>
+                        {(question.questionDetail || question.QuestionDetail || question.detail || question.Detail || question.customInstructions || question.CustomInstructions) && (
+                          <div className="question-detail">
+                            {question.questionDetail || question.QuestionDetail || question.detail || question.Detail || question.customInstructions || question.CustomInstructions}
+                          </div>
+                        )}
+                        {(question.optionA || question.OptionA) && (
+                          <div className="question-options">
+                            <div>A) {question.optionA || question.OptionA}</div>
+                            <div>B) {question.optionB || question.OptionB}</div>
+                            <div>C) {question.optionC || question.OptionC}</div>
+                            <div>D) {question.optionD || question.OptionD}</div>
+                            {(question.correctAnswer || question.CorrectAnswer) && (
+                              <div className="correct-answer">✓ Correct: {question.correctAnswer || question.CorrectAnswer}</div>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="action-cell">
+                        <button 
+                          className="btn-primary select-question-btn"
+                          onClick={() => selectQuestion(question)}
+                          title="Select this question as the next question"
+                        >
+                          Select
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="no-questions">
+              <p>No questions found for the "{selectedCategory}" category.</p>
+              <p>Try browsing a different category or check your question sets.</p>
+            </div>
+          )}
+          
+          <div className="question-browser-footer">
+            <button 
+              className="btn-secondary"
+              onClick={() => setShowQuestionBrowser(false)}
+            >
+              Close Browser
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -3505,6 +4162,7 @@ function GameReport({ reportData, onClose }) {
 
 
   return (
+    <>
     <div className="report-container">
       <div className="report-header">
         <div className="parallax">
@@ -3583,7 +4241,7 @@ function GameReport({ reportData, onClose }) {
               )}
               
               {/* Trivia Question Options - show choices with correct answer marked */}
-              {currentGameType === 'trivia' && (
+              {reportData.gameType === 'trivia' && (
                 <div className="report-trivia-choices">
                   <h4>Answer Choices:</h4>
                   <div className="trivia-options-report">
@@ -3720,6 +4378,7 @@ function GameReport({ reportData, onClose }) {
           </div>
         </div>
       </div>
+    </div>
       
       {/* Save Report Modal */}
       {showSaveReportModal && (
@@ -3808,8 +4467,7 @@ function GameReport({ reportData, onClose }) {
           </div>
         </div>
       )}
-
-    </div>
+    </>
   );
 }
 

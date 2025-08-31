@@ -1,7 +1,9 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, ScanCommand, GetCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
+const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient());
+const s3Client = new S3Client({});
 
 // Archive service configuration
 const ARCHIVE_SERVICE_URL = process.env.ARCHIVE_SERVICE_URL || 'https://archive.seibtribe.us';
@@ -233,6 +235,25 @@ async function exportPrompts(selectedIds, environment, results) {
 
       const prompt = promptResponse.Item;
 
+      // Get the actual prompt content from S3
+      let promptContent = {};
+      if (prompt.s3Key) {
+        try {
+          console.log(`📥 Fetching prompt content from S3: ${prompt.s3Key}`);
+          const s3Response = await s3Client.send(new GetObjectCommand({
+            Bucket: process.env.AI_PROMPTS_BUCKET,
+            Key: prompt.s3Key
+          }));
+          
+          const s3Content = await s3Response.Body.transformToString();
+          promptContent = JSON.parse(s3Content);
+          console.log(`✅ Successfully fetched S3 content for prompt ${promptId}`);
+        } catch (s3Error) {
+          console.warn(`⚠️ Could not fetch S3 content for ${prompt.s3Key}:`, s3Error.message);
+          promptContent = {};
+        }
+      }
+
       // Transform to archive format
       const archiveData = {
         title: `${prompt.name} (${environment})`,
@@ -250,9 +271,15 @@ async function exportPrompts(selectedIds, environment, results) {
             updatedAt: prompt.updatedAt
           },
           prompt: {
-            systemPrompt: prompt.systemPrompt,
-            userPrompt: prompt.userPrompt,
-            variables: prompt.variables
+            // Use actual S3 content structure
+            instructions: promptContent.instructions || '',
+            outputFormat: promptContent.outputFormat || '',
+            template: promptContent.template || '',
+            scenario: promptContent.scenario || '',
+            // Legacy field mappings for backward compatibility
+            systemPrompt: promptContent.instructions || '',
+            userPrompt: promptContent.outputFormat || '',
+            variables: promptContent.variables || {}
           }
         }, null, 2),
         contentType: 'prompt',

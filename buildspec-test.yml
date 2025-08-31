@@ -14,6 +14,10 @@ phases:
     commands:
       - echo "Pre-build phase for $ENVIRONMENT environment"
       - 'echo "Domain: $DOMAIN_NAME"'
+      - echo "Retrieving GitHub token from Secrets Manager..."
+      - export GITHUB_TOKEN=$(aws secretsmanager get-secret-value --secret-id engage/test/github-token --query SecretString --output text | jq -r .GITHUB_TOKEN)
+      - '[ -n "$GITHUB_TOKEN" ] && echo "Successfully retrieved GitHub token" || (echo "ERROR: Failed to retrieve GitHub token" && exit 1)'
+      - export GITHUB_REPO="${GITHUB_REPO:-georgeseib/engage2}"
 
   build:
     commands:
@@ -21,7 +25,7 @@ phases:
       - echo "Building SAM application..."
       - sam build -t template-clean.yaml
       - echo "Deploying to AWS..."
-      - sam deploy --template-file .aws-sam/build/template.yaml --stack-name $STACK_NAME --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --parameter-overrides "Environment=$ENVIRONMENT" "StackName=$STACK_NAME" "DomainName=$DOMAIN_NAME" "HostedZoneId=$HOSTED_ZONE_ID" --resolve-s3 --no-confirm-changeset --no-fail-on-empty-changeset
+      - sam deploy --template-file .aws-sam/build/template.yaml --stack-name $STACK_NAME --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --parameter-overrides "Environment=$ENVIRONMENT" "StackName=$STACK_NAME" "DomainName=$DOMAIN_NAME" "HostedZoneId=$HOSTED_ZONE_ID" "GitHubToken=$GITHUB_TOKEN" "GitHubRepo=$GITHUB_REPO" --resolve-s3 --no-confirm-changeset --no-fail-on-empty-changeset
 
       - echo "Building frontend..."
       - cd src
@@ -29,14 +33,33 @@ phases:
       - echo "Getting API endpoints from CloudFormation..."
       - API_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`RestApiUrl`].OutputValue' --output text)
       - WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)
+      - USER_POOL_ID=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`UserPoolId`].OutputValue' --output text)
+      - USER_POOL_CLIENT_ID=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`UserPoolClientId`].OutputValue' --output text)
+      - COGNITO_DOMAIN=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`UserPoolDomain`].OutputValue' --output text)
 
-      - echo "Creating config.js with API endpoints..."
+      - echo "Creating config.js with API endpoints and Cognito configuration..."
+      - echo "Values retrieved from CloudFormation:"
+      - echo "  API_URL=$API_URL"
+      - echo "  WS_URL=$WS_URL"
+      - echo "  USER_POOL_ID=$USER_POOL_ID"
+      - echo "  USER_POOL_CLIENT_ID=$USER_POOL_CLIENT_ID"
+      - echo "  COGNITO_DOMAIN=$COGNITO_DOMAIN"
       - printf 'window.API_BASE = "%s/";\n' "$API_URL" > public/config.js
       - printf 'window.WS_URL = "%s";\n' "$WS_URL" >> public/config.js
+      - printf 'window.USER_POOL_ID = "%s";\n' "$USER_POOL_ID" >> public/config.js
+      - printf 'window.USER_POOL_CLIENT_ID = "%s";\n' "$USER_POOL_CLIENT_ID" >> public/config.js
+      - printf 'window.COGNITO_DOMAIN = "%s";\n' "$COGNITO_DOMAIN" >> public/config.js
       - printf 'window.ENV = "test";\n' >> public/config.js
       - printf 'console.log("TEST Environment loaded");\n' >> public/config.js
+      - echo "Generated config.js contents:"
+      - cat public/config.js
 
       - npm run build
+
+      - echo "Verifying config.js in dist folder..."
+      - ls -la dist/config.js
+      - echo "Contents of dist/config.js:"
+      - cat dist/config.js
 
       - echo "Deploying frontend to S3..."
       - BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`FrontendBucketName`].OutputValue' --output text)

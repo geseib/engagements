@@ -2,6 +2,11 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
+const webpack = require('webpack');
+const dotenv = require('dotenv');
+
+// Load environment variables from .env file
+const envFile = dotenv.config().parsed || {};
 
 module.exports = (env, argv) => {
   const isProd = argv.mode === 'production';
@@ -39,6 +44,13 @@ module.exports = (env, argv) => {
     },
 
     plugins: [
+      // Define environment variables for the app
+      new webpack.DefinePlugin({
+        'process.env': JSON.stringify({
+          ...envFile,
+          NODE_ENV: argv.mode || 'development'
+        })
+      }),
       new HtmlWebpackPlugin({
         template: path.resolve(__dirname, 'public', 'index.html'),
         filename: 'index.html',
@@ -61,18 +73,14 @@ module.exports = (env, argv) => {
       historyApiFallback: true,
       port: 3000,
       open: true,
-      proxy: {
-        '/games': {
-          target: 'https://<your-api-id>.execute-api.us-east-1.amazonaws.com',
+      proxy: [
+        {
+          context: ['/games', '/questions'],
+          target: envFile.REACT_APP_API_URL || 'https://h1jcmja0w1.execute-api.us-east-1.amazonaws.com/dev',
           changeOrigin: true,
           secure: true,
-        },
-        '/questions': {
-          target: 'https://<your-api-id>.execute-api.us-east-1.amazonaws.com',
-          changeOrigin: true,
-          secure: true,
-        },
-      },
+        }
+      ],
     },
 
     devtool: isProd ? false : 'source-map',

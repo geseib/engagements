@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Fixes Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f7fa;
+        }
+        .test-section {
+            background: white;
+            padding: 24px;
+            margin: 20px 0;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-title {
+            color: #2c3e50;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        /* AI Insights Markdown Styles - Enhanced */
+        .ai-insights-markdown .markdown-h2 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #2c3e50;
+            margin: 20px 0 12px 0;
+            padding: 12px 16px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            border-left: 4px solid #667eea;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 4px rgba(102, 126, 234, 0.1);
+            transition: all 0.2s ease;
+        }
+        .ai-insights-markdown .markdown-h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #4a5568;
+            margin: 16px 0 8px 0;
+            padding: 8px 12px;
+            background: rgba(102, 126, 234, 0.05);
+            border-radius: 6px;
+            border-left: 2px solid rgba(102, 126, 234, 0.3);
+            position: relative;
+        }
+        .ai-insights-markdown .markdown-p {
+            margin: 8px 0 12px 0;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: #4a5568;
+        }
+        .ai-insights-markdown .markdown-list {
+            margin: 8px 0 16px 0;
+            padding-left: 0;
+        }
+        .ai-insights-markdown .markdown-li {
+            margin: 6px 0;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            padding: 8px 14px;
+            background: rgba(102, 126, 234, 0.03);
+            border-radius: 6px;
+            border-left: 3px solid rgba(102, 126, 234, 0.2);
+            list-style: none;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            transition: all 0.2s ease;
+        }
+        .ai-insights-markdown .markdown-li:hover {
+            background: rgba(102, 126, 234, 0.06);
+            border-left-color: rgba(102, 126, 234, 0.4);
+        }
+        .ai-insights-markdown .markdown-li::before {
+            content: "▸";
+            color: #667eea;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        .ai-insights-markdown .markdown-table {
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+            border: 2px solid rgba(102, 126, 234, 0.1);
+            border-collapse: collapse;
+            margin: 12px 0 16px 0;
+        }
+        .ai-insights-markdown .markdown-th {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            color: #2c3e50;
+            font-weight: 600;
+            padding: 12px 16px;
+            border-bottom: 2px solid rgba(102, 126, 234, 0.2);
+            text-align: left;
+        }
+        .ai-insights-markdown .markdown-td {
+            padding: 10px 16px;
+            color: #4a5568;
+            transition: background-color 0.2s ease;
+            border-bottom: 1px solid rgba(102, 126, 234, 0.1);
+        }
+        .ai-insights-markdown .markdown-table tr:nth-child(even) .markdown-td {
+            background: rgba(102, 126, 234, 0.02);
+        }
+        .ai-insights-markdown .markdown-table tr:hover .markdown-td {
+            background: rgba(102, 126, 234, 0.05);
+        }
+        .ai-insights-markdown .markdown-content code {
+            background: rgba(102, 126, 234, 0.1);
+            color: #5a67d8;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-weight: 500;
+            border: 1px solid rgba(102, 126, 234, 0.2);
+            font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+        }
+        /* Response handling test styles */
+        .response-test {
+            background: #f8f9fa;
+            padding: 16px;
+            border-radius: 6px;
+            border: 1px solid #e1e5e9;
+            margin: 12px 0;
+        }
+        .safe-output {
+            background: #d4edda;
+            color: #155724;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin: 8px 0;
+            border: 1px solid #c3e6cb;
+        }
+        .unsafe-output {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin: 8px 0;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <h1 class="test-title">🧪 AI Summary & Prompt Generation Fixes Test</h1>
+    
+    <div class="test-section">
+        <h2 class="test-title">✅ Fix 1: AIPromptManager Response Handling</h2>
+        <p>The <code>handleGenerateWithAI</code> function now includes type checking to prevent '[object Object]' display.</p>
+        
+        <div class="response-test">
+            <h4>Before Fix (would show '[object Object]'):</h4>
+            <div class="unsafe-output">
+                <strong>Instructions:</strong> [object Object]<br>
+                <strong>Output Format:</strong> [object Object]
+            </div>
+            
+            <h4>After Fix (with type checking):</h4>
+            <div class="safe-output">
+                <strong>Instructions:</strong> You are a lessons-learned specialist and strategic consultant. Analyze call-and-answer responses...<br>
+                <strong>Output Format:</strong> ## Summary<br>Analyze the key themes from {responsesText}...
+            </div>
+        </div>
+        
+        <h4>Code Changes:</h4>
+        <pre style="background: #f1f3f4; padding: 12px; border-radius: 4px; font-size: 0.9rem; overflow-x: auto;">
+// Ensure response fields are strings, not objects
+const safeInstructions = typeof result.instructions === 'string' 
+  ? result.instructions 
+  : (result.instructions ? JSON.stringify(result.instructions, null, 2) : '');
+
+const safeOutputFormat = typeof result.outputFormat === 'string' 
+  ? result.outputFormat 
+  : (result.outputFormat ? JSON.stringify(result.outputFormat, null, 2) : '');
+        </pre>
+    </div>
+    
+    <div class="test-section">
+        <h2 class="test-title">🎨 Fix 2: Enhanced Markdown CSS Styling</h2>
+        <p>AI Summary markdown now renders with enhanced site-integrated styling:</p>
+        
+        <div class="ai-insights-markdown">
+            <div class="markdown-h2">🎯 Key Insights from Team Workshop</div>
+            <div class="markdown-p">Analyze the <strong>12 responses</strong> from participants who answered: <em>Leadership Challenge</em></div>
+            
+            <div class="markdown-h3">💡 Top Responses:</div>
+            <ul class="markdown-list">
+                <div class="markdown-li">Alice: "I approached the customer concern by actively listening and identifying core issues"</div>
+                <div class="markdown-li">Bob: "My strategy involved cross-functional collaboration to solve the problem efficiently"</div>
+                <div class="markdown-li">Charlie: "I used data analysis to inform my decision-making process"</div>
+            </ul>
+            
+            <div class="markdown-h3">🚀 Recommended Actions</div>
+            <div class="markdown-p">Priority actions based on <code>Team Building session using Amazon Leadership Principles</code>:</div>
+            
+            <table class="markdown-table">
+                <thead>
+                    <tr>
+                        <th class="markdown-th">Priority</th>
+                        <th class="markdown-th">Action</th>
+                        <th class="markdown-th">Owner</th>
+                        <th class="markdown-th">Timeline</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="markdown-td">High</td>
+                        <td class="markdown-td">Follow up on winning response</td>
+                        <td class="markdown-td">Team Lead</td>
+                        <td class="markdown-td">1 week</td>
+                    </tr>
+                    <tr>
+                        <td class="markdown-td">Medium</td>
+                        <td class="markdown-td">Address common themes</td>
+                        <td class="markdown-td">Manager</td>
+                        <td class="markdown-td">2 weeks</td>
+                    </tr>
+                    <tr>
+                        <td class="markdown-td">Low</td>
+                        <td class="markdown-td">Document lessons learned</td>
+                        <td class="markdown-td">Team</td>
+                        <td class="markdown-td">1 month</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2 class="test-title">🧪 Test Coverage</h2>
+        <p>These fixes address:</p>
+        <ul>
+            <li><strong>Call and Answer games:</strong> AI summary markdown rendering with voting results</li>
+            <li><strong>Trivia games:</strong> AI summary markdown with correctness analysis</li>
+            <li><strong>Wavelength games:</strong> AI summary markdown with word association insights</li>
+            <li><strong>AI Prompt Generation:</strong> All game types now handle object responses properly</li>
+        </ul>
+    </div>
+
+    <script>
+        // Simulate the fixed response handling
+        function testResponseHandling() {
+            const mockResponses = [
+                // This would have caused '[object Object]' before the fix
+                { 
+                    instructions: { role: "expert", domain: "leadership" },
+                    outputFormat: { structure: "markdown", sections: ["summary", "insights"] }
+                },
+                // This works with both old and new code
+                {
+                    instructions: "You are a leadership expert...",
+                    outputFormat: "## Summary\n{responsesText}\n## Insights\n..."
+                }
+            ];
+
+            mockResponses.forEach((result, index) => {
+                // This is the NEW fixed code
+                const safeInstructions = typeof result.instructions === 'string' 
+                    ? result.instructions 
+                    : (result.instructions ? JSON.stringify(result.instructions, null, 2) : '');
+                
+                const safeOutputFormat = typeof result.outputFormat === 'string' 
+                    ? result.outputFormat 
+                    : (result.outputFormat ? JSON.stringify(result.outputFormat, null, 2) : '');
+                
+                console.log(`Response ${index + 1}:`);
+                console.log('Instructions:', safeInstructions.substring(0, 50) + '...');
+                console.log('Output Format:', safeOutputFormat.substring(0, 50) + '...');
+                console.log('---');
+            });
+        }
+
+        // Run test on page load
+        testResponseHandling();
+        
+        console.log('✅ AI Summary & Prompt Generation fixes loaded successfully!');
+        console.log('🎨 Enhanced markdown styling is now active');
+        console.log('🛡️ Type checking prevents [object Object] display');
+    </script>
+</body>
+</html>

@@ -2,12 +2,19 @@ version = 0.1
 [default]
 [default.deploy]
 [default.deploy.parameters]
-stack_name = "engagements-prod"
+stack_name = "engprod"
 s3_bucket = "samcli021891573713"
-s3_prefix = "engagements-prod"
+s3_prefix = "engprod"
 region = "us-east-1"
+confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
-disable_rollback = true
-confirm_changeset = false
-fail_on_empty_changeset = false
-parameter_overrides = "DomainName=engagements.sb.seibtribe.us HostedZoneId=Z03473042HSYD8BUY4XSL"
+parameter_overrides = [
+    "Environment=prod",
+    "StackName=engprod", 
+    "DomainName=eng.seibtribe.us",
+    "HostedZoneId=Z03473042HSYD8BUY4XSL",
+    "GitHubToken=",
+    "GitHubRepo=georgeseib/engage2",
+    "GoogleClientIdParameter=/engprod/oauth/google/client-id",
+    "GoogleClientSecretParameter=/engprod/oauth/google/client-secret"
+]

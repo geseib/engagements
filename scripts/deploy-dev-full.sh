@@ -36,8 +36,29 @@ else
     exit 1
 fi
 
-# Step 2: Deploy frontend
-echo "🎨 STEP 2: Deploying frontend application..."
+# Step 2: Update frontend environment variables
+echo "🔐 STEP 2: Updating frontend environment variables..."
+echo "----------------------------------------"
+if [ -f "$SCRIPT_DIR/update-frontend-env.sh" ]; then
+    chmod +x "$SCRIPT_DIR/update-frontend-env.sh"
+    "$SCRIPT_DIR/update-frontend-env.sh" engdev
+    
+    if [ $? -eq 0 ]; then
+        echo "✅ Frontend environment variables updated!"
+        echo ""
+    else
+        echo "⚠️  Warning: Could not update frontend environment variables"
+        echo "   You may need to update src/.env manually"
+        echo ""
+    fi
+else
+    echo "⚠️  Warning: update-frontend-env.sh not found"
+    echo "   You may need to update src/.env manually"
+    echo ""
+fi
+
+# Step 3: Deploy frontend
+echo "🎨 STEP 3: Deploying frontend application..."
 echo "----------------------------------------"
 if [ -f "$SCRIPT_DIR/deploy-frontend-eng.sh" ]; then
     chmod +x "$SCRIPT_DIR/deploy-frontend-eng.sh"
@@ -60,6 +81,7 @@ echo "🎉 FULL DEVELOPMENT DEPLOYMENT COMPLETE!"
 echo "========================================"
 echo "✅ Backend: AWS SAM stack deployed to 'engdev'"
 echo "✅ Frontend: React app deployed to S3 + CloudFront"
+echo "✅ Authentication: AWS Cognito configured"
 echo ""
 echo "🌐 Your application is now live at:"
 echo "   https://eng.dev.seibtribe.us"
@@ -69,6 +91,11 @@ echo "   Stack: engdev"
 echo "   Domain: eng.dev.seibtribe.us"
 echo "   API: https://h1jcmja0w1.execute-api.us-east-1.amazonaws.com/dev/"
 echo "   WebSocket: wss://r4c24mqku1.execute-api.us-east-1.amazonaws.com/dev"
+echo ""
+echo "🔐 Authentication Configuration:"
+echo "   Cognito User Pool: Check CloudFormation outputs"
+echo "   Google Sign-In: Enabled"
+echo "   Admin Setup: Create first admin user in Cognito Console"
 echo ""
 echo "📊 Deployment completed at: $(date)"
 echo "⏱️  Total time: $SECONDS seconds"

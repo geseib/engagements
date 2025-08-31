@@ -104,7 +104,7 @@ if [ -n "$GITHUB_TOKEN" ]; then
     if [ -n "$GITHUB_REPO" ]; then
         PARAMETERS="$PARAMETERS GitHubRepo=$GITHUB_REPO"
     else
-        PARAMETERS="$PARAMETERS GitHubRepo=georgeseib/engage2"
+        PARAMETERS="$PARAMETERS GitHubRepo=geseib/engagements"
     fi
 else
     print_warning "GitHub integration not configured (GITHUB_TOKEN not set)"

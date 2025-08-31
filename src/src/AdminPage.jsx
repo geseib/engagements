@@ -4,9 +4,12 @@ import TriviaAIBuilder from './components/TriviaAIBuilder';
 import PollAIBuilder from './components/PollAIBuilder';
 import SurveyAIBuilder from './components/SurveyAIBuilder';
 import AIPromptManager from './components/AIPromptManager';
+import AIGenerationPromptEditor from './components/AIGenerationPromptEditor';
 import ArchivePanel from './components/ArchivePanel';
+import UserManagement from './components/UserManagement';
 import HelpButton from './components/HelpButton';
 import IssueFab from './components/IssueFab';
+import { useAuth } from './auth/AuthContext';
 import './BuilderPage.css';
 
 const API_BASE = window.API_BASE;
@@ -14,6 +17,7 @@ const API_BASE = window.API_BASE;
 function AdminPage() {
   console.log('🔧 AdminPage component loading with AI builders...');
 
+  const { currentUser, signOut } = useAuth();
   const [questionSets, setQuestionSets] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadStatus, setUploadStatus] = useState('');
@@ -94,7 +98,21 @@ function AdminPage() {
   // Upload section expand/collapse
   const [isUploadSectionExpanded, setIsUploadSectionExpanded] = useState(false);
 
+  // AI Generation Prompt Editor
+  const [showGenerationPromptEditor, setShowGenerationPromptEditor] = useState(false);
+  
+  // AI Analysis Prompts (Workie) - toggle for showing existing AIPromptManager
+  const [showAnalysisPrompts, setShowAnalysisPrompts] = useState(false);
+
   const defaultInstructions = "How would you apply this concept in your current role or organization? Consider the specific challenges and opportunities in your context.";
+
+  // Sign-out handler
+  const handleSignOut = () => {
+    if (window.confirm('Are you sure you want to sign out?')) {
+      signOut();
+      window.location.href = '/auth';
+    }
+  };
 
   // Fetch available AI prompts for selection
   const fetchAvailablePrompts = async () => {
@@ -885,8 +903,54 @@ function AdminPage() {
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795be09b462b2e8ebf71_osmo-parallax-layer-3.webp" loading="eager" width="800" data-parallax-layer="1" alt="" className="parallax__layer-img" />
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" width="800" data-parallax-layer="2" alt="" className="parallax__layer-img" />
                 <div data-parallax-layer="3" className="parallax__layer-title">
-                  <h2 className="parallax__title">Admin Dashboard</h2>
-                  <HelpButton section="admin" variant="header" size="medium" />
+                  <div className="admin-title-row">
+                    <div className="admin-title-left">
+                      <h2 className="parallax__title">Admin Dashboard</h2>
+                      <HelpButton section="admin" variant="header" size="medium" />
+                    </div>
+                    
+                    {/* User Info and Sign Out */}
+                    {currentUser && (
+                      <div className="admin-user-info" style={{
+                        position: 'absolute',
+                        top: '10px',
+                        right: '20px',
+                        color: 'white',
+                        fontSize: '14px',
+                        textAlign: 'right',
+                        background: 'rgba(0,0,0,0.3)',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        backdropFilter: 'blur(4px)'
+                      }}>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>{currentUser.attributes?.name || 'User'}</strong>
+                        </div>
+                        {currentUser.groups?.includes('admins') && (
+                          <div style={{ color: '#ffd700', fontWeight: '500', fontSize: '12px', marginBottom: '6px' }}>
+                            Administrator
+                          </div>
+                        )}
+                        <button 
+                          onClick={handleSignOut}
+                          style={{
+                            padding: '4px 8px',
+                            backgroundColor: 'rgba(255,255,255,0.2)',
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            borderRadius: '4px',
+                            color: 'white',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.2s'
+                          }}
+                          onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.3)'}
+                          onMouseOut={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+                        >
+                          Sign Out
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" width="800" data-parallax-layer="4" alt="" className="parallax__layer-img" />
               </div>
@@ -924,6 +988,12 @@ function AdminPage() {
                 📦 Archive
               </button>
               <button 
+                className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`}
+                onClick={() => setActiveTab('users')}
+              >
+                👥 Users
+              </button>
+              <button 
                 className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
                 onClick={() => setActiveTab('settings')}
               >
@@ -936,282 +1006,137 @@ function AdminPage() {
           {activeTab === 'prompts' && (
             <div className="tab-content">
               {/* AI Prompt Management Section */}
-              <AIPromptManager />
+              <div className="admin-section">
+                <h2>🤖 AI Prompt Management</h2>
+                
+                {/* Two distinct sections for different prompt types */}
+                <div className="prompt-type-sections">
+                  {/* Question Set Generator Prompts */}
+                  <div className="prompt-section generation-prompts">
+                    <div className="section-header">
+                      <h3>📝 Question Set Generator AI Prompts</h3>
+                      <div className="section-header-right">
+                        <HelpButton section="ai-prompts" variant="inline" size="small" tooltip="Help: AI Prompts Management" />
+                        <span className="section-icon">🏗️</span>
+                      </div>
+                    </div>
+                    <p className="section-description">
+                      These prompts control how AI generates new content for your engagement sessions.
+                      They define templates for creating scenarios, trivia questions, polls, and wavelength topics.
+                    </p>
+                    <button
+                      className="btn-primary"
+                      onClick={() => setShowGenerationPromptEditor(true)}
+                    >
+                      ⚙️ Manage Generation Prompts
+                    </button>
+                    <div className="prompt-examples">
+                      <small>Examples: Lessons Learned, Interview Prep, General Knowledge Trivia, Opinion Polls</small>
+                    </div>
+                  </div>
+
+                  {/* Results Analysis Prompts (Workie) */}
+                  <div className="prompt-section analysis-prompts">
+                    <div className="section-header">
+                      <h3>🤖 Engagement Results AI Analysis (Workie)</h3>
+                      <div className="section-header-right">
+                        <HelpButton section="ai-prompts" variant="inline" size="small" tooltip="Help: AI Prompts Management" />
+                        <span className="section-icon">
+                          <img src="/workie.png" alt="Workie" className="workie-icon-small" />
+                        </span>
+                      </div>
+                    </div>
+                    <p className="section-description">
+                      These prompts control how Workie analyzes player responses during sessions.
+                      They help generate strategic insights, identify patterns, and provide recommendations.
+                    </p>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => setShowAnalysisPrompts(!showAnalysisPrompts)}
+                    >
+                      🔍 {showAnalysisPrompts ? 'Hide' : 'Manage'} Analysis Prompts
+                    </button>
+                    <div className="prompt-examples">
+                      <small>Examples: Team Dynamics Analysis, Innovation Insights, Consensus Patterns</small>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Show Analysis Prompts (AIPromptManager) when toggled */}
+                {showAnalysisPrompts && (
+                  <div className="analysis-prompts-section">
+                    <h3>🔍 Engagement Results Analysis Prompts (Workie)</h3>
+                    <p className="section-description">
+                      These prompts control how Workie analyzes and summarizes player responses to generate strategic insights.
+                    </p>
+                    <AIPromptManager />
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
           {activeTab === 'questionsets' && (
             <div className="tab-content">
 
-
-          {/* CSV Template Download Section */}
+          {/* Current Question Sets - Moved to top */}
           <div className="admin-section">
-            <h2>📥 Download CSV Templates</h2>
-            <p className="section-description">Download engagement-specific CSV templates to understand the required format for each type of question set.</p>
-
-            <div className="template-controls">
-              <div className="template-buttons">
-                <button
-                  className="btn-secondary"
-                  onClick={() => handleDownloadTemplate('call-and-answer')}
-                >
-                  📞 Call & Answer Template
-                </button>
-                <button
-                  className="btn-secondary"
-                  onClick={() => handleDownloadTemplate('trivia')}
-                >
-                  🧠 Trivia Template
-                </button>
-                <button
-                  className="btn-secondary"
-                  onClick={() => handleDownloadTemplate('poll')}
-                >
-                  📊 Poll Template
-                </button>
-                <button
-                  className="btn-secondary"
-                  onClick={() => handleDownloadTemplate('wavelength')}
-                >
-                  📡 Wavelength Template
-                </button>
-                <button
-                  className="btn-secondary"
-                  onClick={() => handleDownloadTemplate('survey')}
-                >
-                  📋 Survey Template
-                </button>
-              </div>
+            <div className="section-title-with-help">
+              <h2>📚 Current Question Sets</h2>
+              <HelpButton section="question-sets" variant="inline" size="small" tooltip="Help: Managing Question Sets" />
             </div>
-          </div>
-
-          {/* Upload Question Set Section */}
-          <div className="admin-section">
-            <div 
-              className="section-header expandable-header"
-              onClick={() => setIsUploadSectionExpanded(!isUploadSectionExpanded)}
-            >
-              <h2>📤 Upload Question Set</h2>
-              <button className={`expand-arrow ${isUploadSectionExpanded ? 'expanded' : ''}`}>
-                ▼
-              </button>
-            </div>
-            {isUploadSectionExpanded && (
-              <>
-                <p className="section-description">Upload a CSV file containing questions to create a new question set with custom title and instructions.</p>
             
-            <div className="upload-form">
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="custom-title">Question Set Title *</label>
+            {/* Horizontal Filtering Controls */}
+            <div className="filters-section">
+              <div className="filter-row">
+                <label>
+                  Search:
                   <input
                     type="text"
-                    id="custom-title"
-                    value={customTitle}
-                    onChange={(e) => setCustomTitle(e.target.value)}
-                    placeholder="Enter a descriptive title"
-                    className="input-field"
+                    placeholder="Search by name or description..."
+                    value={questionSetSearchQuery}
+                    onChange={(e) => setQuestionSetSearchQuery(e.target.value)}
                   />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="custom-description">Description</label>
-                  <input
-                    type="text"
-                    id="custom-description"
-                    value={customDescription}
-                    onChange={(e) => setCustomDescription(e.target.value)}
-                    placeholder="Brief description of this question set"
-                    className="input-field"
-                  />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="engagement-type">Engagement Type *</label>
-                  <select
-                    id="engagement-type"
-                    value={engagementType}
-                    onChange={(e) => setEngagementType(e.target.value)}
-                    className="input-field"
+                </label>
+                
+                <label>
+                  Type:
+                  <select 
+                    value={selectedQuestionSetType} 
+                    onChange={(e) => setSelectedQuestionSetType(e.target.value)}
                   >
+                    <option value="all">All Types</option>
                     <option value="call-and-answer">Call and Answer</option>
                     <option value="trivia">Trivia</option>
                     <option value="poll">Poll</option>
                     <option value="wavelength">Wavelength</option>
                   </select>
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="custom-instructions">
-                    Custom Instructions 
-                    <button 
-                      type="button" 
-                      className="btn-link"
-                      onClick={() => setShowDefaultInstructions(!showDefaultInstructions)}
-                    >
-                      (show default)
-                    </button>
-                  </label>
-                  {showDefaultInstructions && (
-                    <div className="default-instructions">
-                      <strong>Default instructions:</strong> {defaultInstructions}
-                    </div>
-                  )}
-                  <textarea
-                    id="custom-instructions"
-                    value={customInstructions}
-                    onChange={(e) => setCustomInstructions(e.target.value)}
-                    placeholder={defaultInstructions}
-                    className="input-field textarea-field"
-                    rows="3"
-                  />
-                </div>
-                
-                <div className="form-group">
-                  <label htmlFor="ai-context-instructions">AI Context Instructions</label>
-                  <div className="help-text-container">
-                    <small className="help-text">
-                      Provide background context about your project, team, or meeting for AI analysis.
-                      Examples: "Building a new application to support engineering learning" or 
-                      "Supporting engineering teams through developer advocacy in the healthcare sector"
-                    </small>
-                  </div>
-                  <textarea
-                    id="ai-context-instructions"
-                    value={aiContextInstructions}
-                    onChange={(e) => setAiContextInstructions(e.target.value)}
-                    placeholder="Describe your project, team context, industry, or specific goals to help AI provide more relevant analysis..."
-                    className="input-field textarea-field"
-                    rows="4"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="selected-prompt">AI Summary Prompt (Optional)</label>
-                  <div className="help-text-container">
-                    <small className="help-text">
-                      Select a custom AI prompt for analysis summaries. Leave blank to use the default prompt for this engagement type.
-                    </small>
-                  </div>
-                  <select
-                    id="selected-prompt"
-                    value={selectedPromptId}
-                    onChange={(e) => setSelectedPromptId(e.target.value)}
-                    className="input-field select-field"
+                </label>
+                  
+                <label>
+                  Status:
+                  <select 
+                    value={selectedQuestionSetStatus} 
+                    onChange={(e) => setSelectedQuestionSetStatus(e.target.value)}
                   >
-                    <option value="">Use default prompt for {engagementType === 'call-and-answer' ? 'call & answer' : engagementType}</option>
-                    {availablePrompts
-                      .filter(prompt => prompt.gameType === (engagementType === 'call-and-answer' ? 'callandanswer' : engagementType))
-                      .map(prompt => (
-                        <option key={prompt.promptId} value={prompt.promptId}>
-                          {prompt.name} {prompt.isDefault ? '(Default)' : ''}
-                        </option>
-                      ))}
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
                   </select>
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="file-upload">CSV File *</label>
-                  <div className="file-input-wrapper">
-                    <input
-                      type="file"
-                      id="file-upload"
-                      accept=".csv"
-                      onChange={handleFileSelect}
-                      className="file-input"
-                    />
-                    <label htmlFor="file-upload" className="file-input-label">
-                      {selectedFile ? selectedFile.name : 'Choose CSV file...'}
-                    </label>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="form-row">
-                <button
-                  className="btn-primary btn-large"
-                  onClick={handleUploadQuestionSet}
-                  disabled={!selectedFile || !customTitle.trim() || isUploading}
-                >
-                  {isUploading ? '⏳ Uploading...' : '📤 Upload Question Set'}
-                </button>
-              </div>
-            </div>
-            
-                {uploadStatus && (
-                  <div className={`status-message ${uploadStatus.includes('✅') ? 'success' : uploadStatus.includes('❌') ? 'error' : ''}`}>
-                    {uploadStatus}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Current Question Sets */}
-          <div className="admin-section">
-            <h2>📚 Current Question Sets</h2>
-            
-            {/* Filtering Controls */}
-            <div className="filter-controls">
-              <div className="filter-group">
-                <label>Search:</label>
-                <input
-                  type="text"
-                  placeholder="Search by name or description..."
-                  value={questionSetSearchQuery}
-                  onChange={(e) => setQuestionSetSearchQuery(e.target.value)}
-                  className="filter-search"
-                />
-              </div>
-              
-              <div className="filter-group">
-                <label>Type:</label>
-                <select 
-                  value={selectedQuestionSetType} 
-                  onChange={(e) => setSelectedQuestionSetType(e.target.value)}
-                  className="filter-select"
-                >
-                  <option value="all">All Types</option>
-                  <option value="call-and-answer">Call and Answer</option>
-                  <option value="trivia">Trivia</option>
-                  <option value="poll">Poll</option>
-                  <option value="wavelength">Wavelength</option>
-                </select>
-              </div>
-              
-              <div className="filter-group">
-                <label>Status:</label>
-                <select 
-                  value={selectedQuestionSetStatus} 
-                  onChange={(e) => setSelectedQuestionSetStatus(e.target.value)}
-                  className="filter-select"
-                >
-                  <option value="all">All Status</option>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </div>
-              
-              <div className="filter-group">
-                <label>Sort by:</label>
-                <select 
-                  value={questionSetSortBy} 
-                  onChange={(e) => setQuestionSetSortBy(e.target.value)}
-                  className="filter-select"
-                >
-                  <option value="newest">Newest First</option>
-                  <option value="oldest">Oldest First</option>
-                  <option value="name">Name (A-Z)</option>
-                  <option value="questions">Most Questions</option>
-                </select>
+                </label>
+                
+                <label>
+                  Sort by:
+                  <select 
+                    value={questionSetSortBy} 
+                    onChange={(e) => setQuestionSetSortBy(e.target.value)}
+                  >
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="name">Name (A-Z)</option>
+                    <option value="questions">Most Questions</option>
+                  </select>
+                </label>
               </div>
             </div>
             
@@ -1418,48 +1343,186 @@ function AdminPage() {
             </div>
           )}
 
-          {/* Delete Question Set Section */}
-          <div className="admin-section danger-section">
-            <h2>🗑️ Delete Question Set</h2>
-            <p className="section-description">Permanently delete a question set and all its questions.</p>
-            
-            <div className="delete-controls">
-              <div className="form-group">
-                <label htmlFor="question-set-select">Select Question Set to Delete</label>
-                <select
-                  id="question-set-select"
-                  value={selectedQuestionSet}
-                  onChange={(e) => setSelectedQuestionSet(e.target.value)}
-                  className="input-field"
-                >
-                  <option value="">Choose a question set...</option>
-                  {questionSets.map(set => (
-                    <option key={set.id} value={set.id}>
-                      {set.name} ({set.totalQuestions} questions)
-                    </option>
-                  ))}
-                </select>
+          {/* Upload Question Set Section */}
+          <div className="admin-section">
+            <div 
+              className="section-header expandable-header"
+              onClick={() => setIsUploadSectionExpanded(!isUploadSectionExpanded)}
+            >
+              <div className="expandable-title-with-help">
+                <h2>📤 Upload Question Set</h2>
+                <HelpButton section="upload-csv" variant="inline" size="small" tooltip="Help: Uploading CSV Files" 
+                  onClick={(e) => e.stopPropagation()} />
               </div>
-              
-              <button
-                className="btn-danger"
-                onClick={handleDeleteQuestionSet}
-                disabled={!selectedQuestionSet || isDeletingQuestionSet}
-              >
-                {isDeletingQuestionSet ? '⏳ Deleting...' : '🗑️ Delete Question Set'}
+              <button className={`expand-arrow ${isUploadSectionExpanded ? 'expanded' : ''}`}>
+                ▼
               </button>
             </div>
+            {isUploadSectionExpanded && (
+              <>
+                <p className="section-description">Upload a CSV file containing questions to create a new question set with custom title and instructions.</p>
             
-            {questionSetDeleteStatus && (
-              <div className={`status-message ${questionSetDeleteStatus.includes('✅') ? 'success' : questionSetDeleteStatus.includes('❌') ? 'error' : ''}`}>
-                {questionSetDeleteStatus}
-              </div>
+                <div className="upload-form">
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="custom-title">Question Set Title *</label>
+                      <input
+                        type="text"
+                        id="custom-title"
+                        value={customTitle}
+                        onChange={(e) => setCustomTitle(e.target.value)}
+                        placeholder="Enter a descriptive title"
+                        className="input-field"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="custom-description">Description</label>
+                      <input
+                        type="text"
+                        id="custom-description"
+                        value={customDescription}
+                        onChange={(e) => setCustomDescription(e.target.value)}
+                        placeholder="Brief description of this question set"
+                        className="input-field"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="engagement-type">Engagement Type *</label>
+                      <select
+                        id="engagement-type"
+                        value={engagementType}
+                        onChange={(e) => setEngagementType(e.target.value)}
+                        className="input-field"
+                      >
+                        <option value="call-and-answer">Call and Answer</option>
+                        <option value="trivia">Trivia</option>
+                        <option value="poll">Poll</option>
+                        <option value="wavelength">Wavelength</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="custom-instructions">
+                        Custom Instructions 
+                        <button 
+                          type="button" 
+                          className="btn-link"
+                          onClick={() => setShowDefaultInstructions(!showDefaultInstructions)}
+                        >
+                          (show default)
+                        </button>
+                      </label>
+                      {showDefaultInstructions && (
+                        <div className="default-instructions">
+                          <strong>Default instructions:</strong> {defaultInstructions}
+                        </div>
+                      )}
+                      <textarea
+                        id="custom-instructions"
+                        value={customInstructions}
+                        onChange={(e) => setCustomInstructions(e.target.value)}
+                        placeholder={defaultInstructions}
+                        className="input-field textarea-field"
+                        rows="3"
+                      />
+                    </div>
+                    
+                    <div className="form-group">
+                      <label htmlFor="ai-context-instructions">AI Context Instructions</label>
+                      <div className="help-text-container">
+                        <small className="help-text">
+                          Provide background context about your project, team, or meeting for AI analysis.
+                          Examples: "Building a new application to support engineering learning" or 
+                          "Supporting engineering teams through developer advocacy in the healthcare sector"
+                        </small>
+                      </div>
+                      <textarea
+                        id="ai-context-instructions"
+                        value={aiContextInstructions}
+                        onChange={(e) => setAiContextInstructions(e.target.value)}
+                        placeholder="Describe your project, team context, industry, or specific goals to help AI provide more relevant analysis..."
+                        className="input-field textarea-field"
+                        rows="4"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="selected-prompt">AI Summary Prompt (Optional)</label>
+                      <div className="help-text-container">
+                        <small className="help-text">
+                          Select a custom AI prompt for analysis summaries. Leave blank to use the default prompt for this engagement type.
+                        </small>
+                      </div>
+                      <select
+                        id="selected-prompt"
+                        value={selectedPromptId}
+                        onChange={(e) => setSelectedPromptId(e.target.value)}
+                        className="input-field select-field"
+                      >
+                        <option value="">Use default prompt for {engagementType === 'call-and-answer' ? 'call & answer' : engagementType}</option>
+                        {availablePrompts
+                          .filter(prompt => prompt.gameType === (engagementType === 'call-and-answer' ? 'callandanswer' : engagementType))
+                          .map(prompt => (
+                            <option key={prompt.promptId} value={prompt.promptId}>
+                              {prompt.name} {prompt.isDefault ? '(Default)' : ''}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="file-upload">CSV File *</label>
+                      <div className="file-input-wrapper">
+                        <input
+                          type="file"
+                          id="file-upload"
+                          accept=".csv"
+                          onChange={handleFileSelect}
+                          className="file-input"
+                        />
+                        <label htmlFor="file-upload" className="file-input-label">
+                          {selectedFile ? selectedFile.name : 'Choose CSV file...'}
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="form-row">
+                    <button
+                      className="btn-primary btn-large"
+                      onClick={handleUploadQuestionSet}
+                      disabled={!selectedFile || !customTitle.trim() || isUploading}
+                    >
+                      {isUploading ? '⏳ Uploading...' : '📤 Upload Question Set'}
+                    </button>
+                  </div>
+                </div>
+                
+                {uploadStatus && (
+                  <div className={`status-message ${uploadStatus.includes('✅') ? 'success' : uploadStatus.includes('❌') ? 'error' : ''}`}>
+                    {uploadStatus}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
           {/* Add New Set Section */}
           <div className="admin-section">
-            <h2>➕ Add New Question Set</h2>
+            <div className="section-title-with-help">
+              <h2>➕ Add New Question Set</h2>
+              <HelpButton section="ai-builders" variant="inline" size="small" tooltip="Help: AI Builders & Question Creation" />
+            </div>
             <p className="section-description">Create new question sets using different methods based on your engagement type.</p>
 
             <div className="add-set-controls">
@@ -1527,7 +1590,10 @@ function AdminPage() {
             <div className="tab-content">
               {/* Delete Games Section */}
               <div className="admin-section danger-section">
-                <h2>🎮 Remove Games</h2>
+                <div className="section-title-with-help">
+                  <h2>🎮 Remove Games</h2>
+                  <HelpButton section="game-management" variant="inline" size="small" tooltip="Help: Game Management & Cleanup" />
+                </div>
                 <p className="section-description">Delete game data from the database.</p>
                 
                 <div className="delete-controls">
@@ -1588,11 +1654,20 @@ function AdminPage() {
             </div>
           )}
 
+          {activeTab === 'users' && (
+            <div className="tab-content">
+              <UserManagement />
+            </div>
+          )}
+
           {activeTab === 'settings' && (
             <div className="tab-content">
               {/* WebSocket Mode Toggle */}
               <div className="admin-section debug-section">
-                <h2>🔌 Real-time Communication</h2>
+                <div className="section-title-with-help">
+                  <h2>🔌 Real-time Communication</h2>
+                  <HelpButton section="websocket-settings" variant="inline" size="small" tooltip="Help: WebSocket & Real-time Settings" />
+                </div>
                 <p className="section-description">Real-time WebSocket communication is now the default. Toggle off to use HTTP polling instead.</p>
                 
                 <div className="debug-controls">
@@ -1732,6 +1807,13 @@ function AdminPage() {
         <SurveyAIBuilder
           onClose={() => setShowSurveyAIBuilder(false)}
           onSurveyGenerated={handleSurveyGenerated}
+        />
+      )}
+
+      {/* AI Generation Prompt Editor Modal */}
+      {showGenerationPromptEditor && (
+        <AIGenerationPromptEditor
+          onClose={() => setShowGenerationPromptEditor(false)}
         />
       )}
 
