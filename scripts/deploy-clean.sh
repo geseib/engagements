@@ -96,6 +96,23 @@ if [ -n "$DOMAIN" ] && [ -n "$HOSTED_ZONE_ID" ]; then
     PARAMETERS="$PARAMETERS DomainName=$DOMAIN HostedZoneId=$HOSTED_ZONE_ID"
 fi
 
+# Try to retrieve GitHub token from Secrets Manager if not set
+if [ -z "$GITHUB_TOKEN" ] && [ "$ENVIRONMENT" = "dev" ]; then
+    print_status "Attempting to retrieve GitHub token from Secrets Manager..."
+    GITHUB_TOKEN=$(aws secretsmanager get-secret-value \
+        --secret-id "engage/dev/github-token" \
+        --query SecretString \
+        --output text \
+        --region "$AWS_REGION" 2>/dev/null)
+    
+    if [ -n "$GITHUB_TOKEN" ]; then
+        print_success "GitHub token retrieved from Secrets Manager"
+        export GITHUB_TOKEN
+    else
+        print_warning "GitHub token not found in Secrets Manager. GitHub integration will be disabled."
+    fi
+fi
+
 # Add GitHub integration parameters if environment variables are set
 if [ -n "$GITHUB_TOKEN" ]; then
     print_status "GitHub integration enabled"
