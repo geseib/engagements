@@ -2117,6 +2117,18 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # SAM does NOT auto-create the invoke permission for HttpApi Lambda
+  # authorizers — without this, API Gateway gets AccessDenied and every
+  # authorized route returns 500. (This was likely the original "circular
+  # dependency" mystery; the permission is a leaf resource, so no cycle.)
+  AuthorizerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AuthorizerFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/authorizers/*'
+
   # User Management Lambda
   UserManagementFunction:
     Type: AWS::Serverless::Function
