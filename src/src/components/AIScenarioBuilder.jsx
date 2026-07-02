@@ -413,11 +413,14 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
       }
 
       // Break large requests into small parallel batches. API Gateway HTTP
-      // APIs have a hard ~30s integration timeout, and generation runs at
-      // roughly 7.5s per scenario, so 2 per call keeps each request ~15s.
-      // Wavelength items are tiny (a short subject + one framing sentence),
-      // so larger batches still finish comfortably under the timeout.
-      const CHUNK_SIZE = engagementType === 'wavelength' ? 5 : 2;
+      // APIs have a hard ~30s integration timeout. Scenarios are the heaviest
+      // items (~700 output tokens each) and Sonnet generation speed has tail
+      // variance — at 2/batch the occasional slow generation grazed the 29s
+      // ceiling (503 + retry), so scenarios run 1/batch (~8-12s, wide margin);
+      // parallelism keeps total wall-clock roughly the same. Wavelength items
+      // are tiny (a short subject + one framing sentence), so larger batches
+      // still finish comfortably under the timeout.
+      const CHUNK_SIZE = engagementType === 'wavelength' ? 5 : 1;
       const MAX_PARALLEL = 3; // cap concurrency to respect Bedrock rate limits
       const totalCount = scenarioConfig.count;
       const chunks = Math.ceil(totalCount / CHUNK_SIZE);
