@@ -1949,6 +1949,10 @@ Resources:
         - ALLOW_USER_PASSWORD_AUTH
         - ALLOW_USER_SRP_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
+      # Explicit (matches the default) — also forces CloudFormation to
+      # re-apply this resource and correct live drift: the deployed client
+      # had lost its ExplicitAuthFlows to a manual console edit.
+      EnableTokenRevocation: true
       RefreshTokenValidity: 30
       AccessTokenValidity: 1
       IdTokenValidity: 1
