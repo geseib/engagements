@@ -84,6 +84,9 @@ function GameHostPage() {
   const [reportData, setReportData] = useState(null);
   const [lessonNumber, setLessonNumber] = useState(0);
   
+  // Custom instruction state for question set instructions
+  const [customInstruction, setCustomInstruction] = useState(null);
+  
   // Reports List Modal
   const [showReportsModal, setShowReportsModal] = useState(false);
   const [gamesList, setGamesList] = useState([]);
@@ -289,6 +292,54 @@ function GameHostPage() {
     };
     
     return setInstructions[setId] || setInstructions['default'];
+  };
+
+  // Fetch question set custom instruction (similar to player screen)
+  const fetchQuestionSetInstruction = async (setId) => {
+    if (!setId) {
+      setCustomInstruction(null);
+      return;
+    }
+
+    try {
+      console.log('📋 HOST: Fetching instruction for set:', setId);
+      const res = await fetch(`${API_BASE}question-sets`);
+      const data = await res.json();
+      const questionSet = data.sets?.find(set => set.id === setId);
+      if (questionSet && questionSet.customInstruction) {
+        console.log('📋 HOST: Found custom instruction:', questionSet.customInstruction);
+        setCustomInstruction(questionSet.customInstruction);
+      } else {
+        console.log('📋 HOST: No custom instruction found, using default');
+        setCustomInstruction(null);
+      }
+    } catch (error) {
+      console.error('Error fetching question set instruction:', error);
+      setCustomInstruction(null);
+    }
+  };
+
+  // Helper function to get instruction text with proper hierarchy (like player screen)
+  const getHostInstructionText = (currentQuestion, gameType = currentGameType) => {
+    // Priority 1: Question-level custom instructions
+    if (currentQuestion && currentQuestion.customInstructions) {
+      return currentQuestion.customInstructions;
+    }
+    
+    // Priority 2: Question set level custom instruction
+    if (customInstruction) {
+      return customInstruction;
+    }
+    
+    // Priority 3: Default instructions based on game type
+    const gameTypeDefaults = {
+      'trivia': 'Select the best answer:',
+      'poll': 'Share your opinion:',
+      'wavelength': 'Enter 10 words that come to mind:',
+      'call-and-answer': 'How could you adapt this lesson to your work, project, or team?'
+    };
+    
+    return gameTypeDefaults[gameType] || 'How could you adapt this lesson to your work, project, or team?';
   };
 
   // Generate a random 4-digit game ID
@@ -801,6 +852,7 @@ Focus on actionable business strategy insights.`;
           setCurrentGameType(gameStateData.gameMetadata.gameType || 'call-and-answer');
           const restoredSetId = gameStateData.gameMetadata.questionSetId || '';
           setSelectedSetId(restoredSetId);
+          fetchQuestionSetInstruction(restoredSetId);
           console.log(`🎮 HOST: Restored game metadata`);
           
           // Restore categories from bitmask if we have a question set
@@ -1094,6 +1146,7 @@ Focus on actionable business strategy insights.`;
         const firstSetId = activeSets[0].id;
         setSelectedSetId(firstSetId);
         fetchCategories(firstSetId);
+        fetchQuestionSetInstruction(firstSetId);
         console.log(`🎯 HOST: Auto-selected first question set: ${firstSetId}`);
       } else if (selectedSetId) {
         console.log(`⏳ HOST: Question set already selected: ${selectedSetId}`);
@@ -2092,6 +2145,7 @@ Focus on actionable business strategy insights.`;
     
     // Update question set selection
     setSelectedSetId(newGameSetId);
+    fetchQuestionSetInstruction(newGameSetId);
     
     // Reset all state
     setCurrentQuestionIndex(-1);
@@ -2776,6 +2830,9 @@ Ready to engage? See you there!`;
                   setNewGameSetId(e.target.value);
                   if (e.target.value) {
                     fetchCategories(e.target.value);
+                    fetchQuestionSetInstruction(e.target.value);
+                  } else {
+                    setCustomInstruction(null);
                   }
                 }}
                 className="dialog-select"
@@ -3406,7 +3463,7 @@ Ready to engage? See you there!`;
             )}
             
             <div className="application-prompt">
-              <strong>{currentGameType === 'trivia' ? 'Select the best answer:' : getInstructionText()}</strong>
+              <strong>{getHostInstructionText(questions.find(q => q.id === currentQuestionId))}</strong>
             </div>
             <div className="answer-progress">
               {playersWhoAnswered.length} of {players.length} players answered
@@ -3914,7 +3971,7 @@ Ready to engage? See you there!`;
               </div>
             )}
             <div className="expanded-lesson-prompt">
-              <strong>{getInstructionText()}</strong>
+              <strong>{getHostInstructionText(questions.find(q => q.id === currentQuestionId))}</strong>
             </div>
           </div>
         </div>
