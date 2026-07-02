@@ -1919,9 +1919,12 @@ Resources:
       ClientName: !Sub '${StackName}-web-client'
       UserPoolId: !Ref UserPoolV2
       GenerateSecret: false
+      # !Ref on a UserPoolIdentityProvider returns its ProviderName ("Google")
+      # AND creates the implicit dependency that orders provider creation
+      # before this client update (a literal "Google" races and fails).
       SupportedIdentityProviders: !If
         - HasGoogleOAuth
-        - [COGNITO, Google]
+        - [COGNITO, !Ref GoogleIdentityProvider]
         - [COGNITO]
         # Social providers commented out - configure manually in Cognito Console after deployment
         # - Facebook  
