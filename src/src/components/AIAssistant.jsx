@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { authFetch } from '../auth/authFetch';
+import { postGenerationBatch, runWithConcurrency } from '../utils/aiBatchClient';
 
 const API_BASE = window.API_BASE;
 
@@ -21,15 +21,26 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
     setGenerationStatus('🤖 Generating with AI...');
 
     try {
-      const response = await authFetch(`${API_BASE}admin/ai-generate-questions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      // Break bulk requests into small parallel batches so each API call
+      // completes well under API Gateway's ~30s integration timeout
+      const CHUNK_SIZE = 3;
+      const MAX_PARALLEL = 3;
+      const totalCount = isBulkGeneration ? bulkCount : 1;
+      const chunks = Math.ceil(totalCount / CHUNK_SIZE);
+
+      const batchTasks = Array.from({ length: chunks }, (_, i) => async () => {
+        const chunkSize = Math.min(CHUNK_SIZE, totalCount - (i * CHUNK_SIZE));
+
+        // Batches run in parallel, so differentiate them up-front to avoid duplicates
+        let batchInput = userInput.trim();
+        if (chunks > 1) {
+          batchInput += `\n\nThis request is part ${i + 1} of ${chunks} of a larger set generated in parallel - cover a distinct sub-topic or angle for this part and avoid the most obvious questions.`;
+        }
+
+        const result = await postGenerationBatch(`${API_BASE}admin/ai-generate-questions`, {
           engagementType,
-          userInput: userInput.trim(),
-          questionCount: isBulkGeneration ? bulkCount : 1,
+          userInput: batchInput,
+          questionCount: chunkSize,
           existingQuestion: isBulkGeneration ? null : questionSet.questions[questionIndex],
           context: {
             title: questionSet.title,
@@ -37,17 +48,19 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
             customInstructions: questionSet.customInstructions,
             aiContextInstructions: questionSet.aiContextInstructions
           }
-        })
+        }, {
+          label: `Batch ${i + 1} of ${chunks}`,
+          onStatus: setGenerationStatus
+        });
+
+        return result.questions;
       });
 
-      const result = await response.json();
+      const batchResults = await runWithConcurrency(batchTasks, MAX_PARALLEL);
+      const allQuestions = batchResults.flat();
 
-      if (response.ok) {
-        setGenerationStatus(`✅ Generated ${result.questions.length} question(s) successfully`);
-        onQuestionsGenerated(result.questions);
-      } else {
-        setGenerationStatus(`❌ Generation failed: ${result.error || 'Unknown error'}`);
-      }
+      setGenerationStatus(`✅ Generated ${allQuestions.length} question(s) successfully`);
+      onQuestionsGenerated(allQuestions);
     } catch (error) {
       console.error('AI generation error:', error);
       setGenerationStatus(`❌ Generation failed: ${error.message}`);

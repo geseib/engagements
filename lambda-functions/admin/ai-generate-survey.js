@@ -70,8 +70,13 @@ exports.handler = async (event) => {
     fullPrompt += '"textType": "short|long|email|number", "placeholder": "Placeholder text", "required": true}]}';
     fullPrompt += ' Return ONLY the JSON object.';
 
-    console.log('🤖 Sending prompt to Claude...');
-    const aiResponse = await invokeClaudeWithRetry(bedrockClient, InvokeModelCommand, fullPrompt, 4000);
+    // Right-size max_tokens to the requested count (flat 4000 truncated large
+    // surveys). NOTE: surveys are still a single call, so counts >~10 risk API
+    // Gateway's ~30s timeout - splitting/merging surveys needs a design change.
+    const maxTokens = Math.min(1500 + (limitedCount * 250), 8000);
+
+    console.log('🤖 Sending prompt to Claude...', { maxTokens });
+    const aiResponse = await invokeClaudeWithRetry(bedrockClient, InvokeModelCommand, fullPrompt, maxTokens);
     console.log('✅ Received response from Claude');
 
     // Parse the JSON response with improved error handling

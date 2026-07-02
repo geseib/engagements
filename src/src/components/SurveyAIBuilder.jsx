@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
-import { authFetch } from '../auth/authFetch';
+import { postGenerationBatch } from '../utils/aiBatchClient';
 
 const API_BASE = window.API_BASE;
 
@@ -35,34 +35,28 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
     setStep(2);
 
     try {
-      const response = await authFetch(`${API_BASE}admin/ai-generate-survey`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: surveyConfig.title,
-          description: surveyConfig.description,
-          topic: surveyConfig.topic,
-          audience: surveyConfig.audience,
-          purpose: surveyConfig.purpose,
-          questionCount: surveyConfig.questionCount,
-          includeRating: surveyConfig.includeRating,
-          includeMultipleChoice: surveyConfig.includeMultipleChoice,
-          includeTextEntry: surveyConfig.includeTextEntry,
-          customPrompt: surveyConfig.customPrompt
-        })
+      // Note: the survey lambda returns a single survey object, so this stays
+      // one call. Large question counts (>~10) risk API Gateway's ~30s timeout;
+      // postGenerationBatch retries transient failures and reports actionable errors.
+      const result = await postGenerationBatch(`${API_BASE}admin/ai-generate-survey`, {
+        title: surveyConfig.title,
+        description: surveyConfig.description,
+        topic: surveyConfig.topic,
+        audience: surveyConfig.audience,
+        purpose: surveyConfig.purpose,
+        questionCount: surveyConfig.questionCount,
+        includeRating: surveyConfig.includeRating,
+        includeMultipleChoice: surveyConfig.includeMultipleChoice,
+        includeTextEntry: surveyConfig.includeTextEntry,
+        customPrompt: surveyConfig.customPrompt
+      }, {
+        label: 'Survey generation',
+        onStatus: setGenerationStatus
       });
 
-      const result = await response.json();
-
-      if (response.ok) {
-        setGeneratedSurvey(result.survey);
-        setGenerationStatus(`✅ Generated survey with ${result.survey.questions.length} questions successfully`);
-        setCurrentQuestionIndex(0);
-      } else {
-        setGenerationStatus(`❌ Generation failed: ${result.error || 'Unknown error'}`);
-      }
+      setGeneratedSurvey(result.survey);
+      setGenerationStatus(`✅ Generated survey with ${result.survey.questions.length} questions successfully`);
+      setCurrentQuestionIndex(0);
     } catch (error) {
       console.error('AI survey generation error:', error);
       setGenerationStatus(`❌ Generation failed: ${error.message}`);

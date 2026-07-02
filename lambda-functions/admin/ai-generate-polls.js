@@ -55,8 +55,12 @@ exports.handler = async (event) => {
     fullPrompt += '[{"title": "Poll question text", "category": "Category", "detail": "Context or explanation", "school": "Context", "customInstructions": "Instructions", "options": ["Option 1", "Option 2", "Option 3"], "allowMultiple": false}]';
     fullPrompt += ' Return ONLY the JSON array.';
 
-    console.log('🤖 Sending prompt to Claude...');
-    const aiResponse = await invokeClaudeWithRetry(bedrockClient, InvokeModelCommand, fullPrompt, 4000);
+    // Right-size max_tokens to the requested count so responses finish well
+    // under API Gateway's ~30s integration timeout
+    const maxTokens = Math.min(800 + (limitedCount * 300), 8000);
+
+    console.log('🤖 Sending prompt to Claude...', { maxTokens });
+    const aiResponse = await invokeClaudeWithRetry(bedrockClient, InvokeModelCommand, fullPrompt, maxTokens);
     console.log('✅ Received response from Claude');
 
     // Parse the JSON response with improved error handling

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
+import { postGenerationBatch, runWithConcurrency } from '../utils/aiBatchClient';
 
 const API_BASE = window.API_BASE;
 
@@ -33,91 +34,50 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
     setStep(2);
 
     try {
-      // Break large requests into chunks to avoid timeout and rate limiting
-      const CHUNK_SIZE = 5; // Reduced to 5 questions per request for better rate limiting
+      // Break large requests into small parallel batches so each API call
+      // completes well under API Gateway's ~30s integration timeout
+      const CHUNK_SIZE = 3;
+      const MAX_PARALLEL = 3;
       const totalCount = triviaConfig.count;
       const chunks = Math.ceil(totalCount / CHUNK_SIZE);
-      
-      let allQuestions = [];
-      
-      // Helper function for batch retry with exponential backoff
-      const retryBatch = async (batchIndex, chunkSize, maxRetries = 3) => {
-        for (let attempt = 0; attempt <= maxRetries; attempt++) {
-          try {
-            const response = await fetch(`${API_BASE}admin/ai-generate-trivia`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                topic: triviaConfig.topic,
-                audience: triviaConfig.audience,
-                difficulty: triviaConfig.difficulty,
-                count: chunkSize,
-                numChoices: triviaConfig.numChoices,
-                numCorrect: triviaConfig.numCorrect,
-                numberOfCategories: triviaConfig.numberOfCategories,
-                mustHaveCategories: triviaConfig.mustHaveCategories,
-                customPrompt: triviaConfig.customPrompt
-              })
-            });
 
-            const result = await response.json();
+      let completedQuestions = 0;
+      const batchTasks = Array.from({ length: chunks }, (_, i) => async () => {
+        const chunkSize = Math.min(CHUNK_SIZE, totalCount - (i * CHUNK_SIZE));
 
-            if (response.ok) {
-              return result.questions;
-            } else {
-              const error = result.error || 'Unknown error';
-              const isThrottled = error.includes('Too many requests') || 
-                                error.includes('throttle') || 
-                                error.includes('rate limit') ||
-                                response.status === 429;
-              
-              if (isThrottled && attempt < maxRetries) {
-                // For rate limits, wait longer - at least 30 seconds
-                const baseDelay = 30000; // 30 seconds minimum
-                const delay = baseDelay + (attempt * 15000) + Math.random() * 5000; // 30s, 45s, 60s...
-                setGenerationStatus(`⏳ Rate limited! Waiting ${Math.round(delay/1000)}s before retry (Bedrock has per-minute limits)`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-                continue;
-              }
-              
-              throw new Error(`Batch ${batchIndex + 1} failed: ${error}`);
-            }
-          } catch (fetchError) {
-            if (attempt < maxRetries) {
-              const delay = Math.pow(2, attempt) * 2000 + Math.random() * 1000;
-              setGenerationStatus(`⏳ Batch ${batchIndex + 1} error, retrying in ${Math.round(delay/1000)}s (attempt ${attempt + 1}/${maxRetries + 1})`);
-              await new Promise(resolve => setTimeout(resolve, delay));
-              continue;
-            }
-            throw fetchError;
-          }
+        // Batches run in parallel, so differentiate them up-front to avoid duplicates
+        let customPrompt = triviaConfig.customPrompt;
+        if (chunks > 1) {
+          customPrompt = `${customPrompt ? customPrompt + ' ' : ''}This request is part ${i + 1} of ${chunks} of a larger set generated in parallel - explore a distinct sub-topic or angle for this part and avoid the most obvious questions`;
         }
-      };
 
-      for (let i = 0; i < chunks; i++) {
-        const remainingCount = totalCount - (i * CHUNK_SIZE);
-        const chunkSize = Math.min(CHUNK_SIZE, remainingCount);
-        
-        setGenerationStatus(`🤖 Generating batch ${i + 1} of ${chunks} (${chunkSize} questions)...`);
-        
-        const batchQuestions = await retryBatch(i, chunkSize);
-        allQuestions.push(...batchQuestions);
-        setGenerationStatus(`✅ Generated ${allQuestions.length} of ${totalCount} questions...`);
-        
-        // Much longer delay between successful requests to respect per-minute rate limits
-        if (i < chunks - 1) {
-          const interBatchDelay = 12000; // 12 seconds between batches
-          setGenerationStatus(`⏳ Waiting ${interBatchDelay/1000}s before next batch (respecting rate limits)...`);
-          await new Promise(resolve => setTimeout(resolve, interBatchDelay));
-        }
-      }
+        const result = await postGenerationBatch(`${API_BASE}admin/ai-generate-trivia`, {
+          topic: triviaConfig.topic,
+          audience: triviaConfig.audience,
+          difficulty: triviaConfig.difficulty,
+          count: chunkSize,
+          numChoices: triviaConfig.numChoices,
+          numCorrect: triviaConfig.numCorrect,
+          numberOfCategories: triviaConfig.numberOfCategories,
+          mustHaveCategories: triviaConfig.mustHaveCategories,
+          customPrompt: customPrompt
+        }, {
+          label: `Batch ${i + 1} of ${chunks}`,
+          onStatus: setGenerationStatus
+        });
+
+        completedQuestions += result.questions.length;
+        setGenerationStatus(`✅ Generated ${completedQuestions} of ${totalCount} questions...`);
+        return result.questions;
+      });
+
+      const batchResults = await runWithConcurrency(batchTasks, MAX_PARALLEL);
+      const allQuestions = batchResults.flat();
 
       setGeneratedTrivia(allQuestions);
       setGenerationStatus(`✅ Generated ${allQuestions.length} trivia questions successfully`);
       setCurrentTriviaIndex(0);
-      
+
     } catch (error) {
       console.error('AI trivia generation error:', error);
       setGenerationStatus(`❌ Generation failed: ${error.message}`);

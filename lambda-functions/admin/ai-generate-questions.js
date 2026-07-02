@@ -93,8 +93,12 @@ exports.handler = async (event) => {
 
     prompt += '\n\nIMPORTANT: Return ONLY the JSON array, no additional text.';
 
-    console.log('🤖 Sending prompt to Claude...');
-    const aiResponse = await invokeClaudeWithRetry(bedrockClient, InvokeModelCommand, prompt, 3000);
+    // Right-size max_tokens to the requested count so responses finish well
+    // under API Gateway's ~30s integration timeout
+    const maxTokens = Math.min(1000 + ((questionCount || 1) * 700), 8000);
+
+    console.log('🤖 Sending prompt to Claude...', { maxTokens });
+    const aiResponse = await invokeClaudeWithRetry(bedrockClient, InvokeModelCommand, prompt, maxTokens);
     console.log('✅ Received response from Claude');
 
     // Parse the JSON response with improved error handling

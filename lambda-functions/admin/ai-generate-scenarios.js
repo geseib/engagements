@@ -40,10 +40,12 @@ exports.handler = async (event) => {
       console.log('⚠️ Limited scenario count from', count, 'to', limitedCount, 'maximum allowed is 100');
     }
 
-    // Enforce 24-category system limit due to bitmask constraints
-    const limitedCategories = Math.min(numberOfCategories || 3, 24);
+    // Enforce 24-category system limit due to bitmask constraints, and never
+    // ask for more categories than scenarios in this request (small parallel
+    // batches would otherwise get a contradictory prompt)
+    const limitedCategories = Math.min(numberOfCategories || 3, 24, Math.max(limitedCount, 1));
     if (limitedCategories !== numberOfCategories) {
-      console.log('⚠️ Limited category count from', numberOfCategories, 'to', limitedCategories, 'maximum allowed is 24 (bitmask limitation)');
+      console.log('⚠️ Limited category count from', numberOfCategories, 'to', limitedCategories, '(max 24 categories, and no more categories than scenarios per request)');
     }
 
     console.log('🤖 Generating scenarios:', { scenarioType, engagementType, count: limitedCount, difficulty, categories: limitedCategories, promptLength: prompt?.length });
@@ -125,8 +127,13 @@ exports.handler = async (event) => {
       fullPrompt += promptTemplate.outputFormat;
     }
 
-    console.log('🤖 Sending prompt to Claude...', { promptLength: fullPrompt.length });
-    
+    // Right-size max_tokens to the requested count (~500 output tokens per
+    // scenario observed, plus headroom) so we never over-generate and each
+    // call stays well under API Gateway's ~30s timeout
+    const maxTokens = Math.min(1000 + (limitedCount * 700), 8000);
+
+    console.log('🤖 Sending prompt to Claude...', { promptLength: fullPrompt.length, maxTokens });
+
     // Use Claude Sonnet 4.6 inference profile ARN (same as working ai-generate-questions)
     let aiResponse;
     try {
@@ -134,7 +141,7 @@ exports.handler = async (event) => {
         modelId: `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-sonnet-4-6`,
         body: JSON.stringify({
           anthropic_version: 'bedrock-2023-05-31',
-          max_tokens: 4000,
+          max_tokens: maxTokens,
           temperature: 0.7,
           messages: [
             {
@@ -159,7 +166,7 @@ exports.handler = async (event) => {
         modelId: `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`,
         body: JSON.stringify({
           anthropic_version: 'bedrock-2023-05-31',
-          max_tokens: 4000,
+          max_tokens: maxTokens,
           temperature: 0.7,
           messages: [
             {
@@ -183,6 +190,13 @@ exports.handler = async (event) => {
       
       // Try multiple parsing strategies
       let jsonString = aiResponse.trim();
+
+      // Strategy 0: Strip markdown code fences (Claude 4.x may wrap JSON in ```json ... ```)
+      const fenceMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (fenceMatch) {
+        console.log('🔍 Stripped markdown code fence from response');
+        jsonString = fenceMatch[1].trim();
+      }
 
       // Strategy 1: Direct parse if it looks like JSON
       if (jsonString.startsWith('[') && jsonString.endsWith(']')) {
@@ -255,9 +269,14 @@ exports.handler = async (event) => {
 
   } catch (error) {
     console.error('❌ AI scenario generation error:', error);
+    // Surface throttling as 429 so the client backs off instead of retrying immediately
+    const isThrottled = error.name === 'ThrottlingException' ||
+                        error.message?.includes('Too many requests') ||
+                        error.message?.includes('throttl') ||
+                        error.$metadata?.httpStatusCode === 429;
     return {
-      statusCode: 500,
-      body: JSON.stringify({ error: `Failed to generate scenarios: ${error.message}` }),
+      statusCode: isThrottled ? 429 : 500,
+      body: JSON.stringify({ error: `Failed to generate scenarios: ${error.message || 'unexpected error'}` }),
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type',

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { authFetch } from '../auth/authFetch';
+import { postGenerationBatch, runWithConcurrency } from '../utils/aiBatchClient';
 
 const API_BASE = window.API_BASE;
 
@@ -406,96 +407,72 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         basePrompt += `\n\nAdditional Requirements: ${scenarioConfig.customPrompt}`;
       }
 
-      // Break large requests into chunks to avoid timeout and rate limiting
-      const CHUNK_SIZE = 5; // Reduced to 5 scenarios per request for better rate limiting
+      // Break large requests into small parallel batches. API Gateway HTTP
+      // APIs have a hard ~30s integration timeout, and generation runs at
+      // roughly 7.5s per scenario, so 2 per call keeps each request ~15s.
+      const CHUNK_SIZE = 2;
+      const MAX_PARALLEL = 3; // cap concurrency to respect Bedrock rate limits
       const totalCount = scenarioConfig.count;
       const chunks = Math.ceil(totalCount / CHUNK_SIZE);
-      
-      let allScenarios = [];
-      
-      // Helper function for batch retry with exponential backoff
-      const retryBatch = async (batchIndex, chunkSize, maxRetries = 3) => {
-        const chunkPrompt = basePrompt + `\nNumber of scenarios needed: ${chunkSize}`;
-        
-        for (let attempt = 0; attempt <= maxRetries; attempt++) {
-          try {
-            // Determine the correct scenarioType for the backend
-            const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
-            const backendScenarioType = selectedType?.source === 'database' && selectedType.dbPrompt 
-              ? selectedType.dbPrompt.scenarioType 
-              : scenarioConfig.type;
 
-            const response = await authFetch(`${API_BASE}admin/ai-generate-scenarios`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                scenarioType: backendScenarioType,
-                engagementType: engagementType,
-                prompt: chunkPrompt,
-                count: chunkSize,
-                difficulty: scenarioConfig.difficulty,
-                context: scenarioConfig.context,
-                audience: scenarioConfig.audience,
-                customPrompt: scenarioConfig.customPrompt,
-                customTitle: scenarioConfig.customTitle,
-                numberOfCategories: scenarioConfig.numberOfCategories,
-                mustHaveCategories: scenarioConfig.mustHaveCategories
-              })
-            });
+      // Determine the correct scenarioType for the backend
+      const backendScenarioType = selectedType?.source === 'database' && selectedType.dbPrompt
+        ? selectedType.dbPrompt.scenarioType
+        : scenarioConfig.type;
 
-            const result = await response.json();
+      // Since batches run in parallel, differentiate them up-front so we
+      // don't get duplicate/near-identical scenarios across batches.
+      const batchAngles = [
+        'everyday, day-to-day situations',
+        'high-pressure or time-critical situations',
+        'interpersonal and communication-focused situations',
+        'strategic or long-term planning situations',
+        'unexpected situations that require creative thinking',
+        'cross-team or organizational situations'
+      ];
+      const requiredCategories = (scenarioConfig.mustHaveCategories || '')
+        .split(',')
+        .map(c => c.trim())
+        .filter(Boolean);
 
-            if (response.ok) {
-              return result.scenarios;
-            } else {
-              const error = result.error || 'Unknown error';
-              const isThrottled = error.includes('Too many requests') || 
-                                error.includes('throttle') || 
-                                error.includes('rate limit') ||
-                                response.status === 429;
-              
-              if (isThrottled && attempt < maxRetries) {
-                // For rate limits, wait longer - at least 30 seconds
-                const baseDelay = 30000; // 30 seconds minimum
-                const delay = baseDelay + (attempt * 15000) + Math.random() * 5000; // 30s, 45s, 60s...
-                setGenerationStatus(`⏳ Rate limited! Waiting ${Math.round(delay/1000)}s before retry (Bedrock has per-minute limits)`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-                continue;
-              }
-              
-              throw new Error(`Batch ${batchIndex + 1} failed: ${error}`);
-            }
-          } catch (fetchError) {
-            if (attempt < maxRetries) {
-              const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
-              setGenerationStatus(`⏳ Batch ${batchIndex + 1} error, retrying in ${Math.round(delay/1000)}s (attempt ${attempt + 1}/${maxRetries + 1})`);
-              await new Promise(resolve => setTimeout(resolve, delay));
-              continue;
-            }
-            throw fetchError;
+      let completedScenarios = 0;
+      setGenerationStatus(`🤖 Generating ${totalCount} scenario${totalCount > 1 ? 's' : ''} in ${chunks} batch${chunks > 1 ? 'es' : ''}...`);
+
+      const batchTasks = Array.from({ length: chunks }, (_, i) => async () => {
+        const chunkSize = Math.min(CHUNK_SIZE, totalCount - (i * CHUNK_SIZE));
+
+        let chunkPrompt = basePrompt + `\nNumber of scenarios needed: ${chunkSize}`;
+        if (chunks > 1) {
+          chunkPrompt += `\n\nThis request is part ${i + 1} of ${chunks} of a larger set generated in parallel. To avoid duplicating other parts, emphasize ${batchAngles[i % batchAngles.length]} and avoid the most obvious or commonly used examples.`;
+          if (requiredCategories.length > 0) {
+            chunkPrompt += ` Where it fits, favor the category "${requiredCategories[i % requiredCategories.length]}" for this part.`;
           }
         }
-      };
 
-      for (let i = 0; i < chunks; i++) {
-        const remainingCount = totalCount - (i * CHUNK_SIZE);
-        const chunkSize = Math.min(CHUNK_SIZE, remainingCount);
-        
-        setGenerationStatus(`🤖 Generating batch ${i + 1} of ${chunks} (${chunkSize} scenarios)...`);
-        
-        const batchScenarios = await retryBatch(i, chunkSize);
-        allScenarios.push(...batchScenarios);
-        setGenerationStatus(`✅ Generated ${allScenarios.length} of ${totalCount} scenarios...`);
-        
-        // Much longer delay between successful requests to respect per-minute rate limits
-        if (i < chunks - 1) {
-          const interBatchDelay = 12000; // 12 seconds between batches
-          setGenerationStatus(`⏳ Waiting ${interBatchDelay/1000}s before next batch (respecting rate limits)...`);
-          await new Promise(resolve => setTimeout(resolve, interBatchDelay));
-        }
-      }
+        const result = await postGenerationBatch(`${API_BASE}admin/ai-generate-scenarios`, {
+          scenarioType: backendScenarioType,
+          engagementType: engagementType,
+          prompt: chunkPrompt,
+          count: chunkSize,
+          difficulty: scenarioConfig.difficulty,
+          context: scenarioConfig.context,
+          audience: scenarioConfig.audience,
+          customPrompt: scenarioConfig.customPrompt,
+          customTitle: scenarioConfig.customTitle,
+          numberOfCategories: scenarioConfig.numberOfCategories,
+          mustHaveCategories: scenarioConfig.mustHaveCategories
+        }, {
+          label: `Batch ${i + 1} of ${chunks}`,
+          onStatus: setGenerationStatus
+        });
+
+        completedScenarios += result.scenarios.length;
+        setGenerationStatus(`✅ Generated ${completedScenarios} of ${totalCount} scenarios...`);
+        return result.scenarios;
+      });
+
+      const batchResults = await runWithConcurrency(batchTasks, MAX_PARALLEL);
+      const allScenarios = batchResults.flat();
 
       setGeneratedScenarios(allScenarios);
       setGeneratedMetadata(null); // Will be generated later

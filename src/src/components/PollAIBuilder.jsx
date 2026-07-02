@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
-import { authFetch } from '../auth/authFetch';
+import { postGenerationBatch, runWithConcurrency } from '../utils/aiBatchClient';
 
 const API_BASE = window.API_BASE;
 
@@ -32,31 +32,47 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
     setStep(2);
 
     try {
-      const response = await authFetch(`${API_BASE}admin/ai-generate-polls`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      // Break large requests into small parallel batches so each API call
+      // completes well under API Gateway's ~30s integration timeout
+      const CHUNK_SIZE = 3;
+      const MAX_PARALLEL = 3;
+      const totalCount = pollConfig.count;
+      const chunks = Math.ceil(totalCount / CHUNK_SIZE);
+
+      let completedPolls = 0;
+      const batchTasks = Array.from({ length: chunks }, (_, i) => async () => {
+        const chunkSize = Math.min(CHUNK_SIZE, totalCount - (i * CHUNK_SIZE));
+
+        // Batches run in parallel, so differentiate them up-front to avoid duplicates
+        let customPrompt = pollConfig.customPrompt;
+        if (chunks > 1) {
+          customPrompt = `${customPrompt ? customPrompt + ' ' : ''}This request is part ${i + 1} of ${chunks} of a larger set generated in parallel - explore a distinct sub-topic or angle for this part and avoid the most obvious questions`;
+        }
+
+        const result = await postGenerationBatch(`${API_BASE}admin/ai-generate-polls`, {
           topic: pollConfig.topic,
           category: pollConfig.category,
           audience: pollConfig.audience,
           difficulty: pollConfig.difficulty,
-          count: pollConfig.count,
+          count: chunkSize,
           allowMultiple: pollConfig.allowMultiple,
-          customPrompt: pollConfig.customPrompt
-        })
+          customPrompt: customPrompt
+        }, {
+          label: `Batch ${i + 1} of ${chunks}`,
+          onStatus: setGenerationStatus
+        });
+
+        completedPolls += result.questions.length;
+        setGenerationStatus(`✅ Generated ${completedPolls} of ${totalCount} poll questions...`);
+        return result.questions;
       });
 
-      const result = await response.json();
+      const batchResults = await runWithConcurrency(batchTasks, MAX_PARALLEL);
+      const allPolls = batchResults.flat();
 
-      if (response.ok) {
-        setGeneratedPolls(result.questions);
-        setGenerationStatus(`✅ Generated ${result.questions.length} poll questions successfully`);
-        setCurrentPollIndex(0);
-      } else {
-        setGenerationStatus(`❌ Generation failed: ${result.error || 'Unknown error'}`);
-      }
+      setGeneratedPolls(allPolls);
+      setGenerationStatus(`✅ Generated ${allPolls.length} poll questions successfully`);
+      setCurrentPollIndex(0);
     } catch (error) {
       console.error('AI poll generation error:', error);
       setGenerationStatus(`❌ Generation failed: ${error.message}`);
