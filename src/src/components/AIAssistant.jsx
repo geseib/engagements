@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { postGenerationBatch, runWithConcurrency } from '../utils/aiBatchClient';
+import { postGenerationBatch, planGenerationTopics, dropNearDuplicates, runWithConcurrency } from '../utils/aiBatchClient';
 
 const API_BASE = window.API_BASE;
 
@@ -28,12 +28,40 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
       const totalCount = isBulkGeneration ? bulkCount : 1;
       const chunks = Math.ceil(totalCount / CHUNK_SIZE);
 
+      // Two-phase generation: when a bulk request spans multiple parallel
+      // batches, first plan ONE list of distinct sub-topics (a small fast
+      // call), then anchor each batch to its assigned slice so batches can't
+      // duplicate each other. Falls back to the older angle hint on failure.
+      let plannedTopics = null;
+      if (chunks > 1) {
+        plannedTopics = await planGenerationTopics(`${API_BASE}admin/ai-generate-questions`, {
+          engagementType,
+          userInput: userInput.trim(),
+          questionCount: totalCount,
+          context: {
+            title: questionSet.title,
+            description: questionSet.description
+          }
+        }, totalCount, {
+          label: 'Topic planning',
+          onStatus: setGenerationStatus
+        });
+      }
+
       const batchTasks = Array.from({ length: chunks }, (_, i) => async () => {
         const chunkSize = Math.min(CHUNK_SIZE, totalCount - (i * CHUNK_SIZE));
 
-        // Batches run in parallel, so differentiate them up-front to avoid duplicates
+        // Anchor this batch to its assigned topics; the angle hint is only
+        // the fallback when topic planning was unavailable
+        const assignedTopics = plannedTopics
+          ? plannedTopics.slice(i * CHUNK_SIZE, i * CHUNK_SIZE + chunkSize)
+          : undefined;
+        const otherTopics = plannedTopics
+          ? plannedTopics.filter((_, idx) => idx < i * CHUNK_SIZE || idx >= i * CHUNK_SIZE + chunkSize)
+          : undefined;
+
         let batchInput = userInput.trim();
-        if (chunks > 1) {
+        if (chunks > 1 && !plannedTopics) {
           batchInput += `\n\nThis request is part ${i + 1} of ${chunks} of a larger set generated in parallel - cover a distinct sub-topic or angle for this part and avoid the most obvious questions.`;
         }
 
@@ -47,7 +75,9 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
             description: questionSet.description,
             customInstructions: questionSet.customInstructions,
             aiContextInstructions: questionSet.aiContextInstructions
-          }
+          },
+          assignedTopics,
+          otherTopics
         }, {
           label: `Batch ${i + 1} of ${chunks}`,
           onStatus: setGenerationStatus
@@ -57,7 +87,10 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
       });
 
       const batchResults = await runWithConcurrency(batchTasks, MAX_PARALLEL);
-      const allQuestions = batchResults.flat();
+      // Safety net (bulk only): drop any near-duplicate titles that slipped through
+      const allQuestions = isBulkGeneration
+        ? dropNearDuplicates(batchResults.flat())
+        : batchResults.flat();
 
       setGenerationStatus(`✅ Generated ${allQuestions.length} question(s) successfully`);
       onQuestionsGenerated(allQuestions);

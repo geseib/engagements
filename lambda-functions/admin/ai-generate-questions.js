@@ -1,5 +1,5 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
-const { invokeClaudeWithRetry } = require('./shared/bedrock-utils');
+const { invokeClaudeWithRetry, planTopicList, buildTopicAssignmentText } = require('./shared/bedrock-utils');
 
 const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 
@@ -24,7 +24,32 @@ exports.handler = async (event) => {
       throw new Error('No request body provided');
     }
 
-    const { engagementType, userInput, questionCount, existingQuestion, context } = JSON.parse(event.body);
+    const { engagementType, userInput, questionCount, existingQuestion, context, planTopics, assignedTopics, otherTopics } = JSON.parse(event.body);
+
+    // Phase 1 of two-phase generation: plan distinct sub-topics before the
+    // client fans out parallel batches (each batch is then anchored to its
+    // assigned topics so parallel batches can't duplicate each other)
+    if (planTopics === true) {
+      let brief = `${engagementType} questions. Requirements: ${userInput}`;
+      if (context?.title) brief += `\nQuestion Set Title: ${context.title}`;
+      if (context?.description) brief += `\nDescription: ${context.description}`;
+
+      const topics = await planTopicList(bedrockClient, InvokeModelCommand, {
+        brief,
+        itemNoun: `${engagementType} questions`,
+        count: questionCount
+      });
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ topics }),
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS'
+        }
+      };
+    }
 
     console.log(`🤖 Generating ${questionCount} ${engagementType} questions`);
 
@@ -60,6 +85,13 @@ exports.handler = async (event) => {
       prompt += `REQUIREMENTS: ${userInput}\n\n`;
       if (context?.title) prompt += `Question Set Title: ${context.title}\n`;
       if (context?.description) prompt += `Description: ${context.description}\n`;
+
+      // Phase 2 of two-phase generation: anchor this batch to its assigned
+      // topics so parallel batches stay distinct by construction
+      const topicAssignmentText = buildTopicAssignmentText(assignedTopics, otherTopics, `${engagementType} questions`);
+      if (topicAssignmentText) {
+        prompt += topicAssignmentText;
+      }
     }
 
     // Add format instructions based on engagement type

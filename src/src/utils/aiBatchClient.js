@@ -87,6 +87,72 @@ export const postGenerationBatch = async (url, payload, options = {}) => {
   }
 };
 
+// Phase 1 of two-phase generation: ask the generation endpoint to plan a
+// list of distinct topics BEFORE fanning out parallel batches. Each batch is
+// then anchored to its assigned topics (via assignedTopics/otherTopics in the
+// batch payload), which prevents parallel batches from producing duplicate or
+// near-identical items. Returns the topic list, or null on any failure so the
+// caller can fall back to the older per-batch angle hints instead of failing
+// the whole generation.
+export const planGenerationTopics = async (url, payload, expectedCount, options = {}) => {
+  const { label = 'Topic planning', onStatus = () => {} } = options;
+  try {
+    onStatus(`🧭 Planning ${expectedCount} distinct topics...`);
+    const result = await postGenerationBatch(
+      url,
+      { ...payload, planTopics: true, count: expectedCount },
+      { label, onStatus, maxRetries: 1 }
+    );
+    const topics = (Array.isArray(result?.topics) ? result.topics : [])
+      .map((t) => String(t).trim())
+      .filter(Boolean);
+    if (topics.length < expectedCount) {
+      console.warn(`⚠️ ${label}: expected ${expectedCount} topics but got ${topics.length} - falling back to angle hints`);
+      return null;
+    }
+    return topics.slice(0, expectedCount);
+  } catch (error) {
+    console.warn(`⚠️ ${label} failed (${error.message}) - falling back to angle hints`);
+    return null;
+  }
+};
+
+// Safety net after merging parallel batch results: drop items whose titles
+// are near-duplicates of an earlier item (same normalized token set, or very
+// high token overlap for longer titles). Topic anchoring is the primary
+// duplicate-prevention mechanism; this just catches strays.
+const titleTokens = (title) =>
+  String(title || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+export const dropNearDuplicates = (items, getTitle = (item) => item?.title) => {
+  const kept = [];
+  const keptTokenSets = [];
+
+  for (const item of items) {
+    const tokens = titleTokens(getTitle(item));
+    const tokenSet = new Set(tokens);
+    const isDuplicate = tokens.length > 0 && keptTokenSets.some((prevSet) => {
+      const overlap = tokens.filter((t) => prevSet.has(t)).length;
+      const sameSet = overlap === tokenSet.size && overlap === prevSet.size;
+      const highOverlap = Math.min(tokenSet.size, prevSet.size) >= 4 &&
+        overlap / Math.min(tokenSet.size, prevSet.size) >= 0.8;
+      return sameSet || highOverlap;
+    });
+
+    if (isDuplicate) {
+      console.warn(`⚠️ Dropping near-duplicate generated item: "${getTitle(item)}"`);
+    } else {
+      kept.push(item);
+      keptTokenSets.push(tokenSet);
+    }
+  }
+  return kept;
+};
+
 // Run an array of async task functions with a concurrency cap.
 // Results are returned in task order. The first task failure rejects.
 export const runWithConcurrency = async (taskFns, limit = 3) => {

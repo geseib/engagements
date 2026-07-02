@@ -1,6 +1,7 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
+const { planTopicList, buildTopicAssignmentText } = require('./shared/bedrock-utils');
 
 const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const tableName = process.env.TABLE_NAME;
@@ -54,7 +55,35 @@ exports.handler = async (event) => {
       throw new Error('No request body provided');
     }
 
-    const { scenarioType, engagementType = 'call-and-answer', prompt, count, difficulty, context, audience, customPrompt, customTitle, numberOfCategories, mustHaveCategories } = JSON.parse(event.body);
+    const { scenarioType, engagementType = 'call-and-answer', prompt, count, difficulty, context, audience, customPrompt, customTitle, numberOfCategories, mustHaveCategories, planTopics, assignedTopics, otherTopics } = JSON.parse(event.body);
+
+    // Phase 1 of two-phase generation: plan distinct topics before the
+    // client fans out parallel batches (each batch is then anchored to its
+    // assigned topics so parallel batches can't duplicate each other). For
+    // wavelength the topics double as candidate subject areas.
+    if (planTopics === true) {
+      const planItemNoun = engagementType === 'wavelength' ? 'wavelength subjects' : 'scenarios';
+      let brief = prompt || `Create ${planItemNoun} based on the requirements provided.`;
+      if (context) brief += `\nContext: ${context}`;
+      if (audience) brief += `\nAudience: ${audience}`;
+      if (customPrompt) brief += `\nAdditional Requirements: ${customPrompt}`;
+
+      const topics = await planTopicList(bedrockClient, InvokeModelCommand, {
+        brief,
+        itemNoun: planItemNoun,
+        count
+      });
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ topics }),
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS'
+        }
+      };
+    }
 
     // Allow up to 100 scenarios with increased timeout
     const limitedCount = Math.min(count, 100);
@@ -115,6 +144,15 @@ exports.handler = async (event) => {
     // Add custom requirements
     if (customPrompt) {
       fullPrompt += `\n\nAdditional Requirements: ${customPrompt}`;
+    }
+
+    // Phase 2 of two-phase generation: anchor this batch to its assigned
+    // topics so parallel batches stay distinct by construction. Appended
+    // here (like customPrompt) so it reaches BOTH the database-template and
+    // fallback prompt paths.
+    const topicAssignmentText = buildTopicAssignmentText(assignedTopics, otherTopics, itemNoun);
+    if (topicAssignmentText) {
+      fullPrompt += topicAssignmentText;
     }
 
     // Add difficulty/detail level

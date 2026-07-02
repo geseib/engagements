@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
-import { postGenerationBatch, runWithConcurrency } from '../utils/aiBatchClient';
+import { postGenerationBatch, planGenerationTopics, dropNearDuplicates, runWithConcurrency } from '../utils/aiBatchClient';
 
 const API_BASE = window.API_BASE;
 
@@ -41,13 +41,38 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
       const totalCount = triviaConfig.count;
       const chunks = Math.ceil(totalCount / CHUNK_SIZE);
 
+      // Two-phase generation: when the request spans multiple parallel
+      // batches, first plan ONE list of distinct sub-topics (a small fast
+      // call), then anchor each batch to its assigned slice so batches can't
+      // duplicate each other. Falls back to the older angle hint on failure.
+      let plannedTopics = null;
+      if (chunks > 1) {
+        plannedTopics = await planGenerationTopics(`${API_BASE}admin/ai-generate-trivia`, {
+          topic: triviaConfig.topic,
+          audience: triviaConfig.audience,
+          difficulty: triviaConfig.difficulty,
+          customPrompt: triviaConfig.customPrompt
+        }, totalCount, {
+          label: 'Topic planning',
+          onStatus: setGenerationStatus
+        });
+      }
+
       let completedQuestions = 0;
       const batchTasks = Array.from({ length: chunks }, (_, i) => async () => {
         const chunkSize = Math.min(CHUNK_SIZE, totalCount - (i * CHUNK_SIZE));
 
-        // Batches run in parallel, so differentiate them up-front to avoid duplicates
+        // Anchor this batch to its assigned topics; the angle hint is only
+        // the fallback when topic planning was unavailable
+        const assignedTopics = plannedTopics
+          ? plannedTopics.slice(i * CHUNK_SIZE, i * CHUNK_SIZE + chunkSize)
+          : undefined;
+        const otherTopics = plannedTopics
+          ? plannedTopics.filter((_, idx) => idx < i * CHUNK_SIZE || idx >= i * CHUNK_SIZE + chunkSize)
+          : undefined;
+
         let customPrompt = triviaConfig.customPrompt;
-        if (chunks > 1) {
+        if (chunks > 1 && !plannedTopics) {
           customPrompt = `${customPrompt ? customPrompt + ' ' : ''}This request is part ${i + 1} of ${chunks} of a larger set generated in parallel - explore a distinct sub-topic or angle for this part and avoid the most obvious questions`;
         }
 
@@ -60,7 +85,9 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
           numCorrect: triviaConfig.numCorrect,
           numberOfCategories: triviaConfig.numberOfCategories,
           mustHaveCategories: triviaConfig.mustHaveCategories,
-          customPrompt: customPrompt
+          customPrompt: customPrompt,
+          assignedTopics,
+          otherTopics
         }, {
           label: `Batch ${i + 1} of ${chunks}`,
           onStatus: setGenerationStatus
@@ -72,7 +99,8 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
       });
 
       const batchResults = await runWithConcurrency(batchTasks, MAX_PARALLEL);
-      const allQuestions = batchResults.flat();
+      // Safety net: drop any near-duplicate titles that slipped through
+      const allQuestions = dropNearDuplicates(batchResults.flat());
 
       setGeneratedTrivia(allQuestions);
       setGenerationStatus(`✅ Generated ${allQuestions.length} trivia questions successfully`);

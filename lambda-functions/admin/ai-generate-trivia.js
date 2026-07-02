@@ -1,5 +1,5 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
-const { invokeClaudeWithRetry } = require('./shared/bedrock-utils');
+const { invokeClaudeWithRetry, planTopicList, buildTopicAssignmentText } = require('./shared/bedrock-utils');
 
 const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 
@@ -25,7 +25,34 @@ exports.handler = async (event) => {
       throw new Error('No request body provided');
     }
 
-    const { topic, category, audience, difficulty, count, numChoices, numCorrect, customPrompt } = JSON.parse(event.body);
+    const { topic, category, audience, difficulty, count, numChoices, numCorrect, customPrompt, planTopics, assignedTopics, otherTopics } = JSON.parse(event.body);
+
+    // Phase 1 of two-phase generation: plan distinct sub-topics before the
+    // client fans out parallel batches (each batch is then anchored to its
+    // assigned topics so parallel batches can't duplicate each other)
+    if (planTopics === true) {
+      let brief = `Trivia questions about ${topic}.`;
+      if (category) brief += ` Category: ${category}.`;
+      if (audience) brief += ` Target audience: ${audience}.`;
+      if (difficulty) brief += ` Difficulty level: ${difficulty}.`;
+      if (customPrompt) brief += ` Additional requirements: ${customPrompt}`;
+
+      const topics = await planTopicList(bedrockClient, InvokeModelCommand, {
+        brief,
+        itemNoun: 'trivia questions',
+        count
+      });
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ topics }),
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS'
+        }
+      };
+    }
 
     // Allow up to 100 trivia questions
     const limitedCount = Math.min(count, 100);
@@ -49,6 +76,13 @@ exports.handler = async (event) => {
 
     if (customPrompt) {
       fullPrompt += 'Additional requirements: ' + customPrompt + '. ';
+    }
+
+    // Phase 2 of two-phase generation: anchor this batch to its assigned
+    // topics so parallel batches stay distinct by construction
+    const topicAssignmentText = buildTopicAssignmentText(assignedTopics, otherTopics, 'trivia questions');
+    if (topicAssignmentText) {
+      fullPrompt += topicAssignmentText + '\n\n';
     }
 
     fullPrompt += 'Return as JSON array with this structure: ';

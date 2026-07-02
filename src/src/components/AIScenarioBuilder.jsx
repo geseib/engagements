@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { authFetch } from '../auth/authFetch';
-import { postGenerationBatch, runWithConcurrency } from '../utils/aiBatchClient';
+import { postGenerationBatch, planGenerationTopics, dropNearDuplicates, runWithConcurrency } from '../utils/aiBatchClient';
 
 const API_BASE = window.API_BASE;
 
@@ -427,8 +427,27 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         ? selectedType.dbPrompt.scenarioType
         : scenarioConfig.type;
 
-      // Since batches run in parallel, differentiate them up-front so we
-      // don't get duplicate/near-identical scenarios across batches.
+      // Two-phase generation: when the request spans multiple parallel
+      // batches, first plan ONE list of distinct topics (a small fast call),
+      // then anchor each batch to its assigned slice of that list so batches
+      // can't duplicate each other. If planning fails we fall back to the
+      // older rotating angle hints below.
+      let plannedTopics = null;
+      if (chunks > 1) {
+        // basePrompt already includes context/audience/customPrompt, so the
+        // planning brief only needs the assembled prompt itself
+        plannedTopics = await planGenerationTopics(`${API_BASE}admin/ai-generate-scenarios`, {
+          scenarioType: backendScenarioType,
+          engagementType: engagementType,
+          prompt: basePrompt,
+          difficulty: scenarioConfig.difficulty
+        }, totalCount, {
+          label: 'Topic planning',
+          onStatus: setGenerationStatus
+        });
+      }
+
+      // Fallback angle hints, used only when topic planning is unavailable.
       const batchAngles = engagementType === 'wavelength'
         ? [
             'concrete everyday objects, places, and activities',
@@ -457,12 +476,22 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
       const batchTasks = Array.from({ length: chunks }, (_, i) => async () => {
         const chunkSize = Math.min(CHUNK_SIZE, totalCount - (i * CHUNK_SIZE));
 
-        // Build the differentiation hint separately and send it via
+        // Anchor this batch to its assigned slice of the planned topics;
+        // distinctness across parallel batches is then guaranteed by
+        // construction. The angle hint below is only the fallback path.
+        const assignedTopics = plannedTopics
+          ? plannedTopics.slice(i * CHUNK_SIZE, i * CHUNK_SIZE + chunkSize)
+          : undefined;
+        const otherTopics = plannedTopics
+          ? plannedTopics.filter((_, idx) => idx < i * CHUNK_SIZE || idx >= i * CHUNK_SIZE + chunkSize)
+          : undefined;
+
+        // Build the fallback differentiation hint separately and send it via
         // customPrompt: the lambda appends customPrompt to whichever prompt
         // template it uses (database or fallback), so the hint survives both
         // paths without being duplicated.
         let differentiationHint = '';
-        if (chunks > 1) {
+        if (chunks > 1 && !plannedTopics) {
           differentiationHint = `This request is part ${i + 1} of ${chunks} of a larger set generated in parallel. To avoid duplicating other parts, emphasize ${batchAngles[i % batchAngles.length]} and avoid the most obvious or commonly used examples.`;
           if (requiredCategories.length > 0) {
             differentiationHint += ` Where it fits, favor the category "${requiredCategories[i % requiredCategories.length]}" for this part.`;
@@ -485,7 +514,9 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
           customPrompt: chunkCustomPrompt,
           customTitle: scenarioConfig.customTitle,
           numberOfCategories: scenarioConfig.numberOfCategories,
-          mustHaveCategories: scenarioConfig.mustHaveCategories
+          mustHaveCategories: scenarioConfig.mustHaveCategories,
+          assignedTopics,
+          otherTopics
         }, {
           label: `Batch ${i + 1} of ${chunks}`,
           onStatus: setGenerationStatus
@@ -497,7 +528,8 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
       });
 
       const batchResults = await runWithConcurrency(batchTasks, MAX_PARALLEL);
-      const allScenarios = batchResults.flat();
+      // Safety net: drop any near-duplicate titles that slipped through
+      const allScenarios = dropNearDuplicates(batchResults.flat());
 
       setGeneratedScenarios(allScenarios);
       setGeneratedMetadata(null); // Will be generated later
