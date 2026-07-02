@@ -1,5 +1,9 @@
 # Authentication Recovery Guide
 
+> **⚠️ SUPERSEDED (2026-07-02):** the UserPoolV2 migration described here is
+> complete. See **[AUTH.md](AUTH.md)** for how authentication works now.
+> Kept for historical context and the old-pool rollback notes.
+
 This document outlines the steps required after deploying UserPoolV2 to fix the Google OAuth "Attribute cannot be updated" issue.
 
 ## Background
