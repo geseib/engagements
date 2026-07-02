@@ -128,7 +128,25 @@ else
     print_warning "To enable GitHub issue creation, set GITHUB_TOKEN environment variable"
 fi
 
-print_status "Deployment parameters: $PARAMETERS"
+# Google OAuth credentials from SSM (CloudFormation cannot resolve ssm-secure
+# in Cognito IdP properties, so the values are passed as NoEcho parameters)
+if [ "$ENVIRONMENT" = "dev" ]; then
+    print_status "Retrieving Google OAuth credentials from SSM..."
+    GOOGLE_CLIENT_ID=$(aws ssm get-parameter --name "/engdev/google/client-id" \
+        --with-decryption --query 'Parameter.Value' --output text --region "$AWS_REGION" 2>/dev/null)
+    GOOGLE_CLIENT_SECRET=$(aws ssm get-parameter --name "/engdev/google/client-secret" \
+        --with-decryption --query 'Parameter.Value' --output text --region "$AWS_REGION" 2>/dev/null)
+
+    if [ -n "$GOOGLE_CLIENT_ID" ] && [ -n "$GOOGLE_CLIENT_SECRET" ]; then
+        print_success "Google OAuth credentials retrieved — Google sign-in enabled"
+        PARAMETERS="$PARAMETERS GoogleClientId=$GOOGLE_CLIENT_ID GoogleClientSecret=$GOOGLE_CLIENT_SECRET"
+    else
+        print_warning "Google OAuth credentials not found in SSM — Google sign-in disabled"
+    fi
+fi
+
+# Mask secret values when echoing parameters
+print_status "Deployment parameters: $(echo "$PARAMETERS" | sed -E 's/(GitHubToken|GoogleClientSecret)=[^ ]+/\1=***/g')"
 
 # Deploy the stack
 print_status "Deploying CloudFormation stack..."

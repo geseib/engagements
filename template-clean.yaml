@@ -41,26 +41,31 @@ Parameters:
     Description: GitHub repository in format owner/repo-name
     Default: "georgeseib/engage2"
 
-  GoogleClientIdParameter:
+  # Google OAuth credentials are passed as values (not SSM references)
+  # because CloudFormation does not support ssm-secure dynamic references
+  # in Cognito UserPoolIdentityProvider properties. The deploy script
+  # (scripts/deploy-clean.sh) fetches them from SSM (/engdev/google/*) and
+  # passes them through; when empty, Google OAuth resources are skipped.
+  GoogleClientId:
     Type: String
-    Description: AWS Systems Manager Parameter Store path for Google OAuth Client ID
-    Default: "/engdev/google/client-id"
+    Description: Google OAuth Client ID (empty disables Google sign-in resources)
+    Default: ""
 
-  GoogleClientSecretParameter:
+  GoogleClientSecret:
     Type: String
-    Description: AWS Systems Manager Parameter Store path for Google OAuth Client Secret
-    Default: "/engdev/google/client-secret"
+    NoEcho: true
+    Description: Google OAuth Client Secret (empty disables Google sign-in resources)
+    Default: ""
 
 Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
   HasSecondaryDomain: !Not [!Equals [!Ref SecondaryDomainName, ""]]
   IsProd: !Equals [!Ref Environment, "prod"]
-  # Dev only for now: dev's Google credentials live at the default SSM paths
-  # (/engdev/google/*) and the GoogleIdentityProvider below is CFN-managed.
-  # Test/prod still use console-configured providers; before enabling there,
-  # point GoogleClientIdParameter/GoogleClientSecretParameter at env-specific
-  # SSM params and delete the console-created provider so CFN can own it.
-  HasGoogleOAuth: !Equals [!Ref Environment, "dev"]
+  # True when the deploy passes Google credentials (dev's deploy script
+  # fetches them from /engdev/google/* SSM params). Test/prod CI does not
+  # pass them yet and stays on console-configured providers; before enabling
+  # there, delete the console-created provider so CFN can own it.
+  HasGoogleOAuth: !Not [!Equals [!Ref GoogleClientSecret, ""]]
 
 Globals:
   Function:
@@ -2006,8 +2011,8 @@ Resources:
       ProviderName: Google
       ProviderType: Google
       ProviderDetails:
-        client_id: !Sub "{{resolve:ssm:${GoogleClientIdParameter}}}"
-        client_secret: !Sub "{{resolve:ssm-secure:${GoogleClientSecretParameter}}}"
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
         authorize_scopes: email openid profile
       AttributeMapping:
         email: email
