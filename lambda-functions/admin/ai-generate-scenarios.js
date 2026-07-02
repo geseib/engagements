@@ -127,11 +127,11 @@ exports.handler = async (event) => {
 
     console.log('🤖 Sending prompt to Claude...', { promptLength: fullPrompt.length });
     
-    // Use Claude 3.5 Sonnet inference profile ARN (same as working ai-generate-questions)
+    // Use Claude Sonnet 4.6 inference profile ARN (same as working ai-generate-questions)
     let aiResponse;
     try {
       const response = await bedrockClient.send(new InvokeModelCommand({
-        modelId: `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0`,
+        modelId: `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-sonnet-4-6`,
         body: JSON.stringify({
           anthropic_version: 'bedrock-2023-05-31',
           max_tokens: 4000,
@@ -152,11 +152,11 @@ exports.handler = async (event) => {
       
     } catch (error) {
       console.error('🚨 BEDROCK Sonnet ERROR:', error.message);
-      console.log('🔄 BEDROCK: Trying Claude 3.5 Haiku as fallback...');
+      console.log('🔄 BEDROCK: Trying Claude Haiku 4.5 as fallback...');
       
-      // Try Claude 3.5 Haiku inference profile ARN as fallback
+      // Try Claude Haiku 4.5 inference profile ARN as fallback
       const haikuResponse = await bedrockClient.send(new InvokeModelCommand({
-        modelId: `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0`,
+        modelId: `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`,
         body: JSON.stringify({
           anthropic_version: 'bedrock-2023-05-31',
           max_tokens: 4000,

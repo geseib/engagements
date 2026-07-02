@@ -1640,13 +1640,13 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     promptSource: promptProvenance.source
   };
 
-  const sonnetModelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0`;
-  console.log('🤖 BEDROCK: Attempting to call Claude 3.5 Sonnet...');
+  const sonnetModelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-sonnet-4-6`;
+  console.log('🤖 BEDROCK: Attempting to call Claude Sonnet 4.6...');
   console.log('🤖 BEDROCK: Inference Profile ARN:', sonnetModelId);
   console.log('🤖 BEDROCK: Prompt length:', prompt.length);
 
   try {
-    // Use Claude 3.5 Sonnet inference profile ARN
+    // Use Claude Sonnet 4.6 inference profile ARN
     const response = await bedrock.send(new InvokeModelCommand({
       modelId: sonnetModelId,
       body: JSON.stringify({
@@ -1690,17 +1690,17 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     return result;
 
   } catch (error) {
-    console.error('🚨 BEDROCK API ERROR (Claude 3.5 Sonnet):');
+    console.error('🚨 BEDROCK API ERROR (Claude Sonnet 4.6):');
     console.error('  Error name:', error.name);
     console.error('  Error message:', error.message);
     console.error('  Error code:', error.code || error.$metadata?.httpStatusCode);
     console.error('  Full error:', JSON.stringify(error, null, 2));
     
-    const haikuModelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0`;
-    console.log('🔄 BEDROCK: Trying Claude 3.5 Haiku as fallback...');
+    const haikuModelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`;
+    console.log('🔄 BEDROCK: Trying Claude Haiku 4.5 as fallback...');
     console.log('🤖 BEDROCK: Haiku Inference Profile ARN:', haikuModelId);
 
-    // Try Claude 3.5 Haiku inference profile ARN as fallback
+    // Try Claude Haiku 4.5 inference profile ARN as fallback
     try {
       const haikuResponse = await bedrock.send(new InvokeModelCommand({
         modelId: haikuModelId,

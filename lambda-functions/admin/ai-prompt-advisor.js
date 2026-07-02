@@ -25,8 +25,8 @@ const invokeClaude = async (prompt) => {
   let responseBody;
   
   try {
-    // Use Claude 3.5 Sonnet inference profile ARN (cross-region) - primary for analysis tasks
-    const sonnetProfileArn = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0`;
+    // Use Claude Sonnet 4.6 inference profile ARN (cross-region) - primary for analysis tasks
+    const sonnetProfileArn = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-sonnet-4-6`;
     console.log('🤖 BEDROCK: Sonnet Inference Profile ARN:', sonnetProfileArn);
     console.log('🤖 BEDROCK: Prompt length:', prompt.length);
     
@@ -51,19 +51,19 @@ const invokeClaude = async (prompt) => {
     response = await bedrockClient.send(command);
     responseBody = JSON.parse(new TextDecoder().decode(response.body));
     
-    console.log('✅ Successfully called Claude 3.5 Sonnet via inference profile');
+    console.log('✅ Successfully called Claude Sonnet 4.6 via inference profile');
     console.log('📝 Claude response length:', responseBody.content[0].text.length);
     
     return responseBody.content[0].text;
     
   } catch (primaryError) {
-    console.error('❌ Error with Claude 3.5 Sonnet:', primaryError);
+    console.error('❌ Error with Claude Sonnet 4.6:', primaryError);
     
-    // Fallback to Claude 3.5 Haiku inference profile
-    console.log('🔄 BEDROCK: Trying Claude 3.5 Haiku as fallback...');
+    // Fallback to Claude Haiku 4.5 inference profile
+    console.log('🔄 BEDROCK: Trying Claude Haiku 4.5 as fallback...');
     
     try {
-      const haikuProfileArn = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0`;
+      const haikuProfileArn = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`;
       console.log('🤖 BEDROCK: Haiku Inference Profile ARN:', haikuProfileArn);
       
       const payload = {
@@ -87,7 +87,7 @@ const invokeClaude = async (prompt) => {
       response = await bedrockClient.send(command);
       responseBody = JSON.parse(new TextDecoder().decode(response.body));
       
-      console.log('✅ Successfully called Claude 3.5 Haiku as fallback');
+      console.log('✅ Successfully called Claude Haiku 4.5 as fallback');
       console.log('📝 Claude response length:', responseBody.content[0].text.length);
       
       return responseBody.content[0].text;

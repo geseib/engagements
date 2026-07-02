@@ -119,14 +119,14 @@ RESPONSE FORMAT (return as JSON):
 }`;
 
     // Call Claude via Bedrock using cross-region inference profiles (same as ai-summary)
-    console.log('🤖 BEDROCK: Calling Claude 3.5 Haiku via inference profile...');
+    console.log('🤖 BEDROCK: Calling Claude Haiku 4.5 via inference profile...');
     
     let response;
     let responseBody;
     
     try {
-      // Use Claude 3.5 Haiku inference profile ARN (cross-region)
-      const haikuProfileArn = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0`;
+      // Use Claude Haiku 4.5 inference profile ARN (cross-region)
+      const haikuProfileArn = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`;
       console.log('🤖 BEDROCK: Haiku Inference Profile ARN:', haikuProfileArn);
       console.log('🤖 BEDROCK: Prompt length:', aiPrompt.length);
       
@@ -146,17 +146,17 @@ RESPONSE FORMAT (return as JSON):
       }));
       
       responseBody = JSON.parse(new TextDecoder().decode(response.body));
-      console.log('✅ Successfully called Claude 3.5 Haiku via inference profile');
+      console.log('✅ Successfully called Claude Haiku 4.5 via inference profile');
       console.log('📝 Claude response:', responseBody);
       
     } catch (primaryError) {
-      console.error('❌ Error with Claude 3.5 Haiku:', primaryError);
+      console.error('❌ Error with Claude Haiku 4.5:', primaryError);
       
-      // Fallback to Claude 3.5 Sonnet inference profile
-      console.log('🔄 BEDROCK: Trying Claude 3.5 Sonnet as fallback...');
+      // Fallback to Claude Sonnet 4.6 inference profile
+      console.log('🔄 BEDROCK: Trying Claude Sonnet 4.6 as fallback...');
       
       try {
-        const sonnetProfileArn = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0`;
+        const sonnetProfileArn = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-sonnet-4-6`;
         console.log('🤖 BEDROCK: Sonnet Inference Profile ARN:', sonnetProfileArn);
         
         response = await bedrockClient.send(new InvokeModelCommand({
@@ -175,7 +175,7 @@ RESPONSE FORMAT (return as JSON):
         }));
         
         responseBody = JSON.parse(new TextDecoder().decode(response.body));
-        console.log('✅ Successfully called Claude 3.5 Sonnet as fallback');
+        console.log('✅ Successfully called Claude Sonnet 4.6 as fallback');
         console.log('📝 Claude response:', responseBody);
         
       } catch (fallbackError) {
