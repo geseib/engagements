@@ -13,6 +13,23 @@ exports.handler = async (event) => {
     console.log(`Engagement type: ${engagementType}`);
     console.log(`CSV content length: ${fileContent.length} characters`);
 
+    // Survey uploads (JSON template) are not yet supported: surveys have no
+    // game-side support (host/player pages and game lambdas only play
+    // call-and-answer, trivia, poll and wavelength sets), so importing a
+    // survey would create a set that can never be played.
+    const isJsonFile = typeof fileName === 'string' && /\.json$/i.test(fileName);
+    const looksLikeJson = typeof fileContent === 'string' && /^[\[{]/.test(fileContent.trim());
+    if (engagementType === 'survey' || isJsonFile || looksLikeJson) {
+      console.log('⚠️ Survey/JSON upload detected - not yet supported');
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error: 'Survey upload is not yet supported. Survey JSON templates can be downloaded and edited, but surveys cannot be imported as playable question sets until game sessions support the survey engagement type.'
+        }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
     // Parse CSV content with proper multi-line field support
     // First, we need to properly parse CSV with quoted fields that may contain newlines
     const parseCSV = (csvContent) => {

@@ -422,15 +422,26 @@ function AdminPage() {
 
   const handleFileSelect = (event) => {
     const file = event.target.files[0];
-    if (file && file.type === 'text/csv') {
+    const isCsvFile = file && /\.csv$/i.test(file.name);
+    const isJsonFile = file && /\.json$/i.test(file.name);
+    if (isCsvFile || (isJsonFile && engagementType === 'survey')) {
       setSelectedFile(file);
       setUploadStatus('');
-      
+
       // Auto-populate title from filename if not already set
       if (!customTitle) {
-        setCustomTitle(file.name.replace(/\.csv$/i, ''));
+        setCustomTitle(file.name.replace(/\.(csv|json)$/i, ''));
       }
-      
+
+      // JSON survey files: no CSV auto-populate, just confirm selection
+      if (isJsonFile) {
+        if (!customDescription) {
+          setCustomDescription(`Imported from ${file.name}`);
+        }
+        setUploadStatus(`✅ File loaded: ${file.name}. Note: survey JSON upload is not yet supported by the server.`);
+        return;
+      }
+
       // Read CSV content to auto-populate other fields
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -476,7 +487,9 @@ function AdminPage() {
       };
       reader.readAsText(file);
     } else {
-      setUploadStatus('Please select a valid CSV file');
+      setUploadStatus(engagementType === 'survey'
+        ? 'Please select a valid CSV or JSON file'
+        : 'Please select a valid CSV file');
       setSelectedFile(null);
     }
   };
@@ -1361,7 +1374,7 @@ function AdminPage() {
             </div>
             {isUploadSectionExpanded && (
               <>
-                <p className="section-description">Upload a CSV file containing questions to create a new question set with custom title and instructions.</p>
+                <p className="section-description">Upload a CSV file containing questions to create a new question set with custom title and instructions. Surveys use JSON templates (survey upload is not yet supported in game sessions).</p>
             
                 <div className="upload-form">
                   <div className="form-row">
@@ -1405,6 +1418,7 @@ function AdminPage() {
                         <option value="trivia">Trivia</option>
                         <option value="poll">Poll</option>
                         <option value="wavelength">Wavelength</option>
+                        <option value="survey">Survey</option>
                       </select>
                     </div>
                   </div>
@@ -1482,17 +1496,17 @@ function AdminPage() {
 
                   <div className="form-row">
                     <div className="form-group">
-                      <label htmlFor="file-upload">CSV File *</label>
+                      <label htmlFor="file-upload">{engagementType === 'survey' ? 'CSV or JSON File *' : 'CSV File *'}</label>
                       <div className="file-input-wrapper">
                         <input
                           type="file"
                           id="file-upload"
-                          accept=".csv"
+                          accept={engagementType === 'survey' ? '.csv,.json' : '.csv'}
                           onChange={handleFileSelect}
                           className="file-input"
                         />
                         <label htmlFor="file-upload" className="file-input-label">
-                          {selectedFile ? selectedFile.name : 'Choose CSV file...'}
+                          {selectedFile ? selectedFile.name : (engagementType === 'survey' ? 'Choose CSV or JSON file...' : 'Choose CSV file...')}
                         </label>
                       </div>
                     </div>

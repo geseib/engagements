@@ -58,6 +58,14 @@ exports.handler = async (event) => {
           'Content-Type': 'application/json'
         }
       };
+    } else if (templateType === 'wavelength') {
+      // Wavelength: short evocative SUBJECTS players free-associate on
+      // (up to 10 words each); the game measures word overlap across players
+      filename = 'wavelength-template.csv';
+      csvTemplate = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction\n' +
+        '"Workplace",1,"Remote Work","How and where we get our best work done.","General","Enter up to 10 words or short phrases that come to mind when you think about this subject."\n' +
+        '"Culture",2,"Customer Trust","What it takes to earn and keep the confidence of the people we serve.","General","Enter up to 10 words or short phrases that come to mind when you think about this subject."\n' +
+        '"Team",3,"Accountability","Who owns outcomes and how ownership shows up day to day.","General","Enter up to 10 words or short phrases that come to mind when you think about this subject."';
     } else {
       // call-and-answer (default)
       filename = 'call-and-answer-template.csv';
