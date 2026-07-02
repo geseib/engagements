@@ -265,17 +265,20 @@ Resources:
         AllowMethods: ["OPTIONS","GET","POST","PUT","DELETE"]
         AllowHeaders: ["Content-Type", "Authorization"]
         ExposeHeaders: ["Content-Length", "X-Request-Id"]
-      # Auth:
-      #   Authorizers:
-      #     CognitoAuthorizer:
-      #       AuthorizerPayloadFormatVersion: "2.0"
-      #       EnableSimpleResponses: true
-      #       FunctionArn: !GetAtt AuthorizerFunction.Arn
-      #       Identity:
-      #         Headers:
-      #           - Authorization
-      # # Commented out for now to avoid circular dependency
-      #   # DefaultAuthorizer: CognitoAuthorizer
+      # Lambda authorizer (UserPoolV2 JWTs). No DefaultAuthorizer on purpose:
+      # player and host game routes stay public; admin routes opt in per-event
+      # with "Auth: Authorizer: CognitoAuthorizer". Exception: the
+      # /admin/create-github-issue feedback route stays public because the
+      # player page's IssueFab uses it anonymously.
+      Auth:
+        Authorizers:
+          CognitoAuthorizer:
+            AuthorizerPayloadFormatVersion: "2.0"
+            EnableSimpleResponses: true
+            FunctionArn: !GetAtt AuthorizerFunction.Arn
+            Identity:
+              Headers:
+                - Authorization
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -299,6 +302,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/question-sets
             Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -324,39 +329,6 @@ Resources:
             ApiId: !Ref RestApi
             Path: /question-sets/{setId}/questions
             Method: GET
-      Tags:
-        Environment: !Ref Environment
-        StackName: !Ref StackName
-
-  ## Admin Bypass Function (temporary access for first admin)
-  AdminBypassLoginFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub '${StackName}-admin-bypass'
-      CodeUri: lambda-functions/auth/
-      Handler: admin-bypass.handler
-      Runtime: nodejs18.x
-      Timeout: 30
-      Environment:
-        Variables:
-          USER_POOL_ID: !Ref UserPoolV2
-      Policies:
-        - Statement:
-          - Effect: Allow
-            Action:
-              - cognito-idp:AdminCreateUser
-              - cognito-idp:AdminSetUserPassword
-              - cognito-idp:AdminAddUserToGroup
-              - cognito-idp:AdminRemoveUserFromGroup
-              - cognito-idp:AdminUpdateUserAttributes
-            Resource: !GetAtt UserPoolV2.Arn
-      Events:
-        AdminBypassEvent:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref RestApi
-            Path: /admin/bypass
-            Method: POST
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -866,6 +838,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-generate-questions
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -908,6 +882,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-generate-scenarios
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -951,6 +927,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-generate-trivia
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -994,6 +972,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-generate-polls
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1037,6 +1017,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-generate-survey
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1062,6 +1044,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/upload-questions
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1118,6 +1102,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/parse-document
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1140,6 +1126,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/toggle-question-set/{setId}
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1162,6 +1150,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/toggle-quickstart/{setId}
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1184,6 +1174,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/edit-question-set/{setId}
             Method: PUT
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1206,6 +1198,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/question-sets/{setId}
             Method: DELETE
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1232,6 +1226,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/clear-game/{gameId}
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1257,6 +1253,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/games/{gameId}/categories
             Method: PUT
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1282,6 +1280,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/clear-all-games
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1301,6 +1301,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/download-template
             Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1329,6 +1331,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-prompts
             Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1356,12 +1360,16 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-prompts
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
         AdminSaveAIPromptEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
             Path: /admin/ai-prompts/save
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1389,6 +1397,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-prompts/{promptId}
             Method: PUT
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1416,6 +1426,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-prompts/{promptId}
             Method: DELETE
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1460,6 +1472,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-prompt-advisor
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1496,6 +1510,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-generate-prompt
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1525,6 +1541,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/populate-defaults
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1552,6 +1570,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/export-to-archive
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1586,6 +1606,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/import-from-archive
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1612,6 +1634,8 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/list-local-archive
             Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -2067,31 +2091,31 @@ Resources:
   #         Type: Token
   #         AmbiguousRoleResolution: AuthenticatedRole
 
-  # Lambda Authorizer for API Gateway (temporarily commented to resolve circular dependency)
-  # Uncomment after initial deployment if needed
-  # AuthorizerFunction:
-  #   Type: AWS::Serverless::Function
-  #   Properties:
-  #     FunctionName: !Sub '${StackName}-authorizer'
-  #     CodeUri: lambda-functions/auth/
-  #     Handler: authorizer.handler
-  #     Runtime: nodejs18.x
-  #     Environment:
-  #       Variables:
-  #         USER_POOL_ID: !Ref UserPool
-  #         CLIENT_ID: !Ref UserPoolClient
-  #         REGION: !Ref AWS::Region
-  #     Policies:
-  #       - Version: '2012-10-17'
-  #         Statement:
-  #           - Effect: Allow
-  #             Action:
-  #               - cognito-idp:AdminGetUser
-  #               - cognito-idp:ListUsersInGroup
-  #             Resource: !GetAtt UserPool.Arn
-  #     Tags:
-  #       Environment: !Ref Environment
-  #       StackName: !Ref StackName
+  # Lambda Authorizer for the HTTP API (validates UserPoolV2 JWTs).
+  # Payload format 2.0 simple responses — see lambda-functions/auth/authorizer.js.
+  AuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-authorizer'
+      CodeUri: lambda-functions/auth/
+      Handler: authorizer.handler
+      Runtime: nodejs18.x
+      Environment:
+        Variables:
+          USER_POOL_ID: !Ref UserPoolV2
+          CLIENT_ID: !Ref UserPoolClient
+          REGION: !Ref AWS::Region
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:AdminListGroupsForUser
+                - cognito-idp:AdminGetUser
+              Resource: !GetAtt UserPoolV2.Arn
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
 
   # User Management Lambda
   UserManagementFunction:
@@ -2131,12 +2155,16 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/users/list
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
         ChangeUserState:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
             Path: /admin/users/{username}/state
             Method: PUT
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -2171,15 +2199,17 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
-  # Lambda permission for post-confirmation trigger (commented to avoid circular dependency)
-  # Configure manually after deployment or via separate stack update
-  # PostConfirmationLambdaPermission:
-  #   Type: AWS::Lambda::Permission
-  #   Properties:
-  #     Action: lambda:InvokeFunction
-  #     FunctionName: !Ref PostConfirmationFunction
-  #     Principal: cognito-idp.amazonaws.com
-  #     SourceArn: !GetAtt UserPool.Arn
+  # Lambda permission for the post-confirmation trigger. The trigger itself
+  # (UserPoolV2 LambdaConfig -> PostConfirmationFunction) cannot live in the
+  # template without a circular dependency, so it is attached post-deploy by
+  # scripts/setup-post-confirmation.sh; this permission is safe to keep here.
+  PostConfirmationLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref PostConfirmationFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPoolV2.Arn
 
 Outputs:
   # API Endpoints

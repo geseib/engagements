@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './AIPromptManager.css';
+import { authFetch } from '../auth/authFetch';
 
 const API_BASE = window.API_BASE;
 
@@ -94,7 +95,7 @@ function AIGenerationPromptEditor({ onClose }) {
         promptType: 'generation'
       });
       
-      const response = await fetch(`${API_BASE}admin/ai-prompts?${params}`);
+      const response = await authFetch(`${API_BASE}admin/ai-prompts?${params}`);
       const data = await response.json();
       
       if (response.ok) {
@@ -133,7 +134,7 @@ function AIGenerationPromptEditor({ onClose }) {
     try {
       const promptToSave = isEditing ? { ...selectedPrompt } : { ...newPrompt };
       
-      const response = await fetch(`${API_BASE}admin/ai-prompts/save`, {
+      const response = await authFetch(`${API_BASE}admin/ai-prompts/save`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

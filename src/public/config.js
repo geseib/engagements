@@ -1,4 +1,10 @@
-// Development environment configuration
+// Runtime environment configuration.
+//
+// SOURCE OF TRUTH: this file is REGENERATED at deploy time from
+// CloudFormation stack outputs — by scripts/deploy-frontend-eng.sh (dev)
+// and buildspec-test.yml / buildspec-prod.yml (CI). The committed copy only
+// provides dev defaults for local work; do not hand-edit per-environment
+// values here and expect them to survive a deploy.
 window.API_BASE = 'https://h1jcmja0w1.execute-api.us-east-1.amazonaws.com/dev/';
 window.WS_URL = 'wss://r4c24mqku1.execute-api.us-east-1.amazonaws.com/dev';
 window.USER_POOL_ID = 'us-east-1_ow22HbCT0';

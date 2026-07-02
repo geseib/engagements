@@ -5,6 +5,7 @@ import PollBuilder from './components/PollBuilder';
 import WavelengthBuilder from './components/WavelengthBuilder';
 import AIAssistant from './components/AIAssistant';
 import './BuilderPage.css';
+import { authFetch } from './auth/authFetch';
 
 const API_BASE = window.API_BASE;
 
@@ -106,7 +107,7 @@ function BuilderPage() {
       // Convert questions to CSV format
       const csvContent = generateCSVContent();
       
-      const response = await fetch(`${API_BASE}admin/upload-questions`, {
+      const response = await authFetch(`${API_BASE}admin/upload-questions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
+import { authFetch } from '../auth/authFetch';
 
 const API_BASE = window.API_BASE;
 
@@ -31,7 +32,7 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
     setStep(2);
 
     try {
-      const response = await fetch(`${API_BASE}admin/ai-generate-polls`, {
+      const response = await authFetch(`${API_BASE}admin/ai-generate-polls`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

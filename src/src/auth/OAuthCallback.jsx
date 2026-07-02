@@ -2,6 +2,20 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import './auth.css';
 
+// ============================================================================
+// LEGACY_POOL — rollback only. Remove after the old Cognito pool is deleted.
+//
+// The original user pool had an immutable email attribute, which broke Google
+// OAuth with "Attribute cannot be updated". UserPoolV2 (window.USER_POOL_ID)
+// fixed this. These IDs are kept ONLY so the app can be pointed back at the
+// old pool during a rollback; no primary flow should reference them.
+// ============================================================================
+const LEGACY_POOL = {
+  userPoolId: 'us-east-1_bKTK5F5Jm',
+  clientId: '5brt6hub6e2gmi7hmuuidfi3nc',
+  knownGoogleUsername: 'Google_113956208956782440356',
+};
+
 const OAuthCallback = ({ onSuccess, onError }) => {
   const [processing, setProcessing] = useState(true);
   const [error, setError] = useState(null);
@@ -149,16 +163,12 @@ const OAuthCallback = ({ onSuccess, onError }) => {
                 return; // Exit if successful
               } catch (authError) {
                 console.log('🔍 No existing session, attempting manual authentication...');
-                
-                // Try to manually authenticate the known Google user
-                // We know the user exists as Google_113956208956782440356
-                const knownGoogleUsername = 'Google_113956208956782440356';
-                
+
+                // Legacy old-pool workaround (see LEGACY_POOL above) — should not
+                // trigger against UserPoolV2, kept for rollback only.
+                const knownGoogleUsername = LEGACY_POOL.knownGoogleUsername;
+
                 try {
-                  // Create a manual session for the known user
-                  const userPoolId = 'us-east-1_bKTK5F5Jm';
-                  const clientId = '5brt6hub6e2gmi7hmuuidfi3nc';
-                  
                   // Since we can't get OAuth tokens, let's redirect them to try password login
                   // or provide them with a workaround
                   console.log('🔍 Known Google user exists, redirecting to manual login...');

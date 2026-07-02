@@ -11,6 +11,7 @@ import HelpButton from './components/HelpButton';
 import IssueFab from './components/IssueFab';
 import { useAuth } from './auth/AuthContext';
 import './BuilderPage.css';
+import { authFetch } from './auth/authFetch';
 
 const API_BASE = window.API_BASE;
 
@@ -117,7 +118,7 @@ function AdminPage() {
   // Fetch available AI prompts for selection
   const fetchAvailablePrompts = async () => {
     try {
-      const response = await fetch(`${API_BASE}admin/ai-prompts`);
+      const response = await authFetch(`${API_BASE}admin/ai-prompts`);
       if (response.ok) {
         const data = await response.json();
         // Filter to only active prompts for the dropdown
@@ -181,7 +182,7 @@ function AdminPage() {
 
     setSaveStatus('Saving...');
     try {
-      const response = await fetch(`${API_BASE}admin/edit-question-set/${editingSetId}`, {
+      const response = await authFetch(`${API_BASE}admin/edit-question-set/${editingSetId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -260,7 +261,7 @@ function AdminPage() {
   const handleToggleActive = async (setId, currentActive) => {
     try {
       const newActive = !currentActive;
-      const response = await fetch(`${API_BASE}admin/toggle-question-set/${setId}`, {
+      const response = await authFetch(`${API_BASE}admin/toggle-question-set/${setId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -290,7 +291,7 @@ function AdminPage() {
 
   const handleToggleQuickstart = async (setId, quickstartEnabled) => {
     try {
-      const response = await fetch(`${API_BASE}admin/toggle-quickstart/${setId}`, {
+      const response = await authFetch(`${API_BASE}admin/toggle-quickstart/${setId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -338,7 +339,7 @@ function AdminPage() {
   const fetchQuestionSets = async () => {
     try {
       // Use admin endpoint to get all question sets (including inactive)
-      const res = await fetch(`${API_BASE}admin/question-sets`);
+      const res = await authFetch(`${API_BASE}admin/question-sets`);
       const json = await res.json();
       setQuestionSets(json.questionSets || []);
     } catch (error) {
@@ -395,7 +396,7 @@ function AdminPage() {
   const handleDownloadTemplate = async (templateType = 'call-and-answer') => {
     try {
       setUploadStatus('Downloading template...');
-      const response = await fetch(`${API_BASE}admin/download-template?type=${templateType}`);
+      const response = await authFetch(`${API_BASE}admin/download-template?type=${templateType}`);
       const result = await response.json();
 
       if (response.ok) {
@@ -506,7 +507,7 @@ function AdminPage() {
       setUploadStatus('Processing question set...');
 
       // Send to Lambda for processing
-      const response = await fetch(`${API_BASE}admin/upload-questions`, {
+      const response = await authFetch(`${API_BASE}admin/upload-questions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -571,7 +572,7 @@ function AdminPage() {
     try {
       setUploadStatus('Processing AI-generated scenarios...');
 
-      const response = await fetch(`${API_BASE}admin/upload-questions`, {
+      const response = await authFetch(`${API_BASE}admin/upload-questions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -641,7 +642,7 @@ function AdminPage() {
     try {
       setUploadStatus('Processing AI-generated trivia questions...');
 
-      const response = await fetch(`${API_BASE}admin/upload-questions`, {
+      const response = await authFetch(`${API_BASE}admin/upload-questions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -717,7 +718,7 @@ function AdminPage() {
     try {
       setUploadStatus('Processing AI-generated poll questions...');
 
-      const response = await fetch(`${API_BASE}admin/upload-questions`, {
+      const response = await authFetch(`${API_BASE}admin/upload-questions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -824,7 +825,7 @@ function AdminPage() {
         ? `${API_BASE}admin/clear-all-games`
         : `${API_BASE}admin/clear-game/${deleteGameId}`;
       
-      const response = await fetch(endpoint, {
+      const response = await authFetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -868,7 +869,7 @@ function AdminPage() {
       // Extract setId from the selected question set value
       const setId = selectedQuestionSet;
       
-      const response = await fetch(`${API_BASE}admin/question-sets/${setId}`, {
+      const response = await authFetch(`${API_BASE}admin/question-sets/${setId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

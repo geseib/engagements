@@ -1,13 +1,22 @@
-const AWS = require('aws-sdk');
+// Lambda authorizer for the HTTP API (payload format 2.0, simple responses).
+//
+// Validates a Cognito JWT (ID token) from the Authorization header against
+// the user pool configured via env (USER_POOL_ID / CLIENT_ID — UserPoolV2),
+// resolves the user's groups, and allows/denies based on the route.
+//
+// Wired in template-clean.yaml as RestApi CognitoAuthorizer with
+// AuthorizerPayloadFormatVersion "2.0" and EnableSimpleResponses true:
+// the handler returns { isAuthorized, context }, not an IAM policy.
+const { CognitoIdentityProviderClient, AdminListGroupsForUserCommand } = require('@aws-sdk/client-cognito-identity-provider');
 const jwt = require('jsonwebtoken');
 const jwkToPem = require('jwk-to-pem');
 const axios = require('axios');
 
-// Cache for Cognito JWKs
+// Cache for Cognito JWKs (persists across warm invocations)
 let cachedJwks = null;
 let cacheExpiry = 0;
 
-const cognito = new AWS.CognitoIdentityServiceProvider();
+const cognito = new CognitoIdentityProviderClient({});
 
 // Get Cognito JWKs with caching
 async function getJwks() {
@@ -16,7 +25,7 @@ async function getJwks() {
     return cachedJwks;
   }
 
-  const region = process.env.REGION || 'us-east-1';
+  const region = process.env.REGION || process.env.AWS_REGION || 'us-east-1';
   const userPoolId = process.env.USER_POOL_ID;
   const url = `https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`;
 
@@ -33,77 +42,45 @@ async function getJwks() {
 
 // Verify JWT token
 async function verifyToken(token) {
-  try {
-    // Decode token header to get kid
-    const decodedHeader = jwt.decode(token, { complete: true });
-    if (!decodedHeader) {
-      throw new Error('Invalid token');
-    }
-
-    // Get JWKs
-    const jwks = await getJwks();
-    const jwk = jwks.keys.find(key => key.kid === decodedHeader.header.kid);
-    if (!jwk) {
-      throw new Error('JWK not found');
-    }
-
-    // Convert JWK to PEM
-    const pem = jwkToPem(jwk);
-
-    // Verify token
-    const decoded = jwt.verify(token, pem, {
-      algorithms: ['RS256'],
-      issuer: `https://cognito-idp.${process.env.REGION}.amazonaws.com/${process.env.USER_POOL_ID}`,
-      audience: process.env.CLIENT_ID
-    });
-
-    return decoded;
-  } catch (error) {
-    console.error('Token verification failed:', error);
-    throw error;
+  // Decode token header to get kid
+  const decodedHeader = jwt.decode(token, { complete: true });
+  if (!decodedHeader) {
+    throw new Error('Invalid token');
   }
+
+  // Get JWKs
+  const jwks = await getJwks();
+  const jwk = jwks.keys.find(key => key.kid === decodedHeader.header.kid);
+  if (!jwk) {
+    throw new Error('JWK not found');
+  }
+
+  // Convert JWK to PEM
+  const pem = jwkToPem(jwk);
+
+  const region = process.env.REGION || process.env.AWS_REGION || 'us-east-1';
+
+  // Verify signature, issuer, and audience (frontend sends the ID token,
+  // whose aud claim is the app client id)
+  return jwt.verify(token, pem, {
+    algorithms: ['RS256'],
+    issuer: `https://cognito-idp.${region}.amazonaws.com/${process.env.USER_POOL_ID}`,
+    audience: process.env.CLIENT_ID
+  });
 }
 
 // Get user groups from Cognito
 async function getUserGroups(username) {
   try {
-    const params = {
+    const response = await cognito.send(new AdminListGroupsForUserCommand({
       UserPoolId: process.env.USER_POOL_ID,
       Username: username
-    };
-
-    const response = await cognito.adminListGroupsForUser(params).promise();
+    }));
     return response.Groups.map(group => group.GroupName);
   } catch (error) {
     console.error('Error fetching user groups:', error);
     return [];
   }
-}
-
-// Generate policy document
-function generatePolicy(principalId, effect, resource, context = {}) {
-  const authResponse = {
-    principalId
-  };
-
-  if (effect && resource) {
-    authResponse.policyDocument = {
-      Version: '2012-10-17',
-      Statement: [{
-        Action: 'execute-api:Invoke',
-        Effect: effect,
-        Resource: resource
-      }]
-    };
-  }
-
-  // Add context data that will be available in Lambda functions
-  authResponse.context = {
-    ...context,
-    stringKey: JSON.stringify(context) // API Gateway requires string values
-  };
-
-  return authResponse;
 }
 
 // Check if user has required permissions
@@ -114,15 +91,41 @@ function hasPermission(groups, requiredGroups) {
   return requiredGroups.some(group => groups.includes(group));
 }
 
-// Main handler
-exports.handler = async (event) => {
-  console.log('Authorizer event:', JSON.stringify(event, null, 2));
+// Which groups a route requires. `path` is the route path without a leading
+// slash, e.g. "admin/clear-game/{gameId}"; `method` is the HTTP verb.
+function requiredGroupsForRoute(method, path) {
+  // Hosts reset their own games via the admin clear-game endpoint
+  // (GameHostPage.jsx), so hosts are allowed there.
+  if (path.startsWith('admin/clear-game')) {
+    return ['hosts', 'admins'];
+  }
+  // All other admin routes require the admins group
+  if (path.startsWith('admin')) {
+    return ['admins'];
+  }
+  // Game creation/management requires host or admin group
+  if ((method === 'POST' || method === 'PUT' || method === 'DELETE') && path.includes('games')) {
+    return ['hosts', 'admins'];
+  }
+  // Public routes (GET game, join, answer, vote) don't require groups
+  if (path.includes('join') || path.includes('answer') || path.includes('vote') ||
+      (method === 'GET' && path.includes('games'))) {
+    return [];
+  }
+  // All other routes require at least host group
+  return ['hosts', 'admins'];
+}
 
+// Main handler — HTTP API payload 2.0 simple response
+exports.handler = async (event) => {
   try {
-    // Extract token from event
-    const token = event.authorizationToken?.replace(/^Bearer\s+/i, '');
+    // HTTP API lowercases header names; identitySource is the configured
+    // Authorization header value
+    const rawToken = event.identitySource?.[0] || event.headers?.authorization || '';
+    const token = rawToken.replace(/^Bearer\s+/i, '');
     if (!token) {
-      throw new Error('Unauthorized');
+      console.log('Authorization denied: no token');
+      return { isAuthorized: false };
     }
 
     // Verify token
@@ -136,58 +139,35 @@ exports.handler = async (event) => {
     // Check user status (custom attribute)
     const userStatus = decoded['custom:status'] || 'enabled';
     if (userStatus === 'disabled') {
-      throw new Error('User account is disabled');
+      console.log(`Authorization denied: user ${username} is disabled`);
+      return { isAuthorized: false };
     }
 
-    // Extract required groups from route
-    const methodArn = event.methodArn;
-    const arnParts = methodArn.split(':');
-    const apiGatewayArn = arnParts[5].split('/');
-    const method = apiGatewayArn[2];
-    const resource = apiGatewayArn[3] || '';
+    // routeKey is e.g. "POST /admin/clear-game/{gameId}"
+    const [method, routePath] = (event.routeKey || '').split(' ');
+    const path = (routePath || event.rawPath || '').replace(/^\//, '');
 
-    // Define permissions based on routes
-    let requiredGroups = [];
-    
-    // Admin routes require admin group
-    if (resource.startsWith('admin')) {
-      requiredGroups = ['admins'];
-    }
-    // Game creation/management requires host or admin group
-    else if ((method === 'POST' || method === 'PUT' || method === 'DELETE') && 
-             (resource === 'games' || resource.includes('games'))) {
-      requiredGroups = ['hosts', 'admins'];
-    }
-    // Public routes (GET game, join, answer, vote) don't require groups
-    else if (resource.includes('join') || resource.includes('answer') || 
-             resource.includes('vote') || (method === 'GET' && resource.includes('games'))) {
-      requiredGroups = [];
-    }
-    // All other routes require at least host group
-    else {
-      requiredGroups = ['hosts', 'admins'];
-    }
-
-    // Check permissions
+    const requiredGroups = requiredGroupsForRoute(method, path);
     if (!hasPermission(groups, requiredGroups)) {
-      throw new Error('Insufficient permissions');
+      console.log(`Authorization denied: ${username} (groups: ${groups.join(',')}) lacks ${requiredGroups.join('|')} for ${event.routeKey}`);
+      return { isAuthorized: false };
     }
 
-    // Generate policy
-    const context = {
-      userId: decoded.sub,
-      username,
-      email,
-      groups: groups.join(','),
-      status: userStatus,
-      role: decoded['custom:role'] || 'host'
+    return {
+      isAuthorized: true,
+      // Available to backing lambdas as event.requestContext.authorizer.lambda
+      context: {
+        userId: decoded.sub,
+        username,
+        email,
+        groups: groups.join(','),
+        status: userStatus,
+        role: decoded['custom:role'] || 'host'
+      }
     };
-
-    return generatePolicy(decoded.sub, 'Allow', event.methodArn, context);
-
   } catch (error) {
     console.error('Authorization error:', error);
-    throw new Error('Unauthorized');
+    return { isAuthorized: false };
   }
 };
 
@@ -195,3 +175,4 @@ exports.handler = async (event) => {
 module.exports.verifyToken = verifyToken;
 module.exports.getUserGroups = getUserGroups;
 module.exports.hasPermission = hasPermission;
+module.exports.requiredGroupsForRoute = requiredGroupsForRoute;

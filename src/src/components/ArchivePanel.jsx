@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { authFetch } from '../auth/authFetch';
 
 const ArchivePanel = ({ onQuestionSetImport }) => {
   const [activeTab, setActiveTab] = useState('browse');
@@ -76,14 +77,14 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
     
     try {
       // Load question sets using existing API
-      const questionSetsResponse = await fetch(`${window.API_BASE}admin/question-sets`);
+      const questionSetsResponse = await authFetch(`${window.API_BASE}admin/question-sets`);
       if (questionSetsResponse.ok) {
         const questionSetsData = await questionSetsResponse.json();
         setLocalQuestionSets(questionSetsData.questionSets || []);
       }
 
       // Load AI prompts using existing API
-      const promptsResponse = await fetch(`${window.API_BASE}admin/ai-prompts`);
+      const promptsResponse = await authFetch(`${window.API_BASE}admin/ai-prompts`);
       if (promptsResponse.ok) {
         const promptsData = await promptsResponse.json();
         setLocalPrompts(promptsData.prompts || []);
@@ -268,7 +269,7 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
 
     setLoading(true);
     try {
-      const response = await fetch(`${window.API_BASE}admin/export-to-archive`, {
+      const response = await authFetch(`${window.API_BASE}admin/export-to-archive`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -316,7 +317,7 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
 
     setLoading(true);
     try {
-      const response = await fetch(`${window.API_BASE}admin/import-from-archive`, {
+      const response = await authFetch(`${window.API_BASE}admin/import-from-archive`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

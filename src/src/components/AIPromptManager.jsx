@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './AIPromptManager.css';
+import { authFetch } from '../auth/authFetch';
 
 const API_BASE = window.API_BASE;
 
@@ -446,7 +447,7 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
       
       const method = isNew ? 'POST' : 'PUT';
       
-      const response = await fetch(endpoint, {
+      const response = await authFetch(endpoint, {
         method,
         headers: {
           'Content-Type': 'application/json'
@@ -493,7 +494,7 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
     setSavedOutputFormat(formData.outputFormat);
 
     try {
-      const response = await fetch(`${API_BASE}admin/ai-generate-prompt`, {
+      const response = await authFetch(`${API_BASE}admin/ai-generate-prompt`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -823,7 +824,7 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
     setAnalysis(null);
 
     try {
-      const response = await fetch(`${API_BASE}admin/ai-prompt-advisor`, {
+      const response = await authFetch(`${API_BASE}admin/ai-prompt-advisor`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -1039,7 +1040,7 @@ function AIPromptManager() {
   const fetchPrompts = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_BASE}admin/ai-prompts?includeContent=true`);
+      const response = await authFetch(`${API_BASE}admin/ai-prompts?includeContent=true`);
       if (!response.ok) {
         throw new Error('Failed to fetch prompts');
       }
@@ -1098,7 +1099,7 @@ function AIPromptManager() {
     }
 
     try {
-      const response = await fetch(`${API_BASE}admin/ai-prompts/${promptId}`, {
+      const response = await authFetch(`${API_BASE}admin/ai-prompts/${promptId}`, {
         method: 'DELETE'
       });
 
@@ -1136,7 +1137,7 @@ function AIPromptManager() {
 
     try {
       setIsLoading(true);
-      const response = await fetch(`${API_BASE}admin/populate-defaults`, {
+      const response = await authFetch(`${API_BASE}admin/populate-defaults`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

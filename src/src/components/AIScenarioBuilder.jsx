@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
+import { authFetch } from '../auth/authFetch';
 
 const API_BASE = window.API_BASE;
 
@@ -39,7 +40,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         status: 'active'
       });
       
-      const response = await fetch(`${API_BASE}admin/ai-prompts?${params}`);
+      const response = await authFetch(`${API_BASE}admin/ai-prompts?${params}`);
       const data = await response.json();
       
       if (response.ok) {
@@ -424,7 +425,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
               ? selectedType.dbPrompt.scenarioType 
               : scenarioConfig.type;
 
-            const response = await fetch(`${API_BASE}admin/ai-generate-scenarios`, {
+            const response = await authFetch(`${API_BASE}admin/ai-generate-scenarios`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',

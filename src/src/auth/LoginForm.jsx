@@ -76,50 +76,6 @@ const LoginForm = ({ onToggleMode, onSuccess, initialError }) => {
     }
   };
 
-  // Function to create manual session for bypass
-  const createManualSession = async () => {
-    console.log('🔧 Creating manual session...');
-    
-    // Create fake but valid-looking tokens for the existing Google user
-    const userPoolId = 'us-east-1_bKTK5F5Jm';
-    const clientId = '5brt6hub6e2gmi7hmuuidfi3nc';
-    const username = 'Google_113956208956782440356';
-    
-    // Create a realistic ID token payload
-    const idTokenPayload = {
-      "sub": "54e8d468-c061-70c9-1228-07092c1cd714",
-      "email": "george.seib@gmail.com",
-      "email_verified": true,
-      "name": "George Seib",
-      "cognito:username": username,
-      "cognito:groups": ["admins"],
-      "aud": clientId,
-      "token_use": "id",
-      "auth_time": Math.floor(Date.now() / 1000),
-      "iss": `https://cognito-idp.us-east-1.amazonaws.com/${userPoolId}`,
-      "exp": Math.floor(Date.now() / 1000) + 3600,
-      "iat": Math.floor(Date.now() / 1000)
-    };
-    
-    // Create base64 encoded token (simplified for bypass)
-    const fakeIdToken = btoa(JSON.stringify({
-      "alg": "RS256",
-      "typ": "JWT"
-    })) + '.' + btoa(JSON.stringify(idTokenPayload)) + '.fake-signature';
-    
-    const fakeAccessToken = 'fake-access-token-' + Date.now();
-    
-    const tokenKey = `CognitoIdentityServiceProvider.${clientId}`;
-    localStorage.setItem(`${tokenKey}.LastAuthUser`, username);
-    localStorage.setItem(`${tokenKey}.${username}.idToken`, fakeIdToken);
-    localStorage.setItem(`${tokenKey}.${username}.accessToken`, fakeAccessToken);
-    
-    console.log('🔧 Manual session tokens created');
-    
-    // Trigger a page reload to let AuthContext pick up the new session
-    window.location.href = '/';
-  };
-
   const handleGoogleSignIn = () => {
     console.log('🚀 Google sign-in clicked');
     
@@ -283,57 +239,6 @@ const LoginForm = ({ onToggleMode, onSuccess, initialError }) => {
           </button>
         </div>
       </form>
-
-      {/* Admin Bypass Section (Development Only) */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="admin-bypass-section">
-          <div className="admin-bypass-divider">
-            <span>Development Tools</span>
-          </div>
-          
-          <button
-            type="button"
-            onClick={async () => {
-              console.log('🔧 Admin bypass clicked');
-              
-              try {
-                // Call the admin bypass API
-                const response = await fetch('/api/admin/bypass', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    action: 'create_admin',
-                    email: 'george.seib@gmail.com'
-                  }),
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                  console.log('🔧 Admin bypass successful:', result);
-                  alert(`Admin user created!\nEmail: ${result.credentials.email}\nPassword: ${result.credentials.password}\n\nYou can now sign in with these credentials.`);
-                } else {
-                  console.error('🔧 Admin bypass failed:', result.error);
-                  alert(`Admin bypass failed: ${result.error}`);
-                }
-              } catch (error) {
-                console.error('🔧 Admin bypass error:', error);
-                alert(`Admin bypass error: ${error.message}`);
-              }
-            }}
-            className="admin-bypass-button"
-            title="Creates admin user for development (george.seib@gmail.com)"
-          >
-            🔧 Create Admin User (Dev)
-          </button>
-          
-          <p className="admin-bypass-help">
-            This creates an admin user for development. Use the provided credentials to sign in.
-          </p>
-        </div>
-      )}
 
       <div className="auth-footer">
         <p className="help-text">

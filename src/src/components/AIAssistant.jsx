@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { authFetch } from '../auth/authFetch';
 
 const API_BASE = window.API_BASE;
 
@@ -20,7 +21,7 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
     setGenerationStatus('🤖 Generating with AI...');
 
     try {
-      const response = await fetch(`${API_BASE}admin/ai-generate-questions`, {
+      const response = await authFetch(`${API_BASE}admin/ai-generate-questions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

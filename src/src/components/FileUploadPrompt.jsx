@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './FileUploadPrompt.css';
+import { authFetch } from '../auth/authFetch';
 
 function FileUploadPrompt({ 
   onContentExtracted, 
@@ -65,7 +66,7 @@ function FileUploadPrompt({
       else if (fileExtension === 'pdf' || fileExtension === 'docx') {
         const base64Content = await readFileAsBase64(selectedFile);
         
-        const response = await fetch(`${API_BASE}admin/parse-document`, {
+        const response = await authFetch(`${API_BASE}admin/parse-document`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

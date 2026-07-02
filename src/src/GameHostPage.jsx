@@ -7,6 +7,7 @@ import IssueFab from './components/IssueFab';
 import QuickstartMenu from './components/QuickstartMenu';
 import WavelengthWordCloud from './components/WavelengthWordCloud';
 import { useAuth } from './auth/AuthContext';
+import { authFetch } from './auth/authFetch';
 
 const API_BASE = window.API_BASE;
 
@@ -2120,7 +2121,7 @@ Focus on actionable business strategy insights.`;
     try {
       // Clear all game data from database (always call, backend handles empty gameId gracefully)
       console.log(`🗑️ HOST: Clearing old game data (gameId: ${gameId || 'none'})`);
-      const clearResponse = await fetch(`${API_BASE}admin/clear-game/${gameId || 'empty'}`, {
+      const clearResponse = await authFetch(`${API_BASE}admin/clear-game/${gameId || 'empty'}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });

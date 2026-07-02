@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
+import { authFetch } from '../auth/authFetch';
 
 const API_BASE = window.API_BASE;
 
@@ -34,7 +35,7 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
     setStep(2);
 
     try {
-      const response = await fetch(`${API_BASE}admin/ai-generate-survey`, {
+      const response = await authFetch(`${API_BASE}admin/ai-generate-survey`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

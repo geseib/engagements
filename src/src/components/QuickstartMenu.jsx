@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { authFetch } from '../auth/authFetch';
 
 const API_BASE = window.API_BASE;
 
@@ -27,7 +28,7 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
   const fetchQuickstartSets = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}admin/question-sets`);
+      const response = await authFetch(`${API_BASE}admin/question-sets`);
       const data = await response.json();
       
       // Filter and group quickstart-enabled sets by engagement type
