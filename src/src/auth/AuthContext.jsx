@@ -6,16 +6,20 @@ import {
   CognitoUserAttribute 
 } from 'amazon-cognito-identity-js';
 
-// Configure Cognito User Pool  
-const userPoolId = window.USER_POOL_ID || process.env.REACT_APP_USER_POOL_ID || 'us-east-1_PLACEHOLDER';
-const clientId = window.USER_POOL_CLIENT_ID || process.env.REACT_APP_CLIENT_ID || 'PLACEHOLDER_CLIENT_ID';
+// Configure Cognito User Pool - Lazy load to ensure config.js has loaded  
+const getUserPool = () => {
+  const userPoolId = window.USER_POOL_ID || process.env.REACT_APP_USER_POOL_ID || 'us-east-1_PLACEHOLDER';
+  const clientId = window.USER_POOL_CLIENT_ID || process.env.REACT_APP_CLIENT_ID || 'PLACEHOLDER_CLIENT_ID';
+  
+  console.log('🔧 AUTH: Initializing user pool with:', { userPoolId, clientId });
+  
+  const poolData = {
+    UserPoolId: userPoolId,
+    ClientId: clientId,
+  };
 
-const poolData = {
-  UserPoolId: userPoolId,
-  ClientId: clientId,
+  return new CognitoUserPool(poolData);
 };
-
-const userPool = new CognitoUserPool(poolData);
 
 const AuthContext = createContext();
 
@@ -37,6 +41,7 @@ export const AuthProvider = ({ children }) => {
   // Get current user from session
   const getCurrentUser = async () => {
     try {
+      const userPool = getUserPool();
       const cognitoUser = userPool.getCurrentUser();
       if (cognitoUser) {
         return new Promise((resolve, reject) => {
@@ -114,6 +119,7 @@ export const AuthProvider = ({ children }) => {
       ];
 
       return new Promise((resolve, reject) => {
+        const userPool = getUserPool();
         userPool.signUp(email, password, attributeList, null, (err, result) => {
           if (err) {
             console.error('Sign up error:', err);
@@ -151,7 +157,7 @@ export const AuthProvider = ({ children }) => {
 
       const cognitoUser = new CognitoUser({
         Username: email,
-        Pool: userPool,
+        Pool: getUserPool(),
       });
 
       return new Promise((resolve, reject) => {
@@ -186,7 +192,7 @@ export const AuthProvider = ({ children }) => {
 
       const cognitoUser = new CognitoUser({
         Username: email,
-        Pool: userPool,
+        Pool: getUserPool(),
       });
 
       return new Promise((resolve, reject) => {
@@ -254,6 +260,7 @@ export const AuthProvider = ({ children }) => {
 
   // Sign out user
   const signOut = () => {
+    const userPool = getUserPool();
     const cognitoUser = userPool.getCurrentUser();
     if (cognitoUser) {
       cognitoUser.signOut();
@@ -272,7 +279,7 @@ export const AuthProvider = ({ children }) => {
 
       const cognitoUser = new CognitoUser({
         Username: email,
-        Pool: userPool,
+        Pool: getUserPool(),
       });
 
       return new Promise((resolve, reject) => {
@@ -322,6 +329,7 @@ export const AuthProvider = ({ children }) => {
   // Get JWT token for API calls
   const getAuthToken = async () => {
     try {
+      const userPool = getUserPool();
       const cognitoUser = userPool.getCurrentUser();
       if (!cognitoUser) return null;
 
