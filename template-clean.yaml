@@ -55,7 +55,12 @@ Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
   HasSecondaryDomain: !Not [!Equals [!Ref SecondaryDomainName, ""]]
   IsProd: !Equals [!Ref Environment, "prod"]
-  HasGoogleOAuth: !Equals [!Ref Environment, "never"]
+  # Dev only for now: dev's Google credentials live at the default SSM paths
+  # (/engdev/google/*) and the GoogleIdentityProvider below is CFN-managed.
+  # Test/prod still use console-configured providers; before enabling there,
+  # point GoogleClientIdParameter/GoogleClientSecretParameter at env-specific
+  # SSM params and delete the console-created provider so CFN can own it.
+  HasGoogleOAuth: !Equals [!Ref Environment, "dev"]
 
 Globals:
   Function:
