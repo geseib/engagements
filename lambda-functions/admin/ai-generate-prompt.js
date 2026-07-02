@@ -1,6 +1,6 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 
-const bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });
+const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 
 // Template variable definitions for AI generation context
 const TEMPLATE_VARIABLES = {
@@ -126,7 +126,7 @@ RESPONSE FORMAT (return as JSON):
     
     try {
       // Use Claude 3.5 Haiku inference profile ARN (cross-region)
-      const haikuProfileArn = `arn:aws:bedrock:us-east-1:${process.env.AWS_ACCOUNT_ID || '239601476690'}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0`;
+      const haikuProfileArn = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0`;
       console.log('🤖 BEDROCK: Haiku Inference Profile ARN:', haikuProfileArn);
       console.log('🤖 BEDROCK: Prompt length:', aiPrompt.length);
       
@@ -156,7 +156,7 @@ RESPONSE FORMAT (return as JSON):
       console.log('🔄 BEDROCK: Trying Claude 3.5 Sonnet as fallback...');
       
       try {
-        const sonnetProfileArn = `arn:aws:bedrock:us-east-1:${process.env.AWS_ACCOUNT_ID || '239601476690'}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0`;
+        const sonnetProfileArn = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0`;
         console.log('🤖 BEDROCK: Sonnet Inference Profile ARN:', sonnetProfileArn);
         
         response = await bedrockClient.send(new InvokeModelCommand({

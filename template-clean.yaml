@@ -59,6 +59,8 @@ Conditions:
 
 Globals:
   Function:
+    # MODERNIZE FOLLOW-UP (#1): nodejs18.x is EOL. Bump to nodejs22.x here, then
+    # redeploy and smoke-test AI + WebSocket functions. Single change point for all functions.
     Runtime: nodejs18.x
     Timeout: 30
     MemorySize: 256
@@ -67,6 +69,9 @@ Globals:
         TABLE_NAME: !Ref GameTable
         WEBSOCKET_API_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
         ENVIRONMENT: !Ref Environment
+        # Account ID for constructing Bedrock inference-profile ARNs at runtime
+        # (replaces hardcoded account IDs that used to live in Lambda source).
+        ACCOUNT_ID: !Ref AWS::AccountId
 
 Resources:
 
@@ -1484,9 +1489,6 @@ Resources:
                 - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0'
                 - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0'
                 - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0'
-                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-haiku-20240307-v1:0'
-                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-haiku-20240307-v1:0'
-                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-haiku-20240307-v1:0'
       Events:
         AIGeneratePrompt:
           Type: HttpApi

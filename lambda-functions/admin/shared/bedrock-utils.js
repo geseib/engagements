@@ -97,7 +97,7 @@ const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000) => {
 // Enhanced invoke Claude with comprehensive retry logic
 const invokeClaudeWithRetry = async (bedrockClient, InvokeModelCommand, prompt, maxTokens = 4000) => {
   // Use same inference profile ARN as the working AI Summary function
-  const modelId = 'arn:aws:bedrock:us-east-1:239601476690:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0';
+  const modelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0`;
 
   console.log('🤖 Calling Claude with retry logic...');
   console.log('🤖 BEDROCK: Using model ID:', modelId);
@@ -134,7 +134,7 @@ const invokeClaudeWithRetry = async (bedrockClient, InvokeModelCommand, prompt, 
       console.log('🔄 BEDROCK: Trying Claude 3.5 Haiku as fallback...');
       
       // Try Claude 3.5 Haiku inference profile ARN as fallback
-      const haikuModelId = 'arn:aws:bedrock:us-east-1:239601476690:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0';
+      const haikuModelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0`;
       console.log('🤖 BEDROCK: Haiku model ID:', haikuModelId);
       
       const haikuCommand = new InvokeModelCommand({

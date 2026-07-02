@@ -2,7 +2,7 @@ const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-be
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 
-const bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });
+const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const tableName = process.env.TABLE_NAME;
 const dynamoClient = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(dynamoClient, {
@@ -131,7 +131,7 @@ exports.handler = async (event) => {
     let aiResponse;
     try {
       const response = await bedrockClient.send(new InvokeModelCommand({
-        modelId: 'arn:aws:bedrock:us-east-1:239601476690:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0',
+        modelId: `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0`,
         body: JSON.stringify({
           anthropic_version: 'bedrock-2023-05-31',
           max_tokens: 4000,
@@ -156,7 +156,7 @@ exports.handler = async (event) => {
       
       // Try Claude 3.5 Haiku inference profile ARN as fallback
       const haikuResponse = await bedrockClient.send(new InvokeModelCommand({
-        modelId: 'arn:aws:bedrock:us-east-1:239601476690:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0',
+        modelId: `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0`,
         body: JSON.stringify({
           anthropic_version: 'bedrock-2023-05-31',
           max_tokens: 4000,

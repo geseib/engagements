@@ -1,7 +1,7 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const { invokeClaudeWithRetry } = require('./shared/bedrock-utils');
 
-const bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });
+const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 
 exports.handler = async (event) => {
   try {

@@ -3,7 +3,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 
-const bedrock = new BedrockRuntimeClient({ region: 'us-east-1' });
+const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
 const s3 = new S3Client({ region: 'us-east-1' });
@@ -1640,14 +1640,15 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     promptSource: promptProvenance.source
   };
 
+  const sonnetModelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0`;
   console.log('🤖 BEDROCK: Attempting to call Claude 3.5 Sonnet...');
-  console.log('🤖 BEDROCK: Inference Profile ARN: arn:aws:bedrock:us-east-1:239601476690:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0');
+  console.log('🤖 BEDROCK: Inference Profile ARN:', sonnetModelId);
   console.log('🤖 BEDROCK: Prompt length:', prompt.length);
-  
+
   try {
     // Use Claude 3.5 Sonnet inference profile ARN
     const response = await bedrock.send(new InvokeModelCommand({
-      modelId: 'arn:aws:bedrock:us-east-1:239601476690:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0',
+      modelId: sonnetModelId,
       body: JSON.stringify({
         anthropic_version: 'bedrock-2023-05-31',
         max_tokens: 2000,
@@ -1695,13 +1696,14 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     console.error('  Error code:', error.code || error.$metadata?.httpStatusCode);
     console.error('  Full error:', JSON.stringify(error, null, 2));
     
+    const haikuModelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0`;
     console.log('🔄 BEDROCK: Trying Claude 3.5 Haiku as fallback...');
-    console.log('🤖 BEDROCK: Haiku Inference Profile ARN: arn:aws:bedrock:us-east-1:239601476690:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0');
-    
+    console.log('🤖 BEDROCK: Haiku Inference Profile ARN:', haikuModelId);
+
     // Try Claude 3.5 Haiku inference profile ARN as fallback
     try {
       const haikuResponse = await bedrock.send(new InvokeModelCommand({
-        modelId: 'arn:aws:bedrock:us-east-1:239601476690:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0',
+        modelId: haikuModelId,
         body: JSON.stringify({
           anthropic_version: 'bedrock-2023-05-31',
           max_tokens: 2000,

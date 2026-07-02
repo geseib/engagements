@@ -6,7 +6,7 @@ const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
 
-const bedrockClient = new BedrockRuntimeClient({ region: 'us-east-1' });
+const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 
 const dynamoClient = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(dynamoClient, {
@@ -26,7 +26,7 @@ const invokeClaude = async (prompt) => {
   
   try {
     // Use Claude 3.5 Sonnet inference profile ARN (cross-region) - primary for analysis tasks
-    const sonnetProfileArn = `arn:aws:bedrock:us-east-1:${process.env.AWS_ACCOUNT_ID || '239601476690'}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0`;
+    const sonnetProfileArn = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0`;
     console.log('🤖 BEDROCK: Sonnet Inference Profile ARN:', sonnetProfileArn);
     console.log('🤖 BEDROCK: Prompt length:', prompt.length);
     
@@ -63,7 +63,7 @@ const invokeClaude = async (prompt) => {
     console.log('🔄 BEDROCK: Trying Claude 3.5 Haiku as fallback...');
     
     try {
-      const haikuProfileArn = `arn:aws:bedrock:us-east-1:${process.env.AWS_ACCOUNT_ID || '239601476690'}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0`;
+      const haikuProfileArn = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0`;
       console.log('🤖 BEDROCK: Haiku Inference Profile ARN:', haikuProfileArn);
       
       const payload = {
