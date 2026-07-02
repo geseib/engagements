@@ -272,10 +272,10 @@ function GameHostPage() {
     const gameTypeDefaults = {
       'trivia': 'Select the best answer:',
       'poll': 'Share your opinion:',
-      'wavelength': 'Complete this sentence:',
+      'wavelength': 'Enter up to 10 words that come to mind for this subject:',
       'call-and-answer': 'How could you adapt this lesson to your work, project, or team?'
     };
-    
+
     if (!setId) return gameTypeDefaults[currentGameType] || 'Share your response:';
     
     // Get current question set info
@@ -336,10 +336,10 @@ function GameHostPage() {
     const gameTypeDefaults = {
       'trivia': 'Select the best answer:',
       'poll': 'Share your opinion:',
-      'wavelength': 'Enter 10 words that come to mind:',
+      'wavelength': 'Enter up to 10 words that come to mind for this subject:',
       'call-and-answer': 'How could you adapt this lesson to your work, project, or team?'
     };
-    
+
     return gameTypeDefaults[gameType] || 'How could you adapt this lesson to your work, project, or team?';
   };
 
@@ -2261,7 +2261,7 @@ You're invited to participate in an interactive engagement session!
 DETAILS:
 • Type: ${engagementType === 'call-and-answer' ? 'Call and Answer (Discussion + Voting)' : 
                 engagementType === 'trivia' ? 'Trivia (Questions Only)' : 
-                'Wavelength (Spectrum-based Guessing)'}
+                'Wavelength (Word Association & Alignment)'}
 • Question Set: ${questionSet?.name || questionSet?.title || 'Unknown Set'}
 • Categories: ${catText}
 ${gameAiContext ? `• Context: ${gameAiContext}` : ''}
@@ -3407,7 +3407,9 @@ Ready to engage? See you there!`;
         {gameState.startsWith('ASK#') && questions.length > 0 && (
           <div className={`question-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
             <div className="question-header">
-              <h2>{currentGameType === 'trivia' ? `Question ${lessonNumber}` : `Lesson ${lessonNumber}`}</h2>
+              <h2>{currentGameType === 'trivia' ? `Question ${lessonNumber}` :
+                   currentGameType === 'wavelength' ? `Subject ${lessonNumber}` :
+                   `Lesson ${lessonNumber}`}</h2>
               <div className="field-badge">
                 {questions[0].field || questions[0].category}
               </div>
@@ -3443,9 +3445,11 @@ Ready to engage? See you there!`;
                 {questions[0].detail}
               </div>
             )}
-            {!lessonExpanded && currentGameType === 'wavelength' && questions[0].topic && (
+            {!lessonExpanded && currentGameType === 'wavelength' && (questions[0].topic || questions[0].detail) && (
               <div className="wavelength-topic-display lesson-detail">
-                <strong>Topic:</strong> {questions[0].topic}
+                {questions[0].topic
+                  ? (<><strong>Topic:</strong> {questions[0].topic}</>)
+                  : questions[0].detail}
               </div>
             )}
             
@@ -3966,9 +3970,11 @@ Ready to engage? See you there!`;
                 {questions[0].detail}
               </div>
             )}
-            {currentGameType === 'wavelength' && questions[0].topic && (
+            {currentGameType === 'wavelength' && (questions[0].topic || questions[0].detail) && (
               <div className="expanded-lesson-detail wavelength-topic-expanded">
-                <strong>Topic:</strong> {questions[0].topic}
+                {questions[0].topic
+                  ? (<><strong>Topic:</strong> {questions[0].topic}</>)
+                  : questions[0].detail}
               </div>
             )}
             <div className="expanded-lesson-prompt">

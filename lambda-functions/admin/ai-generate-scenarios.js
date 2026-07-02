@@ -11,6 +11,28 @@ const dynamodb = DynamoDBDocumentClient.from(dynamoClient, {
   }
 });
 
+// Fallback prompt template used when no DynamoDB template exists. Wavelength
+// items are short SUBJECTS for word-association alignment (players list up to
+// 10 words each, the game measures overlap), so they get their own shape.
+const buildFallbackTemplate = (engagementType, prompt) => {
+  if (engagementType === 'wavelength') {
+    return {
+      basePrompt: prompt || 'Create wavelength subjects for a team word-association alignment game. Each item is a single short, evocative SUBJECT (1-4 words, e.g. "Remote Work", "Customer Trust") that every participant responds to by listing up to 10 words or short phrases that come to mind; the game then measures how many words overlap across participants. Pick subjects broad enough that everyone can produce 10 associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer.',
+      contextTemplate: '\n\nContext: {context}',
+      audienceTemplate: '\nAudience: {audience}',
+      categoryTemplate: '\nIMPORTANT: Organize subjects into EXACTLY {numberOfCategories} categories - no more, no less.\nMust include these categories: {mustHaveCategories}',
+      outputFormat: '\n\nReturn as JSON array: [{"title": "Subject (1-4 words)", "detail": "One sentence of framing for the subject", "category": "Category", "customInstructions": "Enter up to 10 words or short phrases that come to mind when you think about this subject."}]\nIMPORTANT: Use EXACTLY the specified number of categories. Return ONLY the JSON array.'
+    };
+  }
+  return {
+    basePrompt: prompt || 'Create scenarios based on the requirements provided',
+    contextTemplate: '\n\nContext: {context}',
+    audienceTemplate: '\nAudience: {audience}',
+    categoryTemplate: '\nIMPORTANT: Organize scenarios into EXACTLY {numberOfCategories} categories - no more, no less.\nMust include these categories: {mustHaveCategories}',
+    outputFormat: '\n\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "customInstructions": "Instructions"}]\nIMPORTANT: Use EXACTLY the specified number of categories. Return ONLY the JSON array.'
+  };
+};
+
 exports.handler = async (event) => {
   try {
     console.log('🤖 Lambda function started for scenario generation');
@@ -68,28 +90,17 @@ exports.handler = async (event) => {
       if (!promptTemplate) {
         console.warn(`⚠️ No prompt template found for ${scenarioType}/${engagementType}, using fallback`);
         // Fallback to basic prompt construction (removed business defaults)
-        promptTemplate = {
-          basePrompt: prompt || 'Create scenarios based on the requirements provided',
-          contextTemplate: '\n\nContext: {context}',
-          audienceTemplate: '\nAudience: {audience}',
-          categoryTemplate: '\nIMPORTANT: Organize scenarios into EXACTLY {numberOfCategories} categories - no more, no less.\nMust include these categories: {mustHaveCategories}',
-          outputFormat: '\n\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "customInstructions": "Instructions"}]\nIMPORTANT: Use EXACTLY the specified number of categories. Return ONLY the JSON array.'
-        };
+        promptTemplate = buildFallbackTemplate(engagementType, prompt);
       }
     } catch (dbError) {
       console.error('❌ Error fetching prompt template:', dbError);
       // Use fallback prompt (removed business defaults)
-      promptTemplate = {
-        basePrompt: prompt || 'Create scenarios based on the requirements provided',
-        contextTemplate: '\n\nContext: {context}',
-        audienceTemplate: '\nAudience: {audience}',
-        categoryTemplate: '\nIMPORTANT: Organize scenarios into EXACTLY {numberOfCategories} categories - no more, no less.\nMust include these categories: {mustHaveCategories}',
-        outputFormat: '\n\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "customInstructions": "Instructions"}]\nIMPORTANT: Use EXACTLY the specified number of categories. Return ONLY the JSON array.'
-      };
+      promptTemplate = buildFallbackTemplate(engagementType, prompt);
     }
 
     // Build prompt using template (remove hardcoded business context)
-    let fullPrompt = `Create ${limitedCount} scenarios. ${promptTemplate.basePrompt}`;
+    const itemNoun = engagementType === 'wavelength' ? 'wavelength subjects' : 'scenarios';
+    let fullPrompt = `Create ${limitedCount} ${itemNoun}. ${promptTemplate.basePrompt}`;
 
     // Add context if provided
     if (context && promptTemplate.contextTemplate) {
@@ -129,8 +140,11 @@ exports.handler = async (event) => {
 
     // Right-size max_tokens to the requested count (~500 output tokens per
     // scenario observed, plus headroom) so we never over-generate and each
-    // call stays well under API Gateway's ~30s timeout
-    const maxTokens = Math.min(1000 + (limitedCount * 700), 8000);
+    // call stays well under API Gateway's ~30s timeout. Wavelength items are
+    // tiny (a 1-4 word subject plus one framing sentence), so they need far
+    // fewer tokens per item.
+    const perItemTokens = engagementType === 'wavelength' ? 150 : 700;
+    const maxTokens = Math.min(1000 + (limitedCount * perItemTokens), 8000);
 
     console.log('🤖 Sending prompt to Claude...', { promptLength: fullPrompt.length, maxTokens });
 

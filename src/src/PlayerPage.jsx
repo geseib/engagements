@@ -1489,19 +1489,16 @@ function PlayerPage() {
                 {currentQuestion.title || currentQuestion.question}
               </div>
             )}
-            {gameType === 'wavelength' && currentQuestion.topic && (
+            {gameType === 'wavelength' && (currentQuestion.topic || currentQuestion.detail) && (
               <div className="wavelength-topic lesson-detail">
-                <strong>Topic:</strong> {currentQuestion.topic}
-                {(customInstruction || currentQuestion.customInstructions) && (
-                  <div style={{marginTop: '10px', fontWeight: 'normal'}}>
-                    <strong>Instructions:</strong> {customInstruction || currentQuestion.customInstructions}
-                  </div>
-                )}
+                {currentQuestion.topic
+                  ? (<><strong>Topic:</strong> {currentQuestion.topic}</>)
+                  : currentQuestion.detail}
               </div>
             )}
             <div className="application-prompt">
-              <strong>{gameType === 'trivia' ? 'Select the best answer:' : 
-                       gameType === 'wavelength' ? (currentQuestion?.customInstructions || customInstruction || 'Enter 10 words that come to mind:') :
+              <strong>{gameType === 'trivia' ? 'Select the best answer:' :
+                       gameType === 'wavelength' ? (currentQuestion?.customInstructions || customInstruction || 'Enter up to 10 words or short phrases that come to mind:') :
                        getPlayerInstructionText(customInstruction, currentQuestion)}</strong>
             </div>
             
@@ -1595,7 +1592,7 @@ function PlayerPage() {
                             value={answerInput}
                             onChange={(e) => setAnswerInput(e.target.value)}
                             placeholder={currentQuestion?.customInstructions || 
-                              (gameType === 'wavelength' ? 'Complete this sentence...' : 
+                              (gameType === 'wavelength' ? 'Enter up to 10 words or short phrases that come to mind...' :
                                gameType === 'poll' ? 'Share your opinion...' :
                                'Describe how you would apply this lesson to your work, project, or team...')}
                             className="mobile-answer-input"
@@ -1620,7 +1617,7 @@ function PlayerPage() {
                     onChange={(e) => setAnswerInput(e.target.value)}
                     onFocus={() => !isDesktop && setIsAnswerInputFocused(true)}
                     placeholder={currentQuestion?.customInstructions || 
-                      (gameType === 'wavelength' ? 'Complete this sentence...' : 
+                      (gameType === 'wavelength' ? 'Enter up to 10 words or short phrases that come to mind...' :
                        gameType === 'poll' ? 'Share your opinion...' :
                        'Describe how you would apply this lesson to your work, project, or team...')}
                     className="answer-input"
@@ -1915,9 +1912,11 @@ function PlayerPage() {
               <div className="wavelength-results">
                 <div className="wavelength-question-recap">
                   <h3>{currentQuestion?.title}</h3>
-                  {currentQuestion?.topic && (
+                  {(currentQuestion?.topic || currentQuestion?.detail) && (
                     <div className="wavelength-topic-display">
-                      <strong>Topic:</strong> {currentQuestion.topic}
+                      {currentQuestion.topic
+                        ? (<><strong>Topic:</strong> {currentQuestion.topic}</>)
+                        : currentQuestion.detail}
                     </div>
                   )}
                 </div>

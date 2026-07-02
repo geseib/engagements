@@ -9,6 +9,13 @@ const dynamodb = DynamoDBDocumentClient.from(dynamoClient, {
   }
 });
 
+// Shared framing for wavelength generation. Wavelength is a word-association
+// alignment game: the host shows a SUBJECT, every participant lists up to 10
+// words for it, and the game measures overlap across participants.
+const WAVELENGTH_SPEC = 'Create wavelength subjects for a team word-association alignment game. Each item is a single short, evocative SUBJECT (1-4 words, e.g. "Remote Work", "Customer Trust") that every participant responds to by listing up to 10 words or short phrases that come to mind; the game then measures how many words overlap across participants. Pick subjects broad enough that everyone can produce 10 associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer.';
+
+const WAVELENGTH_OUTPUT_FORMAT = '\n\nReturn as JSON array: [{"title": "Subject (1-4 words)", "detail": "One sentence of framing for the subject", "category": "Category", "customInstructions": "Enter up to 10 words or short phrases that come to mind when you think about this subject."}]\nReturn ONLY the JSON array.';
+
 // All generation prompts extracted from frontend components
 const generationPrompts = {
   // Call and Answer / Scenario Generation
@@ -324,15 +331,18 @@ const generationPrompts = {
   },
 
   // Wavelength Generation
+  // Wavelength items are SUBJECTS for a word-association alignment game: every
+  // participant lists up to 10 words for the subject, and the game measures how
+  // many words overlap across participants (results render as a word cloud).
   "wavelength": {
     "tech-terms": {
       name: "Technology Terms",
-      description: "Technical terms and concepts for word association",
-      basePrompt: "Create wavelength questions using technology and software development terms that teams can associate words with",
+      description: "Technology subjects for word-association alignment",
+      basePrompt: WAVELENGTH_SPEC + " Draw subjects from technology and software development: languages, practices, tools, platforms, and architecture concepts.",
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
-      categoryTemplate: "\nOrganize prompts into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "List prompt", "detail": "Background context", "category": "Category", "customInstructions": "Response guidance"}]\nReturn ONLY the JSON array.',
+      categoryTemplate: "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
+      outputFormat: WAVELENGTH_OUTPUT_FORMAT,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 4,
@@ -347,12 +357,12 @@ const generationPrompts = {
     },
     "business-concepts": {
       name: "Business Concepts",
-      description: "Business and management terms for exploration",
-      basePrompt: "Generate wavelength questions using business, strategy, and management concepts",
+      description: "Business and management subjects for word-association alignment",
+      basePrompt: WAVELENGTH_SPEC + " Draw subjects from business, strategy, and management: markets, leadership, operations, finance, and organizational life.",
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
-      categoryTemplate: "\nOrganize prompts into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "List prompt", "detail": "Background context", "category": "Category", "customInstructions": "Response guidance"}]\nReturn ONLY the JSON array.',
+      categoryTemplate: "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
+      outputFormat: WAVELENGTH_OUTPUT_FORMAT,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 4,
@@ -367,12 +377,12 @@ const generationPrompts = {
     },
     "lists-favorites": {
       name: "Lists & Favorites",
-      description: "Personal preferences and recommendations",
-      basePrompt: 'Create wavelength prompts asking people to list their favorites: books, movies, songs, restaurants, vacation spots, tools, resources, mentors, etc. Format: "List 10 of your favorite [category]"',
+      description: "Everyday life and personal interest subjects for word-association alignment",
+      basePrompt: WAVELENGTH_SPEC + ' Draw subjects from everyday life and personal interests: entertainment, food, travel, hobbies, and shared experiences (e.g. "Road Trips", "Comfort Food") so participants can compare their spontaneous associations.',
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
-      categoryTemplate: "\nOrganize prompts into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "List prompt", "detail": "Background context", "category": "Category", "customInstructions": "Response guidance"}]\nReturn ONLY the JSON array.',
+      categoryTemplate: "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
+      outputFormat: WAVELENGTH_OUTPUT_FORMAT,
       defaultSettings: {
         difficulty: "easy",
         numberOfCategories: 5,
@@ -387,12 +397,12 @@ const generationPrompts = {
     },
     "brainstorming": {
       name: "Brainstorming Sessions",
-      description: "Ideas and solutions for team challenges",
-      basePrompt: 'Generate wavelength prompts for brainstorming: ways to improve products, potential solutions, feature ideas, process improvements. Format: "List 10 ways to [improve/solve/enhance something]"',
+      description: "Work-life subjects that reveal shared team priorities",
+      basePrompt: WAVELENGTH_SPEC + ' Draw subjects from the team\'s working life: products, processes, challenges, goals, and opportunities (e.g. "Our Next Launch", "Team Meetings") so overlapping words reveal shared priorities.',
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
-      categoryTemplate: "\nOrganize prompts into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "List prompt", "detail": "Background context", "category": "Category", "customInstructions": "Response guidance"}]\nReturn ONLY the JSON array.',
+      categoryTemplate: "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
+      outputFormat: WAVELENGTH_OUTPUT_FORMAT,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 4,
@@ -407,12 +417,12 @@ const generationPrompts = {
     },
     "icebreakers-fun": {
       name: "Icebreakers & Fun",
-      description: "Getting to know each other better",
-      basePrompt: 'Create fun wavelength prompts: hidden talents, dream jobs, bucket list items, interesting facts about yourself. Format: "List 10 [fun/interesting/surprising] things about you"',
+      description: "Fun, relatable subjects for playful word association",
+      basePrompt: WAVELENGTH_SPEC + ' Draw fun, universally relatable subjects (e.g. "Monday Mornings", "Office Coffee", "Summer Vacation") that spark playful associations and easy laughs when the overlap is revealed.',
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
-      categoryTemplate: "\nOrganize prompts into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "List prompt", "detail": "Background context", "category": "Category", "customInstructions": "Response guidance"}]\nReturn ONLY the JSON array.',
+      categoryTemplate: "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
+      outputFormat: WAVELENGTH_OUTPUT_FORMAT,
       defaultSettings: {
         difficulty: "easy",
         numberOfCategories: 5,
@@ -426,13 +436,13 @@ const generationPrompts = {
       tags: ["wavelength", "icebreakers", "fun", "personal", "team-building"]
     },
     "custom": {
-      name: "Custom Lists",
-      description: "Define your own list-based prompts",
-      basePrompt: "Create wavelength questions based on the custom list topics provided",
+      name: "Custom Subjects",
+      description: "Define your own subjects for word association",
+      basePrompt: WAVELENGTH_SPEC + " Draw subjects from the custom topics provided.",
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
-      categoryTemplate: "\nOrganize prompts into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "List prompt", "detail": "Background context", "category": "Category", "customInstructions": "Response guidance"}]\nReturn ONLY the JSON array.',
+      categoryTemplate: "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
+      outputFormat: WAVELENGTH_OUTPUT_FORMAT,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 3,

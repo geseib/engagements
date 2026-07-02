@@ -5,6 +5,11 @@ import { postGenerationBatch, runWithConcurrency } from '../utils/aiBatchClient'
 
 const API_BASE = window.API_BASE;
 
+// Shared framing for wavelength generation. Wavelength is a word-association
+// alignment game: the host shows a SUBJECT, every participant lists up to 10
+// words for it, and the game measures how many words overlap across players.
+const WAVELENGTH_SPEC = 'Create wavelength subjects for a team word-association alignment game. Each item is a single short, evocative SUBJECT (1-4 words, e.g. "Remote Work", "Customer Trust") that every participant responds to by listing up to 10 words or short phrases that come to mind; the game then measures how many words overlap across participants. Pick subjects broad enough that everyone can produce 10 associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer.';
+
 function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'call-and-answer' }) {
   const [step, setStep] = useState(1);
   const [scenarioConfig, setScenarioConfig] = useState({
@@ -149,68 +154,68 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
           {
             id: 'tech-terms',
             title: 'Technology Terms',
-            description: 'Technical terms and concepts for word association',
-            prompt: 'Create wavelength questions using technology and software development terms that teams can associate words with'
+            description: 'Technology subjects for word-association alignment',
+            prompt: `${WAVELENGTH_SPEC} Draw subjects from technology and software development: languages, practices, tools, platforms, and architecture concepts.`
           },
           {
             id: 'business-concepts',
             title: 'Business Concepts',
-            description: 'Business and management terms for exploration',
-            prompt: 'Generate wavelength questions using business, strategy, and management concepts'
+            description: 'Business and management subjects for word-association alignment',
+            prompt: `${WAVELENGTH_SPEC} Draw subjects from business, strategy, and management: markets, leadership, operations, finance, and organizational life.`
           },
           {
             id: 'industry-specific',
             title: 'Industry-Specific Terms',
-            description: 'Terms specific to your industry or domain',
-            prompt: 'Create wavelength questions using terms specific to the target industry or professional domain'
+            description: 'Subjects specific to your industry or domain',
+            prompt: `${WAVELENGTH_SPEC} Draw subjects from the target industry or professional domain so overlapping words reveal how aligned the team's mental models are.`
           },
           {
             id: 'leadership-themes',
             title: 'Leadership & Culture',
-            description: 'Leadership principles and cultural concepts',
-            prompt: 'Generate wavelength questions around leadership themes, company culture, and team dynamics'
+            description: 'Leadership and culture subjects that surface team alignment',
+            prompt: `${WAVELENGTH_SPEC} Draw subjects from leadership themes, company culture, and team dynamics (e.g. "Great Managers", "Our Culture", "Trust").`
           },
           {
             id: 'abstract-concepts',
             title: 'Abstract Concepts',
-            description: 'Ideas and concepts that spark creativity',
-            prompt: 'Create wavelength questions using abstract concepts that encourage creative thinking and diverse associations'
+            description: 'Big ideas that spark rich, comparable associations',
+            prompt: `${WAVELENGTH_SPEC} Draw abstract subjects (e.g. "Innovation", "Risk", "Success") that every participant can associate with and that reveal how differently people think about big ideas.`
           },
           {
             id: 'lists-favorites',
-            title: 'Lists & Favorites',
-            description: 'Personal preferences and recommendations',
-            prompt: 'Create wavelength prompts asking people to list their favorites: books, movies, songs, restaurants, vacation spots, tools, resources, mentors, etc. Format: "List 10 of your favorite [category]"'
+            title: 'Everyday Life & Interests',
+            description: 'Everyday life and personal interest subjects for word association',
+            prompt: `${WAVELENGTH_SPEC} Draw subjects from everyday life and personal interests: entertainment, food, travel, hobbies, and shared experiences (e.g. "Road Trips", "Comfort Food") so participants can compare their spontaneous associations.`
           },
           {
             id: 'brainstorming',
-            title: 'Brainstorming Sessions',
-            description: 'Ideas and solutions for team challenges',
-            prompt: 'Generate wavelength prompts for brainstorming: ways to improve products, potential solutions, feature ideas, process improvements. Format: "List 10 ways to [improve/solve/enhance something]"'
+            title: 'Work & Team Priorities',
+            description: 'Work-life subjects that reveal shared team priorities',
+            prompt: `${WAVELENGTH_SPEC} Draw subjects from the team's working life: products, processes, challenges, goals, and opportunities (e.g. "Our Next Launch", "Team Meetings") so overlapping words reveal shared priorities.`
           },
           {
             id: 'team-building',
             title: 'Team Building & Culture',
             description: 'Shared experiences and team connections',
-            prompt: 'Create wavelength prompts for team building: memorable moments, things to appreciate, team values, shared goals. Format: "List 10 [experiences/values/goals] related to our team"'
+            prompt: `${WAVELENGTH_SPEC} Draw subjects around shared team experiences, values, and goals (e.g. "Our Team", "Winning Together", "Onboarding") so the overlap shows what the team holds in common.`
           },
           {
             id: 'reflection-retrospective',
             title: 'Reflection & Learning',
-            description: 'Lessons learned and growth opportunities',
-            prompt: 'Generate wavelength prompts for reflection: lessons learned, achievements, challenges overcome, areas for improvement. Format: "List 10 things you learned/achieved/improved"'
+            description: 'Reflection subjects for lessons learned and growth',
+            prompt: `${WAVELENGTH_SPEC} Draw reflective subjects about lessons, growth, and change (e.g. "Last Quarter", "Feedback", "Lessons Learned") so overlapping words reveal shared takeaways.`
           },
           {
             id: 'icebreakers-fun',
             title: 'Icebreakers & Fun',
-            description: 'Getting to know each other better',
-            prompt: 'Create fun wavelength prompts: hidden talents, dream jobs, bucket list items, interesting facts about yourself. Format: "List 10 [fun/interesting/surprising] things about you"'
+            description: 'Fun, relatable subjects for playful word association',
+            prompt: `${WAVELENGTH_SPEC} Draw fun, universally relatable subjects (e.g. "Monday Mornings", "Office Coffee", "Summer Vacation") that spark playful associations and easy laughs when the overlap is revealed.`
           },
           {
             id: 'custom',
-            title: 'Custom Lists',
-            description: 'Define your own list-based prompts',
-            prompt: 'Create wavelength questions based on the custom list topics provided'
+            title: 'Custom Subjects',
+            description: 'Define your own subjects for word association',
+            prompt: `${WAVELENGTH_SPEC} Draw subjects from the custom topics provided.`
           }
         ];
       case 'call-and-answer':
@@ -410,7 +415,9 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
       // Break large requests into small parallel batches. API Gateway HTTP
       // APIs have a hard ~30s integration timeout, and generation runs at
       // roughly 7.5s per scenario, so 2 per call keeps each request ~15s.
-      const CHUNK_SIZE = 2;
+      // Wavelength items are tiny (a short subject + one framing sentence),
+      // so larger batches still finish comfortably under the timeout.
+      const CHUNK_SIZE = engagementType === 'wavelength' ? 5 : 2;
       const MAX_PARALLEL = 3; // cap concurrency to respect Bedrock rate limits
       const totalCount = scenarioConfig.count;
       const chunks = Math.ceil(totalCount / CHUNK_SIZE);
@@ -422,14 +429,23 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
 
       // Since batches run in parallel, differentiate them up-front so we
       // don't get duplicate/near-identical scenarios across batches.
-      const batchAngles = [
-        'everyday, day-to-day situations',
-        'high-pressure or time-critical situations',
-        'interpersonal and communication-focused situations',
-        'strategic or long-term planning situations',
-        'unexpected situations that require creative thinking',
-        'cross-team or organizational situations'
-      ];
+      const batchAngles = engagementType === 'wavelength'
+        ? [
+            'concrete everyday objects, places, and activities',
+            'abstract concepts, values, and emotions',
+            'work life: processes, events, and milestones',
+            'people, roles, and relationships',
+            'industry and domain-specific themes',
+            'culture, habits, and shared experiences'
+          ]
+        : [
+            'everyday, day-to-day situations',
+            'high-pressure or time-critical situations',
+            'interpersonal and communication-focused situations',
+            'strategic or long-term planning situations',
+            'unexpected situations that require creative thinking',
+            'cross-team or organizational situations'
+          ];
       const requiredCategories = (scenarioConfig.mustHaveCategories || '')
         .split(',')
         .map(c => c.trim())
@@ -441,13 +457,22 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
       const batchTasks = Array.from({ length: chunks }, (_, i) => async () => {
         const chunkSize = Math.min(CHUNK_SIZE, totalCount - (i * CHUNK_SIZE));
 
-        let chunkPrompt = basePrompt + `\nNumber of scenarios needed: ${chunkSize}`;
+        // Build the differentiation hint separately and send it via
+        // customPrompt: the lambda appends customPrompt to whichever prompt
+        // template it uses (database or fallback), so the hint survives both
+        // paths without being duplicated.
+        let differentiationHint = '';
         if (chunks > 1) {
-          chunkPrompt += `\n\nThis request is part ${i + 1} of ${chunks} of a larger set generated in parallel. To avoid duplicating other parts, emphasize ${batchAngles[i % batchAngles.length]} and avoid the most obvious or commonly used examples.`;
+          differentiationHint = `This request is part ${i + 1} of ${chunks} of a larger set generated in parallel. To avoid duplicating other parts, emphasize ${batchAngles[i % batchAngles.length]} and avoid the most obvious or commonly used examples.`;
           if (requiredCategories.length > 0) {
-            chunkPrompt += ` Where it fits, favor the category "${requiredCategories[i % requiredCategories.length]}" for this part.`;
+            differentiationHint += ` Where it fits, favor the category "${requiredCategories[i % requiredCategories.length]}" for this part.`;
           }
         }
+        const chunkCustomPrompt = [scenarioConfig.customPrompt, differentiationHint]
+          .filter(Boolean)
+          .join('\n\n');
+
+        const chunkPrompt = basePrompt + `\nNumber of ${engagementType === 'wavelength' ? 'subjects' : 'scenarios'} needed: ${chunkSize}`;
 
         const result = await postGenerationBatch(`${API_BASE}admin/ai-generate-scenarios`, {
           scenarioType: backendScenarioType,
@@ -457,7 +482,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
           difficulty: scenarioConfig.difficulty,
           context: scenarioConfig.context,
           audience: scenarioConfig.audience,
-          customPrompt: scenarioConfig.customPrompt,
+          customPrompt: chunkCustomPrompt,
           customTitle: scenarioConfig.customTitle,
           numberOfCategories: scenarioConfig.numberOfCategories,
           mustHaveCategories: scenarioConfig.mustHaveCategories
@@ -590,6 +615,11 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
       'team-building': 'Engage in open discussion and listen to different perspectives. Focus on building understanding and collaboration.',
       'custom': 'Follow the specific guidelines provided for your scenario type.'
     };
+
+    // Wavelength sets share one instruction: players list words for a subject
+    if (engagementType === 'wavelength') {
+      return 'Enter up to 10 words or short phrases that come to mind when you think about this subject.';
+    }
 
     return typeInstructions[actualScenarioType] || 'Engage thoughtfully with each scenario and share your experiences and insights.';
   };
