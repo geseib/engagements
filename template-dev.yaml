@@ -1311,6 +1311,8 @@ Resources:
                     title: questionDataRes.Item.Title || questionDataRes.Item.Prompt || '',
                     detail: questionDataRes.Item.Detail || '',
                     category: questionDataRes.Item.Category || '',
+                    school: questionDataRes.Item.School || '',
+                    image: questionDataRes.Item.Image || questionDataRes.Item.ImageUrl || '', // Optional artwork/image URL
                     setId: questionRes.Item.SetId
                   };
                 }
@@ -1724,6 +1726,8 @@ Resources:
             title: i.Title || i.Prompt || '',
             detail: i.Detail || '',
             category: i.Category || '',
+            school: i.School || '',
+            image: i.Image || i.ImageUrl || '', // Optional artwork/image URL (e.g. "Art Title" sets)
             setId: setId
           }));
           
@@ -1926,6 +1930,8 @@ Resources:
                     title: questionRes.Item.Title || questionRes.Item.Prompt || '',
                     detail: questionRes.Item.Detail || '',
                     category: questionRes.Item.Category || '',
+                    school: questionRes.Item.School || '',
+                    image: questionRes.Item.Image || questionRes.Item.ImageUrl || '', // Optional artwork/image URL
                     setId: pointerRes.Item.SetId
                   });
                 }
@@ -2024,13 +2030,19 @@ Resources:
             let detailIndex = getColumnIndex('Detail_lesson');
             let schoolIndex = getColumnIndex('School');
             let customInstructionIndex = getColumnIndex('CustomInstruction');
-            
+            let imageIndex = getColumnIndex('Image');
+
             // Fallback to generic column names if exact matches not found
             if (categoryIndex === -1) categoryIndex = headers.findIndex(h => h.toLowerCase().includes('category'));
             if (titleIndex === -1) titleIndex = headers.findIndex(h => h.toLowerCase().includes('title') && !h.toLowerCase().includes('#'));
             if (detailIndex === -1) detailIndex = headers.findIndex(h => h.toLowerCase().includes('detail') || h.toLowerCase().includes('lesson'));
             if (schoolIndex === -1) schoolIndex = headers.findIndex(h => h.toLowerCase().includes('school'));
             if (customInstructionIndex === -1) customInstructionIndex = headers.findIndex(h => h.toLowerCase().includes('instruction'));
+            // Optional Image column (used by "Art Title" style sets): Image / ImageUrl / Artwork / Picture
+            if (imageIndex === -1) imageIndex = headers.findIndex(h => {
+              const hl = h.toLowerCase();
+              return hl.includes('image') || hl.includes('artwork') || hl.includes('picture') || hl === 'imageurl';
+            });
             
             console.log('🔍 Detected CSV Headers:', headers);
             console.log('📋 Column Mapping:');
@@ -2039,6 +2051,7 @@ Resources:
             console.log(`  Detail: ${detailIndex >= 0 ? headers[detailIndex] : 'NOT FOUND'} (index: ${detailIndex})`);
             console.log(`  School: ${schoolIndex >= 0 ? headers[schoolIndex] : 'NOT FOUND'} (index: ${schoolIndex})`);
             console.log(`  Instructions: ${customInstructionIndex >= 0 ? headers[customInstructionIndex] : 'NOT FOUND'} (index: ${customInstructionIndex})`);
+            console.log(`  Image: ${imageIndex >= 0 ? headers[imageIndex] : 'NOT FOUND'} (index: ${imageIndex})`);
             
             // Check required columns
             if (categoryIndex === -1 || titleIndex === -1) {
@@ -2071,15 +2084,17 @@ Resources:
                 const detail = detailIndex >= 0 ? values[detailIndex]?.replace(/"/g, '')?.trim() || '' : '';
                 const school = schoolIndex >= 0 ? values[schoolIndex]?.replace(/"/g, '')?.trim() || '' : '';
                 const questionCustomInstruction = customInstructionIndex >= 0 ? values[customInstructionIndex]?.replace(/"/g, '')?.trim() || '' : '';
-                
+                const image = imageIndex >= 0 ? values[imageIndex]?.replace(/"/g, '')?.trim() || '' : '';
+
                 if (title && category) {
                   questionCount++;
-                  
+
                   questions.push({
                     Title: title,
                     Detail: detail,
                     Category: category,
                     School: school,
+                    Image: image, // Optional artwork/image URL (empty for text-only sets)
                     // Use per-question custom instruction if available, otherwise use set-level custom instructions
                     CustomInstructions: questionCustomInstruction || customInstructions?.trim() || '',
                     Active: true,
@@ -2139,7 +2154,8 @@ Resources:
                   titleColumn: titleIndex >= 0 ? headers[titleIndex] : '',
                   detailColumn: detailIndex >= 0 ? headers[detailIndex] : '',
                   schoolColumn: schoolIndex >= 0 ? headers[schoolIndex] : '',
-                  customInstructionColumn: customInstructionIndex >= 0 ? headers[customInstructionIndex] : ''
+                  customInstructionColumn: customInstructionIndex >= 0 ? headers[customInstructionIndex] : '',
+                  imageColumn: imageIndex >= 0 ? headers[imageIndex] : ''
                 }
               }
             }).promise();
@@ -2178,6 +2194,7 @@ Resources:
                   Detail: question.Detail || '',
                   Category: question.Category,
                   School: question.School || '',
+                  Image: question.Image || '', // Optional artwork/image URL
                   CustomInstructions: question.CustomInstructions || '',
                   OrderInCategory: questionNumber,
                   QuestionNumber: question.QuestionNumber,
@@ -2391,6 +2408,30 @@ Resources:
       InlineCode: |-
         exports.downloadTemplate = async (event) => {
           try {
+            const templateType = (event.queryStringParameters?.type || '').toLowerCase();
+
+            // "Art Title" template: same Call-and-Answer flow, but each row includes an Image URL.
+            // Players view the artwork and invent a title, then everyone votes. Detail_lesson is left
+            // blank so nothing spoils the artwork; School is used to credit the artist/era.
+            if (templateType === 'art-title' || templateType === 'art') {
+              const artTemplate = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Image\n' +
+                '"Renaissance",1,"THE ENIGMATIC SMILE","","Leonardo da Vinci, c. 1503","Give this masterpiece your own creative title!","https://commons.wikimedia.org/wiki/Special:FilePath/Mona_Lisa,_by_Leonardo_da_Vinci,_from_C2RMF_retouched.jpg?width=900"\n' +
+                '"Post-Impressionism",2,"A SWIRLING NIGHT","","Vincent van Gogh, 1889","Give this masterpiece your own creative title!","https://commons.wikimedia.org/wiki/Special:FilePath/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg?width=900"\n' +
+                '"Ukiyo-e",3,"THE TOWERING SEA","","Katsushika Hokusai, c. 1831","Give this masterpiece your own creative title!","https://commons.wikimedia.org/wiki/Special:FilePath/The_Great_Wave_off_Kanagawa.jpg?width=900"';
+
+              return {
+                statusCode: 200,
+                body: JSON.stringify({
+                  filename: 'art-title-set-template.csv',
+                  content: artTemplate
+                }),
+                headers: {
+                  'Access-Control-Allow-Origin': '*',
+                  'Content-Type': 'application/json'
+                }
+              };
+            }
+
             // CSV template content based on the existing formats (matches lessons.csv and greatest-hits.csv)
             const csvTemplate = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction\n' +
               '"Leadership",1,"MOST EFFECTIVE LEADERSHIP STYLE","Leadership is about inspiring others to achieve their potential. From transformational leaders who create vision to servant leaders who put team first. Consider different situations where different approaches work better. Think about technical skill, cultural impact, innovation, and lasting influence.","School of Management","How would you apply this leadership principle in your current team or organization?"\n' +

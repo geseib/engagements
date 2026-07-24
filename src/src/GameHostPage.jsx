@@ -124,15 +124,20 @@ function GameHostPage() {
   const getInstructionText = () => {
     // Try to get setId from current question first, then fall back to selectedSetId
     const setId = questions[0]?.setId || selectedSetId;
-    
-    if (!setId) return 'How could you adapt this lesson to your work, project, or team?';
-    
+
     // Get current question set info
     const currentSet = questionSets.find(set => set.id === setId);
     if (currentSet && currentSet.customInstruction) {
       return currentSet.customInstruction;
     }
-    
+
+    // "Art Title" sets present an artwork and ask players to invent a title
+    if (questions[0]?.image) {
+      return 'Give this masterpiece your own creative title!';
+    }
+
+    if (!setId) return 'How could you adapt this lesson to your work, project, or team?';
+
     // Default fallback for different sets
     const setInstructions = {
       'AmazonBP': 'How could you adapt this Amazon leadership principle to your work, project, or team?',
@@ -2069,16 +2074,23 @@ Focus on actionable business strategy insights.`;
                 <div className="school-name">{questions[0].school}</div>
               )}
             </div>
-            <div 
+            <div
               className="lesson-title clickable-lesson"
               onClick={() => setLessonExpanded(true)}
               title="Click to expand"
             >
               {questions[0].title || questions[0].question}
             </div>
+            {questions[0].image && (
+              <img
+                src={questions[0].image}
+                alt={questions[0].title || 'Artwork'}
+                className="artwork-image"
+              />
+            )}
             {!lessonExpanded && questions[0].detail && (
-              <div 
-                className="lesson-detail clickable-lesson" 
+              <div
+                className="lesson-detail clickable-lesson"
                 onClick={() => setLessonExpanded(true)}
                 title="Click to expand"
               >
@@ -2111,9 +2123,19 @@ Focus on actionable business strategy insights.`;
 
         {gameState === 'voting' && (
           <div className="voting-state">
-            <h2>Vote for the Best Applications!</h2>
-            <p>Which applications of this lesson would be most valuable for teams to implement?</p>
-            
+            <h2>{questions[0]?.image ? 'Vote for the Best Title!' : 'Vote for the Best Applications!'}</h2>
+            <p>{questions[0]?.image
+              ? 'Which title best captures this masterpiece?'
+              : 'Which applications of this lesson would be most valuable for teams to implement?'}</p>
+
+            {questions[0]?.image && (
+              <img
+                src={questions[0].image}
+                alt={questions[0].title || 'Artwork'}
+                className="artwork-image artwork-image-voting"
+              />
+            )}
+
             {answers.length > 0 && (
               <div className="answer-navigator">
                 <div className="answer-counter">
@@ -2360,6 +2382,13 @@ Focus on actionable business strategy insights.`;
             <div className="expanded-lesson-title">
               {questions[0].title || questions[0].question}
             </div>
+            {questions[0].image && (
+              <img
+                src={questions[0].image}
+                alt={questions[0].title || 'Artwork'}
+                className="artwork-image artwork-image-expanded"
+              />
+            )}
             {questions[0].detail && (
               <div className="expanded-lesson-detail">
                 {questions[0].detail}
@@ -2610,7 +2639,15 @@ function GameReport({ reportData, onClose }) {
                 </h3>
                 <div className="field-badge">{question.field || question.category}</div>
               </div>
-              
+
+              {question.image && (
+                <img
+                  src={question.image}
+                  alt={question.title || 'Artwork'}
+                  className="artwork-image artwork-image-report"
+                />
+              )}
+
               {question.detail && (
                 <div className="report-lesson-detail">
                   {question.detail}

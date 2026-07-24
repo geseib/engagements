@@ -72,6 +72,7 @@ Host selects a questionb set with catagores, if they are to be randomized or not
   - Lessons learned: where they are given some scenario/lesson and the partipants respond with how they could adapt this lesson to the task at hand for the engagement event. partipants vote on best response. Ai summerizes and provides insight
   - Solutioning: where they are given a problem and the partipants respond with an approach or a solution. Vote for best answers
   - Interview: Where they can practice interview questions and respond as if they were being interviewed. Vote on best responses. 
+  - Art Title: the "question" is a picture of a famous, no-longer-copyrighted work of art. Participants view the artwork and come up with their own creative title, then everyone votes on the best title. Uses the exact same Call-and-Answer flow (answer → vote → results → optional AI). Enabled by adding an optional `Image` column to a Call-and-Answer question set (see `sets/famous-art-titles.csv`); the `School` column is used to credit the artist/era and `Detail_lesson` is typically left blank to avoid spoiling the piece.
 - Report will list all questions the answers marking the top 3 answers (they should be first in the report). Current score/Final score of the top three players. if tied skip to the next place. ie. Joe 1st (tied), Sam 1st(tied), Sue 3rd
 
 ## Trivia

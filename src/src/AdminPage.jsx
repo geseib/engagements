@@ -194,10 +194,11 @@ function AdminPage() {
     }
   };
 
-  const handleDownloadTemplate = async () => {
+  const handleDownloadTemplate = async (templateType = '') => {
     try {
       setUploadStatus('Downloading template...');
-      const response = await fetch(`${API_BASE}admin/download-template`);
+      const typeParam = templateType ? `?type=${encodeURIComponent(templateType)}` : '';
+      const response = await fetch(`${API_BASE}admin/download-template${typeParam}`);
       const result = await response.json();
       
       if (response.ok) {
@@ -462,9 +463,15 @@ function AdminPage() {
             <div className="template-controls">
               <button
                 className="btn-secondary"
-                onClick={handleDownloadTemplate}
+                onClick={() => handleDownloadTemplate()}
               >
                 📄 Download Template CSV
+              </button>
+              <button
+                className="btn-secondary"
+                onClick={() => handleDownloadTemplate('art-title')}
+              >
+                🖼️ Download Art Title Template
               </button>
             </div>
           </div>

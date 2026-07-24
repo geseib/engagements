@@ -31,9 +31,13 @@ const calculatePlayerRankings = (players) => {
 };
 
 // Helper function to get instruction text
-const getPlayerInstructionText = (customInstruction) => {
+const getPlayerInstructionText = (customInstruction, question) => {
   if (customInstruction) {
     return customInstruction;
+  }
+  // "Art Title" sets present an artwork and ask players to invent a title
+  if (question?.image) {
+    return 'Give this masterpiece your own creative title!';
   }
   // Default fallback
   return 'How could you adapt this lesson to your work, project, or team?';
@@ -500,6 +504,13 @@ function PlayerPage() {
           console.log(`⚠️ PLAYER: Question ${currentQuestionNumber} not found in game state, waiting...`);
         }
       } else if (serverGameState === 'voting') {
+        // Keep the current question (with any artwork image) available during voting,
+        // including for players who join directly in the voting phase
+        if (stateJson.currentQuestionData) {
+          const votingQuestion = stateJson.currentQuestionData;
+          votingQuestion.id = currentQuestionNumber;
+          setCurrentQuestion(votingQuestion);
+        }
         // Get answers for voting
         const answersRes = await fetch(`${API_BASE}games/${currentGameId}/answers?questionNumber=${currentQuestionNumber}`);
         const answersJson = await answersRes.json();
@@ -927,13 +938,20 @@ function PlayerPage() {
             <div className="lesson-title">
               {currentQuestion.title || currentQuestion.question}
             </div>
+            {currentQuestion.image && (
+              <img
+                src={currentQuestion.image}
+                alt={currentQuestion.title || 'Artwork'}
+                className="artwork-image"
+              />
+            )}
             {currentQuestion.detail && (
               <div className="lesson-detail">
                 {currentQuestion.detail}
               </div>
             )}
             <div className="application-prompt">
-              <strong>{getPlayerInstructionText(customInstruction)}</strong>
+              <strong>{getPlayerInstructionText(customInstruction, currentQuestion)}</strong>
             </div>
             
             {!hasAnswered ? (
@@ -960,7 +978,7 @@ function PlayerPage() {
                         <textarea
                           value={answerInput}
                           onChange={(e) => setAnswerInput(e.target.value)}
-                          placeholder="Describe how you would apply this lesson to your work, project, or team..."
+                          placeholder={currentQuestion?.image ? 'Enter your creative title for this masterpiece...' : 'Describe how you would apply this lesson to your work, project, or team...'}
                           className="mobile-answer-input"
                           rows={12}
                           required
@@ -982,7 +1000,7 @@ function PlayerPage() {
                     value={answerInput}
                     onChange={(e) => setAnswerInput(e.target.value)}
                     onFocus={() => !isDesktop && setIsAnswerInputFocused(true)}
-                    placeholder="Describe how you would apply this lesson to your work, project, or team..."
+                    placeholder={currentQuestion?.image ? 'Enter your creative title for this masterpiece...' : 'Describe how you would apply this lesson to your work, project, or team...'}
                     className="answer-input"
                     rows={isDesktop ? 6 : 4}
                     required
@@ -998,7 +1016,7 @@ function PlayerPage() {
               </>
             ) : (
               <div className="answer-submitted">
-                <h3>✅ Application Submitted!</h3>
+                <h3>✅ {currentQuestion?.image ? 'Title Submitted!' : 'Application Submitted!'}</h3>
                 <p>Waiting for other players...</p>
               </div>
             )}
@@ -1007,9 +1025,19 @@ function PlayerPage() {
 
         {gameState === 'voting' && answers.length > 0 && (
           <div className="voting-screen">
-            <h2>🗳️ Vote for the Best Applications</h2>
-            <p>Which applications would be most valuable for teams to implement?</p>
-            
+            <h2>🗳️ {currentQuestion?.image ? 'Vote for the Best Title' : 'Vote for the Best Applications'}</h2>
+            <p>{currentQuestion?.image
+              ? 'Which title best captures this masterpiece?'
+              : 'Which applications would be most valuable for teams to implement?'}</p>
+
+            {currentQuestion?.image && (
+              <img
+                src={currentQuestion.image}
+                alt={currentQuestion.title || 'Artwork'}
+                className="artwork-image artwork-image-voting"
+              />
+            )}
+
             {!hasVoted ? (
               <>
                 {/* Voting Mode Toggle */}

@@ -38,7 +38,9 @@ This document defines the complete DynamoDB table structure for the quiz game. A
 | ----------- | --------------------- | ---------------- | -------------------------------------------------------------- |
 | `SETS`      | `SET#GreatestHits`    | Question Set     | Name: `Greatest Hits`, Description, TotalQuestions: `10`, CategoryCount: `5`, CustomInstruction, CreatedDate, Active: `true` |
 | `SET#GreatestHits` | `CATEGORY#c001`   | Category Info    | Name: `Entertainment`, Description: `5 questions in Entertainment` |
-| `SET#GreatestHits` | `QUESTION#c001#001` | Source Question | Prompt: `Greatest Musical Artist`, Detail: `Music has the power...`, Category: `Entertainment`, School: `School of Cultural Arts`, OrderInCategory: `1` |
+| `SET#GreatestHits` | `QUESTION#c001#001` | Source Question | Prompt: `Greatest Musical Artist`, Detail: `Music has the power...`, Category: `Entertainment`, School: `School of Cultural Arts`, OrderInCategory: `1`, Image: `` (optional) |
+
+> **Optional `Image` attribute:** Source questions may carry an `Image` URL. When present, the artwork is displayed to hosts and players and the round becomes an "Art Title" exercise (view the art, invent a title, then vote) — see `VOTING_DESIGN.md` and `README.md`. It is populated from an optional `Image` column in the uploaded CSV and flows through unchanged: `getQuestions` → game `STATE.CurrentQuestionData` → `getGameState`/`getGameReport`.
 
 ### Game History Management
 
