@@ -72,9 +72,9 @@ exports.handler = async (event) => {
       // Detail_lesson stays blank so nothing spoils the piece; School credits the artist/era.
       filename = 'art-title-template.csv';
       csvTemplate = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Image\n' +
-        '"Renaissance",1,"THE ENIGMATIC SMILE","","Leonardo da Vinci, c. 1503","Give this masterpiece your own creative title!","https://commons.wikimedia.org/wiki/Special:FilePath/Mona_Lisa,_by_Leonardo_da_Vinci,_from_C2RMF_retouched.jpg?width=900"\n' +
-        '"Post-Impressionism",2,"A SWIRLING NIGHT SKY","","Vincent van Gogh, 1889","Give this masterpiece your own creative title!","https://commons.wikimedia.org/wiki/Special:FilePath/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg?width=900"\n' +
-        '"Ukiyo-e",3,"THE TOWERING SEA","","Katsushika Hokusai, c. 1831","Give this masterpiece your own creative title!","https://commons.wikimedia.org/wiki/Special:FilePath/The_Great_Wave_off_Kanagawa.jpg?width=900"';
+        '"Renaissance",1,"THE ENIGMATIC SMILE","","Leonardo da Vinci, c. 1503","","https://commons.wikimedia.org/wiki/Special:FilePath/Mona_Lisa,_by_Leonardo_da_Vinci,_from_C2RMF_retouched.jpg?width=900"\n' +
+        '"Post-Impressionism",2,"A SWIRLING NIGHT SKY","","Vincent van Gogh, 1889","","https://commons.wikimedia.org/wiki/Special:FilePath/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg?width=900"\n' +
+        '"Ukiyo-e",3,"THE TOWERING SEA","","Katsushika Hokusai, c. 1831","","https://commons.wikimedia.org/wiki/Special:FilePath/The_Great_Wave_off_Kanagawa.jpg?width=900"';
     } else {
       // call-and-answer (default)
       filename = 'call-and-answer-template.csv';

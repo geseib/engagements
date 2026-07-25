@@ -31,7 +31,10 @@ const http = require('http');
 const API = process.env.MET_API_BASE || 'https://collectionapi.metmuseum.org/public/collection/v1';
 const OUT = process.argv[2] || path.join(__dirname, '..', 'sets', 'met-art-titles.csv');
 const TIMEOUT_MS = 25000;
-const PROMPT = 'Give this masterpiece your own creative title!';
+// Left blank on purpose: with no per-question instruction the app falls back to its
+// art-round defaults, which give a distinct banner and input placeholder rather than
+// repeating one sentence twice on screen.
+const PROMPT = '';
 
 // Round titles are hand-written and intentionally do NOT reveal the real title.
 // `query` is only used to locate the piece in the Met's collection.
