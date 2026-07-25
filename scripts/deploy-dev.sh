@@ -1,68 +1,84 @@
 #!/usr/bin/env bash
+#
+# Deploy the Engagements backend (SAM stack) to the development environment.
+#
+# Usage:
+#   scripts/deploy-dev.sh                 # deploy using samconfig-dev.toml
+#   AWS_PROFILE=myprofile scripts/deploy-dev.sh
+#   scripts/deploy-dev.sh --guided        # extra args are passed through to `sam deploy`
+#
+# Configuration lives in samconfig-dev.toml (stack name, region, S3 bucket, and
+# the DomainName / HostedZoneId parameter overrides). This script reads the stack
+# name from there rather than repeating it, so the two cannot drift.
 
-# AWS SAM deployment script for quiz-game DEVELOPMENT environment
-# This script deploys the backend infrastructure using SAM for the dev environment
+set -euo pipefail
 
-set -e  # Exit on any error
-
-echo "🚀 Starting AWS SAM DEVELOPMENT deployment..."
-
-# Get the script directory and project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-# Change to project root directory
-echo "📁 Changing to project root: $PROJECT_ROOT"
 cd "$PROJECT_ROOT"
 
-# Check if template-dev.yaml exists
-if [ ! -f "template-dev.yaml" ]; then
-    echo "❌ Error: template-dev.yaml not found in project root"
+TEMPLATE_FILE="template-dev.yaml"
+CONFIG_FILE="samconfig-dev.toml"
+
+# AWS profile is overridable; "adfs" is the historical default for this account.
+export AWS_PROFILE="${AWS_PROFILE:-adfs}"
+
+for f in "$TEMPLATE_FILE" "$CONFIG_FILE"; do
+    if [ ! -f "$f" ]; then
+        echo "❌ Error: $f not found in $PROJECT_ROOT" >&2
+        exit 1
+    fi
+done
+
+# Single source of truth for the stack name: samconfig-dev.toml. Reading it here
+# is what keeps `sam deploy` and the describe-stacks calls below in agreement.
+# They previously disagreed ("engagements-v1" in the config vs "quiz-game-dev"
+# hardcoded here), so every output lookup silently failed and the script printed
+# "Unable to fetch API URL" on an otherwise successful deploy.
+STACK_NAME="$(grep -E '^\s*stack_name\s*=' "$CONFIG_FILE" | head -1 | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/')"
+REGION="$(grep -E '^\s*region\s*=' "$CONFIG_FILE" | head -1 | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/')"
+REGION="${REGION:-us-east-1}"
+
+if [ -z "$STACK_NAME" ]; then
+    echo "❌ Error: could not read stack_name from $CONFIG_FILE" >&2
     exit 1
 fi
 
-# Check if samconfig-dev.toml exists
-if [ ! -f "samconfig-dev.toml" ]; then
-    echo "❌ Error: samconfig-dev.toml not found. Creating default config..."
-    exit 1
+echo "🚀 Deploying Engagements backend"
+echo "   stack:   $STACK_NAME"
+echo "   region:  $REGION"
+echo "   profile: $AWS_PROFILE"
+echo
+
+# Catch template defects before handing 4,000 lines to CloudFormation. --lint is
+# what surfaces duplicate resource keys and end-of-life Lambda runtimes; plain
+# `sam validate` does not. Findings are reported but do not block the deploy.
+echo "🔍 Validating template..."
+if ! sam validate --template-file "$TEMPLATE_FILE" --region "$REGION" --lint; then
+    echo "⚠️  Template lint reported findings (see above). Deploying anyway."
 fi
+echo
 
-# Set AWS profile
-AWS_PROFILE="adfs"
-echo "🔑 Using AWS profile: $AWS_PROFILE"
+echo "☁️  Running sam deploy..."
+sam deploy \
+    --template-file "$TEMPLATE_FILE" \
+    --config-file "$CONFIG_FILE" \
+    "$@"
 
-# Deploy using SAM with dev template and config
-echo "☁️  Deploying AWS SAM DEV template..."
-AWS_PROFILE="$AWS_PROFILE" sam deploy \
-    --template-file template-dev.yaml \
-    --config-file samconfig-dev.toml \
-    --parameter-overrides DomainName=engagements.sb.seibtribe.us HostedZoneId=Z03473042HSYD8BUY4XSL
+echo
+echo "✅ Backend deployment complete."
 
-if [ $? -eq 0 ]; then
-    echo "✅ AWS SAM DEVELOPMENT deployment completed successfully!"
-    
-    # Get the API Gateway URL from CloudFormation outputs
-    API_URL=$(aws cloudformation describe-stacks \
-        --stack-name quiz-game-dev \
-        --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
-        --output text \
-        --profile $AWS_PROFILE 2>/dev/null || echo "Unable to fetch API URL")
-    
-    # Get the WebSocket URL from CloudFormation outputs  
-    WS_URL=$(aws cloudformation describe-stacks \
-        --stack-name quiz-game-dev \
-        --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' \
-        --output text \
-        --profile $AWS_PROFILE 2>/dev/null || echo "Unable to fetch WebSocket URL")
-    
-    echo "🌐 DEV API Base URL: $API_URL"
-    echo "🔌 DEV WebSocket URL: $WS_URL"
-    echo "🌐 DEV Website URL: https://engagement.sb.seibtribe.us"
-    echo ""
-    echo "🔧 Next steps:"
-    echo "   1. Run scripts/deploy-frontend-dev.sh to deploy the frontend"
-    echo "   2. Update frontend to use WebSocket for real-time state"
-else
-    echo "❌ SAM DEVELOPMENT deployment failed"
-    exit 1
-fi
+# Read endpoints back from the stack so the printed values are the deployed ones.
+get_output() {
+    aws cloudformation describe-stacks \
+        --stack-name "$STACK_NAME" \
+        --region "$REGION" \
+        --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" \
+        --output text 2>/dev/null || echo ""
+}
+
+echo "🌐 API:       $(get_output ApiUrl)"
+echo "🔌 WebSocket: $(get_output WebSocketUrl)"
+echo "🌐 Website:   $(get_output WebsiteUrl)"
+echo
+echo "🔧 Next step: scripts/deploy-frontend-dev.sh"

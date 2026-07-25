@@ -1,0 +1,105 @@
+name: Validate
+
+# Runs on every push and PR. Needs no AWS credentials — nothing here touches a
+# live account, so it is safe to run on forks.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  template:
+    name: SAM template
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install AWS SAM CLI
+        run: pip install --upgrade aws-sam-cli
+
+      # Checks duplicate resource keys, cfn-lint findings, syntax of the ~3,700
+      # lines of JavaScript embedded as InlineCode, aws-sdk v2 on runtimes that
+      # no longer bundle it, and stack-name drift against samconfig.
+      #
+      # STRICT is intentionally not set: 37 functions are on end-of-life Lambda
+      # runtimes, which is a known, tracked issue (docs/AWS_DEPLOYMENT.md §6).
+      # Turn STRICT on once that migration lands, so the warning cannot return.
+      - name: Validate template and inline handlers
+        run: ./scripts/validate.sh
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: src/package-lock.json
+
+      - run: npm ci
+
+      # config.js is generated at deploy time from stack outputs and is
+      # gitignored, so provide a stub for the build to copy.
+      - name: Stub deploy-time config
+        run: |
+          cat > public/config.js <<'EOF'
+          window.API_BASE = 'https://example.invalid/';
+          window.WS_URL = 'wss://example.invalid';
+          window.ENV = 'ci';
+          EOF
+
+      - run: npm run build
+
+      # The initial payload regressed to 982 KiB once because a heavyweight
+      # dependency was imported eagerly. This fails the build if that recurs.
+      - name: Enforce initial JS budget
+        run: |
+          BUDGET_KB=500
+          total=0
+          for f in $(node -e "
+            const fs=require('fs');
+            const html=fs.readFileSync('dist/index.html','utf8');
+            const m=[...html.matchAll(/src=\"\/(assets\/[^\"]+)\"/g)].map(x=>x[1]);
+            console.log(m.join(' '));
+          "); do
+            size=$(stat -c%s "dist/$f")
+            echo "  $f: $((size / 1024)) KB"
+            total=$((total + size))
+          done
+          total_kb=$((total / 1024))
+          echo "Initial JS payload: ${total_kb} KB (budget ${BUDGET_KB} KB)"
+          if [ "$total_kb" -gt "$BUDGET_KB" ]; then
+            echo "::error::Initial JS payload ${total_kb} KB exceeds the ${BUDGET_KB} KB budget."
+            echo "Move large, rarely-used dependencies behind a dynamic import()."
+            exit 1
+          fi
+
+  scripts:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y shellcheck
+          shellcheck --severity=warning scripts/*.sh

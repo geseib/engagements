@@ -72,6 +72,7 @@ Host selects a questionb set with catagores, if they are to be randomized or not
   - Lessons learned: where they are given some scenario/lesson and the partipants respond with how they could adapt this lesson to the task at hand for the engagement event. partipants vote on best response. Ai summerizes and provides insight
   - Solutioning: where they are given a problem and the partipants respond with an approach or a solution. Vote for best answers
   - Interview: Where they can practice interview questions and respond as if they were being interviewed. Vote on best responses. 
+  - Art Title: the "question" is a picture of a famous, no-longer-copyrighted work of art. Participants view the artwork and come up with their own creative title, then everyone votes on the best title. Uses the exact same Call-and-Answer flow (answer → vote → results → optional AI). Enabled by adding an optional `Image` column to a Call-and-Answer question set (see `sets/famous-art-titles.csv`); the `School` column is used to credit the artist/era and `Detail_lesson` is typically left blank to avoid spoiling the piece.
 - Report will list all questions the answers marking the top 3 answers (they should be first in the report). Current score/Final score of the top three players. if tied skip to the next place. ie. Joe 1st (tied), Sam 1st(tied), Sue 3rd
 
 ## Trivia
@@ -79,3 +80,58 @@ Host selects a questionb set with catagores, if they are to be randomized or not
  - questions are presented with their choices on the main screen and the partipants screen. They are told to pick best answer or x number of answers (i.e choose 2)
  - Results will show those that got it right and add up their scores for the round. . person results will show up in partipants screen only after host clicks results. Also results will show percent of answers for each answer even the worng ones. 
  -Report will list all questions the choices with the percentages answerd marking the correct answer. Current score/Final score of the top three players. if tied skip to the next place. ie. Joe 1st (tied), Sam 1st(tied), Sue 3rd
+---
+
+# Development
+
+| Doc | What it covers |
+| --- | --- |
+| [`docs/AWS_DEPLOYMENT.md`](docs/AWS_DEPLOYMENT.md) | Deploy runbook, validation, rollback, the end-of-life Lambda runtime migration |
+| [`DATABASE_DESIGN.md`](DATABASE_DESIGN.md) | DynamoDB single-table schema and access patterns |
+| [`ADMIN_SETUP.md`](ADMIN_SETUP.md) | Admin configuration |
+
+## Quick start
+
+```bash
+# Validate the SAM template and the inline Lambda handlers. No AWS credentials
+# needed — safe to run anywhere.
+./scripts/validate.sh
+
+# Deploy. Backend first: the frontend reads its API and WebSocket URLs from the
+# backend stack's CloudFormation outputs.
+./scripts/deploy-dev.sh
+./scripts/deploy-frontend-dev.sh
+
+# Frontend only, locally
+cd src && npm ci && npm start
+```
+
+`AWS_PROFILE` defaults to `adfs`; override it per invocation:
+`AWS_PROFILE=my-profile ./scripts/deploy-dev.sh`.
+
+## Repository layout
+
+```
+template-dev.yaml      SAM template — infrastructure AND all 37 Lambda handlers
+                       (inline; see docs/AWS_DEPLOYMENT.md §6)
+samconfig-dev.toml     Stack name, region, parameters — the single source of truth
+scripts/validate.sh    Pre-deploy checks (run in CI)
+scripts/deploy-*.sh    Deployment
+src/                   React frontend (webpack)
+sets/                  Question-set CSVs
+```
+
+## Before you push
+
+CI (`.github/workflows/validate.yml`) runs these; run them locally first:
+
+```bash
+./scripts/validate.sh
+cd src && npm ci && npm run build
+shellcheck --severity=warning scripts/*.sh
+```
+
+The frontend build is subject to a 500 KB initial-JS budget enforced in CI.
+Large, rarely-used dependencies belong behind a dynamic `import()` — that is how
+`html2pdf.js` (168 KB gzipped, used only for report export) stays out of the
+payload that participants download.

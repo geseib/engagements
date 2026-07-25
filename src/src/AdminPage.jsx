@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { setWebSocketMode as persistWebSocketMode } from './useWebSocketMode';
 
 const API_BASE = window.API_BASE;
 
@@ -128,12 +129,12 @@ function AdminPage() {
   const handleToggleWebSocketMode = () => {
     const newWebSocketMode = !webSocketMode;
     setWebSocketMode(newWebSocketMode);
-    localStorage.setItem('admin_websocket_mode', newWebSocketMode.toString());
-    
-    // Also set a global variable for other components to access
-    window.WEBSOCKET_MODE = newWebSocketMode;
-    
-    console.log(`🔌 WEBSOCKET MODE ${newWebSocketMode ? 'ENABLED' : 'DISABLED'}`, { newWebSocketMode, localStorage: localStorage.getItem('admin_websocket_mode'), windowWebSocketMode: window.WEBSOCKET_MODE });
+    // Writes localStorage, updates the window global, and notifies host/player
+    // views — in this tab via a custom event, in others via `storage`. They
+    // used to discover the change by polling localStorage once a second.
+    persistWebSocketMode(newWebSocketMode);
+
+    console.log(`🔌 WEBSOCKET MODE ${newWebSocketMode ? 'ENABLED' : 'DISABLED'}`);
   };
 
   // Set initial global modes
@@ -194,10 +195,11 @@ function AdminPage() {
     }
   };
 
-  const handleDownloadTemplate = async () => {
+  const handleDownloadTemplate = async (templateType = '') => {
     try {
       setUploadStatus('Downloading template...');
-      const response = await fetch(`${API_BASE}admin/download-template`);
+      const typeParam = templateType ? `?type=${encodeURIComponent(templateType)}` : '';
+      const response = await fetch(`${API_BASE}admin/download-template${typeParam}`);
       const result = await response.json();
       
       if (response.ok) {
@@ -462,9 +464,15 @@ function AdminPage() {
             <div className="template-controls">
               <button
                 className="btn-secondary"
-                onClick={handleDownloadTemplate}
+                onClick={() => handleDownloadTemplate()}
               >
                 📄 Download Template CSV
+              </button>
+              <button
+                className="btn-secondary"
+                onClick={() => handleDownloadTemplate('art-title')}
+              >
+                🖼️ Download Art Title Template
               </button>
             </div>
           </div>

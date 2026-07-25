@@ -1,7 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import html2pdf from 'html2pdf.js';
 import webSocketClient from './WebSocketClient';
+import { useWebSocketMode } from './useWebSocketMode';
+
+// html2pdf pulls in jsPDF + html2canvas — roughly half the app's JavaScript —
+// but it is only needed when a host exports a report. Loading it on demand keeps
+// it out of the main bundle, so players (who never export) never download it.
+let html2pdfPromise = null;
+function loadHtml2Pdf() {
+  if (!html2pdfPromise) {
+    html2pdfPromise = import('html2pdf.js').then((m) => m.default ?? m);
+  }
+  return html2pdfPromise;
+}
 
 const API_BASE = window.API_BASE;
 
@@ -63,20 +74,16 @@ function GameHostPage() {
   
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
-  const [useWebSocket, setUseWebSocket] = useState(() => {
-    // Check both window global and localStorage, defaulting to true (WebSocket enabled)
-    const adminSetting = localStorage.getItem('admin_websocket_mode');
-    const useWebSocket = adminSetting !== null ? adminSetting === 'true' : true; // Default to true
-    const windowSetting = window.WEBSOCKET_MODE || useWebSocket;
-    console.log(`🔌 Initial WebSocket check: localStorage=${adminSetting}, calculated=${useWebSocket}, window=${windowSetting}`);
-    
-    // Set window global if not already set
-    if (!window.WEBSOCKET_MODE) {
-      window.WEBSOCKET_MODE = useWebSocket;
-    }
-    
-    return useWebSocket;
-  });
+  // Admin's WebSocket toggle, observed via events rather than a 1s poll.
+  const adminWebSocketMode = useWebSocketMode();
+  // Set when a connection attempt fails, so this client falls back to HTTP
+  // polling without overriding the admin's setting for anyone else. Cleared if
+  // the admin toggles WebSocket back on, which is the signal to retry.
+  const [wsConnectFailed, setWsConnectFailed] = useState(false);
+  useEffect(() => {
+    if (adminWebSocketMode) setWsConnectFailed(false);
+  }, [adminWebSocketMode]);
+  const useWebSocket = adminWebSocketMode && !wsConnectFailed;
 
   // Welcome Screen
   const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
@@ -124,15 +131,20 @@ function GameHostPage() {
   const getInstructionText = () => {
     // Try to get setId from current question first, then fall back to selectedSetId
     const setId = questions[0]?.setId || selectedSetId;
-    
-    if (!setId) return 'How could you adapt this lesson to your work, project, or team?';
-    
+
     // Get current question set info
     const currentSet = questionSets.find(set => set.id === setId);
     if (currentSet && currentSet.customInstruction) {
       return currentSet.customInstruction;
     }
-    
+
+    // "Art Title" sets present an artwork and ask players to invent a title
+    if (questions[0]?.image) {
+      return 'Give this masterpiece your own creative title!';
+    }
+
+    if (!setId) return 'How could you adapt this lesson to your work, project, or team?';
+
     // Default fallback for different sets
     const setInstructions = {
       'AmazonBP': 'How could you adapt this Amazon leadership principle to your work, project, or team?',
@@ -575,7 +587,7 @@ Focus on actionable business strategy insights.`;
     const connected = webSocketClient.connect(gameId, null, true);
     if (!connected) {
       console.error('🔌 Failed to connect WebSocket, falling back to polling');
-      setUseWebSocket(false);
+      setWsConnectFailed(true);
     }
 
     return () => {
@@ -592,28 +604,6 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('aiSummaryReady');
     };
   }, [gameId, useWebSocket]);
-
-  // Monitor WebSocket mode changes from admin panel
-  useEffect(() => {
-    const checkWebSocketMode = () => {
-      // Check both localStorage and window global
-      const adminSetting = localStorage.getItem('admin_websocket_mode') === 'true';
-      const windowSetting = window.WEBSOCKET_MODE || false;
-      const currentMode = adminSetting || windowSetting;
-      
-      if (currentMode !== useWebSocket) {
-        console.log(`🔌 WebSocket mode changed: ${currentMode ? 'ENABLED' : 'DISABLED'} (localStorage=${adminSetting}, window=${windowSetting})`);
-        setUseWebSocket(currentMode);
-        
-        // Sync window global
-        window.WEBSOCKET_MODE = currentMode;
-      }
-    };
-
-    // Check every second for admin toggle changes
-    const modeInterval = setInterval(checkWebSocketMode, 1000);
-    return () => clearInterval(modeInterval);
-  }, [useWebSocket]);
 
   // Fetch categories when selectedSetId changes
   useEffect(() => {
@@ -2069,16 +2059,23 @@ Focus on actionable business strategy insights.`;
                 <div className="school-name">{questions[0].school}</div>
               )}
             </div>
-            <div 
+            <div
               className="lesson-title clickable-lesson"
               onClick={() => setLessonExpanded(true)}
               title="Click to expand"
             >
               {questions[0].title || questions[0].question}
             </div>
+            {questions[0].image && (
+              <img
+                src={questions[0].image}
+                alt={questions[0].title || 'Artwork'}
+                className="artwork-image"
+              />
+            )}
             {!lessonExpanded && questions[0].detail && (
-              <div 
-                className="lesson-detail clickable-lesson" 
+              <div
+                className="lesson-detail clickable-lesson"
                 onClick={() => setLessonExpanded(true)}
                 title="Click to expand"
               >
@@ -2111,9 +2108,19 @@ Focus on actionable business strategy insights.`;
 
         {gameState === 'voting' && (
           <div className="voting-state">
-            <h2>Vote for the Best Applications!</h2>
-            <p>Which applications of this lesson would be most valuable for teams to implement?</p>
-            
+            <h2>{questions[0]?.image ? 'Vote for the Best Title!' : 'Vote for the Best Applications!'}</h2>
+            <p>{questions[0]?.image
+              ? 'Which title best captures this masterpiece?'
+              : 'Which applications of this lesson would be most valuable for teams to implement?'}</p>
+
+            {questions[0]?.image && (
+              <img
+                src={questions[0].image}
+                alt={questions[0].title || 'Artwork'}
+                className="artwork-image artwork-image-voting"
+              />
+            )}
+
             {answers.length > 0 && (
               <div className="answer-navigator">
                 <div className="answer-counter">
@@ -2360,6 +2367,13 @@ Focus on actionable business strategy insights.`;
             <div className="expanded-lesson-title">
               {questions[0].title || questions[0].question}
             </div>
+            {questions[0].image && (
+              <img
+                src={questions[0].image}
+                alt={questions[0].title || 'Artwork'}
+                className="artwork-image artwork-image-expanded"
+              />
+            )}
             {questions[0].detail && (
               <div className="expanded-lesson-detail">
                 {questions[0].detail}
@@ -2452,6 +2466,7 @@ function GameReport({ reportData, onClose }) {
       };
 
       // Generate PDF as blob
+      const html2pdf = await loadHtml2Pdf();
       const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('dataurlstring');
       
       // Extract base64 data
@@ -2610,7 +2625,15 @@ function GameReport({ reportData, onClose }) {
                 </h3>
                 <div className="field-badge">{question.field || question.category}</div>
               </div>
-              
+
+              {question.image && (
+                <img
+                  src={question.image}
+                  alt={question.title || 'Artwork'}
+                  className="artwork-image artwork-image-report"
+                />
+              )}
+
               {question.detail && (
                 <div className="report-lesson-detail">
                   {question.detail}

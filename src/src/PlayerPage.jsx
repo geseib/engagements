@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import webSocketClient from './WebSocketClient';
+import { useWebSocketMode } from './useWebSocketMode';
 
 const API_BASE = window.API_BASE;
 
@@ -31,9 +32,13 @@ const calculatePlayerRankings = (players) => {
 };
 
 // Helper function to get instruction text
-const getPlayerInstructionText = (customInstruction) => {
+const getPlayerInstructionText = (customInstruction, question) => {
   if (customInstruction) {
     return customInstruction;
+  }
+  // "Art Title" sets present an artwork and ask players to invent a title
+  if (question?.image) {
+    return 'Give this masterpiece your own creative title!';
   }
   // Default fallback
   return 'How could you adapt this lesson to your work, project, or team?';
@@ -65,12 +70,16 @@ function PlayerPage() {
 
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
-  const [useWebSocket, setUseWebSocket] = useState(() => {
-    const adminSetting = localStorage.getItem('admin_websocket_mode');
-    const useWebSocket = adminSetting !== null ? adminSetting === 'true' : true; // Default to true
-    const windowSetting = window.WEBSOCKET_MODE || useWebSocket;
-    return useWebSocket;
-  });
+  // Admin's WebSocket toggle, observed via events rather than a 1s poll.
+  const adminWebSocketMode = useWebSocketMode();
+  // Set when a connection attempt fails, so this client falls back to HTTP
+  // polling without overriding the admin's setting for anyone else. Cleared if
+  // the admin toggles WebSocket back on, which is the signal to retry.
+  const [wsConnectFailed, setWsConnectFailed] = useState(false);
+  useEffect(() => {
+    if (adminWebSocketMode) setWsConnectFailed(false);
+  }, [adminWebSocketMode]);
+  const useWebSocket = adminWebSocketMode && !wsConnectFailed;
 
   // Detect desktop screens to prevent mobile overlay behavior
   useEffect(() => {
@@ -278,23 +287,6 @@ function PlayerPage() {
     }
   }, [joined, gameId, gameState, lastVoteInteraction, useWebSocket]); // Removed 'votes' dependency
 
-  // Monitor WebSocket mode changes from admin panel
-  useEffect(() => {
-    const checkWebSocketMode = () => {
-      const adminSetting = localStorage.getItem('admin_websocket_mode') === 'true';
-      const windowSetting = window.WEBSOCKET_MODE || false;
-      const currentMode = adminSetting || windowSetting;
-      
-      if (currentMode !== useWebSocket) {
-        console.log(`🔌 PLAYER: WebSocket mode changed: ${currentMode ? 'ENABLED' : 'DISABLED'}`);
-        setUseWebSocket(currentMode);
-        window.WEBSOCKET_MODE = currentMode;
-      }
-    };
-
-    const modeInterval = setInterval(checkWebSocketMode, 1000);
-    return () => clearInterval(modeInterval);
-  }, [useWebSocket]);
 
   // WebSocket connection effect - only runs when WebSocket is enabled and player has joined
   useEffect(() => {
@@ -347,7 +339,7 @@ function PlayerPage() {
     const connected = webSocketClient.connect(gameId, playerName, false);
     if (!connected) {
       console.error('🔌 Failed to connect WebSocket, falling back to polling');
-      setUseWebSocket(false);
+      setWsConnectFailed(true);
     }
 
     return () => {
@@ -500,6 +492,13 @@ function PlayerPage() {
           console.log(`⚠️ PLAYER: Question ${currentQuestionNumber} not found in game state, waiting...`);
         }
       } else if (serverGameState === 'voting') {
+        // Keep the current question (with any artwork image) available during voting,
+        // including for players who join directly in the voting phase
+        if (stateJson.currentQuestionData) {
+          const votingQuestion = stateJson.currentQuestionData;
+          votingQuestion.id = currentQuestionNumber;
+          setCurrentQuestion(votingQuestion);
+        }
         // Get answers for voting
         const answersRes = await fetch(`${API_BASE}games/${currentGameId}/answers?questionNumber=${currentQuestionNumber}`);
         const answersJson = await answersRes.json();
@@ -927,13 +926,20 @@ function PlayerPage() {
             <div className="lesson-title">
               {currentQuestion.title || currentQuestion.question}
             </div>
+            {currentQuestion.image && (
+              <img
+                src={currentQuestion.image}
+                alt={currentQuestion.title || 'Artwork'}
+                className="artwork-image"
+              />
+            )}
             {currentQuestion.detail && (
               <div className="lesson-detail">
                 {currentQuestion.detail}
               </div>
             )}
             <div className="application-prompt">
-              <strong>{getPlayerInstructionText(customInstruction)}</strong>
+              <strong>{getPlayerInstructionText(customInstruction, currentQuestion)}</strong>
             </div>
             
             {!hasAnswered ? (
@@ -960,7 +966,7 @@ function PlayerPage() {
                         <textarea
                           value={answerInput}
                           onChange={(e) => setAnswerInput(e.target.value)}
-                          placeholder="Describe how you would apply this lesson to your work, project, or team..."
+                          placeholder={currentQuestion?.image ? 'Enter your creative title for this masterpiece...' : 'Describe how you would apply this lesson to your work, project, or team...'}
                           className="mobile-answer-input"
                           rows={12}
                           required
@@ -982,7 +988,7 @@ function PlayerPage() {
                     value={answerInput}
                     onChange={(e) => setAnswerInput(e.target.value)}
                     onFocus={() => !isDesktop && setIsAnswerInputFocused(true)}
-                    placeholder="Describe how you would apply this lesson to your work, project, or team..."
+                    placeholder={currentQuestion?.image ? 'Enter your creative title for this masterpiece...' : 'Describe how you would apply this lesson to your work, project, or team...'}
                     className="answer-input"
                     rows={isDesktop ? 6 : 4}
                     required
@@ -998,7 +1004,7 @@ function PlayerPage() {
               </>
             ) : (
               <div className="answer-submitted">
-                <h3>✅ Application Submitted!</h3>
+                <h3>✅ {currentQuestion?.image ? 'Title Submitted!' : 'Application Submitted!'}</h3>
                 <p>Waiting for other players...</p>
               </div>
             )}
@@ -1007,9 +1013,19 @@ function PlayerPage() {
 
         {gameState === 'voting' && answers.length > 0 && (
           <div className="voting-screen">
-            <h2>🗳️ Vote for the Best Applications</h2>
-            <p>Which applications would be most valuable for teams to implement?</p>
-            
+            <h2>🗳️ {currentQuestion?.image ? 'Vote for the Best Title' : 'Vote for the Best Applications'}</h2>
+            <p>{currentQuestion?.image
+              ? 'Which title best captures this masterpiece?'
+              : 'Which applications would be most valuable for teams to implement?'}</p>
+
+            {currentQuestion?.image && (
+              <img
+                src={currentQuestion.image}
+                alt={currentQuestion.title || 'Artwork'}
+                className="artwork-image artwork-image-voting"
+              />
+            )}
+
             {!hasVoted ? (
               <>
                 {/* Voting Mode Toggle */}
