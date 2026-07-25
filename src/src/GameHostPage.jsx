@@ -3437,6 +3437,7 @@ Ready to engage? See you there!`;
                 src={questions[0].image}
                 alt={questions[0].title || 'Artwork'}
                 className="artwork-image"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
             )}
             {!lessonExpanded && currentGameType === 'trivia' && questions[0].questionDetail && (
@@ -3515,6 +3516,7 @@ Ready to engage? See you there!`;
                 src={questions[0].image}
                 alt={questions[0].title || 'Artwork'}
                 className="artwork-image artwork-image-voting"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
             )}
 
@@ -3987,6 +3989,7 @@ Ready to engage? See you there!`;
                 src={questions[0].image}
                 alt={questions[0].title || 'Artwork'}
                 className="artwork-image artwork-image-expanded"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
             )}
             {currentGameType === 'trivia' && (questions[0].questionDetail || questions[0].detail) && (

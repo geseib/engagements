@@ -1589,11 +1589,23 @@ function AdminPage() {
                   onClick={() => handleDownloadTemplate(engagementType)}
                 >
                   📄 Download {engagementType === 'call-and-answer' ? 'Call & Answer' :
-                              engagementType === 'trivia' ? 'Trivia' : 
-                              engagementType === 'poll' ? 'Poll' : 
+                              engagementType === 'trivia' ? 'Trivia' :
+                              engagementType === 'poll' ? 'Poll' :
                               engagementType === 'wavelength' ? 'Wavelength' :
                               engagementType === 'survey' ? 'Survey' : 'Template'} Template
                 </button>
+                {/* Art Title is a Call and Answer set with an extra Image column, not its own
+                    engagement type -- the host filters sets by engagementType, so the upload
+                    must stay 'call-and-answer' for the set to appear in the game picker. */}
+                {engagementType === 'call-and-answer' && (
+                  <button
+                    className="btn-secondary"
+                    onClick={() => handleDownloadTemplate('art-title')}
+                    title="Call and Answer template with an Image column: players title a famous artwork, then vote"
+                  >
+                    🖼️ Download Art Title Template
+                  </button>
+                )}
               </div>
             </div>
           </div>

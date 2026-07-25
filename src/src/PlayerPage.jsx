@@ -1474,6 +1474,7 @@ function PlayerPage() {
                   src={currentQuestion.image}
                   alt={currentQuestion.title || 'Artwork'}
                   className="artwork-image"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
                 />
                 {currentQuestion.detail && (
                   <div className="lesson-detail">
@@ -1681,6 +1682,7 @@ function PlayerPage() {
                 src={currentQuestion.image}
                 alt={currentQuestion.title || 'Artwork'}
                 className="artwork-image artwork-image-voting"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
             )}
 
