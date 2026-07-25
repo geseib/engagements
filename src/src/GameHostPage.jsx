@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import webSocketClient from './WebSocketClient';
+import { useWebSocketMode } from './useWebSocketMode';
 
 // html2pdf pulls in jsPDF + html2canvas — roughly half the app's JavaScript —
 // but it is only needed when a host exports a report. Loading it on demand keeps
@@ -73,20 +74,16 @@ function GameHostPage() {
   
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
-  const [useWebSocket, setUseWebSocket] = useState(() => {
-    // Check both window global and localStorage, defaulting to true (WebSocket enabled)
-    const adminSetting = localStorage.getItem('admin_websocket_mode');
-    const useWebSocket = adminSetting !== null ? adminSetting === 'true' : true; // Default to true
-    const windowSetting = window.WEBSOCKET_MODE || useWebSocket;
-    console.log(`🔌 Initial WebSocket check: localStorage=${adminSetting}, calculated=${useWebSocket}, window=${windowSetting}`);
-    
-    // Set window global if not already set
-    if (!window.WEBSOCKET_MODE) {
-      window.WEBSOCKET_MODE = useWebSocket;
-    }
-    
-    return useWebSocket;
-  });
+  // Admin's WebSocket toggle, observed via events rather than a 1s poll.
+  const adminWebSocketMode = useWebSocketMode();
+  // Set when a connection attempt fails, so this client falls back to HTTP
+  // polling without overriding the admin's setting for anyone else. Cleared if
+  // the admin toggles WebSocket back on, which is the signal to retry.
+  const [wsConnectFailed, setWsConnectFailed] = useState(false);
+  useEffect(() => {
+    if (adminWebSocketMode) setWsConnectFailed(false);
+  }, [adminWebSocketMode]);
+  const useWebSocket = adminWebSocketMode && !wsConnectFailed;
 
   // Welcome Screen
   const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
@@ -590,7 +587,7 @@ Focus on actionable business strategy insights.`;
     const connected = webSocketClient.connect(gameId, null, true);
     if (!connected) {
       console.error('🔌 Failed to connect WebSocket, falling back to polling');
-      setUseWebSocket(false);
+      setWsConnectFailed(true);
     }
 
     return () => {
@@ -607,28 +604,6 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('aiSummaryReady');
     };
   }, [gameId, useWebSocket]);
-
-  // Monitor WebSocket mode changes from admin panel
-  useEffect(() => {
-    const checkWebSocketMode = () => {
-      // Check both localStorage and window global
-      const adminSetting = localStorage.getItem('admin_websocket_mode') === 'true';
-      const windowSetting = window.WEBSOCKET_MODE || false;
-      const currentMode = adminSetting || windowSetting;
-      
-      if (currentMode !== useWebSocket) {
-        console.log(`🔌 WebSocket mode changed: ${currentMode ? 'ENABLED' : 'DISABLED'} (localStorage=${adminSetting}, window=${windowSetting})`);
-        setUseWebSocket(currentMode);
-        
-        // Sync window global
-        window.WEBSOCKET_MODE = currentMode;
-      }
-    };
-
-    // Check every second for admin toggle changes
-    const modeInterval = setInterval(checkWebSocketMode, 1000);
-    return () => clearInterval(modeInterval);
-  }, [useWebSocket]);
 
   // Fetch categories when selectedSetId changes
   useEffect(() => {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import webSocketClient from './WebSocketClient';
+import { useWebSocketMode } from './useWebSocketMode';
 
 const API_BASE = window.API_BASE;
 
@@ -69,12 +70,16 @@ function PlayerPage() {
 
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
-  const [useWebSocket, setUseWebSocket] = useState(() => {
-    const adminSetting = localStorage.getItem('admin_websocket_mode');
-    const useWebSocket = adminSetting !== null ? adminSetting === 'true' : true; // Default to true
-    const windowSetting = window.WEBSOCKET_MODE || useWebSocket;
-    return useWebSocket;
-  });
+  // Admin's WebSocket toggle, observed via events rather than a 1s poll.
+  const adminWebSocketMode = useWebSocketMode();
+  // Set when a connection attempt fails, so this client falls back to HTTP
+  // polling without overriding the admin's setting for anyone else. Cleared if
+  // the admin toggles WebSocket back on, which is the signal to retry.
+  const [wsConnectFailed, setWsConnectFailed] = useState(false);
+  useEffect(() => {
+    if (adminWebSocketMode) setWsConnectFailed(false);
+  }, [adminWebSocketMode]);
+  const useWebSocket = adminWebSocketMode && !wsConnectFailed;
 
   // Detect desktop screens to prevent mobile overlay behavior
   useEffect(() => {
@@ -282,23 +287,6 @@ function PlayerPage() {
     }
   }, [joined, gameId, gameState, lastVoteInteraction, useWebSocket]); // Removed 'votes' dependency
 
-  // Monitor WebSocket mode changes from admin panel
-  useEffect(() => {
-    const checkWebSocketMode = () => {
-      const adminSetting = localStorage.getItem('admin_websocket_mode') === 'true';
-      const windowSetting = window.WEBSOCKET_MODE || false;
-      const currentMode = adminSetting || windowSetting;
-      
-      if (currentMode !== useWebSocket) {
-        console.log(`🔌 PLAYER: WebSocket mode changed: ${currentMode ? 'ENABLED' : 'DISABLED'}`);
-        setUseWebSocket(currentMode);
-        window.WEBSOCKET_MODE = currentMode;
-      }
-    };
-
-    const modeInterval = setInterval(checkWebSocketMode, 1000);
-    return () => clearInterval(modeInterval);
-  }, [useWebSocket]);
 
   // WebSocket connection effect - only runs when WebSocket is enabled and player has joined
   useEffect(() => {
@@ -351,7 +339,7 @@ function PlayerPage() {
     const connected = webSocketClient.connect(gameId, playerName, false);
     if (!connected) {
       console.error('🔌 Failed to connect WebSocket, falling back to polling');
-      setUseWebSocket(false);
+      setWsConnectFailed(true);
     }
 
     return () => {

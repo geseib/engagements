@@ -26,7 +26,10 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-cd "$PROJECT_ROOT"
+# Note: this script runs without `set -e` so it can collect every finding
+# instead of stopping at the first, which makes an unguarded `cd` genuinely
+# unsafe here.
+cd "$PROJECT_ROOT" || exit 1
 
 TEMPLATE_FILE="${TEMPLATE_FILE:-template-dev.yaml}"
 REGION="${AWS_REGION:-us-east-1}"

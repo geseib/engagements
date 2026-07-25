@@ -4566,3 +4566,66 @@ body {
     opacity: 1;
   }
 }
+/* ==========================================================================
+   Error boundary and route-loading fallback
+   ========================================================================== */
+
+.app-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  font-size: 1.1rem;
+  opacity: 0.7;
+}
+
+.error-boundary {
+  max-width: 640px;
+  margin: 10vh auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.error-boundary h1 {
+  margin-bottom: 0.75rem;
+}
+
+.error-boundary p {
+  margin-bottom: 1.5rem;
+  line-height: 1.6;
+}
+
+.error-boundary button {
+  padding: 0.75rem 2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #4f46e5;
+  color: #fff;
+}
+
+.error-boundary button:hover {
+  background: #4338ca;
+}
+
+.error-boundary details {
+  margin-top: 2rem;
+  text-align: left;
+}
+
+.error-boundary summary {
+  cursor: pointer;
+  opacity: 0.7;
+  font-size: 0.9rem;
+}
+
+.error-boundary pre {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.25);
+}
