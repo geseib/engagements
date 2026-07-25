@@ -97,6 +97,7 @@ exports.handler = async (event) => {
               category: question.Item.Category,
               field: question.Item.Category,
               school: question.Item.School || '',
+              image: question.Item.Image || '', // Optional artwork URL ("Art Title" rounds)
               customInstructions: question.Item.CustomInstructions || '',
               setId: questionSetId,
               startedAt: questionRef.Item.StartedAt,

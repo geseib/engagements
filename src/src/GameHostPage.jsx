@@ -331,7 +331,12 @@ function GameHostPage() {
     if (customInstruction) {
       return customInstruction;
     }
-    
+
+    // "Art Title" rounds carry an image and ask players to invent a title
+    if (currentQuestion && currentQuestion.image) {
+      return 'Give this masterpiece your own creative title!';
+    }
+
     // Priority 3: Default instructions based on game type
     const gameTypeDefaults = {
       'trivia': 'Select the best answer:',
@@ -3427,6 +3432,13 @@ Ready to engage? See you there!`;
                 (questions[0].title || questions[0].question)
               }
             </div>
+            {questions[0].image && (
+              <img
+                src={questions[0].image}
+                alt={questions[0].title || 'Artwork'}
+                className="artwork-image"
+              />
+            )}
             {!lessonExpanded && currentGameType === 'trivia' && questions[0].questionDetail && (
               <div 
                 className="lesson-detail clickable-lesson" 
@@ -3493,9 +3505,19 @@ Ready to engage? See you there!`;
 
         {gameState.startsWith('VOTE#') && (
           <div className={`voting-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
-            <h2>Vote for the Best Applications!</h2>
-            <p>Which applications of this lesson would be most valuable for teams to implement?</p>
-            
+            <h2>{questions[0]?.image ? 'Vote for the Best Title!' : 'Vote for the Best Applications!'}</h2>
+            <p>{questions[0]?.image
+              ? 'Which title best captures this masterpiece?'
+              : 'Which applications of this lesson would be most valuable for teams to implement?'}</p>
+
+            {questions[0]?.image && (
+              <img
+                src={questions[0].image}
+                alt={questions[0].title || 'Artwork'}
+                className="artwork-image artwork-image-voting"
+              />
+            )}
+
             {answers.length > 0 && (
               <div className="answer-navigator">
                 <div className="answer-counter">
@@ -3960,6 +3982,13 @@ Ready to engage? See you there!`;
                 (questions[0].title || questions[0].question)
               }
             </div>
+            {questions[0].image && (
+              <img
+                src={questions[0].image}
+                alt={questions[0].title || 'Artwork'}
+                className="artwork-image artwork-image-expanded"
+              />
+            )}
             {currentGameType === 'trivia' && (questions[0].questionDetail || questions[0].detail) && (
               <div className="expanded-lesson-detail">
                 {questions[0].questionDetail || questions[0].detail}
