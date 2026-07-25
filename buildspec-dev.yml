@@ -29,12 +29,26 @@ phases:
       - echo "Getting API endpoints from CloudFormation..."
       - API_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`RestApiUrl`].OutputValue' --output text)
       - WS_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`WebSocketUrl`].OutputValue' --output text)
+      - USER_POOL_ID=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`UserPoolId`].OutputValue' --output text)
+      - USER_POOL_CLIENT_ID=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`UserPoolClientId`].OutputValue' --output text)
+      - COGNITO_DOMAIN=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`UserPoolDomain`].OutputValue' --output text)
 
-      - echo "Creating config.js with API endpoints..."
+      - echo "Creating config.js with API endpoints and Cognito configuration..."
+      - echo "Values retrieved from CloudFormation:"
+      - echo "  API_URL=$API_URL"
+      - echo "  WS_URL=$WS_URL"
+      - echo "  USER_POOL_ID=$USER_POOL_ID"
+      - echo "  USER_POOL_CLIENT_ID=$USER_POOL_CLIENT_ID"
+      - echo "  COGNITO_DOMAIN=$COGNITO_DOMAIN"
       - printf 'window.API_BASE = "%s/";\n' "$API_URL" > public/config.js
       - printf 'window.WS_URL = "%s";\n' "$WS_URL" >> public/config.js
+      - printf 'window.USER_POOL_ID = "%s";\n' "$USER_POOL_ID" >> public/config.js
+      - printf 'window.USER_POOL_CLIENT_ID = "%s";\n' "$USER_POOL_CLIENT_ID" >> public/config.js
+      - printf 'window.COGNITO_DOMAIN = "%s";\n' "$COGNITO_DOMAIN" >> public/config.js
       - printf 'window.ENV = "development";\n' >> public/config.js
       - printf 'console.log("DEV Environment loaded");\n' >> public/config.js
+      - echo "Generated config.js contents:"
+      - cat public/config.js
 
       - npm run build
 
