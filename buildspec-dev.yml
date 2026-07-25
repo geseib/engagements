@@ -15,8 +15,8 @@ phases:
       - echo "Pre-build phase for $ENVIRONMENT environment"
       - 'echo "Domain: $DOMAIN_NAME"'
       - echo "Retrieving GitHub token from Secrets Manager..."
-      - export GITHUB_TOKEN=$(aws secretsmanager get-secret-value --secret-id engage/dev/github-token --query SecretString --output text 2>/dev/null | jq -r .GITHUB_TOKEN 2>/dev/null || echo "")
-      - '[ -n "$GITHUB_TOKEN" ] && echo "Successfully retrieved GitHub token" || echo "WARNING: engage/dev/github-token not found - GitHub issue creation will be disabled"'
+      - export GITHUB_TOKEN=$(aws secretsmanager get-secret-value --secret-id engage/${ENVIRONMENT}/github-token --query SecretString --output text 2>/dev/null | jq -r .GITHUB_TOKEN 2>/dev/null || echo "")
+      - '[ -n "$GITHUB_TOKEN" ] && echo "Successfully retrieved GitHub token" || echo "WARNING: engage/${ENVIRONMENT}/github-token not found - GitHub issue creation will be disabled"'
       - export GITHUB_REPO="${GITHUB_REPO:-geseib/engagements}"
 
       # Google OAuth credentials from SSM (CloudFormation cannot resolve
@@ -25,9 +25,12 @@ phases:
       # These MUST be passed: an empty GoogleClientSecret makes HasGoogleOAuth
       # false, which drops Google from the user pool client's supported
       # providers and deletes the GoogleIdentityProvider resource.
-      - export GOOGLE_CLIENT_ID=$(aws ssm get-parameter --name /engdev/google/client-id --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "")
-      - export GOOGLE_CLIENT_SECRET=$(aws ssm get-parameter --name /engdev/google/client-secret --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "")
-      - '[ -n "$GOOGLE_CLIENT_SECRET" ] && echo "Google OAuth credentials retrieved - Google sign-in enabled" || echo "WARNING: /engdev/google/* SSM params not found - Google sign-in will be DISABLED and the Cognito Google provider REMOVED by this deploy"'
+      # The pipeline's STACK_NAME is engagedev, while scripts/deploy-clean.sh targets
+      # the separate engdev stack under /engdev/*. Try the stack-derived path first,
+      # then fall back, so whichever convention the params were created under works.
+      - export GOOGLE_CLIENT_ID=$(aws ssm get-parameter --name "/$STACK_NAME/google/client-id" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || aws ssm get-parameter --name /engdev/google/client-id --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "")
+      - export GOOGLE_CLIENT_SECRET=$(aws ssm get-parameter --name "/$STACK_NAME/google/client-secret" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || aws ssm get-parameter --name /engdev/google/client-secret --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "")
+      - '[ -n "$GOOGLE_CLIENT_SECRET" ] && echo "Google OAuth credentials retrieved - Google sign-in enabled" || echo "WARNING: no Google params at /$STACK_NAME/google/* or /engdev/google/* - Google sign-in will be DISABLED and the Cognito Google provider REMOVED by this deploy"'
 
   build:
     commands:
