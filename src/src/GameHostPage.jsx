@@ -1,7 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import html2pdf from 'html2pdf.js';
 import webSocketClient from './WebSocketClient';
+
+// html2pdf pulls in jsPDF + html2canvas — roughly half the app's JavaScript —
+// but it is only needed when a host exports a report. Loading it on demand keeps
+// it out of the main bundle, so players (who never export) never download it.
+let html2pdfPromise = null;
+function loadHtml2Pdf() {
+  if (!html2pdfPromise) {
+    html2pdfPromise = import('html2pdf.js').then((m) => m.default ?? m);
+  }
+  return html2pdfPromise;
+}
 
 const API_BASE = window.API_BASE;
 
@@ -2481,6 +2491,7 @@ function GameReport({ reportData, onClose }) {
       };
 
       // Generate PDF as blob
+      const html2pdf = await loadHtml2Pdf();
       const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('dataurlstring');
       
       // Extract base64 data

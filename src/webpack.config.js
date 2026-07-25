@@ -12,12 +12,42 @@ module.exports = (env, argv) => {
 
     output: {
       path: path.resolve(__dirname, 'dist'),
-      filename: 'bundle.js',
+      // Content-hashed and namespaced under assets/ in production so CloudFront
+      // can cache the whole prefix forever: a new build produces new filenames,
+      // so there is nothing stale to invalidate. index.html and config.js stay
+      // at the root, unhashed and uncached — config.js is rewritten per
+      // environment at deploy time. Dev keeps stable names for readable rebuilds.
+      filename: isProd ? 'assets/[name].[contenthash:8].js' : '[name].bundle.js',
+      chunkFilename: isProd
+        ? 'assets/[name].[contenthash:8].chunk.js'
+        : '[name].chunk.js',
       publicPath: '/',
       clean: true,
     },
 
     resolve: { extensions: ['.js', '.jsx'] },
+
+    optimization: {
+      // Keep the module id stable across builds so an unrelated change does not
+      // invalidate the vendor chunk's hash.
+      moduleIds: 'deterministic',
+      runtimeChunk: 'single',
+      splitChunks: {
+        chunks: 'all',
+        cacheGroups: {
+          // React and friends change far less often than app code, so give them
+          // their own long-lived chunk. Scoped to `initial` so that dependencies
+          // reached only through a dynamic import() (html2pdf) stay in their own
+          // lazy chunk instead of being hoisted back into the initial payload.
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendor',
+            chunks: 'initial',
+            reuseExistingChunk: true,
+          },
+        },
+      },
+    },
 
     module: {
       rules: [
