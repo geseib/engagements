@@ -38,7 +38,17 @@ phases:
       - echo "Building SAM application..."
       - sam build -t template-clean.yaml
       - echo "Deploying to AWS..."
-      - sam deploy --template-file .aws-sam/build/template.yaml --stack-name $STACK_NAME --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --parameter-overrides "Environment=$ENVIRONMENT" "StackName=$STACK_NAME" "DomainName=$DOMAIN_NAME" "HostedZoneId=$HOSTED_ZONE_ID" "GitHubToken=$GITHUB_TOKEN" "GitHubRepo=$GITHUB_REPO" "GoogleClientId=$GOOGLE_CLIENT_ID" "GoogleClientSecret=$GOOGLE_CLIENT_SECRET" --resolve-s3 --no-confirm-changeset --no-fail-on-empty-changeset
+      # sam deploy rejects an empty override ("GitHubToken=" is not a valid format)
+      # and exits 2 before reaching CloudFormation. Each of these parameters
+      # defaults to "" in the template, so omitting one is identical to passing
+      # it empty -- build the list from only the values we actually have.
+      - PARAM_OVERRIDES="Environment=$ENVIRONMENT StackName=$STACK_NAME DomainName=$DOMAIN_NAME HostedZoneId=$HOSTED_ZONE_ID"
+      - '[ -n "$GITHUB_TOKEN" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES GitHubToken=$GITHUB_TOKEN" || echo "skipping GitHubToken (empty)"'
+      - '[ -n "$GITHUB_REPO" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES GitHubRepo=$GITHUB_REPO" || echo "skipping GitHubRepo (empty)"'
+      - '[ -n "$GOOGLE_CLIENT_ID" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES GoogleClientId=$GOOGLE_CLIENT_ID" || echo "skipping GoogleClientId (empty)"'
+      - '[ -n "$GOOGLE_CLIENT_SECRET" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES GoogleClientSecret=$GOOGLE_CLIENT_SECRET" || echo "skipping GoogleClientSecret (empty)"'
+      - echo "Parameter overrides:" $(echo "$PARAM_OVERRIDES" | sed -E 's/(GitHubToken|GoogleClientSecret)=[^ ]*/\1=***/g')
+      - sam deploy --template-file .aws-sam/build/template.yaml --stack-name $STACK_NAME --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --parameter-overrides $PARAM_OVERRIDES --resolve-s3 --no-confirm-changeset --no-fail-on-empty-changeset
 
       - echo "Building frontend..."
       - cd src
