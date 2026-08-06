@@ -957,20 +957,41 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     };
   });
 
+  // Data-driven fallback summary — reflects answer count, votes cast, and the
+  // top-supported response. Used whenever the prompt template OR the model is
+  // unavailable, so Workie never renders a blank summary.
+  const buildFallback = () => {
+    const votesCast = (results && results.totalVotes) || 0;
+    const top = topAnswers[0];
+    const isTrivia = gameType === 'trivia';
+    const qText = typeof question === 'string' ? question
+      : (question && (question.title || question.Title || question.questionDetail || question.Detail)) || '';
+    const parts = [`${totalParticipants} ${totalParticipants === 1 ? 'response was' : 'responses were'} submitted${qText ? ` on "${qText}"` : ''}.`];
+    if (votesCast > 0) parts.push(`${votesCast} vote${votesCast === 1 ? '' : 's'} cast.`);
+    if (top && top.playerName && top.answer) {
+      parts.push(`${top.playerName}'s answer${isTrivia ? '' : `, "${top.answer}",`} earned the most support (${top.score} point${top.score === 1 ? '' : 's'}${top.votes ? `: ${top.votes}` : ''}).`);
+    } else if (totalParticipants > 0) {
+      parts.push('The group shared a range of perspectives.');
+    }
+    const summaryText = parts.join(' ');
+    const discussionQuestions = [
+      'What stood out to you in the responses?',
+      top && top.answer ? `What made "${top.answer}" resonate with the group?` : 'Where did the group agree or differ most?'
+    ];
+    const nextSteps = ['Pick one takeaway from this question to apply to your own work this week.'];
+    const markdownResponse =
+      `## ${eventTitle || 'Question'} — Summary\n\n${summaryText}\n\n` +
+      `### Discussion topics\n${discussionQuestions.map(d => `- ${d}`).join('\n')}\n\n` +
+      `### Next steps\n${nextSteps.map(s => `- ${s}`).join('\n')}`;
+    return { summary: summaryText, summaryText, discussionQuestions, nextSteps, fullResponse: summaryText, markdownResponse, model: 'fallback' };
+  };
+
   // Fetch the prompt template
   const promptData = await fetchPromptFromS3(promptId);
-  
+
   if (!promptData || (!promptData.template && (!promptData.instructions || !promptData.outputFormat))) {
-    console.error('❌ Failed to fetch prompt template, using final fallback');
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ 
-        error: 'AI prompt template not available',
-        promptId: promptId,
-        details: 'Please ensure default prompts are populated or use the admin tool to create this prompt'
-      }),
-      headers: { 'Access-Control-Allow-Origin': '*' }
-    };
+    console.warn('⚠️ Prompt template unavailable — returning data-driven fallback summary');
+    return buildFallback();
   }
   
   console.log(`📝 Using prompt template: ${promptData.name}`);
@@ -1831,29 +1852,10 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
   } catch (error) {
     console.error('🚨 BEDROCK ERROR (Haiku 4.5):', error.name, error.message);
 
-    // Straight to the static fallback — never chain a second slow model.
-    const winner = rankedAnswers && rankedAnswers.length > 0 ? rankedAnswers[0] : null;
-    const fallbackSummary = winner && winner.player && winner.answer
-      ? `Great responses to this question! ${winner.player} takes the lead with "${winner.answer}" earning ${winner.score} points from the group. The creativity and thoughtfulness in all ${totalParticipants} answers really shows the engagement of our participants!`
-      : `Fantastic participation from all ${totalParticipants} participants! The variety and creativity in the answers really showcased everyone's engagement with this question.`;
-
-    console.log(`🚨 BEDROCK FINAL FALLBACK: Using static response. Winner:`, winner, 'TotalParticipants:', totalParticipants);
-
-    const fallbackResult = {
-      summary: fallbackSummary,
-      summaryText: fallbackSummary,
-      discussionQuestions: [],
-      nextSteps: [],
-      fullResponse: fallbackSummary,
-      markdownResponse: null,   // present on every path
-      model: 'fallback'
-    };
-
-    // Include debug information if in debug mode
-    if (debugMode) {
-      fallbackResult.debugInfo = debugInfo;
-    }
-
+    // Data-driven fallback — never chain a second slow model, never return blank.
+    console.log(`🚨 BEDROCK FINAL FALLBACK: data-driven summary for ${totalParticipants} participants`);
+    const fallbackResult = buildFallback();
+    if (debugMode) fallbackResult.debugInfo = debugInfo;
     return fallbackResult;
   }
 }
