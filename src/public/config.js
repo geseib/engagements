@@ -1,9 +1,9 @@
-// Development environment configuration
-window.API_BASE = 'https://h1jcmja0w1.execute-api.us-east-1.amazonaws.com/dev/';
-window.WS_URL = 'wss://r4c24mqku1.execute-api.us-east-1.amazonaws.com/dev';
-window.USER_POOL_ID = 'us-east-1_ow22HbCT0';
-window.USER_POOL_CLIENT_ID = '1s7v4imvde9kmvs119kfqtlg5e';
-window.COGNITO_DOMAIN = 'engdev-auth-v2';
+// Development environment configuration (engagedev / engage.dev.seibtribe.us)
+window.API_BASE = 'https://ouv6fztlig.execute-api.us-east-1.amazonaws.com/dev/';
+window.WS_URL = 'wss://h8ipndmk4d.execute-api.us-east-1.amazonaws.com/dev';
+window.USER_POOL_ID = 'us-east-1_7VC2YyGnU';
+window.USER_POOL_CLIENT_ID = '5jssphqmpqmjr1o51e1ba0e22b';
+window.COGNITO_DOMAIN = 'engagedev-auth-v2';
 window.ENV = 'development';
 
 console.log('🔧 DEV Environment loaded:');

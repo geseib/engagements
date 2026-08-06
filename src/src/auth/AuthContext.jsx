@@ -301,6 +301,80 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Initiate a password reset: emails a verification code to the user
+  const forgotPassword = async (email) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const cognitoUser = new CognitoUser({
+        Username: email,
+        Pool: getUserPool(),
+      });
+
+      return new Promise((resolve, reject) => {
+        cognitoUser.forgotPassword({
+          onSuccess: (data) => resolve(data),
+          onFailure: (err) => {
+            console.error('Forgot password error:', err);
+            let errorMessage = err.message;
+            if (err.code === 'UserNotFoundException') {
+              errorMessage = 'No account found with this email address.';
+            } else if (err.code === 'LimitExceededException') {
+              errorMessage = 'Too many attempts. Please wait a while before trying again.';
+            } else if (err.code === 'InvalidParameterException') {
+              errorMessage = 'This account can’t be reset by email. If you signed up with Google, use "Continue with Google" instead.';
+            }
+            setError(errorMessage);
+            reject(err);
+          },
+        });
+      });
+    } catch (error) {
+      setError(error.message);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Complete a password reset using the emailed code and a new password
+  const confirmPassword = async (email, code, newPassword) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const cognitoUser = new CognitoUser({
+        Username: email,
+        Pool: getUserPool(),
+      });
+
+      return new Promise((resolve, reject) => {
+        cognitoUser.confirmPassword(code, newPassword, {
+          onSuccess: () => resolve(true),
+          onFailure: (err) => {
+            console.error('Confirm password error:', err);
+            let errorMessage = err.message;
+            if (err.code === 'CodeMismatchException') {
+              errorMessage = 'Incorrect code. Double-check the code from your email or request a new one.';
+            } else if (err.code === 'ExpiredCodeException') {
+              errorMessage = 'This code has expired. Please request a new one.';
+            } else if (err.code === 'InvalidPasswordException') {
+              errorMessage = 'Password must be at least 8 characters with uppercase, lowercase, number, and special character.';
+            }
+            setError(errorMessage);
+            reject(err);
+          },
+        });
+      });
+    } catch (error) {
+      setError(error.message);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Check if user has specific role
   const hasRole = (role) => {
     return currentUser?.role === role;
@@ -381,6 +455,8 @@ export const AuthProvider = ({ children }) => {
     completeNewPassword,
     signOut,
     resendConfirmationCode,
+    forgotPassword,
+    confirmPassword,
     getCurrentUser,
     hasRole,
     hasGroup,

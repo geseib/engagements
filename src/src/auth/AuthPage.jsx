@@ -3,6 +3,7 @@ import { useAuth } from './AuthContext';
 import LoginForm from './LoginForm';
 import RegisterForm from './RegisterForm';
 import VerificationForm from './VerificationForm';
+import ForgotPasswordForm from './ForgotPasswordForm';
 import PendingApproval from './PendingApproval';
 import PasswordChangeForm from './PasswordChangeForm';
 import './auth.css';
@@ -155,11 +156,17 @@ const AuthPage = ({ onAuthSuccess, onCancel }) => {
           )}
           
           {currentMode === 'verify' && registrationData && (
-            <VerificationForm 
+            <VerificationForm
               email={registrationData.email}
               name={registrationData.name}
               onToggleMode={handleToggleMode}
               onSuccess={handleVerificationSuccess}
+            />
+          )}
+
+          {currentMode === 'forgot' && (
+            <ForgotPasswordForm
+              onToggleMode={handleToggleMode}
             />
           )}
           
