@@ -72,11 +72,11 @@ fi
 
 print_step "3. Configure Repository"
 echo ""
-echo "Default repository: georgeseib/engage2"
+echo "Default repository: geseib/engagements"
 read -p "Enter repository (owner/repo-name) or press Enter for default: " GITHUB_REPO
 
 if [ -z "$GITHUB_REPO" ]; then
-    GITHUB_REPO="georgeseib/engage2"
+    GITHUB_REPO="geseib/engagements"
 fi
 
 print_step "4. Save Configuration"

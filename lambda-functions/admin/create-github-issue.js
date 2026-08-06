@@ -33,7 +33,7 @@ exports.handler = async (event) => {
 
     // GitHub API configuration
     const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-    const GITHUB_REPO = process.env.GITHUB_REPO || 'georgeseib/engage2';
+    const GITHUB_REPO = process.env.GITHUB_REPO || 'geseib/engagements';
     
     if (!GITHUB_TOKEN) {
       console.error('❌ GitHub token not configured');

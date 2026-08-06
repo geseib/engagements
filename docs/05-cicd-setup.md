@@ -1,3 +1,6 @@
+> ⚠️ **Superseded — see [`../DEPLOYMENT.md`](../DEPLOYMENT.md) for the canonical deployment guide.**
+> Kept for history; may contain stale commands, domains, or scripts.
+
 # CI/CD Pipeline Setup
 
 ## Overview

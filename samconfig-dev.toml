@@ -13,7 +13,7 @@ parameter_overrides = [
     "StackName=engdev", 
     "DomainName=eng.dev.seibtribe.us",
     "HostedZoneId=ZB9TUA073B5SH",
-    "GitHubRepo=georgeseib/engage2",
+    "GitHubRepo=geseib/engagements",
     "GoogleClientIdParameter=/engdev/google/client-id",
     "GoogleClientSecretParameter=/engdev/google/client-secret"
 ]

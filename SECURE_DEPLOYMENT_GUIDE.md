@@ -1,3 +1,6 @@
+> ⚠️ **Superseded — see [`DEPLOYMENT.md`](DEPLOYMENT.md) for the canonical deployment guide.**
+> Kept for history; the Secrets Manager / SSM flow is summarized there.
+
 # SECURE DEPLOYMENT GUIDE
 ## GitHub Token Security with AWS Secrets Manager
 

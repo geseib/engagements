@@ -1,3 +1,6 @@
+> ⚠️ **Superseded — see [`../DEPLOYMENT.md`](../DEPLOYMENT.md) for the canonical deployment guide.**
+> Kept for history; may contain stale commands, domains, or scripts.
+
 # Deployment Guide: Dev → Test → Prod
 
 This guide outlines the steps needed to deploy the authentication fixes from dev to test and eventually to production.

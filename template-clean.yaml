@@ -39,7 +39,7 @@ Parameters:
   GitHubRepo:
     Type: String
     Description: GitHub repository in format owner/repo-name
-    Default: "georgeseib/engage2"
+    Default: "geseib/engagements"
 
   # Google OAuth credentials are passed as values (not SSM references)
   # because CloudFormation does not support ssm-secure dynamic references
@@ -69,9 +69,9 @@ Conditions:
 
 Globals:
   Function:
-    # MODERNIZE FOLLOW-UP (#1): nodejs18.x is EOL. Bump to nodejs22.x here, then
-    # redeploy and smoke-test AI + WebSocket functions. Single change point for all functions.
-    Runtime: nodejs18.x
+    # Lambda runtime for all functions. Bumped nodejs18.x (EOL) -> nodejs22.x on 2026-08-04.
+    # Single change point; smoke-test AI + WebSocket functions after any runtime change.
+    Runtime: nodejs22.x
     Timeout: 30
     MemorySize: 256
     Environment:
@@ -300,7 +300,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-get-question-sets'
       CodeUri: lambda-functions/admin/
       Handler: get-question-sets.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -324,7 +324,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-get-question-set-questions'
       CodeUri: lambda-functions/admin/
       Handler: get-question-set-questions.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Environment:
         Variables:
@@ -350,7 +350,7 @@ Resources:
       FunctionName: !Sub '${StackName}-get-question-sets'
       CodeUri: lambda-functions/game/
       Handler: get-question-sets.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -373,7 +373,7 @@ Resources:
       FunctionName: !Sub '${StackName}-get-game'
       CodeUri: lambda-functions/game/
       Handler: get-game.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -395,7 +395,7 @@ Resources:
       FunctionName: !Sub '${StackName}-start-game'
       CodeUri: lambda-functions/game/
       Handler: start-game.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -417,7 +417,7 @@ Resources:
       FunctionName: !Sub '${StackName}-next-question'
       CodeUri: lambda-functions/game/
       Handler: next-question.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -444,7 +444,7 @@ Resources:
       FunctionName: !Sub '${StackName}-toggle-category'
       CodeUri: lambda-functions/game/
       Handler: toggle-category.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -466,7 +466,7 @@ Resources:
       FunctionName: !Sub '${StackName}-get-question'
       CodeUri: lambda-functions/game/
       Handler: get-question.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -489,7 +489,7 @@ Resources:
       FunctionName: !Sub '${StackName}-get-answers'
       CodeUri: lambda-functions/game/
       Handler: get-answers.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -512,7 +512,7 @@ Resources:
       FunctionName: !Sub '${StackName}-get-results'
       CodeUri: lambda-functions/game/
       Handler: get-results.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -600,7 +600,7 @@ Resources:
       FunctionName: !Sub '${StackName}-get-ai-summary'
       CodeUri: lambda-functions/game/
       Handler: get-ai-summary.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 300
       MemorySize: 512
       Environment:
@@ -627,6 +627,15 @@ Resources:
                 - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
                 - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
                 - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+        # Async generation: self-invoke worker (Event) + WebSocket broadcast of aiSummaryReady/aiSummaryError
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-get-ai-summary'
+            - Effect: Allow
+              Action: execute-api:ManageConnections
+              Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
       Events:
         GetAISummaryEvent:
           Type: HttpApi
@@ -645,7 +654,7 @@ Resources:
       FunctionName: !Sub '${StackName}-get-players'
       CodeUri: lambda-functions/game/
       Handler: get-players.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -664,7 +673,7 @@ Resources:
       FunctionName: !Sub '${StackName}-get-games-list'
       CodeUri: lambda-functions/game/
       Handler: get-games-list.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -686,7 +695,7 @@ Resources:
       FunctionName: !Sub '${StackName}-get-game-state'
       CodeUri: lambda-functions/game/
       Handler: get-game-state.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -714,7 +723,7 @@ Resources:
       FunctionName: !Sub '${StackName}-get-categories'
       CodeUri: lambda-functions/game/
       Handler: get-categories.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -736,7 +745,7 @@ Resources:
       FunctionName: !Sub '${StackName}-join-game'
       CodeUri: lambda-functions/game/
       Handler: join-game.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -763,7 +772,7 @@ Resources:
       FunctionName: !Sub '${StackName}-submit-vote'
       CodeUri: lambda-functions/game/
       Handler: submit-vote.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Environment:
         Variables:
@@ -794,7 +803,7 @@ Resources:
       FunctionName: !Sub '${StackName}-get-votes'
       CodeUri: lambda-functions/game/
       Handler: get-votes.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Environment:
         Variables:
@@ -819,7 +828,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-ai-generate-questions'
       CodeUri: lambda-functions/admin/
       Handler: ai-generate-questions.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 900
       MemorySize: 1024
       Policies:
@@ -860,7 +869,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-ai-generate-scenarios'
       CodeUri: lambda-functions/admin/
       Handler: ai-generate-scenarios.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 900
       MemorySize: 1024
       Policies:
@@ -904,7 +913,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-ai-generate-trivia'
       CodeUri: lambda-functions/admin/
       Handler: ai-generate-trivia.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 900
       MemorySize: 1024
       Policies:
@@ -949,7 +958,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-ai-generate-polls'
       CodeUri: lambda-functions/admin/
       Handler: ai-generate-polls.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 900
       MemorySize: 1024
       Policies:
@@ -994,7 +1003,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-ai-generate-survey'
       CodeUri: lambda-functions/admin/
       Handler: ai-generate-survey.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 900
       MemorySize: 1024
       Policies:
@@ -1039,7 +1048,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-upload-questions'
       CodeUri: lambda-functions/admin/
       Handler: upload-questions.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 60
       Policies:
         - DynamoDBCrudPolicy:
@@ -1066,7 +1075,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-create-github-issue'
       CodeUri: lambda-functions/admin/
       Handler: create-github-issue.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -1099,7 +1108,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-parse-document'
       CodeUri: lambda-functions/admin/
       Handler: parse-document.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       MemorySize: 512
       Environment:
@@ -1124,7 +1133,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-toggle-question-set'
       CodeUri: lambda-functions/admin/
       Handler: toggle-question-set.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -1148,7 +1157,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-toggle-quickstart'
       CodeUri: lambda-functions/admin/
       Handler: toggle-quickstart.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -1172,7 +1181,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-edit-question-set'
       CodeUri: lambda-functions/admin/
       Handler: edit-question-set.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -1196,7 +1205,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-delete-question-set'
       CodeUri: lambda-functions/admin/
       Handler: delete-question-set.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -1221,7 +1230,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-clear-game'
       CodeUri: lambda-functions/admin/
       Handler: delete-game.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -1248,7 +1257,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-update-game-categories'
       CodeUri: lambda-functions/admin/
       Handler: update-game-categories.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -1275,7 +1284,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-clear-all-games'
       CodeUri: lambda-functions/admin/
       Handler: clear-all-games.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 300
       Policies:
         - DynamoDBCrudPolicy:
@@ -1302,7 +1311,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-download-template'
       CodeUri: lambda-functions/admin/
       Handler: download-template.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Events:
         AdminDownloadTemplateEvent:
@@ -1324,7 +1333,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-get-ai-prompts'
       CodeUri: lambda-functions/admin/
       Handler: get-ai-prompts.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Environment:
         Variables:
@@ -1353,7 +1362,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-create-ai-prompt'
       CodeUri: lambda-functions/admin/
       Handler: create-ai-prompt.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Environment:
         Variables:
@@ -1390,7 +1399,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-update-ai-prompt'
       CodeUri: lambda-functions/admin/
       Handler: update-ai-prompt.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Environment:
         Variables:
@@ -1419,7 +1428,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-delete-ai-prompt'
       CodeUri: lambda-functions/admin/
       Handler: delete-ai-prompt.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Environment:
         Variables:
@@ -1448,7 +1457,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-ai-prompt-advisor'
       CodeUri: lambda-functions/admin/
       Handler: ai-prompt-advisor.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 120
       MemorySize: 512
       Environment:
@@ -1494,7 +1503,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-ai-generate-prompt'
       CodeUri: lambda-functions/admin/
       Handler: ai-generate-prompt.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 60
       MemorySize: 512
       Policies:
@@ -1532,7 +1541,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-populate-defaults'
       CodeUri: lambda-functions/admin/
       Handler: populate-defaults.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 60
       MemorySize: 512
       Environment:
@@ -1563,7 +1572,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-export-to-archive'
       CodeUri: lambda-functions/admin/
       Handler: export-to-archive.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 300
       MemorySize: 512
       Environment:
@@ -1592,7 +1601,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-import-from-archive'
       CodeUri: lambda-functions/admin/
       Handler: import-from-archive.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 300
       MemorySize: 512
       Environment:
@@ -1628,7 +1637,7 @@ Resources:
       FunctionName: !Sub '${StackName}-admin-list-local-archive'
       CodeUri: lambda-functions/admin/
       Handler: list-local-archive.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       MemorySize: 256
       Environment:
@@ -2116,7 +2125,7 @@ Resources:
       FunctionName: !Sub '${StackName}-authorizer'
       CodeUri: lambda-functions/auth/
       Handler: authorizer.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Environment:
         Variables:
           USER_POOL_ID: !Ref UserPoolV2
@@ -2153,7 +2162,7 @@ Resources:
       FunctionName: !Sub '${StackName}-user-management'
       CodeUri: lambda-functions/admin/
       Handler: manage-users.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 60
       Environment:
         Variables:
@@ -2205,7 +2214,7 @@ Resources:
       FunctionName: !Sub '${StackName}-post-confirmation'
       CodeUri: lambda-functions/auth/
       Handler: post-confirmation.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 30
       Environment:
         Variables:

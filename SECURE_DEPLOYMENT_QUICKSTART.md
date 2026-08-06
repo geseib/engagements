@@ -1,3 +1,6 @@
+> ⚠️ **Superseded — see [`DEPLOYMENT.md`](DEPLOYMENT.md) for the canonical deployment guide.**
+> Kept for history; the Secrets Manager / SSM flow is summarized there.
+
 # SECURE DEPLOYMENT - QUICKSTART
 
 ## 🏃‍♂️ One-Time Setup (10 minutes)

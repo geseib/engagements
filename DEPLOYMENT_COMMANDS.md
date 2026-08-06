@@ -1,3 +1,6 @@
+> ⚠️ **Superseded — see [`DEPLOYMENT.md`](DEPLOYMENT.md) for the canonical deployment guide.**
+> Kept for history; may contain stale commands, domains, or scripts.
+
 # 🚀 Deployment Commands
 
 Quick reference for deploying the Engagements Platform to different environments.

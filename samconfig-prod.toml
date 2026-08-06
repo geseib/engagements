@@ -14,7 +14,7 @@ parameter_overrides = [
     "DomainName=eng.seibtribe.us",
     "HostedZoneId=Z03473042HSYD8BUY4XSL",
     "GitHubToken=",
-    "GitHubRepo=georgeseib/engage2",
+    "GitHubRepo=geseib/engagements",
     "GoogleClientIdParameter=/engprod/oauth/google/client-id",
     "GoogleClientSecretParameter=/engprod/oauth/google/client-secret"
 ]

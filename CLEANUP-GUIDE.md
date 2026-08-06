@@ -1,3 +1,6 @@
+> ⚠️ **Superseded — see [`DEPLOYMENT.md`](DEPLOYMENT.md) for the canonical deployment guide.**
+> Kept for history; references the removed root `deploy-clean.sh` (use `scripts/deploy-clean.sh`).
+
 # 🧹 Clean Slate Deployment Guide
 
 ## Overview
