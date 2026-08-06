@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 
 const client = new DynamoDBClient({});
@@ -114,12 +114,24 @@ async function notifyHostOfVote(gameId, playerName, questionNumber, votes) {
         timestamp: new Date().toISOString()
       };
 
-      await apigateway.send(new PostToConnectionCommand({
-        ConnectionId: hostConnection.ConnectionId,
-        Data: JSON.stringify(notification)
-      }));
-
-      console.log(`✅ Host notified of vote from ${playerName}`);
+      try {
+        await apigateway.send(new PostToConnectionCommand({
+          ConnectionId: hostConnection.ConnectionId,
+          Data: JSON.stringify(notification)
+        }));
+        console.log(`✅ Host notified of vote from ${playerName}`);
+      } catch (sendError) {
+        // 410 Gone == dead host connection. Delete the stale row inline.
+        if (sendError.statusCode === 410 || sendError.name === 'GoneException' || sendError.$response?.statusCode === 410) {
+          console.log(`🧹 Removing stale host connection ${hostConnection.ConnectionId} (410 Gone)`);
+          await db.send(new DeleteCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: hostConnection.PK, SK: hostConnection.SK }
+          })).catch(() => {});
+        } else {
+          throw sendError;
+        }
+      }
     } else {
       console.log(`⚠️ No host connection found for game ${gameId}`);
     }

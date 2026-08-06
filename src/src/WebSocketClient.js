@@ -8,8 +8,16 @@ class WebSocketClient {
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
     this.reconnectDelay = 1000;
+    this.baseReconnectDelay = 1000;
     this.messageHandlers = new Map();
     this.onConnectionChange = null;
+    this.onReconnect = null;          // fired on every successful (re)open after the first
+    this.hasConnectedOnce = false;
+    this.heartbeatTimer = null;
+    this.pongTimer = null;
+    this.intentionalClose = false;
+    this.heartbeatMs = 25000;         // < API GW 10-min idle; catches dead sockets fast
+    this.pongWaitMs = 10000;
   }
 
   connect(gameId, playerName = null, isHost = false) {
@@ -31,13 +39,20 @@ class WebSocketClient {
 
       this.ws.onopen = () => {
         console.log('🔌 WebSocket connected');
+        const wasReconnect = this.hasConnectedOnce;
+        this.hasConnectedOnce = true;
         this.reconnectAttempts = 0;
+        this.reconnectDelay = this.baseReconnectDelay;   // FIX: reset backoff on success
+        this._startHeartbeat();
         if (this.onConnectionChange) this.onConnectionChange(true);
+        if (wasReconnect && this.onReconnect) this.onReconnect();  // FIX core gap: re-sync on reopen
       };
 
       this.ws.onmessage = (event) => {
+        this._clearPongTimer();                          // any inbound frame == alive
         try {
           const message = JSON.parse(event.data);
+          if (message.type === 'pong') return;           // swallow keepalive
           console.log('🔌 WEBSOCKET DEBUG: Raw WebSocket message received:', message);
           console.log('🔌 WEBSOCKET DEBUG: Message type:', message.type);
           console.log('🔌 WEBSOCKET DEBUG: Game ID in message:', message.gameId);
@@ -52,15 +67,14 @@ class WebSocketClient {
 
       this.ws.onclose = (event) => {
         console.log('🔌 WebSocket disconnected:', event.code, event.reason);
+        this._stopHeartbeat();
         if (this.onConnectionChange) this.onConnectionChange(false);
-        
-        // Attempt to reconnect unless it was a clean close
-        if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
-          this.reconnectAttempts++;
-          console.log(`🔌 Attempting reconnect ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${this.reconnectDelay}ms`);
-          setTimeout(() => this.connect(this.gameId, this.playerName, this.isHost), this.reconnectDelay);
-          this.reconnectDelay *= 2; // Exponential backoff
+
+        if (this.intentionalClose || event.code === 1000) {
+          this.intentionalClose = false;
+          return;
         }
+        this._scheduleReconnect();
       };
 
       this.ws.onerror = (error) => {
@@ -74,9 +88,57 @@ class WebSocketClient {
     }
   }
 
+  _scheduleReconnect() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.log('🔌 max reconnects hit; will retry on network/visibility event');
+      return;                                        // don't die forever; ensureConnected() re-arms
+    }
+    this.reconnectAttempts++;
+    console.log(`🔌 Attempting reconnect ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${this.reconnectDelay}ms`);
+    setTimeout(() => this.connect(this.gameId, this.playerName, this.isHost), this.reconnectDelay);
+    this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000);
+  }
+
+  _startHeartbeat() {
+    this._stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      if (!this.isConnected()) return;
+      try { this.ws.send(JSON.stringify({ action: 'ping' })); } catch (_) { return; }
+      this._clearPongTimer();
+      this.pongTimer = setTimeout(() => {            // no frame back == half-open (phone lock)
+        console.warn('🔌 heartbeat timeout — forcing reconnect');
+        try { this.ws.close(4000, 'heartbeat-timeout'); } catch (_) {}
+      }, this.pongWaitMs);
+    }, this.heartbeatMs);
+  }
+
+  _stopHeartbeat() {
+    clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = null;
+    this._clearPongTimer();
+  }
+
+  _clearPongTimer() {
+    clearTimeout(this.pongTimer);
+    this.pongTimer = null;
+  }
+
+  // Called by page visibility/online/focus handlers. Reconnect if dead, else just resync.
+  ensureConnected() {
+    if (this.isConnected()) return true;             // caller still runs checkGameState()
+    this.reconnectAttempts = 0;                      // FIX: re-arm after permanent give-up
+    this.reconnectDelay = this.baseReconnectDelay;
+    if (this.gameId) this.connect(this.gameId, this.playerName, this.isHost);
+    return false;
+  }
+
+  onReconnected(cb) { this.onReconnect = cb; }
+
   disconnect() {
     if (this.ws) {
       console.log('🔌 Manually disconnecting WebSocket');
+      this.intentionalClose = true;
+      this._stopHeartbeat();
       this.ws.close(1000, 'Manual disconnect');
       this.ws = null;
     }

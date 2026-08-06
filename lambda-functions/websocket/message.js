@@ -27,9 +27,17 @@ exports.handler = async (event) => {
   const connectionId = event.requestContext.connectionId;
   
   try {
-    const body = JSON.parse(event.body);
+    const body = JSON.parse(event.body || '{}');
     console.log(`📨 WebSocket Message from ${connectionId}:`, body);
-    
+
+    // Heartbeat keepalive from the client (WebSocketClient._startHeartbeat sends
+    // { action: 'ping' }). Reply with a pong. The pong message carries no gameId,
+    // so sendToConnection's 410 cleanup path skips the delete.
+    if (body.action === 'ping' || body.messageType === 'PING') {
+      await sendToConnection(connectionId, { type: 'pong' });
+      return { statusCode: 200, body: 'pong' };
+    }
+
     const { messageType, gameId, playerName } = body;
     
     if (!messageType || !gameId) {
@@ -99,8 +107,9 @@ async function handleHostMessage(gameId, messageType, messageData) {
     const playerConnections = await getPlayerConnections(gameId);
     console.log(`📡 Broadcasting to ${playerConnections.length} players`);
     
-    // Broadcast to all players
-    const broadcastPromises = playerConnections.map(connection =>
+    // Broadcast to all players. Promise.allSettled + a non-throwing
+    // sendToConnection means one dead phone can't 500 the whole fan-out.
+    const results = await Promise.allSettled(playerConnections.map(connection =>
       sendToConnection(connection.ConnectionId, {
         type: 'hostMessage',
         messageType,
@@ -108,10 +117,9 @@ async function handleHostMessage(gameId, messageType, messageData) {
         timestamp: new Date().toISOString(),
         ...messageData
       })
-    );
-    
-    await Promise.all(broadcastPromises);
-    console.log(`✅ Host message ${messageType} broadcast complete`);
+    ));
+    const delivered = results.filter(r => r.value?.ok).length;
+    console.log(`✅ Host message ${messageType} broadcast complete: ${delivered}/${playerConnections.length} delivered`);
     
   } catch (error) {
     console.error(`❌ Error handling host message ${messageType}:`, error);
@@ -646,15 +654,22 @@ async function sendToConnection(connectionId, message) {
       ConnectionId: connectionId,
       Data: JSON.stringify(message)
     }));
+    return { ok: true };
   } catch (error) {
-    console.error(`❌ Failed to send to connection ${connectionId}:`, error);
-    
-    // Remove stale connections
-    if (error.statusCode === 410) {
+    // 410 Gone == the connection is dead. Delete the stale row inline (the
+    // message carries gameId so the PK is known — no full-table Scan needed)
+    // and never re-throw, so a single dead phone can't poison the broadcast.
+    if (error.statusCode === 410 || error.name === 'GoneException') {
       console.log(`🧹 Removing stale connection ${connectionId}`);
-      // Note: Connection cleanup will be handled by disconnect function
+      if (message.gameId) {
+        await db.send(new DeleteCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${message.gameId}`, SK: `CONNECTION#${connectionId}` }
+        })).catch(() => {});
+      }
+      return { ok: false, stale: true };
     }
-    
-    throw error;
+    console.error(`❌ Failed to send to connection ${connectionId}:`, error);
+    return { ok: false, error };   // degrade gracefully; never block the fan-out
   }
 }

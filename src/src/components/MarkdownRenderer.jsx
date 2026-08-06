@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 
 // Enhanced Markdown renderer for AI summaries
 // Supports: headers, paragraphs, lists, bold, italics, tables
+// Parsing is memoized on `content` and the component is wrapped in React.memo so
+// it does not re-parse on every unrelated re-render of the live host page.
 function MarkdownRenderer({ content, className = '' }) {
+  const elements = useMemo(() => {
   if (!content) return null;
 
   // Split content into lines for processing
@@ -179,6 +182,11 @@ function MarkdownRenderer({ content, className = '' }) {
   flushList();
   flushTable();
 
+  return elements;
+  }, [content]);
+
+  if (!elements) return null;
+
   return (
     <div className={`markdown-content ${className}`}>
       {elements}
@@ -186,4 +194,4 @@ function MarkdownRenderer({ content, className = '' }) {
   );
 }
 
-export default MarkdownRenderer;
+export default React.memo(MarkdownRenderer);

@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 
 const client = new DynamoDBClient({});
@@ -289,20 +289,22 @@ async function sendToConnection(connectionId, message) {
     console.log(`🔔 WEBSOCKET DEBUG: Executing PostToConnectionCommand`);
     const result = await apigateway.send(command);
     console.log(`🔔 WEBSOCKET DEBUG: PostToConnectionCommand result:`, result);
-    
+    return { ok: true };
+
   } catch (error) {
-    console.error(`❌ WEBSOCKET DEBUG: Failed to send to connection ${connectionId}:`, error);
-    console.error(`❌ WEBSOCKET DEBUG: Error type:`, error.constructor.name);
-    console.error(`❌ WEBSOCKET DEBUG: Error code:`, error.Code || error.code);
-    console.error(`❌ WEBSOCKET DEBUG: Error statusCode:`, error.statusCode || error.$response?.statusCode);
-    console.error(`❌ WEBSOCKET DEBUG: Full error object:`, JSON.stringify(error, null, 2));
-    
-    // Remove stale connections
-    if (error.statusCode === 410 || error.$response?.statusCode === 410) {
+    // 410 Gone == dead connection. Delete the stale row inline (message carries
+    // gameId so the PK is known) and never re-throw.
+    if (error.statusCode === 410 || error.name === 'GoneException' || error.$response?.statusCode === 410) {
       console.log(`🧹 WEBSOCKET DEBUG: Removing stale connection ${connectionId} (410 Gone)`);
-      // Note: Connection cleanup will be handled by disconnect function
+      if (message.gameId) {
+        await db.send(new DeleteCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${message.gameId}`, SK: `CONNECTION#${connectionId}` }
+        })).catch(() => {});
+      }
+      return { ok: false, stale: true };
     }
-    
-    throw error;
+    console.error(`❌ WEBSOCKET DEBUG: Failed to send to connection ${connectionId}:`, error);
+    return { ok: false, error };
   }
 }

@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand, PutCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 
 const client = new DynamoDBClient({});
@@ -379,10 +379,14 @@ const broadcastToGame = async (gameId, message) => {
           code: error.Code || error.code
         });
         
-        // Remove stale connections (410 = Gone)
-        if (error.statusCode === 410 || error.$metadata?.httpStatusCode === 410 || error.$response?.statusCode === 410) {
+        // Remove stale connections inline (410 = Gone). PK is known from the
+        // connection row itself, so no full-table Scan is needed.
+        if (error.statusCode === 410 || error.name === 'GoneException' || error.$metadata?.httpStatusCode === 410 || error.$response?.statusCode === 410) {
           console.log(`🧹 WEBSOCKET DEBUG: Removing stale connection: ${connection.ConnectionId}`);
-          // Note: Connection cleanup would be handled by disconnect function
+          await db.send(new DeleteCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: connection.PK, SK: connection.SK }
+          })).catch(() => {});
         }
       }
     });

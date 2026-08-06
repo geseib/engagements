@@ -1,12 +1,58 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
+const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 
 const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
 const s3 = new S3Client({ region: 'us-east-1' });
+const lambda = new LambdaClient({});
+const apigateway = new ApiGatewayManagementApiClient({ endpoint: process.env.WEBSOCKET_API_ENDPOINT });
+
+// Broadcast a message to every connection in a game (copied from next-question.js,
+// including inline 410-stale cleanup). Used by the async summary worker to deliver
+// the legacy-shaped { type: 'aiSummaryReady' | 'aiSummaryError' } events the client handlers register under.
+const broadcastToGame = async (gameId, message) => {
+  try {
+    const connectionsResult = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: {
+        ':pk': `GAME#${gameId}`,
+        ':sk': 'CONNECTION#'
+      }
+    }));
+
+    const connections = connectionsResult.Items || [];
+    console.log(`🔔 AI SUMMARY: broadcasting ${message.type} to ${connections.length} connections for game ${gameId}`);
+    if (connections.length === 0) return;
+
+    await Promise.all(connections.map(async (connection) => {
+      try {
+        await apigateway.send(new PostToConnectionCommand({
+          ConnectionId: connection.ConnectionId,
+          Data: JSON.stringify(message)
+        }));
+      } catch (error) {
+        if (error.statusCode === 410 || error.name === 'GoneException' || error.$metadata?.httpStatusCode === 410 || error.$response?.statusCode === 410) {
+          console.log(`🧹 AI SUMMARY: removing stale connection ${connection.ConnectionId}`);
+          await db.send(new DeleteCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: connection.PK, SK: connection.SK }
+          })).catch(() => {});
+        } else {
+          console.error(`❌ AI SUMMARY: failed to send to ${connection.ConnectionId}:`, error);
+        }
+      }
+    }));
+  } catch (error) {
+    console.error('❌ AI SUMMARY: broadcast error:', error);
+  }
+};
+
 
 // Parse Claude's response - standardized markdown headers (## Summary, ## Discussion Questions, ## Next Steps)
 const parseAIResponse = (aiResponse) => {
@@ -250,10 +296,22 @@ const findDefaultPromptId = async (gameType) => {
 };
 
 exports.handler = async (event) => {
+  // Async worker mode: the HTTP path fires an InvocationType:'Event' self-invoke
+  // with __workerMode set, so the full generation runs off the API Gateway 30s
+  // ceiling. In worker mode we skip the cache/HTTP-return branches, generate,
+  // persist, and broadcast the result over WebSocket.
+  const workerMode = event.__workerMode === true;
   try {
-    const { gameId } = event.pathParameters || {};
-    const queryParams = event.queryStringParameters || {};
-    const { questionId, generateNew, debug, promptDebug } = queryParams;
+    let gameId, questionId, generateNew, debug, promptDebug;
+    if (workerMode) {
+      ({ gameId, questionId, debug, promptDebug } = event); // questionId === targetQuestionId
+      generateNew = 'true';
+      console.log(`🛠️ AI SUMMARY WORKER: generating for game ${gameId}, question ${questionId}`);
+    } else {
+      ({ gameId } = event.pathParameters || {});
+      const queryParams = event.queryStringParameters || {};
+      ({ questionId, generateNew, debug, promptDebug } = queryParams);
+    }
 
     if (!gameId) {
       return {
@@ -360,6 +418,41 @@ exports.handler = async (event) => {
           headers: { 'Access-Control-Allow-Origin': '*' }
         };
       }
+    }
+
+    // ===== HTTP dispatcher (never generates inline) =====
+    // The HTTP path must return fast — generation happens only in the worker.
+    if (!workerMode) {
+      if (!generateNew) {
+        // Cache miss (non-generateNew, no item): tell the client it's not ready
+        // yet. The client already treats 404 as "not ready" and will fire generateNew.
+        console.log(`ℹ️ AI SUMMARY: cache miss for ${gameId}:${paddedQuestionNumber} — returning 404 (not generating inline)`);
+        return {
+          statusCode: 404,
+          body: JSON.stringify({ status: 'not_ready', gameId, questionId: targetQuestionId }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+
+      // generateNew=true: fire-and-forget self-invoke, return 202 immediately.
+      console.log(`🚀 AI SUMMARY: dispatching async generation worker for ${gameId}:${targetQuestionId}`);
+      await lambda.send(new InvokeCommand({
+        FunctionName: process.env.AWS_LAMBDA_FUNCTION_NAME, // auto-set by Lambda runtime
+        InvocationType: 'Event',
+        Payload: Buffer.from(JSON.stringify({
+          __workerMode: true,
+          gameId,
+          questionId: targetQuestionId,
+          paddedQuestionNumber,
+          debug,
+          promptDebug
+        }))
+      }));
+      return {
+        statusCode: 202,
+        body: JSON.stringify({ status: 'generating', gameId, questionId: targetQuestionId }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
     }
 
     // Get game metadata for AI context and scoring configuration
@@ -740,6 +833,18 @@ exports.handler = async (event) => {
     // Generate AI summary
     const summaryData = await generateAISummary(aiData);
 
+    // generateAISummary returns an HTTP-shaped error object when the prompt
+    // template is unavailable. Don't persist/broadcast that as a real summary.
+    if (summaryData && summaryData.statusCode) {
+      if (workerMode) {
+        throw new Error('AI prompt template not available');
+      }
+      return {
+        ...summaryData,
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
     // Store the enhanced AI summary in DynamoDB (keeping same storage key)
     const now = new Date().toISOString();
     const dbItem = {
@@ -768,6 +873,14 @@ exports.handler = async (event) => {
     }));
 
     console.log(`✅ Enhanced AI summary generated and stored for ${gameId}: ${targetQuestionId}`);
+
+    // Worker mode: notify all clients over WebSocket that the summary is ready.
+    // Broadcast the legacy-shaped { type: 'aiSummaryReady' } — the client handlers
+    // register under message.type, so do NOT wrap it as a hostMessage.
+    if (workerMode) {
+      await broadcastToGame(gameId, { type: 'aiSummaryReady', gameId, questionId: targetQuestionId });
+      return { ok: true, gameId, questionId: targetQuestionId };
+    }
 
     const responseData = {
       gameId: gameId,
@@ -803,6 +916,19 @@ exports.handler = async (event) => {
 
   } catch (error) {
     console.error('Get AI summary error:', error);
+    // Worker mode: tell clients generation failed so the spinner can't hang, then
+    // rethrow so the Event invoke's automatic retries kick in (the Put is an
+    // idempotent overwrite, so retries are safe).
+    if (workerMode) {
+      const failedQuestionId = event.questionId;
+      await broadcastToGame(event.gameId, {
+        type: 'aiSummaryError',
+        gameId: event.gameId,
+        questionId: failedQuestionId,
+        message: error.message
+      }).catch(() => {});
+      throw error;
+    }
     return {
       statusCode: 500,
       body: JSON.stringify({ error: `Failed to generate AI summary: ${error.message}` }),
@@ -1640,37 +1766,50 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     promptSource: promptProvenance.source
   };
 
-  const sonnetModelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-sonnet-4-6`;
-  console.log('🤖 BEDROCK: Attempting to call Claude Sonnet 4.6...');
-  console.log('🤖 BEDROCK: Inference Profile ARN:', sonnetModelId);
+  // Haiku 4.5 is the single fast model in the hot path. It finishes in ~3–8s,
+  // makes a throttle retry cheap, and keeps us well under any latency budget.
+  // No second slow model is chained — failures go straight to the static fallback.
+  const haikuModelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`;
+  console.log('🤖 BEDROCK: Calling Claude Haiku 4.5 (primary)…', haikuModelId);
   console.log('🤖 BEDROCK: Prompt length:', prompt.length);
 
+  const invokeHaiku = async () => bedrock.send(new InvokeModelCommand({
+    modelId: haikuModelId,
+    body: JSON.stringify({
+      anthropic_version: 'bedrock-2023-05-31',
+      max_tokens: 1024,     // content is ~600–1000 tok; caps tail latency (bump to 1536 only if stop_reason:"max_tokens")
+      temperature: 0.5,     // tighter/shorter, still a natural summary
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
+    })
+  }));
+
   try {
-    // Use Claude Sonnet 4.6 inference profile ARN
-    const response = await bedrock.send(new InvokeModelCommand({
-      modelId: sonnetModelId,
-      body: JSON.stringify({
-        anthropic_version: 'bedrock-2023-05-31',
-        max_tokens: 2000,
-        temperature: 0.7,
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ]
-      })
-    }));
+    let response;
+    try {
+      response = await invokeHaiku();
+    } catch (e) {
+      if (e.name === 'ThrottlingException') {
+        console.log('⏳ BEDROCK: throttled — retrying Haiku 4.5 once');
+        response = await invokeHaiku(); // one retry, SAME fast model
+      } else {
+        throw e;
+      }
+    }
 
     const responseBody = JSON.parse(new TextDecoder().decode(response.body));
     const aiResponse = responseBody.content[0].text.trim();
-    
+
     console.log('✅ CLAUDE SUCCESS: Real AI response received');
     console.log('📝 AI Response preview:', aiResponse.substring(0, 200) + '...');
-    
+
     // Parse the structured response
     const parsed = parseAIResponse(aiResponse);
-    
+
     // Return structured data for storage
     const result = {
       summary: parsed.summaryText,
@@ -1678,98 +1817,43 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
       discussionQuestions: parsed.discussionQuestions,
       nextSteps: parsed.nextSteps,
       fullResponse: aiResponse,
-      markdownResponse: parsed.markdownResponse,
-      model: 'claude-3.5-sonnet' // Track which model was used
+      markdownResponse: parsed.markdownResponse,   // present on every success path
+      model: 'claude-haiku-4-5'                     // correct label (was mislabeled 'claude-3.5-*')
     };
-    
+
     // Include debug information if in debug mode
     if (debugMode) {
       result.debugInfo = debugInfo;
     }
-    
+
     return result;
 
   } catch (error) {
-    console.error('🚨 BEDROCK API ERROR (Claude Sonnet 4.6):');
-    console.error('  Error name:', error.name);
-    console.error('  Error message:', error.message);
-    console.error('  Error code:', error.code || error.$metadata?.httpStatusCode);
-    console.error('  Full error:', JSON.stringify(error, null, 2));
-    
-    const haikuModelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`;
-    console.log('🔄 BEDROCK: Trying Claude Haiku 4.5 as fallback...');
-    console.log('🤖 BEDROCK: Haiku Inference Profile ARN:', haikuModelId);
+    console.error('🚨 BEDROCK ERROR (Haiku 4.5):', error.name, error.message);
 
-    // Try Claude Haiku 4.5 inference profile ARN as fallback
-    try {
-      const haikuResponse = await bedrock.send(new InvokeModelCommand({
-        modelId: haikuModelId,
-        body: JSON.stringify({
-          anthropic_version: 'bedrock-2023-05-31',
-          max_tokens: 2000,
-          temperature: 0.7,
-          messages: [
-            {
-              role: 'user',
-              content: prompt
-            }
-          ]
-        })
-      }));
+    // Straight to the static fallback — never chain a second slow model.
+    const winner = rankedAnswers && rankedAnswers.length > 0 ? rankedAnswers[0] : null;
+    const fallbackSummary = winner && winner.player && winner.answer
+      ? `Great responses to this question! ${winner.player} takes the lead with "${winner.answer}" earning ${winner.score} points from the group. The creativity and thoughtfulness in all ${totalParticipants} answers really shows the engagement of our participants!`
+      : `Fantastic participation from all ${totalParticipants} participants! The variety and creativity in the answers really showcased everyone's engagement with this question.`;
 
-      const haikuResponseBody = JSON.parse(new TextDecoder().decode(haikuResponse.body));
-      const haikuAiResponse = haikuResponseBody.content[0].text.trim();
-      
-      console.log('✅ BEDROCK HAIKU SUCCESS: AI response received');
-      console.log('📝 Haiku Response preview:', haikuAiResponse.substring(0, 200) + '...');
-      
-      // Parse the structured response
-      const parsed = parseAIResponse(haikuAiResponse);
-      
-      // Return structured data for storage
-      const haikuResult = {
-        summary: parsed.summaryText,
-        summaryText: parsed.summaryText,
-        discussionQuestions: parsed.discussionQuestions,
-        nextSteps: parsed.nextSteps,
-        fullResponse: haikuAiResponse,
-        model: 'claude-3.5-haiku' // Track which model was used
-      };
-      
-      // Include debug information if in debug mode
-      if (debugMode) {
-        haikuResult.debugInfo = debugInfo;
-      }
-      
-      return haikuResult;
-      
-    } catch (haikuError) {
-      console.error('🚨 BEDROCK HAIKU ALSO FAILED:');
-      console.error('  Haiku Error:', haikuError.message);
-      
-      // Final fallback structured response if both AI models fail
-      const winner = rankedAnswers && rankedAnswers.length > 0 ? rankedAnswers[0] : null;
-      const fallbackSummary = winner && winner.player && winner.answer
-        ? `Great responses to this question! ${winner.player} takes the lead with "${winner.answer}" earning ${winner.score} points from the group. The creativity and thoughtfulness in all ${totalParticipants} answers really shows the engagement of our participants!`
-        : `Fantastic participation from all ${totalParticipants} participants! The variety and creativity in the answers really showcased everyone's engagement with this question.`;
-      
-      console.log(`🚨 BEDROCK FINAL FALLBACK: Using static response. Winner:`, winner, 'TotalParticipants:', totalParticipants);
-      
-      const fallbackResult = {
-        summary: fallbackSummary,
-        summaryText: fallbackSummary,
-        discussionQuestions: [],
-        nextSteps: [],
-        fullResponse: fallbackSummary,
-        model: 'fallback'
-      };
-      
-      // Include debug information if in debug mode
-      if (debugMode) {
-        fallbackResult.debugInfo = debugInfo;
-      }
-      
-      return fallbackResult;
+    console.log(`🚨 BEDROCK FINAL FALLBACK: Using static response. Winner:`, winner, 'TotalParticipants:', totalParticipants);
+
+    const fallbackResult = {
+      summary: fallbackSummary,
+      summaryText: fallbackSummary,
+      discussionQuestions: [],
+      nextSteps: [],
+      fullResponse: fallbackSummary,
+      markdownResponse: null,   // present on every path
+      model: 'fallback'
+    };
+
+    // Include debug information if in debug mode
+    if (debugMode) {
+      fallbackResult.debugInfo = debugInfo;
     }
+
+    return fallbackResult;
   }
 }

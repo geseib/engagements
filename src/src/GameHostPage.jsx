@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import html2pdf from 'html2pdf.js';
 import webSocketClient from './WebSocketClient';
@@ -242,6 +242,9 @@ function GameHostPage() {
   const [aiSummaries, setAiSummaries] = useState({});
   const [currentAIInsights, setCurrentAIInsights] = useState(null);
   const [loadingAIInsights, setLoadingAIInsights] = useState(false);
+  // Watchdog for async AI-summary generation: if the aiSummaryReady WS push is
+  // missed (e.g. host WS reconnect), clear the spinner and re-fetch the now-persisted item.
+  const aiWatchdogRef = useRef(null);
   
   // Flash alerts for when all players have answered/voted
   const [showAllAnsweredAlert, setShowAllAnsweredAlert] = useState(false);
@@ -389,7 +392,31 @@ function GameHostPage() {
     }
   };
 
-  // Regenerate AI Summary with new generation
+  // Start/refresh the async-generation watchdog. If aiSummaryReady never arrives
+  // (missed WS push), clear the spinner after ~45s and re-fetch the persisted item.
+  const startAIWatchdog = (questionId) => {
+    if (aiWatchdogRef.current) clearTimeout(aiWatchdogRef.current);
+    aiWatchdogRef.current = setTimeout(() => {
+      console.warn('⏰ AI summary watchdog fired — re-fetching persisted summary');
+      fetchAISummary(questionId).then(summary => {
+        if (summary && (summary.summary || summary.markdownResponse)) {
+          setCurrentAIInsights({
+            summary: summary.summary,
+            discussionTopics: summary.discussionQuestions || [],
+            nextSteps: summary.nextSteps || [],
+            markdownResponse: summary.markdownResponse || null,
+            prompt: gameDebugMode ? summary.debugPrompt : undefined,
+            debugPrompt: gameDebugMode ? summary.debugPrompt : undefined,
+            debugProvenance: gameDebugMode ? summary.debugProvenance : undefined
+          });
+        }
+      }).finally(() => setLoadingAIInsights(false));
+    }, 45000);
+  };
+
+  // Regenerate AI Summary with new generation. The server now returns 202
+  // (generation runs async) and the completed summary arrives via the
+  // aiSummaryReady WebSocket event, which renders it. We only kick it off here.
   const handleRegenerateAISummary = async () => {
     const currentQuestionNum = gameState.match(/#(\d+)/)?.[1];
     if (!currentQuestionNum) {
@@ -400,36 +427,23 @@ function GameHostPage() {
     console.log('🔄 Regenerating AI Summary for question:', currentQuestionNum);
     setCurrentAIInsights(null); // Clear current insights to show loading
     setLoadingAIInsights(true);
-    
+    startAIWatchdog(currentQuestionNum);
+
     try {
       const debugParam = gameDebugMode ? '&debug=true' : '';
+      // Fire-and-forget: response is 202 {status:'generating'}; result comes via WS.
       const response = await fetch(`${API_BASE}games/${gameId}/ai-summary?questionId=${currentQuestionNum}&generateNew=true${debugParam}`);
-      
-      if (response.ok) {
-        const newSummary = await response.json();
-        setCurrentAIInsights({
-          summary: newSummary.summary,
-          summaryText: newSummary.summaryText,
-          discussionTopics: newSummary.discussionQuestions || [],
-          nextSteps: newSummary.nextSteps || [],
-          markdownResponse: newSummary.markdownResponse,
-          prompt: gameDebugMode ? newSummary.debugPrompt : undefined,
-          debugPrompt: gameDebugMode ? newSummary.debugPrompt : undefined,
-          debugProvenance: gameDebugMode ? newSummary.debugProvenance : undefined
-        });
-        // Also update the cached summaries
-        setAiSummaries(prev => ({
-          ...prev,
-          [currentQuestionNum]: newSummary
-        }));
-        console.log('✅ AI Summary regenerated successfully');
+      if (!response.ok && response.status !== 202) {
+        console.error('❌ Failed to trigger AI Summary regeneration. Status:', response.status);
+        setLoadingAIInsights(false);
+        if (aiWatchdogRef.current) clearTimeout(aiWatchdogRef.current);
       } else {
-        console.error('❌ Failed to regenerate AI Summary. Status:', response.status);
+        console.log('✅ AI Summary regeneration triggered (awaiting WebSocket completion)');
       }
     } catch (error) {
-      console.error('❌ Error regenerating AI Summary:', error);
-    } finally {
+      console.error('❌ Error triggering AI Summary regeneration:', error);
       setLoadingAIInsights(false);
+      if (aiWatchdogRef.current) clearTimeout(aiWatchdogRef.current);
     }
   };
 
@@ -511,14 +525,16 @@ Focus on actionable business strategy insights.`;
             });
             setLoadingAIInsights(false);
           } else {
-            // Trigger AI generation - WebSocket will notify us when done
+            // Trigger AI generation - WebSocket will notify us when done (server returns 202)
             console.log('🤖 Triggering AI generation, will wait for WebSocket notification...');
+            startAIWatchdog(questionId);
             fetch(`${API_BASE}games/${gameId}/ai-summary?questionId=${questionId}&generateNew=true`, {
               method: 'GET',
               headers: { 'Content-Type': 'application/json' }
             }).catch(error => {
               console.error('❌ Failed to trigger AI generation:', error);
               setLoadingAIInsights(false);
+              if (aiWatchdogRef.current) clearTimeout(aiWatchdogRef.current);
             });
           }
         });
@@ -668,6 +684,13 @@ Focus on actionable business strategy insights.`;
     // Set up WebSocket connection status callback
     webSocketClient.onConnectionStatusChange(setWsConnected);
 
+    // A4: reconcile authoritative state on every reconnect. The host getting
+    // stuck strands every player, so the same recovery wiring applies here.
+    webSocketClient.onReconnected(() => {
+      console.log('🔁 HOST: WS reconnected — restoring state');
+      restoreGameState();
+    });
+
     // Set up message handlers
     webSocketClient.onMessage('initialStateSync', (data) => {
       console.log('🔌 HOST: Received initial state sync notification:', data);
@@ -745,6 +768,7 @@ Focus on actionable business strategy insights.`;
 
     webSocketClient.onMessage('aiSummaryReady', (data) => {
       console.log('🔌 AI Summary ready notification:', data);
+      if (aiWatchdogRef.current) clearTimeout(aiWatchdogRef.current);
       // Fetch the AI summary from API
       if (data.questionId) {
         console.log(`🔌 Fetching AI summary for question ${data.questionId}`);
@@ -770,6 +794,13 @@ Focus on actionable business strategy insights.`;
           setLoadingAIInsights(false);
         });
       }
+    });
+
+    // Async generation failed on the worker — clear the spinner so it can't hang.
+    webSocketClient.onMessage('aiSummaryError', (data) => {
+      console.error('🔌 AI Summary generation failed:', data);
+      if (aiWatchdogRef.current) clearTimeout(aiWatchdogRef.current);
+      setLoadingAIInsights(false);
     });
 
     webSocketClient.onMessage('gameEnded', (data) => {
@@ -802,6 +833,7 @@ Focus on actionable business strategy insights.`;
       console.log(`🔌 HOST: Disconnecting WebSocket for game ${gameId}`);
       webSocketClient.disconnect();
       webSocketClient.onConnectionStatusChange(null);
+      webSocketClient.onReconnected(null);
       webSocketClient.offMessage('initialStateSync');
       webSocketClient.offMessage('playerJoined');
       webSocketClient.offMessage('playerLeft');
@@ -811,7 +843,27 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('playerVoted');
       webSocketClient.offMessage('votingStarted');
       webSocketClient.offMessage('aiSummaryReady');
+      webSocketClient.offMessage('aiSummaryError');
     };
+  }, [gameId, useWebSocket]);
+
+  // A4: resume handler for the host — same visibility/online/focus/pageshow
+  // resync as the player. A stuck host strands every player.
+  useEffect(() => {
+    if (!gameId || !useWebSocket) return;
+    const resync = () => { webSocketClient.ensureConnected(); restoreGameState(); };
+    const onVisible = () => { if (document.visibilityState === 'visible') resync(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', resync);
+    window.addEventListener('focus', resync);
+    window.addEventListener('pageshow', resync);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', resync);
+      window.removeEventListener('focus', resync);
+      window.removeEventListener('pageshow', resync);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId, useWebSocket]);
 
   // REMOVED: WebSocket mode monitoring - WebSocket always enabled

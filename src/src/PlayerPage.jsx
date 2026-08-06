@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import webSocketClient from './WebSocketClient';
 import IssueFab from './components/IssueFab';
 
@@ -75,6 +75,7 @@ function PlayerPage() {
   const [lastVoteInteraction, setLastVoteInteraction] = useState(0);
   const [isUserVoting, setIsUserVoting] = useState(false);
   const [rejoinedPlayer, setRejoinedPlayer] = useState(false);
+  const [rejoinPrompt, setRejoinPrompt] = useState(null); // { gameId, name } | null
   const [votingMode, setVotingMode] = useState('quick'); // 'quick' or 'detailed'
   const [playerScore, setPlayerScore] = useState(0);
   const [playerRanking, setPlayerRanking] = useState(null);
@@ -92,6 +93,29 @@ function PlayerPage() {
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
   const [useWebSocket, setUseWebSocket] = useState(true); // Always use WebSocket
+
+  // A3: monotonic phase guard — prevents a slow GET /state from clobbering a
+  // newer phase delivered via WebSocket (or vice versa). Accepts both the WS
+  // message spellings (RESULT#/END) and the server state spellings (RESULTS#/ENDED).
+  const lastRankRef = useRef(-1);
+  const stateRank = (s) => {
+    if (!s) return -1;
+    if (s === 'ENDED' || s === 'END') return Number.MAX_SAFE_INTEGER;
+    const m = s.match(/^(ASK|VOTE|RESULTS?)#(\d+)/);   // accepts RESULT# and RESULTS#
+    if (!m) return -1;                                  // CREATED/STARTED never overwrite a live phase
+    const phase = { ASK: 0, VOTE: 1, RESULT: 2, RESULTS: 2 }[m[1]];
+    return parseInt(m[2], 10) * 10 + phase;
+  };
+  const applyGameState = (next) => {
+    const r = stateRank(next);
+    if (r < lastRankRef.current) {
+      console.log(`⏮️ PLAYER: ignoring stale ${next}`);
+      return false;
+    }
+    lastRankRef.current = r;
+    setGameState(next);
+    return true;
+  };
 
   // Detect desktop screens to prevent mobile overlay behavior
   useEffect(() => {
@@ -127,23 +151,20 @@ function PlayerPage() {
         setNameInput(nameFromUrl);
         
         if (savedName === nameFromUrl) {
-          // Previously joined this game with this name
-          console.log(`✅ PLAYER: Auto-joining - name matches saved data`);
-          setPlayerName(nameFromUrl);
-          setJoined(true);
-          // Immediately check game state to load current question/voting/results
-          setTimeout(() => {
-            checkGameState(gameIdFromUrl, nameFromUrl);
-          }, 100);
+          // Previously joined this game with this name — confirm before rejoining
+          // instead of silently auto-joining (B2).
+          console.log(`✅ PLAYER: Saved name matches — staging rejoin prompt`);
+          setRejoinPrompt({ gameId: gameIdFromUrl, name: nameFromUrl });
         } else {
           // Try to join automatically
           console.log(`🔄 PLAYER: Auto-joining with URL name (not previously saved)`);
           attemptAutoJoin(gameIdFromUrl, nameFromUrl);
         }
       } else if (savedName) {
-        // No name in URL but we have saved name - pre-fill the form
+        // No name in URL but we have saved name - pre-fill the form and offer rejoin (B2)
         console.log(`💾 PLAYER: Pre-filling form with saved name: ${savedName}`);
         setNameInput(savedName);
+        setRejoinPrompt({ gameId: gameIdFromUrl, name: savedName });
       }
     } else {
       console.log(`🔗 PLAYER: No game ID in URL - showing manual join form`);
@@ -172,10 +193,10 @@ function PlayerPage() {
         setJoined(true);
         localStorage.setItem(`playerName_${gameId}`, name.trim());
         
-        // Check if auto-join was a rejoin
-        if (joinData.rejoined) {
+        // Check if auto-join was a rejoin (server sends isReconnection)
+        if (joinData.isReconnection || joinData.rejoined) {
           setRejoinedPlayer(true);
-          console.log(`🔄 PLAYER: Auto-rejoined with previous score: ${joinData.previousScore}`);
+          console.log(`🔄 PLAYER: Auto-rejoined existing player`);
           // Note: Vote restoration will happen automatically in checkGameState when entering voting phase
         }
         
@@ -242,6 +263,13 @@ function PlayerPage() {
     // Set up WebSocket connection status callback
     webSocketClient.onConnectionStatusChange(setWsConnected);
 
+    // A2: reconcile authoritative phase on every successful reconnect. Any
+    // ASK#→VOTE#→RESULTS# transition that fired while offline is caught here.
+    webSocketClient.onReconnected(() => {
+      console.log('🔁 PLAYER: WS reconnected — reconciling state');
+      checkGameState();
+    });
+
     // Initial state handler for reconnection/late joining
     webSocketClient.onMessage('initialStateSync', (data) => {
       console.log('🔌 PLAYER: Received initial state sync notification:', data);
@@ -263,9 +291,10 @@ function PlayerPage() {
       if (stateMessage && stateMessage.includes('ASK#')) {
         const questionNumber = stateMessage.split('ASK#')[1]; // Extract "001"
         console.log(`🎯 Player calling get_question for question ${questionNumber}`);
-        // Update game state first, then fetch question
-        setGameState(`ASK#${questionNumber}`);
-        fetchCurrentQuestion(questionNumber);
+        // Update game state first, then fetch question (guarded against stale races)
+        if (applyGameState(`ASK#${questionNumber}`)) {
+          fetchCurrentQuestion(questionNumber);
+        }
       } else {
         console.log('⚠️ Player received questionStarted without valid state format');
       }
@@ -278,13 +307,14 @@ function PlayerPage() {
       if (stateMessage && stateMessage.includes('VOTE#')) {
         const questionNumber = stateMessage.split('VOTE#')[1]; // Extract "001"
         console.log(`🗳️ Player calling voting for question ${questionNumber}`);
-        // Update game state first, then fetch voting data
-        setGameState(`VOTE#${questionNumber}`);
-        // Clear previous votes when starting new voting round
-        setVotes({ first: '', second: '', third: '' });
-        setHasVoted(false);
-        console.log('🔄 Cleared previous votes for new voting round');
-        checkGameState();
+        // Update game state first, then fetch voting data (guarded against stale races)
+        if (applyGameState(`VOTE#${questionNumber}`)) {
+          // Clear previous votes when starting new voting round
+          setVotes({ first: '', second: '', third: '' });
+          setHasVoted(false);
+          console.log('🔄 Cleared previous votes for new voting round');
+          checkGameState();
+        }
       } else {
         console.log('⚠️ Player received votingStarted without valid state format');
         // Fallback to checkGameState
@@ -310,6 +340,11 @@ function PlayerPage() {
       // We don't currently show AI summaries to players, but this is available
     });
 
+    // Parity with host: players don't render summaries, so just log the failure.
+    webSocketClient.onMessage('aiSummaryError', (data) => {
+      console.warn('🔌 Player received AI Summary error:', data);
+    });
+
     // Results ready handler for trivia and call-and-answer
     webSocketClient.onMessage('hostMessage', (data) => {
       if (data.messageType && data.messageType.startsWith('RESULT#')) {
@@ -328,17 +363,18 @@ function PlayerPage() {
       const questionNumber = data.questionId || data.questionNumber;
       if (questionNumber) {
         console.log(`🎯 PLAYER: Results ready for question ${questionNumber}, updating state to RESULTS#${questionNumber}`);
-        // Update local state to show results screen immediately
-        setGameState(`RESULTS#${String(questionNumber).padStart(3, '0')}`);
-        // Then fetch the actual results data
-        checkGameState();
+        // Update local state to show results screen immediately (guarded against stale races)
+        if (applyGameState(`RESULTS#${String(questionNumber).padStart(3, '0')}`)) {
+          // Then fetch the actual results data
+          checkGameState();
+        }
       }
     });
 
     // Game ended handler
     webSocketClient.onMessage('gameEnded', (data) => {
       console.log('🔌 Player received game ended notification:', data);
-      setGameState('ENDED');
+      applyGameState('ENDED');
       setShowGameEndModal(true);
     });
 
@@ -346,14 +382,16 @@ function PlayerPage() {
     console.log('🔌 PLAYER: Connecting WebSocket for real-time updates');
     webSocketClient.connect(gameId, playerName, false);
 
-    // Do initial state check when WebSocket connects
+    // Do a single explicit initial state check (onReconnected covers every
+    // subsequent reopen; it does NOT fire on the first open).
     console.log('🔌 PLAYER: WebSocket connecting, doing initial state check');
-    setTimeout(() => checkGameState(), 500);
+    checkGameState();
 
     return () => {
       console.log(`🔌 PLAYER: Disconnecting WebSocket for game ${gameId}`);
       webSocketClient.disconnect();
       webSocketClient.onConnectionStatusChange(null);
+      webSocketClient.onReconnected(null);
       webSocketClient.offMessage('initialStateSync');
       webSocketClient.offMessage('gameStateChanged');
       webSocketClient.offMessage('questionStarted');
@@ -361,10 +399,31 @@ function PlayerPage() {
       webSocketClient.offMessage('playerAnswered');
       webSocketClient.offMessage('playerVoted');
       webSocketClient.offMessage('aiSummaryReady');
+      webSocketClient.offMessage('aiSummaryError');
       webSocketClient.offMessage('hostMessage');
       webSocketClient.offMessage('resultsReady');
       webSocketClient.offMessage('gameEnded');
     };
+  }, [gameId, playerName, joined, useWebSocket]);
+
+  // A2: resume handler — covers half-open sockets (phone lock) and backgrounded
+  // mobile tabs. ensureConnected() reconnects a dead socket; checkGameState()
+  // reconciles the phase. checkGameState is idempotent so concurrent events converge.
+  useEffect(() => {
+    if (!gameId || !playerName || !joined || !useWebSocket) return;
+    const resync = () => { webSocketClient.ensureConnected(); checkGameState(); };
+    const onVisible = () => { if (document.visibilityState === 'visible') resync(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', resync);
+    window.addEventListener('focus', resync);
+    window.addEventListener('pageshow', resync);   // iOS Safari bfcache restore
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', resync);
+      window.removeEventListener('focus', resync);
+      window.removeEventListener('pageshow', resync);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId, playerName, joined, useWebSocket]);
 
   // Note: Removed auto-save localStorage functionality - now using server-side partial votes
@@ -532,10 +591,15 @@ function PlayerPage() {
       }
       
       console.log(`🔄 PLAYER: Game state is ${serverGameState}`);
-      
-      // Set the game state directly (no mapping needed)
-      setGameState(serverGameState);
-      
+
+      // Set the game state through the monotonic guard (A3). If this HTTP
+      // response is stale relative to a newer WS-delivered phase, skip it and
+      // all its follow-up loads so we never flash backward.
+      if (!applyGameState(serverGameState)) {
+        console.log('⏮️ PLAYER: checkGameState result is stale — skipping follow-up loads');
+        return;
+      }
+
       // Handle different game states
       if (serverGameState.startsWith('ASK#')) {
         // Extract question number from ASK#001 format
@@ -569,9 +633,8 @@ function PlayerPage() {
         await loadResultsData(questionNumber);
         
       } else {
-        // CREATED, STARTED, or other states
+        // CREATED, STARTED, or other states (gameState already set via applyGameState)
         console.log(`⏳ PLAYER: Game in ${serverGameState} state`);
-        setGameState(serverGameState);
         setCurrentQuestion(null);
         setAnswers([]);
         setHasAnswered(false);
@@ -941,10 +1004,10 @@ function PlayerPage() {
       setJoined(true);
       localStorage.setItem(`playerName_${gameId}`, nameInput.trim());
       
-      // Check if this was a rejoin
-      if (successData.rejoined) {
+      // Check if this was a rejoin (server sends isReconnection)
+      if (successData.isReconnection || successData.rejoined) {
         setRejoinedPlayer(true);
-        console.log(`🔄 PLAYER: Rejoined successfully with previous score: ${successData.previousScore}`);
+        console.log(`🔄 PLAYER: Rejoined successfully`);
         // Note: Vote restoration will happen automatically in checkGameState when entering voting phase
       }
       
@@ -992,8 +1055,8 @@ function PlayerPage() {
         setNeedsAccessCode(false);
         localStorage.setItem(`playerName_${gameId}`, nameInput.trim());
         
-        // Check if this was a rejoin
-        if (successData.rejoined) {
+        // Check if this was a rejoin (server sends isReconnection)
+        if (successData.isReconnection || successData.rejoined) {
           setRejoinedPlayer(true);
         }
         
@@ -1234,6 +1297,30 @@ function PlayerPage() {
     setShowGameEndModal(false);
   };
 
+  // B2: rejoin prompt handlers
+  const handleRejoinConfirm = () => {
+    if (!rejoinPrompt) return;
+    const { gameId: gid, name } = rejoinPrompt;
+    console.log(`✅ PLAYER: Rejoining game ${gid} as ${name}`);
+    setPlayerName(name);
+    setJoined(true);
+    localStorage.setItem(`playerName_${gid}`, name);
+    lastRankRef.current = -1; // fresh phase tracking for this session
+    setRejoinPrompt(null);
+    // Restore the player's place (checkPlayerAnswer/checkPlayerVote guards
+    // prevent re-answering/re-voting).
+    setTimeout(() => checkGameState(gid, name), 100);
+  };
+
+  const handleRejoinDecline = () => {
+    if (!rejoinPrompt) return;
+    console.log(`🙅 PLAYER: Declining rejoin — joining as someone else`);
+    localStorage.removeItem(`playerName_${rejoinPrompt.gameId}`);
+    setNameInput('');
+    setPlayerName('');
+    setRejoinPrompt(null);
+  };
+
   // Detailed voting component
   const DetailedVotingMode = ({ answers, votes, onVoteChange, onSubmitVotes, playerName, requiredVotes }) => {
     const handleVoteClick = (answerIndex, position) => {
@@ -1306,6 +1393,31 @@ function PlayerPage() {
       </div>
     );
   };
+
+  // Rejoin prompt (B2) — shown before the join screen when a saved identity is
+  // detected, replacing the previous silent auto-join.
+  if (!joined && rejoinPrompt) {
+    return (
+      <div className="player-outer-container-full">
+        <div className="player-container">
+          <div className="join-screen">
+            <h1>Welcome back!</h1>
+            <div className="game-info">
+              <p>Rejoin game <strong>{rejoinPrompt.gameId}</strong> as <strong>{rejoinPrompt.name}</strong>?</p>
+            </div>
+            <div className="join-form">
+              <button type="button" className="btn-primary btn-large" onClick={handleRejoinConfirm}>
+                Rejoin as {rejoinPrompt.name}
+              </button>
+              <button type="button" className="btn-secondary btn-large" onClick={handleRejoinDecline}>
+                Join as someone else
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Join screen
   if (!joined) {
