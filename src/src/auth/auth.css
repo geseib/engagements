@@ -4,7 +4,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary);
   position: relative;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
@@ -138,8 +138,8 @@
 
 .form-input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(27, 41, 66, 0.1);
 }
 
 .form-input.error {
@@ -306,14 +306,14 @@
 }
 
 .auth-button.primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary);
   color: white;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 12px rgba(27, 41, 66, 0.3);
 }
 
 .auth-button.primary:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 6px 16px rgba(27, 41, 66, 0.4);
 }
 
 .auth-button.secondary {
@@ -380,7 +380,7 @@
 .link-button {
   background: none;
   border: none;
-  color: #667eea;
+  color: var(--primary);
   cursor: pointer;
   font-size: 14px;
   text-decoration: none;
@@ -389,7 +389,7 @@
 }
 
 .link-button:hover:not(:disabled) {
-  color: #5a67d8;
+  color: var(--primary-deep);
   text-decoration: underline;
 }
 

@@ -29,7 +29,7 @@ function ProtectedRoute({ children, requireAdmin = false }) {
           width: '32px',
           height: '32px',
           border: '3px solid #e2e8f0',
-          borderTop: '3px solid #667eea',
+          borderTop: '3px solid var(--primary)',
           borderRadius: '50%',
           animation: 'spin 1s linear infinite'
         }}></div>
@@ -68,7 +68,7 @@ function ProtectedRoute({ children, requireAdmin = false }) {
           onClick={() => window.location.href = '/'}
           style={{
             padding: '12px 24px',
-            background: '#667eea',
+            background: 'var(--primary)',
             color: 'white',
             border: 'none',
             borderRadius: '8px',
@@ -103,7 +103,7 @@ function ProtectedRoute({ children, requireAdmin = false }) {
             onClick={() => window.location.href = '/play'}
             style={{
               padding: '12px 24px',
-              background: '#667eea',
+              background: 'var(--primary)',
               color: 'white',
               border: 'none',
               borderRadius: '8px',
@@ -121,8 +121,8 @@ function ProtectedRoute({ children, requireAdmin = false }) {
             style={{
               padding: '12px 24px',
               background: 'transparent',
-              color: '#667eea',
-              border: '2px solid #667eea',
+              color: 'var(--primary)',
+              border: '2px solid var(--primary)',
               borderRadius: '8px',
               cursor: 'pointer'
             }}

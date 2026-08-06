@@ -92,24 +92,24 @@ const WavelengthWordCloud = ({ answers, promptWord, gameState }) => {
     
     svg.attr('width', width).attr('height', height);
 
-    // Engage theme colors
+    // Warm Summit palette (token values as literals — d3 fills are data-driven)
     const engageColors = [
-      '#667eea', // Primary indigo
-      '#764ba2', // Primary purple
-      '#8b5cf6', // Violet
-      '#a855f7', // Light purple
-      '#6366f1', // Indigo variation
-      '#818cf8', // Light indigo
-      '#c084fc', // Light violet
-      '#9333ea', // Deep purple
-      '#7c3aed', // Mid purple
-      '#5b21b6'  // Dark purple
+      '#F6A94C', // amber  (--primary)
+      '#7CA7E6', // periwinkle (--secondary)
+      '#4FB286', // teal   (--success)
+      '#C77B4A', // deep amber (--primary-deep)
+      '#F4EDE4', // warm paper-white (--text)
+      '#9BA8BE', // slate muted (--muted)
+      '#B4794A', // bronze
+      '#C0C6D0', // silver
+      '#2E4262', // ridge-back
+      '#25375A'  // surface-2
     ];
 
     const color = (d, i) => {
-      // Prompt word gets primary color
-      if (d.isPrompt) return '#667eea';
-      // Other words cycle through theme colors
+      // Prompt word gets the hero amber accent
+      if (d.isPrompt) return '#F6A94C';
+      // Other words cycle through the warm palette
       return engageColors[i % engageColors.length];
     };
 
@@ -249,8 +249,8 @@ const WavelengthWordCloud = ({ answers, promptWord, gameState }) => {
             {/* Show all words chronologically */}
             <details style={{ marginTop: '16px' }}>
               <summary style={{ 
-                cursor: 'pointer', 
-                color: '#667eea',
+                cursor: 'pointer',
+                color: 'var(--secondary)',
                 fontSize: '14px',
                 fontWeight: '500'
               }}>

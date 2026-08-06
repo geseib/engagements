@@ -104,8 +104,8 @@
 }
 
 .search-input-group:focus-within {
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(27, 41, 66, 0.1);
 }
 
 .search-input {
@@ -123,7 +123,7 @@
 
 .search-button {
   padding: 12px 16px;
-  background: #667eea;
+  background: var(--primary);
   color: white;
   border: none;
   cursor: pointer;
@@ -132,7 +132,7 @@
 }
 
 .search-button:hover:not(:disabled) {
-  background: #5a67d8;
+  background: var(--primary-deep);
 }
 
 .search-button:disabled {
@@ -165,8 +165,8 @@
 }
 
 .filter-tab.active {
-  background: #667eea;
-  border-color: #667eea;
+  background: var(--primary);
+  border-color: var(--primary);
   color: white;
 }
 
@@ -227,7 +227,7 @@
 }
 
 .user-email {
-  color: #667eea;
+  color: var(--primary);
   font-size: 14px;
   font-family: monospace;
   margin-bottom: 2px;
@@ -536,7 +536,7 @@
   width: 32px;
   height: 32px;
   border: 3px solid #e2e8f0;
-  border-top: 3px solid #667eea;
+  border-top: 3px solid var(--primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 16px;
@@ -575,7 +575,7 @@
 
 .load-more-button {
   padding: 12px 24px;
-  background: #667eea;
+  background: var(--primary);
   color: white;
   border: none;
   border-radius: 8px;
@@ -586,7 +586,7 @@
 }
 
 .load-more-button:hover:not(:disabled) {
-  background: #5a67d8;
+  background: var(--primary-deep);
   transform: translateY(-1px);
 }
 
@@ -691,7 +691,7 @@
 .search-button:focus,
 .filter-tab:focus,
 .load-more-button:focus {
-  outline: 2px solid #667eea;
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 

@@ -82,7 +82,7 @@
 
 .help-tip-box {
   background: #f0fdf4;
-  border-left: 4px solid #10b981;
+  border-left: 4px solid var(--success);
 }
 
 .help-info-box h4, .help-warning-box h4, .help-tip-box h4 {
@@ -126,7 +126,7 @@
 /* Inline Code */
 code {
   background: #f3f4f6;
-  color: #ef4444;
+  color: var(--danger);
   padding: 2px 6px;
   border-radius: 4px;
   font-family: 'Monaco', 'Consolas', 'Courier New', monospace;

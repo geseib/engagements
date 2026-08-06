@@ -13,7 +13,7 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary);
   border: none;
   color: white;
   font-size: 20px;
@@ -33,7 +33,7 @@
 
 .issue-fab-main.active {
   transform: rotate(45deg);
-  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+  background: linear-gradient(135deg, var(--danger) 0%, #ee5a52 100%);
 }
 
 .issue-fab-menu {

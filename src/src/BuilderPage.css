@@ -659,7 +659,7 @@
 
 /* Enhanced button styles for scenario builder */
 .btn-ai-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary);
   color: white;
   border: none;
   padding: 12px 24px;
@@ -667,12 +667,12 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 2px 8px rgba(27, 41, 66, 0.3);
 }
 
 .btn-ai-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 4px 12px rgba(27, 41, 66, 0.4);
 }
 
 /* Quantity Controls */
@@ -842,12 +842,12 @@
 }
 
 .option-editor input.correct-answer {
-  border-color: #28a745;
+  border-color: var(--success);
   background: #f8fff9;
 }
 
 .correct-indicator {
-  color: #28a745;
+  color: var(--success);
   font-weight: bold;
   font-size: 14px;
 }
@@ -868,9 +868,9 @@
 }
 
 .set-correct-btn.active {
-  background: #28a745;
+  background: var(--success);
   color: white;
-  border-color: #28a745;
+  border-color: var(--success);
 }
 
 .trivia-navigation {
@@ -1047,7 +1047,7 @@
 }
 
 .add-option-btn {
-  background: #28a745;
+  background: var(--success);
   color: white;
   border: none;
   padding: 8px 16px;
@@ -1058,7 +1058,7 @@
 }
 
 .remove-option-btn {
-  background: #dc3545;
+  background: var(--danger);
   color: white;
   border: none;
   padding: 4px 8px;
@@ -1218,7 +1218,7 @@
 }
 
 .required-indicator {
-  color: #dc3545;
+  color: var(--danger);
   font-weight: bold;
   margin-left: 5px;
 }
