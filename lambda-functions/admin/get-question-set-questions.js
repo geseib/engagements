@@ -67,6 +67,8 @@ exports.handler = async (event) => {
       title: item.title || item.Title,
       questionDetail: item.questionDetail || item.QuestionDetail || item.detail || item.Detail,
       category: item.category || item.Category,
+      school: item.school || item.School || '',
+      image: item.image || item.Image || '', // Optional artwork URL ("Art Title" rounds)
       // Trivia question fields
       optionA: item.optionA || item.OptionA,
       optionB: item.optionB || item.OptionB,

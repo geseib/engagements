@@ -44,6 +44,10 @@ const getPlayerInstructionText = (customInstruction, currentQuestion) => {
   if (customInstruction) {
     return customInstruction;
   }
+  // "Art Title" rounds carry an image and ask players to invent a title
+  if (currentQuestion && currentQuestion.image) {
+    return 'Give this masterpiece your own creative title!';
+  }
   // Default fallback
   return 'How could you adapt this lesson to your work, project, or team?';
 };
@@ -1584,11 +1588,30 @@ function PlayerPage() {
                 <div className="school-name">{currentQuestion.school}</div>
               )}
             </div>
-            {gameType === 'call-and-answer' ? (
+            {gameType === 'call-and-answer' && currentQuestion.image ? (
+              /* "Art Title" round: the artwork is the prompt, so lead with the title
+                 and show the piece. Detail is normally blank so it does not spoil it. */
+              <>
+                <div className="lesson-title">
+                  {currentQuestion.title || currentQuestion.question}
+                </div>
+                <img
+                  src={currentQuestion.image}
+                  alt={currentQuestion.title || 'Artwork'}
+                  className="artwork-image"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+                {currentQuestion.detail && (
+                  <div className="lesson-detail">
+                    {currentQuestion.detail}
+                  </div>
+                )}
+              </>
+            ) : gameType === 'call-and-answer' ? (
               <>
                 {/* Only show subtitle if title is different from detail and title is reasonably short */}
-                {currentQuestion.title && 
-                 currentQuestion.title !== (currentQuestion.detail || currentQuestion.question) && 
+                {currentQuestion.title &&
+                 currentQuestion.title !== (currentQuestion.detail || currentQuestion.question) &&
                  currentQuestion.title.length < 100 && (
                   <div className="lesson-subtitle">
                     {currentQuestion.title}
@@ -1723,6 +1746,7 @@ function PlayerPage() {
                             placeholder={currentQuestion?.customInstructions || 
                               (gameType === 'wavelength' ? 'Enter up to 10 words or short phrases that come to mind...' :
                                gameType === 'poll' ? 'Share your opinion...' :
+                               currentQuestion?.image ? 'Enter your creative title for this masterpiece...' :
                                'Describe how you would apply this lesson to your work, project, or team...')}
                             className="mobile-answer-input"
                             rows={12}
@@ -1748,6 +1772,7 @@ function PlayerPage() {
                     placeholder={currentQuestion?.customInstructions || 
                       (gameType === 'wavelength' ? 'Enter up to 10 words or short phrases that come to mind...' :
                        gameType === 'poll' ? 'Share your opinion...' :
+                       currentQuestion?.image ? 'Enter your creative title for this masterpiece...' :
                        'Describe how you would apply this lesson to your work, project, or team...')}
                     className="answer-input"
                     rows={isDesktop ? 6 : 4}
@@ -1767,9 +1792,13 @@ function PlayerPage() {
               <div className="answer-submitted">
                 <h3>
                   <Icon name="CheckCircle" weight="duotone" size={24} color="var(--success)" />
+                  {/* Art Title rounds are call-and-answer with an image, so the
+                      image check sits after the real game types and before the
+                      generic call-and-answer wording. */}
                   {gameType === 'trivia' ? 'Answer Submitted!' :
                    gameType === 'wavelength' ? 'Words Submitted!' :
-                   gameType === 'poll' ? 'Response Submitted!' : 'Application Submitted!'}
+                   gameType === 'poll' ? 'Response Submitted!' :
+                   currentQuestion?.image ? 'Title Submitted!' : 'Application Submitted!'}
                 </h3>
                 <p>Waiting for other players&hellip;</p>
               </div>
@@ -1781,14 +1810,28 @@ function PlayerPage() {
           <div className="voting-screen">
             <h2>
               <Icon name="ListChecks" weight="duotone" size={26} color="var(--primary)" />
-              {gameType === 'poll' ? 'Vote for the Best Response' : 'Vote for the Best Applications'}
+              {currentQuestion?.image ? 'Vote for the Best Title'
+                : gameType === 'poll' ? 'Vote for the Best Response'
+                : 'Vote for the Best Applications'}
             </h2>
             <p>
-              {gameType === 'poll'
-                ? 'Which response best captures where the room should land?'
-                : 'Which applications would be most valuable for teams to implement?'}
+              {currentQuestion?.image
+                ? 'Which title best captures this masterpiece?'
+                : gameType === 'poll'
+                  ? 'Which response best captures where the room should land?'
+                  : 'Which applications would be most valuable for teams to implement?'}
             </p>
-            
+
+            {currentQuestion?.image && (
+              <img
+                src={currentQuestion.image}
+                alt={currentQuestion.title || 'Artwork'}
+                className="artwork-image artwork-image-voting"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+            )}
+
+
             {!hasVoted ? (
               <>
                 {/* Voting Mode Toggle */}

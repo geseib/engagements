@@ -79,7 +79,8 @@ exports.handler = async (event) => {
       // Copy all question fields
       ...question,
       // Override with standardized fields
-      id: nextQuestionNum
+      id: nextQuestionNum,
+      image: question.image || question.Image || '' // Optional artwork URL ("Art Title" rounds)
     };
     
     // Add the question to the game

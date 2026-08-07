@@ -125,6 +125,7 @@ exports.handler = async (event) => {
     let detailIndex = getColumnIndex('Detail_lesson'); // Legacy support
     let schoolIndex = getColumnIndex('School');
     let customInstructionIndex = getColumnIndex('CustomInstruction');
+    let imageIndex = getColumnIndex('Image'); // Optional artwork/image URL ("Art Title" sets)
 
     // Engagement-type specific columns
     let correctAnswerIndex = -1;
@@ -162,11 +163,17 @@ exports.handler = async (event) => {
     if (detailIndex === -1) detailIndex = headers.findIndex(h => h.toLowerCase().includes('detail') || h.toLowerCase().includes('lesson'));
     if (schoolIndex === -1) schoolIndex = headers.findIndex(h => h.toLowerCase().includes('school'));
     if (customInstructionIndex === -1) customInstructionIndex = headers.findIndex(h => h.toLowerCase().includes('instruction'));
+    // Optional Image column: Image / ImageUrl / Artwork / Picture
+    if (imageIndex === -1) imageIndex = headers.findIndex(h => {
+      const hl = h.toLowerCase();
+      return hl.includes('image') || hl.includes('artwork') || hl.includes('picture');
+    });
 
     console.log('📋 Column Mapping:');
     console.log(`  Category: ${categoryIndex >= 0 ? headers[categoryIndex] : 'NOT FOUND'} (index: ${categoryIndex})`);
     console.log(`  Title: ${titleIndex >= 0 ? headers[titleIndex] : 'NOT FOUND'} (index: ${titleIndex})`);
     console.log(`  Detail: ${detailIndex >= 0 ? headers[detailIndex] : 'NOT FOUND'} (index: ${detailIndex})`);
+    console.log(`  Image: ${imageIndex >= 0 ? headers[imageIndex] : 'NOT FOUND'} (index: ${imageIndex})`);
 
     // Check required columns
     if (categoryIndex === -1 || titleIndex === -1) {
@@ -202,7 +209,8 @@ exports.handler = async (event) => {
         const legacyDetail = detailIndex >= 0 ? values[detailIndex]?.replace(/"/g, '')?.trim() || '' : '';
         const school = schoolIndex >= 0 ? values[schoolIndex]?.replace(/"/g, '')?.trim() || '' : '';
         const questionCustomInstruction = customInstructionIndex >= 0 ? values[customInstructionIndex]?.replace(/"/g, '')?.trim() || '' : '';
-        
+        const image = imageIndex >= 0 ? values[imageIndex]?.replace(/"/g, '')?.trim() || '' : '';
+
         // Use new fields if available, otherwise fall back to legacy
         const finalQuestionDetail = questionDetail || legacyDetail || ''; // Use question detail or legacy detail for trivia
         const finalAnswerDetails = answerDetails || ''; // Use answer details for additional info
@@ -215,6 +223,7 @@ exports.handler = async (event) => {
             Detail: finalQuestionDetail, // For trivia, this should be the question detail/explanation
             Category: category,
             School: school,
+            Image: image, // Optional artwork URL; empty for ordinary text questions
             // Use per-question custom instruction if available, otherwise use set-level custom instructions
             CustomInstructions: questionCustomInstruction || customInstructions?.trim() || '',
             Active: true,
@@ -362,6 +371,7 @@ exports.handler = async (event) => {
         Detail: question.Detail || '',
         Category: question.Category,
         School: question.School || '',
+        Image: question.Image || '', // Optional artwork URL
         CustomInstructions: question.CustomInstructions || '',
         OrderInCategory: categoryRelativeNumber,
         QuestionNumber: question.QuestionNumber || categoryCounters[categoryId], // Use CSV value or category counter
