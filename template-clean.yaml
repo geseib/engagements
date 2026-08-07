@@ -2279,6 +2279,17 @@ Outputs:
     Export:
       Name: !Sub '${StackName}-frontend-url'
 
+  # The deploy buildspecs look this up to invalidate the CDN after `s3 sync`.
+  # Without it the lookup returned "" and `aws cloudfront create-invalidation
+  # --distribution-id` failed with exit 252, marking otherwise-successful dev
+  # deploys as Failed. Conditional because the distribution itself is HasDomain.
+  CloudFrontDistributionId:
+    Condition: HasDomain
+    Description: CloudFront distribution ID (used to invalidate cache on deploy)
+    Value: !Ref CloudFrontDistribution
+    Export:
+      Name: !Sub '${StackName}-cloudfront-distribution-id'
+
   # Database
   GameTableName:
     Description: DynamoDB table name

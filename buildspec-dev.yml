@@ -44,7 +44,11 @@ phases:
 
       - echo "Invalidating CloudFront cache..."
       - DISTRIBUTION_ID=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDistributionId`].OutputValue' --output text)
-      - aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths '/*'
+      - echo "CloudFront distribution ID is $DISTRIBUTION_ID"
+      # Same guard test/prod already had. Without it an absent output yields "",
+      # `--distribution-id` gets no argument, and the CLI exits 252 — failing a
+      # deploy whose backend and S3 sync both already succeeded.
+      - 'if [ -n "$DISTRIBUTION_ID" ] && [ "$DISTRIBUTION_ID" != "None" ]; then aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths "/*"; else echo "Skipping CloudFront invalidation - distribution ID not found"; fi'
 
       - echo "Deployment complete!"
 
