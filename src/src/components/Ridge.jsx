@@ -1,4 +1,4 @@
-import { useId } from "react";
+import React, { useId } from "react";
 
 /**
  * Warm Summit mountain motif (design spec §4).

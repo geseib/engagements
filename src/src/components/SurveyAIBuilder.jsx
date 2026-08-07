@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { postGenerationBatch } from '../utils/aiBatchClient';
+import Icon from './Icon';
 
 const API_BASE = window.API_BASE;
 
@@ -31,7 +32,7 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
 
   const handleConfigSubmit = async () => {
     setIsGenerating(true);
-    setGenerationStatus('🤖 Generating comprehensive survey with AI...');
+    setGenerationStatus('Generating comprehensive survey with AI...');
     setStep(2);
 
     try {
@@ -55,11 +56,11 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
       });
 
       setGeneratedSurvey(result.survey);
-      setGenerationStatus(`✅ Generated survey with ${result.survey.questions.length} questions successfully`);
+      setGenerationStatus(`Generated survey with ${result.survey.questions.length} questions successfully`);
       setCurrentQuestionIndex(0);
     } catch (error) {
       console.error('AI survey generation error:', error);
-      setGenerationStatus(`❌ Generation failed: ${error.message}`);
+      setGenerationStatus(`Generation failed: ${error.message}`);
     } finally {
       setIsGenerating(false);
     }
@@ -210,7 +211,7 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
                       className="remove-option-btn"
                       onClick={() => removeOption(index, optionIndex)}
                     >
-                      ✕
+                      <Icon name="X" weight="bold" size={16} color="currentColor" />
                     </button>
                   )}
                 </div>
@@ -341,8 +342,8 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
       <div className="modal-overlay" onClick={onClose}></div>
       <div className="modal-content survey-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>📋 AI Survey Builder</h2>
-          <button className="close-button" onClick={onClose}>✕</button>
+          <h2><Icon name="ClipboardText" weight="bold" size={16} color="currentColor" /> AI Survey Builder</h2>
+          <button className="close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 
         <div className="modal-body">
@@ -496,7 +497,7 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
                       onClick={() => navigateQuestion('prev')}
                       disabled={currentQuestionIndex === 0}
                     >
-                      ← Previous
+                      <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Previous
                     </button>
                     
                     <div className="question-counter">
@@ -509,7 +510,7 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
                       onClick={() => navigateQuestion('next')}
                       disabled={currentQuestionIndex === generatedSurvey.questions.length - 1}
                     >
-                      Next →
+                      Next <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" />
                     </button>
                   </div>
 
@@ -553,10 +554,10 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
 
                   <div className="survey-actions">
                     <button className="btn-secondary" onClick={handleExportJSON}>
-                      📄 Export JSON
+                      <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export JSON
                     </button>
                     <button className="btn-primary" onClick={handleLoadIntoSystem}>
-                      📥 Load into System
+                      <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load into System
                     </button>
                   </div>
                 </div>
@@ -564,7 +565,7 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
                 <div className="generation-error">
                   <p>{generationStatus}</p>
                   <button className="btn-secondary" onClick={() => setStep(1)}>
-                    ← Back to Configuration
+                    <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
                   </button>
                 </div>
               )}
@@ -583,14 +584,14 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
                 onClick={handleConfigSubmit}
                 disabled={!surveyConfig.title.trim() || !surveyConfig.topic.trim()}
               >
-                🤖 Generate Survey
+                <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> Generate Survey
               </button>
             </>
           )}
           {step === 2 && !isGenerating && generatedSurvey && (
             <>
               <button className="btn-secondary" onClick={() => setStep(1)}>
-                ← Back to Configuration
+                <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
               </button>
               <button className="btn-secondary" onClick={onClose}>
                 Cancel

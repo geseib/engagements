@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
 import './auth.css';
+import Icon from '../components/Icon';
 
 const RegisterForm = ({ onToggleMode, onSuccess }) => {
   const [formData, setFormData] = useState({
@@ -195,7 +196,7 @@ const RegisterForm = ({ onToggleMode, onSuccess }) => {
       <form onSubmit={handleSubmit} className="auth-form">
         {error && (
           <div className="auth-error" role="alert">
-            <i className="error-icon">⚠️</i>
+            <i className="error-icon"><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /></i>
             <span>{error}</span>
           </div>
         )}
@@ -266,7 +267,9 @@ const RegisterForm = ({ onToggleMode, onSuccess }) => {
               disabled={isSubmitting}
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
-              {showPassword ? '👁️‍🗨️' : '👁️'}
+              {showPassword
+                ? <Icon name="EyeSlash" weight="bold" size={18} />
+                : <Icon name="Eye" weight="bold" size={18} />}
             </button>
           </div>
           

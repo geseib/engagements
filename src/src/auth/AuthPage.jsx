@@ -7,6 +7,7 @@ import ForgotPasswordForm from './ForgotPasswordForm';
 import PendingApproval from './PendingApproval';
 import PasswordChangeForm from './PasswordChangeForm';
 import './auth.css';
+import Icon from '../components/Icon';
 
 const AuthPage = ({ onAuthSuccess, onCancel }) => {
   // Check URL parameters for initial mode and error messages
@@ -133,7 +134,7 @@ const AuthPage = ({ onAuthSuccess, onCancel }) => {
               className="auth-close"
               aria-label="Close authentication"
             >
-              ✕
+              <Icon name="X" weight="bold" size={16} color="currentColor" />
             </button>
           )}
         </div>
@@ -183,15 +184,15 @@ const AuthPage = ({ onAuthSuccess, onCancel }) => {
         <div className="auth-page-footer">
           <div className="feature-highlights">
             <div className="feature-item">
-              <div className="feature-icon">🎯</div>
+              <div className="feature-icon"><Icon name="Target" weight="duotone" size={16} color="var(--primary)" /></div>
               <span>Interactive Trivia & Polls</span>
             </div>
             <div className="feature-item">
-              <div className="feature-icon">📊</div>
+              <div className="feature-icon"><Icon name="ChartBar" weight="duotone" size={16} color="var(--primary)" /></div>
               <span>Real-time Results</span>
             </div>
             <div className="feature-item">
-              <div className="feature-icon">🤝</div>
+              <div className="feature-icon"><Icon name="Handshake" weight="duotone" size={16} color="var(--primary)" /></div>
               <span>Team Collaboration</span>
             </div>
           </div>

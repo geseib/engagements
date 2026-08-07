@@ -1,6 +1,8 @@
 import React, { useState, useRef } from 'react';
 import './FileUploadPrompt.css';
 import { authFetch } from '../auth/authFetch';
+import Icon from './Icon';
+import StatusMessage from './StatusMessage';
 
 function FileUploadPrompt({ 
   onContentExtracted, 
@@ -23,20 +25,20 @@ function FileUploadPrompt({
     // Validate file type
     const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
     if (!acceptedFormats.includes(fileExtension)) {
-      setUploadStatus(`❌ Invalid file type. Accepted formats: ${acceptedFormats.join(', ')}`);
+      setUploadStatus(`Invalid file type. Accepted formats: ${acceptedFormats.join(', ')}`);
       return;
     }
 
     // Validate file size with Base64 overhead warning
     const estimatedBase64Size = Math.ceil(file.size * 1.37); // Base64 is ~37% larger
     if (file.size > maxFileSize) {
-      setUploadStatus(`❌ File too large. Maximum size: ${(maxFileSize / 1024 / 1024).toFixed(1)}MB (${file.name}: ${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+      setUploadStatus(`File too large. Maximum size: ${(maxFileSize / 1024 / 1024).toFixed(1)}MB (${file.name}: ${(file.size / 1024 / 1024).toFixed(1)}MB)`);
       return;
     }
     
     // Warn about large files that might fail due to Base64 overhead
     if (estimatedBase64Size > 6 * 1024 * 1024) { // 6MB Lambda limit
-      setUploadStatus(`⚠️ Large file warning: ${(file.size / 1024 / 1024).toFixed(1)}MB file will become ~${(estimatedBase64Size / 1024 / 1024).toFixed(1)}MB when processed. This may fail due to Lambda limits.`);
+      setUploadStatus(`Large file warning: ${(file.size / 1024 / 1024).toFixed(1)}MB file will become ~${(estimatedBase64Size / 1024 / 1024).toFixed(1)}MB when processed. This may fail due to Lambda limits.`);
     }
 
     setSelectedFile(file);
@@ -48,7 +50,7 @@ function FileUploadPrompt({
     if (!selectedFile) return;
 
     setIsProcessing(true);
-    setUploadStatus('📄 Processing file...');
+    setUploadStatus('Processing file...');
 
     try {
       const fileExtension = selectedFile.name.split('.').pop().toLowerCase();
@@ -57,7 +59,7 @@ function FileUploadPrompt({
       if (fileExtension === 'txt' || fileExtension === 'md') {
         const content = await readFileAsText(selectedFile);
         setExtractedContent(content);
-        setUploadStatus('✅ File processed successfully');
+        setUploadStatus('File processed successfully');
         if (onContentExtracted) {
           onContentExtracted(content);
         }
@@ -82,17 +84,17 @@ function FileUploadPrompt({
 
         if (response.ok) {
           setExtractedContent(result.text);
-          setUploadStatus('✅ File processed successfully');
+          setUploadStatus('File processed successfully');
           if (onContentExtracted) {
             onContentExtracted(result.text);
           }
         } else {
-          setUploadStatus(`❌ Processing failed: ${result.error || 'Unknown error'}`);
+          setUploadStatus(`Processing failed: ${result.error || 'Unknown error'}`);
         }
       }
     } catch (error) {
       console.error('File processing error:', error);
-      setUploadStatus(`❌ Error: ${error.message}`);
+      setUploadStatus(`Error: ${error.message}`);
     } finally {
       setIsProcessing(false);
     }
@@ -132,7 +134,7 @@ function FileUploadPrompt({
   const useContent = () => {
     if (extractedContent && onContentExtracted) {
       onContentExtracted(extractedContent);
-      setUploadStatus('✅ Content added to prompt');
+      setUploadStatus('Content added to prompt');
     }
   };
 
@@ -150,7 +152,7 @@ function FileUploadPrompt({
             id="file-upload-input"
           />
           <label htmlFor="file-upload-input" className="file-input-label">
-            📁 Choose File
+            <Icon name="Folder" weight="bold" size={16} color="currentColor" /> Choose File
           </label>
           {selectedFile && (
             <span className="selected-file-name">{selectedFile.name}</span>
@@ -164,33 +166,29 @@ function FileUploadPrompt({
               disabled={isProcessing}
               className="btn-primary"
             >
-              {isProcessing ? '⏳ Processing...' : '📤 Process File'}
+              {isProcessing ? 'Processing...' : 'Process File'}
             </button>
             <button 
               onClick={clearFile}
               className="btn-secondary"
             >
-              ❌ Clear
+              <Icon name="XCircle" weight="fill" size={16} color="var(--danger)" /> Clear
             </button>
           </div>
         )}
 
-        {uploadStatus && (
-          <div className={`upload-status ${uploadStatus.includes('❌') ? 'error' : uploadStatus.includes('✅') ? 'success' : ''}`}>
-            {uploadStatus}
-          </div>
-        )}
+        {uploadStatus && <StatusMessage message={uploadStatus} className="upload-status" />}
 
         {extractedContent && (
           <div className="extracted-content">
             <div className="content-header">
-              <h4>📄 Extracted Content</h4>
+              <h4><Icon name="FileText" weight="bold" size={16} color="currentColor" /> Extracted Content</h4>
               <div className="content-actions">
                 <button onClick={useContent} className="btn-primary btn-small">
-                  ✅ Use This Content
+                  <Icon name="CheckCircle" weight="fill" size={16} color="var(--success)" /> Use This Content
                 </button>
                 <button onClick={clearFile} className="btn-secondary btn-small">
-                  🔄 Upload Different File
+                  <Icon name="ArrowsClockwise" weight="bold" size={16} color="currentColor" /> Upload Different File
                 </button>
               </div>
             </div>
@@ -206,10 +204,10 @@ function FileUploadPrompt({
       </div>
       
       <div className="upload-help">
-        <p>📌 <strong>Supported formats:</strong> {acceptedFormats.join(', ')}</p>
-        <p>📏 <strong>Max file size:</strong> {(maxFileSize / 1024 / 1024).toFixed(1)}MB (PDF/DOCX files use more processing memory)</p>
-        <p>💡 <strong>Tip:</strong> Upload documents containing context, examples, or guidelines for AI content generation</p>
-        <p>⚡ <strong>For large files:</strong> Consider splitting into smaller documents or extracting text manually</p>
+        <p><Icon name="PushPin" weight="bold" size={16} color="currentColor" /> <strong>Supported formats:</strong> {acceptedFormats.join(', ')}</p>
+        <p><Icon name="Ruler" weight="bold" size={16} color="currentColor" /> <strong>Max file size:</strong> {(maxFileSize / 1024 / 1024).toFixed(1)}MB (PDF/DOCX files use more processing memory)</p>
+        <p><Icon name="Lightbulb" weight="duotone" size={16} color="var(--primary)" /> <strong>Tip:</strong> Upload documents containing context, examples, or guidelines for AI content generation</p>
+        <p><Icon name="Lightning" weight="fill" size={16} color="var(--primary)" /> <strong>For large files:</strong> Consider splitting into smaller documents or extracting text manually</p>
       </div>
     </div>
   );

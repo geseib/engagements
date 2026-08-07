@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
 import './auth.css';
+import Icon from '../components/Icon';
 
 const PasswordChangeForm = () => {
   const { completeNewPassword, error, loading, newPasswordRequired } = useAuth();
@@ -90,7 +91,7 @@ const PasswordChangeForm = () => {
           <form onSubmit={handleSubmit} className="auth-form">
             {(error || validationError) && (
               <div className="auth-error" role="alert">
-                <i className="error-icon">⚠️</i>
+                <i className="error-icon"><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /></i>
                 <span>{validationError || error}</span>
               </div>
             )}

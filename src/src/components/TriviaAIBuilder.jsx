@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { postGenerationBatch, planGenerationTopics, dropNearDuplicates, runWithConcurrency } from '../utils/aiBatchClient';
+import Icon from './Icon';
 
 const API_BASE = window.API_BASE;
 
@@ -30,7 +31,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
 
   const handleConfigSubmit = async () => {
     setIsGenerating(true);
-    setGenerationStatus('🤖 Generating trivia questions with AI...');
+    setGenerationStatus('Generating trivia questions with AI...');
     setStep(2);
 
     try {
@@ -94,7 +95,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
         });
 
         completedQuestions += result.questions.length;
-        setGenerationStatus(`✅ Generated ${completedQuestions} of ${totalCount} questions...`);
+        setGenerationStatus(`Generated ${completedQuestions} of ${totalCount} questions...`);
         return result.questions;
       });
 
@@ -103,12 +104,12 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
       const allQuestions = dropNearDuplicates(batchResults.flat());
 
       setGeneratedTrivia(allQuestions);
-      setGenerationStatus(`✅ Generated ${allQuestions.length} trivia questions successfully`);
+      setGenerationStatus(`Generated ${allQuestions.length} trivia questions successfully`);
       setCurrentTriviaIndex(0);
 
     } catch (error) {
       console.error('AI trivia generation error:', error);
-      setGenerationStatus(`❌ Generation failed: ${error.message}`);
+      setGenerationStatus(`Generation failed: ${error.message}`);
     } finally {
       setIsGenerating(false);
     }
@@ -180,8 +181,8 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
       <div className="modal-overlay" onClick={onClose}></div>
       <div className="modal-content trivia-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>🧠 AI Trivia Builder</h2>
-          <button className="close-button" onClick={onClose}>✕</button>
+          <h2><Icon name="Brain" weight="duotone" size={16} color="var(--primary)" /> AI Trivia Builder</h2>
+          <button className="close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 
         <div className="modal-body">
@@ -360,7 +361,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                       onClick={() => navigateTrivia('prev')}
                       disabled={currentTriviaIndex === 0}
                     >
-                      ← Previous
+                      <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Previous
                     </button>
                     
                     <div className="trivia-counter">
@@ -373,7 +374,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                       onClick={() => navigateTrivia('next')}
                       disabled={currentTriviaIndex === generatedTrivia.length - 1}
                     >
-                      Next →
+                      Next <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" />
                     </button>
                   </div>
 
@@ -449,7 +450,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                                   onChange={(e) => handleOptionEdit(currentTriviaIndex, optionKey, e.target.value)}
                                   className={isCorrect ? 'correct-answer' : ''}
                                 />
-                                {isCorrect && <span className="correct-indicator">✓ Correct</span>}
+                                {isCorrect && <span className="correct-indicator"><Icon name="Check" weight="bold" size={16} color="var(--success)" /> Correct</span>}
                               </label>
                               <button
                                 type="button"
@@ -466,7 +467,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                                   }
                                 }}
                               >
-                                {isCorrect ? '✗ Remove' : '✓ Set as Correct'}
+                                {isCorrect ? 'Remove' : 'Set as Correct'}
                               </button>
                             </div>
                           );
@@ -494,7 +495,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                                 <div key={optionKey} className={`category-item trivia-option ${isCorrect ? 'correct' : ''}`}>
                                   <span className="category-name">
                                     <span className="option-letter">{optionLetter}.</span> {currentTrivia[optionKey]}
-                                    {isCorrect && <span className="correct-indicator"> ✓</span>}
+                                    {isCorrect && <span className="correct-indicator"> <Icon name="Check" weight="bold" size={16} color="var(--success)" /></span>}
                                   </span>
                                 </div>
                               );
@@ -507,10 +508,10 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
 
                   <div className="trivia-actions">
                     <button className="btn-secondary" onClick={handleExportCSV}>
-                      📄 Export CSV
+                      <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export CSV
                     </button>
                     <button className="btn-primary" onClick={handleLoadIntoSystem}>
-                      📥 Load into System
+                      <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load into System
                     </button>
                   </div>
                 </div>
@@ -518,7 +519,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                 <div className="generation-error">
                   <p>{generationStatus}</p>
                   <button className="btn-secondary" onClick={() => setStep(1)}>
-                    ← Back to Configuration
+                    <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
                   </button>
                 </div>
               )}
@@ -537,14 +538,14 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                 onClick={handleConfigSubmit}
                 disabled={!triviaConfig.topic.trim()}
               >
-                🤖 Generate Trivia Questions
+                <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> Generate Trivia Questions
               </button>
             </>
           )}
           {step === 2 && !isGenerating && generatedTrivia.length > 0 && (
             <>
               <button className="btn-secondary" onClick={() => setStep(1)}>
-                ← Back to Configuration
+                <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
               </button>
               <button className="btn-secondary" onClick={onClose}>
                 Cancel

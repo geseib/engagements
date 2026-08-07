@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from './AuthContext';
 import './auth.css';
+import Icon from '../components/Icon';
 
 const PendingApproval = ({ email, name, onSignOut }) => {
   const { currentUser, signOut } = useAuth();
@@ -18,7 +19,7 @@ const PendingApproval = ({ email, name, onSignOut }) => {
     <div className="auth-form-container pending-approval">
       <div className="auth-header">
         <div className="pending-icon">
-          <div className="hourglass">⏳</div>
+          <div className="hourglass"><Icon name="Timer" weight="bold" size={16} color="var(--primary)" /></div>
         </div>
         <h2>Account Pending Approval</h2>
         <p>Welcome, <strong>{userName}</strong>!</p>
@@ -51,7 +52,7 @@ const PendingApproval = ({ email, name, onSignOut }) => {
           <h4>While you wait...</h4>
           <div className="info-grid">
             <div className="info-item">
-              <div className="info-icon">🎮</div>
+              <div className="info-icon"><Icon name="GameController" weight="bold" size={16} color="currentColor" /></div>
               <div>
                 <strong>Join as a Player</strong>
                 <p>You can participate in sessions using game codes - no approval needed!</p>
@@ -59,7 +60,7 @@ const PendingApproval = ({ email, name, onSignOut }) => {
             </div>
             
             <div className="info-item">
-              <div className="info-icon">📚</div>
+              <div className="info-icon"><Icon name="Books" weight="duotone" size={16} color="var(--primary)" /></div>
               <div>
                 <strong>Learn More</strong>
                 <p>Explore our help documentation to get familiar with Engagements</p>
@@ -67,7 +68,7 @@ const PendingApproval = ({ email, name, onSignOut }) => {
             </div>
             
             <div className="info-item">
-              <div className="info-icon">💡</div>
+              <div className="info-icon"><Icon name="Lightbulb" weight="duotone" size={16} color="var(--primary)" /></div>
               <div>
                 <strong>Plan Sessions</strong>
                 <p>Start thinking about what types of sessions you'd like to host</p>

@@ -1,4 +1,5 @@
 import React from 'react';
+import Icon from './Icon';
 
 function TriviaBuilder({ questions, onUpdateQuestion, onDeleteQuestion, onAIAssistance }) {
   
@@ -23,14 +24,14 @@ function TriviaBuilder({ questions, onUpdateQuestion, onDeleteQuestion, onAIAssi
                 onClick={() => onAIAssistance(index)}
                 title="Get AI assistance for this question"
               >
-                🤖 AI Help
+                <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI Help
               </button>
               <button
                 className="btn-danger btn-small"
                 onClick={() => onDeleteQuestion(index)}
                 title="Delete this question"
               >
-                🗑️
+                <Icon name="Trash" weight="bold" size={16} color="currentColor" />
               </button>
             </div>
           </div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import Icon from './Icon';
 
 function CallAnswerBuilder({ questions, onUpdateQuestion, onDeleteQuestion, onAIAssistance }) {
   
@@ -19,14 +20,14 @@ function CallAnswerBuilder({ questions, onUpdateQuestion, onDeleteQuestion, onAI
                 onClick={() => onAIAssistance(index)}
                 title="Get AI assistance for this question"
               >
-                🤖 AI Help
+                <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI Help
               </button>
               <button
                 className="btn-danger btn-small"
                 onClick={() => onDeleteQuestion(index)}
                 title="Delete this question"
               >
-                🗑️
+                <Icon name="Trash" weight="bold" size={16} color="currentColor" />
               </button>
             </div>
           </div>

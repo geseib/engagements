@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import './auth.css';
+import Icon from '../components/Icon';
 
 const VerificationForm = ({ email, name, onToggleMode, onSuccess }) => {
   const [verificationCode, setVerificationCode] = useState('');
@@ -114,7 +115,7 @@ const VerificationForm = ({ email, name, onToggleMode, onSuccess }) => {
       <form onSubmit={handleSubmit} className="auth-form">
         {error && (
           <div className="auth-error" role="alert">
-            <i className="error-icon">⚠️</i>
+            <i className="error-icon"><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /></i>
             <span>{error}</span>
           </div>
         )}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import './UserManagement.css';
+import Icon from './Icon';
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
@@ -392,7 +393,7 @@ const UserManagement = () => {
 
       {error && (
         <div className="alert alert-error">
-          <span className="alert-icon">⚠️</span>
+          <span className="alert-icon"><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /></span>
           {error}
           <button className="alert-close" onClick={() => setError(null)}>×</button>
         </div>
@@ -410,7 +411,7 @@ const UserManagement = () => {
               className="search-input"
             />
             <button type="submit" className="search-button" disabled={loading}>
-              🔍
+              <Icon name="MagnifyingGlass" weight="bold" size={16} color="currentColor" />
             </button>
           </div>
         </form>
@@ -549,7 +550,9 @@ const UserManagement = () => {
                           disabled={isActionInProgress}
                           title="Delete user permanently"
                         >
-                          {isActionInProgress ? '⏳' : '🗑️'}
+                          {isActionInProgress
+                            ? <Icon name="Timer" weight="bold" size={16} color="var(--muted)" />
+                            : <Icon name="Trash" weight="bold" size={16} />}
                         </button>
                       </div>
                     </td>

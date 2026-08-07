@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { postGenerationBatch, planGenerationTopics, dropNearDuplicates, runWithConcurrency } from '../utils/aiBatchClient';
+import Icon from './Icon';
 
 const API_BASE = window.API_BASE;
 
@@ -28,7 +29,7 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
 
   const handleConfigSubmit = async () => {
     setIsGenerating(true);
-    setGenerationStatus('🤖 Generating poll questions with AI...');
+    setGenerationStatus('Generating poll questions with AI...');
     setStep(2);
 
     try {
@@ -91,7 +92,7 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
         });
 
         completedPolls += result.questions.length;
-        setGenerationStatus(`✅ Generated ${completedPolls} of ${totalCount} poll questions...`);
+        setGenerationStatus(`Generated ${completedPolls} of ${totalCount} poll questions...`);
         return result.questions;
       });
 
@@ -100,11 +101,11 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
       const allPolls = dropNearDuplicates(batchResults.flat());
 
       setGeneratedPolls(allPolls);
-      setGenerationStatus(`✅ Generated ${allPolls.length} poll questions successfully`);
+      setGenerationStatus(`Generated ${allPolls.length} poll questions successfully`);
       setCurrentPollIndex(0);
     } catch (error) {
       console.error('AI poll generation error:', error);
-      setGenerationStatus(`❌ Generation failed: ${error.message}`);
+      setGenerationStatus(`Generation failed: ${error.message}`);
     } finally {
       setIsGenerating(false);
     }
@@ -191,8 +192,8 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
       <div className="modal-overlay" onClick={onClose}></div>
       <div className="modal-content poll-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>📊 AI Poll Builder</h2>
-          <button className="close-button" onClick={onClose}>✕</button>
+          <h2><Icon name="ChartBar" weight="duotone" size={16} color="var(--primary)" /> AI Poll Builder</h2>
+          <button className="close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 
         <div className="modal-body">
@@ -326,7 +327,7 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                       onClick={() => navigatePoll('prev')}
                       disabled={currentPollIndex === 0}
                     >
-                      ← Previous
+                      <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Previous
                     </button>
                     
                     <div className="poll-counter">
@@ -339,7 +340,7 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                       onClick={() => navigatePoll('next')}
                       disabled={currentPollIndex === generatedPolls.length - 1}
                     >
-                      Next →
+                      Next <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" />
                     </button>
                   </div>
 
@@ -393,7 +394,7 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                                 className="remove-option-btn"
                                 onClick={() => removeOption(currentPollIndex, index)}
                               >
-                                ✕
+                                <Icon name="X" weight="bold" size={16} color="currentColor" />
                               </button>
                             )}
                           </div>
@@ -431,10 +432,10 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
 
                   <div className="poll-actions">
                     <button className="btn-secondary" onClick={handleExportCSV}>
-                      📄 Export CSV
+                      <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export CSV
                     </button>
                     <button className="btn-primary" onClick={handleLoadIntoSystem}>
-                      📥 Load into System
+                      <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load into System
                     </button>
                   </div>
                 </div>
@@ -442,7 +443,7 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                 <div className="generation-error">
                   <p>{generationStatus}</p>
                   <button className="btn-secondary" onClick={() => setStep(1)}>
-                    ← Back to Configuration
+                    <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
                   </button>
                 </div>
               )}
@@ -461,14 +462,14 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                 onClick={handleConfigSubmit}
                 disabled={!pollConfig.topic.trim()}
               >
-                🤖 Generate Poll Questions
+                <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> Generate Poll Questions
               </button>
             </>
           )}
           {step === 2 && !isGenerating && generatedPolls.length > 0 && (
             <>
               <button className="btn-secondary" onClick={() => setStep(1)}>
-                ← Back to Configuration
+                <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
               </button>
               <button className="btn-secondary" onClick={onClose}>
                 Cancel

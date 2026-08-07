@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import cloud from 'd3-cloud';
+import Icon from './Icon';
 
 const WavelengthWordCloud = ({ answers, promptWord, gameState }) => {
   const svgRef = useRef();
@@ -186,7 +187,7 @@ const WavelengthWordCloud = ({ answers, promptWord, gameState }) => {
         textAlign: 'center'
       }}>
         <h3 style={{ marginBottom: '16px', color: '#333' }}>
-          🌊 Wavelength Word Cloud
+          <Icon name="Waves" weight="duotone" size={16} color="var(--secondary)" /> Wavelength Word Cloud
         </h3>
         <svg ref={svgRef}></svg>
         <div style={{ 
@@ -213,7 +214,7 @@ const WavelengthWordCloud = ({ answers, promptWord, gameState }) => {
             textAlign: 'left'
           }}>
             <h4 style={{ margin: '0 0 12px 0', color: '#333', fontSize: '16px' }}>
-              📝 Complete Word List ({Object.keys(wordFrequency).length} unique words)
+              <Icon name="NotePencil" weight="bold" size={16} color="currentColor" /> Complete Word List ({Object.keys(wordFrequency).length} unique words)
             </h4>
             <div style={{ 
               display: 'flex',

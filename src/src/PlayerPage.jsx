@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import webSocketClient from './WebSocketClient';
 import IssueFab from './components/IssueFab';
+import Icon from './components/Icon';
+import RankIcon, { rankLabel, VOTE_POSITIONS } from './components/RankIcon';
+import { gameTypeMeta } from './config/gameTypes';
 
 const API_BASE = window.API_BASE;
 
@@ -901,10 +904,7 @@ function PlayerPage() {
             roundScore: roundScore,
             rank: rank,
             totalPlayers: rankedPlayers.length,
-            rankDisplay: rank === 1 ? '🥇 1st Place' : 
-                       rank === 2 ? '🥈 2nd Place' : 
-                       rank === 3 ? '🥉 3rd Place' : 
-                       `${rank}th Place`
+            rankDisplay: rankLabel(rank)
           };
           
           setPlayerScoreInfo(scoreInfo);
@@ -1360,15 +1360,18 @@ function PlayerPage() {
                 <div className="vote-buttons">
                   {['first', 'second', 'third'].slice(0, requiredVotes).map(position => {
                     const isSelected = currentPosition === position;
-                    const emoji = position === 'first' ? '🥇' : position === 'second' ? '🥈' : '🥉';
-                    
+                    const rank = VOTE_POSITIONS[position];
+
                     return (
                       <button
                         key={position}
                         className={`vote-btn-detailed ${isSelected ? 'selected' : ''}`}
                         onClick={() => handleVoteClick(idx, position)}
+                        aria-pressed={isSelected}
+                        aria-label={`Vote this answer ${rankLabel(rank)}`}
+                        title={rankLabel(rank)}
                       >
-                        {emoji}
+                        <RankIcon rank={rank} size={26} />
                       </button>
                     );
                   })}
@@ -1447,13 +1450,13 @@ function PlayerPage() {
               <div className="game-info">
                 <p>Game ID: <strong>{gameId}</strong></p>
                 <p className="reconnect-hint">
-                  💡 Save this URL to easily reconnect later!
+                  <Icon name="Lightbulb" weight="duotone" size={16} color="var(--primary)" /> Save this URL to easily reconnect later!
                 </p>
               </div>
             )}
             {needsAccessCode ? (
               <div className="access-code-form">
-                <h3>🔐 Private Game</h3>
+                <h3><Icon name="Lock" weight="duotone" size={20} color="var(--primary)" />Private Game</h3>
                 <p>This game requires an access code to join.</p>
                 <form onSubmit={handleAccessCodeSubmit} className="join-form">
                   <input
@@ -1513,21 +1516,31 @@ function PlayerPage() {
   return (
     <div className="player-outer-container-full">
       <div className="player-info-external">
-        <span className="player-name">👤 {playerName}</span>
+        <span className="player-name"><Icon name="UserCircle" weight="fill" size={16} /> {playerName}</span>
         <span className="game-id">Game: {gameId}</span>
         {currentQuestion && <span className="lesson-number">Lesson {currentQuestion.id}</span>}
         <span 
           className={`websocket-indicator ${wsConnected ? 'connected' : 'disconnected'}`}
           onClick={() => window.location.reload()}
           style={{ cursor: 'pointer' }}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') window.location.reload(); }}
+          title={wsConnected ? 'Live connection is healthy — tap to reload' : 'Not connected — tap to reload'}
         >
-          🔌 {wsConnected ? 'Connected' : 'Not Connected'}
+          <Icon
+            name={wsConnected ? 'Broadcast' : 'WifiSlash'}
+            weight="bold"
+            size={14}
+            color={wsConnected ? 'var(--success)' : 'var(--danger)'}
+          />{' '}
+          {wsConnected ? 'Connected' : 'Not Connected'}
         </span>
       </div>
       
       {rejoinedPlayer && (
-        <div className="rejoin-notification">
-          🔄 Welcome back! Your previous game state has been restored.
+        <div className="rejoin-notification" role="status">
+          <Icon name="ArrowsClockwise" weight="bold" size={16} color="var(--success)" /> Welcome back! Your previous game state has been restored.
         </div>
       )}
       
@@ -1552,8 +1565,8 @@ function PlayerPage() {
       <div className="game-content">
         {isWaitingState(gameState) && (
           <div className="waiting-screen">
-            <h2>✅ You're in!</h2>
-            <p>Waiting for the game to start...</p>
+            <h2><Icon name="CheckCircle" weight="duotone" size={28} color="var(--success)" />You're in!</h2>
+            <p>Waiting for the game to start&hellip;</p>
             <div className="status-indicator">
               <div className="pulse"></div>
               <span>Ready to play</span>
@@ -1688,16 +1701,20 @@ function PlayerPage() {
                           className="mobile-minimize-btn mobile-minimize-left"
                           onClick={() => setIsAnswerInputFocused(false)}
                           type="button"
+                          aria-label="Close the full-screen editor"
+                          title="Close editor"
                         >
-                          ↓
+                          <Icon name="ArrowDown" weight="bold" size={20} />
                         </button>
-                        <button 
+                        <button
                           className="mobile-submit-btn-top"
                           onClick={handleSubmitAnswer}
                           type="button"
                           disabled={!answerInput.trim()}
+                          aria-label="Submit answer"
+                          title="Submit answer"
                         >
-                          ✈️
+                          <Icon name="Airplane" weight="fill" size={20} />
                         </button>
                         <form onSubmit={handleSubmitAnswer} className="mobile-answer-form">
                           <textarea
@@ -1748,9 +1765,13 @@ function PlayerPage() {
               )
             ) : (
               <div className="answer-submitted">
-                <h3>✅ {gameType === 'trivia' ? 'Answer Submitted!' : 
-                       gameType === 'wavelength' ? 'Words Submitted!' : 'Application Submitted!'}</h3>
-                <p>Waiting for other players...</p>
+                <h3>
+                  <Icon name="CheckCircle" weight="duotone" size={24} color="var(--success)" />
+                  {gameType === 'trivia' ? 'Answer Submitted!' :
+                   gameType === 'wavelength' ? 'Words Submitted!' :
+                   gameType === 'poll' ? 'Response Submitted!' : 'Application Submitted!'}
+                </h3>
+                <p>Waiting for other players&hellip;</p>
               </div>
             )}
           </div>
@@ -1758,8 +1779,15 @@ function PlayerPage() {
 
         {gameState.startsWith('VOTE#') && answers.length > 0 && (
           <div className="voting-screen">
-            <h2>🗳️ Vote for the Best Applications</h2>
-            <p>Which applications would be most valuable for teams to implement?</p>
+            <h2>
+              <Icon name="ListChecks" weight="duotone" size={26} color="var(--primary)" />
+              {gameType === 'poll' ? 'Vote for the Best Response' : 'Vote for the Best Applications'}
+            </h2>
+            <p>
+              {gameType === 'poll'
+                ? 'Which response best captures where the room should land?'
+                : 'Which applications would be most valuable for teams to implement?'}
+            </p>
             
             {!hasVoted ? (
               <>
@@ -1785,9 +1813,8 @@ function PlayerPage() {
                     {['first', 'second', 'third'].slice(0, Math.min(3, answers.length)).map((position, posIndex) => (
                       <div key={position} className="vote-position">
                         <label className="position-label">
-                          {position === 'first' && '🥇 1st Place:'}
-                          {position === 'second' && '🥈 2nd Place:'}
-                          {position === 'third' && '🥉 3rd Place:'}
+                          <RankIcon rank={VOTE_POSITIONS[position]} size={18} />{' '}
+                          {rankLabel(VOTE_POSITIONS[position])}:
                         </label>
                         <select 
                           value={votes[position]} 
@@ -1844,8 +1871,8 @@ function PlayerPage() {
               </>
             ) : (
               <div className="vote-submitted">
-                <h3>✅ Votes Submitted!</h3>
-                <p>Waiting for results...</p>
+                <h3><Icon name="CheckCircle" weight="duotone" size={24} color="var(--success)" />Votes Submitted!</h3>
+                <p>Waiting for results&hellip;</p>
               </div>
             )}
           </div>
@@ -1853,7 +1880,10 @@ function PlayerPage() {
 
         {gameState.startsWith('RESULTS#') && (
           <div className="results-screen">
-            <h2>📊 Question {parseInt(gameState.split('#')[1])} Results</h2>
+            <h2>
+              <Icon name={gameTypeMeta(gameType).icon} weight="duotone" size={26} color="var(--primary)" />
+              Question {parseInt(gameState.split('#')[1])} Results
+            </h2>
             
             {gameType === 'trivia' ? (
               <div className="trivia-player-results">
@@ -1963,8 +1993,8 @@ function PlayerPage() {
                         <div key={key} className={className}>
                           <span className="category-name">
                             <span className="option-letter">{optionLetter}.</span> {currentQuestion[key]}
-                            {isCorrect && <span className="correct-indicator"> ✓</span>}
-                            {isPlayerChoice && !isCorrect && <span className="wrong-indicator"> ✗</span>}
+                            {isCorrect && <span className="correct-indicator"> <Icon name="CheckCircle" weight="fill" size={16} color="var(--success)" /></span>}
+                            {isPlayerChoice && !isCorrect && <span className="wrong-indicator"> <Icon name="XCircle" weight="fill" size={16} color="var(--danger)" /></span>}
                             {isPlayerChoice && <span className="your-choice"> (Your Choice)</span>}
                           </span>
                         </div>
@@ -1987,7 +2017,7 @@ function PlayerPage() {
                             <div className="speed-bonus-info">
                               <small>
                                 ({playerAnswer.basePoints} base + {playerAnswer.speedBonus} speed bonus)
-                                <span className="speed-icon"> ⚡</span>
+                                <span className="speed-icon"> <Icon name="Lightning" weight="fill" size={13} color="var(--primary)" /></span>
                               </small>
                             </div>
                           );
@@ -2011,9 +2041,7 @@ function PlayerPage() {
                     <div className="player-ranking">
                       <span className="ranking-label">Your Ranking:</span>
                       <span className="ranking-value">
-                        {playerRanking.rank === 1 ? '🏆' :
-                         playerRanking.rank === 2 ? '🥈' :
-                         playerRanking.rank === 3 ? '🥉' : '📍'}
+                        <RankIcon rank={playerRanking.rank} size={18} />{' '}
                         {playerRanking.rank} of {playerRanking.total}
                       </span>
                     </div>
@@ -2034,7 +2062,7 @@ function PlayerPage() {
                 </div>
                 
                 <div className="wavelength-common-words">
-                  <h4>🤝 Common Words</h4>
+                  <h4><Icon name="Handshake" weight="duotone" size={20} color="var(--primary)" />Common Words</h4>
                   {answers && answers.length > 0 ? (
                     <div className="common-words-display">
                       {(() => {
@@ -2058,7 +2086,7 @@ function PlayerPage() {
                           .sort((a, b) => b[1] - a[1]);
                         
                         if (commonWords.length === 0) {
-                          return <p className="no-common-words">No common words found - everyone had unique responses! 🎨</p>;
+                          return <p className="no-common-words">No common words found — everyone had unique responses.</p>;
                         }
                         
                         return (
@@ -2079,7 +2107,7 @@ function PlayerPage() {
                 </div>
                 
                 <div className="wavelength-your-words">
-                  <h4>📝 Your Words</h4>
+                  <h4><Icon name="NotePencil" weight="duotone" size={20} color="var(--primary)" />Your Words</h4>
                   {(() => {
                     const playerAnswer = answers.find(answer => 
                       answer.name === playerName || answer.playerName === playerName || answer.player === playerName
@@ -2156,9 +2184,7 @@ function PlayerPage() {
                         <div className="player-ranking">
                           <span className="ranking-label">Your Ranking:</span>
                           <span className="ranking-value">
-                            {playerRanking.rank === 1 ? '🏆' :
-                             playerRanking.rank === 2 ? '🥈' :
-                             playerRanking.rank === 3 ? '🥉' : '📍'}
+                            <RankIcon rank={playerRanking.rank} size={18} />{' '}
                             {playerRanking.rank} of {playerRanking.total}
                           </span>
                         </div>
@@ -2186,7 +2212,7 @@ function PlayerPage() {
       {showGameEndModal && (
         <div className="modal-overlay" onClick={closeGameEndModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>🏁 Game Complete!</h3>
+            <h3><Icon name="FlagCheckered" weight="duotone" size={24} color="var(--primary)" />Game Complete!</h3>
             <p>All questions have been completed. Thank you for playing!</p>
             <div className="modal-actions">
               <button 

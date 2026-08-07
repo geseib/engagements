@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { authFetch } from '../auth/authFetch';
 import { postGenerationBatch, planGenerationTopics, dropNearDuplicates, runWithConcurrency } from '../utils/aiBatchClient';
+import Icon from './Icon';
 
 const API_BASE = window.API_BASE;
 
@@ -341,7 +342,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   const handleConfigSubmit = async () => {
     console.log('🤖 Starting AI scenario generation...', scenarioConfig);
     setIsGenerating(true);
-    setGenerationStatus('🤖 Generating scenarios with AI...');
+    setGenerationStatus('Generating scenarios with AI...');
     setStep(3);
 
     try {
@@ -474,7 +475,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         .filter(Boolean);
 
       let completedScenarios = 0;
-      setGenerationStatus(`🤖 Generating ${totalCount} scenario${totalCount > 1 ? 's' : ''} in ${chunks} batch${chunks > 1 ? 'es' : ''}...`);
+      setGenerationStatus(`Generating ${totalCount} scenario${totalCount > 1 ? 's' : ''} in ${chunks} batch${chunks > 1 ? 'es' : ''}...`);
 
       const batchTasks = Array.from({ length: chunks }, (_, i) => async () => {
         const chunkSize = Math.min(CHUNK_SIZE, totalCount - (i * CHUNK_SIZE));
@@ -526,7 +527,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         });
 
         completedScenarios += result.scenarios.length;
-        setGenerationStatus(`✅ Generated ${completedScenarios} of ${totalCount} scenarios...`);
+        setGenerationStatus(`Generated ${completedScenarios} of ${totalCount} scenarios...`);
         return result.scenarios;
       });
 
@@ -536,12 +537,12 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
 
       setGeneratedScenarios(allScenarios);
       setGeneratedMetadata(null); // Will be generated later
-      setGenerationStatus(`✅ Generated ${allScenarios.length} scenarios successfully`);
+      setGenerationStatus(`Generated ${allScenarios.length} scenarios successfully`);
       setCurrentScenarioIndex(0);
       
     } catch (error) {
       console.error('AI generation error:', error);
-      setGenerationStatus(`❌ Generation failed: ${error.message}`);
+      setGenerationStatus(`Generation failed: ${error.message}`);
     } finally {
       setIsGenerating(false);
     }
@@ -742,8 +743,8 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
       <div className="modal-overlay" onClick={onClose}></div>
       <div className="modal-content scenario-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>🤖 AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : engagementType === 'wavelength' ? 'Wavelength' : 'Scenario'} Builder</h2>
-          <button className="close-button" onClick={onClose}>✕</button>
+          <h2><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : engagementType === 'wavelength' ? 'Wavelength' : 'Scenario'} Builder</h2>
+          <button className="close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 
         <div className="modal-body">
@@ -758,7 +759,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                 </div>
               ) : promptsError ? (
                 <div className="prompts-error">
-                  <p>⚠️ {promptsError}</p>
+                  <p><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> {promptsError}</p>
                   <p>Using default templates as fallback.</p>
                   <button onClick={fetchAvailablePrompts} className="btn-secondary">
                     Retry Loading
@@ -766,7 +767,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                 </div>
               ) : availablePrompts.length === 0 ? (
                 <div className="no-prompts">
-                  <p>ℹ️ No database prompts found for {engagementType}. Using default templates.</p>
+                  <p><Icon name="Info" weight="fill" size={16} color="var(--secondary)" /> No database prompts found for {engagementType}. Using default templates.</p>
                 </div>
               ) : null}
               
@@ -780,10 +781,10 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                     <h4>{type.title}</h4>
                     <p>{type.description}</p>
                     {type.source === 'database' && (
-                      <span className="prompt-source">📊 Database Template</span>
+                      <span className="prompt-source"><Icon name="ChartBar" weight="duotone" size={16} color="var(--primary)" /> Database Template</span>
                     )}
                     {type.source === 'hardcoded' && (
-                      <span className="prompt-source">🏗️ Built-in Template</span>
+                      <span className="prompt-source"><Icon name="Buildings" weight="bold" size={16} color="currentColor" /> Built-in Template</span>
                     )}
                   </div>
                 ))}
@@ -946,7 +947,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                       onClick={() => navigateScenario('prev')}
                       disabled={currentScenarioIndex === 0}
                     >
-                      ← Previous
+                      <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Previous
                     </button>
                     
                     <div className="scenario-counter">
@@ -959,7 +960,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                       onClick={() => navigateScenario('next')}
                       disabled={currentScenarioIndex === generatedScenarios.length - 1}
                     >
-                      Next →
+                      Next <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" />
                     </button>
                   </div>
 
@@ -1004,10 +1005,10 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
 
                   <div className="scenario-actions">
                     <button className="btn-secondary" onClick={handleExportCSV}>
-                      📄 Export CSV
+                      <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export CSV
                     </button>
                     <button className="btn-primary" onClick={handleLoadIntoSystem}>
-                      📥 Load into System
+                      <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load into System
                     </button>
                   </div>
                 </div>
@@ -1015,7 +1016,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                 <div className="generation-error">
                   <p>{generationStatus}</p>
                   <button className="btn-secondary" onClick={() => setStep(2)}>
-                    ← Back to Configuration
+                    <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
                   </button>
                 </div>
               )}
@@ -1034,17 +1035,17 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
           {step === 2 && (
             <>
               <button className="btn-secondary" onClick={() => setStep(1)}>
-                ← Back
+                <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back
               </button>
               <button className="btn-primary" onClick={handleConfigSubmit}>
-                🤖 Generate Scenarios
+                <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> Generate Scenarios
               </button>
             </>
           )}
           {step === 3 && !isGenerating && generatedScenarios.length > 0 && (
             <>
               <button className="btn-secondary" onClick={() => setStep(2)}>
-                ← Back to Configuration
+                <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
               </button>
               <button className="btn-secondary" onClick={onClose}>
                 Cancel

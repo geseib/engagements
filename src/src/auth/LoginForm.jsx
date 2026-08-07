@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
 import './auth.css';
+import Icon from '../components/Icon';
 
 const LoginForm = ({ onToggleMode, onSuccess, initialError }) => {
   const [formData, setFormData] = useState({
@@ -132,7 +133,7 @@ const LoginForm = ({ onToggleMode, onSuccess, initialError }) => {
       <form onSubmit={handleSubmit} className="auth-form">
         {displayError && (
           <div className="auth-error" role="alert">
-            <i className="error-icon">⚠️</i>
+            <i className="error-icon"><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /></i>
             <span>{displayError}</span>
           </div>
         )}

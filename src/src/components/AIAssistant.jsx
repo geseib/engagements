@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { postGenerationBatch, planGenerationTopics, dropNearDuplicates, runWithConcurrency } from '../utils/aiBatchClient';
+import Icon from './Icon';
 
 const API_BASE = window.API_BASE;
 
@@ -13,12 +14,12 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
 
   const handleGenerate = async () => {
     if (!userInput.trim()) {
-      setGenerationStatus('❌ Please provide some context or requirements');
+      setGenerationStatus('Please provide some context or requirements');
       return;
     }
 
     setIsGenerating(true);
-    setGenerationStatus('🤖 Generating with AI...');
+    setGenerationStatus('Generating with AI...');
 
     try {
       // Break bulk requests into small parallel batches so each API call
@@ -92,11 +93,11 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
         ? dropNearDuplicates(batchResults.flat())
         : batchResults.flat();
 
-      setGenerationStatus(`✅ Generated ${allQuestions.length} question(s) successfully`);
+      setGenerationStatus(`Generated ${allQuestions.length} question(s) successfully`);
       onQuestionsGenerated(allQuestions);
     } catch (error) {
       console.error('AI generation error:', error);
-      setGenerationStatus(`❌ Generation failed: ${error.message}`);
+      setGenerationStatus(`Generation failed: ${error.message}`);
     } finally {
       setIsGenerating(false);
     }
@@ -175,8 +176,8 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
       <div className="modal-overlay" onClick={onClose}></div>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>🤖 AI Assistant</h2>
-          <button className="close-button" onClick={onClose}>✕</button>
+          <h2><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI Assistant</h2>
+          <button className="close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 
         <div className="modal-body">
@@ -296,8 +297,8 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
             onClick={handleGenerate}
             disabled={isGenerating || !userInput.trim()}
           >
-            {isGenerating ? '🤖 Generating...' : 
-             isBulkGeneration ? `🤖 Generate ${bulkCount} Questions` : '🤖 Improve Question'}
+            {isGenerating ? 'Generating...' : 
+             isBulkGeneration ? `Generate ${bulkCount} Questions` : 'Improve Question'}
           </button>
         </div>
       </div>

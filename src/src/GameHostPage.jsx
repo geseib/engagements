@@ -6,6 +6,9 @@ import MarkdownRenderer from './components/MarkdownRenderer';
 import IssueFab from './components/IssueFab';
 import QuickstartMenu from './components/QuickstartMenu';
 import WavelengthWordCloud from './components/WavelengthWordCloud';
+import Icon from './components/Icon';
+import RankIcon from './components/RankIcon';
+import { gameTypeMeta } from './config/gameTypes';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
 
@@ -166,6 +169,12 @@ function GameHostPage() {
     console.log('🖥️ Big screen mode reset to false on component mount');
   }, []);
 
+  // Host Remote drives the same actions the host toolbar does. The listener below
+  // is registered once, so it must not close over a single render's handlers —
+  // those capture a stale gameState/players. Every render refreshes this ref
+  // instead (assigned just after the handlers are declared, further down).
+  const remoteActionsRef = useRef({});
+
   // Listen for remote control commands from Host Remote app
   useEffect(() => {
     const handleRemoteCommand = (event) => {
@@ -193,19 +202,13 @@ function GameHostPage() {
             setBigScreenMode(prev => !prev);
             break;
           case 'NEXT_QUESTION':
-            if (typeof nextQuestion === 'function') {
-              nextQuestion();
-            }
+            remoteActionsRef.current.nextQuestion?.();
             break;
           case 'START_VOTING':
-            if (typeof startVoting === 'function') {
-              startVoting();
-            }
+            remoteActionsRef.current.startVoting?.();
             break;
           case 'SHOW_RESULTS':
-            if (typeof showResults === 'function') {
-              showResults();
-            }
+            remoteActionsRef.current.showResults?.();
             break;
           default:
             console.log('🎮 Unknown remote command:', command);
@@ -807,7 +810,7 @@ Focus on actionable business strategy insights.`;
       console.log('🔌 Game ended notification:', data);
       // Show stylized modal and transition to final report
       showConfirmation(
-        '🏁 End of Game!',
+        'End of Game',
         'All questions have been completed. Would you like to view the final report?',
         'View Report'
       ).then((confirmed) => {
@@ -2047,6 +2050,16 @@ Focus on actionable business strategy insights.`;
     }
   };
 
+  // Refresh the Host Remote's action handles on every render so the one-time
+  // window-message listener above always calls the current-state versions.
+  // (Previously these were bare `nextQuestion`/`startVoting`/`showResults`
+  // identifiers that never existed, so every remote advance was a silent no-op.)
+  remoteActionsRef.current = {
+    nextQuestion: handleNextQuestion,
+    startVoting: handleFinishQuestion,
+    showResults: handleShowResults,
+  };
+
   const handleNewGame = async () => {
     // Ensure question sets are loaded
     if (questionSets.length === 0) {
@@ -2156,7 +2169,7 @@ Focus on actionable business strategy insights.`;
   };
   
   const copyInviteInfo = (game) => {
-    const inviteText = `🎮 Join the engagement!\n\nGame ID: ${game.gameId}\nURL: ${window.location.origin}/player?gameId=${game.gameId}\n\nTitle: ${game.eventTitle || 'Engagement Session'}`;
+    const inviteText = `Join the engagement!\n\nGame ID: ${game.gameId}\nURL: ${window.location.origin}/player?gameId=${game.gameId}\n\nTitle: ${game.eventTitle || 'Engagement Session'}`;
     navigator.clipboard.writeText(inviteText).then(() => {
       console.log('📋 Invite info copied to clipboard');
     }).catch(err => {
@@ -2583,11 +2596,11 @@ Ready to engage? See you there!`;
             
             <div className="welcome-options">
               <button className="btn-secondary btn-large welcome-btn" onClick={() => setShowQuickstartMenu(true)}>
-                ⚡ Quick Start
+                <Icon name="Lightning" weight="duotone" size={20} color="var(--primary)" /> Quick Start
               </button>
-              
+
               <button className="btn-primary btn-large welcome-btn" onClick={handleWelcomeNewGame}>
-                🎯 Create Engagement
+                <Icon name="Target" weight="duotone" size={20} /> Create Engagement
               </button>
               
               <div className="continue-game-section">
@@ -2612,7 +2625,7 @@ Ready to engage? See you there!`;
               </div>
               
               <button className="btn-secondary btn-large welcome-btn" onClick={handleViewGameHistory}>
-                📋 View Game History
+                <Icon name="ClipboardText" weight="bold" size={20} /> View Game History
               </button>
               
               {/* User Info and Sign Out */}
@@ -2670,7 +2683,11 @@ Ready to engage? See you there!`;
       <div className="new-game-overlay">
         <div className="new-game-dialog reports-modal">
           <div className="modal-header">
-            <h2 className="modal-title">{reportsModalMode === 'select' ? '🎮 Game History' : '📊 Game Reports'}</h2>
+            <h2 className="modal-title">
+              {reportsModalMode === 'select'
+                ? <><Icon name="GameController" weight="duotone" size={24} color="var(--primary)" /> Game History</>
+                : <><Icon name="ChartBar" weight="duotone" size={24} color="var(--primary)" /> Game Reports</>}
+            </h2>
             <div className="modal-subtitle">
               {reportsModalMode === 'select' ? 'Select a game to start or continue' : 'View past game reports'}
             </div>
@@ -2680,7 +2697,7 @@ Ready to engage? See you there!`;
             <div className="games-list">
               {gamesList.length === 0 ? (
                 <div className="empty-state">
-                  <div className="empty-icon">🎯</div>
+                  <div className="empty-icon"><Icon name="Target" weight="duotone" size={48} color="var(--primary)" /></div>
                   <p>No games found.</p>
                   <small>Create your first engagement session to get started!</small>
                 </div>
@@ -2700,16 +2717,16 @@ Ready to engage? See you there!`;
                         <div className="game-title-section">
                           <h3 className="game-title">
                             {displayTitle}
-                            {isRecent && <span className="new-badge">✨ Latest</span>}
-                            {isCurrent && <span className="current-badge">📍 Current</span>}
+                            {isRecent && <span className="new-badge"><Icon name="Sparkle" weight="fill" size={13} /> Latest</span>}
+                            {isCurrent && <span className="current-badge"><Icon name="MapPin" weight="fill" size={13} /> Current</span>}
                           </h3>
                           <div className="game-id">#{game.gameId}</div>
                         </div>
                         <div className="game-status-badges">
                           {game.started ? (
-                            <span className="status-badge started">▶️ Started</span>
+                            <span className="status-badge started"><Icon name="Play" weight="fill" size={13} /> Started</span>
                           ) : (
-                            <span className="status-badge pending">⏸️ Ready to Start</span>
+                            <span className="status-badge pending"><Icon name="Pause" weight="fill" size={13} /> Ready to Start</span>
                           )}
                         </div>
                       </div>
@@ -2719,7 +2736,13 @@ Ready to engage? See you there!`;
                           <div className="info-item">
                             <span className="info-label">Type:</span>
                             <span className="info-value">
-                              {game.gameType === 'call-and-answer' ? '💬 Call & Answer' : '🧠 Trivia'}
+                              <Icon
+                                name={gameTypeMeta(game.gameType).icon}
+                                weight="bold"
+                                size={15}
+                                color={gameTypeMeta(game.gameType).accent}
+                              />{' '}
+                              {gameTypeMeta(game.gameType).label}
                             </span>
                           </div>
                           <div className="info-item">
@@ -2762,7 +2785,7 @@ Ready to engage? See you there!`;
                           }}
                           title="Copy player URL"
                         >
-                          🔗 Player URL
+                          <Icon name="LinkSimple" weight="bold" size={16} /> Player URL
                         </button>
                         <button 
                           className="game-action-btn category-style-btn"
@@ -2772,7 +2795,7 @@ Ready to engage? See you there!`;
                           }}
                           title="Copy invite info"
                         >
-                          📋 Invite
+                          <Icon name="ClipboardText" weight="bold" size={16} /> Invite
                         </button>
                         {game.started && (
                           <button 
@@ -2783,7 +2806,7 @@ Ready to engage? See you there!`;
                             }}
                             title="View detailed game report"
                           >
-                            📊 Report
+                            <Icon name="ChartBar" weight="bold" size={16} /> Report
                           </button>
                         )}
                         <button 
@@ -2798,7 +2821,9 @@ Ready to engage? See you there!`;
                             }
                           }}
                         >
-                          {game.started ? '▶️ Continue' : '🚀 Start Game'}
+                          {game.started
+                            ? <><Icon name="Play" weight="fill" size={16} /> Continue</>
+                            : <><Icon name="PlayCircle" weight="fill" size={16} /> Start Game</>}
                         </button>
                       </div>
                     </div>
@@ -2818,7 +2843,7 @@ Ready to engage? See you there!`;
                 }
               }}
             >
-              {reportsModalMode === 'select' ? '❌ Cancel' : '✖️ Close'}
+              <Icon name="X" weight="bold" size={16} /> {reportsModalMode === 'select' ? 'Cancel' : 'Close'}
             </button>
           </div>
         </div>
@@ -3109,7 +3134,11 @@ Ready to engage? See you there!`;
         </div>
       </div>
       <div className="instructions-tab" onClick={() => setInstructionsVisible(!instructionsVisible)}>
-        <span>{instructionsVisible ? '◀ Close' : '▶ How to Play'}</span>
+        <span>
+          {instructionsVisible
+            ? <><Icon name="CaretLeft" weight="bold" size={14} /> Close</>
+            : <><Icon name="CaretRight" weight="bold" size={14} /> How to Play</>}
+        </span>
       </div>
 
       {/* QR Code Sidebar */}
@@ -3123,7 +3152,7 @@ Ready to engage? See you there!`;
                 <p>Players can join at:</p>
                 {sidebarCopyMessage && (
                   <div className="copy-message">
-                    ✓ Link copied!
+                    <Icon name="Check" weight="bold" size={14} color="var(--success)" /> Link copied!
                   </div>
                 )}
                 <div 
@@ -3138,11 +3167,17 @@ Ready to engage? See you there!`;
               <div className="connection-status">
                 {useWebSocket ? (
                   <span className={`status-indicator websocket ${wsConnected ? 'connected' : 'connecting'}`}>
-                    🔌 WebSocket {wsConnected ? 'Connected' : 'Connecting...'}
+                    <Icon
+                      name={wsConnected ? 'Broadcast' : 'WifiSlash'}
+                      weight="bold"
+                      size={15}
+                      color={wsConnected ? 'var(--success)' : 'var(--muted)'}
+                    />{' '}
+                    WebSocket {wsConnected ? 'Connected' : 'Connecting...'}
                   </span>
                 ) : (
                   <span className="status-indicator polling">
-                    🔄 HTTP Polling Mode
+                    <Icon name="ArrowsClockwise" weight="bold" size={15} color="var(--muted)" /> HTTP Polling Mode
                   </span>
                 )}
               </div>
@@ -3159,7 +3194,7 @@ Ready to engage? See you there!`;
                 onClick={createInvite}
                 title="Copy meeting invitation to clipboard"
               >
-                📋 {inviteCopied ? 'Copied!' : 'Copy Invite'}
+                <Icon name={inviteCopied ? 'Check' : 'ClipboardText'} weight="bold" size={16} /> {inviteCopied ? 'Copied!' : 'Copy Invite'}
               </button>
               <button 
                 className={`btn-${bigScreenMode ? 'primary' : 'secondary'}`} 
@@ -3170,7 +3205,7 @@ Ready to engage? See you there!`;
                 }}
                 title="Toggle big screen mode for conference room displays"
               >
-                📺 Big Screen {bigScreenMode ? 'ON' : 'OFF'}
+                <Icon name="Monitor" weight="bold" size={18} /> Big Screen {bigScreenMode ? 'ON' : 'OFF'}
               </button>
               <button className="btn-secondary" onClick={handleViewReports}>
                 View Reports
@@ -3224,7 +3259,7 @@ Ready to engage? See you there!`;
             <div className="qr-column-right">
               <div className="question-set-panel">
                 <div className="question-set-header">
-                  <h3>📚 {questionSets.find(set => set.id === selectedSetId)?.name || 'Unknown Set'}</h3>
+                  <h3><Icon name="Books" weight="duotone" size={20} color="var(--primary)" />{questionSets.find(set => set.id === selectedSetId)?.name || 'Unknown Set'}</h3>
                   <div className="set-details">
                     {categoryCounts ? (
                       // Show dynamic total for active games
@@ -3312,7 +3347,7 @@ Ready to engage? See you there!`;
                               }}
                               title={`Browse questions in ${category.name} category`}
                             >
-                              🔍
+                              <Icon name="MagnifyingGlass" weight="bold" size={16} />
                             </button>
                           </div>
                         );
@@ -3334,10 +3369,17 @@ Ready to engage? See you there!`;
         </div>
       </div>
       <div className="qr-tab" onClick={() => setQrSidebarVisible(!qrSidebarVisible)}>
-        <span>{qrSidebarVisible ? 'Hide ▶' : '◀ Game Info'}</span>
+        <span>
+          {qrSidebarVisible
+            ? <>Hide <Icon name="CaretRight" weight="bold" size={14} /></>
+            : <><Icon name="CaretLeft" weight="bold" size={14} /> Game Info</>}
+        </span>
       </div>
       
-      <div className={`outer-container ${!qrSidebarVisible ? 'qr-hidden' : ''} ${instructionsVisible ? 'instructions-open' : ''} ${bigScreenMode ? 'big-screen-mode' : ''}`}>
+      <div
+        className={`outer-container ${!qrSidebarVisible ? 'qr-hidden' : ''} ${instructionsVisible ? 'instructions-open' : ''} ${bigScreenMode ? 'big-screen-mode' : ''}`}
+        data-theme={bigScreenMode ? 'dark' : undefined}
+      >
       
       <div className="game-host-container">
         <div className="parallax">
@@ -3356,6 +3398,29 @@ Ready to engage? See you there!`;
             </div>
           </section>
         </div>
+
+        {/* Warm Summit dusk-stage photo hero — persistent mountain-hiker
+            parallax layers behind every big-screen state. The scrim recedes /
+            deepens per phase and an amber alpenglow washes in on results. */}
+        {bigScreenMode && (
+          <div
+            className="big-screen-hero"
+            aria-hidden="true"
+            data-phase={
+              gameState.startsWith('RESULTS#') ? 'results' :
+              gameState.startsWith('VOTE#') ? 'voting' :
+              gameState.startsWith('ASK#') ? 'question' : 'lobby'
+            }
+          >
+            <div className="bsh-scene">
+              <img className="bsh-l3" src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795be09b462b2e8ebf71_osmo-parallax-layer-3.webp" loading="eager" alt="" />
+              <img className="bsh-l2" src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" alt="" />
+              <img className="bsh-l1" src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" alt="" />
+            </div>
+            <div className="bsh-scrim"></div>
+            <div className="bsh-amberwash"></div>
+          </div>
+        )}
 
       <div className="players-section">
         {bigScreenMode && gameId && (
@@ -3389,29 +3454,30 @@ Ready to engage? See you there!`;
             const score = player.score || 0;
             const hasPoints = score > 0;
             
-            // Only show trophies if player has 1+ points
-            let rankEmoji = '👤'; // Default person icon
-            if (hasPoints) {
-              if (player.rank === 1) rankEmoji = '🏆';
-              else if (player.rank === 2) rankEmoji = '🥈';
-              else if (player.rank === 3) rankEmoji = '🥉';
-              else rankEmoji = '📍';
-            }
-            
+            // Rank marker (Warm Summit) — see components/RankIcon.jsx. A player
+            // with no points yet gets a neutral avatar rather than a placement.
+            const rankIcon = hasPoints
+              ? <RankIcon rank={player.rank} size={22} className="rank-icon" />
+              : <Icon name="UserCircle" weight="fill" size={22} color="var(--muted)" className="rank-icon" />;
+
             return (
               <div key={player.name || `player-${Math.random()}`} className="player-card">
                 <div className="player-name">
-                  {rankEmoji} {player.name || player.playerName || 'Unknown Player'}
+                  {rankIcon} <span className="player-name-text">{player.name || player.playerName || 'Unknown Player'}</span>
                 </div>
                 <div className="player-score">{score} pts</div>
                 {gameState.startsWith('ASK#') && (
                   <div className={`answer-status ${playersWhoAnswered.includes(player.name) ? 'answered' : 'waiting'}`}>
-                    {playersWhoAnswered.includes(player.name) ? '✓' : '⏱️'}
+                    {playersWhoAnswered.includes(player.name)
+                      ? <Icon name="CheckCircle" weight="fill" size={20} color="var(--success)" />
+                      : <Icon name="Timer" weight="bold" size={20} color="var(--muted)" />}
                   </div>
                 )}
                 {gameState.startsWith('VOTE#') && (
                   <div className={`answer-status ${playersWhoVoted.includes(player.name) ? 'answered' : 'waiting'}`}>
-                    {playersWhoVoted.includes(player.name) ? '✓' : '⏱️'}
+                    {playersWhoVoted.includes(player.name)
+                      ? <Icon name="CheckCircle" weight="fill" size={20} color="var(--success)" />
+                      : <Icon name="Timer" weight="bold" size={20} color="var(--muted)" />}
                   </div>
                 )}
               </div>
@@ -3423,6 +3489,16 @@ Ready to engage? See you there!`;
       <div className={`game-content ${bigScreenMode ? 'big-screen-mode' : ''}`}>
         {isWaitingState(gameState) && (
           <div className={`waiting-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
+            {bigScreenMode && (
+              <div className="bs-lobby-eyebrow">
+                <span className="kicker-dot"></span>
+                {currentGameType === 'trivia' ? 'Team Trivia' :
+                 currentGameType === 'wavelength' ? 'Wavelength' : 'Live Engagement'} · Live
+              </div>
+            )}
+            {bigScreenMode && eventTitle && (
+              <h1 className="bs-lobby-title">{eventTitle}</h1>
+            )}
             {gameId && (
               <div className={bigScreenMode ? "big-screen-join-qr" : "join-qr"}>
                 <QRCodeSVG 
@@ -3459,14 +3535,48 @@ Ready to engage? See you there!`;
         {gameState.startsWith('ASK#') && questions.length > 0 && (
           <div className={`question-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
             <div className="question-header">
-              <h2>{currentGameType === 'trivia' ? `Question ${lessonNumber}` :
-                   currentGameType === 'wavelength' ? `Subject ${lessonNumber}` :
-                   `Lesson ${lessonNumber}`}</h2>
-              <div className="field-badge">
-                {questions[0].field || questions[0].category}
-              </div>
-              {questions[0].school && currentGameType === 'call-and-answer' && (
-                <div className="school-name">{questions[0].school}</div>
+              {bigScreenMode ? (
+                <>
+                  <div className="bs-kicker">
+                    <span className="kicker-dot"></span>
+                    <span className="bs-kicker-cat">{questions[0].field || questions[0].category}</span>
+                    <span className="bs-kicker-sep">/</span>
+                    <span className="bs-kicker-num">
+                      {(currentGameType === 'trivia' ? 'Question' :
+                        currentGameType === 'wavelength' ? 'Subject' : 'Lesson')} {lessonNumber}
+                      {(() => {
+                        const total = questionSets.find(s => s.id === (questions[0]?.setId || selectedSetId))?.totalQuestions;
+                        return total ? ` / ${total}` : '';
+                      })()}
+                    </span>
+                  </div>
+                  {(() => {
+                    const frac = players.length ? playersWhoAnswered.length / players.length : 0;
+                    const C = 270; // 2πr for r=43
+                    return (
+                      <div className="bs-timer-ring" title={`${playersWhoAnswered.length} of ${players.length} answered`}>
+                        <svg viewBox="0 0 100 100">
+                          <circle className="ring-track" cx="50" cy="50" r="43" />
+                          <circle className="ring-fill" cx="50" cy="50" r="43"
+                            style={{ strokeDasharray: C, strokeDashoffset: C * (1 - frac) }} />
+                        </svg>
+                        <b className="tnum">{playersWhoAnswered.length}</b>
+                      </div>
+                    );
+                  })()}
+                </>
+              ) : (
+                <>
+                  <h2>{currentGameType === 'trivia' ? `Question ${lessonNumber}` :
+                       currentGameType === 'wavelength' ? `Subject ${lessonNumber}` :
+                       `Lesson ${lessonNumber}`}</h2>
+                  <div className="field-badge">
+                    {questions[0].field || questions[0].category}
+                  </div>
+                  {questions[0].school && currentGameType === 'call-and-answer' && (
+                    <div className="school-name">{questions[0].school}</div>
+                  )}
+                </>
               )}
             </div>
             <div 
@@ -3512,7 +3622,8 @@ Ready to engage? See you there!`;
                   .map((key, index) => (
                     <div key={key} className="category-item trivia-option">
                       <span className="category-name">
-                        <span className="option-letter">{String.fromCharCode(65 + index)}.</span> {questions[0][key]}
+                        <span className="option-letter">{String.fromCharCode(65 + index)}</span>
+                        <span className="option-text">{questions[0][key]}</span>
                       </span>
                     </div>
                   ))}
@@ -3520,7 +3631,13 @@ Ready to engage? See you there!`;
             )}
             
             <div className="application-prompt">
-              <strong>{getHostInstructionText(questions.find(q => q.id === currentQuestionId))}</strong>
+              <div className="application-prompt__label">
+                <Icon name="ChatCircleText" weight="bold" size={16} color="var(--muted)" />
+                <span>How to answer</span>
+              </div>
+              <p className="application-prompt__body">
+                {getHostInstructionText(questions.find(q => q.id === currentQuestionId))}
+              </p>
             </div>
             <div className="answer-progress">
               {playersWhoAnswered.length} of {players.length} players answered
@@ -3595,7 +3712,10 @@ Ready to engage? See you there!`;
 
         {gameState.startsWith('RESULTS#') && (
           <div className={`results-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
-            <h2>🏆 Question {parseInt(gameState.split('#')[1])} Results</h2>
+            <h2 className="results-heading">
+              <Icon name="Trophy" weight="duotone" size={30} color="var(--primary)" />
+              <span>Question {parseInt(gameState.split('#')[1])} · Results</span>
+            </h2>
             
             {currentGameType === 'trivia' ? (
               <div className="trivia-results-display">
@@ -3652,13 +3772,19 @@ Ready to engage? See you there!`;
                       const percentage = totalPlayers > 0 ? Math.round((playersWhoSelectedThis / totalPlayers) * 100) : 0;
                       
                       return (
-                        <div 
-                          key={key} 
+                        <div
+                          key={key}
                           className={`category-item trivia-result-option ${isCorrect ? 'correct' : 'incorrect'}`}
+                          style={{ '--pct': `${percentage}%` }}
                         >
                           <span className="category-name">
-                            <span className="option-letter">{optionLetter}.</span> {questions[0][key]}
-                            {isCorrect && <span className="correct-indicator"> ✓</span>}
+                            <span className="option-letter">{optionLetter}</span>
+                            <span className="option-text">{questions[0][key]}</span>
+                            {isCorrect && (
+                              <span className="correct-indicator">
+                                <Icon name="CheckCircle" weight="fill" size={26} color="var(--success)" />
+                              </span>
+                            )}
                           </span>
                           <span className="category-count">
                             {percentage}%
@@ -3683,7 +3809,12 @@ Ready to engage? See you there!`;
                       <div key={idx} className={`trivia-player-result ${isCorrect ? 'correct' : 'incorrect'}`}>
                         <span className="player-name">{playerName}</span>
                         <span className="player-answer">Answer: {answer.answer}</span>
-                        <span className="player-points">{isCorrect ? '✓' : '✗'} +{roundPoints} pts</span>
+                        <span className="player-points">
+                          {isCorrect
+                            ? <Icon name="CheckCircle" weight="fill" size={18} color="var(--success)" />
+                            : <Icon name="XCircle" weight="fill" size={18} color="var(--muted)" />}
+                          {' '}+{roundPoints} pts
+                        </span>
                         <span className="player-total">Total: {player?.score || 0} pts</span>
                       </div>
                     );
@@ -3760,7 +3891,11 @@ Ready to engage? See you there!`;
                     <div className="result-answer">"{answer.answer}"</div>
                     <div className="result-breakdown">
                       <span className="vote-summary">
-                        {answer.votes} votes • Placement: {answer.placement ? (answer.placement === 1 ? '🥇' : answer.placement === 2 ? '🥈' : '🥉') : '-'}
+                        {answer.votes} votes • Placement:{' '}
+                        {answer.placement ? (
+                          <Icon name="Medal" weight="fill" size={18}
+                            color={answer.placement === 1 ? 'var(--primary)' : answer.placement === 2 ? 'var(--silver)' : 'var(--bronze)'} />
+                        ) : '-'}
                       </span>
                     </div>
                   </div>
@@ -3781,7 +3916,7 @@ Ready to engage? See you there!`;
                 <div className="ai-insights-loading">
                   <img src="/workie.png" alt="Workie" className="workie-avatar" />
                   <div className="ai-insights-content">
-                    <h3>🤖 Workie is analyzing responses...</h3>
+                    <h3><Icon name="Sparkle" weight="duotone" size={24} color="var(--primary)" /> Workie is analyzing responses...</h3>
                     <p>Please wait while I generate strategic insights</p>
                   </div>
                 </div>
@@ -3790,8 +3925,8 @@ Ready to engage? See you there!`;
                   <div className="ai-insights-header">
                     <img src="/workie.png" alt="Workie" className="workie-avatar" />
                     <div className="ai-insights-title">
-                      <h3>💡 Strategic Insights from Workie</h3>
-                      <p>AI-powered analysis of your team's responses</p>
+                      <h3><Icon name="Sparkle" weight="duotone" size={24} color="var(--primary)" /> Field Notes</h3>
+                      <p>Workie's analysis of your team's responses</p>
                     </div>
                     <button 
                       className="regenerate-ai-btn"
@@ -3818,23 +3953,23 @@ Ready to engage? See you there!`;
                       <>
                         {/* Summary */}
                         <div className="ai-insights-section-item">
-                          <h4>📋 Summary</h4>
+                          <h4><Icon name="ClipboardText" weight="bold" size={20} color="var(--primary)" /> Summary</h4>
                           <p>{currentAIInsights.summary}</p>
                         </div>
-                        
+
                         {/* Discussion Topics */}
                         <div className="ai-insights-section-item">
-                          <h4>💬 Discussion Topics</h4>
+                          <h4><Icon name="ChatCircleText" weight="bold" size={20} color="var(--primary)" /> Discussion Topics</h4>
                           <ul>
                             {currentAIInsights.discussionTopics.map((topic, idx) => (
                               <li key={idx}>{topic}</li>
                             ))}
                           </ul>
                         </div>
-                        
+
                         {/* Next Steps */}
                         <div className="ai-insights-section-item">
-                          <h4>🎡 Next Steps</h4>
+                          <h4><Icon name="ListChecks" weight="bold" size={20} color="var(--primary)" /> Next Steps</h4>
                           <ul>
                             {currentAIInsights.nextSteps.map((step, idx) => (
                               <li key={idx}>{step}</li>
@@ -3847,12 +3982,12 @@ Ready to engage? See you there!`;
                     {/* Debug Prompt Display */}
                     {gameDebugMode && (currentAIInsights.prompt || currentAIInsights.debugPrompt || currentAIInsights.debugProvenance) && (
                       <div className="ai-insights-section-item debug-section">
-                        <h4>🐛 Debug: AI Prompt Information</h4>
+                        <h4><Icon name="Bug" weight="bold" size={18} color="var(--muted)" /> Debug: AI Prompt Information</h4>
                         
                         {/* Prompt Provenance Information */}
                         {currentAIInsights.debugProvenance && (
                           <div className="debug-provenance-section">
-                            <h5>📋 Prompt Source</h5>
+                            <h5><Icon name="ClipboardText" weight="bold" size={16} color="var(--muted)" /> Prompt Source</h5>
                             <div className="provenance-info">
                               <strong>Source:</strong> {currentAIInsights.debugProvenance.source === 'question_set' ? 'Custom prompt from question set' : 
                                                        currentAIInsights.debugProvenance.source === 'default_category' ? 'Default prompt for game type + category' :
@@ -3877,7 +4012,7 @@ Ready to engage? See you there!`;
                             {/* Context Hierarchy */}
                             {currentAIInsights.debugProvenance.hierarchy && currentAIInsights.debugProvenance.hierarchy.length > 0 && (
                               <div className="context-hierarchy">
-                                <h6>🎯 Context Sources:</h6>
+                                <h6><Icon name="Target" weight="bold" size={16} color="var(--muted)" /> Context Sources:</h6>
                                 <ul>
                                   {currentAIInsights.debugProvenance.hierarchy.map((item, idx) => (
                                     <li key={idx}>
@@ -3894,7 +4029,7 @@ Ready to engage? See you there!`;
                         
                         {/* Full Prompt Display */}
                         <div className="debug-prompt-content">
-                          <h5>📝 Full AI Prompt</h5>
+                          <h5><Icon name="Note" weight="bold" size={16} color="var(--muted)" /> Full AI Prompt</h5>
                           <div className="prompt-display">{currentAIInsights.debugPrompt || currentAIInsights.prompt}</div>
                         </div>
                       </div>
@@ -3905,7 +4040,7 @@ Ready to engage? See you there!`;
                 <div className="ai-insights-placeholder">
                   <img src="/workie.png" alt="Workie" className="workie-avatar-disabled" />
                   <div className="ai-insights-content">
-                    <h3>🤖 Workie's Analysis</h3>
+                    <h3><Icon name="Sparkle" weight="duotone" size={24} color="var(--muted)" /> Field Notes</h3>
                     <p>Strategic insights will appear here after responses are submitted</p>
                   </div>
                 </div>
@@ -3930,7 +4065,7 @@ Ready to engage? See you there!`;
             </div>
             {expandedCopyMessage && (
               <div className="copy-message expanded-copy-message">
-                ✓ Link copied!
+                <Icon name="Check" weight="bold" size={16} color="var(--success)" /> Link copied!
               </div>
             )}
             <div 
@@ -3954,7 +4089,7 @@ Ready to engage? See you there!`;
       {isLoadingData && (
         <div className="flash-alert-overlay">
           <div className="flash-alert">
-            <div className="flash-alert-icon">⏳</div>
+            <div className="flash-alert-icon"><Icon name="Timer" weight="duotone" size={64} color="var(--primary)" /></div>
             <div className="flash-alert-text">{loadingMessage}</div>
             <div className="flash-alert-subtext">Please wait while we update the game...</div>
           </div>
@@ -3965,7 +4100,7 @@ Ready to engage? See you there!`;
       {showAllAnsweredAlert && (
         <div className="flash-alert-overlay">
           <div className="flash-alert">
-            <div className="flash-alert-icon">🎉</div>
+            <div className="flash-alert-icon"><Icon name="Confetti" weight="duotone" size={64} color="var(--primary)" /></div>
             <div className="flash-alert-text">All Players Have Answered!</div>
             <div className="flash-alert-subtext">Ready to proceed to voting</div>
           </div>
@@ -3976,7 +4111,7 @@ Ready to engage? See you there!`;
       {showAllVotedAlert && (
         <div className="flash-alert-overlay">
           <div className="flash-alert">
-            <div className="flash-alert-icon">🗳️</div>
+            <div className="flash-alert-icon"><Icon name="ListChecks" weight="duotone" size={64} color="var(--primary)" /></div>
             <div className="flash-alert-text">All Players Have Voted!</div>
             <div className="flash-alert-subtext">Ready to see results</div>
           </div>
@@ -3987,7 +4122,7 @@ Ready to engage? See you there!`;
       {showInviteCreated && (
         <div className="flash-alert-overlay">
           <div className="flash-alert">
-            <div className="flash-alert-icon">📋</div>
+            <div className="flash-alert-icon"><Icon name="ClipboardText" weight="duotone" size={64} color="var(--primary)" /></div>
             <div className="flash-alert-text">Invite Created & Copied!</div>
             <div className="flash-alert-subtext">Meeting invitation copied to clipboard</div>
           </div>
@@ -4082,7 +4217,7 @@ Ready to engage? See you there!`;
       }}>
         <div className="question-browser-modal">
           <div className="question-browser-header">
-            <h2>🔍 Browse Questions - {selectedCategory}</h2>
+            <h2><Icon name="MagnifyingGlass" weight="duotone" size={22} color="var(--primary)" />Browse Questions — {selectedCategory}</h2>
             <p className="question-count">{browsingQuestions?.length || 0} questions found</p>
           </div>
           
@@ -4117,7 +4252,7 @@ Ready to engage? See you there!`;
                             <div>C) {question.optionC || question.OptionC}</div>
                             <div>D) {question.optionD || question.OptionD}</div>
                             {(question.correctAnswer || question.CorrectAnswer) && (
-                              <div className="correct-answer">✓ Correct: {question.correctAnswer || question.CorrectAnswer}</div>
+                              <div className="correct-answer"><Icon name="CheckCircle" weight="fill" size={14} color="var(--success)" /> Correct: {question.correctAnswer || question.CorrectAnswer}</div>
                             )}
                           </div>
                         )}
@@ -4324,7 +4459,7 @@ function GameReport({ reportData, onClose }) {
             {isSaving ? 'Saving...' : 'Save Report'}
           </button>
           <button className="btn-secondary report-close" onClick={onClose}>
-            ← Back to Game
+            <Icon name="ArrowLeft" weight="bold" size={16} /> Back to Game
           </button>
         </div>
       </div>
@@ -4374,7 +4509,7 @@ function GameReport({ reportData, onClose }) {
                         <div key={letter} className={`trivia-option-report ${isCorrect ? 'correct-answer' : ''}`}>
                           <span className="option-letter">{letter})</span>
                           <span className="option-text">{optionText}</span>
-                          {isCorrect && <span className="correct-indicator">✓ Correct Answer</span>}
+                          {isCorrect && <span className="correct-indicator"><Icon name="CheckCircle" weight="fill" size={14} color="var(--success)" /> Correct Answer</span>}
                         </div>
                       );
                     })}
@@ -4385,7 +4520,7 @@ function GameReport({ reportData, onClose }) {
               {/* AI Summary for this question */}
               {aiSummary && (
                 <div className="report-ai-summary">
-                  <h4>🤖 AI Analysis</h4>
+                  <h4><Icon name="Sparkle" weight="duotone" size={18} color="var(--primary)" />AI Analysis</h4>
                   
                   <div className="report-ai-content">
                     {aiSummary.markdownResponse ? (
@@ -4481,11 +4616,11 @@ function GameReport({ reportData, onClose }) {
               
               return rankedPlayers.map((player, idx) => {
                 const isChampion = (player.score || 0) === highestScore;
-                const rankEmoji = player.rank === 1 ? '🏆' : player.rank === 2 ? '🥈' : player.rank === 3 ? '🥉' : '📍';
+                const rankIcon = <RankIcon rank={player.rank} size={18} />;
                 return (
                   <div key={player.name} className={`score-item ${isChampion ? 'champion' : ''}`}>
-                    {isChampion && <div className="champion-badge">🏆 Session Champion</div>}
-                    <div className="player-name">{rankEmoji} #{player.rank} {player.name}</div>
+                    {isChampion && <div className="champion-badge"><Icon name="Trophy" weight="duotone" size={16} color="var(--primary)" /> Session Champion</div>}
+                    <div className="player-name">{rankIcon} #{player.rank} {player.name}</div>
                     <div className="player-final-score">{player.score || 0} points</div>
                   </div>
                 );

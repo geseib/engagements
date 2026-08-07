@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './AIPromptManager.css';
 import { authFetch } from '../auth/authFetch';
+import Icon from './Icon';
 
 const API_BASE = window.API_BASE;
 
@@ -243,8 +244,8 @@ function AIGenerationPromptEditor({ onClose }) {
       <div className="modal-overlay" onClick={onClose}>
         <div className="modal-content large-modal" onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
-            <h2>🤖 AI Generation Prompt Editor</h2>
-            <button className="close-button" onClick={onClose}>✕</button>
+            <h2><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI Generation Prompt Editor</h2>
+            <button className="close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
           </div>
 
           <div className="modal-body">
@@ -294,7 +295,7 @@ function AIGenerationPromptEditor({ onClose }) {
                     </label>
 
                     <button className="btn-primary" onClick={handleCreateNew}>
-                      ➕ Create New Prompt
+                      <Icon name="Plus" weight="bold" size={16} color="currentColor" /> Create New Prompt
                     </button>
                   </div>
                 </div>

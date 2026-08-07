@@ -376,3 +376,57 @@
     flex-basis: 100%;
   }
 }
+/* ---- Phase flow (ASK → VOTE → RESULTS) ----
+   Replaces the ASCII-art <pre> diagram: real boxes so it stays legible at any
+   zoom, and wraps to a vertical stack on a phone instead of overflowing. */
+.phase-flow {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 16px 0 8px;
+  padding: 0;
+}
+
+.phase-flow__step {
+  flex: 1 1 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid rgba(155, 168, 190, 0.28);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+}
+
+.phase-flow__name {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: var(--primary, #f6a94c);
+}
+
+.phase-flow__desc {
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--text, #1b2942);
+}
+
+.phase-flow__arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.phase-flow__note {
+  font-size: 13px;
+  color: var(--muted, #5e6167);
+  margin-bottom: 16px;
+}
+
+@media (max-width: 560px) {
+  .phase-flow { flex-direction: column; }
+  .phase-flow__arrow { transform: rotate(90deg); }
+}

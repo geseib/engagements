@@ -12,6 +12,8 @@ import IssueFab from './components/IssueFab';
 import { useAuth } from './auth/AuthContext';
 import './BuilderPage.css';
 import { authFetch } from './auth/authFetch';
+import Icon from './components/Icon';
+import StatusMessage from './components/StatusMessage';
 
 const API_BASE = window.API_BASE;
 
@@ -80,6 +82,9 @@ function AdminPage() {
   const [editEngagementType, setEditEngagementType] = useState('call-and-answer');
   const [editPromptId, setEditPromptId] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
+  // Success/failure is explicit state. It used to be inferred by sniffing the
+  // status string for a ✅, which silently broke the moment the copy changed.
+  const [saveOk, setSaveOk] = useState(null); // true | false | null (in progress)
 
   // Available prompts for selection
   const [availablePrompts, setAvailablePrompts] = useState([]);
@@ -176,10 +181,12 @@ function AdminPage() {
 
   const handleSaveEdit = async () => {
     if (!editTitle.trim()) {
-      setSaveStatus('❌ Title is required');
+      setSaveOk(false);
+      setSaveStatus('Title is required');
       return;
     }
 
+    setSaveOk(null);
     setSaveStatus('Saving...');
     try {
       const response = await authFetch(`${API_BASE}admin/edit-question-set/${editingSetId}`, {
@@ -199,7 +206,8 @@ function AdminPage() {
       const result = await response.json();
 
       if (response.ok) {
-        setSaveStatus('✅ Question set updated successfully');
+        setSaveOk(true);
+        setSaveStatus('Question set updated successfully');
         setEditMode(false);
         setEditingSetId('');
         setEditTitle('');
@@ -210,11 +218,13 @@ function AdminPage() {
         // Refresh the question sets list
         await fetchQuestionSets();
       } else {
-        setSaveStatus(`❌ Save failed: ${result.error || 'Unknown error'}`);
+        setSaveOk(false);
+        setSaveStatus(`Save failed: ${result.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Edit save error:', error);
-      setSaveStatus(`❌ Save failed: ${error.message}`);
+      setSaveOk(false);
+      setSaveStatus(`Save failed: ${error.message}`);
     }
   };
 
@@ -411,12 +421,12 @@ function AdminPage() {
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
-        setUploadStatus(`✅ ${result.filename} downloaded successfully`);
+        setUploadStatus(`${result.filename} downloaded successfully`);
       } else {
-        setUploadStatus(`❌ Failed to download template: ${result.error}`);
+        setUploadStatus(`Failed to download template: ${result.error}`);
       }
     } catch (error) {
-      setUploadStatus(`❌ Failed to download template: ${error.message}`);
+      setUploadStatus(`Failed to download template: ${error.message}`);
     }
   };
 
@@ -438,7 +448,7 @@ function AdminPage() {
         if (!customDescription) {
           setCustomDescription(`Imported from ${file.name}`);
         }
-        setUploadStatus(`✅ File loaded: ${file.name}. Note: survey JSON upload is not yet supported by the server.`);
+        setUploadStatus(`File loaded: ${file.name}. Note: survey JSON upload is not yet supported by the server.`);
         return;
       }
 
@@ -478,7 +488,7 @@ function AdminPage() {
               setCustomInstructions(firstRow[customInstructionIndex]);
             }
             
-            setUploadStatus(`✅ File loaded: ${lines.length - 1} questions detected. Fields auto-populated from CSV.`);
+            setUploadStatus(`File loaded: ${lines.length - 1} questions detected. Fields auto-populated from CSV.`);
           }
         } catch (error) {
           console.log('Could not auto-populate from CSV:', error);
@@ -540,7 +550,7 @@ function AdminPage() {
       const result = await response.json();
 
       if (response.ok) {
-        setUploadStatus(`✅ ${result.message}`);
+        setUploadStatus(`${result.message}`);
         fetchQuestionSets(); // Refresh the list
         setSelectedFile(null);
         setCustomTitle('');
@@ -552,11 +562,11 @@ function AdminPage() {
         const fileInput = document.getElementById('file-upload');
         if (fileInput) fileInput.value = '';
       } else {
-        setUploadStatus(`❌ Upload failed: ${result.error || 'Unknown error'}`);
+        setUploadStatus(`Upload failed: ${result.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Upload error:', error);
-      setUploadStatus(`❌ Upload failed: ${error.message}`);
+      setUploadStatus(`Upload failed: ${error.message}`);
     } finally {
       setIsUploading(false);
     }
@@ -605,14 +615,14 @@ function AdminPage() {
       const result = await response.json();
 
       if (response.ok) {
-        setUploadStatus(`✅ ${result.message} - Question set created successfully! You can edit it in the Question Sets list below.`);
+        setUploadStatus(`${result.message} - Question set created successfully! You can edit it in the Question Sets list below.`);
         await fetchQuestionSets(); // Refresh the list
       } else {
-        setUploadStatus(`❌ Upload failed: ${result.error || 'Unknown error'}`);
+        setUploadStatus(`Upload failed: ${result.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Upload error:', error);
-      setUploadStatus(`❌ Upload failed: ${error.message}`);
+      setUploadStatus(`Upload failed: ${error.message}`);
     }
   };
 
@@ -675,14 +685,14 @@ function AdminPage() {
       const result = await response.json();
 
       if (response.ok) {
-        setUploadStatus(`✅ ${result.message} - Trivia question set created successfully! You can edit it in the Question Sets list below.`);
+        setUploadStatus(`${result.message} - Trivia question set created successfully! You can edit it in the Question Sets list below.`);
         await fetchQuestionSets(); // Refresh the list
       } else {
-        setUploadStatus(`❌ Upload failed: ${result.error || 'Unknown error'}`);
+        setUploadStatus(`Upload failed: ${result.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Upload error:', error);
-      setUploadStatus(`❌ Upload failed: ${error.message}`);
+      setUploadStatus(`Upload failed: ${error.message}`);
     }
   };
 
@@ -751,14 +761,14 @@ function AdminPage() {
       const result = await response.json();
 
       if (response.ok) {
-        setUploadStatus(`✅ ${result.message} - Poll question set created successfully! You can edit it in the Question Sets list below.`);
+        setUploadStatus(`${result.message} - Poll question set created successfully! You can edit it in the Question Sets list below.`);
         await fetchQuestionSets(); // Refresh the list
       } else {
-        setUploadStatus(`❌ Upload failed: ${result.error || 'Unknown error'}`);
+        setUploadStatus(`Upload failed: ${result.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Upload error:', error);
-      setUploadStatus(`❌ Upload failed: ${error.message}`);
+      setUploadStatus(`Upload failed: ${error.message}`);
     }
   };
 
@@ -819,11 +829,11 @@ function AdminPage() {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
 
-      setUploadStatus(`✅ Survey "${survey.title}" exported as JSON file with ${survey.questions.length} questions`);
+      setUploadStatus(`Survey "${survey.title}" exported as JSON file with ${survey.questions.length} questions`);
 
     } catch (error) {
       console.error('Survey export error:', error);
-      setUploadStatus(`❌ Survey export failed: ${error.message}`);
+      setUploadStatus(`Survey export failed: ${error.message}`);
     }
   };
 
@@ -850,16 +860,16 @@ function AdminPage() {
       if (response.ok) {
         setDeleteStatus(
           deleteMode === 'all'
-            ? `✅ Successfully cleared all games (${result.itemsDeleted || 0} items deleted)`
-            : `✅ Successfully cleared game ${deleteGameId} (${result.itemsDeleted || 0} items deleted)`
+            ? `Successfully cleared all games (${result.itemsDeleted || 0} items deleted)`
+            : `Successfully cleared game ${deleteGameId} (${result.itemsDeleted || 0} items deleted)`
         );
         setDeleteGameId('');
       } else {
-        setDeleteStatus(`❌ Delete failed: ${result.error || 'Unknown error'}`);
+        setDeleteStatus(`Delete failed: ${result.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Delete error:', error);
-      setDeleteStatus(`❌ Delete failed: ${error.message}`);
+      setDeleteStatus(`Delete failed: ${error.message}`);
     } finally {
       setIsDeleting(false);
     }
@@ -892,15 +902,15 @@ function AdminPage() {
       const result = await response.json();
 
       if (response.ok) {
-        setQuestionSetDeleteStatus(`✅ ${result.message}`);
+        setQuestionSetDeleteStatus(`${result.message}`);
         setSelectedQuestionSet('');
         fetchQuestionSets(); // Refresh the list
       } else {
-        setQuestionSetDeleteStatus(`❌ Delete failed: ${result.error || 'Unknown error'}`);
+        setQuestionSetDeleteStatus(`Delete failed: ${result.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Delete question set error:', error);
-      setQuestionSetDeleteStatus(`❌ Delete failed: ${error.message}`);
+      setQuestionSetDeleteStatus(`Delete failed: ${error.message}`);
     } finally {
       setIsDeletingQuestionSet(false);
     }
@@ -981,37 +991,37 @@ function AdminPage() {
                 className={`tab-btn ${activeTab === 'prompts' ? 'active' : ''}`}
                 onClick={() => setActiveTab('prompts')}
               >
-                🤖 AI Prompts
+                <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI Prompts
               </button>
               <button 
                 className={`tab-btn ${activeTab === 'questionsets' ? 'active' : ''}`}
                 onClick={() => setActiveTab('questionsets')}
               >
-                📚 Question Sets
+                <Icon name="Books" weight="duotone" size={16} color="var(--primary)" /> Question Sets
               </button>
               <button 
                 className={`tab-btn ${activeTab === 'games' ? 'active' : ''}`}
                 onClick={() => setActiveTab('games')}
               >
-                🎮 Game Management
+                <Icon name="GameController" weight="bold" size={16} color="currentColor" /> Game Management
               </button>
               <button 
                 className={`tab-btn ${activeTab === 'archive' ? 'active' : ''}`}
                 onClick={() => setActiveTab('archive')}
               >
-                📦 Archive
+                <Icon name="Package" weight="bold" size={16} color="currentColor" /> Archive
               </button>
               <button 
                 className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`}
                 onClick={() => setActiveTab('users')}
               >
-                👥 Users
+                <Icon name="UsersThree" weight="bold" size={16} color="currentColor" /> Users
               </button>
               <button 
                 className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
                 onClick={() => setActiveTab('settings')}
               >
-                ⚙️ Settings
+                <Icon name="Gear" weight="bold" size={16} color="currentColor" /> Settings
               </button>
             </div>
           </div>
@@ -1021,17 +1031,17 @@ function AdminPage() {
             <div className="tab-content">
               {/* AI Prompt Management Section */}
               <div className="admin-section">
-                <h2>🤖 AI Prompt Management</h2>
+                <h2><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI Prompt Management</h2>
                 
                 {/* Two distinct sections for different prompt types */}
                 <div className="prompt-type-sections">
                   {/* Question Set Generator Prompts */}
                   <div className="prompt-section generation-prompts">
                     <div className="section-header">
-                      <h3>📝 Question Set Generator AI Prompts</h3>
+                      <h3><Icon name="NotePencil" weight="bold" size={16} color="currentColor" /> Question Set Generator AI Prompts</h3>
                       <div className="section-header-right">
                         <HelpButton section="ai-prompts" variant="inline" size="small" tooltip="Help: AI Prompts Management" />
-                        <span className="section-icon">🏗️</span>
+                        <span className="section-icon"><Icon name="Buildings" weight="bold" size={16} color="currentColor" /></span>
                       </div>
                     </div>
                     <p className="section-description">
@@ -1042,7 +1052,7 @@ function AdminPage() {
                       className="btn-primary"
                       onClick={() => setShowGenerationPromptEditor(true)}
                     >
-                      ⚙️ Manage Generation Prompts
+                      <Icon name="Gear" weight="bold" size={16} color="currentColor" /> Manage Generation Prompts
                     </button>
                     <div className="prompt-examples">
                       <small>Examples: Lessons Learned, Interview Prep, General Knowledge Trivia, Opinion Polls</small>
@@ -1052,7 +1062,7 @@ function AdminPage() {
                   {/* Results Analysis Prompts (Workie) */}
                   <div className="prompt-section analysis-prompts">
                     <div className="section-header">
-                      <h3>🤖 Engagement Results AI Analysis (Workie)</h3>
+                      <h3><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> Engagement Results AI Analysis (Workie)</h3>
                       <div className="section-header-right">
                         <HelpButton section="ai-prompts" variant="inline" size="small" tooltip="Help: AI Prompts Management" />
                         <span className="section-icon">
@@ -1068,7 +1078,7 @@ function AdminPage() {
                       className="btn-secondary"
                       onClick={() => setShowAnalysisPrompts(!showAnalysisPrompts)}
                     >
-                      🔍 {showAnalysisPrompts ? 'Hide' : 'Manage'} Analysis Prompts
+                      <Icon name="MagnifyingGlass" weight="bold" size={16} color="currentColor" /> {showAnalysisPrompts ? 'Hide' : 'Manage'} Analysis Prompts
                     </button>
                     <div className="prompt-examples">
                       <small>Examples: Team Dynamics Analysis, Innovation Insights, Consensus Patterns</small>
@@ -1079,7 +1089,7 @@ function AdminPage() {
                 {/* Show Analysis Prompts (AIPromptManager) when toggled */}
                 {showAnalysisPrompts && (
                   <div className="analysis-prompts-section">
-                    <h3>🔍 Engagement Results Analysis Prompts (Workie)</h3>
+                    <h3><Icon name="MagnifyingGlass" weight="bold" size={16} color="currentColor" /> Engagement Results Analysis Prompts (Workie)</h3>
                     <p className="section-description">
                       These prompts control how Workie analyzes and summarizes player responses to generate strategic insights.
                     </p>
@@ -1096,7 +1106,7 @@ function AdminPage() {
           {/* Current Question Sets - Moved to top */}
           <div className="admin-section">
             <div className="section-title-with-help">
-              <h2>📚 Current Question Sets</h2>
+              <h2><Icon name="Books" weight="duotone" size={16} color="var(--primary)" /> Current Question Sets</h2>
               <HelpButton section="question-sets" variant="inline" size="small" tooltip="Help: Managing Question Sets" />
             </div>
             
@@ -1203,11 +1213,11 @@ function AdminPage() {
                             checked={set.quickstart || false}
                             onChange={(e) => handleToggleQuickstart(set.id, e.target.checked)}
                           />
-                          <span className="quickstart-label">⚡ Quickstart</span>
+                          <span className="quickstart-label"><Icon name="Lightning" weight="fill" size={16} color="var(--primary)" /> Quickstart</span>
                         </label>
                         {set.isAIGenerated && (
                           <span className="stat-badge ai-generated" title="AI-generated content">
-                            🤖 AI
+                            <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI
                           </span>
                         )}
                       </div>
@@ -1218,14 +1228,14 @@ function AdminPage() {
                         onClick={() => handleEditQuestionSet(set)}
                         title="Edit this question set"
                       >
-                        ✏️ Edit
+                        <Icon name="PencilSimple" weight="bold" size={16} color="currentColor" /> Edit
                       </button>
                       <button
                         className="btn-danger btn-small"
                         onClick={() => handleDeleteQuestionSetFromList(set.id, set.name)}
                         title="Delete this question set"
                       >
-                        🗑️ Delete
+                        <Icon name="Trash" weight="bold" size={16} color="currentColor" /> Delete
                       </button>
                     </div>
                   </div>
@@ -1238,14 +1248,14 @@ function AdminPage() {
           {/* Edit Question Set Modal/Form */}
           {editMode && (
             <div className="admin-section edit-section">
-              <h2>✏️ Edit Question Set</h2>
+              <h2><Icon name="PencilSimple" weight="bold" size={16} color="currentColor" /> Edit Question Set</h2>
               {/* AI-Generated Content Warning */}
               {(() => {
                 const currentSet = questionSets.find(set => set.id === editingSetId);
                 return currentSet?.isAIGenerated && (
                   <div className="ai-review-banner">
                     <div className="ai-review-content">
-                      <span className="ai-review-icon">🤖</span>
+                      <span className="ai-review-icon"><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /></span>
                       <div className="ai-review-text">
                         <strong>AI-Generated Content - Review Required</strong>
                         <p>This question set was created by AI and is currently inactive. Please review and edit the content, then activate it when ready.</p>
@@ -1349,8 +1359,14 @@ function AdminPage() {
                 </div>
                 
                 {saveStatus && (
-                  <div className={`status-message ${saveStatus.includes('✅') ? 'success' : 'error'}`}>
-                    {saveStatus}
+                  <div
+                    className={`status-message ${saveOk === true ? 'success' : saveOk === false ? 'error' : 'pending'}`}
+                    role="status"
+                  >
+                    {saveOk === true && <Icon name="CheckCircle" weight="fill" size={16} color="var(--success)" />}
+                    {saveOk === false && <Icon name="XCircle" weight="fill" size={16} color="var(--danger)" />}
+                    {saveOk === null && <Icon name="Timer" weight="bold" size={16} color="var(--muted)" />}
+                    {' '}{saveStatus}
                   </div>
                 )}
               </div>
@@ -1364,12 +1380,12 @@ function AdminPage() {
               onClick={() => setIsUploadSectionExpanded(!isUploadSectionExpanded)}
             >
               <div className="expandable-title-with-help">
-                <h2>📤 Upload Question Set</h2>
+                <h2><Icon name="UploadSimple" weight="bold" size={16} color="currentColor" /> Upload Question Set</h2>
                 <HelpButton section="upload-csv" variant="inline" size="small" tooltip="Help: Uploading CSV Files" 
                   onClick={(e) => e.stopPropagation()} />
               </div>
               <button className={`expand-arrow ${isUploadSectionExpanded ? 'expanded' : ''}`}>
-                ▼
+                <Icon name="CaretDown" weight="bold" size={16} color="currentColor" />
               </button>
             </div>
             {isUploadSectionExpanded && (
@@ -1518,16 +1534,12 @@ function AdminPage() {
                       onClick={handleUploadQuestionSet}
                       disabled={!selectedFile || !customTitle.trim() || isUploading}
                     >
-                      {isUploading ? '⏳ Uploading...' : '📤 Upload Question Set'}
+                      {isUploading ? 'Uploading...' : 'Upload Question Set'}
                     </button>
                   </div>
                 </div>
                 
-                {uploadStatus && (
-                  <div className={`status-message ${uploadStatus.includes('✅') ? 'success' : uploadStatus.includes('❌') ? 'error' : ''}`}>
-                    {uploadStatus}
-                  </div>
-                )}
+                {uploadStatus && <StatusMessage message={uploadStatus} />}
               </>
             )}
           </div>
@@ -1535,7 +1547,7 @@ function AdminPage() {
           {/* Add New Set Section */}
           <div className="admin-section">
             <div className="section-title-with-help">
-              <h2>➕ Add New Question Set</h2>
+              <h2><Icon name="Plus" weight="bold" size={16} color="currentColor" /> Add New Question Set</h2>
               <HelpButton section="ai-builders" variant="inline" size="small" tooltip="Help: AI Builders & Question Creation" />
             </div>
             <p className="section-description">Create new question sets using different methods based on your engagement type.</p>
@@ -1573,7 +1585,7 @@ function AdminPage() {
                     }
                   }}
                 >
-                  🤖 AI {engagementType === 'trivia' ? 'Trivia' : 
+                  <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI {engagementType === 'trivia' ? 'Trivia' : 
                            engagementType === 'poll' ? 'Poll' : 
                            engagementType === 'survey' ? 'Survey' :
                            engagementType === 'wavelength' ? 'Wavelength' : 'Scenario'} Builder
@@ -1582,13 +1594,13 @@ function AdminPage() {
                   className="btn-secondary"
                   onClick={() => window.open('/builder', '_blank')}
                 >
-                  🎨 Manual Builder Interface
+                  <Icon name="Palette" weight="duotone" size={16} color="var(--primary)" /> Manual Builder Interface
                 </button>
                 <button
                   className="btn-secondary"
                   onClick={() => handleDownloadTemplate(engagementType)}
                 >
-                  📄 Download {engagementType === 'call-and-answer' ? 'Call & Answer' :
+                  <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Download {engagementType === 'call-and-answer' ? 'Call & Answer' :
                               engagementType === 'trivia' ? 'Trivia' : 
                               engagementType === 'poll' ? 'Poll' : 
                               engagementType === 'wavelength' ? 'Wavelength' :
@@ -1606,7 +1618,7 @@ function AdminPage() {
               {/* Delete Games Section */}
               <div className="admin-section danger-section">
                 <div className="section-title-with-help">
-                  <h2>🎮 Remove Games</h2>
+                  <h2><Icon name="GameController" weight="bold" size={16} color="currentColor" /> Remove Games</h2>
                   <HelpButton section="game-management" variant="inline" size="small" tooltip="Help: Game Management & Cleanup" />
                 </div>
                 <p className="section-description">Delete game data from the database.</p>
@@ -1650,15 +1662,11 @@ function AdminPage() {
                     onClick={handleDeleteGames}
                     disabled={isDeleting}
                   >
-                    {isDeleting ? '⏳ Deleting...' : deleteMode === 'all' ? '🗑️ Delete All Games' : '🗑️ Delete Game'}
+                    {isDeleting ? 'Deleting...' : deleteMode === 'all' ? 'Delete All Games' : 'Delete Game'}
                   </button>
                 </div>
                 
-                {deleteStatus && (
-                  <div className={`status-message ${deleteStatus.includes('✅') ? 'success' : deleteStatus.includes('❌') ? 'error' : ''}`}>
-                    {deleteStatus}
-                  </div>
-                )}
+                {deleteStatus && <StatusMessage message={deleteStatus} />}
               </div>
             </div>
           )}
@@ -1680,7 +1688,7 @@ function AdminPage() {
               {/* WebSocket Mode Toggle */}
               <div className="admin-section debug-section">
                 <div className="section-title-with-help">
-                  <h2>🔌 Real-time Communication</h2>
+                  <h2><Icon name="Broadcast" weight="bold" size={16} color="var(--success)" /> Real-time Communication</h2>
                   <HelpButton section="websocket-settings" variant="inline" size="small" tooltip="Help: WebSocket & Real-time Settings" />
                 </div>
                 <p className="section-description">Real-time WebSocket communication is now the default. Toggle off to use HTTP polling instead.</p>
@@ -1707,7 +1715,7 @@ function AdminPage() {
 
               {/* Debug Mode Toggle */}
               <div className="admin-section debug-section">
-                <h2>🐛 Debug Settings</h2>
+                <h2><Icon name="Bug" weight="bold" size={16} color="currentColor" /> Debug Settings</h2>
                 <p className="section-description">Development and debugging tools for AI functionality.</p>
                 
                 <div className="debug-controls">
@@ -1751,7 +1759,7 @@ function AdminPage() {
       {showDeleteConfirm && (
         <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>⚠️ Confirm Deletion</h3>
+            <h3><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> Confirm Deletion</h3>
             <p>
               {deleteMode === 'all'
                 ? 'Are you sure you want to delete ALL games? This action cannot be undone!'
@@ -1773,7 +1781,7 @@ function AdminPage() {
       {showQuestionSetDeleteConfirm && (
         <div className="modal-overlay" onClick={() => setShowQuestionSetDeleteConfirm(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>⚠️ Confirm Question Set Deletion</h3>
+            <h3><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> Confirm Question Set Deletion</h3>
             <p>
               Are you sure you want to delete the question set "<strong>{questionSets.find(set => set.id === selectedQuestionSet)?.name || selectedQuestionSet}</strong>"? 
             </p>

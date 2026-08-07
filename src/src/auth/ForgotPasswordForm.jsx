@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
 import './auth.css';
+import Icon from '../components/Icon';
 
 // Two-step self-service password reset:
 //   1. "request" — enter email, Cognito emails a 6-digit code
@@ -103,7 +104,7 @@ const ForgotPasswordForm = ({ onToggleMode, initialEmail = '' }) => {
         <form onSubmit={handleRequest} className="auth-form">
           {error && (
             <div className="auth-error" role="alert">
-              <i className="error-icon">⚠️</i>
+              <i className="error-icon"><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /></i>
               <span>{error}</span>
             </div>
           )}
@@ -146,7 +147,7 @@ const ForgotPasswordForm = ({ onToggleMode, initialEmail = '' }) => {
         <form onSubmit={handleReset} className="auth-form">
           {error && (
             <div className="auth-error" role="alert">
-              <i className="error-icon">⚠️</i>
+              <i className="error-icon"><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /></i>
               <span>{error}</span>
             </div>
           )}

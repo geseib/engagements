@@ -1,19 +1,20 @@
 import React from 'react';
+import Icon from '../Icon';
 
 const AdminAIPromptsDoc = () => {
   return (
     <div className="help-content-doc">
       <div className="help-doc-header">
-        <h1>🤖 AI Prompts Management</h1>
+        <h1><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI Prompts Management</h1>
         <p>Learn how to create, manage, and optimize AI prompts for better game analysis</p>
       </div>
 
       <div className="help-doc-section">
-        <h2>📝 Understanding AI Prompts</h2>
+        <h2><Icon name="NotePencil" weight="bold" size={16} color="currentColor" /> Understanding AI Prompts</h2>
         <p>AI prompts are templates that tell the AI how to analyze and summarize game results. They use template variables to insert game data and generate meaningful insights for your team.</p>
         
         <div className="help-info-box">
-          <h4>💡 Key Benefits</h4>
+          <h4><Icon name="Lightbulb" weight="duotone" size={16} color="var(--primary)" /> Key Benefits</h4>
           <ul>
             <li><strong>Consistent Analysis:</strong> Standardized format across all games</li>
             <li><strong>Customizable Insights:</strong> Tailor analysis to your specific needs</li>
@@ -24,7 +25,7 @@ const AdminAIPromptsDoc = () => {
       </div>
 
       <div className="help-doc-section">
-        <h2>🔧 Creating Custom Prompts</h2>
+        <h2><Icon name="Wrench" weight="bold" size={16} color="currentColor" /> Creating Custom Prompts</h2>
         
         <h3>Required Structure</h3>
         <p>All AI prompts must use this standardized markdown structure:</p>
@@ -45,16 +46,16 @@ Your analysis and key insights here
         </div>
 
         <div className="help-warning-box">
-          <h4>⚠️ Important</h4>
+          <h4><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> Important</h4>
           <p>Always use exactly these headers: <code>## Summary</code>, <code>## Discussion Questions</code>, and <code>## Next Steps</code>. The AI system expects this format.</p>
         </div>
       </div>
 
       <div className="help-doc-section">
-        <h2>📊 Template Variables</h2>
+        <h2><Icon name="ChartBar" weight="duotone" size={16} color="var(--primary)" /> Template Variables</h2>
         <p>Use these variables in your prompts to insert game data:</p>
 
-        <h3>🎮 Game Information</h3>
+        <h3><Icon name="GameController" weight="bold" size={16} color="currentColor" /> Game Information</h3>
         <div className="help-variables-grid">
           <div className="help-variable-item">
             <code>{'{question}'}</code>
@@ -70,7 +71,7 @@ Your analysis and key insights here
           </div>
         </div>
 
-        <h3>📝 Player Responses</h3>
+        <h3><Icon name="NotePencil" weight="bold" size={16} color="currentColor" /> Player Responses</h3>
         <div className="help-variables-grid">
           <div className="help-variable-item">
             <code>{'{playerResponses}'}</code>
@@ -82,7 +83,7 @@ Your analysis and key insights here
           </div>
         </div>
 
-        <h3>🏆 Scoring & Results</h3>
+        <h3><Icon name="Trophy" weight="fill" size={16} color="var(--primary)" /> Scoring & Results</h3>
         <div className="help-variables-grid">
           <div className="help-variable-item">
             <code>{'{totalScores}'}</code>
@@ -102,7 +103,7 @@ Your analysis and key insights here
           </div>
         </div>
 
-        <h3>🧠 Trivia-Specific Variables</h3>
+        <h3><Icon name="Brain" weight="duotone" size={16} color="var(--primary)" /> Trivia-Specific Variables</h3>
         <div className="help-variables-grid">
           <div className="help-variable-item">
             <code>{'{correctAnswer}'}</code>
@@ -124,7 +125,7 @@ Your analysis and key insights here
       </div>
 
       <div className="help-doc-section">
-        <h2>💡 Example Prompt</h2>
+        <h2><Icon name="Lightbulb" weight="duotone" size={16} color="var(--primary)" /> Example Prompt</h2>
         <p>Here's a complete example for trivia games:</p>
         
         <div className="help-code-block">
@@ -153,7 +154,7 @@ Looking at our current standings: {totalScores}
       </div>
 
       <div className="help-doc-section">
-        <h2>⚙️ Managing Prompts</h2>
+        <h2><Icon name="Gear" weight="bold" size={16} color="currentColor" /> Managing Prompts</h2>
         
         <h3>Setting Default Prompts</h3>
         <p>Each engagement type (Call & Answer, Trivia, Polls) should have a default prompt:</p>
@@ -182,44 +183,44 @@ Looking at our current standings: {totalScores}
         </ol>
 
         <div className="help-tip-box">
-          <h4>💡 Pro Tip</h4>
+          <h4><Icon name="Lightbulb" weight="duotone" size={16} color="var(--primary)" /> Pro Tip</h4>
           <p>Create different prompts for different contexts. For example, have separate prompts for team building vs. training sessions, even if they use the same engagement type.</p>
         </div>
       </div>
 
       <div className="help-doc-section">
-        <h2>🎯 Best Practices</h2>
+        <h2><Icon name="Target" weight="duotone" size={16} color="var(--primary)" /> Best Practices</h2>
         
         <div className="help-best-practices">
           <div className="help-practice-item">
-            <h4>📝 Clear Instructions</h4>
+            <h4><Icon name="NotePencil" weight="bold" size={16} color="currentColor" /> Clear Instructions</h4>
             <p>Start your prompt with clear instructions about the AI's role and what kind of analysis you want.</p>
           </div>
           
           <div className="help-practice-item">
-            <h4>🎨 Engaging Tone</h4>
+            <h4><Icon name="Palette" weight="duotone" size={16} color="var(--primary)" /> Engaging Tone</h4>
             <p>Use an appropriate tone for your audience - professional for business, encouraging for learning, etc.</p>
           </div>
           
           <div className="help-practice-item">
-            <h4>🔍 Specific Questions</h4>
+            <h4><Icon name="MagnifyingGlass" weight="bold" size={16} color="currentColor" /> Specific Questions</h4>
             <p>Make discussion questions specific and actionable rather than generic.</p>
           </div>
           
           <div className="help-practice-item">
-            <h4>⚡ Actionable Steps</h4>
+            <h4><Icon name="Lightning" weight="fill" size={16} color="var(--primary)" /> Actionable Steps</h4>
             <p>Ensure next steps are concrete and achievable within the suggested timeframes.</p>
           </div>
           
           <div className="help-practice-item">
-            <h4>📊 Use Score Data</h4>
+            <h4><Icon name="ChartBar" weight="duotone" size={16} color="var(--primary)" /> Use Score Data</h4>
             <p>Include {'{totalScores}'} to show overall game standings, not just round results.</p>
           </div>
         </div>
       </div>
 
       <div className="help-doc-section">
-        <h2>🛠️ Troubleshooting</h2>
+        <h2><Icon name="Wrench" weight="bold" size={16} color="currentColor" /> Troubleshooting</h2>
         
         <h3>Common Issues</h3>
         <dl className="help-faq">

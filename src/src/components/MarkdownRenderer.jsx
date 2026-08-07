@@ -79,6 +79,25 @@ function MarkdownRenderer({ content, className = '' }) {
     return <span dangerouslySetInnerHTML={{ __html: formatted }} />;
   };
 
+  // List items often arrive as "**Lead phrase**: supporting detail".
+  // Split that into a bold lead + a quieter rest so the big-screen
+  // (projector) Field Notes can render each point as a headline over a
+  // caption. Falls back to normal inline formatting when there's no
+  // leading bold lead-in, and the wrapper stays inline in the light
+  // views (only big-screen CSS stacks it), so nothing else changes.
+  const formatListItem = (text) => {
+    const m = text && text.match(/^\*\*(.+?)\*\*\s*[:—–-]?\s*([\s\S]*)$/);
+    if (m && m[2].trim()) {
+      return (
+        <span className="md-point">
+          <strong className="md-lead">{m[1]}</strong>
+          <span className="md-rest">{formatInlineText(m[2])}</span>
+        </span>
+      );
+    }
+    return formatInlineText(text);
+  };
+
   lines.forEach((line, index) => {
     const trimmedLine = line.trim();
 
@@ -149,7 +168,7 @@ function MarkdownRenderer({ content, className = '' }) {
       const content = trimmedLine.replace(/^\d+\.\s/, '');
       listItems.push(
         <li key={`${index}-li`} className="markdown-li">
-          {formatInlineText(content)}
+          {formatListItem(content)}
         </li>
       );
     }
@@ -163,7 +182,7 @@ function MarkdownRenderer({ content, className = '' }) {
       const content = trimmedLine.replace(/^[-*]\s/, '');
       listItems.push(
         <li key={`${index}-li`} className="markdown-li">
-          {formatInlineText(content)}
+          {formatListItem(content)}
         </li>
       );
     }

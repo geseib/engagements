@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { authFetch } from '../auth/authFetch';
+import Icon from './Icon';
 
 const ArchivePanel = ({ onQuestionSetImport }) => {
   const [activeTab, setActiveTab] = useState('browse');
@@ -365,25 +366,25 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
   return (
     <div className="archive-panel">
       <div className="archive-header">
-        <h3>📚 Content Archive</h3>
+        <h3><Icon name="Books" weight="duotone" size={16} color="var(--primary)" /> Content Archive</h3>
         <div className="archive-tabs">
           <button 
             className={`tab-btn ${activeTab === 'browse' ? 'active' : ''}`}
             onClick={() => setActiveTab('browse')}
           >
-            🔍 Browse Archive
+            <Icon name="MagnifyingGlass" weight="bold" size={16} color="currentColor" /> Browse Archive
           </button>
           <button 
             className={`tab-btn ${activeTab === 'export' ? 'active' : ''}`}
             onClick={() => setActiveTab('export')}
           >
-            📤 Export to Archive
+            <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" /> Export to Archive
           </button>
           <button 
             className={`tab-btn ${activeTab === 'import' ? 'active' : ''}`}
             onClick={() => setActiveTab('import')}
           >
-            📥 Import from Archive
+            <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Import from Archive
           </button>
         </div>
       </div>
@@ -457,9 +458,9 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                 )}
                 
                 <div className="item-meta">
-                  <span>📁 {item.Category}</span>
-                  <span>📄 {formatFileSize(item.FileSize)}</span>
-                  <span>📅 {formatDate(item.CreatedAt)}</span>
+                  <span><Icon name="Folder" weight="bold" size={16} color="currentColor" /> {item.Category}</span>
+                  <span><Icon name="FileText" weight="bold" size={16} color="currentColor" /> {formatFileSize(item.FileSize)}</span>
+                  <span><Icon name="CalendarBlank" weight="bold" size={16} color="currentColor" /> {formatDate(item.CreatedAt)}</span>
                 </div>
 
                 {item.Tags && item.Tags.length > 0 && (
@@ -472,18 +473,18 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
 
                 <div className="item-actions">
                   <button onClick={() => handleDownload(item)}>
-                    📥 Download
+                    <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Download
                   </button>
                   {item.ContentType === 'questionset' && onQuestionSetImport && (
                     <button onClick={() => handleImport(item)}>
-                      📤 Import
+                      <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" /> Import
                     </button>
                   )}
                   <button 
                     className="delete-btn"
                     onClick={() => handleDelete(item)}
                   >
-                    🗑️ Delete
+                    <Icon name="Trash" weight="bold" size={16} color="currentColor" /> Delete
                   </button>
                 </div>
               </div>
@@ -497,7 +498,7 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
       {/* Export to Archive Tab */}
       {activeTab === 'export' && (
         <div className="export-section">
-          <h4>📤 Export Local Content to Archive</h4>
+          <h4><Icon name="UploadSimple" weight="bold" size={16} color="currentColor" /> Export Local Content to Archive</h4>
           
           {loading ? (
             <div className="loading">Loading local content...</div>
@@ -506,7 +507,7 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
               {/* Question Sets Section */}
               <div className="export-category">
                 <div className="category-header">
-                  <h5>📚 Question Sets ({localQuestionSets.length})</h5>
+                  <h5><Icon name="Books" weight="duotone" size={16} color="var(--primary)" /> Question Sets ({localQuestionSets.length})</h5>
                   <div className="bulk-actions">
                     <button
                       className="btn-secondary btn-small"
@@ -528,7 +529,7 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                       onClick={() => handleExportSelected('questionsets')}
                       disabled={selectedQuestionSets.size === 0}
                     >
-                      📤 Export Selected ({selectedQuestionSets.size})
+                      <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" /> Export Selected ({selectedQuestionSets.size})
                     </button>
                   </div>
                 </div>
@@ -561,9 +562,9 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                       )}
                       
                       <div className="item-meta">
-                        <span>🎮 {qs.engagementType}</span>
-                        <span>❓ {qs.totalQuestions} questions</span>
-                        <span>📅 {qs.createdAt ? formatDate(qs.createdAt) : 'Unknown'}</span>
+                        <span><Icon name="GameController" weight="bold" size={16} color="currentColor" /> {qs.engagementType}</span>
+                        <span><Icon name="Question" weight="bold" size={16} color="currentColor" /> {qs.totalQuestions} questions</span>
+                        <span><Icon name="CalendarBlank" weight="bold" size={16} color="currentColor" /> {qs.createdAt ? formatDate(qs.createdAt) : 'Unknown'}</span>
                       </div>
 
                       <div className="item-tags">
@@ -586,7 +587,7 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                             }
                           }}
                         >
-                          {selectedQuestionSets.has(qs.id) ? '✓ Selected' : '📤 Select for Export'}
+                          {selectedQuestionSets.has(qs.id) ? 'Selected' : 'Select for Export'}
                         </button>
                       </div>
                     </div>
@@ -597,7 +598,7 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
               {/* AI Prompts Section */}
               <div className="export-category">
                 <div className="category-header">
-                  <h5>🤖 AI Prompts ({localPrompts.length})</h5>
+                  <h5><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI Prompts ({localPrompts.length})</h5>
                   <div className="bulk-actions">
                     <button
                       className="btn-secondary btn-small"
@@ -619,7 +620,7 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                       onClick={() => handleExportSelected('prompts')}
                       disabled={selectedPrompts.size === 0}
                     >
-                      📤 Export Selected ({selectedPrompts.size})
+                      <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" /> Export Selected ({selectedPrompts.size})
                     </button>
                   </div>
                 </div>
@@ -653,9 +654,9 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                       )}
                       
                       <div className="item-meta">
-                        <span>🎮 {prompt.gameType}</span>
-                        <span>📁 {prompt.category}</span>
-                        <span>📅 {prompt.createdAt ? formatDate(prompt.createdAt) : 'Unknown'}</span>
+                        <span><Icon name="GameController" weight="bold" size={16} color="currentColor" /> {prompt.gameType}</span>
+                        <span><Icon name="Folder" weight="bold" size={16} color="currentColor" /> {prompt.category}</span>
+                        <span><Icon name="CalendarBlank" weight="bold" size={16} color="currentColor" /> {prompt.createdAt ? formatDate(prompt.createdAt) : 'Unknown'}</span>
                       </div>
 
                       <div className="item-tags">
@@ -679,7 +680,7 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                             }
                           }}
                         >
-                          {selectedPrompts.has(prompt.promptId || prompt.id) ? '✓ Selected' : '📤 Select for Export'}
+                          {selectedPrompts.has(prompt.promptId || prompt.id) ? 'Selected' : 'Select for Export'}
                         </button>
                       </div>
                     </div>
@@ -694,7 +695,7 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
       {/* Import from Archive Tab */}
       {activeTab === 'import' && (
         <div className="import-section">
-          <h4>📥 Import Content from Archive</h4>
+          <h4><Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Import Content from Archive</h4>
           
           <div className="import-header">
             <div className="bulk-actions">
@@ -718,7 +719,7 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                 onClick={handleImportSelected}
                 disabled={selectedArchiveItems.size === 0}
               >
-                📥 Import Selected ({selectedArchiveItems.size})
+                <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Import Selected ({selectedArchiveItems.size})
               </button>
             </div>
           </div>
@@ -757,9 +758,9 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                     )}
                     
                     <div className="item-meta">
-                      <span>📁 {item.Category}</span>
-                      <span>📄 {formatFileSize(item.FileSize)}</span>
-                      <span>📅 {formatDate(item.CreatedAt)}</span>
+                      <span><Icon name="Folder" weight="bold" size={16} color="currentColor" /> {item.Category}</span>
+                      <span><Icon name="FileText" weight="bold" size={16} color="currentColor" /> {formatFileSize(item.FileSize)}</span>
+                      <span><Icon name="CalendarBlank" weight="bold" size={16} color="currentColor" /> {formatDate(item.CreatedAt)}</span>
                     </div>
 
                     {item.Tags && item.Tags.length > 0 && (
@@ -785,7 +786,7 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                           }
                         }}
                       >
-                        {selectedArchiveItems.has(item.ArchiveId) ? '✓ Selected' : '📥 Select for Import'}
+                        {selectedArchiveItems.has(item.ArchiveId) ? 'Selected' : 'Select for Import'}
                       </button>
                     </div>
                   </div>

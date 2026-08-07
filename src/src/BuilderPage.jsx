@@ -6,6 +6,7 @@ import WavelengthBuilder from './components/WavelengthBuilder';
 import AIAssistant from './components/AIAssistant';
 import './BuilderPage.css';
 import { authFetch } from './auth/authFetch';
+import Icon from './components/Icon';
 
 const API_BASE = window.API_BASE;
 
@@ -91,12 +92,12 @@ function BuilderPage() {
   // Handle saving the question set
   const handleSaveQuestionSet = async () => {
     if (!questionSet.title.trim()) {
-      setSaveStatus('❌ Title is required');
+      setSaveStatus('Title is required');
       return;
     }
 
     if (questionSet.questions.length === 0) {
-      setSaveStatus('❌ At least one question is required');
+      setSaveStatus('At least one question is required');
       return;
     }
 
@@ -127,7 +128,7 @@ function BuilderPage() {
       const result = await response.json();
 
       if (response.ok) {
-        setSaveStatus(`✅ ${result.message}`);
+        setSaveStatus(`${result.message}`);
         // Reset form after successful save
         setQuestionSet({
           title: '',
@@ -138,11 +139,11 @@ function BuilderPage() {
           questions: []
         });
       } else {
-        setSaveStatus(`❌ Save failed: ${result.error || 'Unknown error'}`);
+        setSaveStatus(`Save failed: ${result.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Save error:', error);
-      setSaveStatus(`❌ Save failed: ${error.message}`);
+      setSaveStatus(`Save failed: ${error.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -203,14 +204,14 @@ function BuilderPage() {
   return (
     <div className="builder-page">
       <div className="builder-header">
-        <h1>🎨 Question Set Builder</h1>
+        <h1><Icon name="Palette" weight="duotone" size={16} color="var(--primary)" /> Question Set Builder</h1>
         <p>Create engaging question sets with AI assistance</p>
       </div>
 
       <div className="builder-content">
         {/* Question Set Metadata */}
         <div className="builder-section">
-          <h2>📋 Question Set Details</h2>
+          <h2><Icon name="ClipboardText" weight="bold" size={16} color="currentColor" /> Question Set Details</h2>
           
           <div className="form-row">
             <div className="form-group">
@@ -315,19 +316,19 @@ function BuilderPage() {
         {/* Questions Section */}
         <div className="builder-section">
           <div className="section-header">
-            <h2>❓ Questions ({questionSet.questions.length})</h2>
+            <h2><Icon name="Question" weight="bold" size={16} color="currentColor" /> Questions ({questionSet.questions.length})</h2>
             <div className="section-actions">
               <button
                 className="btn-secondary"
                 onClick={handleBulkAIGeneration}
               >
-                🤖 Bulk AI Generation
+                <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> Bulk AI Generation
               </button>
               <button
                 className="btn-primary"
                 onClick={handleAddQuestion}
               >
-                ➕ Add Question
+                <Icon name="Plus" weight="bold" size={16} color="currentColor" /> Add Question
               </button>
             </div>
           </div>
@@ -349,7 +350,7 @@ function BuilderPage() {
               onClick={handleSaveQuestionSet}
               disabled={isSaving}
             >
-              {isSaving ? '💾 Saving...' : '💾 Save Question Set'}
+              {isSaving ? 'Saving...' : 'Save Question Set'}
             </button>
             {saveStatus && (
               <div className="save-status">

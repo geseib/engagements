@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
 import './HostRemote.css';
+import Icon from './components/Icon';
 
 const API_BASE = window.API_BASE;
 
@@ -79,10 +80,10 @@ function HostRemote() {
   return (
     <div className="host-remote">
       <div className="remote-header">
-        <h1>🎮 Host Remote Control</h1>
+        <h1><Icon name="GameController" weight="bold" size={16} color="currentColor" /> Host Remote Control</h1>
         <div className="connection-status">
           <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
-            {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
+            {isConnected ? 'Connected' : 'Disconnected'}
           </span>
         </div>
       </div>
@@ -114,7 +115,7 @@ function HostRemote() {
 
           <div className="host-page-control">
             <button className="btn-primary large" onClick={openHostPage}>
-              📺 Open Host Page
+              <Icon name="Monitor" weight="bold" size={16} color="currentColor" /> Open Host Page
             </button>
             <p className="help-text">Opens the main host page in a new window that you can control from here</p>
           </div>
@@ -136,7 +137,7 @@ function HostRemote() {
                 className="btn-secondary"
                 onClick={() => navigator.clipboard.writeText(playerJoinUrl)}
               >
-                📋 Copy
+                <Icon name="ClipboardText" weight="bold" size={16} color="currentColor" /> Copy
               </button>
             </div>
           </div>
@@ -145,16 +146,16 @@ function HostRemote() {
             <h3>Screen Control</h3>
             <div className="control-grid">
               <button className="btn-action" onClick={scrollHostToTop}>
-                ⬆️ Scroll to Top
+                <Icon name="ArrowUp" weight="bold" size={16} color="currentColor" /> Scroll to Top
               </button>
               <button className="btn-action" onClick={scrollHostToResults}>
-                📊 Scroll to Results
+                <Icon name="ChartBar" weight="duotone" size={16} color="var(--primary)" /> Scroll to Results
               </button>
               <button className="btn-action" onClick={scrollHostToBottom}>
-                ⬇️ Scroll to Bottom
+                <Icon name="ArrowDown" weight="bold" size={16} color="currentColor" /> Scroll to Bottom
               </button>
               <button className="btn-action" onClick={toggleBigScreen}>
-                🖥️ Toggle Big Screen
+                <Icon name="Monitor" weight="bold" size={16} color="currentColor" /> Toggle Big Screen
               </button>
             </div>
           </div>
@@ -163,13 +164,13 @@ function HostRemote() {
             <h3>Game Control</h3>
             <div className="control-grid">
               <button className="btn-primary" onClick={nextQuestion}>
-                ➡️ Next Question
+                <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" /> Next Question
               </button>
               <button className="btn-primary" onClick={startVoting}>
-                🗳️ Start Voting
+                <Icon name="ListChecks" weight="bold" size={16} color="currentColor" /> Start Voting
               </button>
               <button className="btn-primary" onClick={showResults}>
-                📈 Show Results
+                <Icon name="ChartLineUp" weight="bold" size={16} color="currentColor" /> Show Results
               </button>
             </div>
           </div>
@@ -179,7 +180,7 @@ function HostRemote() {
               className="btn-secondary"
               onClick={() => setGameId('')}
             >
-              🔄 Change Game
+              <Icon name="ArrowsClockwise" weight="bold" size={16} color="currentColor" /> Change Game
             </button>
           </div>
         </div>

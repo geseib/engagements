@@ -1,23 +1,202 @@
-import * as Ph from "@phosphor-icons/react";
+import React from "react";
+import {
+  Airplane,
+  Archive,
+  ArrowCounterClockwise,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  ArrowsClockwise,
+  Books,
+  Brain,
+  Broadcast,
+  Bug,
+  Buildings,
+  CalendarBlank,
+  CaretDown,
+  CaretLeft,
+  CaretRight,
+  CaretUp,
+  ChartBar,
+  ChartLineUp,
+  ChatCircleText,
+  Check,
+  CheckCircle,
+  Circle,
+  ClipboardText,
+  Confetti,
+  DeviceMobile,
+  DownloadSimple,
+  Eye,
+  EyeSlash,
+  FileText,
+  FlagCheckered,
+  FloppyDisk,
+  Folder,
+  FolderOpen,
+  GameController,
+  Gear,
+  Handshake,
+  House,
+  Info,
+  Lightbulb,
+  Lightning,
+  LinkSimple,
+  ListChecks,
+  Lock,
+  MagicWand,
+  MagnifyingGlass,
+  MapPin,
+  Medal,
+  Microphone,
+  Monitor,
+  Note,
+  NotePencil,
+  Package,
+  Palette,
+  Pause,
+  PencilSimple,
+  Play,
+  PlayCircle,
+  Plus,
+  PushPin,
+  Question,
+  RocketLaunch,
+  Ruler,
+  Shuffle,
+  SkipForward,
+  Sparkle,
+  Target,
+  Timer,
+  Trash,
+  Trophy,
+  UploadSimple,
+  UserCircle,
+  UsersThree,
+  Warning,
+  WarningOctagon,
+  Waves,
+  WifiSlash,
+  Wrench,
+  X,
+  XCircle,
+} from "@phosphor-icons/react";
 
 /**
  * Warm Summit icon wrapper around @phosphor-icons/react.
  *
- * Weight discipline (see design spec §3):
- *   - "duotone" (amber fill) for the ~15 feature / hero icons
- *   - "bold" for inline UI controls (the default)
+ * Weight discipline (design spec §3):
+ *   - "duotone" (amber fill) for feature / hero icons
+ *   - "bold" for inline UI controls (default)
  *   - "fill" for status dots
  *
  * Usage: <Icon name="Trophy" weight="duotone" color="var(--primary)" size={32} />
- * Unknown names fall back to a Circle so a typo never crashes a render.
+ * Icons are named-imported (not `import *`) so webpack tree-shakes to only these —
+ * add any new icon to the map below. Unknown names fall back to Circle so a typo never crashes.
  */
+export const ICONS = {
+  Airplane,
+  Archive,
+  ArrowCounterClockwise,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  ArrowsClockwise,
+  Books,
+  Brain,
+  Broadcast,
+  Bug,
+  Buildings,
+  CalendarBlank,
+  CaretDown,
+  CaretLeft,
+  CaretRight,
+  CaretUp,
+  ChartBar,
+  ChartLineUp,
+  ChatCircleText,
+  Check,
+  CheckCircle,
+  Circle,
+  ClipboardText,
+  Confetti,
+  DeviceMobile,
+  DownloadSimple,
+  Eye,
+  EyeSlash,
+  FileText,
+  FlagCheckered,
+  FloppyDisk,
+  Folder,
+  FolderOpen,
+  GameController,
+  Gear,
+  Handshake,
+  House,
+  Info,
+  Lightbulb,
+  Lightning,
+  LinkSimple,
+  ListChecks,
+  Lock,
+  MagicWand,
+  MagnifyingGlass,
+  MapPin,
+  Medal,
+  Microphone,
+  Monitor,
+  Note,
+  NotePencil,
+  Package,
+  Palette,
+  Pause,
+  PencilSimple,
+  Play,
+  PlayCircle,
+  Plus,
+  PushPin,
+  Question,
+  RocketLaunch,
+  Ruler,
+  Shuffle,
+  SkipForward,
+  Sparkle,
+  Target,
+  Timer,
+  Trash,
+  Trophy,
+  UploadSimple,
+  UserCircle,
+  UsersThree,
+  Warning,
+  WarningOctagon,
+  Waves,
+  WifiSlash,
+  Wrench,
+  X,
+  XCircle,
+};
+
 export default function Icon({
   name,
   weight = "bold",
   size = 24,
   color = "currentColor",
+  className,
   ...rest
 }) {
-  const C = Ph[name] ?? Ph.Circle;
-  return <C size={size} weight={weight} color={color} {...rest} />;
+  const C = ICONS[name] ?? Circle;
+  // Every icon carries `.ws-icon` so one CSS rule can optically centre it against
+  // adjacent text and keep it from being squashed inside flex rows.
+  return (
+    <C
+      size={size}
+      weight={weight}
+      color={color}
+      className={className ? `ws-icon ${className}` : "ws-icon"}
+      {...rest}
+    />
+  );
 }

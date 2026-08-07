@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import './auth.css';
+import Icon from '../components/Icon';
 
 // ============================================================================
 // LEGACY_POOL — rollback only. Remove after the old Cognito pool is deleted.
@@ -448,7 +449,7 @@ const OAuthCallback = ({ onSuccess, onError }) => {
             </div>
             
             <div className="auth-error">
-              <i className="error-icon">⚠️</i>
+              <i className="error-icon"><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /></i>
               <span>{error}</span>
             </div>
             

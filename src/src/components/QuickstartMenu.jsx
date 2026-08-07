@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { authFetch } from '../auth/authFetch';
+import Icon from './Icon';
+import { gameTypeMeta } from '../config/gameTypes';
 
 const API_BASE = window.API_BASE;
 
@@ -154,25 +156,6 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
     return sets.slice(startIdx, startIdx + SETS_PER_PAGE);
   };
 
-  const getTypeIcon = (type) => {
-    switch (type) {
-      case 'call-and-answer': return '💬';
-      case 'trivia': return '🧠';
-      case 'wavelength': return '🌊';
-      case 'poll': return '📊';
-      default: return '❓';
-    }
-  };
-
-  const getTypeDisplayName = (type) => {
-    switch (type) {
-      case 'call-and-answer': return 'Call & Answer';
-      case 'trivia': return 'Trivia';
-      case 'wavelength': return 'Wavelength';
-      case 'poll': return 'Poll';
-      default: return type;
-    }
-  };
 
   if (loading) {
     return (
@@ -194,7 +177,7 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
       <div className="quickstart-modal" onClick={(e) => e.stopPropagation()}>
         <div className="quickstart-header">
           <div className="quickstart-title">
-            <h2>⚡ Quickstart Menu</h2>
+            <h2><Icon name="Lightning" weight="fill" size={16} color="var(--primary)" /> Quickstart Menu</h2>
             <p>Create and start a game instantly with pre-configured question sets</p>
           </div>
           
@@ -206,7 +189,7 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
           {totalQuickstartSets === 0 ? (
             <div className="no-quickstart-sets">
               <h3>No Quickstart Sets Available</h3>
-              <p>To enable quickstart, go to Admin → Question Sets and check the "⚡ Quickstart" box for your desired question sets.</p>
+              <p>To enable quickstart, go to Admin <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" /> Question Sets and check the "Quickstart" box for your desired question sets.</p>
             </div>
           ) : (
             Object.entries(quickstartSets).map(([type, sets]) => {
@@ -220,7 +203,13 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
                 <div key={type} className="quickstart-section">
                   <div className="quickstart-section-header">
                     <h3>
-                      {getTypeIcon(type)} {getTypeDisplayName(type)}
+                      <Icon
+                        name={gameTypeMeta(type).icon}
+                        weight="duotone"
+                        size={18}
+                        color={gameTypeMeta(type).accent}
+                      />{' '}
+                      {gameTypeMeta(type).label}
                       <span className="set-count">({sets.length} available)</span>
                     </h3>
                   </div>
@@ -232,7 +221,7 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
                         onClick={() => prevPage(type)}
                         title="Previous sets"
                       >
-                        ←
+                        <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" />
                       </button>
                     )}
 
@@ -254,7 +243,9 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
                             </div>
                           </div>
                           <div className="quickstart-play-icon">
-                            {creating ? '⏳' : '▶️'}
+                            {creating
+                              ? <Icon name="Timer" weight="bold" size={20} color="var(--muted)" />
+                              : <Icon name="PlayCircle" weight="fill" size={20} color="var(--primary)" />}
                           </div>
                         </div>
                       ))}
@@ -266,7 +257,7 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
                         onClick={() => nextPage(type)}
                         title="Next sets"
                       >
-                        →
+                        <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" />
                       </button>
                     )}
                   </div>

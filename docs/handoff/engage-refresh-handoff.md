@@ -28,6 +28,70 @@ Also see repo `DEPLOYMENT.md` (canonical deploy guide) and `docs/AUTH.md`.
 - **Big-screen redesign + polish pass** in `src/src/GameHostPage.jsx` + `src/src/styles.css`, plus the `React`-import fix in `Icon.jsx`/`Ridge.jsx`. Deployed to engagedev **frontend** via direct `aws s3 sync` (not the pipeline).
 - Open visual items: big-screen **vertical rhythm / type scale** and confirming the **standard-view gutter** clears the side panel — waiting on the user's screenshots to iterate. Then commit.
 
+## Emoji → Phosphor icon sweep — COMPLETE (committed, NOT yet deployed)
+The whole JSX surface is off emoji. ~380 sites across 35 files; `console.*` prefixes
+were deliberately left alone (they're logs, not UI). Two dead files were skipped —
+see "Known landmines" below.
+
+New shared modules (use these instead of re-deriving anything):
+- `src/src/components/Icon.jsx` — ~80 named Phosphor imports (tree-shaken), exports
+  `ICONS` for tests. Every icon carries `.ws-icon`, which one rule in `styles.css`
+  uses for optical alignment + `flex:none`.
+- `src/src/config/gameTypes.js` — **the** registry for the five types
+  (`call-and-answer` / `trivia` / `poll` / `wavelength` / `survey`): label, icon,
+  accent, blurb, phases. Normalises the `callandanswer` storage spelling. Replaced
+  three hand-rolled type→label/icon switches.
+- `src/src/components/RankIcon.jsx` — placement mark + `rankLabel()` ordinals.
+  Replaced five copies of the same gold/silver/bronze ladder.
+- `src/src/components/StatusMessage.jsx` + `src/src/utils/statusTone.js` — status
+  banners.
+
+Bugs found and fixed along the way:
+1. **Host Remote's advance buttons were dead.** `GameHostPage.jsx` handled
+   `NEXT_QUESTION` / `START_VOTING` / `SHOW_RESULTS` by calling bare
+   `nextQuestion` / `startVoting` / `showResults` — identifiers that never
+   existed. `typeof x === 'function'` on an undeclared name is `'undefined'`, not
+   a throw, so the remote silently did nothing. Now routed through
+   `remoteActionsRef` (refreshed each render, because the listener is registered
+   once and would otherwise capture a stale `gameState`).
+2. **Status banners styled by emoji-sniffing.** Three sites did
+   `status.includes('✅') ? 'success' : 'error'`. Replaced with `statusTone()`
+   (word-based, unit-tested against the 18 real message strings) and explicit
+   `saveOk` state on the AdminPage edit path.
+3. **Mobile type overflow.** `.parallax__title` at a fixed `4rem` rendered
+   "Engagements" ~395px wide inside a 375px phone, clipped both edges; the join
+   `h1` did the same. Both are `clamp()` now. Verified at 375px: no horizontal
+   overflow, no sub-40px tap targets.
+4. **`<Icon>` inside `<option>`** (IssueReportForm) — options are text-only, so
+   the icons were reverted to plain labels there.
+5. **Player copy was call-and-answer-only.** The vote screen said "Vote for the
+   Best Applications" to poll players too; submit confirmations had no poll case.
+
+Test harness: `npm test` had **never run** — no `babel.config.js`, and
+`jest.config.js` said `moduleNameMapping` (not a real option, so CSS imports were
+never stubbed). Fixed both plus `transformIgnorePatterns` for ESM-only `d3`.
+Added `src/src/__tests__/designSystem.test.jsx` — **37 tests, all passing**.
+The five pre-existing suites now execute (0 → 33 tests) but mostly fail: they
+predate the auth system (`useAuth must be used within an AuthProvider`) and call
+`new WebSocketClient()` on what is a singleton export. **Those failures are stale
+tests, not regressions** — rewriting them is its own task.
+
+Verification done: production build clean; AST checks confirm every literal
+`<Icon name>` resolves, none are stranded inside string literals, and none sit in
+text-only elements. Live-rendered the player join screen at 375px and 1280px.
+**Not deployed** — host/admin screens need auth + a live backend, so the
+icon-dense states (lobby, ASK/VOTE/RESULTS, big-screen, admin) are still
+eyeball-pending on engagedev.
+
+## Known landmines
+- `src/src/components/ArchiveManager.jsx` and `ArchiveSearch.jsx` are **stored as a
+  single line with literal `\n` and `\"` escapes** — not valid JS. Nothing imports
+  them and webpack never compiles them, so they're invisible dead weight. They
+  were excluded from the sweep. The real archive UI is `ArchivePanel.jsx`.
+  Either restore or delete them; don't edit them in place.
+- `src/src/AdminPage.jsx.backup` is likewise stale and should go.
+- `bundle.js` is 2.04 MiB and `workie.png` is 1.32 MiB (webpack warns on both).
+
 ## Fixed live (verified)
 - **Workie** — was blank because the `engagedev-ai-prompts` bucket was empty (missing prompt template) + old sync backend deployed + unreachable fallback. Fixed by: surgically updating `engagedev-get-ai-summary` code + adding `lambda:InvokeFunction`/`execute-api:ManageConnections` IAM (policy `WorkieAsyncPolicy`); making the fallback **always-reachable + data-driven** (answer count + votes + top response); seeding the missing prompt at `s3://engagedev-ai-prompts/prompts/callandanswer/md9ih6msyezugcusipp/v1.json`. Verified real Haiku 4.5 output on game `9639`. **NOT a Bedrock license issue** — models are ACTIVE.
 - **Password-reset email** — engagedev pool now sends via **SES** (`DEVELOPER`, from `no-reply@seibtribe.us`). `seibtribe.us` domain verified (DKIM in Route53); `george@seibtribe.com` verified as sandbox recipient. Reset codes deliver. SES **production-access request filed** (draft reply is in the session; **user must paste it** into the AWS Support case for any-recipient delivery).
@@ -41,13 +105,26 @@ Also see repo `DEPLOYMENT.md` (canonical deploy guide) and `docs/AUTH.md`.
 ---
 
 ## Remaining work (prioritized)
-1. **Redesign iteration** — get the user's big-screen + standard screenshots; tune vertical rhythm/type scale (`styles.css` `.*-state.big-screen-mode` ~6878) and confirm the standard gutter. Then **commit** the redesign (GameHostPage.jsx, styles.css, Icon.jsx, Ridge.jsx).
-2. **Presentation mode** (approved conceptually — build a mockup first). See "Presentation-mode ideas" below.
-3. **Admin prompt/question-set cleanup** — parked. Full plan in `admin-prompt-cleanup-plan.md`. Headlines: two confusingly-different prompt generators (modal vs inline), inconsistent game-type vocab, AI-prompt key-schema split (delete/advisor read a different DynamoDB key), question-set DELETE is non-atomic/non-paginated/drops UnprocessedItems, no clean REPLACE path (orphan/clutter risk), missing per-type variable exposure, dead lambdas (pbd generator, download-set).
-4. **Archive filter** (game type + tags + search; cross-env prompts/questions + backups) — running in a **separate session** (`task_b1a8e720`).
-5. **Retire `engdev`** + repoint local `deployall`/`samconfig-dev` from `engdev` → `engagedev`. (875 durable items already migrated engdev→engagedev.) Destructive — confirm before deleting the stack.
-6. **SES production access** — user pastes the drafted support reply.
-7. **Prompt seeding for other question sets** (fallback covers them until then) + **prompt-content quality** (separate effort; the seeded template asks for lessons/themes, not the "discussion questions" the parser expects, so those come back sparse).
+1. **Deploy the sweep to engagedev and eyeball it** — the icon-dense screens
+   (host lobby, ASK/VOTE/RESULTS, big-screen mode, admin, Field Notes) could not
+   be reached locally without auth + a live backend. Frontend deploy command is
+   in the runbook below. Watch specifically for icons that look under- or
+   over-sized in slots whose CSS used `font-size` to scale the old emoji —
+   `styles.css` handles the five known ones (`.success-icon`, `.ai-review-icon`,
+   `.type-icon`, `.alert-icon`, `.help-role-icon`) with a `1em` rule, but the
+   list came from a static scan, not from seeing them live.
+2. **Redesign iteration** — big-screen vertical rhythm/type scale
+   (`styles.css` `.*-state.big-screen-mode`) and confirming the standard gutter
+   clears the side panel. Still needs the user's screenshots.
+3. **Presentation mode** (approved conceptually — build a mockup first). See "Presentation-mode ideas" below.
+4. **Stale test suites** — the five pre-existing suites now run but assert against
+   a pre-auth UI. Either wrap them in `AuthProvider` and fix the
+   `WebSocketClient` singleton assumption, or delete them.
+5. **Admin prompt/question-set cleanup** — parked. Full plan in `admin-prompt-cleanup-plan.md`. Headlines: two confusingly-different prompt generators (modal vs inline), inconsistent game-type vocab, AI-prompt key-schema split (delete/advisor read a different DynamoDB key), question-set DELETE is non-atomic/non-paginated/drops UnprocessedItems, no clean REPLACE path (orphan/clutter risk), missing per-type variable exposure, dead lambdas (pbd generator, download-set).
+6. **Archive filter** (game type + tags + search; cross-env prompts/questions + backups) — running in a **separate session** (`task_b1a8e720`).
+7. **Retire `engdev`** + repoint local `deployall`/`samconfig-dev` from `engdev` → `engagedev`. (875 durable items already migrated engdev→engagedev.) Destructive — confirm before deleting the stack.
+8. **SES production access** — user pastes the drafted support reply.
+9. **Prompt seeding for other question sets** (fallback covers them until then) + **prompt-content quality** (separate effort; the seeded template asks for lessons/themes, not the "discussion questions" the parser expects, so those come back sparse).
 
 ## Presentation-mode ideas (for item 2)
 Big screen = a **presentation surface** (projector or Zoom share), driven like a slideshow, not a dashboard:

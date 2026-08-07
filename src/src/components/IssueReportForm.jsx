@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './IssueReportForm.css';
+import Icon from './Icon';
 
 const IssueReportForm = ({ 
   isOpen, 
@@ -88,16 +89,16 @@ const IssueReportForm = ({
       <div className="issue-form-modal">
         <div className="issue-form-header">
           <h2>
-            {issueType === 'bug' && '🐛 Report a Bug'}
-            {issueType === 'feature' && '💡 Request a Feature'}
-            {issueType === 'help' && '❓ Get Help'}
+            {issueType === 'bug' && 'Report a Bug'}
+            {issueType === 'feature' && 'Request a Feature'}
+            {issueType === 'help' && 'Get Help'}
           </h2>
           <button className="close-button" onClick={onClose}>×</button>
         </div>
 
         {submitSuccess ? (
           <div className="success-message">
-            <div className="success-icon">✅</div>
+            <div className="success-icon"><Icon name="CheckCircle" weight="fill" size={16} color="var(--success)" /></div>
             <h3>Issue Created Successfully!</h3>
             <p>Your {issueType} report has been submitted to GitHub.</p>
             <p>You can track progress in the repository issues.</p>
@@ -113,9 +114,9 @@ const IssueReportForm = ({
                   onChange={(e) => setIssueType(e.target.value)}
                   className="form-select"
                 >
-                  <option value="bug">🐛 Bug Report</option>
-                  <option value="feature">💡 Feature Request</option>
-                  <option value="help">❓ Help/Question</option>
+                  <option value="bug">Bug Report</option>
+                  <option value="feature">Feature Request</option>
+                  <option value="help">Help/Question</option>
                 </select>
               </div>
 
@@ -127,9 +128,9 @@ const IssueReportForm = ({
                   onChange={(e) => setContext(e.target.value)}
                   className="form-select"
                 >
-                  <option value="host">🎯 Host Screen</option>
-                  <option value="player">📱 Player Screen</option>
-                  <option value="admin">⚙️ Admin Panel</option>
+                  <option value="host">Host Screen</option>
+                  <option value="player">Player Screen</option>
+                  <option value="admin">Admin Panel</option>
                 </select>
               </div>
             </div>
@@ -200,7 +201,7 @@ const IssueReportForm = ({
 
             {error && (
               <div className="error-message">
-                ❌ {error}
+                <Icon name="XCircle" weight="fill" size={16} color="var(--danger)" /> {error}
               </div>
             )}
 

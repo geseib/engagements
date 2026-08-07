@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import AdminAIPromptsDoc from './documentation/AdminAIPromptsDoc';
 import HostQuickStartDoc from './documentation/HostQuickStartDoc';
 import './HelpSystem.css';
+import Icon from './Icon';
 
 const HelpSystem = ({ section, onClose }) => {
   const [currentDoc, setCurrentDoc] = useState(null);
@@ -12,7 +13,7 @@ const HelpSystem = ({ section, onClose }) => {
   const documentation = {
     admin: {
       title: "Admin Documentation",
-      icon: "🔧",
+      icon: "Gear",
       sections: [
         {
           id: "getting-started",
@@ -43,7 +44,7 @@ const HelpSystem = ({ section, onClose }) => {
     },
     host: {
       title: "Host Documentation",
-      icon: "🎮",
+      icon: "GameController",
       sections: [
         {
           id: "quick-start",
@@ -74,7 +75,7 @@ const HelpSystem = ({ section, onClose }) => {
     },
     player: {
       title: "Player Documentation",
-      icon: "👥", 
+      icon: "UsersThree",
       sections: [
         {
           id: "getting-started",
@@ -100,7 +101,7 @@ const HelpSystem = ({ section, onClose }) => {
     },
     builder: {
       title: "Builder Documentation", 
-      icon: "🏗️",
+      icon: "Buildings",
       sections: [
         {
           id: "manual-creation",
@@ -116,7 +117,7 @@ const HelpSystem = ({ section, onClose }) => {
     },
     technical: {
       title: "Technical Documentation",
-      icon: "🛠️",
+      icon: "Wrench",
       sections: [
         {
           id: "troubleshooting",
@@ -161,10 +162,10 @@ const HelpSystem = ({ section, onClose }) => {
     <div className="help-navigation">
       <div className="help-nav-header">
         <button className="help-back-btn" onClick={navigateBack} disabled={!navigationHistory.length && currentDoc === 'home'}>
-          ← Back
+          <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back
         </button>
         <button className="help-home-btn" onClick={() => setCurrentDoc('home')}>
-          🏠 Home
+          <Icon name="House" weight="bold" size={16} color="currentColor" /> Home
         </button>
         <div className="help-search">
           <input
@@ -182,7 +183,7 @@ const HelpSystem = ({ section, onClose }) => {
   const renderHome = () => (
     <div className="help-home">
       <div className="help-home-header">
-        <h1>📚 Engagements Platform Documentation</h1>
+        <h1><Icon name="Books" weight="duotone" size={16} color="var(--primary)" /> Engagements Platform Documentation</h1>
         <p>Welcome to the comprehensive help system for the Engagements real-time engagement platform. 
            Select your role below to get started with role-specific documentation.</p>
       </div>
@@ -190,7 +191,7 @@ const HelpSystem = ({ section, onClose }) => {
       <div className="help-role-grid">
         {Object.entries(documentation).map(([key, section]) => (
           <div key={key} className="help-role-card" onClick={() => navigateToDoc(key)}>
-            <div className="help-role-icon">{section.icon}</div>
+            <div className="help-role-icon"><Icon name={section.icon} weight="duotone" size={28} color="var(--primary)" /></div>
             <h3>{section.title}</h3>
             <p>{section.sections.length} guides available</p>
             <div className="help-role-sections">
@@ -206,7 +207,7 @@ const HelpSystem = ({ section, onClose }) => {
       </div>
 
       <div className="help-quick-links">
-        <h3>🚀 Quick Start</h3>
+        <h3><Icon name="RocketLaunch" weight="duotone" size={16} color="var(--primary)" /> Quick Start</h3>
         <div className="help-quick-grid">
           <button className="help-quick-btn" onClick={() => navigateToDoc('host-quick-start')}>
             Create Your First Game
@@ -232,7 +233,7 @@ const HelpSystem = ({ section, onClose }) => {
     return (
       <div className="help-role-section">
         <div className="help-section-header">
-          <h1>{role.icon} {role.title}</h1>
+          <h1><Icon name={role.icon} weight="duotone" size={26} color="var(--primary)" /> {role.title}</h1>
           <p>Comprehensive guides for {roleKey} users</p>
         </div>
         
@@ -241,7 +242,7 @@ const HelpSystem = ({ section, onClose }) => {
             <div key={section.id} className="help-section-card" onClick={() => navigateToDoc(section.content)}>
               <h3>{section.title}</h3>
               <p>Learn about {section.title.toLowerCase()}</p>
-              <span className="help-section-arrow">→</span>
+              <span className="help-section-arrow"><Icon name="ArrowRight" weight="bold" size={16} color="currentColor" /></span>
             </div>
           ))}
         </div>
@@ -268,11 +269,11 @@ const HelpSystem = ({ section, onClose }) => {
         return (
           <div className="help-content">
             <div className="help-content-loading">
-              <h2>📄 Loading Documentation</h2>
+              <h2><Icon name="FileText" weight="bold" size={16} color="currentColor" /> Loading Documentation</h2>
               <p>Content for "{currentDoc}" is being loaded...</p>
               <p>This documentation section is currently under development.</p>
               <div className="help-tip-box">
-                <h4>🚧 Coming Soon</h4>
+                <h4><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> Coming Soon</h4>
                 <p>We're working on expanding our documentation. In the meantime, feel free to explore the available sections or report any issues you encounter.</p>
               </div>
             </div>
@@ -286,8 +287,8 @@ const HelpSystem = ({ section, onClose }) => {
       <div className="help-modal-overlay" onClick={onClose}></div>
       <div className="help-modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="help-modal-header">
-          <h2>📚 Help & Documentation</h2>
-          <button className="help-close-button" onClick={onClose}>✕</button>
+          <h2><Icon name="Books" weight="duotone" size={16} color="var(--primary)" /> Help & Documentation</h2>
+          <button className="help-close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 
         {renderNavigation()}
@@ -299,13 +300,13 @@ const HelpSystem = ({ section, onClose }) => {
         <div className="help-modal-footer">
           <div className="help-footer-links">
             <button className="help-footer-btn" onClick={() => navigateToDoc('technical-troubleshooting')}>
-              🔧 Troubleshooting
+              <Icon name="Wrench" weight="bold" size={16} color="currentColor" /> Troubleshooting
             </button>
             <button className="help-footer-btn" onClick={() => navigateToDoc('technical-requirements')}>
-              📋 System Requirements
+              <Icon name="ClipboardText" weight="bold" size={16} color="currentColor" /> System Requirements
             </button>
             <a href="https://github.com/your-repo/engage2/issues" target="_blank" rel="noopener noreferrer" className="help-footer-btn">
-              🐛 Report Issue
+              <Icon name="Bug" weight="bold" size={16} color="currentColor" /> Report Issue
             </a>
           </div>
         </div>

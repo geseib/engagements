@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import HelpSystem from './HelpSystem';
 import './HelpButton.css';
+import Icon from './Icon';
 
 const HelpButton = ({ section, variant = 'floating', size = 'medium', tooltip = 'Help & Documentation' }) => {
   const [showHelp, setShowHelp] = useState(false);
@@ -21,11 +22,11 @@ const HelpButton = ({ section, variant = 'floating', size = 'medium', tooltip = 
       >
         {variant === 'text' ? (
           <>
-            <span className="help-button-icon">📚</span>
+            <span className="help-button-icon"><Icon name="Books" weight="duotone" size={16} color="var(--primary)" /></span>
             <span className="help-button-text">Help</span>
           </>
         ) : (
-          <span className="help-button-icon">❓</span>
+          <span className="help-button-icon"><Icon name="Question" weight="bold" size={16} color="currentColor" /></span>
         )}
       </button>
 

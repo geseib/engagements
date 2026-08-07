@@ -1,36 +1,37 @@
 import React from 'react';
 import './documentation.css';
+import Icon from '../Icon';
 
 const HostQuickStartDoc = () => {
   return (
     <div className="help-content-doc">
       <div className="help-doc-header">
-        <h1>🚀 Host Quick Start Guide</h1>
+        <h1><Icon name="RocketLaunch" weight="duotone" size={16} color="var(--primary)" /> Host Quick Start Guide</h1>
         <p>Create and run your first engagement in 5 minutes</p>
       </div>
 
       <div className="help-doc-section">
-        <h2>🎯 Overview</h2>
+        <h2><Icon name="Target" weight="duotone" size={16} color="var(--primary)" /> Overview</h2>
         <p>This guide will walk you through creating and running your first engagement session. You'll learn the essential workflow that every host needs to know.</p>
         
         <div className="help-feature-grid">
           <div className="help-feature-item">
-            <span className="help-feature-icon">⚡</span>
+            <span className="help-feature-icon"><Icon name="Lightning" weight="fill" size={16} color="var(--primary)" /></span>
             <h4>5 Minutes</h4>
             <p>From zero to running game</p>
           </div>
           <div className="help-feature-item">
-            <span className="help-feature-icon">📱</span>
+            <span className="help-feature-icon"><Icon name="DeviceMobile" weight="bold" size={16} color="currentColor" /></span>
             <h4>Any Device</h4>
             <p>Works on phones, tablets, laptops</p>
           </div>
           <div className="help-feature-item">
-            <span className="help-feature-icon">👥</span>
+            <span className="help-feature-icon"><Icon name="UsersThree" weight="bold" size={16} color="currentColor" /></span>
             <h4>Real-time</h4>
             <p>Live updates for all players</p>
           </div>
           <div className="help-feature-item">
-            <span className="help-feature-icon">🧠</span>
+            <span className="help-feature-icon"><Icon name="Brain" weight="duotone" size={16} color="var(--primary)" /></span>
             <h4>AI-Powered</h4>
             <p>Intelligent analysis and insights</p>
           </div>
@@ -38,7 +39,7 @@ const HostQuickStartDoc = () => {
       </div>
 
       <div className="help-doc-section">
-        <h2>⚡ The Essential Workflow</h2>
+        <h2><Icon name="Lightning" weight="fill" size={16} color="var(--primary)" /> The Essential Workflow</h2>
         
         <ol className="help-steps">
           <li>
@@ -61,7 +62,7 @@ const HostQuickStartDoc = () => {
       </div>
 
       <div className="help-doc-section">
-        <h2>🎮 Step 1: Create Your Game</h2>
+        <h2><Icon name="GameController" weight="bold" size={16} color="currentColor" /> Step 1: Create Your Game</h2>
         
         <h3>Getting Started</h3>
         <ol>
@@ -73,7 +74,7 @@ const HostQuickStartDoc = () => {
         </ol>
 
         <div className="help-info-box">
-          <h4>💡 Question Set Types</h4>
+          <h4><Icon name="Lightbulb" weight="duotone" size={16} color="var(--primary)" /> Question Set Types</h4>
           <ul>
             <li><strong>Call & Answer:</strong> Open discussion questions where players submit text responses</li>
             <li><strong>Trivia:</strong> Multiple choice knowledge questions with correct answers</li>
@@ -90,7 +91,7 @@ const HostQuickStartDoc = () => {
       </div>
 
       <div className="help-doc-section">
-        <h2>🚦 Step 2: Start Your Game</h2>
+        <h2><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> Step 2: Start Your Game</h2>
         
         <p>After creating, your game is in "CREATED" status - players can't join yet.</p>
         
@@ -102,7 +103,7 @@ const HostQuickStartDoc = () => {
         </ol>
 
         <div className="help-tip-box">
-          <h4>💡 Pro Tips</h4>
+          <h4><Icon name="Lightbulb" weight="duotone" size={16} color="var(--primary)" /> Pro Tips</h4>
           <ul>
             <li>Click the QR code to expand it for easier scanning</li>
             <li>You can start with just a few players and let others join during the game</li>
@@ -112,7 +113,7 @@ const HostQuickStartDoc = () => {
       </div>
 
       <div className="help-doc-section">
-        <h2>❓ Step 3: Present Questions</h2>
+        <h2><Icon name="Question" weight="bold" size={16} color="currentColor" /> Step 3: Present Questions</h2>
         
         <h3>Starting Questions</h3>
         <ol>
@@ -125,12 +126,29 @@ const HostQuickStartDoc = () => {
         <h3>The Question Flow</h3>
         <p>Each question follows this pattern:</p>
         
-        <div className="help-code-block">
-          <pre>{`ASK Phase → VOTE Phase → RESULTS Phase
-   ↓            ↓             ↓
-Players     Players vote    View results
-respond     on answers      & insights`}</pre>
-        </div>
+        <ol className="phase-flow">
+          <li className="phase-flow__step">
+            <span className="phase-flow__name">ASK</span>
+            <span className="phase-flow__desc">Players respond</span>
+          </li>
+          <li className="phase-flow__arrow" aria-hidden="true">
+            <Icon name="ArrowRight" weight="bold" size={18} color="var(--muted)" />
+          </li>
+          <li className="phase-flow__step">
+            <span className="phase-flow__name">VOTE</span>
+            <span className="phase-flow__desc">Players vote on answers</span>
+          </li>
+          <li className="phase-flow__arrow" aria-hidden="true">
+            <Icon name="ArrowRight" weight="bold" size={18} color="var(--muted)" />
+          </li>
+          <li className="phase-flow__step">
+            <span className="phase-flow__name">RESULTS</span>
+            <span className="phase-flow__desc">View results &amp; insights</span>
+          </li>
+        </ol>
+        <p className="phase-flow__note">
+          Trivia and Wavelength skip the VOTE phase — they go straight from ASK to RESULTS.
+        </p>
 
         <h3>For Call & Answer Questions</h3>
         <ol>
@@ -147,13 +165,13 @@ respond     on answers      & insights`}</pre>
         </ol>
 
         <div className="help-warning-box">
-          <h4>⚠️ Important</h4>
+          <h4><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> Important</h4>
           <p>Don't rush the phases! Give players adequate time to think and respond. You can see their progress in the sidebar.</p>
         </div>
       </div>
 
       <div className="help-doc-section">
-        <h2>📊 Step 4: View Results & Insights</h2>
+        <h2><Icon name="ChartBar" weight="duotone" size={16} color="var(--primary)" /> Step 4: View Results & Insights</h2>
         
         <h3>Real-time Results</h3>
         <p>After each question, you'll see:</p>
@@ -181,7 +199,7 @@ respond     on answers      & insights`}</pre>
       </div>
 
       <div className="help-doc-section">
-        <h2>📱 Mobile & Multi-Device Tips</h2>
+        <h2><Icon name="DeviceMobile" weight="bold" size={16} color="currentColor" /> Mobile & Multi-Device Tips</h2>
         
         <h3>Host Remote</h3>
         <p>Use a second device for remote control:</p>
@@ -202,43 +220,43 @@ respond     on answers      & insights`}</pre>
       </div>
 
       <div className="help-doc-section">
-        <h2>🎯 Success Tips</h2>
+        <h2><Icon name="Target" weight="duotone" size={16} color="var(--primary)" /> Success Tips</h2>
         
         <div className="help-best-practices">
           <div className="help-practice-item">
-            <h4>🎤 Engage Your Audience</h4>
+            <h4><Icon name="Microphone" weight="bold" size={16} color="currentColor" /> Engage Your Audience</h4>
             <p>Read questions aloud, encourage participation, and discuss results with the team.</p>
           </div>
           
           <div className="help-practice-item">
-            <h4>⏱️ Manage Time</h4>
+            <h4><Icon name="Timer" weight="bold" size={16} color="var(--primary)" /> Manage Time</h4>
             <p>Allow enough time for thoughtful responses but keep energy high with good pacing.</p>
           </div>
           
           <div className="help-practice-item">
-            <h4>🤝 Encourage Participation</h4>
+            <h4><Icon name="Handshake" weight="duotone" size={16} color="var(--primary)" /> Encourage Participation</h4>
             <p>Create a safe space for all opinions and celebrate creative thinking.</p>
           </div>
           
           <div className="help-practice-item">
-            <h4>💬 Use AI Insights</h4>
+            <h4><Icon name="ChatCircleText" weight="bold" size={16} color="currentColor" /> Use AI Insights</h4>
             <p>Share the AI-generated discussion questions to spark deeper conversations.</p>
           </div>
           
           <div className="help-practice-item">
-            <h4>📋 Follow Up</h4>
+            <h4><Icon name="ClipboardText" weight="bold" size={16} color="currentColor" /> Follow Up</h4>
             <p>Save reports and use the "Next Steps" recommendations for future action.</p>
           </div>
           
           <div className="help-practice-item">
-            <h4>🔧 Test First</h4>
+            <h4><Icon name="Wrench" weight="bold" size={16} color="currentColor" /> Test First</h4>
             <p>Try a quick practice run with a small group before important sessions.</p>
           </div>
         </div>
       </div>
 
       <div className="help-doc-section">
-        <h2>❓ Common Questions</h2>
+        <h2><Icon name="Question" weight="bold" size={16} color="currentColor" /> Common Questions</h2>
         
         <dl className="help-faq">
           <dt>What if players join late?</dt>
@@ -259,7 +277,7 @@ respond     on answers      & insights`}</pre>
       </div>
 
       <div className="help-doc-section">
-        <h2>🚀 Ready to Start?</h2>
+        <h2><Icon name="RocketLaunch" weight="duotone" size={16} color="var(--primary)" /> Ready to Start?</h2>
         <p>You now have everything you need to run successful engagement sessions! Remember:</p>
         <ul>
           <li>Start simple with a small group</li>
@@ -269,7 +287,7 @@ respond     on answers      & insights`}</pre>
         </ul>
         
         <div className="help-tip-box">
-          <h4>🎯 Next Steps</h4>
+          <h4><Icon name="Target" weight="duotone" size={16} color="var(--primary)" /> Next Steps</h4>
           <p>Ready to dive deeper? Check out the complete Host Documentation for advanced features like custom question sets, detailed reporting, and engagement optimization strategies.</p>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './AIPromptManager.css';
 import { authFetch } from '../auth/authFetch';
+import Icon from './Icon';
 
 const API_BASE = window.API_BASE;
 
@@ -279,7 +280,7 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
       description: 'Top 3 most voted responses with vote details', 
       category: 'Vote Tally',
       gameTypes: ['callandanswer'],
-      example: '🥇 Alice\'s response (13 points), 🥈 Bob\'s response (8 points), 🥉 Charlie\'s response (5 points)'
+      example: 'Alice\'s response (13 points), Bob\'s response (8 points), Charlie\'s response (5 points)'
     },
     
     // RESULTS - Available for call-and-answer and trivia
@@ -288,7 +289,7 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
       description: 'Top 3 results with rankings and scores/correctness', 
       category: 'Results',
       gameTypes: ['callandanswer', 'trivia'],
-      example: '🥇 Alice: Leadership approach (13 points), 🥈 Bob: Process improvement (8 points)'
+      example: 'Alice: Leadership approach (13 points), Bob: Process improvement (8 points)'
     },
     { 
       name: 'winnerInfo', 
@@ -647,7 +648,10 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
                   disabled={isGeneratingWithAI || !formData.gameType}
                   title="Generate AI-powered prompt based on game type and category"
                 >
-                  {isGeneratingWithAI ? '⏳' : '🪄'} AI Generate
+                  {isGeneratingWithAI
+                    ? <Icon name="Timer" weight="bold" size={16} color="var(--muted)" />
+                    : <Icon name="MagicWand" weight="duotone" size={16} color="var(--primary)" />}
+                  {' '}AI Generate
                 </button>
                 {(savedInstructions || savedOutputFormat) && (
                   <button 
@@ -656,7 +660,7 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
                     onClick={handleRevert}
                     title="Restore your original text"
                   >
-                    ↶ Revert
+                    <Icon name="ArrowCounterClockwise" weight="bold" size={16} color="currentColor" /> Revert
                   </button>
                 )}
               </div>
@@ -677,12 +681,12 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
             <label>2. Output Format (Markdown) *</label>
             <div className="template-editor-container">
               <div className="template-variables-panel">
-                <h4>📝 Available Variables</h4>
+                <h4><Icon name="NotePencil" weight="bold" size={16} color="currentColor" /> Available Variables</h4>
                 <p className="variables-help">
                   Click to insert into output format:<br />
-                  <small><strong>💡 Markdown Support:</strong> Use ## Headers, **bold**, *italic*, `code`, and | tables | for | formatting |</small>
+                  <small><strong><Icon name="Lightbulb" weight="duotone" size={16} color="var(--primary)" /> Markdown Support:</strong> Use ## Headers, **bold**, *italic*, `code`, and | tables | for | formatting |</small>
                   <br />
-                  <small><strong>🎯 Game Type:</strong> {formData.gameType} - Variables marked with ⚠️ are not available for this game type</small>
+                  <small><strong><Icon name="Target" weight="duotone" size={16} color="var(--primary)" /> Game Type:</strong> {formData.gameType} - Variables marked with <Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> are not available for this game type</small>
                 </p>
                 {['Set Info', 'Game Info', 'Player Info', 'Question Info', 'Answers', 'Votes', 'Vote Tally', 'Results', 'Scores', 'Context'].map(category => {
                   const categoryVariables = templateVariables.filter(v => v.category === category);
@@ -706,9 +710,10 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
                               title={`${variable.description}\n\nAvailable for: ${variable.gameTypes.join(', ')}\n\nExample: ${variable.example}`}
                               disabled={!isAvailable}
                             >
-                              {!isAvailable && '⚠️ '}
-                              {isTriviaMostly && formData.gameType === 'trivia' && '🎲 '}
-                              {isCallAnswerOnly && formData.gameType === 'callandanswer' && '🗳️ '}
+                              {!isAvailable && <Icon name="Warning" weight="fill" size={13} color="var(--primary)" />}
+                              {isTriviaMostly && formData.gameType === 'trivia' && <Icon name="Brain" weight="bold" size={13} />}
+                              {isCallAnswerOnly && formData.gameType === 'callandanswer' && <Icon name="ChatCircleText" weight="bold" size={13} />}
+                              {' '}
                               {'{' + variable.name + '}'}
                             </button>
                           );
@@ -725,20 +730,20 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
                   onChange={(e) => setFormData({ ...formData, outputFormat: e.target.value })}
                   placeholder="Example output format with Markdown formatting:
 
-## 🎯 Key Insights from {eventTitle}
+## Key Insights from {eventTitle}
 Analyze the **{responseCount} responses** from participants who answered: *{questionTitle}*
 
 ### Top Responses:
 {responsesText}
 
-## 💡 Strategic Implications
+## Strategic Implications
 Based on the **{winnerInfo}**, here are strategic implications:
 
 1. **Leadership Alignment**: How responses demonstrate team thinking
 2. **Process Improvement**: Areas for operational enhancement  
 3. **Culture Insights**: What responses reveal about team culture
 
-## 🚀 Recommended Actions
+## Recommended Actions
 Priority actions based on `{sessionContext}`:
 
 | Priority | Action | Owner | Timeline |
@@ -814,9 +819,9 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
   const [analysis, setAnalysis] = useState(null);
 
   const analysisTypes = [
-    { value: 'improve', label: 'Improve Prompt', icon: '✨' },
-    { value: 'validate', label: 'Validate Quality', icon: '🔍' },
-    { value: 'optimize', label: 'Optimize Performance', icon: '⚡' }
+    { value: 'improve', label: 'Improve Prompt', icon: 'Sparkle' },
+    { value: 'validate', label: 'Validate Quality', icon: 'MagnifyingGlass' },
+    { value: 'optimize', label: 'Optimize Performance', icon: 'Lightning' }
   ];
 
   const runAnalysis = async () => {
@@ -856,7 +861,7 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
     <div className="prompt-advisor-overlay">
       <div className="prompt-advisor-modal">
         <div className="prompt-advisor-header">
-          <h2>🪄 AI Prompt Advisor</h2>
+          <h2><Icon name="MagicWand" weight="duotone" size={16} color="var(--primary)" /> AI Prompt Advisor</h2>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
 
@@ -878,7 +883,7 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
                   checked={analysisType === type.value}
                   onChange={(e) => setAnalysisType(e.target.value)}
                 />
-                <span className="type-icon">{type.icon}</span>
+                <span className="type-icon"><Icon name={type.icon} weight="duotone" size={18} color="var(--primary)" /></span>
                 <span className="type-label">{type.label}</span>
               </label>
             ))}
@@ -896,7 +901,7 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
             <div className="analysis-results">
               {analysisType === 'improve' && analysis.improvedPrompt && (
                 <div className="result-section">
-                  <h4>✨ Improved Prompt</h4>
+                  <h4><Icon name="Sparkle" weight="fill" size={16} color="var(--primary)" /> Improved Prompt</h4>
                   <div className="improved-prompt">
                     <pre>{analysis.improvedPrompt}</pre>
                     <div className="improved-prompt-actions">
@@ -904,7 +909,7 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
                         className="btn-secondary copy-btn"
                         onClick={() => navigator.clipboard.writeText(analysis.improvedPrompt)}
                       >
-                        📋 Copy to Clipboard
+                        <Icon name="ClipboardText" weight="bold" size={16} color="currentColor" /> Copy to Clipboard
                       </button>
                       <button 
                         className="btn-primary apply-btn"
@@ -913,7 +918,7 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
                           onClose();
                         }}
                       >
-                        ✨ Apply to Prompt
+                        <Icon name="Sparkle" weight="fill" size={16} color="var(--primary)" /> Apply to Prompt
                       </button>
                     </div>
                   </div>
@@ -922,7 +927,7 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
 
               {analysis.overallScore && (
                 <div className="result-section">
-                  <h4>📊 Overall Score</h4>
+                  <h4><Icon name="ChartBar" weight="duotone" size={16} color="var(--primary)" /> Overall Score</h4>
                   <div className="score-display">
                     <div className="score-value">{analysis.overallScore}/10</div>
                     <div className="score-bar">
@@ -937,7 +942,7 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
 
               {analysis.strengths && (
                 <div className="result-section">
-                  <h4>💪 Strengths</h4>
+                  <h4>Strengths</h4>
                   <ul className="analysis-list">
                     {analysis.strengths.map((strength, idx) => (
                       <li key={idx}>{strength}</li>
@@ -948,7 +953,7 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
 
               {analysis.improvements && (
                 <div className="result-section">
-                  <h4>📝 Improvements</h4>
+                  <h4><Icon name="NotePencil" weight="bold" size={16} color="currentColor" /> Improvements</h4>
                   <div className="improvements-list">
                     {analysis.improvements.map((improvement, idx) => (
                       <div key={idx} className={`improvement-item priority-${improvement.priority}`}>
@@ -969,7 +974,7 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
 
               {analysis.alternativeApproaches && (
                 <div className="result-section">
-                  <h4>🔄 Alternative Approaches</h4>
+                  <h4><Icon name="ArrowsClockwise" weight="bold" size={16} color="currentColor" /> Alternative Approaches</h4>
                   {analysis.alternativeApproaches.map((approach, idx) => (
                     <div key={idx} className="alternative-approach">
                       <h5>{approach.approach}</h5>
@@ -999,7 +1004,7 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
 
               {analysis.recommendations && (
                 <div className="result-section">
-                  <h4>💡 Recommendations</h4>
+                  <h4><Icon name="Lightbulb" weight="duotone" size={16} color="var(--primary)" /> Recommendations</h4>
                   <ul className="analysis-list">
                     {analysis.recommendations.map((rec, idx) => (
                       <li key={idx}>{rec}</li>
@@ -1185,7 +1190,7 @@ function AIPromptManager() {
   return (
     <div className="ai-prompt-manager">
       <div className="prompt-manager-header">
-        <h2>🤖 AI Prompt Management</h2>
+        <h2><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI Prompt Management</h2>
         <p className="section-description">
           Create and manage AI prompts for different game types. Use the AI Advisor to improve your prompts.
         </p>
@@ -1244,13 +1249,13 @@ function AIPromptManager() {
             onClick={handlePopulateDefaults}
             disabled={isLoading}
           >
-            🎯 Populate Default Prompts
+            <Icon name="Target" weight="duotone" size={16} color="var(--primary)" /> Populate Default Prompts
           </button>
           <button 
             className="btn-primary create-prompt-btn"
             onClick={() => setIsCreating(true)}
           >
-            ➕ Create New Prompt
+            <Icon name="Plus" weight="bold" size={16} color="currentColor" /> Create New Prompt
           </button>
         </div>
       </div>
@@ -1301,21 +1306,21 @@ function AIPromptManager() {
                     onClick={() => setEditingPrompt(prompt)}
                     title="Edit"
                   >
-                    ✏️
+                    <Icon name="PencilSimple" weight="bold" size={16} color="currentColor" />
                   </button>
                   <button
                     className="btn-icon"
                     onClick={() => setAdvisorPrompt(prompt)}
                     title="AI Advisor"
                   >
-                    🪄
+                    <Icon name="MagicWand" weight="duotone" size={16} color="var(--primary)" />
                   </button>
                   <button
                     className="btn-icon delete"
                     onClick={() => handleDeletePrompt(prompt.promptId)}
                     title="Archive"
                   >
-                    🗑️
+                    <Icon name="Trash" weight="bold" size={16} color="currentColor" />
                   </button>
                 </div>
               </div>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import IssueReportForm from './IssueReportForm';
 import './IssueFab.css';
+import Icon from './Icon';
 
 const IssueFab = ({ context = 'host', gameId = null }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -26,7 +27,7 @@ const IssueFab = ({ context = 'host', gameId = null }) => {
               onClick={() => openForm('bug')}
               title="Report a Bug"
             >
-              <span className="icon">🐛</span>
+              <span className="icon"><Icon name="Bug" weight="bold" size={16} color="currentColor" /></span>
               <span className="label">Report Bug</span>
             </button>
             
@@ -35,7 +36,7 @@ const IssueFab = ({ context = 'host', gameId = null }) => {
               onClick={() => openForm('feature')}
               title="Request a Feature"
             >
-              <span className="icon">💡</span>
+              <span className="icon"><Icon name="Lightbulb" weight="duotone" size={16} color="var(--primary)" /></span>
               <span className="label">Request Feature</span>
             </button>
             
@@ -44,7 +45,7 @@ const IssueFab = ({ context = 'host', gameId = null }) => {
               onClick={() => openForm('help')}
               title="Get Help"
             >
-              <span className="icon">❓</span>
+              <span className="icon"><Icon name="Question" weight="bold" size={16} color="currentColor" /></span>
               <span className="label">Get Help</span>
             </button>
           </div>
@@ -56,7 +57,9 @@ const IssueFab = ({ context = 'host', gameId = null }) => {
           onClick={() => setIsMenuOpen(!isMenuOpen)}
           title="Report Issue or Request Feature"
         >
-          {isMenuOpen ? '×' : '📝'}
+          {isMenuOpen
+            ? <Icon name="X" weight="bold" size={20} />
+            : <Icon name="NotePencil" weight="bold" size={20} />}
         </button>
       </div>
 
