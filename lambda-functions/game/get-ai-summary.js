@@ -295,6 +295,46 @@ const findDefaultPromptId = async (gameType) => {
   }
 };
 
+/**
+ * Resolve a usable prompt template, recovering from a dangling promptId.
+ *
+ * A question set can reference a prompt that no longer exists — prompt deletion
+ * doesn't clean up the sets pointing at it (see admin-prompt-cleanup-plan.md).
+ * Before this, `promptId` present-but-unresolvable skipped Bedrock entirely and
+ * the caller emitted the data-driven fallback, because the "find the game-type
+ * default" path only ran when promptId was absent. A set with NO prompt worked
+ * while a set with a BROKEN one silently lost its AI summary — the opposite of
+ * what you'd want.
+ *
+ * Returns { promptId, promptData, recoveredFrom? } or null when genuinely
+ * nothing resolves, so the caller can still use its data-driven fallback.
+ */
+const resolvePromptTemplate = async (promptId, gameType) => {
+  const usable = (p) => p && (p.template || (p.instructions && p.outputFormat));
+
+  if (promptId) {
+    const promptData = await fetchPromptFromS3(promptId);
+    if (usable(promptData)) return { promptId, promptData };
+    console.warn(`⚠️ Prompt ${promptId} is referenced but unusable — falling back to the ${gameType} default`);
+  }
+
+  const defaultId = await findDefaultPromptId(gameType);
+  if (defaultId && defaultId !== promptId) {
+    const promptData = await fetchPromptFromS3(defaultId);
+    if (usable(promptData)) {
+      return promptId
+        ? { promptId: defaultId, promptData, recoveredFrom: promptId }
+        : { promptId: defaultId, promptData };
+    }
+  }
+
+  console.error(`❌ No usable prompt template for gameType=${gameType} (tried ${promptId || 'none'}, default ${defaultId})`);
+  return null;
+};
+
+// Exported for tests/ai-prompt-resolution.js
+exports.resolvePromptTemplate = resolvePromptTemplate;
+
 exports.handler = async (event) => {
   // Async worker mode: the HTTP path fires an InvocationType:'Event' self-invoke
   // with __workerMode set, so the full generation runs off the API Gateway 30s
@@ -986,14 +1026,25 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     return { summary: summaryText, summaryText, discussionQuestions, nextSteps, fullResponse: summaryText, markdownResponse, model: 'fallback' };
   };
 
-  // Fetch the prompt template
-  const promptData = await fetchPromptFromS3(promptId);
+  // Fetch the prompt template, recovering to the game-type default if the set
+  // points at a prompt that has since been deleted.
+  const resolved = await resolvePromptTemplate(promptId, gameType || 'call-and-answer');
 
-  if (!promptData || (!promptData.template && (!promptData.instructions || !promptData.outputFormat))) {
+  if (!resolved) {
     console.warn('⚠️ Prompt template unavailable — returning data-driven fallback summary');
     return buildFallback();
   }
-  
+
+  const promptData = resolved.promptData;
+  if (resolved.recoveredFrom) {
+    console.warn(`♻️ Recovered from dangling prompt ${resolved.recoveredFrom} → using default ${resolved.promptId}`);
+    promptId = resolved.promptId;
+    if (promptProvenance) {
+      promptProvenance.recoveredFrom = resolved.recoveredFrom;
+      promptProvenance.details = `${promptProvenance.details || ''} (referenced prompt "${resolved.recoveredFrom}" no longer exists; used the ${gameType} default instead)`.trim();
+    }
+  }
+
   console.log(`📝 Using prompt template: ${promptData.name}`);
   
   // Use custom instruction if available, otherwise default context
