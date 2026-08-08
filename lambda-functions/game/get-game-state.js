@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { resolveSetPartition } = require('./set-version');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -78,12 +79,20 @@ exports.handler = async (event) => {
           const sourceQuestionId = questionRef.Item.SourceQuestionId;
           const questionSetId = questionRef.Item.SetId;
           
+          // Read the VERSION this round was served from. The REF row records it
+          // (next-question.js writes SetVersion); the resolver falls through to
+          // the set's activeVersion and then to the legacy `SET#<id>` partition,
+          // so rounds started before versioning are unaffected.
+          const resolvedSet = await resolveSetPartition(
+            db, process.env.TABLE_NAME, questionSetId, questionRef.Item.SetVersion
+          );
+
           // Get the actual question from the question set
           const question = await db.send(new GetCommand({
             TableName: process.env.TABLE_NAME,
-            Key: { 
-              PK: `SET#${questionSetId}`, 
-              SK: sourceQuestionId 
+            Key: {
+              PK: resolvedSet.pk,
+              SK: sourceQuestionId
             }
           }));
 

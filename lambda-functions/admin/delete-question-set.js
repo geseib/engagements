@@ -1,6 +1,14 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { collectPartitionKeys, batchDeleteKeys } = require('./shared/ddb-delete');
+const { knownVersions, setPartition, toVersion } = require('./shared/set-version');
+
+// How far past the highest recorded version to sweep for orphans. A replace
+// that died between writing `SET#<id>#v<n>` and flipping activeVersion leaves an
+// unreferenced partition that appears in no versions[] entry; without this the
+// set's index row would be deleted while those rows lived on forever, invisible.
+// Each extra probe is one Query that returns nothing.
+const ORPHAN_SWEEP_AHEAD = 5;
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -59,10 +67,39 @@ exports.handler = async (event) => {
 
     const setName = metaRes.Item.name || metaRes.Item.Name;
 
-    // 1. Enumerate the whole SET# partition. Paginated: a Query caps out at
-    //    1 MB, and the largest live set is 160 questions.
-    const { keys, pages } = await collectPartitionKeys(db, tableName, `SET#${setId}`);
-    console.log(`Found ${keys.length} content row(s) for set ${setId} across ${pages} query page(s)`);
+    // 1. Enumerate EVERY content partition this set owns. Since versioning, one
+    //    set spans the legacy `SET#<id>` partition plus one `SET#<id>#v<n>` per
+    //    version, so deleting only the legacy one would strand every version.
+    //
+    //    Versions are swept by number rather than only from versions[], so a
+    //    partition orphaned by a replace that failed before the activeVersion
+    //    flip is collected too — it is in no versions[] entry and nothing else
+    //    would ever find it.
+    //
+    //    Paginated: a Query caps out at 1 MB, and the largest live set is 160
+    //    questions.
+    const highestVersion = Math.max(
+      0,
+      toVersion(metaRes.Item.activeVersion) || 0,
+      ...knownVersions(metaRes.Item)
+    );
+
+    const partitions = [setPartition(setId, null)];
+    for (let v = 1; v <= highestVersion + ORPHAN_SWEEP_AHEAD; v++) {
+      partitions.push(setPartition(setId, v));
+    }
+
+    const keys = [];
+    let pages = 0;
+    for (const partition of partitions) {
+      const res = await collectPartitionKeys(db, tableName, partition);
+      pages += res.pages;
+      if (res.keys.length) {
+        console.log(`  ${partition}: ${res.keys.length} row(s)`);
+        keys.push(...res.keys);
+      }
+    }
+    console.log(`Found ${keys.length} content row(s) for set ${setId} across ${partitions.length} partition(s), ${pages} query page(s)`);
 
     // 2. Delete the content, in chunks of 25, retrying UnprocessedItems.
     //    Throws if anything is still undeleted after the retry budget.

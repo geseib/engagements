@@ -236,21 +236,27 @@ function check(label, fn) {
 
   const leaks = (body) => /Mona Lisa/i.test(body) || /Vincenzo Peruggia/i.test(body);
 
-  // get-question only serves the ASK state (it 400s otherwise), so it is checked
-  // there for both roles.
-  for (const role of ['player', 'host']) {
-    store.set(key('GAME#1234', 'STATE'), {
-      PK: 'GAME#1234', SK: 'STATE', State: 'ASK#001',
-      LessonNumber: 1, CurrentQuestionId: artQ.SK,
-    });
-    const qRes = await questionHandler({
-      pathParameters: { gameId: '1234' },
-      queryStringParameters: { role },
-    });
-    check(`get-question, ${role} @ ASK: no reveal in the payload`, () => {
-      assert.strictEqual(qRes.statusCode, 200, `got ${qRes.statusCode}: ${qRes.body}`);
-      assert.ok(!leaks(qRes.body), 'the reveal leaked to the client');
-    });
+  // get-question serves every state a round passes through (its guard used to be
+  // ASK-only, which stranded its own RESULTS# correct-answer block), so the
+  // reveal is checked in all three for both roles. RESULTS is the state that
+  // matters most: it is the one where the correct answer IS released, so it is
+  // the easiest place to release the reveal alongside it by accident.
+  for (const state of ['ASK#001', 'VOTE#001', 'RESULTS#001']) {
+    for (const role of ['player', 'host']) {
+      store.set(key('GAME#1234', 'STATE'), {
+        PK: 'GAME#1234', SK: 'STATE', State: state,
+        LessonNumber: 1, CurrentQuestionId: artQ.SK,
+      });
+      const qRes = await questionHandler({
+        pathParameters: { gameId: '1234' },
+        queryStringParameters: { role },
+      });
+      check(`get-question, ${role} @ ${state}: no reveal in the payload`, () => {
+        assert.strictEqual(qRes.statusCode, 200, `got ${qRes.statusCode}: ${qRes.body}`);
+        assert.ok(!leaks(qRes.body), 'the reveal leaked to the client');
+        assert.ok(!/answerdetails/i.test(qRes.body), 'AnswerDetails projected under some spelling');
+      });
+    }
   }
 
   // get-game-state is the payload that drives the player through the whole

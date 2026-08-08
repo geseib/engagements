@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
+const { resolveSetPartition } = require('./set-version');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -37,11 +38,22 @@ exports.handler = async (event) => {
     const gameStateValue = gameState.Item.State;
     const lessonNumber = gameState.Item.LessonNumber || 0;
     
-    // Check if we're in a question asking state
-    if (!gameStateValue || !gameStateValue.startsWith('ASK#')) {
+    // A round is in progress in ASK#, VOTE# and RESULTS# — the same triple that
+    // get-game-state.js and next-question.js already treat as "there is a
+    // current question". This guard used to accept ASK# alone, which stranded
+    // the RESULTS# correct-answer block below and 400d two real callers:
+    // PlayerPage.loadResultsData (which swallows the failure and rebuilds the
+    // question from get-results, losing image/school/category/setId along the
+    // way) and GameHostPage's refresh-restore path.
+    const roundInProgress = !!gameStateValue && (
+      gameStateValue.startsWith('ASK#') ||
+      gameStateValue.startsWith('VOTE#') ||
+      gameStateValue.startsWith('RESULTS#')
+    );
+    if (!roundInProgress) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           error: 'No active question',
           message: 'Game is not currently asking a question',
           currentState: gameStateValue
@@ -74,15 +86,24 @@ exports.handler = async (event) => {
 
     const sourceQuestionId = questionRef.Item.SourceQuestionId;
     const questionSetId = questionRef.Item.SetId;
-    
+
     console.log(`📖 Found question reference: ${sourceQuestionId} from set ${questionSetId}`);
 
-    // Get the actual question from the question set
+    // The REF row records the set VERSION the round was started on
+    // (next-question.js writes SetVersion beside SetId). That is the tightest
+    // pin available — tighter than the game's, and it costs no extra read. REF
+    // rows written before versioning have no SetVersion, so the resolver falls
+    // through to the set's activeVersion and then to the legacy partition.
+    const resolved = await resolveSetPartition(
+      db, process.env.TABLE_NAME, questionSetId, questionRef.Item.SetVersion
+    );
+
+    // Get the actual question from the resolved version of the question set
     const question = await db.send(new GetCommand({
       TableName: process.env.TABLE_NAME,
-      Key: { 
-        PK: `SET#${questionSetId}`, 
-        SK: sourceQuestionId 
+      Key: {
+        PK: resolved.pk,
+        SK: sourceQuestionId
       }
     }));
 
@@ -104,8 +125,8 @@ exports.handler = async (event) => {
       questionNumber: questionNumber,
       // `id` is what get-game-state's currentQuestionData calls the round number
       // (padded, e.g. "001"). It was missing here, so the player's round badge
-      // rendered blank on ASK and RESULTS and only filled in during VOTE — the
-      // one phase served by get-game-state.
+      // rendered blank wherever this payload drove the screen rather than
+      // get-game-state's.
       id: questionNumber,
       // The set id reaches the player too. PlayerPage guards its per-set
       // instruction fetch on `setId`, and this payload only ever carried
@@ -116,7 +137,13 @@ exports.handler = async (event) => {
       title: question.Item.Title || '',
       questionDetail: question.Item.questionDetail || question.Item.Detail || '',
       detail: question.Item.Detail || question.Item.questionDetail || '',
-      answerDetails: question.Item.answerDetails || '',
+      // No answerDetails here, deliberately. It is the spoiler — the real title
+      // and its trivia on an art round, the answer explanation on a trivia one —
+      // and game/get-ai-summary.js is its only reader, at RESULTS. This used to
+      // project `question.Item.answerDetails`, which looked harmless only
+      // because admin/upload-questions.js writes `AnswerDetails`; sets built by
+      // admin/ai-generate-trivia.js store the lower-case spelling, and those
+      // leaked the explanation to players during ASK.
       category: question.Item.Category,
       school: question.Item.School || '',
       image: question.Item.Image || '', // Optional artwork URL ("Art Title" rounds)

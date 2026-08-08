@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
+const { resolveSetPartition } = require('./set-version');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client, {
@@ -103,6 +104,13 @@ exports.handler = async (event) => {
     const questionSetId = gameMetadata.Item.QuestionSetId;
     let questionSetData = null;
     let useNewFormat = false; // Track which format is being used
+
+    // Which VERSION of the set this game played. The final report must quote
+    // the questions the players actually saw, so it resolves through the game's
+    // pin first, then the set's activeVersion, then the legacy partition.
+    const resolvedSet = questionSetId
+      ? await resolveSetPartition(db, process.env.TABLE_NAME, questionSetId, gameMetadata.Item.QuestionSetVersion)
+      : { pk: null, version: null };
     
     if (questionSetId) {
       try {
@@ -219,9 +227,9 @@ exports.handler = async (event) => {
             console.log(`📊 Fetching question details using NEW format...`);
             const questionResult = await db.send(new GetCommand({
               TableName: process.env.TABLE_NAME,
-              Key: { 
-                PK: `SET#${questionSetId}`, 
-                SK: sourceQuestionId 
+              Key: {
+                PK: resolvedSet.pk,
+                SK: sourceQuestionId
               }
             }));
             questionDetails = questionResult.Item;
@@ -239,7 +247,7 @@ exports.handler = async (event) => {
               TableName: process.env.TABLE_NAME,
               KeyConditionExpression: 'PK = :pk AND SK = :sk',
               ExpressionAttributeValues: {
-                ':pk': `SET#${questionSetId}`,
+                ':pk': resolvedSet.pk,
                 ':sk': sourceQuestionId
               }
             }));

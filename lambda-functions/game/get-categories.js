@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { resolveSetPartition } = require('./set-version');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -7,6 +8,10 @@ const db = DynamoDBDocumentClient.from(client);
 exports.handler = async (event) => {
   try {
     const { setId } = event.pathParameters || {};
+    // Optional pin. A host previewing the categories of a specific version
+    // passes ?version=2; everyone else gets the set's activeVersion, and an
+    // unmigrated set falls through to its legacy partition.
+    const requestedVersion = (event.queryStringParameters || {}).version;
 
     if (!setId) {
       return {
@@ -18,12 +23,14 @@ exports.handler = async (event) => {
 
     console.log(`Getting categories for question set: ${setId}`);
 
-    // Query all categories in the set
+    const resolved = await resolveSetPartition(db, process.env.TABLE_NAME, setId, requestedVersion);
+
+    // Query all categories in the resolved version of the set
     const result = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
       KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
       ExpressionAttributeValues: {
-        ':pk': `SET#${setId}`,
+        ':pk': resolved.pk,
         ':sk': 'CATEGORY#'
       }
     }));
@@ -45,7 +52,11 @@ exports.handler = async (event) => {
       statusCode: 200,
       body: JSON.stringify({
         categories: categories,
-        totalCategories: categories.length
+        totalCategories: categories.length,
+        // Which version answered, so a caller can tell "this set has no
+        // categories" apart from "you asked for a version that is gone".
+        version: resolved.version,
+        versionSource: resolved.source
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }
     };

@@ -1,6 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand, PutCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+const { resolveSetPartition } = require('./set-version');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -21,7 +22,12 @@ const setBitToZero = (mask, position) => {
 };
 
 // Helper function to select next question from enhanced counts (array-based)
-const selectNextQuestionFromCounts = async (gameId, countsState, questionSetId, isRandomized = true) => {
+//
+// `setPk` is the RESOLVED question-set partition — `SET#<id>#v<n>` for a
+// versioned set, `SET#<id>` for a legacy one. It is resolved once in the
+// handler (game pin -> activeVersion -> legacy) and threaded through, so a game
+// cannot read its categories from one version and its questions from another.
+const selectNextQuestionFromCounts = async (gameId, countsState, setPk, isRandomized = true) => {
   const counts1_8 = countsState['1-8'] || [];
   const counts9_16 = countsState['9-16'] || [];
   const counts17_24 = countsState['17-24'] || [];
@@ -116,7 +122,7 @@ const selectNextQuestionFromCounts = async (gameId, countsState, questionSetId, 
     TableName: process.env.TABLE_NAME,
     KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
     ExpressionAttributeValues: {
-      ':pk': `SET#${questionSetId}`,
+      ':pk': setPk,
       ':sk': 'CATEGORY#'
     }
   }));
@@ -189,7 +195,7 @@ const selectNextQuestionFromCounts = async (gameId, countsState, questionSetId, 
 };
 
 // Helper function to select next question based on bitmasks
-const selectNextQuestion = async (gameId, categoryState, questionSetId, isRandomized = true) => {
+const selectNextQuestion = async (gameId, categoryState, setPk, isRandomized = true) => {
   console.log(`🎯 Selecting next question for game ${gameId}`);
   
   // Check if we have enhanced category counts (new feature)
@@ -201,7 +207,7 @@ const selectNextQuestion = async (gameId, categoryState, questionSetId, isRandom
   if (countsResult.Item && (countsResult.Item['1-8'] || countsResult.Item['9-16'] || countsResult.Item['17-24'])) {
     // Use enhanced category management
     console.log(`📊 Using enhanced array-based category counts for selection`);
-    return selectNextQuestionFromCounts(gameId, countsResult.Item, questionSetId, isRandomized);
+    return selectNextQuestionFromCounts(gameId, countsResult.Item, setPk, isRandomized);
   }
   
   // Fallback to bitmask-based selection
@@ -222,7 +228,7 @@ const selectNextQuestion = async (gameId, categoryState, questionSetId, isRandom
     TableName: process.env.TABLE_NAME,
     KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
     ExpressionAttributeValues: {
-      ':pk': `SET#${questionSetId}`,
+      ':pk': setPk,
       ':sk': 'CATEGORY#'
     }
   }));
@@ -495,6 +501,18 @@ exports.handler = async (event) => {
       };
     }
 
+    // Resolve which VERSION of the question set this game reads, ONCE, and use
+    // it for every set read below. The game's pinned QuestionSetVersion wins, so
+    // replacing a set cannot change the questions under a game in progress; a
+    // game with no pin follows the set's activeVersion; an unmigrated set falls
+    // through to its legacy `SET#<id>` partition.
+    const resolvedSet = await resolveSetPartition(
+      db, process.env.TABLE_NAME,
+      gameMetadata.Item.QuestionSetId,
+      gameMetadata.Item.QuestionSetVersion
+    );
+    const setPk = resolvedSet.pk;
+
     // Get category state
     const categoryState = await db.send(new GetCommand({
       TableName: process.env.TABLE_NAME,
@@ -518,7 +536,7 @@ exports.handler = async (event) => {
       // Validate that the requested question exists
       const specificQuestionQuery = await db.send(new GetCommand({
         TableName: process.env.TABLE_NAME,
-        Key: { PK: `SET#${gameMetadata.Item.QuestionSetId}`, SK: `QUESTION#${questionId}` }
+        Key: { PK: setPk, SK: `QUESTION#${questionId}` }
       }));
 
       if (!specificQuestionQuery.Item) {
@@ -545,7 +563,7 @@ exports.handler = async (event) => {
         TableName: process.env.TABLE_NAME,
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
         ExpressionAttributeValues: {
-          ':pk': `SET#${gameMetadata.Item.QuestionSetId}`,
+          ':pk': setPk,
           ':sk': 'CATEGORY#'
         }
       }));
@@ -606,7 +624,7 @@ exports.handler = async (event) => {
       }
 
       // Select next question automatically
-      nextQuestion = await selectNextQuestion(gameId, categoryState.Item, gameMetadata.Item.QuestionSetId, isRandomized);
+      nextQuestion = await selectNextQuestion(gameId, categoryState.Item, setPk, isRandomized);
     }
 
     if (!nextQuestion) {
@@ -671,6 +689,12 @@ exports.handler = async (event) => {
         SK: `QUESTION#${questionNumber}#REF`,
         SourceQuestionId: nextQuestion.questionId,
         SetId: gameMetadata.Item.QuestionSetId,
+        // The version this round was actually served from. get-question.js reads
+        // it back as the pin, so a round already on screen keeps resolving to
+        // the same version even if the set is replaced or promoted mid-round.
+        // Omitted for a legacy (unversioned) set so the REF row keeps its old
+        // shape and the resolver's legacy branch still fires.
+        ...(resolvedSet.version !== null ? { SetVersion: resolvedSet.version } : {}),
         QuestionNumber: questionNumber,
         StartedAt: now,
         ttl: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 hours
@@ -746,7 +770,7 @@ exports.handler = async (event) => {
 
     // Decrement category count when question is asked (not when results are calculated)
     console.log(`🔢 Calling decrementCategoryCount for asked question ${questionNumber} in game ${gameId}`);
-    await decrementCategoryCount(gameId, questionNumber, nextQuestion.categoryId);
+    await decrementCategoryCount(gameId, questionNumber, nextQuestion.categoryId, setPk);
 
     // Send simplified WebSocket notification to all connected players
     await broadcastToGame(gameId, {
@@ -785,7 +809,12 @@ exports.handler = async (event) => {
 };
 
 // Helper function to decrement category count when question is asked
-const decrementCategoryCount = async (gameId, questionId, categoryId) => {
+// `setPk` is the caller's already-resolved set partition (see selectNextQuestion).
+// Passing it in rather than rebuilding `SET#<id>` here is what keeps the category
+// POSITIONS this decrement uses identical to the ones the selection used — two
+// versions of a set can order or number their categories differently, and a
+// mismatch would decrement the wrong counter.
+const decrementCategoryCount = async (gameId, questionId, categoryId, setPk) => {
   try {
     console.log(`🔢 Decrementing category count for asked question ${questionId} (category ${categoryId}) in game ${gameId}`);
     
@@ -827,14 +856,8 @@ const decrementCategoryCount = async (gameId, questionId, categoryId) => {
           return;
         }
 
-        // Get game metadata to find question set ID
-        const gameMetadata = await db.send(new GetCommand({
-          TableName: process.env.TABLE_NAME,
-          Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
-        }));
-
-        if (!gameMetadata.Item || !gameMetadata.Item.QuestionSetId) {
-          console.log(`⚠️ Game metadata not found for ${gameId}, skipping decrement`);
+        if (!setPk) {
+          console.log(`⚠️ No resolved question-set partition for ${gameId}, skipping decrement`);
           return;
         }
 
@@ -843,7 +866,7 @@ const decrementCategoryCount = async (gameId, questionId, categoryId) => {
           TableName: process.env.TABLE_NAME,
           KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
           ExpressionAttributeValues: {
-            ':pk': `SET#${gameMetadata.Item.QuestionSetId}`,
+            ':pk': setPk,
             ':sk': 'CATEGORY#'
           }
         }));

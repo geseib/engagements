@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { resolvePartitionFromMeta, toVersion, knownVersions } = require('./set-version');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -20,13 +21,18 @@ exports.handler = async (event) => {
     for (const item of res.Items) {
       if (item.active !== false) { // Include if active is true or undefined
         const setId = item.SK.replace('SET#', '');
-        
-        // Get categories for this set
+
+        // No game exists yet at picker time, so there is no pin: this is the
+        // set's activeVersion, falling through to the legacy partition for a
+        // set that has never been versioned.
+        const resolved = resolvePartitionFromMeta(setId, item, null);
+
+        // Get categories for the active version of this set
         const categoriesRes = await db.send(new QueryCommand({
           TableName: process.env.TABLE_NAME,
           KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-          ExpressionAttributeValues: { 
-            ':pk': `SET#${setId}`,
+          ExpressionAttributeValues: {
+            ':pk': resolved.pk,
             ':sk': 'CATEGORY#'
           }
         }));
@@ -52,6 +58,10 @@ exports.handler = async (event) => {
           personaId: item.personaId || null,
           roundNoun: item.roundNoun || null,
           hasImages: item.hasImages === true,
+          // The version a game created from this set right now would pin to.
+          // null on an unmigrated set, which reads its legacy partition.
+          activeVersion: toVersion(item.activeVersion),
+          availableVersions: knownVersions(item),
           active: true,
           categories: categories,
           engagementType: item.engagementType || 'call-and-answer'

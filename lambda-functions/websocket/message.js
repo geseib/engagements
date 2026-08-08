@@ -1,6 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand, DeleteCommand, PutCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+const { resolveSetPartition } = require('./set-version');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -376,12 +377,19 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
           const questionSetId = questionRef.Item.SetId;
           const questionStartTime = questionRef.Item.StartedAt;
           
+          // Read the VERSION this round was served from (the REF row records
+          // it). Scoring against a different version's correctAnswer than the
+          // one the player was shown is the worst possible drift.
+          const resolvedSet = await resolveSetPartition(
+            db, process.env.TABLE_NAME, questionSetId, questionRef.Item.SetVersion
+          );
+
           // Get the actual question to check correct answer
           const question = await db.send(new GetCommand({
             TableName: process.env.TABLE_NAME,
-            Key: { 
-              PK: `SET#${questionSetId}`, 
-              SK: sourceQuestionId 
+            Key: {
+              PK: resolvedSet.pk,
+              SK: sourceQuestionId
             }
           }));
           

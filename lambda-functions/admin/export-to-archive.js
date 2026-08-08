@@ -1,6 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, ScanCommand, GetCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { resolvePartitionFromMeta } = require('./shared/set-version');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient());
 const s3Client = new S3Client({});
@@ -110,12 +111,17 @@ async function exportQuestionSets(selectedIds, environment, results) {
 
       const questionSet = setResponse.Item;
 
+      // Export the ACTIVE version's questions, falling back to the legacy
+      // partition for a set that has never been versioned. Exporting the bare
+      // `SET#<id>` partition after a replace would archive the superseded copy.
+      const resolvedSet = resolvePartitionFromMeta(setId, questionSet, null);
+
       // Get all questions for this set
       const questionsResponse = await db.send(new ScanCommand({
         TableName: process.env.TABLE_NAME,
         FilterExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
         ExpressionAttributeValues: {
-          ':pk': `SET#${setId}`,
+          ':pk': resolvedSet.pk,
           ':skPrefix': 'QUESTION#'
         }
       }));

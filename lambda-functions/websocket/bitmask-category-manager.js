@@ -397,6 +397,16 @@ const initializeCategoryCounts = async (gameId, selectedCategories, availableCat
 };
 
 // Get actual question count for a category
+//
+// NOT version-aware, deliberately: this is dead code. Its only caller chain is
+// getCategoryQuestionCount <- initializeCategoryCounts <- initializeCategoryState,
+// and initializeCategoryState is exported but imported by nothing —
+// start-game.js takes only initializeCategoryOrder/getCategoryState/
+// TTL_ACTIVE_PHASE/updateHostState from this module. The real category setup
+// lives in schema-compliant-manager.createGame(), which IS version-aware.
+// getAvailableCategoriesFromSet() above still returns four hardcoded category
+// names, which is the other half of the same evidence. Wire this through
+// resolveSetPartition if it is ever revived.
 const getCategoryQuestionCount = async (questionSetId, categoryId) => {
   try {
     // Query questions for this category

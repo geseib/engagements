@@ -15,44 +15,12 @@ import { authFetch } from './auth/authFetch';
 import Icon from './components/Icon';
 import StatusMessage from './components/StatusMessage';
 import SetImageBadge from './components/SetImageBadge';
-import { GAME_TYPE_LIST, gameTypeLabel, normalizeGameType } from './config/gameTypes';
+import PromptShapePreview from './components/PromptShapePreview';
+import QuestionSetEditor from './components/QuestionSetEditor';
+import { gameTypeLabel } from './config/gameTypes';
+import { truncate } from './utils/questionSetEditing';
 
 const API_BASE = window.API_BASE;
-
-/**
- * Question-set fields the editor can change, and how to describe a change to
- * one of them in the save confirmation.
- *
- * The set editor used to report a bare "updated successfully" for every save,
- * including saves where the field the owner actually cared about was silently
- * discarded by the backend. Naming each landed change makes a no-op visible.
- */
-const EDITABLE_SET_FIELDS = {
-  description: 'description',
-  customInstruction: 'custom instructions',
-  aiContextInstruction: 'AI context',
-  promptId: 'AI summary prompt',
-  engagementType: 'engagement type',
-  roundNoun: 'round label',
-  personaId: "Workie's voice"
-};
-
-function describeSetChange(field, value) {
-  const label = EDITABLE_SET_FIELDS[field] || field;
-  if (!value) {
-    if (field === 'promptId') return 'AI summary prompt reset to the game-type default';
-    if (field === 'personaId') return "Workie's voice reset to adapting to the session";
-    return `${label} cleared`;
-  }
-  return `${label} set to "${value}"`;
-}
-
-/** One-line preview of a long free-text field for the set list. */
-function truncate(text, max = 90) {
-  const value = String(text || '').trim();
-  if (value.length <= max) return value;
-  return `${value.slice(0, max - 1)}…`;
-}
 
 function AdminPage() {
   console.log('🔧 AdminPage component loading with AI builders...');
@@ -111,22 +79,10 @@ function AdminPage() {
   
   // Tab management
   const [activeTab, setActiveTab] = useState('prompts');
+  // The set being edited. Every field of the editor itself now lives in
+  // components/QuestionSetEditor.jsx — this page only decides which set is open
+  // and shows the confirmation after the editor closes.
   const [editingSetId, setEditingSetId] = useState('');
-  const [editTitle, setEditTitle] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editInstructions, setEditInstructions] = useState('');
-  const [editAiContextInstructions, setEditAiContextInstructions] = useState('');
-  const [editEngagementType, setEditEngagementType] = useState('call-and-answer');
-  const [editPromptId, setEditPromptId] = useState('');
-  const [editRoundNoun, setEditRoundNoun] = useState('');
-  // Per-set voice. '' means "adapt to the session", which is the default and
-  // beats the prompt template's baked-in persona on purpose.
-  const [editPersonaId, setEditPersonaId] = useState('');
-  // Snapshot of the set as it was when the editor opened. The save payload is a
-  // diff against this: a field the owner did not touch is omitted entirely, a
-  // field they blanked is sent as '' so the backend can tell "leave it alone"
-  // from "clear it". Sending null for both is what made blanking a no-op.
-  const [editOriginal, setEditOriginal] = useState({});
   const [saveStatus, setSaveStatus] = useState('');
   // Success/failure is explicit state. It used to be inferred by sniffing the
   // status string for a ✅, which silently broke the moment the copy changed.
@@ -209,42 +165,6 @@ function AdminPage() {
     return match ? match.name : `${personaId} (unknown — Workie will adapt instead)`;
   };
 
-  /*
-   * The headings a prompt will actually produce.
-   *
-   * Mirrors lambda-functions/game/prompt-shape.js: a prompt that declares
-   * `outputSections` gets that shape, and everything else gets the default
-   * triad. Picking a prompt is how you choose the SHAPE of Workie's output, not
-   * just its wording — an art round wants the winning title and the real title,
-   * not "Next Steps" for a painting — and until this was shown there was no way
-   * to tell from the picker which prompt produced which output.
-   */
-  const DEFAULT_OUTPUT_HEADINGS = ['Summary', 'Discussion Questions', 'Next Steps'];
-
-  const promptOutputHeadings = (prompt) => {
-    const declared = prompt && prompt.outputSections;
-    if (!Array.isArray(declared) || declared.length === 0) return DEFAULT_OUTPUT_HEADINGS;
-    const headings = declared
-      .map((s) => (s && typeof s.heading === 'string' ? s.heading.trim() : ''))
-      .filter(Boolean);
-    return headings.length ? headings : DEFAULT_OUTPUT_HEADINGS;
-  };
-
-  /** Renders the shape of whichever prompt is currently selected, or of the default. */
-  const PromptShapePreview = ({ promptId }) => {
-    const prompt = availablePrompts.find((p) => p.promptId === promptId);
-    const headings = promptOutputHeadings(prompt);
-    const isCustom = !!(prompt && Array.isArray(prompt.outputSections) && prompt.outputSections.length);
-    return (
-      <small className="help-text prompt-shape-preview">
-        <strong>Output shape:</strong> {headings.map((h) => `## ${h}`).join('  ')}
-        {promptId
-          ? (isCustom ? ' — declared by this prompt' : ' — this prompt uses the standard shape')
-          : ' — the standard shape'}
-      </small>
-    );
-  };
-
   // Load prompts when component mounts
   useEffect(() => {
     fetchAvailablePrompts();
@@ -252,27 +172,8 @@ function AdminPage() {
   }, []);
 
   const handleEditQuestionSet = (questionSet) => {
-    const original = {
-      description: (questionSet.description || '').trim(),
-      customInstruction: (questionSet.customInstruction || '').trim(),
-      aiContextInstruction: (questionSet.aiContextInstruction || '').trim(),
-      promptId: (questionSet.promptId || '').trim(),
-      engagementType: normalizeGameType(questionSet.engagementType),
-      roundNoun: (questionSet.roundNoun || '').trim(),
-      personaId: (questionSet.personaId || '').trim()
-    };
-
     setEditMode(true);
     setEditingSetId(questionSet.id);
-    setEditTitle(questionSet.name || '');
-    setEditDescription(original.description);
-    setEditInstructions(original.customInstruction);
-    setEditAiContextInstructions(original.aiContextInstruction);
-    setEditEngagementType(original.engagementType);
-    setEditPromptId(original.promptId);
-    setEditRoundNoun(original.roundNoun);
-    setEditPersonaId(original.personaId);
-    setEditOriginal(original);
     setSaveStatus('');
     setSaveOk(null);
 
@@ -295,91 +196,21 @@ function AdminPage() {
   const handleCancelEdit = () => {
     setEditMode(false);
     setEditingSetId('');
-    setEditTitle('');
-    setEditDescription('');
-    setEditInstructions('');
-    setEditAiContextInstructions('');
-    setEditEngagementType('call-and-answer');
-    setEditPromptId('');
-    setEditRoundNoun('');
-    setEditPersonaId('');
-    setEditOriginal({});
     setSaveStatus('');
     setSaveOk(null);
   };
 
-  const handleSaveEdit = async () => {
-    if (!editTitle.trim()) {
-      setSaveOk(false);
-      setSaveStatus('Title is required');
-      return;
-    }
-
-    const current = {
-      description: editDescription.trim(),
-      customInstruction: editInstructions.trim(),
-      aiContextInstruction: editAiContextInstructions.trim(),
-      promptId: editPromptId.trim(),
-      engagementType: normalizeGameType(editEngagementType),
-      roundNoun: editRoundNoun.trim(),
-      personaId: editPersonaId.trim()
-    };
-
-    // Only send what actually changed. An omitted key means "leave it alone";
-    // an empty string means "clear it". The backend guards on `!== undefined`,
-    // so both intentions survive the round trip — which they did not when every
-    // blank field was flattened to null and then skipped.
-    const changed = {};
-    for (const field of Object.keys(EDITABLE_SET_FIELDS)) {
-      if (current[field] !== (editOriginal[field] ?? '')) changed[field] = current[field];
-    }
-
-    const savedName = editTitle.trim();
-    setSaveOk(null);
-    setSaveStatus('Saving...');
-    try {
-      const response = await authFetch(`${API_BASE}admin/edit-question-set/${editingSetId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: savedName, ...changed })
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        // Report what the backend says it wrote, not what we hoped it wrote.
-        const applied = result.updated || changed;
-        const summary = Object.keys(applied).map((f) => describeSetChange(f, applied[f]));
-        setSaveOk(true);
-        setSaveStatus(
-          summary.length
-            ? `Saved "${savedName}" — ${summary.join('; ')}.`
-            : `Saved "${savedName}" — title only, no other fields changed.`
-        );
-        setEditMode(false);
-        setEditingSetId('');
-        setEditTitle('');
-        setEditDescription('');
-        setEditInstructions('');
-        setEditAiContextInstructions('');
-        setEditEngagementType('call-and-answer');
-        setEditPromptId('');
-        setEditRoundNoun('');
-        setEditPersonaId('');
-        setEditOriginal({});
-        // Refresh the question sets list
-        await fetchQuestionSets();
-      } else {
-        setSaveOk(false);
-        setSaveStatus(`Save failed: ${result.error || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error('Edit save error:', error);
-      setSaveOk(false);
-      setSaveStatus(`Save failed: ${error.message}`);
-    }
+  /**
+   * A field save landed inside QuestionSetEditor. Close the editor, keep the
+   * confirmation on screen and re-read the list so the row shows what the
+   * backend actually wrote.
+   */
+  const handleEditorSaved = async (message) => {
+    setSaveOk(true);
+    setSaveStatus(message);
+    setEditMode(false);
+    setEditingSetId('');
+    await fetchQuestionSets();
   };
 
   const handleToggleDebugMode = () => {
@@ -1431,197 +1262,22 @@ function AdminPage() {
             </div>
           </div>
 
-          {/* Edit Question Set Modal/Form */}
-          {editMode && (
-            <div className="admin-section edit-section">
-              <h2><Icon name="PencilSimple" weight="bold" size={16} color="currentColor" /> Edit Question Set</h2>
-              {/* AI-Generated Content Warning */}
-              {(() => {
-                const currentSet = questionSets.find(set => set.id === editingSetId);
-                return currentSet?.isAIGenerated && (
-                  <div className="ai-review-banner">
-                    <div className="ai-review-content">
-                      <span className="ai-review-icon"><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /></span>
-                      <div className="ai-review-text">
-                        <strong>AI-Generated Content - Review Required</strong>
-                        <p>This question set was created by AI and is currently inactive. Please review and edit the content, then activate it when ready.</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-              <div className="edit-form">
-                <div className="form-group">
-                  <label htmlFor="edit-title">Title *</label>
-                  <input
-                    id="edit-title"
-                    type="text"
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    placeholder="Question set title"
-                    className="form-input"
-                  />
-                </div>
-                
-                <div className="form-group">
-                  <label htmlFor="edit-description">Description</label>
-                  <textarea
-                    id="edit-description"
-                    value={editDescription}
-                    onChange={(e) => setEditDescription(e.target.value)}
-                    placeholder="Brief description of this question set"
-                    className="form-textarea"
-                    rows="3"
-                  />
-                </div>
-                
-                {/*
-                  Engagement type was loaded into state but never rendered and
-                  never sent, so a set imported with the wrong type could only be
-                  fixed by deleting and re-importing it — there is no REPLACE
-                  path. It drives phases, default prompt and round label, so it
-                  has to be editable.
-                */}
-                <div className="form-group">
-                  <label htmlFor="edit-engagement-type">Engagement Type</label>
-                  <select
-                    id="edit-engagement-type"
-                    value={editEngagementType}
-                    onChange={(e) => setEditEngagementType(e.target.value)}
-                    className="form-select"
-                  >
-                    {GAME_TYPE_LIST.map(type => (
-                      <option key={type.id} value={type.id}>{type.label}</option>
-                    ))}
-                  </select>
-                  <small className="help-text">
-                    Controls which phases the session runs and which default AI prompt applies.
-                    Changing it does not rewrite the questions themselves.
-                  </small>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="edit-round-noun">Round Label</label>
-                  <input
-                    id="edit-round-noun"
-                    type="text"
-                    value={editRoundNoun}
-                    onChange={(e) => setEditRoundNoun(e.target.value)}
-                    placeholder="Leave blank for the default (Round, Question, Artwork…)"
-                    className="form-input"
-                  />
-                  <small className="help-text">
-                    What one item in this set is called on screen — "Lesson 3", "Scenario 3".
-                    Blank uses the default for the engagement type.
-                  </small>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="edit-instructions">Custom Instructions</label>
-                  <textarea
-                    id="edit-instructions"
-                    value={editInstructions}
-                    onChange={(e) => setEditInstructions(e.target.value)}
-                    placeholder={`Custom instruction for players (optional). Default: "${defaultInstructions}"`}
-                    className="form-textarea"
-                    rows="4"
-                  />
-                  <small className="help-text">
-                    This instruction will be shown to players and used by AI for analysis. 
-                    Leave blank to use default instructions.
-                  </small>
-                </div>
-                
-                <div className="form-group">
-                  <label htmlFor="edit-ai-context-instructions">AI Context Instructions</label>
-                  <textarea
-                    id="edit-ai-context-instructions"
-                    value={editAiContextInstructions}
-                    onChange={(e) => setEditAiContextInstructions(e.target.value)}
-                    placeholder="Provide background context about your project, team, or meeting for AI analysis..."
-                    className="form-textarea"
-                    rows="4"
-                  />
-                  <small className="help-text">
-                    This context helps AI provide more relevant analysis based on your specific project, industry, or goals.
-                    Leave blank for general analysis.
-                  </small>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="edit-prompt-id">AI Summary Prompt</label>
-                  <select
-                    id="edit-prompt-id"
-                    value={editPromptId}
-                    onChange={(e) => setEditPromptId(e.target.value)}
-                    className="form-select"
-                  >
-                    <option value="">Use default prompt for game type</option>
-                    {availablePrompts.map(prompt => (
-                      <option key={prompt.promptId} value={prompt.promptId}>
-                        {prompt.name} ({prompt.gameType} - {prompt.category})
-                      </option>
-                    ))}
-                  </select>
-                  <small className="help-text">
-                    Choose a specific AI prompt for generating summaries, or leave blank to use the default prompt based on game type.
-                    Only active prompts are shown.
-                  </small>
-                  <PromptShapePreview promptId={editPromptId} />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="edit-persona-id">Workie's Voice</label>
-                  <select
-                    id="edit-persona-id"
-                    value={editPersonaId}
-                    onChange={(e) => setEditPersonaId(e.target.value)}
-                    className="form-select"
-                  >
-                    {/* Adapting is the designed default, not a fallback. A host
-                        who picks a voice at creation still overrides this. */}
-                    <option value="">Adapt to the session (recommended)</option>
-                    {availablePersonas.map(persona => (
-                      <option key={persona.personaId} value={persona.personaId}>
-                        {persona.name}{persona.tagline ? ` — ${persona.tagline}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <small className="help-text">
-                    The voice Workie uses for summaries of this set. A host's pick at engagement
-                    creation takes precedence over this. Leave blank and Workie reads the room.
-                  </small>
-                </div>
-
-                <div className="form-actions">
-                  <button
-                    className="btn-primary"
-                    onClick={handleSaveEdit}
-                    disabled={saveStatus === 'Saving...'}
-                  >
-                    {saveStatus === 'Saving...' ? 'Saving...' : 'Save Changes'}
-                  </button>
-                  <button
-                    className="btn-secondary"
-                    onClick={handleCancelEdit}
-                  >
-                    Cancel
-                  </button>
-                </div>
-                
-                {saveStatus && (
-                  <div
-                    className={`status-message ${saveOk === true ? 'success' : saveOk === false ? 'error' : 'pending'}`}
-                    role="status"
-                  >
-                    {saveOk === true && <Icon name="CheckCircle" weight="fill" size={16} color="var(--success)" />}
-                    {saveOk === false && <Icon name="XCircle" weight="fill" size={16} color="var(--danger)" />}
-                    {saveOk === null && <Icon name="Timer" weight="bold" size={16} color="var(--muted)" />}
-                    {' '}{saveStatus}
-                  </div>
-                )}
-              </div>
-            </div>
+          {/*
+            The set editor. It used to be ~190 lines of form inline here; it now
+            owns every creation field plus CSV download/replace, the version list
+            and the media seam. Extracted, not rewritten — the save payload is
+            still the diff built in utils/questionSetEditing.
+          */}
+          {editMode && editingSetId && (
+            <QuestionSetEditor
+              questionSet={questionSets.find(set => set.id === editingSetId) || { id: editingSetId }}
+              availablePrompts={availablePrompts}
+              availablePersonas={availablePersonas}
+              defaultInstructions={defaultInstructions}
+              onSaved={handleEditorSaved}
+              onChanged={fetchQuestionSets}
+              onCancel={handleCancelEdit}
+            />
           )}
 
           {/* Upload Question Set Section */}
@@ -1758,7 +1414,7 @@ function AdminPage() {
                             </option>
                           ))}
                       </select>
-                      <PromptShapePreview promptId={selectedPromptId} />
+                      <PromptShapePreview promptId={selectedPromptId} prompts={availablePrompts} />
                     </div>
                   </div>
 

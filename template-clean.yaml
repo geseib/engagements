@@ -1242,7 +1242,9 @@ Resources:
       CodeUri: lambda-functions/admin/
       Handler: delete-question-set.handler
       Runtime: nodejs22.x
-      Timeout: 30
+      # Deleting a set now sweeps the legacy partition AND every version
+      # partition, so a many-versioned set is several times the work it was.
+      Timeout: 60
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
@@ -1252,6 +1254,119 @@ Resources:
           Properties:
             ApiId: !Ref RestApi
             Path: /admin/question-sets/{setId}
+            Method: DELETE
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  ## Export a question set as CSV/JSON.
+  ##
+  ## The lambda has existed for a long time but had NO route, so
+  ## QuestionSetEditor.jsx's "Download CSV" has been calling a 404. The route is
+  ## added here because a lossless download is half of the replace round trip:
+  ## download the current version, edit it, upload it back as a new one.
+  AdminDownloadQuestionSetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-download-question-set'
+      CodeUri: lambda-functions/admin/
+      Handler: download-question-set.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        AdminDownloadQuestionSetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/download-question-set/{setId}
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  ## Question-set VERSIONING
+  ##
+  ## A set's questions live at PK=SET#<id>#v<n>; the SETS metadata row carries
+  ## activeVersion and versions[]. These three routes list, promote and delete
+  ## versions. See docs/superpowers/specs/2026-08-08-question-set-versioning-design.md.
+  ##
+  ## Cognito-authorised, mirroring every other /admin/* route.
+
+  AdminGetSetVersionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-get-set-versions'
+      CodeUri: lambda-functions/admin/
+      Handler: get-set-versions.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        AdminGetSetVersionsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/question-sets/{setId}/versions
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  AdminPromoteSetVersionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-promote-set-version'
+      CodeUri: lambda-functions/admin/
+      Handler: promote-set-version.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        AdminPromoteSetVersionEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/question-sets/{setId}/versions/{version}/promote
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  AdminDeleteSetVersionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-delete-set-version'
+      CodeUri: lambda-functions/admin/
+      Handler: delete-set-version.handler
+      Runtime: nodejs22.x
+      # A version is one partition (up to ~160 question rows plus categories),
+      # deleted in retried batches of 25 — the same budget the whole-set delete
+      # gets, for a strictly smaller job.
+      Timeout: 60
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        AdminDeleteSetVersionEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/question-sets/{setId}/versions/{version}
             Method: DELETE
             Auth:
               Authorizer: CognitoAuthorizer

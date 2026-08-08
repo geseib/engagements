@@ -418,14 +418,37 @@ function seedSet(overrides = {}) {
   // line that caused the bug: `field.trim() || null` flattened every blank field
   // to null, and the backend skipped nulls, so blanking anything was a silent
   // no-op. This is a source check, and it is deliberately narrow.
-  const adminSource = require('fs').readFileSync(
-    path.join(REPO, 'src', 'src', 'AdminPage.jsx'), 'utf8');
+  //
+  // The editor was extracted out of AdminPage.jsx into QuestionSetEditor.jsx +
+  // utils/questionSetEditing.js, so this must scan the whole editing surface.
+  // Pinning one filename made this fail for a refactor that kept the contract
+  // perfectly — a test that cries wolf on a rename teaches people to ignore it.
+  const editorFiles = [
+    ['src', 'src', 'AdminPage.jsx'],
+    ['src', 'src', 'components', 'QuestionSetEditor.jsx'],
+    ['src', 'src', 'utils', 'questionSetEditing.js'],
+  ];
+  const fs = require('fs');
+  const editorSource = editorFiles
+    .map((p) => path.join(REPO, ...p))
+    .filter((p) => fs.existsSync(p))
+    .map((p) => fs.readFileSync(p, 'utf8'))
+    .join('\n');
+
   check('no `.trim() || null` left in the set-edit payload', () =>
-    assert.strictEqual(/\.trim\(\)\s*\|\|\s*null/.test(adminSource), false,
+    assert.strictEqual(/\.trim\(\)\s*\|\|\s*null/.test(editorSource), false,
       'a blank field is being flattened to null again — the backend will skip it'));
-  check('the editor sends a diff (editOriginal snapshot still present)', () =>
-    assert.ok(adminSource.includes('editOriginal'),
-      'the omit-untouched/send-empty-when-cleared contract is gone'));
+
+  // Assert the CONTRACT, not a variable name: the payload builder compares each
+  // field against a snapshot of what was loaded, and only sends the ones that
+  // differ. Whatever it is called, that comparison has to be there — without it
+  // an untouched field is sent every time (harmless) or, far worse, a cleared
+  // field is dropped and blanking silently reverts.
+  check('the edit payload is still built as a diff against the loaded values', () =>
+    assert.ok(
+      /current\[\s*field\s*\]\s*!==\s*\(?\s*original\[/.test(editorSource)
+        || /editOriginal/.test(editorSource),
+      'the omit-untouched / send-empty-when-cleared contract is gone'));
 
   say(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

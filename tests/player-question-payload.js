@@ -115,7 +115,38 @@ function roundNumberOf(question, gameState) {
 }
 
 const SET_ID = 'famousarttitles';
+const TRIVIA_SET_ID = 'triviaset';
 const GAME_ID = '1234';
+
+// A trivia round, used for the correct-answer gating checks. Note the
+// LOWER-CASE `answerDetails`: admin/ai-generate-trivia.js emits that spelling
+// while admin/upload-questions.js writes `AnswerDetails`, so both live in the
+// table. get-question must project neither.
+function seedTrivia(state) {
+  store.clear();
+  store.set(key(`SET#${TRIVIA_SET_ID}`, 'QUESTION#001'), {
+    PK: `SET#${TRIVIA_SET_ID}`, SK: 'QUESTION#001',
+    Title: 'A CITY ON THE SEINE',
+    Category: 'Geography',
+    questionDetail: 'Which city is the capital of France?',
+    optionA: 'Paris', optionB: 'Lyon', optionC: 'Marseille', optionD: 'Nice',
+    correctAnswer: 'OptionA',
+    answerDetails: 'SPOILER_SENTINEL — Paris has been the capital since 987.',
+  });
+  store.set(key(`GAME#${GAME_ID}`, 'METADATA'), {
+    PK: `GAME#${GAME_ID}`, SK: 'METADATA', GameId: GAME_ID,
+    Title: 'Trivia Night', GameType: 'trivia', QuestionSetId: TRIVIA_SET_ID,
+  });
+  store.set(key(`GAME#${GAME_ID}`, 'STATE'), {
+    PK: `GAME#${GAME_ID}`, SK: 'STATE', State: state,
+    LessonNumber: 1, CurrentQuestionId: 'QUESTION#001',
+  });
+  store.set(key(`GAME#${GAME_ID}`, 'QUESTION#001#REF'), {
+    PK: `GAME#${GAME_ID}`, SK: 'QUESTION#001#REF',
+    SourceQuestionId: 'QUESTION#001', SetId: TRIVIA_SET_ID,
+    StartedAt: new Date(0).toISOString(),
+  });
+}
 
 function seed(state) {
   store.clear();
@@ -168,20 +199,44 @@ function seed(state) {
     assert.ok(ask.image && ask.image.startsWith('http'), `image was ${JSON.stringify(ask.image)}`));
 
   // ---------- 2. RESULTS: the other blank-badge phase ----------
+  //
+  // D3  The guard was ASK-only, so every RESULTS-state caller got a 400. The one
+  //     that mattered is PlayerPage.loadResultsData, which swallows the failure
+  //     (`if (questionRes.ok)`) and rebuilds the question from get-results
+  //     instead. That reconstruction carries only title/detail/correctAnswer/
+  //     optionA-F — it drops image, school, category, customInstructions and
+  //     setId, so an art round lost its artwork at RESULTS. It also stranded the
+  //     handler's own `RESULTS#` correct-answer block, which could never run.
   console.log('\n2. get-question (role=player) during RESULTS');
   seed('RESULTS#001');
   const resultsRes = await questionHandler({
     pathParameters: { gameId: GAME_ID }, queryStringParameters: { role: 'player' },
   });
-  // get-question only serves ASK# states; RESULTS is served from the same
-  // record via the ASK guard, so assert on whichever answer it gives.
-  check('RESULTS is not served a question (guard is ASK-only) — badge falls back to the phase', () => {
-    assert.strictEqual(resultsRes.statusCode, 400, `got ${resultsRes.statusCode}`);
-    assert.strictEqual(roundNumberOf(null, 'RESULTS#001'), 1);
+  check('D3: RESULTS is served, not 400d', () =>
+    assert.strictEqual(resultsRes.statusCode, 200, `got ${resultsRes.statusCode}: ${resultsRes.body}`));
+  const results = JSON.parse(resultsRes.body);
+  check('D3: badge renders a round number at RESULTS', () =>
+    assert.strictEqual(roundNumberOf(results, 'RESULTS#001'), 1));
+  check('D3: the artwork survives to RESULTS (get-results cannot supply it)', () =>
+    assert.strictEqual(results.image, 'https://example.test/night-watch.jpg'));
+  check('D3: so do the other fields the get-results fallback drops', () => {
+    assert.strictEqual(results.school, 'Rembrandt van Rijn');
+    assert.strictEqual(results.category, 'Baroque');
+    assert.strictEqual(results.setId, SET_ID);
   });
 
-  // ---------- 3. VOTE: get-game-state, the path that always worked ----------
-  console.log('\n3. get-game-state during VOTE (the path that already had an id)');
+  // ---------- 3. VOTE ----------
+  console.log('\n3. get-question (role=player) during VOTE');
+  seed('VOTE#001');
+  const voteRes = await questionHandler({
+    pathParameters: { gameId: GAME_ID }, queryStringParameters: { role: 'player' },
+  });
+  check('D3: VOTE is served too', () =>
+    assert.strictEqual(voteRes.statusCode, 200, `got ${voteRes.statusCode}: ${voteRes.body}`));
+  check('D3: badge renders a round number at VOTE', () =>
+    assert.strictEqual(roundNumberOf(JSON.parse(voteRes.body), 'VOTE#001'), 1));
+
+  console.log('\n3b. get-game-state during VOTE (the path that already had an id)');
   seed('VOTE#001');
   const stateRes = await stateHandler({ pathParameters: { gameId: GAME_ID } });
   check('returns 200', () =>
@@ -205,6 +260,66 @@ function seed(state) {
     assert.strictEqual(host.setId, SET_ID));
   check('host keeps its extra fields', () =>
     assert.ok('points' in host && 'sourceQuestionId' in host));
+
+  // ---------- 5. Widening the guard must not widen the spoilers ----------
+  // Serving VOTE and RESULTS means the correct answer and the answer
+  // explanation now pass through states they never used to. correctAnswer is
+  // gated on RESULTS# by design; answerDetails is gated on nothing, because it
+  // is not projected at all.
+  console.log('\n5. correctAnswer is gated on RESULTS, answerDetails is never sent');
+  for (const state of ['ASK#001', 'VOTE#001']) {
+    for (const role of ['player', 'host']) {
+      seedTrivia(state);
+      const res = await questionHandler({
+        pathParameters: { gameId: GAME_ID }, queryStringParameters: { role },
+      });
+      check(`${role} @ ${state}: 200, and no correctAnswer`, () => {
+        assert.strictEqual(res.statusCode, 200, `got ${res.statusCode}: ${res.body}`);
+        assert.strictEqual(JSON.parse(res.body).correctAnswer, undefined);
+      });
+    }
+  }
+
+  for (const role of ['player', 'host']) {
+    seedTrivia('RESULTS#001');
+    const res = await questionHandler({
+      pathParameters: { gameId: GAME_ID }, queryStringParameters: { role },
+    });
+    check(`${role} @ RESULTS: correctAnswer resolved to option TEXT, not "OptionA"`, () => {
+      assert.strictEqual(res.statusCode, 200, `got ${res.statusCode}: ${res.body}`);
+      assert.strictEqual(JSON.parse(res.body).correctAnswer, 'Paris');
+    });
+  }
+
+  // The spoiler check, in every state the widened guard now serves.
+  for (const state of ['ASK#001', 'VOTE#001', 'RESULTS#001']) {
+    for (const role of ['player', 'host']) {
+      seedTrivia(state);
+      const res = await questionHandler({
+        pathParameters: { gameId: GAME_ID }, queryStringParameters: { role },
+      });
+      check(`${role} @ ${state}: answerDetails withheld, lower-case spelling and all`, () => {
+        assert.ok(!/SPOILER_SENTINEL/.test(res.body), 'the answer explanation leaked');
+        assert.ok(!/answerdetails/i.test(res.body), res.body.slice(0, 200));
+      });
+    }
+  }
+
+  // ---------- 6. Non-question states are still refused ----------
+  // Widening is to the ASK#/VOTE#/RESULTS# triple that get-game-state.js and
+  // next-question.js already treat as "a round is in progress" — not to
+  // everything. There is no current question in a lobby or a finished game.
+  console.log('\n6. states with no round in progress are still 400d');
+  for (const state of ['STARTED', 'CREATED', 'ENDED']) {
+    seed(state);
+    const res = await questionHandler({
+      pathParameters: { gameId: GAME_ID }, queryStringParameters: { role: 'player' },
+    });
+    check(`${state}: 400 'No active question'`, () => {
+      assert.strictEqual(res.statusCode, 400, `got ${res.statusCode}: ${res.body}`);
+      assert.strictEqual(JSON.parse(res.body).error, 'No active question');
+    });
+  }
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

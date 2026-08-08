@@ -1,16 +1,27 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, BatchWriteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, BatchWriteCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const {
+  BATCH_LIMIT,
+  batchPutItems,
+  copyPartition,
+  knownVersions,
+  nextVersion,
+  queryPartition,
+  setPartition,
+  toVersion,
+} = require('./shared/set-version');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
 
-const BATCH_LIMIT = 25;          // DynamoDB BatchWriteItem hard limit
-const MAX_BATCH_ATTEMPTS = 6;    // retries for UnprocessedItems
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
 const badRequest = (error) => ({
   statusCode: 400,
+  body: JSON.stringify({ error }),
+  headers: { 'Access-Control-Allow-Origin': '*' }
+});
+
+const notFound = (error) => ({
+  statusCode: 404,
   body: JSON.stringify({ error }),
   headers: { 'Access-Control-Allow-Origin': '*' }
 });
@@ -20,23 +31,48 @@ const badRequest = (error) => ({
  * UnprocessedItems with exponential backoff. DynamoDB returns UnprocessedItems
  * on partial throttling without raising an error — dropping them silently
  * loses rows, which is exactly how a large import ends up short.
+ *
+ * The implementation lives in shared/set-version.js so the importer, the
+ * legacy->v1 snapshot and the migration script all share ONE retry policy.
  */
-async function batchPut(items) {
-  for (let i = 0; i < items.length; i += BATCH_LIMIT) {
-    let pending = items.slice(i, i + BATCH_LIMIT).map((Item) => ({ PutRequest: { Item } }));
+const batchPut = (items) => batchPutItems(db, process.env.TABLE_NAME, items);
 
-    for (let attempt = 0; attempt < MAX_BATCH_ATTEMPTS && pending.length > 0; attempt++) {
-      if (attempt > 0) await sleep(50 * 2 ** (attempt - 1));
-      const res = await db.send(new BatchWriteCommand({
-        RequestItems: { [process.env.TABLE_NAME]: pending }
-      }));
-      pending = (res?.UnprocessedItems?.[process.env.TABLE_NAME]) || [];
-    }
-
-    if (pending.length > 0) {
-      throw new Error(`DynamoDB kept throttling ${pending.length} item(s) after ${MAX_BATCH_ATTEMPTS} attempts`);
-    }
-  }
+/**
+ * Turn a CSV Image cell into the value stored on the question row.
+ *
+ * The CSV carries a BARE FILENAME — `the-enigmatic-smile.jpg` — and the importer
+ * expands it to the set-scoped media key `sets/<setId>/<filename>`, so an author
+ * never types a prefix and every image is findable from the set id alone.
+ *
+ * A KEY is stored, never a full URL. Baking `https://<env>-cdn/...` into the row
+ * would make a table restored into another tier point at the wrong environment's
+ * bucket — the frontend prepends the media base from config at render time.
+ *
+ * The prefix uses the SET id and never the version number. Media is per-set and
+ * shared across versions on purpose: a CSV edit almost always keeps the artwork,
+ * and per-version media would mean re-uploading every image to fix one typo. A
+ * replace therefore leaves stored image keys pointing at the same prefix.
+ *
+ * Three rules, and the first two must not be removed:
+ *   https?://…            -> stored as-is   (legacy hot-linked Wikimedia rows)
+ *   /…                    -> stored as-is   (repo assets, /assets/art/…)
+ *   anything else         -> sets/<setId>/<filename>
+ *
+ * Idempotent: a value that already carries the set's prefix is left alone, so a
+ * downloaded CSV — which contains the stored value — can be re-uploaded without
+ * growing `sets/x/sets/x/…`.
+ */
+function toMediaKey(rawImage, setId) {
+  const image = String(rawImage ?? '').trim();
+  if (!image) return '';
+  if (/^https?:\/\//i.test(image)) return image;   // absolute URL — legacy rows
+  if (image.startsWith('/')) return image;         // repo asset — served by the app
+  const prefix = `sets/${setId}/`;
+  if (image.startsWith(prefix)) return image;      // already keyed — do not double-prefix
+  // Guard against a hand-written `sets/<other>/file.jpg` too: only the basename
+  // is meaningful, and re-keying it to THIS set is what the author meant.
+  const fileName = image.split('/').pop();
+  return `${prefix}${fileName}`;
 }
 
 /** Best-effort removal of rows written by a failed import, so it leaves no orphans. */
@@ -62,7 +98,14 @@ exports.handler = async (event) => {
       return badRequest('Request body is not valid JSON.');
     }
 
-    const { fileName, fileContent, customTitle, customDescription, customInstructions, aiContextInstructions, promptId, engagementType, isAIGenerated } = payload;
+    const { fileName, fileContent, customTitle, customDescription, customInstructions, aiContextInstructions, promptId, isAIGenerated } = payload;
+
+    // REPLACE. When present, this import does not create a set — it writes a
+    // NEW VERSION of an existing one and flips activeVersion to it. See
+    // docs/superpowers/specs/2026-08-08-question-set-versioning-design.md.
+    const replaceSetId = String(payload.replaceSetId ?? '').trim();
+    const isReplace = replaceSetId !== '';
+    let engagementType = payload.engagementType;
 
     if (typeof fileContent !== 'string' || fileContent.trim() === '') {
       return badRequest('No file content received. Please choose a CSV file and try again.');
@@ -71,9 +114,32 @@ exports.handler = async (event) => {
       return badRequest('No file name received. Please choose a CSV file and try again.');
     }
 
+    // On a REPLACE the target set is read BEFORE the CSV is parsed, because the
+    // parse is engagement-type specific: which columns are read (OptionA..F and
+    // CorrectAnswer for trivia, Options/AllowMultiple for a poll) depends on it.
+    // A replace that omitted engagementType would silently reparse a trivia set
+    // as call-and-answer and drop every option — so the existing set's type is
+    // the default, and only an explicit value overrides it.
+    let existingMeta;
+    if (isReplace) {
+      const res = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: 'SETS', SK: `SET#${replaceSetId}` }
+      }));
+      existingMeta = res.Item;
+      if (!existingMeta) {
+        return notFound(`Question set "${replaceSetId}" does not exist, so there is nothing to replace.`);
+      }
+      if (engagementType === undefined || engagementType === null || String(engagementType).trim() === '') {
+        engagementType = existingMeta.engagementType || 'call-and-answer';
+        console.log(`↻ Replace: inheriting engagement type "${engagementType}" from the existing set`);
+      }
+    }
+
     console.log(`Processing CSV upload: ${fileName}`);
     console.log(`Custom title: ${customTitle}`);
     console.log(`Engagement type: ${engagementType}`);
+    console.log(`Replace target: ${isReplace ? replaceSetId : '(new set)'}`);
     console.log(`CSV content length: ${fileContent.length} characters`);
 
     // Survey uploads (JSON template) are not yet supported: surveys have no
@@ -167,9 +233,16 @@ exports.handler = async (event) => {
       };
     }
 
-    // Extract set name from custom title or filename
-    const setName = customTitle?.trim() || fileName.replace(/\.csv$/i, '');
-    let setId = setName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    // Extract set name from custom title or filename.
+    //
+    // A REPLACE keeps the target set's id and name: the whole reason to replace
+    // rather than delete-and-reupload is that the id, and everything hanging off
+    // it (prompt, persona, instructions, round noun, games that reference it),
+    // survives.
+    const setName = isReplace
+      ? (existingMeta.name || existingMeta.Name || replaceSetId)
+      : (customTitle?.trim() || fileName.replace(/\.csv$/i, ''));
+    let setId = isReplace ? replaceSetId : setName.toLowerCase().replace(/[^a-z0-9]/g, '');
     if (!setId) {
       // A title with no ASCII alphanumerics (e.g. "日本語セット") used to slug to
       // the empty string, producing the bare keys PK/SK "SET#" — every such set
@@ -312,7 +385,10 @@ exports.handler = async (event) => {
             Detail: finalQuestionDetail, // For trivia, this should be the question detail/explanation
             Category: category,
             School: school,
-            Image: image, // Optional artwork URL; empty for ordinary text questions
+            // A bare CSV filename becomes the set-scoped media key
+            // `sets/<setId>/<filename>`; absolute URLs and /-rooted repo assets
+            // are stored untouched. See toMediaKey().
+            Image: toMediaKey(image, setId),
             // Use per-question custom instruction if available, otherwise use set-level custom instructions
             CustomInstructions: questionCustomInstruction || customInstructions?.trim() || '',
             Active: true,
@@ -388,19 +464,72 @@ exports.handler = async (event) => {
 
     console.log(`✅ Successfully parsed ${questions.length} questions in ${categories.size} categories`);
 
-    // Check if set already exists
-    const existingSet = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: 'SETS', SK: `SET#${setId}` }
-    }));
+    // Everything above this line is validation. Nothing has been written yet,
+    // and nothing below writes anything the live set can see until the single
+    // activeVersion flip at the very end — that is the atomicity the design
+    // depends on. A failure anywhere before the flip leaves an orphaned version
+    // and a fully intact live set.
 
-    if (existingSet.Item) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: `Question set "${setName}" already exists. Please use a different title or delete the existing set first.` }),
-        headers: { 'Access-Control-Allow-Origin': '*' }
-      };
+    if (!isReplace) {
+      // Check if set already exists. A plain import still refuses to touch an
+      // existing set: overwriting one by accident (same title -> same slug) is
+      // exactly the data loss versioning exists to prevent. Replacing is opt-in
+      // and explicit, via replaceSetId.
+      const existingSet = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: 'SETS', SK: `SET#${setId}` }
+      }));
+
+      if (existingSet.Item) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: `Question set "${setName}" already exists. Please use a different title or delete the existing set first.` }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
     }
+
+    // ---- REPLACE: work out which version to write ---------------------------
+    //
+    // A set that has never been versioned still holds its content in the legacy
+    // `SET#<id>` partition. Snapshot that to #v1 FIRST, so the version this
+    // replace supersedes actually exists and rolling back is a promote rather
+    // than a restore. The snapshot is a copy; the legacy rows stay put, exactly
+    // as the migration script leaves them.
+    let targetVersion = null;
+    let snapshotted = 0;
+    if (isReplace) {
+      const alreadyVersioned = toVersion(existingMeta.activeVersion) !== null
+        || knownVersions(existingMeta).length > 0;
+
+      if (!alreadyVersioned) {
+        const legacyPk = setPartition(setId, null);
+        const { items: legacyItems } = await queryPartition(db, process.env.TABLE_NAME, legacyPk);
+        if (legacyItems.length > 0) {
+          snapshotted = await copyPartition(db, process.env.TABLE_NAME, legacyPk, setPartition(setId, 1));
+          console.log(`📸 Snapshotted ${snapshotted} legacy row(s) of "${setId}" to v1 before replacing`);
+          existingMeta = {
+            ...existingMeta,
+            versions: [{
+              version: 1,
+              createdAt: existingMeta.createdAt || new Date().toISOString(),
+              questionCount: existingMeta.questionCount || 0,
+              categoryCount: existingMeta.categoryCount || 0,
+              sourceFile: existingMeta.sourceFile || '',
+              note: 'snapshot of the pre-versioning content'
+            }]
+          };
+        }
+      }
+
+      targetVersion = nextVersion(existingMeta);
+      console.log(`↻ Replacing set "${setId}" — writing version v${targetVersion}`);
+    }
+
+    // Content partition for THIS import. A plain import keeps writing to the
+    // legacy `SET#<id>` layout (a new set is version-less until it is migrated
+    // or first replaced); a replace writes to `SET#<id>#v<n>`.
+    const contentPk = setPartition(setId, targetVersion);
 
     const setMetadataItem = {
       PK: 'SETS',
@@ -438,7 +567,7 @@ exports.handler = async (event) => {
 
     // Build the category rows
     const categoryItems = Array.from(categories).map((categoryName, idx) => ({
-      PK: `SET#${setId}`,
+      PK: contentPk,
       SK: `CATEGORY#c${String(idx + 1).padStart(3, '0')}`,
       Name: categoryName,
       Description: `${categoryName} questions`,
@@ -479,7 +608,7 @@ exports.handler = async (event) => {
       
       // Base question item
       const questionItem = {
-        PK: `SET#${setId}`,
+        PK: contentPk,
         SK: questionId,
         Title: question.Title,
         Detail: question.Detail || '',
@@ -533,13 +662,20 @@ exports.handler = async (event) => {
     // that came back clean: BatchWriteItem is not atomic, so the call that
     // throws may already have applied some of its items. Deleting a key that
     // was never written is a harmless no-op.
-    const intendedKeys = [...categoryItems, ...questionItems, setMetadataItem]
+    //
+    // A REPLACE writes only content rows here. Its metadata row already exists
+    // and must NOT be overwritten — the set's promptId, personaId,
+    // customInstruction, aiContextInstruction, roundNoun, active flag and
+    // Quickstart badge all live there, and a wholesale Put would silently reset
+    // every one of them to this request's defaults. The flip below is a
+    // targeted UpdateCommand instead.
+    const intendedKeys = [...categoryItems, ...questionItems, ...(isReplace ? [] : [setMetadataItem])]
       .map(({ PK, SK }) => ({ PK, SK }));
 
     try {
       await batchPut(categoryItems);
       await batchPut(questionItems);
-      await batchPut([setMetadataItem]);
+      if (!isReplace) await batchPut([setMetadataItem]);
     } catch (writeError) {
       console.error(`❌ Import write failed: ${writeError.message}`);
       console.log(`🧹 Rolling back up to ${intendedKeys.length} item(s)`);
@@ -547,13 +683,97 @@ exports.handler = async (event) => {
       return {
         statusCode: 500,
         body: JSON.stringify({
-          error: `Upload failed while writing to the database: ${writeError.message}. No partial set was left behind.`
+          error: isReplace
+            ? `Replace failed while writing v${targetVersion}: ${writeError.message}. The live set is untouched and still on version ${toVersion(existingMeta.activeVersion) ?? 'legacy'}.`
+            : `Upload failed while writing to the database: ${writeError.message}. No partial set was left behind.`
         }),
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
     }
 
-    console.log(`✅ Successfully created question set "${setName}"`);
+    // ---- THE FLIP ----------------------------------------------------------
+    //
+    // One attribute write, and the only moment the live set changes. Everything
+    // above it wrote to a partition nothing reads yet. There is no half-flipped
+    // state: either activeVersion still names the old version and the new one is
+    // an unreferenced orphan, or it names the new one and every row is present.
+    //
+    // versions[] is appended in the SAME update, so the list and the pointer can
+    // never disagree. list_append needs an existing list, so if_not_exists seeds
+    // one for a set that has never carried the attribute.
+    if (isReplace) {
+      const versionEntry = {
+        version: targetVersion,
+        createdAt: new Date().toISOString(),
+        questionCount: questions.length,
+        categoryCount: categories.size,
+        sourceFile: fileName,
+        note: ''
+      };
+      // The snapshot entry (legacy -> v1) only exists in memory until now; if it
+      // was taken, seed versions[] with it rather than an empty list.
+      const seed = Array.isArray(existingMeta.versions) ? existingMeta.versions : [];
+
+      try {
+        await db.send(new UpdateCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: 'SETS', SK: `SET#${setId}` },
+          // Every attribute is aliased through ExpressionAttributeNames, the
+          // same blanket rule edit-question-set.js uses: DynamoDB's reserved-word
+          // list is long and dull, and one rule beats a per-field judgement call
+          // that only fails in production.
+          UpdateExpression:
+            'SET #activeVersion = :v, '
+            + '#versions = list_append(if_not_exists(#versions, :seed), :entry), '
+            + '#questionCount = :qc, #categoryCount = :cc, #hasImages = :hi, '
+            + '#sourceFile = :src, #updatedAt = :now, #engagementType = :et',
+          ExpressionAttributeNames: {
+            '#activeVersion': 'activeVersion',
+            '#versions': 'versions',
+            '#questionCount': 'questionCount',
+            '#categoryCount': 'categoryCount',
+            '#hasImages': 'hasImages',
+            '#sourceFile': 'sourceFile',
+            '#updatedAt': 'updatedAt',
+            '#engagementType': 'engagementType'
+          },
+          ExpressionAttributeValues: {
+            ':v': targetVersion,
+            ':seed': seed,
+            ':entry': [versionEntry],
+            ':qc': questions.length,
+            ':cc': categories.size,
+            ':hi': setMetadataItem.hasImages,
+            ':src': fileName,
+            ':now': versionEntry.createdAt,
+            // The rows just written were parsed for this type, so the recorded
+            // type must agree with them or the game reads fields that are not
+            // there. On a replace this is the existing type unless the caller
+            // explicitly changed it.
+            ':et': engagementType || 'call-and-answer'
+          }
+        }));
+      } catch (flipError) {
+        // The new version is written but unreferenced. The live set is exactly
+        // as it was, which is the failure mode the design is built around.
+        console.error(`❌ activeVersion flip failed: ${flipError.message}`);
+        return {
+          statusCode: 500,
+          body: JSON.stringify({
+            error: `v${targetVersion} was written but could not be activated: ${flipError.message}. `
+              + `The live set is unchanged; retry the replace, or promote v${targetVersion} directly.`,
+            setId,
+            version: targetVersion,
+            activated: false
+          }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+    }
+
+    console.log(isReplace
+      ? `✅ Replaced question set "${setName}" — now on v${targetVersion}`
+      : `✅ Successfully created question set "${setName}"`);
     console.log(`📊 Final stats: ${questions.length} questions, ${categories.size} categories`);
 
     return {
@@ -561,14 +781,22 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         setName: setName,
         setId: setId,
+        // null for a plain import: a brand-new set is unversioned until it is
+        // migrated or first replaced, exactly like every set that exists today.
+        version: targetVersion,
+        replaced: isReplace,
+        snapshottedLegacyRows: snapshotted || undefined,
         questionCount: questions.length,
         categoryCount: categories.size,
         // Rows the importer could not use. Reported so an import that quietly
         // drops half a file is visible instead of looking like a clean success.
         skippedRowCount: skippedRows.length,
         skippedRows: skippedRows.slice(0, 50),
-        message: `Successfully created question set "${setName}" with ${questions.length} questions across ${categories.size} categories`
-          + (skippedRows.length ? ` (${skippedRows.length} row(s) skipped)` : '')
+        message: isReplace
+          ? `Replaced question set "${setName}" with ${questions.length} questions across ${categories.size} categories (now version ${targetVersion})`
+            + (skippedRows.length ? ` (${skippedRows.length} row(s) skipped)` : '')
+          : `Successfully created question set "${setName}" with ${questions.length} questions across ${categories.size} categories`
+            + (skippedRows.length ? ` (${skippedRows.length} row(s) skipped)` : '')
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }
     };

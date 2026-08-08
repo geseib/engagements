@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { resolveSetPartition } = require('./shared/set-version');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -94,12 +95,19 @@ exports.handler = async (event) => {
 
     const questionSetId = gameMetadata.Item.QuestionSetId;
 
+    // Category POSITIONS drive the game's bitmasks, so they must come from the
+    // version the game is pinned to — a different version can order or number
+    // its categories differently and every mask bit would then point elsewhere.
+    const resolvedSet = await resolveSetPartition(
+      db, process.env.TABLE_NAME, questionSetId, gameMetadata.Item.QuestionSetVersion
+    );
+
     // Get all categories for this question set
     const categoriesQuery = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
       KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
       ExpressionAttributeValues: {
-        ':pk': `SET#${questionSetId}`,
+        ':pk': resolvedSet.pk,
         ':sk': 'CATEGORY#'
       }
     }));

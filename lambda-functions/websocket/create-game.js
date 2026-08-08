@@ -6,7 +6,7 @@ exports.handler = async (event) => {
   // and silently discarded that way. If you add a field to the create payload,
   // it needs THREE edits — here, the createGame() argument below, and the
   // METADATA item in schema-compliant-manager.js.
-  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, randomizeQuestions, selectedCategories, hostName, visibility, accessCode, personaId } = JSON.parse(event.body || '{}');
+  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, questionSetVersion, randomizeQuestions, selectedCategories, hostName, visibility, accessCode, personaId } = JSON.parse(event.body || '{}');
 
   // Generate a unique 4-digit game ID
   const gameId = Math.floor(1000 + Math.random() * 9000).toString();
@@ -18,6 +18,11 @@ exports.handler = async (event) => {
       title: eventTitle || 'Engagement Session',
       engagementType: gameType || 'call-and-answer',
       questionSetId: questionSetId,
+      // Optional explicit version pin. Omitted by the normal create flow, in
+      // which case createGame() resolves the set's activeVersion and pins THAT
+      // — the game keeps reading the questions it started on even after the set
+      // is replaced. Supplying it lets a host deliberately run an older version.
+      questionSetVersion: questionSetVersion,
       selectedCategories: selectedCategories || [],
       hostPreferences: {
         randomizeQuestions: randomizeQuestions !== false // Default to true if not specified

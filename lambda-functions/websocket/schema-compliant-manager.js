@@ -1,6 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+const { resolveSetPartition } = require('./set-version');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -19,7 +20,26 @@ const createGame = async (gameId, gameData) => {
     const now = new Date().toISOString();
     
     console.log(`🎮 Creating game ${gameId} with schema compliance`);
-    
+
+    // Resolve — and then PIN — the question-set version this game plays.
+    //
+    // Resolution is the shared 1-2-3: an explicit pin from the caller, else the
+    // set's activeVersion, else the legacy unversioned partition. Whatever comes
+    // back is written to METADATA as QuestionSetVersion and used for every set
+    // read below, so the categories and counts this game is built from are the
+    // same rows it will be served during play. Replacing the set afterwards
+    // writes a NEW version and cannot disturb this game.
+    //
+    // `null` means the set has never been versioned; the attribute is then
+    // omitted entirely so the resolver's legacy branch keeps firing.
+    let resolvedSet = { pk: null, version: null, source: 'none' };
+    if (gameData.questionSetId) {
+      resolvedSet = await resolveSetPartition(
+        db, process.env.TABLE_NAME, gameData.questionSetId, gameData.questionSetVersion
+      );
+    }
+    const pinnedVersion = resolvedSet.version;
+
     // 1. Create GAMES list entry (for efficient game listing - DATABASE_DESIGN.md requirement)
     await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
@@ -31,6 +51,10 @@ const createGame = async (gameId, gameData) => {
         HostName: gameData.hostName || 'Host',
         GameType: gameData.engagementType || 'call-and-answer',
         QuestionSetId: gameData.questionSetId,
+        // Mirrored onto the index row so DELETE /versions/{n} can find the games
+        // pinned to a version with ONE Query of the GAMES partition instead of a
+        // GetItem per game.
+        ...(pinnedVersion !== null ? { QuestionSetVersion: pinnedVersion } : {}),
         Visibility: gameData.visibility || 'public',
         AccessCode: gameData.accessCode || null,
         Started: false, // Game is created but not started
@@ -38,7 +62,7 @@ const createGame = async (gameId, gameData) => {
         ttl
       }
     }));
-    
+
     // 2. Create METADATA record (for template compatibility)
     await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
@@ -50,6 +74,11 @@ const createGame = async (gameId, gameData) => {
         HostName: gameData.hostName || 'Host',
         GameType: gameData.engagementType || 'call-and-answer',
         QuestionSetId: gameData.questionSetId,
+        // THE PIN. Every runtime reader (next-question, get-question,
+        // select-question, get-categories) resolves through this first. Absent
+        // means "no version anywhere" — every game created before this change —
+        // and those fall through to activeVersion and then to legacy.
+        ...(pinnedVersion !== null ? { QuestionSetVersion: pinnedVersion } : {}),
         AIContext: gameData.aiContext || '',
         // Workie's voice for this session. `get-ai-summary.js` reads
         // `metadata.PersonaId`, and `PUT /games/{id}/persona` updates this one
@@ -98,7 +127,7 @@ const createGame = async (gameId, gameData) => {
         TableName: process.env.TABLE_NAME,
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
         ExpressionAttributeValues: {
-          ':pk': `SET#${gameData.questionSetId}`,
+          ':pk': resolvedSet.pk,
           ':sk': 'CATEGORY#'
         }
       }));
@@ -214,7 +243,7 @@ const createGame = async (gameId, gameData) => {
               TableName: process.env.TABLE_NAME,
               KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
               ExpressionAttributeValues: {
-                ':pk': `SET#${gameData.questionSetId}`,
+                ':pk': resolvedSet.pk,
                 ':sk': `QUESTION#${categoryId}#`
               }
             }));

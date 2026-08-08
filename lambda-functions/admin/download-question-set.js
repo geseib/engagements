@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { resolvePartitionFromMeta } = require('./shared/set-version');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -8,7 +9,11 @@ exports.handler = async (event) => {
   try {
     const setId = event.pathParameters?.setId;
     const format = event.queryStringParameters?.format || 'auto'; // 'csv', 'json', or 'auto'
-    
+    // Optional `?version=2` to export an OLD version — the download half of
+    // rollback: fetch what v2 said, edit it, upload it back as a new version.
+    // Omitted means the active version, falling through to legacy.
+    const requestedVersion = event.queryStringParameters?.version;
+
     console.log(`Downloading question set ${setId} in format: ${format}`);
     
     if (!setId) {
@@ -37,12 +42,17 @@ exports.handler = async (event) => {
     const setName = metadata.name || metadata.Name;
     const engagementType = metadata.engagementType || metadata.EngagementType || 'call-and-answer';
     
-    // Get all questions for this set
+    // Get all questions for the resolved version of this set. The download must
+    // reflect the SAME rows a game would be served, or the round trip
+    // (download -> edit -> upload as a new version) silently reverts to
+    // whatever the legacy partition still holds.
+    const resolved = resolvePartitionFromMeta(setId, metadata, requestedVersion);
+
     const questionsRes = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
       KeyConditionExpression: 'PK = :setpk AND begins_with(SK, :questionPrefix)',
-      ExpressionAttributeValues: { 
-        ':setpk': `SET#${setId}`,
+      ExpressionAttributeValues: {
+        ':setpk': resolved.pk,
         ':questionPrefix': 'QUESTION#'
       }
     }));
@@ -69,6 +79,7 @@ exports.handler = async (event) => {
           customInstruction: metadata.customInstruction || metadata.CustomInstruction || '',
           aiContextInstruction: metadata.aiContextInstruction || metadata.AIContextInstruction || '',
           createdAt: metadata.createdAt || metadata.CreatedAt,
+          version: resolved.version,
           questionCount: questions.length
         },
         questions: questions.map(q => ({

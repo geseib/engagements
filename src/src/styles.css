@@ -9343,3 +9343,189 @@ body {
   text-transform: uppercase;
   color: var(--primary);
 }
+
+/* ==========================================================================
+   Question set editor (components/QuestionSetEditor.jsx)
+
+   Paper surface, per the Warm Summit split: admin is authoring UI, so it stays
+   light and amber shows up once per panel at most. Each panel is a nested card
+   inside .admin-section so Details / Questions / Versions / Media read as four
+   steps rather than one long form.
+   ========================================================================== */
+
+.qs-editor .qs-panel {
+  background: var(--surface-2, #F1EDE4);
+  border: 1px solid rgba(155, 168, 190, 0.28);
+  border-radius: var(--radius-sm, 8px);
+  padding: 20px 24px;
+  margin-top: 24px;
+}
+
+.qs-panel-header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding-bottom: 10px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(155, 168, 190, 0.28);
+}
+
+.qs-panel-header h3 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.qs-panel-note {
+  color: #5E6167;
+  font-size: 0.9rem;
+}
+
+.qs-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.qs-empty {
+  color: #5E6167;
+  font-style: italic;
+  margin: 0;
+}
+
+.qs-readonly-field {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.qs-replace-input {
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+
+/* --- replace preview: what will happen, shown before the flip --- */
+.qs-replace-preview {
+  margin-top: 16px;
+  padding: 16px 20px;
+  background: #FFFFFF;
+  border: 1px solid var(--primary, #F6A94C);
+  border-radius: var(--radius-sm, 8px);
+}
+
+.qs-replace-preview h4 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
+.qs-preview-lines {
+  margin: 0 0 10px;
+  padding-left: 20px;
+  line-height: 1.6;
+}
+
+.qs-preview-categories {
+  margin: 0;
+  color: #5E6167;
+  font-size: 0.92rem;
+}
+
+/* --- version list --- */
+.qs-version-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.qs-version-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 16px;
+  background: #FFFFFF;
+  border: 1px solid rgba(155, 168, 190, 0.28);
+  border-left: 4px solid transparent;
+  border-radius: var(--radius-sm, 8px);
+}
+
+/* The active version is the one new engagements get. It is the single most
+   important fact in this panel, so it gets the panel's one warm accent. */
+.qs-version-row.active {
+  border-left-color: var(--primary, #F6A94C);
+  background: #FFFBF4;
+}
+
+.qs-version-id {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 180px;
+}
+
+.qs-version-active-badge,
+.qs-version-pinned-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(79, 178, 134, 0.12);
+  color: #2F6B52;
+}
+
+.qs-version-pinned-badge {
+  background: rgba(246, 169, 76, 0.16);
+  color: #8A5A22;
+}
+
+.qs-version-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  flex: 1 1 240px;
+  color: #5E6167;
+  font-size: 0.88rem;
+}
+
+.qs-version-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Game ids in the pinned-version confirmation. "Some games are using this" is
+   not enough information to decide with; the ids are the decision. */
+.qs-pinned-games {
+  margin: 10px 0;
+  padding-left: 20px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9rem;
+}
+
+/* Placeholder until the media panel lands; see the SEAM comment in the JSX. */
+.qs-media-seam {
+  opacity: 0.75;
+}
+
+@media (max-width: 700px) {
+  .qs-version-row,
+  .qs-panel-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .qs-version-actions {
+    justify-content: flex-start;
+  }
+}

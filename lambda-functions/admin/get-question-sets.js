@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { toVersion, versionList } = require('./shared/set-version');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -41,7 +42,24 @@ exports.handler = async (event) => {
       // showing a date instead of nothing.
       updatedAt: item.updatedAt || item.UpdatedAt,
       isAIGenerated: item.isAIGenerated || false,
-      hasImages: item.hasImages === true
+      hasImages: item.hasImages === true,
+      // Versioning. `activeVersion` is null for a set that has never been
+      // versioned — its content is still in the legacy `SET#<id>` partition and
+      // it plays perfectly well from there — so the UI must treat null as "not
+      // versioned yet", not as an error. `versions` is likewise [] until the
+      // set is first replaced or migrated.
+      activeVersion: toVersion(item.activeVersion),
+      versions: versionList(item)
+        .map((v) => ({
+          version: toVersion(v && v.version),
+          createdAt: (v && v.createdAt) || null,
+          questionCount: (v && v.questionCount) || 0,
+          categoryCount: (v && v.categoryCount) || 0,
+          sourceFile: (v && v.sourceFile) || '',
+          note: (v && v.note) || ''
+        }))
+        .filter((v) => v.version !== null)
+        .sort((a, b) => a.version - b.version)
     }));
 
     return {

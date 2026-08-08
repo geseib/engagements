@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { resolveSetPartition } = require('./set-version');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -353,12 +354,19 @@ async function handleTriviaResults(gameId, questionId) {
         
         console.log(`📋 Found question reference: ${sourceQuestionId} from set ${questionSetId}`);
 
+        // Read the VERSION this round was served from (the REF row records it).
+        // RESULTS must show the same question text ASK did, so this resolves
+        // through the same pin > activeVersion > legacy order.
+        const resolvedSet = await resolveSetPartition(
+          db, process.env.TABLE_NAME, questionSetId, questionRef.Item.SetVersion
+        );
+
         // Get the actual question from the question set (same as get-question.js)
         const questionResponse = await db.send(new GetCommand({
           TableName: process.env.TABLE_NAME,
-          Key: { 
-            PK: `SET#${questionSetId}`, 
-            SK: sourceQuestionId 
+          Key: {
+            PK: resolvedSet.pk,
+            SK: sourceQuestionId
           }
         }));
 
@@ -649,12 +657,17 @@ async function handleWavelengthResults(gameId, questionId) {
         
         console.log(`📋 Found question reference: ${sourceQuestionId} from set ${questionSetId}`);
 
+        // Same version resolution as the trivia branch above.
+        const resolvedSet = await resolveSetPartition(
+          db, process.env.TABLE_NAME, questionSetId, questionRef.Item.SetVersion
+        );
+
         // Get the actual question from the question set
         const questionResponse = await db.send(new GetCommand({
           TableName: process.env.TABLE_NAME,
-          Key: { 
-            PK: `SET#${questionSetId}`, 
-            SK: sourceQuestionId 
+          Key: {
+            PK: resolvedSet.pk,
+            SK: sourceQuestionId
           }
         }));
 
@@ -853,12 +866,20 @@ async function decrementCategoryCount(gameId, questionId) {
           return;
         }
 
-        // Find category position by querying question set categories
+        // Find category position by querying question set categories.
+        // Category POSITIONS are what the bitmask counters are indexed by, and
+        // two versions of a set can order categories differently — so this must
+        // read the same version the round was served from.
+        const resolvedCategorySet = await resolveSetPartition(
+          db, process.env.TABLE_NAME,
+          questionRef.Item.SetId || 'unknown',
+          questionRef.Item.SetVersion
+        );
         const categoriesQuery = await db.send(new QueryCommand({
           TableName: process.env.TABLE_NAME,
           KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
           ExpressionAttributeValues: {
-            ':pk': questionRef.Item.SetId ? `SET#${questionRef.Item.SetId}` : `SET#unknown`,
+            ':pk': resolvedCategorySet.pk,
             ':sk': 'CATEGORY#'
           }
         }));

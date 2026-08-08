@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
+const { resolvePartitionFromMeta } = require('./shared/set-version');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -8,6 +9,9 @@ exports.handler = async (event) => {
   try {
     const setId = event.pathParameters?.setId;
     const category = event.queryStringParameters?.category;
+    // Optional `?version=2` so the admin editor can preview an older version.
+    // Omitted means the set's activeVersion, falling through to legacy.
+    const requestedVersion = event.queryStringParameters?.version;
     
     console.log(`Getting questions for set: ${setId}, category: ${category || 'all'}`);
     
@@ -33,12 +37,17 @@ exports.handler = async (event) => {
       };
     }
     
+    // Read the resolved VERSION of the set, not the bare `SET#<id>` partition:
+    // once a set has been replaced its live questions live at `SET#<id>#v<n>`
+    // and the legacy partition holds the superseded copy.
+    const resolved = resolvePartitionFromMeta(setId, setRes.Item, requestedVersion);
+
     // Build query parameters
     let queryParams = {
       TableName: process.env.TABLE_NAME,
       KeyConditionExpression: 'PK = :setpk AND begins_with(SK, :questionPrefix)',
       ExpressionAttributeValues: { 
-        ':setpk': `SET#${setId}`,
+        ':setpk': resolved.pk,
         ':questionPrefix': 'QUESTION#'
       }
     };
@@ -112,6 +121,7 @@ exports.handler = async (event) => {
         questions,
         setId,
         setName: setRes.Item.name || setRes.Item.Name,
+        version: resolved.version,
         totalQuestions: questions.length
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }

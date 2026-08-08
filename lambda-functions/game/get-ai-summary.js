@@ -7,6 +7,7 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 const { resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutputShape } = require('./personas');
 const { normalizeGameType } = require('./game-types');
 const { isUsableSummaryPrompt, summaryPromptDefect } = require('./prompt-shape');
+const { resolveSetPartition } = require('./set-version');
 
 /**
  * Voice attribution carried out of generateAISummary() and onto the stored
@@ -658,6 +659,7 @@ exports.handler = async (event) => {
     // Use the same question retrieval logic as get-results.js
     let question = null;
     let questionSetId = null;
+    let questionSetVersion = null;
     try {
       // Get question reference record (same as get-results.js)
       const questionRef = await db.send(new GetCommand({
@@ -671,12 +673,21 @@ exports.handler = async (event) => {
         
         console.log(`📋 Found question reference: ${sourceQuestionId} from set ${questionSetId}`);
         
+        // Read the VERSION this round was served from (the REF row records it),
+        // falling through to activeVersion and then the legacy partition.
+        // AnswerDetails — the reveal — lives on the question row, so reading the
+        // wrong version would narrate the wrong answer at RESULTS.
+        questionSetVersion = questionRef.Item.SetVersion;
+        const resolvedSet = await resolveSetPartition(
+          db, process.env.TABLE_NAME, questionSetId, questionSetVersion
+        );
+
         // Get the actual question from the question set (same as get-results.js)
         const questionResponse = await db.send(new GetCommand({
           TableName: process.env.TABLE_NAME,
-          Key: { 
-            PK: `SET#${questionSetId}`, 
-            SK: sourceQuestionId 
+          Key: {
+            PK: resolvedSet.pk,
+            SK: sourceQuestionId
           }
         }));
         question = questionResponse.Item;
@@ -1308,12 +1319,15 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
       }
     }
     
-    // Count questions in the set
+    // Count questions in the set. This is prompt CONTEXT ("question 3 of 20"),
+    // not the round's content, so it resolves without a pin: the set's
+    // activeVersion, falling back to the legacy partition.
+    const resolvedSet = await resolveSetPartition(db, process.env.TABLE_NAME, questionSetId, null);
     const allQuestions = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
       KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
       ExpressionAttributeValues: {
-        ':pk': `SET#${questionSetId}`,
+        ':pk': resolvedSet.pk,
         ':sk': 'QUESTION#'  // Questions are stored with SK pattern: QUESTION#{categoryId}#{questionNumber}
       }
     }));
