@@ -75,6 +75,33 @@ print_status "Prod Domain: $PROD_DOMAIN"
 # The separate GitHub PAT the *application* uses to file issues lives in Secrets
 # Manager (engage/<env>/github-token) and is set by scripts/setup-secure-github-token.sh.
 
+# Which CodeStar connection to authenticate to GitHub with.
+#
+# Do NOT let CloudFormation pick this. On 2026-08-08 a routine stack update
+# reverted the pipelines from a working connection back to `!Ref
+# GitHubConnection` — the stack's own connection, which is in ERROR ("GitHub
+# authorization has been revoked or expired"). All three pipelines began
+# failing at Source with no template change that mentioned connections.
+#
+# Resolve the newest AVAILABLE connection by name and pin it. If none is
+# AVAILABLE we pass empty, which lets the stack create one — correct for a
+# fresh bootstrap, and the check below will tell the operator it needs the
+# manual GitHub handshake.
+print_status "Resolving an AVAILABLE CodeStar connection..."
+GITHUB_CONNECTION_ARN=$(aws codestar-connections list-connections \
+    --query "Connections[?ConnectionName=='${STACK_NAME%cicd}-github-connection' && ConnectionStatus=='AVAILABLE'].ConnectionArn | [0]" \
+    --output text \
+    --profile adminaccess 2>/dev/null || echo "")
+[ "$GITHUB_CONNECTION_ARN" = "None" ] && GITHUB_CONNECTION_ARN=""
+
+if [ -n "$GITHUB_CONNECTION_ARN" ]; then
+    print_success "Pinning pipelines to AVAILABLE connection: ${GITHUB_CONNECTION_ARN##*/}"
+else
+    print_warning "No AVAILABLE connection found — the stack will create one."
+    print_warning "A new connection starts PENDING and cannot fetch source until"
+    print_warning "you complete the GitHub handshake in the AWS console."
+fi
+
 # Deploy the CI/CD pipeline
 print_status "Deploying CI/CD pipeline CloudFormation stack..."
 
@@ -91,6 +118,7 @@ if ! aws cloudformation deploy \
         TestDomain="$TEST_DOMAIN" \
         ProdDomain="$PROD_DOMAIN" \
         HostedZoneId="$HOSTED_ZONE_ID" \
+        GitHubConnectionArn="$GITHUB_CONNECTION_ARN" \
     --tags \
         Project=engage \
         Purpose=CICD \

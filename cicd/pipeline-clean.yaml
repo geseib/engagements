@@ -39,6 +39,32 @@ Parameters:
     Default: ZB9TUA073B5SH
     Description: Route53 hosted zone ID for all environments
 
+  # Which CodeStar connection the pipelines authenticate to GitHub with.
+  #
+  # This exists because the stack's OWN connection went to ERROR ("GitHub
+  # authorization has been revoked or expired") and someone repaired the
+  # pipelines by hand, pointing them at a second, working connection of the
+  # same name. That is configuration drift, and on 2026-08-08 a routine stack
+  # update silently reverted it — CloudFormation restored `!Ref
+  # GitHubConnection` and every pipeline started failing at Source.
+  #
+  # Leave empty to have the stack create and manage its own connection (the
+  # original behaviour, correct for a fresh bootstrap). Set it to an existing
+  # AVAILABLE connection ARN to pin the pipelines to that one, so a redeploy
+  # cannot revert a working setup again.
+  #
+  # A newly created connection is PENDING and cannot fetch source until a human
+  # completes the GitHub handshake in the console — it is not automatable.
+  GitHubConnectionArn:
+    Type: String
+    Default: ''
+    Description: >-
+      Existing CodeStar connection ARN to use. Empty means create and manage one
+      in this stack.
+
+Conditions:
+  # Only create a connection when one was not supplied.
+  CreateGitHubConnection: !Equals [!Ref GitHubConnectionArn, '']
 
 Resources:
 
@@ -70,8 +96,10 @@ Resources:
           Value: CICD-Artifacts
 
   ### GitHub Connection (CodeStar Connection)
+  # Created only when GitHubConnectionArn was not supplied. See that parameter.
   GitHubConnection:
     Type: AWS::CodeStarConnections::Connection
+    Condition: CreateGitHubConnection
     Properties:
       ConnectionName: !Sub '${ProjectName}-github-connection'
       ProviderType: GitHub
@@ -165,7 +193,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - codestar-connections:UseConnection
-                Resource: !Ref GitHubConnection
+                Resource: !If [CreateGitHubConnection, !Ref GitHubConnection, !Ref GitHubConnectionArn]
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -304,7 +332,7 @@ Resources:
                 Provider: CodeStarSourceConnection
                 Version: '1'
               Configuration:
-                ConnectionArn: !Ref GitHubConnection
+                ConnectionArn: !If [CreateGitHubConnection, !Ref GitHubConnection, !Ref GitHubConnectionArn]
                 FullRepositoryId: !Sub '${GitHubOwner}/${GitHubRepo}'
                 BranchName: dev
                 OutputArtifactFormat: CODE_ZIP
@@ -358,7 +386,7 @@ Resources:
                 Provider: CodeStarSourceConnection
                 Version: '1'
               Configuration:
-                ConnectionArn: !Ref GitHubConnection
+                ConnectionArn: !If [CreateGitHubConnection, !Ref GitHubConnection, !Ref GitHubConnectionArn]
                 FullRepositoryId: !Sub '${GitHubOwner}/${GitHubRepo}'
                 BranchName: test
                 OutputArtifactFormat: CODE_ZIP
@@ -414,7 +442,7 @@ Resources:
                 Provider: CodeStarSourceConnection
                 Version: '1'
               Configuration:
-                ConnectionArn: !Ref GitHubConnection
+                ConnectionArn: !If [CreateGitHubConnection, !Ref GitHubConnection, !Ref GitHubConnectionArn]
                 FullRepositoryId: !Sub '${GitHubOwner}/${GitHubRepo}'
                 BranchName: prod
                 OutputArtifactFormat: CODE_ZIP
