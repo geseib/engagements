@@ -12,6 +12,7 @@ import SetImageBadge, { imageMarkerSuffix } from './components/SetImageBadge';
 import {
   resolveInstruction, currentQuestionOf, resolveRoundNoun, pluralRoundNoun,
 } from './config/instructions';
+import { resetGameSession } from './config/gameSession';
 import { gameTypeMeta } from './config/gameTypes';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
@@ -279,9 +280,101 @@ function GameHostPage() {
   // Loading overlay state
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('Loading...');
-  
+
   // Note: Save Report Modal state moved to GameReport component
-  
+
+  // 🔁 SWITCHING GAMES
+  //
+  // One map, one reset. Every per-game key in config/gameSession.js needs a
+  // setter here — gameSession.test.js fails if the two drift, which is what
+  // stops the next person from adding state and quietly forgetting to clear it.
+  //
+  // Keys deliberately absent from this map (and from gameSession.js) are the
+  // navigation flags and the create-dialog inputs; see that file's header.
+  const gameSessionSetters = {
+    gameState: setGameState,
+    currentGameType: setCurrentGameType,
+    questions: setQuestions,
+    currentQuestionId: setCurrentQuestionId,
+    currentQuestionIndex: setCurrentQuestionIndex,
+    lessonNumber: setLessonNumber,
+    players: setPlayers,
+    answers: setAnswers,
+    playersWhoAnswered: setPlayersWhoAnswered,
+    votes: setVotes,
+    playersWhoVoted: setPlayersWhoVoted,
+    currentQuestionVotes: setCurrentQuestionVotes,
+    currentAnswerIndex: setCurrentAnswerIndex,
+    selectedSetId: setSelectedSetId,
+    customInstruction: setCustomInstruction,
+    setRoundNoun: setSetRoundNoun,
+    categories: setCategories,
+    activeCategoryIds: setActiveCategoryIds,
+    categoryCounts: setCategoryCounts,
+    categoryBitmasks: setCategoryBitmasks,
+    isTogglingCategory: setIsTogglingCategory,
+    gamePersonaId: setGamePersonaId,
+    personaSwitchStatus: setPersonaSwitchStatus,
+    aiSummaries: setAiSummaries,
+    currentAIInsights: setCurrentAIInsights,
+    loadingAIInsights: setLoadingAIInsights,
+    showReport: setShowReport,
+    reportData: setReportData,
+    showFinalReport: setShowFinalReport,
+    eventTitle: setEventTitle,
+    lessonExpanded: setLessonExpanded,
+    instructionsVisible: setInstructionsVisible,
+    showExpandedQR: setShowExpandedQR,
+    questionSetTabVisible: setQuestionSetTabVisible,
+    showQuestionBrowser: setShowQuestionBrowser,
+    browsingQuestions: setBrowsingQuestions,
+    selectedCategory: setSelectedCategory,
+    showAllAnsweredAlert: setShowAllAnsweredAlert,
+    showAllVotedAlert: setShowAllVotedAlert,
+    showInviteCreated: setShowInviteCreated,
+    inviteCopied: setInviteCopied,
+    isLoadingData: setIsLoadingData,
+    isRestoringState: setIsRestoringState,
+    manualStateChange: setManualStateChange,
+    gameDebugMode: setGameDebugMode,
+  };
+
+  // The game every in-flight async write is allowed to touch. Bumped
+  // synchronously the instant the host leaves a game, so a `restoreGameState()`
+  // that was already awaiting the old game's API cannot land afterwards and
+  // repaint the previous session over the new one.
+  const activeGameIdRef = useRef('');
+
+  /**
+   * Leave whatever game is on screen. Clears every per-game value.
+   *
+   * Called on its own when the host goes back to the welcome screen, and via
+   * `switchToGame()` on every path that opens a different game.
+   */
+  const leaveCurrentGame = (overrides = {}) => {
+    activeGameIdRef.current = '';
+    if (aiWatchdogRef.current) clearTimeout(aiWatchdogRef.current);
+    resetGameSession(gameSessionSetters, overrides);
+  };
+
+  /**
+   * Open a different game. THE choke point — every create/join/continue path
+   * goes through here, so per-game state can never be half-cleared.
+   *
+   * The reset and the `setGameId` land in the same React 18 batch, so the
+   * screen never renders the new game id against the old game's data. The
+   * `[gameId]` effect then restores the new game from the server onto a clean
+   * slate — which matters because `restoreGameState()` only *adds*: a
+   * just-started game reports `currentQuestion: 0` and skips the entire
+   * question/answer/progress branch, so anything left behind would survive.
+   */
+  const switchToGame = (nextGameId, overrides = {}) => {
+    console.log(`🔁 HOST: switching to game ${nextGameId} (from ${gameId || 'none'})`);
+    leaveCurrentGame(overrides);
+    setGameId(nextGameId);
+    setShowWelcomeScreen(false);
+  };
+
 
   // Fetch question set custom instruction (similar to player screen)
   const fetchQuestionSetInstruction = async (setId) => {
@@ -677,12 +770,16 @@ Focus on actionable business strategy insights.`;
   }, []);
 
   useEffect(() => {
+    // Whatever we are about to load is now the only game allowed to write
+    // state. Anything still awaiting for a previous game is dead on arrival.
+    activeGameIdRef.current = gameId;
+
     // Only initialize game if we have a game ID
     if (!gameId) {
       console.log(`⏳ HOST: Waiting for game ID to be set...`);
       return;
     }
-    
+
     console.log(`🚀 HOST: Initializing game ${gameId}`);
     
     // Create game in database when gameId changes, then fetch data
@@ -922,10 +1019,21 @@ Focus on actionable business strategy insights.`;
   // OLD createGame function removed - now using handleStartNewGame which properly shows game history
 
   const restoreGameState = async () => {
+    // The game this particular restore belongs to. Every await below is a
+    // chance for the host to have switched games underneath us — a late reply
+    // from the old game would otherwise repaint the previous session over the
+    // new one, which reads as "it flickered back".
+    const forGameId = gameId;
+    const superseded = () => {
+      if (activeGameIdRef.current === forGameId) return false;
+      console.log(`🚫 HOST: discarding restore for game ${forGameId} — now on ${activeGameIdRef.current || 'none'}`);
+      return true;
+    };
+
     setIsRestoringState(true); // Start restoration
     try {
       console.log(`🔄 HOST: Restoring game state for ${gameId}...`);
-      
+
       // Don't restore state if we just manually changed it
       if (manualStateChange) {
         console.log(`⏭️ HOST: Skipping state restore - manual change in progress`);
@@ -935,14 +1043,16 @@ Focus on actionable business strategy insights.`;
       
       // Use new game state API with host data
       const stateRes = await fetch(`${API_BASE}games/${gameId}/state?includeHostData=true`);
+      if (superseded()) return false;
       if (stateRes.ok) {
         const gameStateData = await stateRes.json();
         console.log(`📊 HOST: Found existing game state:`, gameStateData);
-        
+
         // First, load question sets for the restored game
         console.log(`🔍 HOST: Loading question sets for restored game...`);
         await fetchQuestionSets(true); // true = during restoration, no auto-selection
-        
+        if (superseded()) return false;
+
         // Restore basic game metadata
         if (gameStateData.gameMetadata) {
           setEventTitle(gameStateData.gameMetadata.title || '');
@@ -957,9 +1067,10 @@ Focus on actionable business strategy insights.`;
           // Restore categories from bitmask if we have a question set
           if (restoredSetId) {
             await fetchCategories(restoredSetId, true); // true = restore from game bitmask
+            if (superseded()) return false;
           }
         }
-        
+
         // Parse and restore game state
         const currentState = gameStateData.state || 'LOBBY';
         let questionNumber = gameStateData.currentQuestion || 0;
@@ -1123,11 +1234,34 @@ Focus on actionable business strategy insights.`;
               console.error(`❌ Failed to load results for question ${questionNumber}:`, error);
             }
           }
+        } else {
+          // No round in play — a game that has been created or started but not
+          // yet advanced. This branch used to not exist, and that was the bug:
+          // restore only ever ADDED, so a freshly started game (which reports
+          // currentQuestion: 0) left the previous session's question, answers
+          // and progress on screen until the host refreshed the browser.
+          //
+          // `questions` and `currentQuestionId` clear together, always — see
+          // config/instructions.js for what happens when they don't.
+          console.log(`🧹 HOST: Game ${forGameId} has no current round — clearing round state`);
+          setQuestions([]);
+          setCurrentQuestionId('');
+          setCurrentQuestionIndex(-1);
+          setLessonNumber(0);
+          setAnswers([]);
+          setPlayersWhoAnswered([]);
+          setVotes([]);
+          setPlayersWhoVoted([]);
+          setCurrentQuestionVotes([]);
+          setCurrentAnswerIndex(0);
+          setCurrentAIInsights(null);
+          setLoadingAIInsights(false);
         }
-        
+
         // Fetch current players with scores
         await fetchPlayers('state-restore');
-        
+        if (superseded()) return false;
+
         // Load dynamic category management data for active games
         await loadCategoryCounts();
         
@@ -2108,19 +2242,25 @@ Focus on actionable business strategy insights.`;
     showResults: handleShowResults,
   };
 
-  const handleNewGame = async () => {
-    // Ensure question sets are loaded
-    if (questionSets.length === 0) {
-      await fetchQuestionSets();
-    }
-    // Show the new game dialog
-    setNewGameSetId(selectedSetId); // Pre-select current set
-    setEventTitle(''); // Clear event title
-    setShowNewGameDialog(true);
-  };
+  // NOTE: there used to be a second, never-called `handleNewGame` here that
+  // pre-selected the current set and cleared the event title before opening the
+  // create dialog. It was orphaned when the welcome screen was added, and since
+  // it reset no game state it was never the missing reset — the missing reset is
+  // `leaveCurrentGame()`. Both of its behaviours survive: the set pre-selection
+  // moved into handleSwitchGame below, and clearing the title is now part of
+  // the central reset.
 
   const handleSwitchGame = () => {
-    // Show the welcome screen (Get Started dialog)
+    // Leaving the game the host is watching. Every per-game value goes back to
+    // its initial state HERE, before the welcome screen appears, so whichever
+    // route they take next (Quick Start, create, continue, history) starts
+    // clean and there is no window where the new game id renders against the
+    // old game's question, phase and answers.
+    //
+    // Order matters: read selectedSetId before the reset clears it, so the
+    // create dialog still opens on the set they were just using.
+    setNewGameSetId(selectedSetId);
+    leaveCurrentGame();
     setShowWelcomeScreen(true);
     // Clear continue game input
     setContinueGameId('');
@@ -2139,11 +2279,9 @@ Focus on actionable business strategy insights.`;
       alert('Please enter a valid 4-digit Game ID');
       return;
     }
-    
-    // Generate new game ID and update URL
-    setGameId(gameIdToUse);
-    setShowWelcomeScreen(false);
-    
+
+    switchToGame(gameIdToUse);
+
     // Update URL
     const url = new URL(window.location);
     url.searchParams.set('gameId', gameIdToUse);
@@ -2161,10 +2299,8 @@ Focus on actionable business strategy insights.`;
   const selectGameFromHistory = (selectedGameId, selectedEventTitle) => {
     // Close the reports modal and set up the selected game
     setShowReportsModal(false);
-    setGameId(selectedGameId);
-    setEventTitle(selectedEventTitle);
-    setShowWelcomeScreen(false);
-    
+    switchToGame(selectedGameId, { eventTitle: selectedEventTitle });
+
     // Update URL
     const url = new URL(window.location);
     url.searchParams.set('gameId', selectedGameId);
@@ -2191,10 +2327,8 @@ Focus on actionable business strategy insights.`;
       
       // Close modal and go to game screen
       setShowReportsModal(false);
-      setGameId(selectedGameId);
-      setEventTitle(selectedEventTitle || 'Engagement Session');
-      setShowWelcomeScreen(false);
-      
+      switchToGame(selectedGameId, { eventTitle: selectedEventTitle || 'Engagement Session' });
+
       // Update URL to reflect the selected game
       const url = new URL(window.location);
       url.searchParams.set('gameId', selectedGameId);
@@ -2249,7 +2383,7 @@ Focus on actionable business strategy insights.`;
         }
       }
     } catch (e) {
-      console.error('handleNewGame clear error', e);
+      console.error('handleStartNewGame clear error', e);
       // Don't fail the new game creation if clear fails
       console.log(`⚠️ HOST: Clear failed, but continuing with new game creation`);
     }
@@ -2257,25 +2391,22 @@ Focus on actionable business strategy insights.`;
     // Create the game first - let backend generate the gameId
     console.log(`🆕 HOST: Creating new game with backend-generated ID`);
     
-    // Update question set selection
-    setSelectedSetId(newGameSetId);
+    // Drop the game that was on screen. This used to be a hand-picked dozen
+    // setters here, which left questions/currentQuestionId/aiSummaries/
+    // customInstruction/categories behind — the "mostly new game with one stale
+    // panel" failure. One list now, in config/gameSession.js.
+    //
+    // `eventTitle` is carried through as an override because on this path it is
+    // also the create dialog's own input, which the host has just typed.
+    // `activeCategoryIds` is read from this closure below (pre-reset), so the
+    // categories the host picked still reach the create call.
+    leaveCurrentGame({
+      eventTitle,
+      currentGameType: engagementType,
+      selectedSetId: newGameSetId,
+    });
     fetchQuestionSetInstruction(newGameSetId);
-    
-    // Reset all state
-    setCurrentQuestionIndex(-1);
-    setGameState('CREATED');
-    setCurrentGameType(engagementType); // Set the game type
-    setAnswers([]);
-    setPlayersWhoAnswered([]);
-    setVotes([]);
-    setPlayersWhoVoted([]);
-    setCurrentQuestionVotes([]);
-    setCurrentAnswerIndex(0);
-    setPlayers([]);
-    setShowReport(false);
-    setReportData(null);
-    setLessonNumber(0);
-    
+
     // Create the game directly with the backend API
     try {
       // Convert activeCategoryIds Set to array for selectedCategories
@@ -2610,11 +2741,15 @@ Ready to engage? See you there!`;
       <QuickstartMenu
         onGameCreated={(gameData) => {
           setShowQuickstartMenu(false);
-          // Extract the gameId and eventTitle from the gameData object
-          setGameId(gameData.gameId);
-          setEventTitle(gameData.eventTitle);
-          setShowWelcomeScreen(false);
-          // The useEffect hook will automatically initialize the game when gameId is set
+          // switchToGame clears every per-game value in the same React batch as
+          // the new gameId, so the quickstart game can never be drawn over the
+          // previous session's question/phase/answers. The [gameId] effect then
+          // restores the new game from the server onto a clean slate.
+          switchToGame(gameData.gameId, {
+            eventTitle: gameData.eventTitle,
+            currentGameType: gameData.gameType || 'call-and-answer',
+            selectedSetId: gameData.questionSetId || '',
+          });
         }}
         onClose={() => setShowQuickstartMenu(false)}
       />
