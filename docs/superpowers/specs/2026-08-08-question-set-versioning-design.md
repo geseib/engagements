@@ -111,6 +111,102 @@ prefix and allows removal — the owner's stated requirement.
 - `delete one` → `DeleteObject`
 - `delete set` → paginated `ListObjectsV2` + `DeleteObjects` in batches of 1000
 
+### Media lifecycle is independent of version lifecycle (owner-specified)
+
+| Operation | Effect on `sets/<setId>/` |
+|---|---|
+| Upload a new CSV version | **nothing** — media is untouched |
+| Delete a version | **nothing** |
+| Promote a version | **nothing** |
+| Delete the whole set | delete the entire prefix |
+| Bulk image upload | add only keys that do not already exist; overwrite is an explicit opt-in |
+
+The owner's words: *"if I delete the question set as a whole, I delete the images too.
+And if I upload a new version, I don't want to reimport the images too, just perhaps add
+the ones that are missing."*
+
+This is why images are keyed per **set**, not per version. A CSV edit almost always keeps
+the artwork; re-uploading 10 files to fix one typo would be absurd, and per-version media
+would duplicate every file on every import.
+
+### The CSV names the file; the importer stores the key (owner-specified)
+
+*"The CSV should just reference the image file name, not any prefix. The system should
+transform the file name to full prefix in Dynamo so it associates with the question set
+id, and is easy to find without much logic."*
+
+Transformation happens **at import**, not at read:
+
+```
+CSV       the-enigmatic-smile.jpg
+   ↓ upload-questions.js
+DynamoDB  Image = "sets/famousarttitles/the-enigmatic-smile.jpg"
+```
+
+Every downstream reader — player payload, host, report, AI summary — uses the stored
+value directly. No shared resolver, no risk of one of the six readers forgetting to call
+it.
+
+**Store the key, not a full URL.** A full URL bakes the environment's CloudFront domain
+into the data, so a table restore into another tier or a domain change silently breaks
+every image. The key keeps the property that makes this design good: the stored value IS
+the S3 key, so "everything belonging to this set" is the same `sets/<setId>/` prefix in
+DynamoDB and in S3. The environment's media base comes from config at render time,
+exactly as the API URL already does.
+
+**Exactly one place has any logic** — the image render site:
+
+| Stored value | Rendered as |
+|---|---|
+| `https://…` | as-is — legacy Wikimedia rows |
+| `/assets/art/…` | as-is — repo assets in the frontend bundle |
+| `sets/<setId>/<file>` | `<mediaBase>/` + value |
+
+The first two rules exist so nothing already imported breaks, and must not be removed.
+A bare filename with no prefix is treated as a set-relative key and gets the prefix
+applied, so a hand-written CSV that omits it still works.
+
+This also makes "add only the missing images" a set difference between the keys the CSV
+references and the keys under the prefix, rather than URL parsing.
+
+### The value type declares ownership (owner's framing)
+
+*"A file name assumes you will upload that file name via the edit question set; a URL
+assumes the file will stay external."*
+
+A **filename is a commitment to upload**; a **URL is a disclaimer**. That single rule
+decides lifecycle:
+
+| Value | Owner | Deleted with the set |
+|---|---|---|
+| `the-enigmatic-smile.jpg` | the system — lives in `sets/<setId>/` | **yes** |
+| `https://…` | external, permanent | never touched |
+| `/assets/art/…` | the repo, shipped in the bundle | never touched |
+
+Because the expected key set is knowable for system-owned images, both failure modes
+become detectable — neither is possible for a URL, since nothing says what it *should*
+have been:
+
+- **Referenced but not uploaded** → a broken image at game time. Import compares the CSV's
+  filenames against the prefix and reports the missing ones *at import*, not mid-session.
+  This is a warning, not a rejection: uploading the CSV before the images is a legitimate
+  order of work.
+- **Uploaded but unreferenced** → orphaned by a dropped row. Surfaced in the media panel
+  for one-click removal, which is the owner's "easily removed" requirement.
+
+The media panel therefore shows three states per file: **in use**, **missing** (referenced,
+not uploaded), **orphaned** (uploaded, unreferenced).
+
+### Adopting the existing artwork
+
+The 10 art images are currently repo assets at `src/public/assets/art/`, deployed to
+`<env>-web` as part of `dist/`. They work, and they are safe from the frontend deploy's
+`--delete` precisely because they are part of `dist/` — but they are not admin-manageable.
+
+`scripts/adopt-set-media.js` copies a directory into `sets/<setId>/` and emits a CSV with
+the `Image` column rewritten to bare filenames, so the migration is one upload rather than
+ten hand-edited URLs. Once versioning ships, that is a version bump, not a re-creation.
+
 Upload uses a **presigned PUT** issued by an admin-authorised lambda. API Gateway caps
 payloads at 10 MB and base64 inflates by a third; artwork exceeds that. The browser PUTs
 straight to S3, so the bucket needs CORS for the app origins.
