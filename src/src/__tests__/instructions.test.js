@@ -1,5 +1,6 @@
 import {
   resolveInstruction, currentQuestionOf, ART_TITLE_INSTRUCTION, GAME_TYPE_INSTRUCTIONS,
+  resolveRoundNoun, pluralRoundNoun, ART_ROUND_NOUN,
 } from '../config/instructions';
 
 const CALL_AND_ANSWER_DEFAULT = GAME_TYPE_INSTRUCTIONS['call-and-answer'];
@@ -55,6 +56,90 @@ describe('resolveInstruction', () => {
   it('treats a whitespace-only instruction as absent', () => {
     expect(resolveInstruction({ customInstructions: '   ' }, '  ', 'call-and-answer'))
       .toBe(CALL_AND_ANSWER_DEFAULT);
+  });
+});
+
+describe('the art instruction itself', () => {
+  it('names the art round rather than describing a lesson', () => {
+    const text = resolveInstruction({ image: '/assets/art/x.jpg' }, '', 'call-and-answer');
+    expect(text).toBe(ART_TITLE_INSTRUCTION);
+    expect(text).toMatch(/work of art/i);
+    expect(text).not.toMatch(/lesson/i);
+  });
+
+  it('is what the placeholder surfaces get too, with no question or set text', () => {
+    // Both textareas used to carry their own hardcoded art string
+    // ("Enter your creative title for this masterpiece...").
+    expect(resolveInstruction({ image: 'x.jpg' }, null, 'call-and-answer'))
+      .toBe(ART_TITLE_INSTRUCTION);
+  });
+
+  it('gives poll and survey their own defaults instead of call-and-answer', () => {
+    expect(resolveInstruction({}, '', 'poll')).toBe(GAME_TYPE_INSTRUCTIONS.poll);
+    expect(resolveInstruction({}, '', 'survey')).toBe(GAME_TYPE_INSTRUCTIONS.survey);
+    expect(resolveInstruction({}, '', 'wavelength')).toBe(GAME_TYPE_INSTRUCTIONS.wavelength);
+  });
+});
+
+describe('resolveRoundNoun', () => {
+  it('calls an art round an Artwork', () => {
+    expect(resolveRoundNoun(artQuestion, 'call-and-answer')).toBe(ART_ROUND_NOUN);
+    expect(resolveRoundNoun({ Image: '/assets/art/x.jpg' }, 'call-and-answer')).toBe('Artwork');
+  });
+
+  it('calls a plain call-and-answer round a Round, never a Lesson', () => {
+    expect(resolveRoundNoun({ id: '1' }, 'call-and-answer')).toBe('Round');
+  });
+
+  it('uses the game type noun for the other types', () => {
+    expect(resolveRoundNoun({}, 'trivia')).toBe('Question');
+    expect(resolveRoundNoun({}, 'poll')).toBe('Poll');
+    expect(resolveRoundNoun({}, 'wavelength')).toBe('Subject');
+    expect(resolveRoundNoun({}, 'survey')).toBe('Question');
+  });
+
+  it('lets an explicit per-set noun beat the artwork', () => {
+    expect(resolveRoundNoun(artQuestion, 'call-and-answer', 'Masterpiece')).toBe('Masterpiece');
+    expect(resolveRoundNoun({}, 'trivia', 'Lesson')).toBe('Lesson');
+  });
+
+  it('ignores a blank or whitespace-only per-set noun', () => {
+    expect(resolveRoundNoun(artQuestion, 'call-and-answer', '   ')).toBe(ART_ROUND_NOUN);
+    expect(resolveRoundNoun({}, 'trivia', '')).toBe('Question');
+    expect(resolveRoundNoun({}, 'trivia', null)).toBe('Question');
+  });
+
+  it('tolerates a missing question or an unknown game type', () => {
+    expect(resolveRoundNoun(null, 'call-and-answer')).toBe('Round');
+    expect(resolveRoundNoun(undefined, undefined)).toBe('Round');
+    expect(resolveRoundNoun({}, 'nonsense')).toBe('Round');
+  });
+
+  it('accepts the storage spelling of call-and-answer', () => {
+    expect(resolveRoundNoun({}, 'callandanswer')).toBe('Round');
+    expect(resolveRoundNoun({}, 'polls')).toBe('Poll');
+  });
+
+  it('treats a whitespace-only image as no artwork', () => {
+    expect(resolveRoundNoun({ image: '   ' }, 'call-and-answer')).toBe('Round');
+  });
+
+  // D3: the host said "Lesson N" while asking and "Question N" on results.
+  it('gives ASK and RESULTS the same noun for the same round', () => {
+    for (const type of ['call-and-answer', 'trivia', 'poll', 'wavelength', 'survey']) {
+      const ask = resolveRoundNoun(artQuestion, type);
+      const results = resolveRoundNoun(artQuestion, type);
+      expect(ask).toBe(results);
+    }
+  });
+});
+
+describe('pluralRoundNoun', () => {
+  it('pluralises everything but one', () => {
+    expect(pluralRoundNoun('Round', 1)).toBe('Round');
+    expect(pluralRoundNoun('Round', 0)).toBe('Rounds');
+    expect(pluralRoundNoun('Round', 3)).toBe('Rounds');
+    expect(pluralRoundNoun('Artwork', 5)).toBe('Artworks');
   });
 });
 

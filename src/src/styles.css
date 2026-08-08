@@ -1732,6 +1732,13 @@ body {
   color: #333;
 }
 
+/* Round badge ("Artwork 3", "Question 3"). Was .lesson-number, which had no
+   rule at all, so it rendered unstyled beside two bold siblings. */
+.player-info-external .round-number {
+  font-weight: 800;
+  color: #333;
+}
+
 .player-info-external .websocket-indicator {
   font-size: 0.9rem;
   font-weight: 600;

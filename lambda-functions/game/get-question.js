@@ -102,6 +102,17 @@ exports.handler = async (event) => {
     const baseQuestionInfo = {
       questionId: sourceQuestionId,
       questionNumber: questionNumber,
+      // `id` is what get-game-state's currentQuestionData calls the round number
+      // (padded, e.g. "001"). It was missing here, so the player's round badge
+      // rendered blank on ASK and RESULTS and only filled in during VOTE — the
+      // one phase served by get-game-state.
+      id: questionNumber,
+      // The set id reaches the player too. PlayerPage guards its per-set
+      // instruction fetch on `setId`, and this payload only ever carried
+      // `questionSetId`, and only on the host branch — so per-set instructions
+      // never reached a player at all. Set metadata is already public via
+      // GET /question-sets, so there is nothing sensitive to withhold.
+      setId: questionSetId,
       title: question.Item.Title || '',
       questionDetail: question.Item.questionDetail || question.Item.Detail || '',
       detail: question.Item.Detail || question.Item.questionDetail || '',

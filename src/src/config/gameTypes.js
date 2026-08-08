@@ -19,6 +19,9 @@ export const GAME_TYPES = {
     phases: ['ASK', 'VOTE', 'RESULTS'],
     blurb: 'Open responses, then the room votes on the best ones.',
     answerType: 'text',
+    // What one unit of play is called on screen. See resolveRoundNoun() in
+    // config/instructions.js — art rounds override this by carrying an image.
+    roundNoun: 'Round',
   },
   trivia: {
     id: 'trivia',
@@ -29,6 +32,7 @@ export const GAME_TYPES = {
     phases: ['ASK', 'RESULTS'],
     blurb: 'Multiple choice with one correct answer and a scoreboard.',
     answerType: 'trivia',
+    roundNoun: 'Question',
   },
   poll: {
     id: 'poll',
@@ -39,6 +43,7 @@ export const GAME_TYPES = {
     phases: ['ASK', 'VOTE', 'RESULTS'],
     blurb: 'Gauge opinion — no right answer, distribution is the result.',
     answerType: 'text',
+    roundNoun: 'Poll',
   },
   wavelength: {
     id: 'wavelength',
@@ -49,6 +54,7 @@ export const GAME_TYPES = {
     phases: ['ASK', 'VOTE', 'RESULTS'],
     blurb: 'Word association — the room converges on a shared cloud.',
     answerType: 'wavelength',
+    roundNoun: 'Subject',
   },
   survey: {
     id: 'survey',
@@ -59,6 +65,7 @@ export const GAME_TYPES = {
     phases: ['ASK', 'RESULTS'],
     blurb: 'Structured multi-question feedback, reported in aggregate.',
     answerType: 'text',
+    roundNoun: 'Question',
   },
 };
 

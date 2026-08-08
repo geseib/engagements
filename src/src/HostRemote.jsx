@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
 import './HostRemote.css';
 import Icon from './components/Icon';
+import { resolveRoundNoun } from './config/instructions';
 
 const API_BASE = window.API_BASE;
 
@@ -108,7 +109,12 @@ function HostRemote() {
                 <p><strong>Title:</strong> {gameState.eventTitle}</p>
                 <p><strong>Players:</strong> {gameState.playerCount || 0}</p>
                 <p><strong>State:</strong> {gameState.currentState}</p>
-                <p><strong>Question:</strong> {gameState.currentQuestionNumber || 0}</p>
+                <p>
+                  {/* GET /games/{id} returns `lessonNumber`; `currentQuestionNumber`
+                      is not a field it emits, so this always read 0. */}
+                  <strong>{resolveRoundNoun(gameState.currentQuestionData, gameState.gameType)}:</strong>{' '}
+                  {gameState.lessonNumber || gameState.currentQuestionNumber || 0}
+                </p>
               </div>
             )}
           </div>

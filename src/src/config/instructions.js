@@ -1,3 +1,5 @@
+import { gameTypeMeta } from './gameTypes';
+
 /**
  * What the room is told to do for the current question.
  *
@@ -26,7 +28,8 @@ export const GAME_TYPE_INSTRUCTIONS = {
   survey: 'Share your response:',
 };
 
-export const ART_TITLE_INSTRUCTION = 'Give this masterpiece your own creative title!';
+export const ART_TITLE_INSTRUCTION =
+  'Name this work of art. Will you be accurate, witty, or make the room really think?';
 
 const FALLBACK = 'Share your response:';
 
@@ -49,6 +52,50 @@ export function resolveInstruction(question, setInstruction, gameType) {
   if ((q.image || q.Image || '').trim()) return ART_TITLE_INSTRUCTION;
 
   return GAME_TYPE_INSTRUCTIONS[gameType] || FALLBACK;
+}
+
+export const ART_ROUND_NOUN = 'Artwork';
+
+const FALLBACK_ROUND_NOUN = 'Round';
+
+/**
+ * What one unit of play is called on screen — "Round 3", "Artwork 3",
+ * "Question 3".
+ *
+ * Every label site used to inline its own ternary, which is how the host came
+ * to say "Lesson 3" while asking and "Question 3" when showing results, and how
+ * poll and survey both ended up labelled "Lesson".
+ *
+ * Order matters and is deliberate, mirroring resolveInstruction:
+ *   1. the question set's own noun     — an explicit per-set override
+ *   2. artwork present                 — Art Title rounds
+ *   3. the game type's noun            — config/gameTypes.js
+ *   4. 'Round'                         — accurate for anything
+ *
+ * The default is 'Round', not 'Lesson': "Lesson" asserts the content is
+ * didactic, which is false for icebreakers, retros and opinion sets. A genuine
+ * lessons-learned set can still say "Lesson" through the per-set override.
+ *
+ * @param question      the current question object, or null/undefined
+ * @param gameType      canonical game type id
+ * @param setRoundNoun  question-set level override, if any
+ */
+export function resolveRoundNoun(question, gameType, setRoundNoun) {
+  const set = (setRoundNoun || '').trim();
+  if (set) return set;
+
+  const q = question || {};
+
+  // Art Title rounds are call-and-answer sets carrying an image, so the artwork
+  // is the only thing that identifies them here.
+  if ((q.image || q.Image || '').trim()) return ART_ROUND_NOUN;
+
+  return gameTypeMeta(gameType).roundNoun || FALLBACK_ROUND_NOUN;
+}
+
+/** "1 Round" / "3 Rounds" — for counts in the report header. */
+export function pluralRoundNoun(noun, count) {
+  return count === 1 ? noun : `${noun}s`;
 }
 
 /**

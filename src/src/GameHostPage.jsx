@@ -9,7 +9,9 @@ import WavelengthWordCloud from './components/WavelengthWordCloud';
 import Icon from './components/Icon';
 import RankIcon from './components/RankIcon';
 import SetImageBadge, { imageMarkerSuffix } from './components/SetImageBadge';
-import { resolveInstruction, currentQuestionOf } from './config/instructions';
+import {
+  resolveInstruction, currentQuestionOf, resolveRoundNoun, pluralRoundNoun,
+} from './config/instructions';
 import { gameTypeMeta } from './config/gameTypes';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
@@ -92,6 +94,7 @@ function GameHostPage() {
   
   // Custom instruction state for question set instructions
   const [customInstruction, setCustomInstruction] = useState(null);
+  const [setRoundNoun, setSetRoundNoun] = useState(null); // per-set override, e.g. "Lesson"
   
   // Reports List Modal
   const [showReportsModal, setShowReportsModal] = useState(false);
@@ -270,6 +273,7 @@ function GameHostPage() {
   const fetchQuestionSetInstruction = async (setId) => {
     if (!setId) {
       setCustomInstruction(null);
+      setSetRoundNoun(null);
       return;
     }
 
@@ -285,9 +289,11 @@ function GameHostPage() {
         console.log('📋 HOST: No custom instruction found, using default');
         setCustomInstruction(null);
       }
+      setSetRoundNoun(questionSet?.roundNoun || null);
     } catch (error) {
       console.error('Error fetching question set instruction:', error);
       setCustomInstruction(null);
+      setSetRoundNoun(null);
     }
   };
 
@@ -295,6 +301,11 @@ function GameHostPage() {
   // player screen cannot drift apart (they had, on Art Title rounds).
   const getHostInstructionText = (currentQuestion, gameType = currentGameType) =>
     resolveInstruction(currentQuestion, customInstruction, gameType);
+
+  // Same idea for what a round is called. Every label site used to inline its
+  // own ternary, which is why ASK said "Lesson 3" and RESULTS "Question 3".
+  const getHostRoundNoun = (question = questions[0], gameType = currentGameType) =>
+    resolveRoundNoun(question, gameType, setRoundNoun);
 
 
   // Generate a random 4-digit game ID
@@ -3505,8 +3516,7 @@ Ready to engage? See you there!`;
                     <span className="bs-kicker-cat">{questions[0].field || questions[0].category}</span>
                     <span className="bs-kicker-sep">/</span>
                     <span className="bs-kicker-num">
-                      {(currentGameType === 'trivia' ? 'Question' :
-                        currentGameType === 'wavelength' ? 'Subject' : 'Lesson')} {lessonNumber}
+                      {getHostRoundNoun()} {lessonNumber}
                       {(() => {
                         const total = questionSets.find(s => s.id === (questions[0]?.setId || selectedSetId))?.totalQuestions;
                         return total ? ` / ${total}` : '';
@@ -3530,9 +3540,7 @@ Ready to engage? See you there!`;
                 </>
               ) : (
                 <>
-                  <h2>{currentGameType === 'trivia' ? `Question ${lessonNumber}` :
-                       currentGameType === 'wavelength' ? `Subject ${lessonNumber}` :
-                       `Lesson ${lessonNumber}`}</h2>
+                  <h2>{getHostRoundNoun()} {lessonNumber}</h2>
                   <div className="field-badge">
                     {questions[0].field || questions[0].category}
                   </div>
@@ -3696,7 +3704,7 @@ Ready to engage? See you there!`;
           <div className={`results-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
             <h2 className="results-heading">
               <Icon name="Trophy" weight="duotone" size={30} color="var(--primary)" />
-              <span>Question {parseInt(gameState.split('#')[1])} · Results</span>
+              <span>{getHostRoundNoun()} {parseInt(gameState.split('#')[1])} · Results</span>
             </h2>
             
             {currentGameType === 'trivia' ? (
@@ -4286,6 +4294,10 @@ Ready to engage? See you there!`;
 // Game Report Component
 function GameReport({ reportData, onClose }) {
   const { gameId, eventTitle, players, questions, allAnswers, allVotes, aiSummaries } = reportData;
+  // Same round noun the live screens use. NOTE: create-report.js does not put
+  // `image` on questionData, so an art set reports as its game type's noun.
+  const reportRoundNoun = (questionData) =>
+    resolveRoundNoun(questionData, reportData.gameType, reportData.roundNoun);
   const [isSaving, setIsSaving] = useState(false);
   const [showSaveReportModal, setShowSaveReportModal] = useState(false);
   const [saveModalData, setSaveModalData] = useState(null);
@@ -4436,7 +4448,10 @@ function GameReport({ reportData, onClose }) {
           <div className="report-meta">
             <span>Game ID: <strong>{gameId}</strong></span>
             <span>{players.length} Player{players.length !== 1 ? 's' : ''}</span>
-            <span>{questions.length} Lesson{questions.length !== 1 ? 's' : ''}</span>
+            <span>
+              {questions.length}{' '}
+              {pluralRoundNoun(reportRoundNoun(questions[0]?.questionData), questions.length)}
+            </span>
           </div>
         </div>
         
@@ -4470,7 +4485,7 @@ function GameReport({ reportData, onClose }) {
             <div key={questionNumber} className="report-question">
               <div className="report-question-header">
                 <h3 className="report-lesson-heading">
-                  Lesson {qIdx + 1} - {questionData.title || `Question ${questionNumber}`}
+                  {reportRoundNoun(questionData)} {qIdx + 1} - {questionData.title || `${reportRoundNoun(questionData)} ${questionNumber}`}
                 </h3>
                 <div className="field-badge">{questionData.category || 'General'}</div>
               </div>

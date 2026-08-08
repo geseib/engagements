@@ -4,7 +4,7 @@ import IssueFab from './components/IssueFab';
 import Icon from './components/Icon';
 import RankIcon, { rankLabel, VOTE_POSITIONS } from './components/RankIcon';
 import { gameTypeMeta } from './config/gameTypes';
-import { resolveInstruction } from './config/instructions';
+import { resolveInstruction, resolveRoundNoun } from './config/instructions';
 
 const API_BASE = window.API_BASE;
 
@@ -35,9 +35,25 @@ const calculatePlayerRankings = (players) => {
   return rankedPlayers;
 };
 
-// Helper function to get instruction text
-const getPlayerInstructionText = (customInstruction, currentQuestion) =>
-  resolveInstruction(currentQuestion, customInstruction, 'call-and-answer');
+// Helper function to get instruction text.
+// The game type used to be hardcoded to 'call-and-answer', so poll and survey
+// never saw their own default — pass the real type.
+const getPlayerInstructionText = (customInstruction, currentQuestion, gameType) =>
+  resolveInstruction(currentQuestion, customInstruction, gameType);
+
+// Which round the player is on. The payload spells this three different ways
+// depending on which endpoint answered (get-question sends lessonNumber +
+// questionNumber + id, get-game-state sends id, and the results-reconstruction
+// fallback sends none of them), so fall back to the phase string last.
+const roundNumberOf = (question, gameState) => {
+  const candidates = [question?.lessonNumber, question?.questionNumber, question?.id];
+  for (const candidate of candidates) {
+    const n = parseInt(candidate, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  const fromState = parseInt(String(gameState || '').split('#')[1], 10);
+  return Number.isFinite(fromState) && fromState > 0 ? fromState : null;
+};
 
 function PlayerPage() {
   const [gameId, setGameId] = useState('');
@@ -76,6 +92,7 @@ function PlayerPage() {
   const [playerScoreInfo, setPlayerScoreInfo] = useState(null);
   const [allPlayers, setAllPlayers] = useState([]);
   const [customInstruction, setCustomInstruction] = useState(null);
+  const [setRoundNoun, setSetRoundNoun] = useState(null); // per-set override, e.g. "Lesson"
   const [lastProcessedQuestionId, setLastProcessedQuestionId] = useState(null);
   const [results, setResults] = useState(null);
 
@@ -433,9 +450,10 @@ function PlayerPage() {
   const fetchQuestionSetInstruction = async (setId) => {
     if (!setId) {
       setCustomInstruction(null);
+      setSetRoundNoun(null);
       return;
     }
-    
+
     try {
       console.log('📋 PLAYER: Fetching instruction for set:', setId);
       const response = await fetch(`${API_BASE}question-sets`);
@@ -449,10 +467,12 @@ function PlayerPage() {
           console.log('📋 PLAYER: No custom instruction found, using default');
           setCustomInstruction(null);
         }
+        setSetRoundNoun(questionSet?.roundNoun || null);
       }
     } catch (error) {
       console.error('Error fetching question set instruction:', error);
       setCustomInstruction(null);
+      setSetRoundNoun(null);
     }
   };
 
@@ -548,9 +568,12 @@ function PlayerPage() {
           setSelectedTriviaAnswer('');
         }
         
-        // Fetch question set instructions
-        if (questionData.setId) {
-          fetchQuestionSetInstruction(questionData.setId);
+        // Fetch question set instructions. The payload only started carrying
+        // `setId` for players in this change; before that this guard could
+        // never fire and per-set instructions were host-only.
+        const setId = questionData.setId || questionData.questionSetId;
+        if (setId) {
+          fetchQuestionSetInstruction(setId);
         }
         
         console.log(`🎯 PLAYER: Question ${questionNumber} loaded, hasAnswered: ${hasAnswered}`);
@@ -1509,7 +1532,12 @@ function PlayerPage() {
       <div className="player-info-external">
         <span className="player-name"><Icon name="UserCircle" weight="fill" size={16} /> {playerName}</span>
         <span className="game-id">Game: {gameId}</span>
-        {currentQuestion && <span className="lesson-number">Lesson {currentQuestion.id}</span>}
+        {currentQuestion && roundNumberOf(currentQuestion, gameState) !== null && (
+          <span className="round-number">
+            {resolveRoundNoun(currentQuestion, gameType, setRoundNoun)}{' '}
+            {roundNumberOf(currentQuestion, gameState)}
+          </span>
+        )}
         <span 
           className={`websocket-indicator ${wsConnected ? 'connected' : 'disconnected'}`}
           onClick={() => window.location.reload()}
@@ -1632,9 +1660,7 @@ function PlayerPage() {
               </div>
             )}
             <div className="application-prompt">
-              <strong>{gameType === 'trivia' ? 'Select the best answer:' :
-                       gameType === 'wavelength' ? (currentQuestion?.customInstructions || customInstruction || 'Enter up to 10 words or short phrases that come to mind:') :
-                       getPlayerInstructionText(customInstruction, currentQuestion)}</strong>
+              <strong>{getPlayerInstructionText(customInstruction, currentQuestion, gameType)}</strong>
             </div>
             
             {!hasAnswered ? (
@@ -1730,11 +1756,7 @@ function PlayerPage() {
                           <textarea
                             value={answerInput}
                             onChange={(e) => setAnswerInput(e.target.value)}
-                            placeholder={currentQuestion?.customInstructions || 
-                              (gameType === 'wavelength' ? 'Enter up to 10 words or short phrases that come to mind...' :
-                               gameType === 'poll' ? 'Share your opinion...' :
-                               currentQuestion?.image ? 'Enter your creative title for this masterpiece...' :
-                               'Describe how you would apply this lesson to your work, project, or team...')}
+                            placeholder={getPlayerInstructionText(customInstruction, currentQuestion, gameType)}
                             className="mobile-answer-input"
                             rows={12}
                             required
@@ -1756,11 +1778,7 @@ function PlayerPage() {
                     value={answerInput}
                     onChange={(e) => setAnswerInput(e.target.value)}
                     onFocus={() => !isDesktop && setIsAnswerInputFocused(true)}
-                    placeholder={currentQuestion?.customInstructions || 
-                      (gameType === 'wavelength' ? 'Enter up to 10 words or short phrases that come to mind...' :
-                       gameType === 'poll' ? 'Share your opinion...' :
-                       currentQuestion?.image ? 'Enter your creative title for this masterpiece...' :
-                       'Describe how you would apply this lesson to your work, project, or team...')}
+                    placeholder={getPlayerInstructionText(customInstruction, currentQuestion, gameType)}
                     className="answer-input"
                     rows={isDesktop ? 6 : 4}
                     required
@@ -1912,7 +1930,8 @@ function PlayerPage() {
           <div className="results-screen">
             <h2>
               <Icon name={gameTypeMeta(gameType).icon} weight="duotone" size={26} color="var(--primary)" />
-              Question {parseInt(gameState.split('#')[1])} Results
+              {resolveRoundNoun(currentQuestion, gameType, setRoundNoun)}{' '}
+              {parseInt(gameState.split('#')[1])} Results
             </h2>
             
             {gameType === 'trivia' ? (
