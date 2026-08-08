@@ -1,0 +1,3662 @@
+{
+    "Items": [
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "amazon-principles"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Amazon Leadership Principles"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "context": {
+                        "S": "Deep dive into Amazon's 16 Leadership Principles through real-world scenarios and STAR method practice"
+                    },
+                    "customTitle": {
+                        "S": "Amazon Leadership Principles Workshop"
+                    },
+                    "audience": {
+                        "S": "Amazon employees, leadership candidates, and professionals interested in Amazon culture"
+                    },
+                    "numberOfCategories": {
+                        "N": "4"
+                    },
+                    "mustHaveCategories": {
+                        "S": "Customer Obsession, Ownership, Invent & Simplify, Bias for Action"
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Title\", \"category\": \"Category\", \"detail\": \"Description\", \"school\": \"Professional Development\", \"customInstructions\": \"Instructions\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize scenarios into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "call-and-answer"
+            },
+            "description": {
+                "S": "Scenarios based on Amazon's 16 Leadership Principles"
+            },
+            "basePrompt": {
+                "S": "Generate scenarios that explore Amazon Leadership Principles through real-world situations"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "scenarios"
+                    },
+                    {
+                        "S": "amazon-principles"
+                    },
+                    {
+                        "S": "leadership"
+                    },
+                    {
+                        "S": "STAR"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#amazon-principles#call-and-answer"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "brainstorming"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Brainstorming Sessions"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "context": {
+                        "S": "Collaborative ideation session for generating solutions and innovations"
+                    },
+                    "customTitle": {
+                        "S": "Team Brainstorming Session"
+                    },
+                    "audience": {
+                        "S": "Cross-functional teams, product teams, and innovation groups"
+                    },
+                    "numberOfCategories": {
+                        "N": "4"
+                    },
+                    "mustHaveCategories": {
+                        "S": "Product Ideas, Process Improvements, Problem Solutions, Future Opportunities"
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Subject (1-4 words)\", \"detail\": \"One sentence of framing for the subject\", \"category\": \"Category\", \"customInstructions\": \"Enter up to 10 words or short phrases that come to mind when you think about this subject.\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "wavelength"
+            },
+            "description": {
+                "S": "Work-life subjects that reveal shared team priorities"
+            },
+            "basePrompt": {
+                "S": "Create wavelength subjects for a team word-association alignment game. Each item is a single short, evocative SUBJECT (1-4 words, e.g. \"Remote Work\", \"Customer Trust\") that every participant responds to by listing up to 10 words or short phrases that come to mind; the game then measures how many words overlap across participants. Pick subjects broad enough that everyone can produce 10 associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer. Draw subjects from the team's working life: products, processes, challenges, goals, and opportunities (e.g. \"Our Next Launch\", \"Team Meetings\") so overlapping words reveal shared priorities."
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "wavelength"
+                    },
+                    {
+                        "S": "brainstorming"
+                    },
+                    {
+                        "S": "innovation"
+                    },
+                    {
+                        "S": "ideas"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#brainstorming#wavelength"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "business-concepts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Business Concepts"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "context": {
+                        "S": "Explore business and management terms through creative word association"
+                    },
+                    "customTitle": {
+                        "S": "Business Concepts Wavelength"
+                    },
+                    "audience": {
+                        "S": "Business professionals, managers, and leadership teams"
+                    },
+                    "numberOfCategories": {
+                        "N": "4"
+                    },
+                    "mustHaveCategories": {
+                        "S": "Strategy, Operations, Finance, Leadership"
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Subject (1-4 words)\", \"detail\": \"One sentence of framing for the subject\", \"category\": \"Category\", \"customInstructions\": \"Enter up to 10 words or short phrases that come to mind when you think about this subject.\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "wavelength"
+            },
+            "description": {
+                "S": "Business and management subjects for word-association alignment"
+            },
+            "basePrompt": {
+                "S": "Create wavelength subjects for a team word-association alignment game. Each item is a single short, evocative SUBJECT (1-4 words, e.g. \"Remote Work\", \"Customer Trust\") that every participant responds to by listing up to 10 words or short phrases that come to mind; the game then measures how many words overlap across participants. Pick subjects broad enough that everyone can produce 10 associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer. Draw subjects from business, strategy, and management: markets, leadership, operations, finance, and organizational life."
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "wavelength"
+                    },
+                    {
+                        "S": "business"
+                    },
+                    {
+                        "S": "strategy"
+                    },
+                    {
+                        "S": "management"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#business-concepts#wavelength"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "custom"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Custom Scenarios"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "context": {
+                        "S": ""
+                    },
+                    "customTitle": {
+                        "S": "Custom Scenarios"
+                    },
+                    "audience": {
+                        "S": ""
+                    },
+                    "numberOfCategories": {
+                        "N": "3"
+                    },
+                    "mustHaveCategories": {
+                        "S": ""
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Title\", \"category\": \"Category\", \"detail\": \"Description\", \"school\": \"Professional Development\", \"customInstructions\": \"Instructions\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize scenarios into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "call-and-answer"
+            },
+            "description": {
+                "S": "Define your own specific scenario requirements"
+            },
+            "basePrompt": {
+                "S": "Create scenarios based on the custom requirements provided"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "scenarios"
+                    },
+                    {
+                        "S": "custom"
+                    },
+                    {
+                        "S": "flexible"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#custom#call-and-answer"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "custom"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Custom Subjects"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "context": {
+                        "S": "Custom list-based exercise tailored to your specific needs"
+                    },
+                    "customTitle": {
+                        "S": "Custom Wavelength Workshop"
+                    },
+                    "audience": {
+                        "S": "Customized based on requirements"
+                    },
+                    "numberOfCategories": {
+                        "N": "3"
+                    },
+                    "mustHaveCategories": {
+                        "S": ""
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Subject (1-4 words)\", \"detail\": \"One sentence of framing for the subject\", \"category\": \"Category\", \"customInstructions\": \"Enter up to 10 words or short phrases that come to mind when you think about this subject.\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "wavelength"
+            },
+            "description": {
+                "S": "Define your own subjects for word association"
+            },
+            "basePrompt": {
+                "S": "Create wavelength subjects for a team word-association alignment game. Each item is a single short, evocative SUBJECT (1-4 words, e.g. \"Remote Work\", \"Customer Trust\") that every participant responds to by listing up to 10 words or short phrases that come to mind; the game then measures how many words overlap across participants. Pick subjects broad enough that everyone can produce 10 associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer. Draw subjects from the custom topics provided."
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "wavelength"
+                    },
+                    {
+                        "S": "custom"
+                    },
+                    {
+                        "S": "flexible"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#custom#wavelength"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "custom-polls"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Custom Poll Topics"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "numberOfCategories": {
+                        "N": "3"
+                    },
+                    "mustHaveCategories": {
+                        "S": ""
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Question/prompt\", \"detail\": \"Background context\", \"category\": \"Category\", \"customInstructions\": \"Response guidance\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize polls into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "poll"
+            },
+            "description": {
+                "S": "Define your own poll topic and requirements"
+            },
+            "basePrompt": {
+                "S": "Create poll questions based on the specific topic and requirements provided"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "poll"
+                    },
+                    {
+                        "S": "custom"
+                    },
+                    {
+                        "S": "flexible"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#custom-polls#poll"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "custom-trivia"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nTopic: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Custom Trivia Topics"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "numChoices": {
+                        "N": "4"
+                    },
+                    "numCorrect": {
+                        "N": "1"
+                    },
+                    "numberOfCategories": {
+                        "N": "3"
+                    },
+                    "mustHaveCategories": {
+                        "S": ""
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Short title\", \"questionDetail\": \"Full question text\", \"category\": \"Category\", \"optionA\": \"Choice A\", \"optionB\": \"Choice B\", \"optionC\": \"Choice C\", \"optionD\": \"Choice D\", \"correctAnswer\": \"OptionA\", \"answerDetails\": \"Explanation\", \"difficulty\": \"easy|medium|hard\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize questions into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "trivia"
+            },
+            "description": {
+                "S": "Define your own trivia topic and requirements"
+            },
+            "basePrompt": {
+                "S": "Create trivia questions based on the specific topic and requirements provided"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "trivia"
+                    },
+                    {
+                        "S": "custom"
+                    },
+                    {
+                        "S": "flexible"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#custom-trivia#trivia"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "decision-making"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Decision-Making Polls"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "numberOfCategories": {
+                        "N": "3"
+                    },
+                    "mustHaveCategories": {
+                        "S": "Strategic Decisions, Process Choices, Priority Setting"
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Question/prompt\", \"detail\": \"Background context\", \"category\": \"Category\", \"customInstructions\": \"Response guidance\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize polls into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "poll"
+            },
+            "description": {
+                "S": "Help teams make decisions through voting"
+            },
+            "basePrompt": {
+                "S": "Generate poll questions that help teams make decisions and choose between options"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "poll"
+                    },
+                    {
+                        "S": "decision-making"
+                    },
+                    {
+                        "S": "voting"
+                    },
+                    {
+                        "S": "choice"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#decision-making#poll"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "feedback-polls"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Feedback & Assessment Polls"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "numberOfCategories": {
+                        "N": "3"
+                    },
+                    "mustHaveCategories": {
+                        "S": "Feedback, Assessment, Satisfaction"
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Question/prompt\", \"detail\": \"Background context\", \"category\": \"Category\", \"customInstructions\": \"Response guidance\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize polls into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "poll"
+            },
+            "description": {
+                "S": "Collect feedback and assess understanding"
+            },
+            "basePrompt": {
+                "S": "Create poll questions to gather feedback, assess understanding, and measure satisfaction"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "poll"
+                    },
+                    {
+                        "S": "feedback"
+                    },
+                    {
+                        "S": "assessment"
+                    },
+                    {
+                        "S": "satisfaction"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#feedback-polls#poll"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "fun-facts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Fun Facts & Interesting Trivia"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "numChoices": {
+                        "N": "4"
+                    },
+                    "numCorrect": {
+                        "N": "1"
+                    },
+                    "numberOfCategories": {
+                        "N": "5"
+                    },
+                    "mustHaveCategories": {
+                        "S": "Animals, Science, Entertainment, History, World Records"
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Short title\", \"questionDetail\": \"Full question text\", \"category\": \"Category\", \"optionA\": \"Choice A\", \"optionB\": \"Choice B\", \"optionC\": \"Choice C\", \"optionD\": \"Choice D\", \"correctAnswer\": \"OptionA\", \"answerDetails\": \"Explanation\", \"difficulty\": \"easy|medium|hard\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize questions into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "trivia"
+            },
+            "description": {
+                "S": "Entertaining and surprising facts"
+            },
+            "basePrompt": {
+                "S": "Generate fun and interesting trivia questions with surprising facts and entertaining knowledge"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "trivia"
+                    },
+                    {
+                        "S": "fun-facts"
+                    },
+                    {
+                        "S": "entertainment"
+                    },
+                    {
+                        "S": "interesting"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#fun-facts#trivia"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "general-knowledge"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "General Knowledge Trivia"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "numChoices": {
+                        "N": "4"
+                    },
+                    "numCorrect": {
+                        "N": "1"
+                    },
+                    "numberOfCategories": {
+                        "N": "4"
+                    },
+                    "mustHaveCategories": {
+                        "S": "History, Science, Geography, Culture"
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Short title\", \"questionDetail\": \"Full question text\", \"category\": \"Category\", \"optionA\": \"Choice A\", \"optionB\": \"Choice B\", \"optionC\": \"Choice C\", \"optionD\": \"Choice D\", \"correctAnswer\": \"OptionA\", \"answerDetails\": \"Explanation\", \"difficulty\": \"easy|medium|hard\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize questions into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "trivia"
+            },
+            "description": {
+                "S": "Broad knowledge questions across various topics"
+            },
+            "basePrompt": {
+                "S": "Create general knowledge trivia questions covering history, science, geography, and culture"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "trivia"
+                    },
+                    {
+                        "S": "general-knowledge"
+                    },
+                    {
+                        "S": "education"
+                    },
+                    {
+                        "S": "quiz"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#general-knowledge#trivia"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "icebreaker-polls"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Icebreaker & Team Polls"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "easy"
+                    },
+                    "numberOfCategories": {
+                        "N": "4"
+                    },
+                    "mustHaveCategories": {
+                        "S": "Personal Interests, Fun Facts, Preferences, Getting to Know You"
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Question/prompt\", \"detail\": \"Background context\", \"category\": \"Category\", \"customInstructions\": \"Response guidance\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize polls into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "poll"
+            },
+            "description": {
+                "S": "Fun polls to break the ice and learn about team members"
+            },
+            "basePrompt": {
+                "S": "Generate fun and engaging poll questions that help team members get to know each other"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "poll"
+                    },
+                    {
+                        "S": "icebreaker"
+                    },
+                    {
+                        "S": "team-building"
+                    },
+                    {
+                        "S": "fun"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#icebreaker-polls#poll"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "icebreakers-fun"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Icebreakers & Fun"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "easy"
+                    },
+                    "context": {
+                        "S": "Get to know your teammates better through fun and engaging prompts"
+                    },
+                    "customTitle": {
+                        "S": "Fun Icebreakers Session"
+                    },
+                    "audience": {
+                        "S": "New teams, remote teams, or groups looking to build rapport"
+                    },
+                    "numberOfCategories": {
+                        "N": "5"
+                    },
+                    "mustHaveCategories": {
+                        "S": "Personal Interests, Fun Facts, Dreams & Aspirations, Hidden Talents, Life Experiences"
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Subject (1-4 words)\", \"detail\": \"One sentence of framing for the subject\", \"category\": \"Category\", \"customInstructions\": \"Enter up to 10 words or short phrases that come to mind when you think about this subject.\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "wavelength"
+            },
+            "description": {
+                "S": "Fun, relatable subjects for playful word association"
+            },
+            "basePrompt": {
+                "S": "Create wavelength subjects for a team word-association alignment game. Each item is a single short, evocative SUBJECT (1-4 words, e.g. \"Remote Work\", \"Customer Trust\") that every participant responds to by listing up to 10 words or short phrases that come to mind; the game then measures how many words overlap across participants. Pick subjects broad enough that everyone can produce 10 associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer. Draw fun, universally relatable subjects (e.g. \"Monday Mornings\", \"Office Coffee\", \"Summer Vacation\") that spark playful associations and easy laughs when the overlap is revealed."
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "wavelength"
+                    },
+                    {
+                        "S": "icebreakers"
+                    },
+                    {
+                        "S": "fun"
+                    },
+                    {
+                        "S": "personal"
+                    },
+                    {
+                        "S": "team-building"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#icebreakers-fun#wavelength"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "interview-prep"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Interview Preparation"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "context": {
+                        "S": "Comprehensive practice session for job interviews with scenario-based questions"
+                    },
+                    "customTitle": {
+                        "S": "Interview Preparation Workshop"
+                    },
+                    "audience": {
+                        "S": "Job seekers, career changers, and professionals seeking advancement"
+                    },
+                    "numberOfCategories": {
+                        "N": "3"
+                    },
+                    "mustHaveCategories": {
+                        "S": "Behavioral Questions, Technical Skills, Situational Judgment"
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Title\", \"category\": \"Category\", \"detail\": \"Description\", \"school\": \"Professional Development\", \"customInstructions\": \"Instructions\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize scenarios into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "call-and-answer"
+            },
+            "description": {
+                "S": "Practice questions for job interviews and assessments"
+            },
+            "basePrompt": {
+                "S": "Create interview-style questions that help candidates prepare and practice their responses"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "scenarios"
+                    },
+                    {
+                        "S": "interview-prep"
+                    },
+                    {
+                        "S": "career"
+                    },
+                    {
+                        "S": "preparation"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#interview-prep#call-and-answer"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "lessons-learned"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Lessons Learned Scenarios"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "context": {
+                        "S": "Professional development workshop focusing on real-world challenges and the valuable lessons learned from them"
+                    },
+                    "customTitle": {
+                        "S": "Lessons Learned Workshop"
+                    },
+                    "audience": {
+                        "S": "Team leaders, project managers, and experienced professionals"
+                    },
+                    "numberOfCategories": {
+                        "N": "4"
+                    },
+                    "mustHaveCategories": {
+                        "S": "Leadership, Project Management, Team Dynamics, Problem Resolution"
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Title\", \"category\": \"Category\", \"detail\": \"Description\", \"school\": \"Professional Development\", \"customInstructions\": \"Instructions\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize scenarios into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "call-and-answer"
+            },
+            "description": {
+                "S": "Real-world situations where teams learned valuable lessons"
+            },
+            "basePrompt": {
+                "S": "Create scenarios based on common workplace challenges and the lessons learned from them"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "scenarios"
+                    },
+                    {
+                        "S": "lessons-learned"
+                    },
+                    {
+                        "S": "workplace"
+                    },
+                    {
+                        "S": "professional-development"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#lessons-learned#call-and-answer"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "lists-favorites"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Lists & Favorites"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "easy"
+                    },
+                    "context": {
+                        "S": "Share personal preferences and recommendations with your team through curated lists"
+                    },
+                    "customTitle": {
+                        "S": "Lists & Favorites Workshop"
+                    },
+                    "audience": {
+                        "S": "All team members looking to connect and share interests"
+                    },
+                    "numberOfCategories": {
+                        "N": "5"
+                    },
+                    "mustHaveCategories": {
+                        "S": "Entertainment, Professional Resources, Places & Travel, Personal Growth, Hobbies & Interests"
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Subject (1-4 words)\", \"detail\": \"One sentence of framing for the subject\", \"category\": \"Category\", \"customInstructions\": \"Enter up to 10 words or short phrases that come to mind when you think about this subject.\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "wavelength"
+            },
+            "description": {
+                "S": "Everyday life and personal interest subjects for word-association alignment"
+            },
+            "basePrompt": {
+                "S": "Create wavelength subjects for a team word-association alignment game. Each item is a single short, evocative SUBJECT (1-4 words, e.g. \"Remote Work\", \"Customer Trust\") that every participant responds to by listing up to 10 words or short phrases that come to mind; the game then measures how many words overlap across participants. Pick subjects broad enough that everyone can produce 10 associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer. Draw subjects from everyday life and personal interests: entertainment, food, travel, hobbies, and shared experiences (e.g. \"Road Trips\", \"Comfort Food\") so participants can compare their spontaneous associations."
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "wavelength"
+                    },
+                    {
+                        "S": "lists"
+                    },
+                    {
+                        "S": "favorites"
+                    },
+                    {
+                        "S": "personal"
+                    },
+                    {
+                        "S": "sharing"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#lists-favorites#wavelength"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "opinion-polls"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Opinion & Preference Polls"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "numberOfCategories": {
+                        "N": "3"
+                    },
+                    "mustHaveCategories": {
+                        "S": "Preferences, Opinions, Viewpoints"
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Question/prompt\", \"detail\": \"Background context\", \"category\": \"Category\", \"customInstructions\": \"Response guidance\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize polls into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "poll"
+            },
+            "description": {
+                "S": "Gather opinions and preferences from participants"
+            },
+            "basePrompt": {
+                "S": "Create poll questions that gather opinions, preferences, and viewpoints on various topics"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "poll"
+                    },
+                    {
+                        "S": "opinion"
+                    },
+                    {
+                        "S": "preference"
+                    },
+                    {
+                        "S": "feedback"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#opinion-polls#poll"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "problem-solving"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Problem-Solving Challenges"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "context": {
+                        "S": "Interactive session designed to tackle current workplace challenges through collaborative problem-solving"
+                    },
+                    "customTitle": {
+                        "S": "Problem-Solving Challenge Session"
+                    },
+                    "audience": {
+                        "S": "Cross-functional teams, managers, and solution-oriented professionals"
+                    },
+                    "numberOfCategories": {
+                        "N": "5"
+                    },
+                    "mustHaveCategories": {
+                        "S": "Technical Challenges, Process Improvement, Team Collaboration, Innovation, Risk Management"
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Title\", \"category\": \"Category\", \"detail\": \"Description\", \"school\": \"Professional Development\", \"customInstructions\": \"Instructions\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize scenarios into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "call-and-answer"
+            },
+            "description": {
+                "S": "Current problems your team is tackling that need solutions"
+            },
+            "basePrompt": {
+                "S": "Generate problem scenarios that require creative thinking and collaborative solutions"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "scenarios"
+                    },
+                    {
+                        "S": "problem-solving"
+                    },
+                    {
+                        "S": "workplace"
+                    },
+                    {
+                        "S": "collaboration"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#problem-solving#call-and-answer"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "subject-specific"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nTopic: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Subject-Specific Trivia"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "numChoices": {
+                        "N": "4"
+                    },
+                    "numCorrect": {
+                        "N": "1"
+                    },
+                    "numberOfCategories": {
+                        "N": "3"
+                    },
+                    "mustHaveCategories": {
+                        "S": ""
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Short title\", \"questionDetail\": \"Full question text\", \"category\": \"Category\", \"optionA\": \"Choice A\", \"optionB\": \"Choice B\", \"optionC\": \"Choice C\", \"optionD\": \"Choice D\", \"correctAnswer\": \"OptionA\", \"answerDetails\": \"Explanation\", \"difficulty\": \"easy|medium|hard\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize questions into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "trivia"
+            },
+            "description": {
+                "S": "Deep dive into a specific subject or field"
+            },
+            "basePrompt": {
+                "S": "Generate trivia questions focused on a specific subject area with varying difficulty levels"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "trivia"
+                    },
+                    {
+                        "S": "subject-specific"
+                    },
+                    {
+                        "S": "focused"
+                    },
+                    {
+                        "S": "education"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#subject-specific#trivia"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "team-building"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Team Building Exercises"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "context": {
+                        "S": "Collaborative exercises designed to strengthen team bonds and improve communication"
+                    },
+                    "customTitle": {
+                        "S": "Team Building Workshop"
+                    },
+                    "audience": {
+                        "S": "Team members, project groups, and departments looking to improve collaboration"
+                    },
+                    "numberOfCategories": {
+                        "N": "3"
+                    },
+                    "mustHaveCategories": {
+                        "S": "Communication, Trust Building, Conflict Resolution"
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Title\", \"category\": \"Category\", \"detail\": \"Description\", \"school\": \"Professional Development\", \"customInstructions\": \"Instructions\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize scenarios into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "call-and-answer"
+            },
+            "description": {
+                "S": "Scenarios that promote team collaboration and communication"
+            },
+            "basePrompt": {
+                "S": "Create team-building scenarios that encourage discussion and collaboration"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "scenarios"
+                    },
+                    {
+                        "S": "team-building"
+                    },
+                    {
+                        "S": "collaboration"
+                    },
+                    {
+                        "S": "communication"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#team-building#call-and-answer"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "tech-terms"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Technology Terms"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "context": {
+                        "S": "Word association exercise using technology and software development concepts"
+                    },
+                    "customTitle": {
+                        "S": "Technology Terms Wavelength"
+                    },
+                    "audience": {
+                        "S": "Software developers, technical teams, and technology professionals"
+                    },
+                    "numberOfCategories": {
+                        "N": "4"
+                    },
+                    "mustHaveCategories": {
+                        "S": "Programming, Cloud Computing, Development Tools, Architecture"
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Subject (1-4 words)\", \"detail\": \"One sentence of framing for the subject\", \"category\": \"Category\", \"customInstructions\": \"Enter up to 10 words or short phrases that come to mind when you think about this subject.\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "wavelength"
+            },
+            "description": {
+                "S": "Technology subjects for word-association alignment"
+            },
+            "basePrompt": {
+                "S": "Create wavelength subjects for a team word-association alignment game. Each item is a single short, evocative SUBJECT (1-4 words, e.g. \"Remote Work\", \"Customer Trust\") that every participant responds to by listing up to 10 words or short phrases that come to mind; the game then measures how many words overlap across participants. Pick subjects broad enough that everyone can produce 10 associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer. Draw subjects from technology and software development: languages, practices, tools, platforms, and architecture concepts."
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "wavelength"
+                    },
+                    {
+                        "S": "technology"
+                    },
+                    {
+                        "S": "programming"
+                    },
+                    {
+                        "S": "technical"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#tech-terms#wavelength"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0.0"
+            },
+            "scenarioType": {
+                "S": "workplace-trivia"
+            },
+            "status": {
+                "S": "active"
+            },
+            "contextTemplate": {
+                "S": "\n\nContext: {context}"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "promptType": {
+                "S": "generation"
+            },
+            "name": {
+                "S": "Workplace & Business Trivia"
+            },
+            "defaultSettings": {
+                "M": {
+                    "difficulty": {
+                        "S": "medium"
+                    },
+                    "numChoices": {
+                        "N": "4"
+                    },
+                    "numCorrect": {
+                        "N": "1"
+                    },
+                    "numberOfCategories": {
+                        "N": "4"
+                    },
+                    "mustHaveCategories": {
+                        "S": "Business Strategy, Management, Finance, Professional Skills"
+                    }
+                }
+            },
+            "outputFormat": {
+                "S": "\n\nReturn as JSON array: [{\"title\": \"Short title\", \"questionDetail\": \"Full question text\", \"category\": \"Category\", \"optionA\": \"Choice A\", \"optionB\": \"Choice B\", \"optionC\": \"Choice C\", \"optionD\": \"Choice D\", \"correctAnswer\": \"OptionA\", \"answerDetails\": \"Explanation\", \"difficulty\": \"easy|medium|hard\"}]\nReturn ONLY the JSON array."
+            },
+            "categoryTemplate": {
+                "S": "\nOrganize questions into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}"
+            },
+            "audienceTemplate": {
+                "S": "\nAudience: {audience}"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:36:01.555Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameType": {
+                "S": "trivia"
+            },
+            "description": {
+                "S": "Business knowledge and workplace concepts"
+            },
+            "basePrompt": {
+                "S": "Create trivia questions about business concepts, workplace skills, and professional knowledge"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "trivia"
+                    },
+                    {
+                        "S": "business"
+                    },
+                    {
+                        "S": "workplace"
+                    },
+                    {
+                        "S": "professional"
+                    }
+                ]
+            },
+            "SK": {
+                "S": "AIPROMPT#GENERATION#workplace-trivia#trivia"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2025-07-31T11:09:20.443Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "md9ih6msyezugcusipp"
+            },
+            "name": {
+                "S": "Lessons Learned - Strategic Insights"
+            },
+            "updatedAt": {
+                "S": "2025-07-31T11:09:20.443Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "lessons-learned"
+            },
+            "category": {
+                "S": "lessons-learned"
+            },
+            "gameType": {
+                "S": "callandanswer"
+            },
+            "description": {
+                "S": "AI prompt for analyzing lessons learned scenarios and extracting strategic insights from team experiences"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "lessons-learned"
+                    },
+                    {
+                        "S": "strategic"
+                    },
+                    {
+                        "S": "retrospective"
+                    },
+                    {
+                        "S": "analysis"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/callandanswer/md9ih6msyezugcusipp/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#md9ih6msyezugcusipp"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2025-07-31T11:09:21.229Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "md9ih6t7cua7c1bd7yf"
+            },
+            "name": {
+                "S": "Problem-Solving - Solution Architecture"
+            },
+            "updatedAt": {
+                "S": "2025-07-31T11:09:21.229Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "problem-solving"
+            },
+            "category": {
+                "S": "problem-solving"
+            },
+            "gameType": {
+                "S": "callandanswer"
+            },
+            "description": {
+                "S": "AI prompt for analyzing problem-solving approaches and building comprehensive solution frameworks"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "problem-solving"
+                    },
+                    {
+                        "S": "solutions"
+                    },
+                    {
+                        "S": "architecture"
+                    },
+                    {
+                        "S": "systematic"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/callandanswer/md9ih6t7cua7c1bd7yf/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#md9ih6t7cua7c1bd7yf"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2025-07-31T11:09:21.271Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "md9ih6v723cs9vv9f1n"
+            },
+            "name": {
+                "S": "Amazon Leadership Principles - Application Guide"
+            },
+            "updatedAt": {
+                "S": "2025-07-31T11:09:21.271Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "amazon-principles"
+            },
+            "category": {
+                "S": "amazon-principles"
+            },
+            "gameType": {
+                "S": "callandanswer"
+            },
+            "description": {
+                "S": "AI prompt for analyzing responses related to Amazon Leadership Principles and their practical application"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "amazon"
+                    },
+                    {
+                        "S": "leadership"
+                    },
+                    {
+                        "S": "principles"
+                    },
+                    {
+                        "S": "development"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/callandanswer/md9ih6v723cs9vv9f1n/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#md9ih6v723cs9vv9f1n"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2025-07-31T11:09:21.317Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "md9ih6wc4wtuywzbgv5"
+            },
+            "name": {
+                "S": "Interview Preparation - STAR Method Analysis"
+            },
+            "updatedAt": {
+                "S": "2025-07-31T11:09:21.317Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "interview-prep"
+            },
+            "category": {
+                "S": "interview-prep"
+            },
+            "gameType": {
+                "S": "callandanswer"
+            },
+            "description": {
+                "S": "AI prompt for analyzing interview responses and providing feedback using the STAR (Situation, Task, Action, Result) method"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "interview"
+                    },
+                    {
+                        "S": "STAR"
+                    },
+                    {
+                        "S": "coaching"
+                    },
+                    {
+                        "S": "preparation"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/callandanswer/md9ih6wc4wtuywzbgv5/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#md9ih6wc4wtuywzbgv5"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2025-07-31T11:09:21.354Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "md9ih6xhs8u5x3t3w8"
+            },
+            "name": {
+                "S": "Team Building - Collaboration Insights"
+            },
+            "updatedAt": {
+                "S": "2025-07-31T11:09:21.354Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "team-building"
+            },
+            "category": {
+                "S": "team-building"
+            },
+            "gameType": {
+                "S": "callandanswer"
+            },
+            "description": {
+                "S": "AI prompt for analyzing team building responses and fostering stronger collaboration and communication"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "team-building"
+                    },
+                    {
+                        "S": "collaboration"
+                    },
+                    {
+                        "S": "communication"
+                    },
+                    {
+                        "S": "dynamics"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/callandanswer/md9ih6xhs8u5x3t3w8/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#md9ih6xhs8u5x3t3w8"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2025-07-31T11:09:21.401Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "md9ih6yn38deavcfj2s"
+            },
+            "name": {
+                "S": "Opinion Analysis - Perspective Synthesis"
+            },
+            "updatedAt": {
+                "S": "2025-07-31T11:09:21.401Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "opinions"
+            },
+            "category": {
+                "S": "opinions"
+            },
+            "gameType": {
+                "S": "callandanswer"
+            },
+            "description": {
+                "S": "AI prompt for analyzing diverse opinions and finding common ground while respecting different viewpoints"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "opinions"
+                    },
+                    {
+                        "S": "perspectives"
+                    },
+                    {
+                        "S": "consensus"
+                    },
+                    {
+                        "S": "dialogue"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/callandanswer/md9ih6yn38deavcfj2s/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#md9ih6yn38deavcfj2s"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2025-07-31T11:09:21.443Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "md9ih6zobuubmvvc8vr"
+            },
+            "name": {
+                "S": "Custom Scenario - Adaptive Analysis"
+            },
+            "updatedAt": {
+                "S": "2025-07-31T11:09:21.443Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "custom"
+            },
+            "category": {
+                "S": "custom"
+            },
+            "gameType": {
+                "S": "callandanswer"
+            },
+            "description": {
+                "S": "Flexible AI prompt template that adapts to any custom scenario or business context"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "custom"
+                    },
+                    {
+                        "S": "flexible"
+                    },
+                    {
+                        "S": "adaptive"
+                    },
+                    {
+                        "S": "general"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/callandanswer/md9ih6zobuubmvvc8vr/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#md9ih6zobuubmvvc8vr"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2025-07-28T23:54:41.577Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "mdnrm2awjobwax0vcdl"
+            },
+            "name": {
+                "S": "Trivia Basic - Learning Analysis"
+            },
+            "updatedAt": {
+                "S": "2025-07-28T23:54:41.577Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "trivia-basic"
+            },
+            "category": {
+                "S": "general"
+            },
+            "gameType": {
+                "S": "trivia"
+            },
+            "description": {
+                "S": "AI prompt for analyzing trivia results focusing on learning insights and knowledge retention"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "trivia"
+                    },
+                    {
+                        "S": "basic"
+                    },
+                    {
+                        "S": "learning"
+                    },
+                    {
+                        "S": "knowledge"
+                    },
+                    {
+                        "S": "education"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/trivia/mdnrm2awjobwax0vcdl/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#mdnrm2awjobwax0vcdl"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2025-07-28T23:54:41.624Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "mdnrm2c8jcy4dsf2ol"
+            },
+            "name": {
+                "S": "Workie's Trivia Analysis - Team Performance & Learning"
+            },
+            "updatedAt": {
+                "S": "2025-07-28T23:54:41.624Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "workie-trivia"
+            },
+            "category": {
+                "S": "general"
+            },
+            "gameType": {
+                "S": "trivia"
+            },
+            "description": {
+                "S": "Workie analyzes trivia results with humor, insights about correct answers, and explanations for common wrong answers"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "trivia"
+                    },
+                    {
+                        "S": "workie"
+                    },
+                    {
+                        "S": "team-analysis"
+                    },
+                    {
+                        "S": "learning"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/trivia/mdnrm2c8jcy4dsf2ol/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#mdnrm2c8jcy4dsf2ol"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2025-07-28T23:54:41.663Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "mdnrm2dbqn90b99yvv"
+            },
+            "name": {
+                "S": "General Trivia - Knowledge Assessment"
+            },
+            "updatedAt": {
+                "S": "2025-07-28T23:54:41.663Z"
+            },
+            "isDefault": {
+                "BOOL": false
+            },
+            "scenario": {
+                "S": "general"
+            },
+            "category": {
+                "S": "general"
+            },
+            "gameType": {
+                "S": "trivia"
+            },
+            "description": {
+                "S": "AI prompt for analyzing trivia performance and providing educational insights"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "trivia"
+                    },
+                    {
+                        "S": "general"
+                    },
+                    {
+                        "S": "knowledge"
+                    },
+                    {
+                        "S": "learning"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/trivia/mdnrm2dbqn90b99yvv/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#mdnrm2dbqn90b99yvv"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2025-07-28T23:54:41.705Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "mdnrm2eh90kvqlwekeo"
+            },
+            "name": {
+                "S": "Business Trivia - Strategic Knowledge"
+            },
+            "updatedAt": {
+                "S": "2025-07-28T23:54:41.705Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "business"
+            },
+            "category": {
+                "S": "business"
+            },
+            "gameType": {
+                "S": "trivia"
+            },
+            "description": {
+                "S": "AI prompt for analyzing business trivia performance and connecting knowledge to strategic thinking"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "business"
+                    },
+                    {
+                        "S": "strategy"
+                    },
+                    {
+                        "S": "knowledge"
+                    },
+                    {
+                        "S": "application"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/trivia/mdnrm2eh90kvqlwekeo/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#mdnrm2eh90kvqlwekeo"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2025-07-28T23:54:41.765Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "mdnrm2g5xxdgbqn9dwc"
+            },
+            "name": {
+                "S": "Technology Trivia - Innovation Insights"
+            },
+            "updatedAt": {
+                "S": "2025-07-28T23:54:41.765Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "technology"
+            },
+            "category": {
+                "S": "technology"
+            },
+            "gameType": {
+                "S": "trivia"
+            },
+            "description": {
+                "S": "AI prompt for analyzing technology trivia and connecting knowledge to innovation and development"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "technology"
+                    },
+                    {
+                        "S": "innovation"
+                    },
+                    {
+                        "S": "development"
+                    },
+                    {
+                        "S": "application"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/trivia/mdnrm2g5xxdgbqn9dwc/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#mdnrm2g5xxdgbqn9dwc"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2025-07-28T23:54:41.797Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "mdnrm2h1gvg2h5w3sz6"
+            },
+            "name": {
+                "S": "Opinion Polls - Consensus Building"
+            },
+            "updatedAt": {
+                "S": "2025-07-28T23:54:41.797Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "opinion"
+            },
+            "category": {
+                "S": "opinion"
+            },
+            "gameType": {
+                "S": "polls"
+            },
+            "description": {
+                "S": "AI prompt for analyzing opinion poll results and facilitating consensus building"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "polls"
+                    },
+                    {
+                        "S": "opinion"
+                    },
+                    {
+                        "S": "consensus"
+                    },
+                    {
+                        "S": "decision-making"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/polls/mdnrm2h1gvg2h5w3sz6/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#mdnrm2h1gvg2h5w3sz6"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2025-07-28T23:54:41.842Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "mdnrm2iazqbaxp003jr"
+            },
+            "name": {
+                "S": "Preference Polls - Choice Analysis"
+            },
+            "updatedAt": {
+                "S": "2025-07-28T23:54:41.842Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "preference"
+            },
+            "category": {
+                "S": "preference"
+            },
+            "gameType": {
+                "S": "polls"
+            },
+            "description": {
+                "S": "AI prompt for analyzing preference polls and understanding choice motivations"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "polls"
+                    },
+                    {
+                        "S": "preference"
+                    },
+                    {
+                        "S": "choice"
+                    },
+                    {
+                        "S": "decision"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/polls/mdnrm2iazqbaxp003jr/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#mdnrm2iazqbaxp003jr"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2025-07-28T23:54:41.877Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "mdnrm2j9chxemw5ciaf"
+            },
+            "name": {
+                "S": "Feedback Polls - Improvement Insights"
+            },
+            "updatedAt": {
+                "S": "2025-07-28T23:54:41.877Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "feedback"
+            },
+            "category": {
+                "S": "feedback"
+            },
+            "gameType": {
+                "S": "polls"
+            },
+            "description": {
+                "S": "AI prompt for analyzing feedback polls and generating actionable improvement recommendations"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "polls"
+                    },
+                    {
+                        "S": "feedback"
+                    },
+                    {
+                        "S": "improvement"
+                    },
+                    {
+                        "S": "actionable"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/polls/mdnrm2j9chxemw5ciaf/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#mdnrm2j9chxemw5ciaf"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2025-07-28T23:54:41.920Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "mdnrm2kg1pnan7p8ipf"
+            },
+            "name": {
+                "S": "Wavelength Basic - Team Connection Analysis"
+            },
+            "updatedAt": {
+                "S": "2025-07-28T23:54:41.920Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "wavelength-basic"
+            },
+            "category": {
+                "S": "general"
+            },
+            "gameType": {
+                "S": "wavelength"
+            },
+            "description": {
+                "S": "AI prompt for analyzing wavelength word association results and team collaboration insights"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "wavelength"
+                    },
+                    {
+                        "S": "word-association"
+                    },
+                    {
+                        "S": "team-connection"
+                    },
+                    {
+                        "S": "collaboration"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/wavelength/mdnrm2kg1pnan7p8ipf/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#mdnrm2kg1pnan7p8ipf"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2025-07-28T23:54:41.958Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "mdnrm2lisodcrq9gof"
+            },
+            "name": {
+                "S": "Wavelength Creative - Innovation Insights"
+            },
+            "updatedAt": {
+                "S": "2025-07-28T23:54:41.958Z"
+            },
+            "isDefault": {
+                "BOOL": false
+            },
+            "scenario": {
+                "S": "wavelength-creative"
+            },
+            "category": {
+                "S": "creative"
+            },
+            "gameType": {
+                "S": "wavelength"
+            },
+            "description": {
+                "S": "AI prompt focused on creativity and innovation insights from wavelength games"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "wavelength"
+                    },
+                    {
+                        "S": "creativity"
+                    },
+                    {
+                        "S": "innovation"
+                    },
+                    {
+                        "S": "brainstorming"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/wavelength/mdnrm2lisodcrq9gof/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#mdnrm2lisodcrq9gof"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:34:52.288Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "mr3lvwn4i329ako5dla"
+            },
+            "name": {
+                "S": "Trivia Basic - Learning Analysis"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:34:52.288Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "general"
+            },
+            "category": {
+                "S": "general"
+            },
+            "gameType": {
+                "S": "trivia"
+            },
+            "description": {
+                "S": "AI prompt for analyzing trivia results focusing on learning insights and knowledge retention"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "trivia"
+                    },
+                    {
+                        "S": "learning"
+                    },
+                    {
+                        "S": "knowledge"
+                    },
+                    {
+                        "S": "education"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/trivia/mr3lvwn4i329ako5dla/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#mr3lvwn4i329ako5dla"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:34:52.485Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "mr3lvwslqgapdbpi2mo"
+            },
+            "name": {
+                "S": "Business Trivia - Strategic Knowledge"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:34:52.485Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "business"
+            },
+            "category": {
+                "S": "business"
+            },
+            "gameType": {
+                "S": "trivia"
+            },
+            "description": {
+                "S": "AI prompt for analyzing business trivia results and connecting knowledge to strategic thinking"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "business"
+                    },
+                    {
+                        "S": "strategy"
+                    },
+                    {
+                        "S": "knowledge"
+                    },
+                    {
+                        "S": "decision-making"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/trivia/mr3lvwslqgapdbpi2mo/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#mr3lvwslqgapdbpi2mo"
+            }
+        },
+        {
+            "version": {
+                "S": "1.0"
+            },
+            "s3Bucket": {
+                "S": "engdev-ai-prompts"
+            },
+            "status": {
+                "S": "active"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:34:52.549Z"
+            },
+            "usageCount": {
+                "N": "0"
+            },
+            "createdBy": {
+                "S": "system"
+            },
+            "promptId": {
+                "S": "mr3lvwud6whj14571yw"
+            },
+            "name": {
+                "S": "Poll Analysis - Team Preferences"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:34:52.549Z"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "scenario": {
+                "S": "general"
+            },
+            "category": {
+                "S": "general"
+            },
+            "gameType": {
+                "S": "polls"
+            },
+            "description": {
+                "S": "AI prompt for analyzing poll results and understanding team preferences and decision patterns"
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "tags": {
+                "L": [
+                    {
+                        "S": "polls"
+                    },
+                    {
+                        "S": "preferences"
+                    },
+                    {
+                        "S": "consensus"
+                    },
+                    {
+                        "S": "decision-making"
+                    }
+                ]
+            },
+            "s3Key": {
+                "S": "prompts/polls/mr3lvwud6whj14571yw/v1.json"
+            },
+            "SK": {
+                "S": "AIPROMPT#mr3lvwud6whj14571yw"
+            }
+        },
+        {
+            "personaId": {
+                "S": "business-advisor"
+            },
+            "icon": {
+                "S": "ChartLineUp"
+            },
+            "tagline": {
+                "S": "Strategic, direct, focused on what to do next"
+            },
+            "voice": {
+                "S": "You are a seasoned advisor briefing a leadership team. Direct and specific. Draw the through-line between what people said and what the organisation should actually do. Prefer one concrete recommendation over three vague ones. Avoid buzzwords entirely — if a sentence could appear in any deck about any company, cut it."
+            },
+            "updatedAt": {
+                "S": "2026-08-08T00:20:02.756Z"
+            },
+            "status": {
+                "S": "active"
+            },
+            "isDefault": {
+                "BOOL": false
+            },
+            "gameTypes": {
+                "L": [
+                    {
+                        "S": "all"
+                    }
+                ]
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "name": {
+                "S": "The Business Advisor"
+            },
+            "sortOrder": {
+                "N": "30"
+            },
+            "SK": {
+                "S": "PERSONA#business-advisor"
+            }
+        },
+        {
+            "personaId": {
+                "S": "coach"
+            },
+            "icon": {
+                "S": "Target"
+            },
+            "tagline": {
+                "S": "Curious, developmental, asks the better question"
+            },
+            "updatedAt": {
+                "S": "2026-08-08T00:20:02.782Z"
+            },
+            "voice": {
+                "S": "You are a coach, not a consultant. You are more interested in what the group has not yet examined than in giving them answers. Reflect patterns back as questions. Be encouraging without being saccharine, and challenge gently where the group seems to be agreeing too easily."
+            },
+            "status": {
+                "S": "active"
+            },
+            "isDefault": {
+                "BOOL": false
+            },
+            "gameTypes": {
+                "L": [
+                    {
+                        "S": "all"
+                    }
+                ]
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "name": {
+                "S": "The Coach"
+            },
+            "sortOrder": {
+                "N": "40"
+            },
+            "SK": {
+                "S": "PERSONA#coach"
+            }
+        },
+        {
+            "personaId": {
+                "S": "comedian"
+            },
+            "tagline": {
+                "S": "Quick, warm, laughs with the room"
+            },
+            "icon": {
+                "S": "Confetti"
+            },
+            "voice": {
+                "S": "You are a quick-witted host with genuinely good comic timing. Be funny about the ANSWERS, never at the expense of the people who wrote them — punch at the idea, never the person. One good joke beats three weak ones. Land a real observation underneath the humour so the room gets something to think about as well as a laugh. Keep it clean enough for a work event."
+            },
+            "updatedAt": {
+                "S": "2026-08-08T00:20:02.728Z"
+            },
+            "status": {
+                "S": "active"
+            },
+            "isDefault": {
+                "BOOL": false
+            },
+            "gameTypes": {
+                "L": [
+                    {
+                        "S": "all"
+                    }
+                ]
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "name": {
+                "S": "The Comedian"
+            },
+            "sortOrder": {
+                "N": "20"
+            },
+            "SK": {
+                "S": "PERSONA#comedian"
+            }
+        },
+        {
+            "personaId": {
+                "S": "commentator"
+            },
+            "icon": {
+                "S": "Trophy"
+            },
+            "tagline": {
+                "S": "Play-by-play energy, calls the leaderboard"
+            },
+            "updatedAt": {
+                "S": "2026-08-08T00:20:02.842Z"
+            },
+            "voice": {
+                "S": "You are calling this session like a live sports broadcast. High energy, present tense, short punchy sentences. Treat the standings and the winning answer as the drama they are. Give the leaders their moment and keep it good-natured for everyone else. Do not overdo the sports metaphors — two or three land, ten become noise."
+            },
+            "status": {
+                "S": "active"
+            },
+            "isDefault": {
+                "BOOL": false
+            },
+            "gameTypes": {
+                "L": [
+                    {
+                        "S": "all"
+                    }
+                ]
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "name": {
+                "S": "The Sports Commentator"
+            },
+            "sortOrder": {
+                "N": "60"
+            },
+            "SK": {
+                "S": "PERSONA#commentator"
+            }
+        },
+        {
+            "personaId": {
+                "S": "facilitator"
+            },
+            "icon": {
+                "S": "UsersThree"
+            },
+            "tagline": {
+                "S": "Warm, clear, keeps the room moving"
+            },
+            "updatedAt": {
+                "S": "2026-08-08T00:20:02.695Z"
+            },
+            "voice": {
+                "S": "You are a skilled workshop facilitator. Warm, plain-spoken and concise. You notice what the group actually said and reflect it back so people feel heard. No corporate jargon, no filler praise. When responses disagree, name the disagreement plainly rather than smoothing it over."
+            },
+            "status": {
+                "S": "active"
+            },
+            "isDefault": {
+                "BOOL": true
+            },
+            "gameTypes": {
+                "L": [
+                    {
+                        "S": "all"
+                    }
+                ]
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "name": {
+                "S": "The Facilitator"
+            },
+            "sortOrder": {
+                "N": "10"
+            },
+            "SK": {
+                "S": "PERSONA#facilitator"
+            }
+        },
+        {
+            "personaId": {
+                "S": "historian"
+            },
+            "icon": {
+                "S": "Books"
+            },
+            "tagline": {
+                "S": "Adds the context and the good trivia"
+            },
+            "voice": {
+                "S": "You are a knowledgeable enthusiast who cannot resist good context. Connect what the group said to a relevant fact, origin story or precedent — one, chosen well, not a list. Only state things you are confident are true; if you are unsure of a detail, leave it out rather than hedge. The trivia should make people say \"huh, I did not know that\", not \"so what\"."
+            },
+            "updatedAt": {
+                "S": "2026-08-08T00:20:02.814Z"
+            },
+            "status": {
+                "S": "active"
+            },
+            "isDefault": {
+                "BOOL": false
+            },
+            "gameTypes": {
+                "L": [
+                    {
+                        "S": "all"
+                    }
+                ]
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "name": {
+                "S": "The Historian"
+            },
+            "sortOrder": {
+                "N": "50"
+            },
+            "SK": {
+                "S": "PERSONA#historian"
+            }
+        },
+        {
+            "personaId": {
+                "S": "sceptic"
+            },
+            "icon": {
+                "S": "MagnifyingGlass"
+            },
+            "tagline": {
+                "S": "Pokes holes, in a useful way"
+            },
+            "voice": {
+                "S": "You are the constructive dissenter in the room. Take the group's answers seriously enough to test them: what assumption is doing the heavy lifting, what would have to be true, what is the group not saying? Be rigorous, never sneering — the goal is a stronger conclusion, not a cleverer critic. Acknowledge what is genuinely good before you challenge it."
+            },
+            "updatedAt": {
+                "S": "2026-08-08T00:20:02.869Z"
+            },
+            "status": {
+                "S": "active"
+            },
+            "isDefault": {
+                "BOOL": false
+            },
+            "gameTypes": {
+                "L": [
+                    {
+                        "S": "all"
+                    }
+                ]
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "name": {
+                "S": "The Sceptic"
+            },
+            "sortOrder": {
+                "N": "70"
+            },
+            "SK": {
+                "S": "PERSONA#sceptic"
+            }
+        },
+        {
+            "personaId": {
+                "S": "storyteller"
+            },
+            "icon": {
+                "S": "ChatCircleText"
+            },
+            "tagline": {
+                "S": "Finds the narrative in the answers"
+            },
+            "voice": {
+                "S": "You find the story in what the group said. Open with the most human detail in the responses, then widen out to what it says about this team. Concrete images over abstractions. You are writing for the ear, not the eye — this gets read aloud off a screen at the front of a room."
+            },
+            "updatedAt": {
+                "S": "2026-08-08T00:20:02.894Z"
+            },
+            "status": {
+                "S": "active"
+            },
+            "isDefault": {
+                "BOOL": false
+            },
+            "gameTypes": {
+                "L": [
+                    {
+                        "S": "all"
+                    }
+                ]
+            },
+            "PK": {
+                "S": "AIPROMPTS"
+            },
+            "name": {
+                "S": "The Storyteller"
+            },
+            "sortOrder": {
+                "N": "80"
+            },
+            "SK": {
+                "S": "PERSONA#storyteller"
+            }
+        }
+    ],
+    "Count": 50,
+    "ScannedCount": 50,
+    "ConsumedCapacity": null
+}
