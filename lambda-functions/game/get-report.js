@@ -56,6 +56,10 @@ exports.handler = async (event) => {
         startedAt: report.startedAt,
         currentState: report.currentState,
         lessonNumber: report.lessonNumber,
+        // Per-set round-label override. This branch is an explicit whitelist,
+        // not a spread, so a field create-report.js stores is invisible to the
+        // host until it is named here.
+        roundNoun: report.roundNoun || null,
         gameStats: report.gameStats,
         playerPerformance: report.playerPerformance,
         

@@ -8,6 +8,37 @@ import { resolveInstruction, resolveRoundNoun } from './config/instructions';
 
 const API_BASE = window.API_BASE;
 
+// `fetchQuestionSetInstruction` runs on every question, and the only endpoint
+// that carries a set's customInstruction/roundNoun is the FULL /question-sets
+// list. That was O(questions) full-list downloads per player per game. The
+// metadata cannot change mid-game, so resolve each setId once and share the
+// answer across every player component instance. The value is the in-flight
+// promise, so N questions arriving together still make one request.
+const questionSetMetaCache = new Map();
+
+const loadQuestionSetMeta = (setId) => {
+  const cached = questionSetMetaCache.get(setId);
+  if (cached) return cached;
+
+  const pending = (async () => {
+    const response = await fetch(`${API_BASE}question-sets`);
+    if (!response.ok) throw new Error(`question-sets returned ${response.status}`);
+    const data = await response.json();
+    const questionSet = data.sets?.find((set) => set.id === setId);
+    return {
+      customInstruction: questionSet?.customInstruction || null,
+      roundNoun: questionSet?.roundNoun || null,
+    };
+  })();
+
+  // Never cache a failure: a transient network error would otherwise wedge the
+  // player on the default instruction for the rest of the game.
+  pending.catch(() => questionSetMetaCache.delete(setId));
+
+  questionSetMetaCache.set(setId, pending);
+  return pending;
+};
+
 // Utility function to calculate proper rankings with tie handling
 const calculatePlayerRankings = (players) => {
   // Sort players by score (descending)
@@ -455,20 +486,15 @@ function PlayerPage() {
     }
 
     try {
-      console.log('📋 PLAYER: Fetching instruction for set:', setId);
-      const response = await fetch(`${API_BASE}question-sets`);
-      if (response.ok) {
-        const data = await response.json();
-        const questionSet = data.sets?.find(set => set.id === setId);
-        if (questionSet && questionSet.customInstruction) {
-          console.log('📋 PLAYER: Found custom instruction:', questionSet.customInstruction);
-          setCustomInstruction(questionSet.customInstruction);
-        } else {
-          console.log('📋 PLAYER: No custom instruction found, using default');
-          setCustomInstruction(null);
-        }
-        setSetRoundNoun(questionSet?.roundNoun || null);
+      console.log('📋 PLAYER: Resolving instruction for set:', setId);
+      const meta = await loadQuestionSetMeta(setId);
+      if (meta.customInstruction) {
+        console.log('📋 PLAYER: Found custom instruction:', meta.customInstruction);
+      } else {
+        console.log('📋 PLAYER: No custom instruction found, using default');
       }
+      setCustomInstruction(meta.customInstruction);
+      setSetRoundNoun(meta.roundNoun);
     } catch (error) {
       console.error('Error fetching question set instruction:', error);
       setCustomInstruction(null);

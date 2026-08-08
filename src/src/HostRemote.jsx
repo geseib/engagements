@@ -106,9 +106,13 @@ function HostRemote() {
             <h2>Game: {gameId}</h2>
             {gameState && (
               <div className="game-details">
-                <p><strong>Title:</strong> {gameState.eventTitle}</p>
+                {/* GET /games/{id} (lambda-functions/game/get-game.js:50-61)
+                    emits `title` and `state`. It has never emitted `eventTitle`
+                    or `currentState`, so both of these rendered blank. It emits
+                    no player count at all — that needs GET /games/{id}/players. */}
+                <p><strong>Title:</strong> {gameState.title}</p>
                 <p><strong>Players:</strong> {gameState.playerCount || 0}</p>
-                <p><strong>State:</strong> {gameState.currentState}</p>
+                <p><strong>State:</strong> {gameState.state}</p>
                 <p>
                   {/* GET /games/{id} returns `lessonNumber`; `currentQuestionNumber`
                       is not a field it emits, so this always read 0. */}

@@ -155,11 +155,25 @@ exports.handler = async (event) => {
       return match ? match[1] : null;
     }).filter(Boolean))];
     
-    // Combine both sources and deduplicate
-    const questionNumbers = [...new Set([...questionNumbersFromVotes, ...questionNumbersFromResults])];
-    
+    // And from AI summaries. A round that produced a Workie summary but neither a
+    // vote nor a RESULTS record — a game ended mid-question, or any future
+    // non-voting flow — would otherwise be dropped from the report entirely,
+    // taking its Field Notes with it.
+    const questionNumbersFromAISummaries = [...new Set(aiSummaries.map(ai => {
+      // Extract question number from SK format: QUESTION#001#AISummary
+      const match = ai.SK.match(/QUESTION#(\d+)#AISummary/);
+      return match ? match[1] : null;
+    }).filter(Boolean))];
+
+    // Combine all three sources and deduplicate
+    const questionNumbers = [...new Set([
+      ...questionNumbersFromVotes,
+      ...questionNumbersFromResults,
+      ...questionNumbersFromAISummaries
+    ])];
+
     console.log(`📊 Found ${questionNumbers.length} questions to process: ${questionNumbers.join(', ')}`);
-    console.log(`📊 From votes: ${questionNumbersFromVotes.length}, from results: ${questionNumbersFromResults.length}`);
+    console.log(`📊 From votes: ${questionNumbersFromVotes.length}, from results: ${questionNumbersFromResults.length}, from AI summaries: ${questionNumbersFromAISummaries.length}`);
 
     for (const questionNumber of questionNumbers) {
       console.log(`📊 Processing question ${questionNumber} for report`);
@@ -345,7 +359,14 @@ exports.handler = async (event) => {
           detail: questionDetails?.Detail || questionDetails?.QuestionDetail || '',
           category: questionDetails?.Category || 'General',
           sourceQuestionId: sourceQuestionId,
-          
+
+          // Art Title rounds are ordinary call-and-answer sets that carry an
+          // image, so `image` is the ONLY thing that lets resolveRoundNoun()
+          // label the round "Artwork" in the report. `school` is the artist
+          // credit that goes with it.
+          image: questionDetails?.Image || questionDetails?.image || null,
+          school: questionDetails?.School || questionDetails?.school || null,
+
           // Trivia-specific fields
           ...(gameMetadata.Item.GameType === 'trivia' && questionDetails ? {
             questionDetail: questionDetails.QuestionDetail || questionDetails.Detail,
@@ -367,7 +388,12 @@ exports.handler = async (event) => {
         voteStats: {
           totalAnswers: questionAnswers.length,
           totalVotes: questionVotes.length,
-          maxScore: Math.max(...Object.values(answerScores)),
+          // Math.max() with no arguments is -Infinity, which JSON.stringify
+          // turns into null. Reachable whenever a round has no answers — now
+          // more so, since AI-summary-only rounds join the list above.
+          maxScore: Object.values(answerScores).length > 0
+            ? Math.max(...Object.values(answerScores))
+            : 0,
           averageScore: Object.values(answerScores).length > 0 ? 
             Math.round((Object.values(answerScores).reduce((sum, score) => sum + score, 0) / Object.values(answerScores).length) * 100) / 100 : 0
         },
@@ -380,6 +406,11 @@ exports.handler = async (event) => {
           fullResponse: questionAISummary.FullResponse,
           markdownResponse: questionAISummary.MarkdownResponse,
           generatedAt: questionAISummary.GeneratedAt,
+          // Which Workie voice wrote this. Tolerant read: summaries generated
+          // before the persona resolver started stamping the item carry neither
+          // spelling, and must stay renderable.
+          personaName: questionAISummary.PersonaName || questionAISummary.personaName || null,
+          personaId: questionAISummary.PersonaId || questionAISummary.personaId || null,
           hasStructuredData: !!(questionAISummary.SummaryText && questionAISummary.DiscussionQuestions)
         } : null,
         
@@ -479,7 +510,10 @@ exports.handler = async (event) => {
     // Create comprehensive report
     const reportData = {
       gameId,
-      gameTitle: gameMetadata.Item.EventTitle || 'Untitled Game',
+      // schema-compliant-manager.js writes the metadata attribute as `Title`;
+      // nothing has ever written `EventTitle`, so this always read
+      // "Untitled Game". Same tolerant order get-ai-summary.js:947 uses.
+      gameTitle: gameMetadata.Item.EventTitle || gameMetadata.Item.Title || 'Untitled Game',
       hostName: gameMetadata.Item.HostName || 'Unknown Host',
       questionSetId: gameMetadata.Item.QuestionSetId,
       gameType: gameMetadata.Item.GameType || 'standard',
@@ -487,7 +521,12 @@ exports.handler = async (event) => {
       startedAt: gameState.Item?.StartedAt,
       currentState: gameState.Item?.State || 'UNKNOWN',
       lessonNumber: gameState.Item?.LessonNumber || 0,
-      
+
+      // Per-set round-label override ("Lesson", "Scenario", ...). Top level
+      // because resolveRoundNoun() is called as
+      // resolveRoundNoun(questionData, reportData.gameType, reportData.roundNoun).
+      roundNoun: questionSetData?.roundNoun || questionSetData?.RoundNoun || null,
+
       // Statistics
       gameStats,
       
@@ -511,7 +550,8 @@ exports.handler = async (event) => {
         description: questionSetData.description || questionSetData.Description,
         category: questionSetData.category || questionSetData.Category,
         aiContext: questionSetData.aiContextInstruction || questionSetData.AIContextInstruction,
-        customInstruction: questionSetData.customInstruction || questionSetData.CustomInstruction
+        customInstruction: questionSetData.customInstruction || questionSetData.CustomInstruction,
+        roundNoun: questionSetData.roundNoun || questionSetData.RoundNoun || null
       } : null,
       
       // Metadata
