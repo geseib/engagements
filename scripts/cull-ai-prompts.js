@@ -203,9 +203,28 @@ const label = (i) => `${i.SK}${i.name ? `  "${i.name}"` : ''}`;
 
   // ---- pass 4: one isDefault per game type ------------------------------
   if (wants('defaults')) {
+    // `isDefault` means two different things depending on the kind of prompt,
+    // and only one of them matters here.
+    //
+    // For a SUMMARY prompt it is load-bearing: get-ai-summary.js scans
+    // `isDefault = true` to pick the fallback for a game type, so a collision
+    // makes that pick arbitrary. For a GENERATION prompt it is only a "Default"
+    // badge in AIGenerationPromptEditor.
+    //
+    // Before the generation rows were re-keyed they lived under
+    // AIPROMPT#GENERATION#... and never collided with summary prompts. Now they
+    // share the AIPROMPT#<promptId> namespace, so grouping purely by gameType
+    // would silently strip badges off the generation library on every run.
+    // Scope the dedup to summary prompts and leave generation alone.
+    const isGeneration = (i) => String(i.promptId || '').startsWith('gen-')
+      || String(i.promptType || '') === 'generation'
+      || (!i.template && !i.instructions && !!i.basePrompt);
+
     const byType = new Map();
+    let generationSkipped = 0;
     for (const item of prompts) {
       if (!item.isDefault || !item.promptId) continue;
+      if (isGeneration(item)) { generationSkipped++; continue; }
       const t = normalizeGameType(item.gameType);
       if (!byType.has(t)) byType.set(t, []);
       byType.get(t).push(item);
@@ -213,6 +232,9 @@ const label = (i) => `${i.SK}${i.name ? `  "${i.name}"` : ''}`;
 
     let cleared = 0;
     console.log('[defaults] resolving isDefault collisions');
+    if (generationSkipped) {
+      console.log(`  (skipping ${generationSkipped} generation prompt(s) — their isDefault is a badge, not a lookup)`);
+    }
     for (const [type, candidates] of byType) {
       if (candidates.length <= 1) {
         console.log(`  ${type}: 1 default — ok (${candidates[0].promptId})`);
