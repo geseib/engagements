@@ -611,6 +611,32 @@
   margin-bottom: 20px;
 }
 
+/* AI-suggested tags on a generated scenario. Suggested, not imposed — the
+   field stays editable and the chips are a read-out of what will be saved. */
+.field-hint {
+  font-weight: normal;
+  color: #6c757d;
+  font-size: 12px;
+}
+
+.tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tag-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: #eef2f7;
+  border: 1px solid #d6e0ea;
+  color: #35506b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .scenario-actions {
   display: flex;
   justify-content: center;

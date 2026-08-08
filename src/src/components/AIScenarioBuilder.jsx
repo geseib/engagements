@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { authFetch } from '../auth/authFetch';
-import { postGenerationBatch, planGenerationTopics, dropNearDuplicates, runWithConcurrency } from '../utils/aiBatchClient';
+import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
+import { normalizeTags } from '../utils/tags';
 import Icon from './Icon';
 
 const API_BASE = window.API_BASE;
@@ -29,6 +30,10 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   const [currentScenarioIndex, setCurrentScenarioIndex] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStatus, setGenerationStatus] = useState('');
+  // Raw text of the tag field while it is being edited. null = not editing, so
+  // the input falls back to the scenario's stored tags. Normalising on every
+  // keystroke would eat the hyphen out of "remote-" as it is typed.
+  const [tagDraft, setTagDraft] = useState(null);
   const [availablePrompts, setAvailablePrompts] = useState([]);
   const [loadingPrompts, setLoadingPrompts] = useState(true);
   const [promptsError, setPromptsError] = useState(null);
@@ -413,131 +418,54 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         basePrompt += `\n\nAdditional Requirements: ${scenarioConfig.customPrompt}`;
       }
 
-      // Break large requests into small parallel batches. API Gateway HTTP
-      // APIs have a hard ~30s integration timeout. Scenarios are the heaviest
-      // items (~700 output tokens each) and Sonnet generation speed has tail
-      // variance — at 2/batch the occasional slow generation grazed the 29s
-      // ceiling (503 + retry), so scenarios run 1/batch (~8-12s, wide margin);
-      // parallelism keeps total wall-clock roughly the same. Wavelength items
-      // are tiny (a short subject + one framing sentence), so larger batches
-      // still finish comfortably under the timeout.
-      const CHUNK_SIZE = engagementType === 'wavelength' ? 5 : 1;
-      const MAX_PARALLEL = 3; // cap concurrency to respect Bedrock rate limits
-      const totalCount = scenarioConfig.count;
-      const chunks = Math.ceil(totalCount / CHUNK_SIZE);
-
-      // Determine the correct scenarioType for the backend
+      // Generation runs as an ASYNCHRONOUS JOB, not inside this request.
+      //
+      // It used to fan out one Bedrock call per scenario — twenty calls for
+      // twenty scenarios — because each call had to finish inside API Gateway's
+      // hard 30s integration timeout. It never did: CloudWatch put this endpoint
+      // at 28.4s average and 40.1s maximum, so the gateway returned its own 503
+      // while the Lambda was still working, and retrying only repeated it. The
+      // per-call floor was already 1700 output tokens (~38s), so no batch size
+      // could have fitted.
+      //
+      // The endpoint now returns a jobId immediately and we poll. One call can
+      // then write every scenario at once, which is also what stops the
+      // duplicates: twenty parallel calls were each blind to the other nineteen.
+      const endpoint = `${API_BASE}admin/ai-generate-scenarios`;
       const backendScenarioType = selectedType?.source === 'database' && selectedType.dbPrompt
         ? selectedType.dbPrompt.scenarioType
         : scenarioConfig.type;
 
-      // Two-phase generation: when the request spans multiple parallel
-      // batches, first plan ONE list of distinct topics (a small fast call),
-      // then anchor each batch to its assigned slice of that list so batches
-      // can't duplicate each other. If planning fails we fall back to the
-      // older rotating angle hints below.
-      let plannedTopics = null;
-      if (chunks > 1) {
-        // basePrompt already includes context/audience/customPrompt, so the
-        // planning brief only needs the assembled prompt itself
-        plannedTopics = await planGenerationTopics(`${API_BASE}admin/ai-generate-scenarios`, {
-          scenarioType: backendScenarioType,
-          engagementType: engagementType,
-          prompt: basePrompt,
-          difficulty: scenarioConfig.difficulty
-        }, totalCount, {
-          label: 'Topic planning',
-          onStatus: setGenerationStatus
-        });
-      }
+      const { jobId } = await startGenerationJob(endpoint, {
+        scenarioType: backendScenarioType,
+        engagementType: engagementType,
+        prompt: basePrompt,
+        count: scenarioConfig.count,
+        difficulty: scenarioConfig.difficulty,
+        context: scenarioConfig.context,
+        audience: scenarioConfig.audience,
+        customPrompt: scenarioConfig.customPrompt,
+        customTitle: scenarioConfig.customTitle,
+        numberOfCategories: scenarioConfig.numberOfCategories,
+        mustHaveCategories: scenarioConfig.mustHaveCategories
+      }, { label: 'Generation', onStatus: setGenerationStatus });
 
-      // Fallback angle hints, used only when topic planning is unavailable.
-      const batchAngles = engagementType === 'wavelength'
-        ? [
-            'concrete everyday objects, places, and activities',
-            'abstract concepts, values, and emotions',
-            'work life: processes, events, and milestones',
-            'people, roles, and relationships',
-            'industry and domain-specific themes',
-            'culture, habits, and shared experiences'
-          ]
-        : [
-            'everyday, day-to-day situations',
-            'high-pressure or time-critical situations',
-            'interpersonal and communication-focused situations',
-            'strategic or long-term planning situations',
-            'unexpected situations that require creative thinking',
-            'cross-team or organizational situations'
-          ];
-      const requiredCategories = (scenarioConfig.mustHaveCategories || '')
-        .split(',')
-        .map(c => c.trim())
-        .filter(Boolean);
-
-      let completedScenarios = 0;
-      setGenerationStatus(`Generating ${totalCount} scenario${totalCount > 1 ? 's' : ''} in ${chunks} batch${chunks > 1 ? 'es' : ''}...`);
-
-      const batchTasks = Array.from({ length: chunks }, (_, i) => async () => {
-        const chunkSize = Math.min(CHUNK_SIZE, totalCount - (i * CHUNK_SIZE));
-
-        // Anchor this batch to its assigned slice of the planned topics;
-        // distinctness across parallel batches is then guaranteed by
-        // construction. The angle hint below is only the fallback path.
-        const assignedTopics = plannedTopics
-          ? plannedTopics.slice(i * CHUNK_SIZE, i * CHUNK_SIZE + chunkSize)
-          : undefined;
-        const otherTopics = plannedTopics
-          ? plannedTopics.filter((_, idx) => idx < i * CHUNK_SIZE || idx >= i * CHUNK_SIZE + chunkSize)
-          : undefined;
-
-        // Build the fallback differentiation hint separately and send it via
-        // customPrompt: the lambda appends customPrompt to whichever prompt
-        // template it uses (database or fallback), so the hint survives both
-        // paths without being duplicated.
-        let differentiationHint = '';
-        if (chunks > 1 && !plannedTopics) {
-          differentiationHint = `This request is part ${i + 1} of ${chunks} of a larger set generated in parallel. To avoid duplicating other parts, emphasize ${batchAngles[i % batchAngles.length]} and avoid the most obvious or commonly used examples.`;
-          if (requiredCategories.length > 0) {
-            differentiationHint += ` Where it fits, favor the category "${requiredCategories[i % requiredCategories.length]}" for this part.`;
+      const job = await pollGenerationJob(endpoint, jobId, {
+        label: 'Generation',
+        onStatus: setGenerationStatus,
+        // Show partial results as they land rather than a spinner for minutes.
+        onProgress: (update) => {
+          if (Array.isArray(update.items) && update.items.length > 0) {
+            setGeneratedScenarios(update.items);
           }
         }
-        const chunkCustomPrompt = [scenarioConfig.customPrompt, differentiationHint]
-          .filter(Boolean)
-          .join('\n\n');
-
-        const chunkPrompt = basePrompt + `\nNumber of ${engagementType === 'wavelength' ? 'subjects' : 'scenarios'} needed: ${chunkSize}`;
-
-        const result = await postGenerationBatch(`${API_BASE}admin/ai-generate-scenarios`, {
-          scenarioType: backendScenarioType,
-          engagementType: engagementType,
-          prompt: chunkPrompt,
-          count: chunkSize,
-          difficulty: scenarioConfig.difficulty,
-          context: scenarioConfig.context,
-          audience: scenarioConfig.audience,
-          customPrompt: chunkCustomPrompt,
-          customTitle: scenarioConfig.customTitle,
-          numberOfCategories: scenarioConfig.numberOfCategories,
-          mustHaveCategories: scenarioConfig.mustHaveCategories,
-          assignedTopics,
-          otherTopics
-        }, {
-          label: `Batch ${i + 1} of ${chunks}`,
-          onStatus: setGenerationStatus
-        });
-
-        completedScenarios += result.scenarios.length;
-        setGenerationStatus(`Generated ${completedScenarios} of ${totalCount} scenarios...`);
-        return result.scenarios;
       });
 
-      const batchResults = await runWithConcurrency(batchTasks, MAX_PARALLEL);
-      // Safety net: drop any near-duplicate titles that slipped through
-      const allScenarios = dropNearDuplicates(batchResults.flat());
-
-      setGeneratedScenarios(allScenarios);
+      setGeneratedScenarios(job.items);
       setGeneratedMetadata(null); // Will be generated later
-      setGenerationStatus(`Generated ${allScenarios.length} scenarios successfully`);
+      setGenerationStatus(
+        [`Generated ${job.items.length} scenarios successfully`, ...(job.warnings || [])].join(' ')
+      );
       setCurrentScenarioIndex(0);
       
     } catch (error) {
@@ -676,6 +604,8 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   };
 
   const navigateScenario = (direction) => {
+    // Drop any in-flight tag edit; it belongs to the scenario being left.
+    setTagDraft(null);
     if (direction === 'prev' && currentScenarioIndex > 0) {
       setCurrentScenarioIndex(currentScenarioIndex - 1);
     } else if (direction === 'next' && currentScenarioIndex < generatedScenarios.length - 1) {
@@ -1000,6 +930,36 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                         rows="2"
                         placeholder="Specific instructions for participants..."
                       />
+                    </div>
+
+                    {/*
+                      Suggested tags, not imposed tags. The model that just wrote
+                      the scenario is best placed to say what it is about, but the
+                      owner gets the final word before anything is saved. Stored
+                      as a flat lowercase kebab-case array under `tags` — the same
+                      field name and shape the AIPROMPT# rows already use.
+                    */}
+                    <div className="form-group">
+                      <label>Tags <span className="field-hint">suggested — edit freely, comma separated</span></label>
+                      <input
+                        type="text"
+                        value={tagDraft !== null ? tagDraft : (currentScenario?.tags || []).join(', ')}
+                        onChange={(e) => setTagDraft(e.target.value)}
+                        onBlur={() => {
+                          if (tagDraft !== null) {
+                            handleScenarioEdit(currentScenarioIndex, 'tags', normalizeTags(tagDraft));
+                            setTagDraft(null);
+                          }
+                        }}
+                        placeholder="remote-work, conflict-resolution, leadership"
+                      />
+                      {(currentScenario?.tags || []).length > 0 && (
+                        <div className="tag-chips">
+                          {currentScenario.tags.map((tag) => (
+                            <span className="tag-chip" key={tag}>{tag}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 

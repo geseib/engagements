@@ -927,6 +927,15 @@ Resources:
                 - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
                 - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
                 - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-6'
+        # Async generation: self-invoke worker (Event). A single detailed
+        # scenario measured 33-40s against API Gateway's hard 30s integration
+        # timeout, so generation cannot run inside the request. POST returns 202
+        # and this invoke does the work against the 900s function timeout.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-admin-ai-generate-scenarios'
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
@@ -937,6 +946,16 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-generate-scenarios
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # Job status poll. The admin builders have no gameId and no WebSocket,
+        # so results come back by polling rather than by broadcast.
+        AdminAIGenerateScenariosStatusEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/ai-generate-scenarios/{jobId}
+            Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:

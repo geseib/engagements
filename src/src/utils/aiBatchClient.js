@@ -153,6 +153,90 @@ export const dropNearDuplicates = (items, getTitle = (item) => item?.title) => {
   return kept;
 };
 
+// --- Asynchronous generation jobs -----------------------------------------
+//
+// Scenario generation no longer runs inside the HTTP request. It could not:
+// API Gateway's 30s integration timeout is a hard ceiling and a single detailed
+// scenario measured 33-40s in CloudWatch, so the gateway returned its own 503
+// while the Lambda was still working. That is the "HTTP 503" the batching code
+// above was built to retry around — retries never had a chance, because every
+// attempt was equally too slow.
+//
+// The endpoint now returns 202 + a jobId and a self-invoked worker does the
+// work. Results come back by polling: the admin builders have no gameId, so the
+// WebSocket channel get-ai-summary uses (broadcastToGame) is not available here.
+
+const POLL_INTERVAL_MS = 2000;
+const POLL_TIMEOUT_MS = 10 * 60 * 1000;
+
+// Kick off a generation job. Returns { jobId, requested }.
+export const startGenerationJob = async (url, payload, options = {}) => {
+  const { label = 'Generation', onStatus = () => {} } = options;
+  onStatus('Starting generation...');
+  const result = await postGenerationBatch(url, payload, { label, onStatus });
+  if (!result?.jobId) {
+    throw new Error(`${label}: server did not return a job id`);
+  }
+  return result;
+};
+
+// Poll a generation job to completion.
+//
+// Reports incremental progress rather than only a terminal result: a run that
+// takes minutes and says nothing is indistinguishable from a hung one, which is
+// most of why the old failure felt so bad.
+export const pollGenerationJob = async (url, jobId, options = {}) => {
+  const {
+    label = 'Generation',
+    onStatus = () => {},
+    onProgress = () => {},
+    intervalMs = POLL_INTERVAL_MS,
+    timeoutMs = POLL_TIMEOUT_MS,
+    isCancelled = () => false,
+  } = options;
+
+  const startedAt = Date.now();
+  let consecutiveErrors = 0;
+
+  while (true) {
+    if (isCancelled()) throw new Error(`${label}: cancelled`);
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error(`${label}: timed out after ${Math.round(timeoutMs / 60000)} minutes. The job may still finish - reopen the builder to check.`);
+    }
+
+    await sleep(intervalMs);
+
+    let job;
+    try {
+      const response = await authFetch(`${url}/${encodeURIComponent(jobId)}`, { method: 'GET' });
+      if (response.status === 404) {
+        throw new Error(`${label}: job ${jobId} not found or expired`);
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      job = await response.json();
+      consecutiveErrors = 0;
+    } catch (error) {
+      // A transient poll failure must not kill a job that is still running.
+      consecutiveErrors += 1;
+      if (consecutiveErrors >= 5) {
+        throw new Error(`${label}: lost contact with the job (${error.message})`);
+      }
+      onStatus(`⏳ ${label}: reconnecting...`);
+      continue;
+    }
+
+    onProgress(job);
+    if (job.phase) onStatus(job.phase);
+
+    if (job.status === 'complete') return job;
+    if (job.status === 'error') {
+      const err = new Error(job.error || `${label} failed`);
+      err.partialItems = job.items || [];
+      throw err;
+    }
+  }
+};
+
 // Run an array of async task functions with a concurrency cap.
 // Results are returned in task order. The first task failure rejects.
 export const runWithConcurrency = async (taskFns, limit = 3) => {

@@ -1,339 +1,397 @@
+/**
+ * AI scenario generation — asynchronous, structured, tag-suggesting.
+ *
+ * THE BUG THIS REPLACES. The old handler generated inside the HTTP request and
+ * the owner saw "Batch 2 of 20: HTTP 503 - retrying in 3s". The 503 was not
+ * Bedrock and not Lambda concurrency: this handler could only ever return 200,
+ * 429 or 500, and the client's error text was empty, meaning the body was not
+ * JSON. It came from API Gateway. `RestApi` is an AWS::Serverless::HttpApi,
+ * whose 30s integration timeout is a hard ceiling, and CloudWatch put this
+ * function's Duration at 28.4s average / 40.1s maximum. The gateway was hanging
+ * up on a Lambda that was still working.
+ *
+ * Batch size could not fix it. max_tokens was `1000 + count * 700` — 1700 even
+ * at count=1 — and at the ~45 output tokens/sec measured here that is ~38s of
+ * generation. The floor was already above the ceiling, which is why shrinking
+ * batches to one item made things worse rather than better.
+ *
+ * WHAT CHANGED
+ *   1. Async. POST creates a job and returns 202; a self-invoked worker runs
+ *      with the full 900s Lambda timeout; the client polls (see
+ *      shared/generation-jobs.js for why polling and not WebSocket).
+ *   2. Few large calls instead of many tiny ones. Twenty parallel one-item calls
+ *      were each blind to the other nineteen, which is why duplicates appeared.
+ *   3. Tool use instead of regex-parsing prose, plus a real truncation check.
+ *   4. Hard length limits in the prompt. Unbounded "detailed" output was the
+ *      root cause of BOTH the latency and the truncation.
+ *   5. Suggested tags, produced by the same call that writes the content.
+ *
+ * Also fixed: the prompt template lookup. This handler read
+ * `AIPROMPT#GENERATION#<scenarioType>#<engagementType>`, but the rows were
+ * re-keyed to `AIPROMPT#gen-<gameType>-<scenarioType>`. Every single invocation
+ * logged "No prompt template found … using fallback", so all 22 curated
+ * generation prompts were dead and the generic fallback — which has no length
+ * guidance — ran every time.
+ */
+
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
-const { planTopicList, buildTopicAssignmentText } = require('./shared/bedrock-utils');
+const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
+
+const { normalizeGameType, gameTypeSpellings } = require('./shared/game-types');
+const { normalizeTags } = require('./shared/tags');
+const {
+  itemsPerCall, maxTokensFor, perItemTokens,
+  lengthGuidance, tagGuidance, buildItemsTool, invokeStructured,
+} = require('./shared/structured-generation');
+const {
+  newJobId, createJob, updateJobProgress, completeJob, failJob, getJob, jobToResponse,
+} = require('./shared/generation-jobs');
 
 const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
+const lambda = new LambdaClient({ region: process.env.AWS_REGION });
 const tableName = process.env.TABLE_NAME;
-const dynamoClient = new DynamoDBClient({});
-const dynamodb = DynamoDBDocumentClient.from(dynamoClient, {
-  marshallOptions: {
-    removeUndefinedValues: true
-  }
+const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
+  marshallOptions: { removeUndefinedValues: true },
 });
 
-// Fallback prompt template used when no DynamoDB template exists. Wavelength
-// items are short SUBJECTS for word-association alignment (players list up to
-// 10 words each, the game measures overlap), so they get their own shape.
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+};
+const json = (statusCode, body) => ({ statusCode, body: JSON.stringify(body), headers: CORS });
+
+const MAX_COUNT = 100;
+/** Observed Sonnet throughput on this account. Used only to budget the deadline. */
+const OUTPUT_TOKENS_PER_SEC = 45;
+
+// ---------------------------------------------------------------- templates
+
 const buildFallbackTemplate = (engagementType, prompt) => {
   if (engagementType === 'wavelength') {
     return {
       basePrompt: prompt || 'Create wavelength subjects for a team word-association alignment game. Each item is a single short, evocative SUBJECT (1-4 words, e.g. "Remote Work", "Customer Trust") that every participant responds to by listing up to 10 words or short phrases that come to mind; the game then measures how many words overlap across participants. Pick subjects broad enough that everyone can produce 10 associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer.',
       contextTemplate: '\n\nContext: {context}',
       audienceTemplate: '\nAudience: {audience}',
-      categoryTemplate: '\nIMPORTANT: Organize subjects into EXACTLY {numberOfCategories} categories - no more, no less.\nMust include these categories: {mustHaveCategories}',
-      outputFormat: '\n\nReturn as JSON array: [{"title": "Subject (1-4 words)", "detail": "One sentence of framing for the subject", "category": "Category", "customInstructions": "Enter up to 10 words or short phrases that come to mind when you think about this subject."}]\nIMPORTANT: Use EXACTLY the specified number of categories. Return ONLY the JSON array.'
+      categoryTemplate: '\nOrganize subjects into EXACTLY {numberOfCategories} categories - no more, no less.\nMust include these categories: {mustHaveCategories}',
     };
   }
   return {
     basePrompt: prompt || 'Create scenarios based on the requirements provided',
     contextTemplate: '\n\nContext: {context}',
     audienceTemplate: '\nAudience: {audience}',
-    categoryTemplate: '\nIMPORTANT: Organize scenarios into EXACTLY {numberOfCategories} categories - no more, no less.\nMust include these categories: {mustHaveCategories}',
-    outputFormat: '\n\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "customInstructions": "Instructions"}]\nIMPORTANT: Use EXACTLY the specified number of categories. Return ONLY the JSON array.'
+    categoryTemplate: '\nOrganize scenarios into EXACTLY {numberOfCategories} categories - no more, no less.\nMust include these categories: {mustHaveCategories}',
   };
 };
 
-exports.handler = async (event) => {
+/**
+ * Find the curated prompt row.
+ *
+ * Tries every spelling the row may legitimately be stored under rather than one
+ * exact string — comparing raw game-type strings is exactly what kept this (and
+ * other) lookups silently empty. The legacy `AIPROMPT#GENERATION#…` key is still
+ * probed last because dev has been re-keyed and the other stacks may not be.
+ */
+async function resolvePromptTemplate({ scenarioType, engagementType, prompt }) {
+  const gameType = normalizeGameType(engagementType);
+  const type = String(scenarioType || '').trim().toLowerCase();
+  const candidates = [];
+  if (type) {
+    for (const spelling of gameTypeSpellings(gameType)) {
+      candidates.push(`AIPROMPT#gen-${spelling}-${type}`);
+    }
+    for (const spelling of gameTypeSpellings(gameType)) {
+      candidates.push(`AIPROMPT#GENERATION#${type}#${spelling}`);
+    }
+  }
+
+  for (const SK of candidates) {
+    try {
+      const res = await dynamodb.send(new GetCommand({ TableName: tableName, Key: { PK: 'AIPROMPTS', SK } }));
+      if (res.Item && res.Item.basePrompt) {
+        console.log('✅ Using curated prompt template:', SK);
+        return { template: res.Item, source: SK };
+      }
+    } catch (error) {
+      console.error(`❌ Error reading prompt template ${SK}:`, error.message);
+    }
+  }
+
+  console.warn(`⚠️ No curated prompt for ${type}/${gameType} (tried ${candidates.length} keys), using fallback`);
+  return { template: buildFallbackTemplate(engagementType, prompt), source: 'fallback' };
+}
+
+// ------------------------------------------------------------------ prompts
+
+function buildPrompt({
+  template, engagementType, count, difficulty, context, audience, customPrompt,
+  categories, mustHaveCategories, alreadyUsedTitles,
+}) {
+  const itemNoun = engagementType === 'wavelength' ? 'wavelength subjects' : 'scenarios';
+  let p = `Create ${count} ${itemNoun}. ${template.basePrompt}`;
+
+  if (context && template.contextTemplate) p += template.contextTemplate.replace('{context}', context);
+  if (audience && template.audienceTemplate) p += template.audienceTemplate.replace('{audience}', audience);
+  if (customPrompt) p += `\n\nAdditional Requirements: ${customPrompt}`;
+
+  const levelLabel = engagementType === 'trivia' ? 'Difficulty Level' : 'Level of Detail';
+  if (difficulty) p += `\n\n${levelLabel}: ${difficulty}`;
+
+  if (template.categoryTemplate && (categories || mustHaveCategories)) {
+    let categoryText = template.categoryTemplate;
+    if (categories) categoryText = categoryText.replace('{numberOfCategories}', categories);
+    if (mustHaveCategories) categoryText = categoryText.replace('{mustHaveCategories}', mustHaveCategories);
+    p += `\n${categoryText}`;
+  }
+
+  // Later chunks must know what earlier ones produced. The old design had no
+  // equivalent — twenty parallel calls each believed they were the only one.
+  if (alreadyUsedTitles && alreadyUsedTitles.length > 0) {
+    p += `\n\nALREADY GENERATED for this set — do not repeat, rephrase, or write a near-variant of any of these:\n`;
+    p += alreadyUsedTitles.map((t) => `- ${t}`).join('\n');
+  }
+
+  p += lengthGuidance(engagementType);
+  p += tagGuidance();
+  p += `\n\nReturn the items by calling the emit_items tool. Do not write prose.`;
+  return p;
+}
+
+// ------------------------------------------------------------ normalisation
+
+const titleTokens = (title) =>
+  String(title || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+
+/**
+ * Safety net only — prompt-level avoidance is the primary dedup mechanism now,
+ * so this can afford to be conservative, and needs to be.
+ *
+ * The threshold inherited from the client-side version (4+ tokens, 80% overlap)
+ * is a hair trigger on real titles: "Handling a difficult customer escalation"
+ * and "Handling a difficult customer complaint" share 4 of 5 tokens and are
+ * different scenarios. Dropping one of those silently — server-side, where
+ * nobody sees it — is worse than letting a genuine near-duplicate through for
+ * the owner to delete. Identical token sets are still always caught.
+ */
+function isNearDuplicate(title, keptTokenSets) {
+  const tokens = titleTokens(title);
+  if (tokens.length === 0) return false;
+  const set = new Set(tokens);
+  return keptTokenSets.some((prev) => {
+    const overlap = tokens.filter((t) => prev.has(t)).length;
+    const sameSet = overlap === set.size && overlap === prev.size;
+    const high = Math.min(set.size, prev.size) >= 5 && overlap / Math.min(set.size, prev.size) >= 0.9;
+    return sameSet || high;
+  });
+}
+
+function normalizeItem(raw) {
+  return {
+    id: Date.now() + Math.random(),
+    active: true,
+    title: String(raw?.title || '').trim(),
+    category: String(raw?.category || '').trim(),
+    detail: String(raw?.detail || '').trim(),
+    customInstructions: String(raw?.customInstructions || '').trim(),
+    // Normalised on write; readers tolerate legacy casing. See shared/tags.js.
+    tags: normalizeTags(raw?.tags),
+  };
+}
+
+// ------------------------------------------------------------------- worker
+
+async function runWorker(event, context) {
+  const { jobId, payload } = event;
+  const produced = [];
+  const keptTokenSets = [];
+  const warnings = [];
+
   try {
-    console.log('🤖 Lambda function started for scenario generation');
+    const {
+      scenarioType, engagementType = 'call-and-answer', prompt, count, difficulty,
+      context: brief, audience, customPrompt, numberOfCategories, mustHaveCategories,
+    } = payload;
 
-    // Handle CORS preflight
-    if (event.requestContext?.http?.method === 'OPTIONS') {
-      return {
-        statusCode: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': 'Content-Type',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS'
-        },
-        body: ''
-      };
+    const total = Math.min(Math.max(parseInt(count, 10) || 1, 1), MAX_COUNT);
+
+    // The category clamp used to be Math.min(n, 24, chunkCount). With one item
+    // per chunk that evaluated to 1 EVERY time — the logs read "Limited category
+    // count from 5 to 1" — so each of the twenty calls invented its own single
+    // category and a 5-category request came back with up to 20. Clamp against
+    // the TOTAL, which is the number that was always meant.
+    const categories = Math.min(parseInt(numberOfCategories, 10) || 3, 24, Math.max(total, 1));
+
+    const { template, source } = await resolvePromptTemplate({ scenarioType, engagementType, prompt });
+    if (source === 'fallback') {
+      warnings.push('No curated prompt matched this type; used the generic fallback prompt.');
     }
 
-    if (!event.body) {
-      throw new Error('No request body provided');
-    }
+    const perCall = itemsPerCall(engagementType);
+    const tool = buildItemsTool(engagementType);
 
-    const { scenarioType, engagementType = 'call-and-answer', prompt, count, difficulty, context, audience, customPrompt, customTitle, numberOfCategories, mustHaveCategories, planTopics, assignedTopics, otherTopics } = JSON.parse(event.body);
+    await updateJobProgress(dynamodb, tableName, jobId, {
+      completed: 0,
+      phase: total <= perCall ? `Generating ${total} in a single pass...` : `Generating ${total} in ${Math.ceil(total / perCall)} passes...`,
+    });
 
-    // Phase 1 of two-phase generation: plan distinct topics before the
-    // client fans out parallel batches (each batch is then anchored to its
-    // assigned topics so parallel batches can't duplicate each other). For
-    // wavelength the topics double as candidate subject areas.
-    if (planTopics === true) {
-      const planItemNoun = engagementType === 'wavelength' ? 'wavelength subjects' : 'scenarios';
-      let brief = prompt || `Create ${planItemNoun} based on the requirements provided.`;
-      if (context) brief += `\nContext: ${context}`;
-      if (audience) brief += `\nAudience: ${audience}`;
-      if (customPrompt) brief += `\nAdditional Requirements: ${customPrompt}`;
+    while (produced.length < total) {
+      const remainingItems = total - produced.length;
+      const chunkSize = Math.min(perCall, remainingItems);
 
-      const topics = await planTopicList(bedrockClient, InvokeModelCommand, {
-        brief,
-        itemNoun: planItemNoun,
-        count
+      // Stop cleanly rather than being killed mid-call: a partial result that
+      // is saved beats a full result that is lost.
+      const estimatedMs = ((chunkSize * perItemTokens(engagementType)) / OUTPUT_TOKENS_PER_SEC) * 1000 * 1.5 + 30000;
+      const remainingMs = typeof context?.getRemainingTimeInMillis === 'function'
+        ? context.getRemainingTimeInMillis()
+        : Infinity;
+      if (remainingMs < estimatedMs) {
+        warnings.push(`Stopped after ${produced.length} of ${total} to stay inside the function time limit. Run again to generate more.`);
+        break;
+      }
+
+      const chunkPrompt = buildPrompt({
+        template,
+        engagementType,
+        count: chunkSize,
+        difficulty,
+        context: brief,
+        audience,
+        customPrompt,
+        categories,
+        mustHaveCategories,
+        alreadyUsedTitles: produced.map((s) => s.title),
       });
 
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ topics }),
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': 'Content-Type',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS'
-        }
-      };
-    }
-
-    // Allow up to 100 scenarios with increased timeout
-    const limitedCount = Math.min(count, 100);
-    if (limitedCount !== count) {
-      console.log('⚠️ Limited scenario count from', count, 'to', limitedCount, 'maximum allowed is 100');
-    }
-
-    // Enforce 24-category system limit due to bitmask constraints, and never
-    // ask for more categories than scenarios in this request (small parallel
-    // batches would otherwise get a contradictory prompt)
-    const limitedCategories = Math.min(numberOfCategories || 3, 24, Math.max(limitedCount, 1));
-    if (limitedCategories !== numberOfCategories) {
-      console.log('⚠️ Limited category count from', numberOfCategories, 'to', limitedCategories, '(max 24 categories, and no more categories than scenarios per request)');
-    }
-
-    console.log('🤖 Generating scenarios:', { scenarioType, engagementType, count: limitedCount, difficulty, categories: limitedCategories, promptLength: prompt?.length });
-
-    // Fetch prompt template from database
-    const promptSortKey = `AIPROMPT#GENERATION#${scenarioType}#${engagementType}`;
-    console.log('🔍 Fetching prompt template:', promptSortKey);
-    
-    let promptTemplate;
-    try {
-      const promptResponse = await dynamodb.send(new GetCommand({
-        TableName: tableName,
-        Key: {
-          PK: 'AIPROMPTS',
-          SK: promptSortKey
-        }
-      }));
-
-      promptTemplate = promptResponse.Item;
-      if (!promptTemplate) {
-        console.warn(`⚠️ No prompt template found for ${scenarioType}/${engagementType}, using fallback`);
-        // Fallback to basic prompt construction (removed business defaults)
-        promptTemplate = buildFallbackTemplate(engagementType, prompt);
-      }
-    } catch (dbError) {
-      console.error('❌ Error fetching prompt template:', dbError);
-      // Use fallback prompt (removed business defaults)
-      promptTemplate = buildFallbackTemplate(engagementType, prompt);
-    }
-
-    // Build prompt using template (remove hardcoded business context)
-    const itemNoun = engagementType === 'wavelength' ? 'wavelength subjects' : 'scenarios';
-    let fullPrompt = `Create ${limitedCount} ${itemNoun}. ${promptTemplate.basePrompt}`;
-
-    // Add context if provided
-    if (context && promptTemplate.contextTemplate) {
-      fullPrompt += promptTemplate.contextTemplate.replace('{context}', context);
-    }
-
-    // Add audience if provided  
-    if (audience && promptTemplate.audienceTemplate) {
-      fullPrompt += promptTemplate.audienceTemplate.replace('{audience}', audience);
-    }
-
-    // Add custom requirements
-    if (customPrompt) {
-      fullPrompt += `\n\nAdditional Requirements: ${customPrompt}`;
-    }
-
-    // Phase 2 of two-phase generation: anchor this batch to its assigned
-    // topics so parallel batches stay distinct by construction. Appended
-    // here (like customPrompt) so it reaches BOTH the database-template and
-    // fallback prompt paths.
-    const topicAssignmentText = buildTopicAssignmentText(assignedTopics, otherTopics, itemNoun);
-    if (topicAssignmentText) {
-      fullPrompt += topicAssignmentText;
-    }
-
-    // Add difficulty/detail level
-    const levelLabel = engagementType === 'trivia' ? 'Difficulty Level' : 'Level of Detail';
-    fullPrompt += `\n\n${levelLabel}: ${difficulty}`;
-    
-    // Add category requirements using template (only if categories are specified)
-    if (promptTemplate.categoryTemplate && (limitedCategories || mustHaveCategories)) {
-      let categoryText = promptTemplate.categoryTemplate;
-      if (limitedCategories) {
-        categoryText = categoryText.replace('{numberOfCategories}', limitedCategories);
-      }
-      if (mustHaveCategories) {
-        categoryText = categoryText.replace('{mustHaveCategories}', mustHaveCategories);
-      }
-      fullPrompt += `\n${categoryText}`;
-    }
-    
-    // Add output format
-    if (promptTemplate.outputFormat) {
-      fullPrompt += promptTemplate.outputFormat;
-    }
-
-    // Right-size max_tokens to the requested count (~500 output tokens per
-    // scenario observed, plus headroom) so we never over-generate and each
-    // call stays well under API Gateway's ~30s timeout. Wavelength items are
-    // tiny (a 1-4 word subject plus one framing sentence), so they need far
-    // fewer tokens per item.
-    const perItemTokens = engagementType === 'wavelength' ? 150 : 700;
-    const maxTokens = Math.min(1000 + (limitedCount * perItemTokens), 8000);
-
-    console.log('🤖 Sending prompt to Claude...', { promptLength: fullPrompt.length, maxTokens });
-
-    // Use Claude Sonnet 4.6 inference profile ARN (same as working ai-generate-questions)
-    let aiResponse;
-    try {
-      const response = await bedrockClient.send(new InvokeModelCommand({
-        modelId: `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-sonnet-4-6`,
-        body: JSON.stringify({
-          anthropic_version: 'bedrock-2023-05-31',
-          max_tokens: maxTokens,
-          temperature: 0.7,
-          messages: [
-            {
-              role: 'user',
-              content: fullPrompt
-            }
-          ]
-        })
-      }));
-
-      const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-      aiResponse = responseBody.content[0].text.trim();
-      
-      console.log('✅ Received response from Claude Sonnet', { responseLength: aiResponse?.length });
-      
-    } catch (error) {
-      console.error('🚨 BEDROCK Sonnet ERROR:', error.message);
-      console.log('🔄 BEDROCK: Trying Claude Haiku 4.5 as fallback...');
-      
-      // Try Claude Haiku 4.5 inference profile ARN as fallback
-      const haikuResponse = await bedrockClient.send(new InvokeModelCommand({
-        modelId: `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`,
-        body: JSON.stringify({
-          anthropic_version: 'bedrock-2023-05-31',
-          max_tokens: maxTokens,
-          temperature: 0.7,
-          messages: [
-            {
-              role: 'user',
-              content: fullPrompt
-            }
-          ]
-        })
-      }));
-
-      const haikuResponseBody = JSON.parse(new TextDecoder().decode(haikuResponse.body));
-      aiResponse = haikuResponseBody.content[0].text.trim();
-      
-      console.log('✅ Received response from Claude Haiku fallback', { responseLength: aiResponse?.length });
-    }
-      
-    // Parse the JSON response with improved error handling
-    let scenarios;
-    try {
-      console.log('🔍 Parsing AI response...');
-      
-      // Try multiple parsing strategies
-      let jsonString = aiResponse.trim();
-
-      // Strategy 0: Strip markdown code fences (Claude 4.x may wrap JSON in ```json ... ```)
-      const fenceMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-      if (fenceMatch) {
-        console.log('🔍 Stripped markdown code fence from response');
-        jsonString = fenceMatch[1].trim();
-      }
-
-      // Strategy 1: Direct parse if it looks like JSON
-      if (jsonString.startsWith('[') && jsonString.endsWith(']')) {
-        console.log('✅ Direct JSON parsing...');
-        scenarios = JSON.parse(jsonString);
-      } else {
-        // Strategy 2: Extract JSON array with regex
-        console.log('🔍 Extracting JSON with regex...');
-        const jsonMatch = jsonString.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          console.log('✅ Found JSON match, parsing...');
-          scenarios = JSON.parse(jsonMatch[0]);
+      let result;
+      try {
+        result = await invokeStructured(bedrockClient, InvokeModelCommand, {
+          prompt: chunkPrompt,
+          tool,
+          maxTokens: maxTokensFor(engagementType, chunkSize),
+        });
+      } catch (error) {
+        if (error.name === 'OutputTruncatedError' && chunkSize > 1) {
+          // Truncation means this chunk was too ambitious, not that the run is
+          // doomed. Halving is cheaper than failing the whole job.
+          warnings.push(`A pass of ${chunkSize} exceeded the output budget; continuing in smaller passes.`);
+          const halved = Math.max(1, Math.floor(chunkSize / 2));
+          result = await invokeStructured(bedrockClient, InvokeModelCommand, {
+            prompt: buildPrompt({
+              template, engagementType, count: halved, difficulty, context: brief, audience,
+              customPrompt, categories, mustHaveCategories,
+              alreadyUsedTitles: produced.map((s) => s.title),
+            }),
+            tool,
+            maxTokens: maxTokensFor(engagementType, halved),
+          });
         } else {
-          // Strategy 3: Try to find and clean JSON
-          console.log('🔍 Cleaning and extracting JSON...');
-          const startIndex = jsonString.indexOf('[');
-          const endIndex = jsonString.lastIndexOf(']');
-          if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
-            const extractedJson = jsonString.substring(startIndex, endIndex + 1);
-            console.log('✅ Extracted JSON, parsing...');
-            scenarios = JSON.parse(extractedJson);
-          } else {
-            throw new Error('No JSON array found in response');
-          }
+          throw error;
         }
       }
 
-      console.log('✅ Successfully parsed', scenarios.length, 'scenarios');
-      
-      // Validate category count if specified
-      if (limitedCategories) {
-        const uniqueCategories = [...new Set(scenarios.map(s => s.category))];
-        console.log(`🔍 Category validation: Expected ${limitedCategories}, got ${uniqueCategories.length} categories:`, uniqueCategories);
-        
-        if (uniqueCategories.length > limitedCategories) {
-          console.warn(`⚠️ AI generated ${uniqueCategories.length} categories but only ${limitedCategories} were requested. This exceeds system limit of 24.`);
-          // Truncate to requested number of categories
-          const allowedCategories = uniqueCategories.slice(0, limitedCategories);
-          scenarios = scenarios.filter(s => allowedCategories.includes(s.category));
-          console.log(`✅ Filtered scenarios to use only first ${limitedCategories} categories, now have ${scenarios.length} scenarios`);
-        }
+      const batch = Array.isArray(result?.items) ? result.items : [];
+      if (batch.length === 0) {
+        warnings.push('A generation pass returned no items; stopping early.');
+        break;
       }
-    } catch (parseError) {
-      console.error('❌ Failed to parse AI response:', parseError);
-      console.log('Raw response:', aiResponse);
-      throw new Error('Failed to parse AI response as JSON: ' + parseError.message);
+
+      let added = 0;
+      for (const raw of batch) {
+        if (produced.length >= total) break;
+        const item = normalizeItem(raw);
+        if (!item.title) continue;
+        if (isNearDuplicate(item.title, keptTokenSets)) {
+          console.warn(`⚠️ Dropping near-duplicate: "${item.title}"`);
+          continue;
+        }
+        keptTokenSets.push(new Set(titleTokens(item.title)));
+        produced.push(item);
+        added += 1;
+      }
+
+      await updateJobProgress(dynamodb, tableName, jobId, {
+        completed: produced.length,
+        phase: `Generated ${produced.length} of ${total}...`,
+        items: produced,
+        warnings,
+      });
+
+      // No forward progress means another pass will not help either.
+      if (added === 0) {
+        warnings.push('A generation pass produced only duplicates; stopping early.');
+        break;
+      }
     }
 
-    // Add IDs and ensure proper structure
-    const processedScenarios = scenarios.map(s => ({
-      id: Date.now() + Math.random(),
-      active: true,
-      ...s
-    }));
+    await completeJob(dynamodb, tableName, jobId, { items: produced, warnings });
+    console.log(`✅ Job ${jobId} complete: ${produced.length} items`);
+  } catch (error) {
+    console.error(`❌ Job ${jobId} failed:`, error);
+    await failJob(dynamodb, tableName, jobId, error.message, { items: produced });
+  }
+}
 
-    console.log(`✅ Successfully generated ${processedScenarios.length} scenarios`);
+// ------------------------------------------------------------------ handler
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        scenarios: processedScenarios,
-        message: `Generated ${processedScenarios.length} scenarios successfully`
-      }),
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      }
-    };
+exports.handler = async (event, context) => {
+  // Async worker: invoked with InvocationType 'Event', so it runs against the
+  // Lambda's own 900s timeout and never touches API Gateway's 30s ceiling.
+  if (event && event.__workerMode === true) {
+    await runWorker(event, context);
+    return { statusCode: 200, body: 'ok' };
+  }
 
+  const method = event?.requestContext?.http?.method;
+  if (method === 'OPTIONS') return { statusCode: 200, headers: CORS, body: '' };
+
+  try {
+    // ---- poll -------------------------------------------------------------
+    const jobIdParam = event?.pathParameters?.jobId || event?.queryStringParameters?.jobId;
+    if (method === 'GET' || jobIdParam) {
+      if (!jobIdParam) return json(400, { error: 'jobId is required' });
+      const item = await getJob(dynamodb, tableName, jobIdParam);
+      if (!item) return json(404, { error: 'Job not found or expired' });
+      return json(200, jobToResponse(item));
+    }
+
+    // ---- start ------------------------------------------------------------
+    if (!event.body) return json(400, { error: 'No request body provided' });
+    const payload = JSON.parse(event.body);
+
+    const requested = Math.min(Math.max(parseInt(payload.count, 10) || 1, 1), MAX_COUNT);
+    const jobId = newJobId();
+
+    await createJob(dynamodb, tableName, {
+      jobId,
+      kind: 'scenarios',
+      requested,
+      request: {
+        scenarioType: payload.scenarioType,
+        engagementType: payload.engagementType,
+        count: requested,
+      },
+    });
+
+    try {
+      await lambda.send(new InvokeCommand({
+        FunctionName: context.functionName,
+        InvocationType: 'Event',
+        Payload: Buffer.from(JSON.stringify({ __workerMode: true, jobId, payload })),
+      }));
+    } catch (error) {
+      // The job row already exists, so surface the failure there too — a client
+      // polling a job that will never start deserves an explanation.
+      console.error('❌ Failed to dispatch generation worker:', error);
+      await failJob(dynamodb, tableName, jobId, `Could not start generation worker: ${error.message}`);
+      return json(500, { error: `Could not start generation: ${error.message}`, jobId });
+    }
+
+    console.log(`🚀 Dispatched scenario generation job ${jobId} for ${requested} items`);
+    return json(202, { jobId, status: 'queued', requested });
   } catch (error) {
     console.error('❌ AI scenario generation error:', error);
-    // Surface throttling as 429 so the client backs off instead of retrying immediately
-    const isThrottled = error.name === 'ThrottlingException' ||
-                        error.message?.includes('Too many requests') ||
-                        error.message?.includes('throttl') ||
-                        error.$metadata?.httpStatusCode === 429;
-    return {
-      statusCode: isThrottled ? 429 : 500,
-      body: JSON.stringify({ error: `Failed to generate scenarios: ${error.message || 'unexpected error'}` }),
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      }
-    };
+    return json(500, { error: `Failed to generate scenarios: ${error.message || 'unexpected error'}` });
   }
 };

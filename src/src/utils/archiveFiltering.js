@@ -25,6 +25,7 @@
  */
 
 import { resolveGameType } from '../config/gameTypes';
+import { tagsMatch } from './tags';
 
 /** Sentinel for "don't filter on this axis" — the value of the All… option. */
 export const ANY = '';
@@ -101,8 +102,14 @@ export function tagFilterOptions(items, selected) {
 /** Does this record match the chosen tag? Comparison is case-insensitive. */
 export function hasArchiveTag(item, tag) {
   if (!tag) return true;
-  const wanted = String(tag).toLowerCase();
-  return archiveTags(item).some((candidate) => candidate.toLowerCase() === wanted);
+  // Delegate to the shared matcher rather than lower-casing here. Two helpers
+  // that both "compare tags" but normalise differently is how a filter starts
+  // silently missing rows: this one only lower-cased, so the stored "STAR"
+  // matched `star` but "Amazon Principles" never matched `amazon-principles`.
+  // Both sides go through the same normalisation, so archive's own
+  // "questions:20" collapses to "questions-20" on the item AND on the filter
+  // value — the comparison stays consistent.
+  return tagsMatch(archiveTags(item), [tag]);
 }
 
 /**
