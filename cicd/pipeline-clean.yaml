@@ -270,6 +270,27 @@ Resources:
     Properties:
       Name: !Sub '${ProjectName}cicd-pipeline-dev'
       RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      # V2 is required for Triggers (Git tag filtering). See the note below on
+      # why the branch filter has to be restated once Triggers is present.
+      PipelineType: V2
+      Triggers:
+        - ProviderType: CodeStarSourceConnection
+          GitConfiguration:
+            SourceActionName: SourceAction
+            Push:
+              # IMPORTANT: "When a trigger configuration is specified, default
+              # change detection for repository and branch commits is disabled."
+              # (AWS::CodePipeline::Pipeline Triggers docs.) The branch filter
+              # below is what keeps `git push origin dev` deploying.
+              - Branches:
+                  Includes:
+                    - dev
+              # Tags must be a SEPARATE Push entry. Tags and Branches inside one
+              # entry are ANDed, which would require a tag push that also lands
+              # on the branch. Two entries are ORed, which is what we want.
+              - Tags:
+                  Includes:
+                    - dev-v*
       ArtifactStore:
         Type: S3
         Location: !Ref ArtifactsBucket
@@ -311,6 +332,19 @@ Resources:
     Properties:
       Name: !Sub '${ProjectName}cicd-pipeline-test'
       RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      PipelineType: V2
+      Triggers:
+        - ProviderType: CodeStarSourceConnection
+          GitConfiguration:
+            SourceActionName: SourceAction
+            Push:
+              # Restates the default branch trigger, which Triggers disables.
+              - Branches:
+                  Includes:
+                    - test
+              - Tags:
+                  Includes:
+                    - test-v*
       ArtifactStore:
         Type: S3
         Location: !Ref ArtifactsBucket
@@ -352,6 +386,21 @@ Resources:
     Properties:
       Name: !Sub '${ProjectName}cicd-pipeline-prod'
       RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      PipelineType: V2
+      Triggers:
+        - ProviderType: CodeStarSourceConnection
+          GitConfiguration:
+            SourceActionName: SourceAction
+            Push:
+              # Restates the default branch trigger, which Triggers disables.
+              - Branches:
+                  Includes:
+                    - prod
+              # A prod-v* tag starts the pipeline but still lands on the
+              # ApprovalForProd stage below - it does not bypass approval.
+              - Tags:
+                  Includes:
+                    - prod-v*
       ArtifactStore:
         Type: S3
         Location: !Ref ArtifactsBucket
@@ -402,7 +451,12 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
-  ### GitHub Webhooks - One per Branch/Pipeline
+  ### Change detection
+  # There are deliberately no AWS::CodePipeline::Webhook resources. Webhooks are
+  # for the legacy GitHub v1 (OAuth-token) source provider. This stack uses the
+  # CodeStar/CodeConnections provider, whose managed webhook is created and owned
+  # by the GitHubConnection above. Branch and tag filtering lives in each
+  # pipeline's Triggers block.
 
 
 Outputs:

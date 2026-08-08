@@ -32,6 +32,43 @@ prompt writer stamps `now + 365 days` (`create-ai-prompt.js:173`, `:237`,
 `update-ai-prompt.js:258`, `migrate-ai-prompts.js:57,81`). Prompts authored in Aug 2025 are
 expiring now. **Question sets carry no `ttl`.** This is a data-loss bug, not a UX bug.
 
+> **R1a — live-data remediation (implemented in code; the sweep is still to run).**
+>
+> The `ttl` stamps are gone from all three writers (`create-ai-prompt.js` — both the
+> `AIPROMPT#` item and the `GAMETYPE#…#CATEGORY#…` default-lookup row —,
+> `update-ai-prompt.js`, `migrate-ai-prompts.js`). The table's
+> `TimeToLiveSpecification` is **unchanged and must stay enabled**: TTL is a per-item
+> opt-in, and `GAME#`/`PLAYER#`/`CONNECTION#` records legitimately depend on it.
+> Only records in the `PK='AIPROMPTS'` partition should ever lose their `ttl`.
+>
+> Existing rows still carry the old stamp and are expiring now. Two remedies, both live:
+>
+> 1. **Self-healing.** `update-ai-prompt.js` now appends `REMOVE #ttl` to every save,
+>    so any prompt anyone edits loses its stamp automatically. (`ttl` is a DynamoDB
+>    reserved word — it must go through `ExpressionAttributeNames`.)
+> 2. **One-off sweep** — `scripts/cull-ai-prompts.js`, pass `ttl`. Dry run by default:
+>
+>    ```bash
+>    AWS_PROFILE=adminaccess node scripts/cull-ai-prompts.js engagedev --only=ttl
+>    AWS_PROFILE=adminaccess node scripts/cull-ai-prompts.js engagedev --only=ttl --apply
+>    ```
+>
+>    It paginates `Query PK='AIPROMPTS'` (never a Scan, so game/player rows are never
+>    even read), prints each row with its expiry date and flags any already past, then
+>    issues one `UpdateCommand` per row:
+>
+>    ```js
+>    UpdateExpression: 'REMOVE #ttl',
+>    ExpressionAttributeNames: { '#ttl': 'ttl' },
+>    ```
+>
+>    Removing an absent attribute is a no-op, so the sweep is idempotent and safe to
+>    re-run. Run it against dev, then test, then prod.
+>
+> **Anything already deleted by TTL is gone** — there is no recovery short of
+> point-in-time restore, which is only enabled on prod (`template-clean.yaml:110`).
+> Run the sweep before more rows cross their expiry.
+
 **(b) A prompt authored in `AIGenerationPromptEditor` can never work as a summary prompt.** That
 form emits `basePrompt`/`contextTemplate`/`outputFormat` and never `template`/`instructions`.
 The runtime gate is `get-ai-summary.js:340`:

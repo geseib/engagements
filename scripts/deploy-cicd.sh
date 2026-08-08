@@ -66,37 +66,27 @@ print_status "Dev Domain: $DEV_DOMAIN"
 print_status "Test Domain: $TEST_DOMAIN"
 print_status "Prod Domain: $PROD_DOMAIN"
 
-# Prompt for GitHub token
-echo ""
-print_warning "⚠️  GitHub Personal Access Token Required"
-echo "The CI/CD pipeline needs a GitHub personal access token with the following permissions:"
-echo "  - repo (Full control of private repositories)"
-echo "  - admin:repo_hook (Full control of repository hooks)"
-echo ""
-echo "You can create one at: https://github.com/settings/tokens"
-echo ""
-read -s -p "Enter your GitHub Personal Access Token: " GITHUB_TOKEN
-echo ""
-
-if [ -z "$GITHUB_TOKEN" ]; then
-    print_error "GitHub token is required"
-    exit 1
-fi
-
-print_success "✅ GitHub token provided"
+# NOTE: no GitHub Personal Access Token is prompted for or passed.
+# pipeline-clean.yaml has no GitHubToken parameter — repository access is via the
+# AWS::CodeStarConnections::Connection ("engage-github-connection"), which is
+# authorized once, by hand, in the AWS console. Passing GitHubToken= here made
+# every redeploy fail with an unknown-parameter error.
+#
+# The separate GitHub PAT the *application* uses to file issues lives in Secrets
+# Manager (engage/<env>/github-token) and is set by scripts/setup-secure-github-token.sh.
 
 # Deploy the CI/CD pipeline
 print_status "Deploying CI/CD pipeline CloudFormation stack..."
 
-aws cloudformation deploy \
+if ! aws cloudformation deploy \
     --template-file cicd/pipeline-clean.yaml \
     --stack-name "$STACK_NAME" \
     --capabilities CAPABILITY_NAMED_IAM \
+    --no-fail-on-empty-changeset \
     --parameter-overrides \
         ProjectName=engage \
         GitHubOwner=geseib \
         GitHubRepo=engagements \
-        GitHubToken="$GITHUB_TOKEN" \
         DevDomain="$DEV_DOMAIN" \
         TestDomain="$TEST_DOMAIN" \
         ProdDomain="$PROD_DOMAIN" \
@@ -104,14 +94,37 @@ aws cloudformation deploy \
     --tags \
         Project=engage \
         Purpose=CICD \
-    --profile adminaccess
-
-if [ $? -ne 0 ]; then
+    --profile adminaccess; then
     print_error "CI/CD pipeline deployment failed"
     exit 1
 fi
 
 print_success "✅ CI/CD pipeline deployed successfully"
+
+# Verify the GitHub connection is actually usable. A brand-new connection is
+# created in PENDING and cannot fetch source until a human completes the GitHub
+# handshake in the console — the pipelines will fail at Source until then.
+CONNECTION_ARN=$(aws codestar-connections list-connections \
+    --query "Connections[?ConnectionName=='engage-github-connection'].ConnectionArn | [0]" \
+    --output text \
+    --profile adminaccess 2>/dev/null || echo "")
+
+if [ -n "$CONNECTION_ARN" ] && [ "$CONNECTION_ARN" != "None" ]; then
+    CONNECTION_STATUS=$(aws codestar-connections get-connection \
+        --connection-arn "$CONNECTION_ARN" \
+        --query 'Connection.ConnectionStatus' \
+        --output text \
+        --profile adminaccess 2>/dev/null || echo "UNKNOWN")
+    if [ "$CONNECTION_STATUS" = "AVAILABLE" ]; then
+        print_success "✅ GitHub connection is AVAILABLE"
+    else
+        print_warning "⚠️  GitHub connection status is $CONNECTION_STATUS (expected AVAILABLE)"
+        echo "   Finish the handshake in the console, then re-run any failed pipeline:"
+        echo "   https://console.aws.amazon.com/codesuite/settings/connections"
+    fi
+else
+    print_warning "⚠️  Could not read the engage-github-connection status"
+fi
 
 # Get stack outputs
 print_status "Retrieving CI/CD pipeline information..."
@@ -188,17 +201,26 @@ cat > "$CONFIG_FILE" << EOF
       "dev": {
         "name": "$DEV_PIPELINE_NAME",
         "url": "$DEV_PIPELINE_URL",
-        "branch": "dev"
+        "stack": "engagedev",
+        "branch": "dev",
+        "tagPattern": "dev-v*",
+        "manualApproval": false
       },
       "test": {
         "name": "$TEST_PIPELINE_NAME",
         "url": "$TEST_PIPELINE_URL",
-        "branch": "test"
+        "stack": "engagetest",
+        "branch": "test",
+        "tagPattern": "test-v*",
+        "manualApproval": false
       },
       "prod": {
         "name": "$PROD_PIPELINE_NAME",
         "url": "$PROD_PIPELINE_URL",
-        "branch": "prod"
+        "stack": "engageprod",
+        "branch": "prod",
+        "tagPattern": "prod-v*",
+        "manualApproval": true
       }
     }
   },
@@ -216,7 +238,9 @@ cat > "$CONFIG_FILE" << EOF
   "github": {
     "owner": "geseib",
     "repo": "engagements",
-    "branches": ["dev", "test", "prod"]
+    "connectionName": "engage-github-connection",
+    "branches": ["dev", "test", "prod"],
+    "tagPatterns": ["dev-v*", "test-v*", "prod-v*"]
   }
 }
 EOF
@@ -231,10 +255,14 @@ echo "   - Dev: $DEV_PIPELINE_URL"
 echo "   - Test: $TEST_PIPELINE_URL"
 echo "   - Prod: $PROD_PIPELINE_URL"
 echo ""
-echo "2. 🔧 Branch-based deployment strategy:"
-echo "   - Push to 'dev' branch → Auto-deploy to engagedev"
-echo "   - Merge dev → test branch → Auto-deploy to engagetest"
-echo "   - Merge test → prod branch → Manual approval → Deploy to engageprod"
+echo "2. 🔧 Triggers (branch push OR matching tag push — either starts the pipeline):"
+echo "   - push 'dev'  branch  or  tag dev-v*   → engagedev   (auto)"
+echo "   - push 'test' branch  or  tag test-v*  → engagetest  (auto)"
+echo "   - push 'prod' branch  or  tag prod-v*  → engageprod  (MANUAL APPROVAL first)"
+echo ""
+echo "3. 🏷️  Tag a release:"
+echo "   git tag dev-v1.3.0 && git push origin dev-v1.3.0"
+echo "   git tag --sort=-creatordate | grep '^prod-'   # what shipped to prod"
 echo ""
 echo "4. 📋 Manual deployment commands (if needed):"
 echo "   ./scripts/deploy-clean.sh engagedev engage.dev.seibtribe.us"
