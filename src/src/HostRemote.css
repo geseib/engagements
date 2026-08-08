@@ -1,219 +1,516 @@
-/* Host Remote Control Styles */
+/*
+ * Host Remote — phone-first.
+ *
+ * The host is standing in front of a room, holding the phone in one hand, in a
+ * dim room, glancing down between sentences. So:
+ *
+ *   - the primary control is docked in the thumb arc and never scrolls away;
+ *   - every tap target is at least 44px, and the primary one is 64px;
+ *   - type is set with clamp() against the viewport, never a fixed rem that can
+ *     overflow. (A fixed `4rem` heading in this codebase once rendered ~395px
+ *     wide inside a 375px phone and clipped both edges. Everything here is
+ *     measured at 375x812.)
+ *
+ * Tokens come from styles.css (Warm Summit). This file owns nothing but the
+ * remote — no rule here leaks outside `.hr`.
+ */
 
-.host-remote {
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 20px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  background: #f8f9fa;
+.hr {
+  --hr-gutter: 16px;
+  /* Tallest the dock gets: 64px button + 12px padding top/bottom + the 24px
+     "N still answering" line that appears when a confirmation is armed.
+     Measured at 375x812. The body reserves this PLUS the home-indicator inset,
+     or the last row of More controls sits under the dock on a notched phone. */
+  --hr-dock-h: 112px;
+
   min-height: 100vh;
-}
-
-.remote-header {
-  text-align: center;
-  margin-bottom: 30px;
-  padding-bottom: 20px;
-  border-bottom: 2px solid #e9ecef;
-}
-
-.remote-header h1 {
-  margin: 0 0 15px 0;
-  color: #2c3e50;
-  font-size: 2rem;
-}
-
-.connection-status {
-  margin-top: 10px;
-}
-
-.status-indicator {
-  font-weight: 600;
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-size: 14px;
-}
-
-.status-indicator.connected {
-  background: #d4edda;
-  color: #155724;
-}
-
-.status-indicator.disconnected {
-  background: #f8d7da;
-  color: #721c24;
-}
-
-.game-id-input {
-  text-align: center;
-  padding: 40px 20px;
-}
-
-.game-id-input h2 {
-  margin-bottom: 20px;
-  color: #495057;
-}
-
-.remote-controls {
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui, system-ui, sans-serif);
   display: flex;
   flex-direction: column;
-  gap: 30px;
+  /* Nothing in here may push the page sideways on a narrow phone. */
+  overflow-x: hidden;
 }
 
-.game-info {
-  background: white;
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
+.hr *,
+.hr *::before,
+.hr *::after { box-sizing: border-box; }
 
-.game-info h2 {
-  margin: 0 0 15px 0;
-  color: #2c3e50;
-}
+/* ------------------------------------------------------------------ bar */
 
-.game-details p {
-  margin: 8px 0;
-  color: #6c757d;
-}
-
-.host-page-control {
-  background: white;
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  text-align: center;
-}
-
-.player-join-section {
-  background: white;
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  text-align: center;
-}
-
-.player-join-section h3 {
-  margin: 0 0 20px 0;
-  color: #2c3e50;
-}
-
-.qr-code-container {
-  margin: 20px 0;
-  padding: 20px;
-  background: #f8f9fa;
-  border-radius: 8px;
+.hr-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   display: flex;
-  justify-content: center;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: max(10px, env(safe-area-inset-top)) var(--hr-gutter) 10px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: var(--hairline, 1px solid rgba(155, 168, 190, .18));
 }
 
-.join-url {
-  margin-top: 20px;
+.hr-bar-id {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0; /* lets the title truncate instead of widening the bar */
 }
 
-.join-url code {
-  display: block;
-  background: #e9ecef;
-  padding: 10px;
-  border-radius: 4px;
-  margin: 10px 0;
-  word-break: break-all;
-  font-size: 14px;
+.hr-bar-code {
+  font-family: var(--font-display, var(--font-ui));
+  font-size: clamp(1rem, 4.5vw, 1.25rem);
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--primary);
+  flex: none;
 }
 
-.scroll-controls,
-.game-controls {
-  background: white;
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+.hr-bar-title {
+  font-size: .8125rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
-.scroll-controls h3,
-.game-controls h3 {
-  margin: 0 0 20px 0;
-  color: #2c3e50;
-}
-
-.control-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 15px;
-}
-
-.btn-primary,
-.btn-secondary,
-.btn-action {
-  padding: 15px 20px;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
+.hr-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: .75rem;
   font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.hr-live.is-live {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.hr-live.is-down {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+/* ----------------------------------------------------------------- body */
+
+.hr-body {
+  flex: 1;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 16px var(--hr-gutter) calc(var(--hr-dock-h) + 24px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* --------------------------------------------------------- status card */
+
+.hr-status {
+  background: var(--surface);
+  border: var(--hairline, 1px solid rgba(155, 168, 190, .18));
+  border-radius: var(--radius, 16px);
+  padding: 20px;
   text-align: center;
+}
+
+.hr-status-kicker {
+  margin: 0;
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hr-status-phase {
+  margin: 6px 0 0;
+  font-family: var(--font-display, var(--font-ui));
+  /* Measured at 375px: 6.4vw = 24px, well inside the 343px content box even
+     for the longest headline ("Session over"). */
+  font-size: clamp(1.5rem, 6.4vw, 2rem);
+  line-height: 1.15;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.hr-progress { margin-top: 18px; }
+
+.hr-meter {
+  height: 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 25%, transparent);
+  overflow: hidden;
+}
+
+.hr-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+  transition: width .35s ease;
+}
+
+.hr-progress.is-complete .hr-meter-fill { background: var(--success); }
+
+.hr-progress-count {
+  margin: 10px 0 0;
+  font-size: clamp(1.125rem, 5vw, 1.375rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.hr-allin {
+  margin: 8px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: .875rem;
+  font-weight: 600;
+  color: var(--success);
+}
+
+.hr-roster {
+  margin: 16px 0 0;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  font-size: .9375rem;
+  color: var(--muted);
 }
 
-.btn-primary {
-  background: #007bff;
-  color: white;
+/* --------------------------------------------------------------- flash */
+
+.hr-flash {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm, 8px);
+  font-size: .875rem;
+  line-height: 1.4;
 }
 
-.btn-primary:hover {
-  background: #0056b3;
-  transform: translateY(-1px);
+.hr-flash--error {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
 }
 
-.btn-secondary {
-  background: #6c757d;
-  color: white;
+.hr-flash--notice {
+  color: var(--secondary);
+  background: color-mix(in srgb, var(--secondary) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--secondary) 35%, transparent);
 }
 
-.btn-secondary:hover {
-  background: #545b62;
-  transform: translateY(-1px);
+/* ------------------------------------------------------ more controls */
+
+.hr-more-toggle {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font: inherit;
+  font-size: .875rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 10px;
 }
 
-.btn-action {
-  background: #28a745;
-  color: white;
+.hr-more-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 8px;
 }
 
-.btn-action:hover {
-  background: #1e7e34;
-  transform: translateY(-1px);
+.hr-more-heading {
+  margin: 10px 0 0;
+  font-size: .6875rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
-.btn-primary.large {
-  font-size: 18px;
-  padding: 20px 30px;
+.hr-hint {
+  margin: 0;
+  font-size: .8125rem;
+  line-height: 1.45;
+  color: var(--muted);
 }
 
-.help-text {
-  margin-top: 10px;
-  color: #6c757d;
-  font-size: 14px;
+.hr-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
-.change-game {
+/* -------------------------------------------------------------- buttons */
+
+.hr-btn {
+  min-height: 48px; /* > the 44px floor, with room for the icon+label row */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: .9375rem;
+  font-weight: 600;
+  cursor: pointer;
   text-align: center;
+  transition: background-color .15s ease, border-color .15s ease, transform .1s ease;
 }
 
-/* Mobile responsive */
-@media (max-width: 768px) {
-  .host-remote {
-    padding: 15px;
+.hr-btn:active { transform: scale(.985); }
+.hr-btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+.hr-btn--primary {
+  background: var(--primary);
+  color: #1B2942;
+}
+
+.hr-btn--ghost {
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--muted) 35%, transparent);
+  color: var(--text);
+}
+
+.hr-btn--danger {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+  color: var(--danger);
+}
+
+.hr-btn--danger.is-armed {
+  background: var(--danger);
+  color: #FFF;
+  border-color: var(--danger);
+}
+
+/* ---------------------------------------------------------------- join */
+
+.hr-join {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface);
+  border-radius: var(--radius, 16px);
+  border: var(--hairline, 1px solid rgba(155, 168, 190, .18));
+}
+
+/* The QR itself must stay white to stay scannable in a dark theme. */
+.hr-qr {
+  background: #FFF;
+  padding: 10px;
+  border-radius: var(--radius-sm, 8px);
+  line-height: 0;
+}
+
+.hr-qr canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.hr-join-url {
+  font-size: .75rem;
+  color: var(--muted);
+  /* A join URL is one long unbreakable token; without this it is the single
+     thing most likely to widen the page past the viewport. */
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  text-align: center;
+  max-width: 100%;
+}
+
+.hr-join .hr-btn { width: 100%; }
+
+/* ---------------------------------------------------------------- dock */
+
+.hr-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  padding: 12px var(--hr-gutter) calc(12px + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  backdrop-filter: blur(10px);
+  border-top: var(--hairline, 1px solid rgba(155, 168, 190, .18));
+}
+
+.hr-dock > * {
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
+}
+
+.hr-dock-warn {
+  margin: 0 0 8px;
+  text-align: center;
+  font-size: .8125rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.hr-dock-idle {
+  margin: 0;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: .9375rem;
+}
+
+.hr-primary {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 20px;
+  border: 0;
+  border-radius: var(--radius, 16px);
+  background: var(--primary);
+  color: #1B2942;
+  font: inherit;
+  font-size: clamp(1.0625rem, 4.8vw, 1.25rem);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color .15s ease, transform .1s ease;
+}
+
+.hr-primary:active { transform: scale(.99); }
+
+.hr-primary:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/*
+ * Armed state. The colour change is the load-bearing signal — the pulse is
+ * decoration and is removed under prefers-reduced-motion below.
+ */
+.hr-primary.is-armed {
+  background: var(--danger);
+  color: #FFF;
+  animation: hr-pulse 1.1s ease-in-out infinite;
+}
+
+.hr-primary-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+@keyframes hr-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 55%, transparent); }
+  50%      { box-shadow: 0 0 0 10px color-mix(in srgb, var(--danger) 0%, transparent); }
+}
+
+/* ---------------------------------------------------------- code entry */
+
+.hr--entry {
+  align-items: center;
+  justify-content: center;
+  padding: var(--hr-gutter);
+}
+
+.hr-entry-card {
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+  background: var(--surface);
+  border: var(--hairline, 1px solid rgba(155, 168, 190, .18));
+  border-radius: var(--radius, 16px);
+  padding: 28px 20px;
+}
+
+.hr-entry-card h1 {
+  margin: 12px 0 6px;
+  font-family: var(--font-display, var(--font-ui));
+  font-size: clamp(1.375rem, 6vw, 1.75rem);
+  font-weight: 700;
+}
+
+.hr-entry-card p {
+  margin: 0 0 20px;
+  font-size: .9375rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.hr-entry-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hr-code-input {
+  width: 100%;
+  min-height: 56px;
+  padding: 12px;
+  text-align: center;
+  font-family: var(--font-display, var(--font-ui));
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: .18em;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid color-mix(in srgb, var(--muted) 40%, transparent);
+  border-radius: var(--radius-sm, 8px);
+}
+
+.hr-code-input:focus-visible,
+.hr :is(button, input):focus-visible {
+  outline: 3px solid var(--secondary);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------ reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+  .hr *,
+  .hr *::before,
+  .hr *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
   }
-  
-  .control-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .qr-code-container canvas {
-    max-width: 100%;
-    height: auto;
+
+  /* The armed button must stay unmistakable without the pulse, so pin the
+     steady ring the animation was drawing attention with. */
+  .hr-primary.is-armed {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 55%, transparent);
   }
 }

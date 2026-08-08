@@ -1,14 +1,145 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { resolveSetPartition } = require('./set-version');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
+const apigateway = new ApiGatewayManagementApiClient({
+  endpoint: process.env.WEBSOCKET_API_ENDPOINT
+});
 
 // Helper function to check if a bit is set in a bitmask
 const isBitSet = (mask, position) => {
   const pos = position - 1; // Convert to 0-based index
   return mask[pos] === '1';
+};
+
+/**
+ * Tell the room the round has resolved.
+ *
+ * This handler moves the game into RESULTS# — the same class of transition that
+ * next-question.js (`questionStarted`) and start-vote.js (`votingStarted`)
+ * announce — but until now it announced NOTHING. The only notification was the
+ * host page firing `RESULT#nnn` down its OWN socket after the fetch returned
+ * (GameHostPage.handleShowResults). That made the transition depend on a
+ * particular browser tab being open with a live socket: if the host's WebSocket
+ * had dropped, the database said RESULTS and the room sat on the voting screen.
+ *
+ * It also made the transition impossible to drive from anywhere else, which is
+ * what the Host Remote needs to do — it calls this endpoint directly so it keeps
+ * working when the projector browser is closed.
+ *
+ * `gameStateChanged` is the message both GameHostPage and PlayerPage already
+ * handle by re-fetching state, so it is additive and idempotent: when the host
+ * page drives results it now gets a re-sync to the state it just set, and
+ * players may see this plus the host's own `RESULT#nnn`, which their handler
+ * already tolerates (both funnel into the same re-fetch).
+ *
+ * Never throws: a broadcast failure must not turn a round that scored correctly
+ * into a 500 that the host reads as "results failed".
+ */
+const broadcastResultsReady = async (gameId, paddedQuestionId) => {
+  if (!gameId || !paddedQuestionId) return;
+  try {
+    const connectionsResult = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: {
+        ':pk': `GAME#${gameId}`,
+        ':sk': 'CONNECTION#'
+      }
+    }));
+
+    const connections = connectionsResult.Items || [];
+    if (connections.length === 0) {
+      console.log(`⚠️ RESULTS BROADCAST: no active connections for game ${gameId}`);
+      return;
+    }
+
+    const message = JSON.stringify({
+      type: 'gameStateChanged',
+      gameId: gameId,
+      state: `GAME#${gameId} RESULTS#${paddedQuestionId}`,
+      newState: `RESULTS#${paddedQuestionId}`,
+      questionNumber: paddedQuestionId,
+      timestamp: new Date().toISOString()
+    });
+
+    await Promise.all(connections.map(async (connection) => {
+      try {
+        await apigateway.send(new PostToConnectionCommand({
+          ConnectionId: connection.ConnectionId,
+          Data: message
+        }));
+      } catch (error) {
+        // 410 Gone == the client is long dead. Drop the row inline; PK/SK are
+        // known from the connection item, so no table scan is needed. Same
+        // cleanup next-question.js does.
+        const status = error.statusCode || error.$metadata?.httpStatusCode || error.$response?.statusCode;
+        if (status === 410 || error.name === 'GoneException') {
+          await db.send(new DeleteCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: connection.PK, SK: connection.SK }
+          })).catch(() => {});
+        } else {
+          console.error(`❌ RESULTS BROADCAST: failed for ${connection.ConnectionId}:`, error.message);
+        }
+      }
+    }));
+
+    console.log(`✅ RESULTS BROADCAST: RESULTS#${paddedQuestionId} sent to ${connections.length} connection(s)`);
+  } catch (error) {
+    console.error('❌ RESULTS BROADCAST: failed entirely (continuing):', error);
+  }
+};
+
+/**
+ * Move the game into RESULTS#nnn and tell the room.
+ *
+ * The same six-line UpdateCommand was pasted into the call-and-answer branch and
+ * the trivia branch, and MISSING from the other two exits of this handler:
+ *
+ *   - wavelength: handleWavelengthResults computed the word cloud, stored it,
+ *     and returned 200 without ever writing the state. The database stayed on
+ *     ASK#nnn for the rest of the round.
+ *   - call-and-answer with zero votes: returned "No votes found" early, also
+ *     without writing the state.
+ *
+ * Neither was visible from the host page, because GameHostPage.handleShowResults
+ * sets `RESULTS#nnn` in its OWN React state regardless of what the server did —
+ * so the projector moved on while the database did not. Anything that reads the
+ * state back instead of remembering what it asked for (a refresh, a second host
+ * screen, the Host Remote) saw the round stuck.
+ *
+ * `Started: true` is preserved from the original copies: resolving a round is
+ * also proof the game is underway.
+ */
+const enterResultsState = async (gameId, paddedQuestionId) => {
+  const lessonNumber = parseInt(paddedQuestionId, 10);
+  console.log(`🏷️ Updating game state to RESULTS#${paddedQuestionId} (LessonNumber ${lessonNumber})`);
+
+  await db.send(new UpdateCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
+    UpdateExpression: 'SET #state = :state, #currentQuestionId = :questionId, #lessonNumber = :lessonNumber, #started = :started, #updatedAt = :updatedAt',
+    ExpressionAttributeNames: {
+      '#state': 'State',
+      '#currentQuestionId': 'CurrentQuestionId',
+      '#lessonNumber': 'LessonNumber',
+      '#started': 'Started',
+      '#updatedAt': 'UpdatedAt'
+    },
+    ExpressionAttributeValues: {
+      ':state': `RESULTS#${paddedQuestionId}`,
+      ':questionId': paddedQuestionId,
+      ':lessonNumber': lessonNumber,
+      ':started': true,
+      ':updatedAt': new Date().toISOString()
+    }
+  }));
+
+  await broadcastResultsReady(gameId, paddedQuestionId);
 };
 
 exports.handler = async (event) => {
@@ -104,6 +235,11 @@ exports.handler = async (event) => {
     console.log(`📊 Found ${votes.length} votes for question ${paddedQuestionId}`);
 
     if (votes.length === 0) {
+      // A round nobody voted on is still a resolved round. This used to return
+      // without touching the state, so the game sat on VOTE#nnn while the host
+      // screen (which sets RESULTS# locally regardless) showed results.
+      await enterResultsState(gameId, paddedQuestionId);
+
       return {
         statusCode: 200,
         body: JSON.stringify({
@@ -192,31 +328,7 @@ exports.handler = async (event) => {
     });
 
     // Update game state to results (preserve LessonNumber!)
-    console.log(`🏷️ Updating game state to RESULTS#${paddedQuestionId}`);
-    
-    // Get the current lesson number from the paddedQuestionId
-    const lessonNumber = parseInt(paddedQuestionId);
-    console.log(`📊 Setting LessonNumber to ${lessonNumber} for RESULTS#${paddedQuestionId}`);
-    
-    await db.send(new UpdateCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
-      UpdateExpression: 'SET #state = :state, #currentQuestionId = :questionId, #lessonNumber = :lessonNumber, #started = :started, #updatedAt = :updatedAt',
-      ExpressionAttributeNames: {
-        '#state': 'State',
-        '#currentQuestionId': 'CurrentQuestionId', 
-        '#lessonNumber': 'LessonNumber',
-        '#started': 'Started',
-        '#updatedAt': 'UpdatedAt'
-      },
-      ExpressionAttributeValues: {
-        ':state': `RESULTS#${paddedQuestionId}`,
-        ':questionId': paddedQuestionId,
-        ':lessonNumber': lessonNumber,
-        ':started': true,
-        ':updatedAt': new Date().toISOString()
-      }
-    }));
+    await enterResultsState(gameId, paddedQuestionId);
 
     // Update player scores using simplified PLAYER#{playerName}#SCORE architecture
     console.log(`🏆 Updating player scores for ${gameId} using simplified score records`);
@@ -521,31 +633,7 @@ async function handleTriviaResults(gameId, questionId) {
   await decrementCategoryCount(gameId, paddedQuestionId);
 
   // Update game state to RESULTS (important for trivia flow!)
-  console.log(`🏷️ Updating game state to RESULTS#${paddedQuestionId}`);
-  
-  // Get the current lesson number from the paddedQuestionId
-  const lessonNumber = parseInt(paddedQuestionId);
-  console.log(`📊 Setting LessonNumber to ${lessonNumber} for trivia RESULTS#${paddedQuestionId}`);
-  
-  await db.send(new UpdateCommand({
-    TableName: process.env.TABLE_NAME,
-    Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
-    UpdateExpression: 'SET #state = :state, #currentQuestionId = :questionId, #lessonNumber = :lessonNumber, #started = :started, #updatedAt = :updatedAt',
-    ExpressionAttributeNames: {
-      '#state': 'State',
-      '#currentQuestionId': 'CurrentQuestionId', 
-      '#lessonNumber': 'LessonNumber',
-      '#started': 'Started',
-      '#updatedAt': 'UpdatedAt'
-    },
-    ExpressionAttributeValues: {
-      ':state': `RESULTS#${paddedQuestionId}`,
-      ':questionId': paddedQuestionId,
-      ':lessonNumber': lessonNumber,
-      ':started': true,
-      ':updatedAt': new Date().toISOString()
-    }
-  }));
+  await enterResultsState(gameId, paddedQuestionId);
 
   return {
     statusCode: 200,
@@ -766,6 +854,13 @@ async function handleWavelengthResults(gameId, questionId) {
     };
 
     console.log(`🏆 Wavelength results calculated: ${commonWords.length} common words, team score: ${teamScore}`);
+
+    // This branch never wrote the state at all — the word cloud was computed and
+    // returned while the game stayed on ASK#nnn. Only the host page's local
+    // React state moved, so a refresh (or the Host Remote, which reads the state
+    // back rather than remembering what it asked for) put the room back on the
+    // answering screen.
+    await enterResultsState(gameId, paddedQuestionId);
 
     // Store results for future retrieval
     await db.send(new PutCommand({

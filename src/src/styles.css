@@ -183,17 +183,59 @@ body {
 }
 
 /* Game Host Page Styles */
+
+/* ---------------------------------------------------------------------------
+   Fixed rails, and the strip the action bar occupies.
+
+   The Game Info and How-to-Play panels are `position: fixed`. The previous
+   scheme reserved room for them with `margin-right: 320px` on a container that
+   also had `width: 100%` — which over-constrains the box, so the auto margin
+   collapses and the declared gutter is simply ignored. On top of that the Game
+   Info panel becomes 600px wide (`.qr-sidebar.two-column`) the moment a
+   question set is chosen, i.e. for the whole of a live game. Measured at
+   1280×800 the panel covered 480px of the 1160px content column; even at
+   1920×1080 it covered 280px. `closeAllSidePanels()` on every advance was
+   papering over that.
+
+   Now the rail width is one variable, the layout reserves it as PADDING on the
+   layout root (so the content column still centres in what is left), and the
+   action bar uses the same variable to stop short of the panel.
+   --------------------------------------------------------------------------- */
 .main-layout {
   position: relative;
   min-height: 100vh;
+  --rail-right: 0px;
+  --rail-left: 0px;
+  --host-bar-h: 76px;
+  padding-right: var(--rail-right);
+  padding-left: var(--rail-left);
+  transition: padding 0.3s ease;
+}
+
+.main-layout.rail-right-narrow { --rail-right: 300px; }  /* join-only panel */
+.main-layout.rail-right-wide   { --rail-right: 600px; }  /* + question-set column */
+.main-layout.rail-left         { --rail-left: 300px; }   /* How to Play */
+
+/* Below this width, reserving a rail would crush the content column past
+   readability, so the panels go back to overlaying — a deliberate, temporary
+   inspection state the host opened. */
+@media (max-width: 1024px) {
+  .main-layout.rail-right-narrow,
+  .main-layout.rail-right-wide { --rail-right: 0px; }
+  .main-layout.rail-left { --rail-left: 0px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main-layout { transition: none; }
 }
 
 .outer-container {
-  width: 100%;
+  /* `width: auto` on purpose — see the note above; `width: 100%` here is what
+     silently defeated the reserved gutter. */
+  width: auto;
   max-width: 1160px;
   margin: 0 auto;
   padding: 20px;
-  transition: margin 0.3s ease;
   /* Ensure container has white background to cover body gradient */
   background: white;
   min-height: 100vh;
@@ -203,49 +245,168 @@ body {
   overflow-x: hidden;
 }
 
-/* The QR (Game Info) and Instructions panels are position:fixed, 300px wide.
-   Reserve that width as a margin so content is never covered/clipped, instead
-   of the old fragile negative-margin calc scheme that ran content off-screen. */
-.outer-container.qr-hidden {
-  margin-right: auto;
+/* ---------------------------------------------------------------------------
+   Host action bar — the single "move the room forward" control.
+
+   Measured before this existed (1280×800, Game Info panel open, 8 players):
+   the primary button's bottom edge sat 1079–1672px down the document during
+   ASK and 2087–2845px during RESULTS, i.e. 279–2045px BELOW the fold. Every
+   phase of every game type required a scroll to act.
+
+   The bar is fixed to the foot of the content column, stops short of whichever
+   rail is open, and the page reserves an equal strip of bottom padding — so the
+   bar is always reachable and the tail of the Field Notes panel can always be
+   scrolled out from under it. Scrolling to read stays; scrolling to act is gone.
+   --------------------------------------------------------------------------- */
+.host-action-bar {
+  position: fixed;
+  bottom: 0;
+  left: var(--rail-left, 0px);
+  right: var(--rail-right, 0px);
+  /* Under the fixed rails (z 1000) — the bar belongs to the content column and
+     must never draw across a panel the host deliberately opened. */
+  z-index: 900;
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(6px);
+  border-top: 1px solid rgba(155, 168, 190, 0.35);
+  box-shadow: 0 -6px 20px rgba(27, 41, 66, 0.08);
 }
 
-.outer-container.instructions-open {
-  margin-left: auto;
+.host-action-bar__inner {
+  max-width: 1160px;
+  margin: 0 auto;
+  min-height: var(--host-bar-h, 76px);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-/* Default: QR panel open on the right, instructions closed */
-.outer-container:not(.qr-hidden):not(.instructions-open) {
-  margin-left: auto;
-  margin-right: 320px;
+.host-action-bar__status {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
-.outer-container.qr-hidden:not(.instructions-open) {
-  margin-left: auto;
-  margin-right: auto;
+/* Reuse the StatusMessage tones, drop its banner chrome — inside the bar it is
+   a progress line, not an alert. */
+.host-action-bar__status-msg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
 }
 
-.outer-container.instructions-open:not(.qr-hidden) {
-  margin-left: 320px;
-  margin-right: 320px;
+.host-action-bar__status-msg.success { color: var(--primary); }
+.host-action-bar__status-msg.error { color: var(--danger); }
+
+.host-action-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
 }
 
-.outer-container.instructions-open.qr-hidden {
-  margin-left: 320px;
-  margin-right: auto;
+.host-action-bar__hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+  max-width: 24ch;
+  text-align: right;
+  line-height: 1.3;
 }
 
-/* On narrow viewports the fixed panels overlay content rather than reserving
-   a gutter, so drop the reserved margins and let the container use full width. */
+.host-action-bar__primary,
+.host-action-bar__secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.host-action-bar__primary {
+  padding: 14px 28px;
+  font-size: 1.05rem;
+}
+
+.host-action-bar__kbd {
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid rgba(155, 168, 190, 0.5);
+  border-radius: 5px;
+  padding: 3px 7px;
+  white-space: nowrap;
+}
+
+/* The strip the bar occupies is reserved, never stolen: content can always be
+   scrolled clear of it. */
+.main-layout.has-host-bar .outer-container:not(.big-screen-mode) .game-host-container {
+  padding-bottom: calc(var(--host-bar-h, 76px) + 24px);
+}
+
+/* The report FAB is fixed bottom-right and would otherwise sit on the primary
+   button. */
+.main-layout.has-host-bar .issue-fab-container {
+  bottom: calc(var(--host-bar-h, 76px) + 16px);
+}
+
+/* The decorative parallax hero is 250px+ of pure chrome. It earns that on the
+   landing/lobby screen; during a live round it is 250px of the fold spent on a
+   word the host already knows. Collapse it — the brand band stays, the content
+   comes up. */
+.outer-container.round-live .parallax__header {
+  min-height: 96px;
+  padding: 12px 20px;
+}
+
+.outer-container.round-live .parallax__title {
+  font-size: clamp(1.5rem, 5vw, 2rem);
+}
+
 @media (max-width: 900px) {
-  .outer-container:not(.qr-hidden):not(.instructions-open),
-  .outer-container.qr-hidden:not(.instructions-open),
-  .outer-container.instructions-open:not(.qr-hidden),
-  .outer-container.instructions-open.qr-hidden {
-    margin-left: auto;
-    margin-right: auto;
+  .host-action-bar__inner {
+    padding: 10px 14px;
+    gap: 10px;
   }
+  .host-action-bar__status,
+  .host-action-bar__hint,
+  .host-action-bar__kbd { display: none; }
+  .host-action-bar__actions { flex: 1 1 auto; justify-content: center; }
 }
+
+/* ---- big-screen: the stage does not scroll, so the bar stays in flow ---- */
+.host-action-bar.big-screen-mode {
+  position: static;
+  background: none;
+  backdrop-filter: none;
+  border-top: 0;
+  box-shadow: none;
+  z-index: auto;
+  flex: 0 0 auto;
+  padding-bottom: clamp(8px, 1.6vh, 22px);
+}
+
+.host-action-bar.big-screen-mode .host-action-bar__inner {
+  max-width: none;
+  min-height: 0;
+  padding: 0;
+  justify-content: center;
+}
+
+/* The stage already prints its own "n of m answered" line inside the phase. */
+.host-action-bar.big-screen-mode .host-action-bar__status,
+.host-action-bar.big-screen-mode .host-action-bar__kbd,
+.host-action-bar.big-screen-mode .host-action-bar__hint { display: none; }
+
+.host-action-bar.big-screen-mode .host-action-bar__actions { gap: 18px; }
 
 /* Instructions Sidebar */
 .instructions-sidebar {
@@ -1319,13 +1480,6 @@ body {
   margin: 20px 0;
   font-size: 1.1rem;
   color: var(--primary);
-}
-
-.question-controls {
-  display: flex;
-  gap: 15px;
-  justify-content: center;
-  margin-top: 30px;
 }
 
 .answers-display {
@@ -3592,10 +3746,6 @@ body {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   }
   
-  .question-controls {
-    flex-direction: column;
-    align-items: center;
-  }
 }
 
 @media (max-width: 480px) {
@@ -7037,7 +7187,12 @@ body {
 .game-content.big-screen-mode {
   position: relative;
   z-index: 1;
-  height: 100vh;
+  /* Was `height: 100vh` inside a 100vh, overflow:hidden flex column — which
+     left no room for the action bar that now sits below it, so the bar was
+     clipped straight off the stage. Taking the *remaining* height instead
+     leaves it its strip and keeps the stage exactly one screen tall. */
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   align-items: stretch;
   justify-content: center;
@@ -7143,12 +7298,6 @@ body {
   color: var(--muted);
   margin: 0;
   font-weight: 500;
-}
-.waiting-state.big-screen-mode .waiting-controls {
-  display: flex;
-  justify-content: center;
-  gap: 18px;
-  margin: 8px 0 0;
 }
 .waiting-state.big-screen-mode p { color: var(--muted); font-size: 1.1rem; }
 
@@ -7302,13 +7451,6 @@ body {
   font-weight: 600;
   margin: 0;
 }
-.question-state.big-screen-mode .question-controls {
-  margin-top: clamp(6px, 1.2vh, 16px);
-  display: flex;
-  gap: 18px;
-  justify-content: center;
-  align-items: center;
-}
 
 /* ---- VOTING ---- */
 .voting-state.big-screen-mode {
@@ -7382,11 +7524,6 @@ body {
   color: var(--muted);
   font-weight: 600;
   text-align: center;
-}
-.voting-state.big-screen-mode .voting-controls {
-  display: flex;
-  justify-content: center;
-  gap: 18px;
 }
 
 /* ---- RESULTS ---- */
@@ -7558,13 +7695,6 @@ body {
 .results-state.big-screen-mode .vote-summary { color: var(--muted); }
 .results-state.big-screen-mode .points-total,
 .results-state.big-screen-mode .points-this-round { color: var(--primary); font-weight: 600; }
-
-.results-state.big-screen-mode .results-controls {
-  display: flex;
-  gap: 18px;
-  justify-content: center;
-  margin: clamp(8px, 1.4vh, 18px) 0 0;
-}
 
 /* ---- Field Notes (Workie AI insights, editorial sidebar) ---- */
 .results-state.big-screen-mode .ai-insights-section {
@@ -7863,16 +7993,6 @@ body {
 .results-state.big-screen-mode .ai-insights-section-item li {
   font-size: clamp(19px, 1.35vw, 25px);
   line-height: 1.5;
-}
-
-/* Generic control containers (also used in normal mode) */
-.waiting-controls,
-.voting-controls,
-.results-controls {
-  display: flex;
-  justify-content: center;
-  gap: 15px;
-  margin: 30px 0;
 }
 
 /* ---- Responsive: narrower projectors / windows ---- */

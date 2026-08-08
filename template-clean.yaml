@@ -553,6 +553,16 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        # get-results moves the game into RESULTS# and now announces it over the
+        # WebSocket, the way next-question and start-vote already announce their
+        # transitions. Without this the announcement is a silent AccessDenied and
+        # the room stays on the voting screen while the database says RESULTS.
+        # (WEBSOCKET_API_ENDPOINT comes from Globals, so only IAM was missing.)
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
       Events:
         GetResultsEvent:
           Type: HttpApi

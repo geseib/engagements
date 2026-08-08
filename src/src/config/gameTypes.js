@@ -51,7 +51,10 @@ export const GAME_TYPES = {
     short: 'Wavelength',
     icon: 'Waves',
     accent: 'var(--secondary)',
-    phases: ['ASK', 'VOTE', 'RESULTS'],
+    // No VOTE. handleFinishQuestion() in GameHostPage special-cases trivia and
+    // wavelength straight to results; the word cloud IS the result, there is
+    // nothing to vote on. This table used to claim a vote phase that never ran.
+    phases: ['ASK', 'RESULTS'],
     blurb: 'Word association — the room converges on a shared cloud.',
     answerType: 'wavelength',
     roundNoun: 'Subject',
@@ -62,7 +65,12 @@ export const GAME_TYPES = {
     short: 'Survey',
     icon: 'ListChecks',
     accent: 'var(--secondary)',
-    phases: ['ASK', 'RESULTS'],
+    // Records what the code DOES, which may not be what was intended: only
+    // trivia and wavelength skip voting, so a survey falls through and runs a
+    // vote phase. Arguably a survey should not — but changing that changes the
+    // game, so this table is corrected to reality and the question is flagged
+    // rather than silently answered here.
+    phases: ['ASK', 'VOTE', 'RESULTS'],
     blurb: 'Structured multi-question feedback, reported in aggregate.',
     answerType: 'text',
     roundNoun: 'Question',

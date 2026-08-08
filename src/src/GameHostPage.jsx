@@ -9,11 +9,13 @@ import WavelengthWordCloud from './components/WavelengthWordCloud';
 import Icon from './components/Icon';
 import RankIcon from './components/RankIcon';
 import SetImageBadge, { imageMarkerSuffix } from './components/SetImageBadge';
+import HostActionBar from './components/HostActionBar';
 import {
   resolveInstruction, currentQuestionOf, resolveRoundNoun, pluralRoundNoun,
 } from './config/instructions';
 import { resetGameSession } from './config/gameSession';
 import { gameTypeMeta } from './config/gameTypes';
+import { hostControlsFor, phaseOfGameState, HOST_INTENTS } from './config/hostControls';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
 
@@ -3246,12 +3248,76 @@ Ready to engage? See you there!`;
     );
   }
 
+  // ---------------------------------------------------------------------
+  // The single advance control.
+  //
+  // Every phase used to render its own button at the bottom of its own
+  // content, which is how "Next Question" ended up ~2800px down the document
+  // on a 1280×800 laptop. config/hostControls.js now decides which one action
+  // is available, and <HostActionBar> is the only thing that draws it.
+  // ---------------------------------------------------------------------
+  const hostPhase = phaseOfGameState(gameState);
+  const hostControls = hostControlsFor({
+    gameType: currentGameType,
+    phase: hostPhase,
+    roundNoun: getHostRoundNoun(),
+    playerCount: players.length,
+    answeredCount: playersWhoAnswered.length,
+    votedCount: playersWhoVoted.length,
+    answerCount: answers.length,
+    hasQuestionSet: Boolean(selectedSetId),
+  });
+
+  // A keyboard shortcut must never fire underneath something the host is
+  // reading or filling in.
+  const anyOverlayOpen = Boolean(
+    showConfirmModal || showQuestionBrowser || showExpandedQR ||
+    showReportsModal || lessonExpanded || isLoadingData || showFinalReport
+  );
+
+  const runHostAction = (action) => {
+    if (!action) return;
+    // Advancing clears the room-facing chrome: the Game Info / How to Play
+    // rails are inspection surfaces, not part of the round.
+    closeAllSidePanels();
+    switch (action.intent) {
+      case HOST_INTENTS.START:
+      case HOST_INTENTS.NEXT:
+        handleNextQuestion(false);
+        break;
+      case HOST_INTENTS.SKIP:
+        handleNextQuestion(true);
+        break;
+      case HOST_INTENTS.FINISH:
+        handleFinishQuestion();
+        break;
+      case HOST_INTENTS.REVEAL:
+        handleShowResults();
+        break;
+      default:
+        console.warn(`Unknown host action intent: ${action.intent}`);
+    }
+  };
+
+  // Fixed rails reserve real space instead of covering the content column.
+  // The Game Info panel is 300px on its own and 600px once a question set is
+  // chosen (`two-column`); the old CSS reserved a flat 320px *and* was
+  // over-constrained by `width:100%`, so the panel sat on top of up to 480px
+  // of content at 1280px wide. Big-screen mode is a full-bleed stage and
+  // reserves nothing.
+  const railClasses = bigScreenMode
+    ? ''
+    : [
+        qrSidebarVisible ? (selectedSetId ? 'rail-right-wide' : 'rail-right-narrow') : '',
+        instructionsVisible ? 'rail-left' : '',
+      ].filter(Boolean).join(' ');
+
   // DEBUG: Track every render with modal state
   console.log(`🎨 RENDER: showQuestionBrowser=${showQuestionBrowser}, showExpandedQR=${showExpandedQR}`);
 
   return (
     <>
-    <div className="main-layout">
+    <div className={`main-layout ${railClasses} has-host-bar`}>
       {/* Instructions Sidebar */}
       <div className={`instructions-sidebar ${instructionsVisible ? 'visible' : ''}`}>
         <div className="instructions-content">
@@ -3597,7 +3663,7 @@ Ready to engage? See you there!`;
       </div>
       
       <div
-        className={`outer-container ${!qrSidebarVisible ? 'qr-hidden' : ''} ${instructionsVisible ? 'instructions-open' : ''} ${bigScreenMode ? 'big-screen-mode' : ''}`}
+        className={`outer-container ${!qrSidebarVisible ? 'qr-hidden' : ''} ${instructionsVisible ? 'instructions-open' : ''} ${bigScreenMode ? 'big-screen-mode' : ''} ${hostPhase !== 'LOBBY' ? 'round-live' : ''}`}
         data-theme={bigScreenMode ? 'dark' : undefined}
       >
       
@@ -3738,20 +3804,8 @@ Ready to engage? See you there!`;
               </div>
             )}
             <h2>Waiting for players to join...</h2>
-            <div className="waiting-controls">
-              {selectedSetId && (
-                <button 
-                  className="btn-primary btn-large" 
-                  onClick={() => { closeAllSidePanels(); handleNextQuestion(false); }}
-                  disabled={players.length === 0}
-                >
-                  Start First Question
-                </button>
-              )}
-              {!selectedSetId && (
-                <p>Please select a question set in the sidebar to begin.</p>
-              )}
-            </div>
+            {/* Start / skip / advance all live in <HostActionBar> at the foot
+                of the page — see config/hostControls.js. */}
           </div>
         )}
 
@@ -3870,21 +3924,6 @@ Ready to engage? See you there!`;
             <div className="answer-progress">
               {playersWhoAnswered.length} of {players.length} players answered
             </div>
-            <div className="question-controls">
-              <button 
-                className="btn-primary" 
-                onClick={() => { closeAllSidePanels(); handleFinishQuestion(); }}
-                disabled={answers.length === 0}
-              >
-                {currentGameType === 'trivia' || currentGameType === 'wavelength' ? 'Show Results' : 'Vote'}
-              </button>
-              <button 
-                className="btn-secondary" 
-                onClick={() => { closeAllSidePanels(); handleNextQuestion(true); }}
-              >
-                Skip to Next Question
-              </button>
-            </div>
           </div>
         )}
 
@@ -3937,14 +3976,6 @@ Ready to engage? See you there!`;
             
             <div className="voting-progress">
               {playersWhoVoted.length} of {players.length} players voted
-            </div>
-            <div className="voting-controls">
-              <button 
-                className="btn-primary" 
-                onClick={() => { closeAllSidePanels(); handleShowResults(); }}
-              >
-                Show Results
-              </button>
             </div>
           </div>
         )}
@@ -4143,12 +4174,6 @@ Ready to engage? See you there!`;
               </div>
             )}
             
-            <div className="results-controls">
-              <button className="btn-primary" onClick={() => { closeAllSidePanels(); handleNextQuestion(false); }}>
-                Next Question
-              </button>
-            </div>
-            
             {/* AI Insights Section - Inline Display */}
             <div className="ai-insights-section">
               {loadingAIInsights ? (
@@ -4315,9 +4340,21 @@ Ready to engage? See you there!`;
         )}
       </div>
 
+      {/* The one advance control, for every phase and every game type.
+          Standard mode: fixed to the foot of the content column, with an equal
+          strip of reserved padding below the content so it never permanently
+          covers the Field Notes. Big-screen mode: in normal flow at the foot of
+          the stage, which does not scroll. */}
+      <HostActionBar
+        controls={hostControls}
+        onAction={runHostAction}
+        bigScreen={bigScreenMode}
+        shortcutsEnabled={!anyOverlayOpen}
+      />
+
       </div>
       </div>
-      
+
       {/* Expanded QR Code Modal */}
       {showExpandedQR && (
         <div className="expanded-qr-overlay" onClick={() => setShowExpandedQR(false)}>

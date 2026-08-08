@@ -1,0 +1,303 @@
+import {
+  parseGamePhase,
+  runsVotePhase,
+  primaryAction,
+  skipAction,
+  requestFor,
+  roundProgress,
+  needsConfirmation,
+  phaseSummary,
+  ACTIONS,
+  TYPES_WITH_NO_VOTE_AT_RUNTIME,
+} from '../config/hostRemote';
+import { GAME_TYPES, hasVotePhase } from '../config/gameTypes';
+
+const ALL_TYPES = Object.keys(GAME_TYPES);
+
+describe('parseGamePhase', () => {
+  it('splits the stored round states into phase and number', () => {
+    expect(parseGamePhase('ASK#001')).toMatchObject({ phase: 'ASK', round: 1 });
+    expect(parseGamePhase('VOTE#012')).toMatchObject({ phase: 'VOTE', round: 12 });
+    expect(parseGamePhase('RESULTS#003')).toMatchObject({ phase: 'RESULTS', round: 3 });
+  });
+
+  it('accepts the WebSocket spelling RESULT# as well as the stored RESULTS#', () => {
+    // PlayerPage already tolerates both spellings; the remote must not be the
+    // one surface that disagrees about what RESULT#002 means.
+    expect(parseGamePhase('RESULT#002')).toMatchObject({ phase: 'RESULTS', round: 2 });
+  });
+
+  it('recognises the bare lifecycle states', () => {
+    expect(parseGamePhase('CREATED').phase).toBe('CREATED');
+    expect(parseGamePhase('STARTED').phase).toBe('STARTED');
+    expect(parseGamePhase('ENDED').phase).toBe('ENDED');
+  });
+
+  it('degrades to UNKNOWN instead of throwing on junk', () => {
+    // Every one of these has been observed in a half-loaded payload or a
+    // pre-fix version of the remote, which read `gameState.currentState` — a
+    // field the API has never emitted — and rendered blank.
+    for (const junk of [undefined, null, '', '   ', {}, 42, [], 'voting', 'ASK#']) {
+      expect(() => parseGamePhase(junk)).not.toThrow();
+      expect(parseGamePhase(junk).phase).toBe('UNKNOWN');
+      expect(parseGamePhase(junk).round).toBeNull();
+    }
+  });
+});
+
+describe('runsVotePhase', () => {
+  it('matches the config table for every type it does not override', () => {
+    for (const type of ALL_TYPES) {
+      if (TYPES_WITH_NO_VOTE_AT_RUNTIME.includes(type)) continue;
+      expect(runsVotePhase(type)).toBe(hasVotePhase(type));
+    }
+  });
+
+  it('agrees with config/gameTypes.js for every type', () => {
+    // This replaces a test that PINNED a divergence: gameTypes.js claimed
+    // wavelength voted (it never has) and that survey did not (it does), so the
+    // remote carried an override. The table is corrected, the override is gone,
+    // and there is now one answer to "does this type vote?". If anyone
+    // reintroduces a second one, this fails.
+    for (const type of ALL_TYPES) {
+      expect(runsVotePhase(type)).toBe(hasVotePhase(type));
+    }
+
+    expect(runsVotePhase('wavelength')).toBe(false);
+    expect(runsVotePhase('trivia')).toBe(false);
+    expect(runsVotePhase('survey')).toBe(true);
+  });
+
+  it('normalises legacy spellings rather than defaulting them to no-vote', () => {
+    expect(runsVotePhase('callandanswer')).toBe(true);
+    expect(runsVotePhase('quiz')).toBe(false);
+    expect(runsVotePhase(undefined)).toBe(true); // falls back to call-and-answer
+  });
+});
+
+describe('primaryAction — every game type x every phase', () => {
+  it('opens the first round from CREATED and STARTED', () => {
+    for (const type of ALL_TYPES) {
+      for (const state of ['CREATED', 'STARTED']) {
+        const action = primaryAction(state, type);
+        expect(action).not.toBeNull();
+        expect(action.id).toBe('next');
+        expect(action.label).toBe('Start First Round');
+      }
+    }
+  });
+
+  it('offers voting from ASK only for the types that actually vote', () => {
+    for (const type of ALL_TYPES) {
+      const action = primaryAction('ASK#001', type);
+      expect(action.id).toBe(runsVotePhase(type) ? 'vote' : 'results');
+    }
+  });
+
+  it('never offers "Start Voting" for trivia or wavelength', () => {
+    // The failure this guards: a trivia round has no VOTE phase, so pushing the
+    // room into VOTE#001 strands every player on a screen the host never shows.
+    for (const type of TYPES_WITH_NO_VOTE_AT_RUNTIME) {
+      for (const state of ['CREATED', 'STARTED', 'ASK#001', 'VOTE#001', 'RESULTS#001', 'ENDED']) {
+        const action = primaryAction(state, type);
+        expect(action && action.id).not.toBe('vote');
+      }
+    }
+  });
+
+  it('shows results from VOTE for every type', () => {
+    for (const type of ALL_TYPES) {
+      expect(primaryAction('VOTE#004', type).id).toBe('results');
+    }
+  });
+
+  it('advances from RESULTS using the game type\'s own round noun', () => {
+    expect(primaryAction('RESULTS#001', 'trivia')).toMatchObject({
+      id: 'next',
+      label: 'Next Question',
+    });
+    expect(primaryAction('RESULTS#001', 'call-and-answer').label).toBe('Next Round');
+    expect(primaryAction('RESULTS#001', 'wavelength').label).toBe('Next Subject');
+    expect(primaryAction('RESULTS#001', 'poll').label).toBe('Next Poll');
+  });
+
+  it('offers nothing once the session has ended or the state is unreadable', () => {
+    for (const type of ALL_TYPES) {
+      expect(primaryAction('ENDED', type)).toBeNull();
+      expect(primaryAction(undefined, type)).toBeNull();
+      expect(primaryAction('nonsense', type)).toBeNull();
+    }
+  });
+
+  it('returns a copy, so a caller cannot mutate the shared ACTIONS table', () => {
+    const action = primaryAction('RESULTS#001', 'trivia');
+    action.label = 'MUTATED';
+    expect(ACTIONS.next.label).toBe('Next Round');
+  });
+});
+
+describe('skipAction', () => {
+  it('is available only mid-round', () => {
+    expect(skipAction('ASK#001')).toMatchObject({ id: 'skip', destructive: true });
+    expect(skipAction('VOTE#001')).toMatchObject({ id: 'skip' });
+    expect(skipAction('RESULTS#001')).toBeNull();
+    expect(skipAction('CREATED')).toBeNull();
+    expect(skipAction('ENDED')).toBeNull();
+    expect(skipAction(undefined)).toBeNull();
+  });
+
+  it('always demands confirmation', () => {
+    // `action: 'skip'` bypasses next-question.js's "already asking" guard, so
+    // unlike an ordinary advance a double-fire really does consume two
+    // questions and display one.
+    expect(needsConfirmation(skipAction('ASK#001'), { applicable: true, allIn: true })).toBe(true);
+  });
+});
+
+describe('requestFor', () => {
+  it('builds the same calls the host toolbar makes', () => {
+    expect(requestFor('next', { gameId: '4821' })).toEqual({
+      path: 'games/4821/next-question',
+      body: {},
+    });
+    expect(requestFor('skip', { gameId: '4821' })).toEqual({
+      path: 'games/4821/next-question',
+      body: { action: 'skip' },
+    });
+    expect(requestFor('vote', { gameId: '4821', round: 3 })).toEqual({
+      path: 'games/4821/start-vote',
+      body: { questionNumber: 3 },
+    });
+    // get-results is not nested under the game — it takes gameId in the body.
+    expect(requestFor('results', { gameId: '4821', round: 3 })).toEqual({
+      path: 'games/get-results',
+      body: { gameId: '4821', questionNumber: 3 },
+    });
+  });
+
+  it('refuses round-addressed calls when the round is unknown', () => {
+    // Guessing round 1 here would resolve or vote on the wrong round.
+    expect(requestFor('vote', { gameId: '4821' })).toBeNull();
+    expect(requestFor('results', { gameId: '4821', round: null })).toBeNull();
+  });
+
+  it('refuses everything without a game id, and ignores unknown actions', () => {
+    expect(requestFor('next', {})).toBeNull();
+    expect(requestFor('next')).toBeNull();
+    expect(requestFor('explode', { gameId: '4821' })).toBeNull();
+  });
+});
+
+describe('roundProgress', () => {
+  const asking = (answersReceived, totalPlayers) => ({
+    state: 'ASK#002',
+    answerProgress: { answersReceived, totalPlayers },
+  });
+
+  it('reads the answer tally while asking', () => {
+    expect(roundProgress(asking(12, 14))).toMatchObject({
+      kind: 'answers',
+      received: 12,
+      total: 14,
+      allIn: false,
+      label: '12 of 14 answered',
+    });
+  });
+
+  it('reads the vote tally while voting', () => {
+    expect(roundProgress({
+      state: 'VOTE#002',
+      votingProgress: { votesReceived: 5, totalPlayers: 9 },
+    })).toMatchObject({ kind: 'votes', received: 5, total: 9, label: '5 of 9 voted' });
+  });
+
+  it('is "all in" only when every active player has responded', () => {
+    expect(roundProgress(asking(13, 14)).allIn).toBe(false);
+    expect(roundProgress(asking(14, 14)).allIn).toBe(true);
+  });
+
+  it('is never "all in" for an empty room', () => {
+    // 0 of 0 is a room with nobody in it, not a room that has finished. A green
+    // badge here would cost a round.
+    const empty = roundProgress(asking(0, 0));
+    expect(empty.allIn).toBe(false);
+    expect(empty.label).toBe('Nobody has answered yet');
+  });
+
+  it('clamps a tally that runs ahead of the deduplicated player count', () => {
+    // The server counts ANSWER# rows but deduplicates PLAYER# rows by name, so
+    // one person who rejoined can push received past total. "15 of 14" reads as
+    // a bug to a host standing in front of a room.
+    expect(roundProgress(asking(15, 14))).toMatchObject({ received: 14, allIn: true });
+  });
+
+  it('reports nothing to wait for outside the responding phases', () => {
+    for (const state of ['CREATED', 'STARTED', 'RESULTS#002', 'ENDED']) {
+      expect(roundProgress({ state, answerProgress: { answersReceived: 3, totalPlayers: 4 } }))
+        .toMatchObject({ applicable: false, kind: null, allIn: false });
+    }
+  });
+
+  it('degrades without crashing on a missing or partial payload', () => {
+    for (const payload of [undefined, null, {}, 'nope', { state: 'ASK#001' },
+      { state: 'ASK#001', answerProgress: null },
+      { state: 'ASK#001', answerProgress: {} },
+      { state: 'ASK#001', answerProgress: { answersReceived: 'x', totalPlayers: undefined } }]) {
+      expect(() => roundProgress(payload)).not.toThrow();
+      const progress = roundProgress(payload);
+      expect(progress.allIn).toBe(false);
+      expect(Number.isFinite(progress.received)).toBe(true);
+      expect(Number.isFinite(progress.total)).toBe(true);
+    }
+  });
+});
+
+describe('needsConfirmation', () => {
+  const partial = { applicable: true, allIn: false };
+  const done = { applicable: true, allIn: true };
+
+  it('demands the second tap when advancing would discard responses', () => {
+    expect(needsConfirmation(primaryAction('ASK#001', 'call-and-answer'), partial)).toBe(true);
+    expect(needsConfirmation(primaryAction('ASK#001', 'trivia'), partial)).toBe(true);
+    expect(needsConfirmation(primaryAction('VOTE#001', 'poll'), partial)).toBe(true);
+  });
+
+  it('gets out of the way once the room is done', () => {
+    expect(needsConfirmation(primaryAction('ASK#001', 'call-and-answer'), done)).toBe(false);
+    expect(needsConfirmation(primaryAction('VOTE#001', 'poll'), done)).toBe(false);
+  });
+
+  it('does not gate the beats that discard nothing', () => {
+    // Moving on from RESULTS, or dealing the first round, throws away no input.
+    expect(needsConfirmation(primaryAction('RESULTS#001', 'trivia'), { applicable: false })).toBe(false);
+    expect(needsConfirmation(primaryAction('CREATED', 'trivia'), { applicable: false })).toBe(false);
+  });
+
+  it('is false when there is no action at all', () => {
+    expect(needsConfirmation(null, partial)).toBe(false);
+    expect(needsConfirmation(undefined, undefined)).toBe(false);
+  });
+});
+
+describe('phaseSummary', () => {
+  it('names the round with the game type\'s own noun', () => {
+    expect(phaseSummary({ state: 'ASK#003', gameType: 'trivia' })).toMatchObject({
+      headline: 'Question 3',
+      detail: 'Collecting responses',
+    });
+    expect(phaseSummary({ state: 'VOTE#003', gameType: 'call-and-answer' }).headline).toBe('Round 3');
+  });
+
+  it('falls back to gameMetadata.gameType when the top-level field is absent', () => {
+    expect(phaseSummary({ state: 'ASK#001', gameMetadata: { gameType: 'wavelength' } }).headline)
+      .toBe('Subject 1');
+  });
+
+  it('never renders undefined for a missing or unreadable payload', () => {
+    for (const payload of [undefined, null, {}, { state: 'garbage' }]) {
+      const summary = phaseSummary(payload);
+      expect(summary.headline).toBe('Waiting…');
+      expect(summary.detail).toBe('No game state yet');
+    }
+  });
+});

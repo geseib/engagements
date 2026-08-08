@@ -72,10 +72,15 @@ describe('gameTypes registry', () => {
   });
 
   it('knows which types run a vote phase', () => {
+    // These describe what GameHostPage.handleFinishQuestion ACTUALLY does: it
+    // special-cases trivia and wavelength straight to results, and everything
+    // else falls through to a vote. The table used to disagree on two of five
+    // types and nothing caught it, because hasVotePhase had no runtime reader.
     expect(hasVotePhase('trivia')).toBe(false);
-    expect(hasVotePhase('wavelength')).toBe(true);
+    expect(hasVotePhase('wavelength')).toBe(false);
     expect(hasVotePhase('call-and-answer')).toBe(true);
     expect(hasVotePhase('poll')).toBe(true);
+    expect(hasVotePhase('survey')).toBe(true);
   });
 
   it('exposes a label and accent for every type', () => {
