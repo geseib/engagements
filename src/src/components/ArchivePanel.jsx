@@ -1,6 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { authFetch } from '../auth/authFetch';
 import Icon from './Icon';
+import StatusMessage from './StatusMessage';
+import { GAME_TYPE_LIST, gameTypeLabel } from '../config/gameTypes';
+import {
+  archiveGameType,
+  filterArchiveItems,
+  tagFilterOptions,
+} from '../utils/archiveFiltering';
 
 const ArchivePanel = ({ onQuestionSetImport }) => {
   const [activeTab, setActiveTab] = useState('browse');
@@ -11,7 +18,12 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
+  // Game type and tag are filtered in the browser, not by the API: the stored
+  // value spells the same type several ways and sometimes lives only in Tags,
+  // so an exact-match Category filter on the server drops matching records.
+  // See utils/archiveFiltering.js.
+  const [selectedGameType, setSelectedGameType] = useState('');
+  const [selectedTag, setSelectedTag] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
   
   // Selection states for export/import
@@ -33,7 +45,24 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
     if (activeTab === 'export') {
       loadLocalContent();
     }
-  }, [selectedType, selectedCategory, activeTab]);
+  }, [selectedType, activeTab]);
+
+  // What the browse/import grids actually render.
+  const visibleItems = useMemo(
+    () => filterArchiveItems(archiveItems, { gameType: selectedGameType, tag: selectedTag }),
+    [archiveItems, selectedGameType, selectedTag]
+  );
+
+  const availableTags = useMemo(
+    () => tagFilterOptions(archiveItems, selectedTag),
+    [archiveItems, selectedTag]
+  );
+
+  // An empty grid means two different things, and saying which one saves the
+  // owner from re-running a search that was never going to match.
+  const emptyMessage = archiveItems.length === 0
+    ? 'No archive items found'
+    : 'No archive items match the current filters';
 
   const loadArchiveItems = async () => {
     setLoading(true);
@@ -43,8 +72,7 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
       // Use archive service directly
       const queryParams = new URLSearchParams();
       if (selectedType) queryParams.append('type', selectedType);
-      if (selectedCategory) queryParams.append('category', selectedCategory);
-      
+
       const archiveServiceUrl = 'https://archive.seibtribe.us'; // Archive service URL
       const url = `${archiveServiceUrl}/archive/items${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
       
@@ -110,8 +138,7 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
     try {
       const filters = {};
       if (selectedType) filters.contentType = selectedType;
-      if (selectedCategory) filters.category = selectedCategory;
-      
+
       const archiveServiceUrl = 'https://archive.seibtribe.us';
       const response = await fetch(`${archiveServiceUrl}/archive/search`, {
         method: 'POST',
@@ -403,31 +430,41 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
 
         <div className="filter-group">
           <select
+            aria-label="Content type"
             value={selectedType}
             onChange={(e) => setSelectedType(e.target.value)}
           >
-            <option value="">All Types</option>
+            <option value="">All Content Types</option>
             <option value="questionset">Question Sets</option>
             <option value="prompt">Prompts</option>
           </select>
 
           <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
+            aria-label="Game type"
+            value={selectedGameType}
+            onChange={(e) => setSelectedGameType(e.target.value)}
           >
-            <option value="">All Categories</option>
-            <option value="general">General</option>
-            <option value="business">Business</option>
-            <option value="education">Education</option>
-            <option value="entertainment">Entertainment</option>
-            <option value="technology">Technology</option>
+            <option value="">All Game Types</option>
+            {GAME_TYPE_LIST.map((type) => (
+              <option key={type.id} value={type.id}>{type.label}</option>
+            ))}
+          </select>
+
+          <select
+            aria-label="Tag"
+            value={selectedTag}
+            onChange={(e) => setSelectedTag(e.target.value)}
+            disabled={availableTags.length === 0}
+          >
+            <option value="">All Tags</option>
+            {availableTags.map((tag) => (
+              <option key={tag} value={tag}>{tag}</option>
+            ))}
           </select>
         </div>
       </div>
 
-      {error && (
-        <div className="error-message">{error}</div>
-      )}
+      <StatusMessage message={error} tone="error" className="error-message" />
 
       {/* Browse Archive Tab */}
       {activeTab === 'browse' && (
@@ -443,21 +480,27 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
             <div className="loading">Loading archive items...</div>
           ) : (
             <div className="archive-grid">
-              {archiveItems.length === 0 ? (
-                <div className="no-items">No archive items found</div>
+              {visibleItems.length === 0 ? (
+                <div className="no-items">{emptyMessage}</div>
               ) : (
-                archiveItems.map((item) => (
+                visibleItems.map((item) => (
               <div key={item.ArchiveId} className="archive-item">
                 <div className="item-header">
                   <h4>{item.Title}</h4>
                   <span className="item-type">{item.ContentType}</span>
                 </div>
-                
+
                 {item.Description && (
                   <p className="item-description">{item.Description}</p>
                 )}
-                
+
                 <div className="item-meta">
+                  {archiveGameType(item) && (
+                    <span>
+                      <Icon name="GameController" weight="bold" size={16} color="currentColor" />
+                      {' '}{gameTypeLabel(archiveGameType(item))}
+                    </span>
+                  )}
                   <span><Icon name="Folder" weight="bold" size={16} color="currentColor" /> {item.Category}</span>
                   <span><Icon name="FileText" weight="bold" size={16} color="currentColor" /> {formatFileSize(item.FileSize)}</span>
                   <span><Icon name="CalendarBlank" weight="bold" size={16} color="currentColor" /> {formatDate(item.CreatedAt)}</span>
@@ -702,7 +745,8 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
               <button
                 className="btn-secondary btn-small"
                 onClick={() => {
-                  const allIds = archiveItems.map(item => item.ArchiveId);
+                  // Select what is on screen, not what the filters hid.
+                  const allIds = visibleItems.map(item => item.ArchiveId);
                   setSelectedArchiveItems(new Set(allIds));
                 }}
               >
@@ -728,10 +772,10 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
             <div className="loading">Loading archive items...</div>
           ) : (
             <div className="archive-grid">
-              {archiveItems.length === 0 ? (
-                <div className="no-items">No archive items found</div>
+              {visibleItems.length === 0 ? (
+                <div className="no-items">{emptyMessage}</div>
               ) : (
-                archiveItems.map((item) => (
+                visibleItems.map((item) => (
                   <div key={item.ArchiveId} className="archive-item">
                     <div className="item-checkbox">
                       <input
@@ -758,6 +802,12 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                     )}
                     
                     <div className="item-meta">
+                      {archiveGameType(item) && (
+                        <span>
+                          <Icon name="GameController" weight="bold" size={16} color="currentColor" />
+                          {' '}{gameTypeLabel(archiveGameType(item))}
+                        </span>
+                      )}
                       <span><Icon name="Folder" weight="bold" size={16} color="currentColor" /> {item.Category}</span>
                       <span><Icon name="FileText" weight="bold" size={16} color="currentColor" /> {formatFileSize(item.FileSize)}</span>
                       <span><Icon name="CalendarBlank" weight="bold" size={16} color="currentColor" /> {formatDate(item.CreatedAt)}</span>

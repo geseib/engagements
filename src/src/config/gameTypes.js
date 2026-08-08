@@ -89,6 +89,25 @@ export function normalizeGameType(type) {
   return DEFAULT_GAME_TYPE;
 }
 
+/**
+ * Canonical id for a value that is *supposed to be* a game type, or null when
+ * the value is something else entirely.
+ *
+ * `normalizeGameType()` answers "what type should I render this as?" and so
+ * always returns one. Filtering asks the opposite question — "is this a game
+ * type at all?" — where the fallback is actively wrong: every archived record
+ * whose Category is `business` or `general` would come back tagged
+ * Call & Answer and show up under the wrong filter.
+ */
+export function resolveGameType(type) {
+  if (type === null || type === undefined) return null;
+  const key = String(type).trim().toLowerCase();
+  if (!key) return null;
+  if (GAME_TYPES[key]) return key;
+  if (ALIASES[key]) return ALIASES[key];
+  return null;
+}
+
 /** Full descriptor for any spelling. Never returns undefined. */
 export function gameTypeMeta(type) {
   return GAME_TYPES[normalizeGameType(type)];
