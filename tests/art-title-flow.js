@@ -21,6 +21,10 @@ class GetCommand { constructor(i) { this.input = i; this.type = 'get'; } }
 class QueryCommand { constructor(i) { this.input = i; this.type = 'query'; } }
 class DeleteCommand { constructor(i) { this.input = i; this.type = 'delete'; } }
 class UpdateCommand { constructor(i) { this.input = i; this.type = 'update'; } }
+// upload-questions.js batches its writes (165 items -> 9 calls), so the stub has
+// to speak BatchWrite too. Without it the handler 500s and every assertion below
+// fails for a reason that has nothing to do with what this file is testing.
+class BatchWriteCommand { constructor(i) { this.input = i; this.type = 'batchWrite'; } }
 
 const fakeDoc = {
   send: async (cmd) => {
@@ -36,6 +40,15 @@ const fakeDoc = {
         return {};
       case 'update':
         return {};
+      case 'batchWrite': {
+        for (const [, requests] of Object.entries(inp.RequestItems || {})) {
+          for (const r of requests) {
+            if (r.PutRequest) store.set(key(r.PutRequest.Item.PK, r.PutRequest.Item.SK), r.PutRequest.Item);
+            if (r.DeleteRequest) store.delete(key(r.DeleteRequest.Key.PK, r.DeleteRequest.Key.SK));
+          }
+        }
+        return { UnprocessedItems: {} };
+      }
       case 'query': {
         const pk = inp.ExpressionAttributeValues[':pk'] ?? inp.ExpressionAttributeValues[':PK'];
         const prefixVal = inp.ExpressionAttributeValues[':sk'] ?? inp.ExpressionAttributeValues[':prefix'] ?? '';
@@ -78,7 +91,7 @@ function stub(name, exports) {
 stub('@aws-sdk/client-dynamodb', { DynamoDBClient: class {} });
 stub('@aws-sdk/lib-dynamodb', {
   DynamoDBDocumentClient: { from: () => fakeDoc },
-  PutCommand, GetCommand, QueryCommand, DeleteCommand, UpdateCommand,
+  PutCommand, GetCommand, QueryCommand, DeleteCommand, UpdateCommand, BatchWriteCommand,
 });
 
 process.env.TABLE_NAME = 'test-table';

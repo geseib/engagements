@@ -1,12 +1,75 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, BatchWriteCommand } = require('@aws-sdk/lib-dynamodb');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
 
+const BATCH_LIMIT = 25;          // DynamoDB BatchWriteItem hard limit
+const MAX_BATCH_ATTEMPTS = 6;    // retries for UnprocessedItems
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const badRequest = (error) => ({
+  statusCode: 400,
+  body: JSON.stringify({ error }),
+  headers: { 'Access-Control-Allow-Origin': '*' }
+});
+
+/**
+ * Write items with BatchWrite, honouring the 25-item limit and RETRYING
+ * UnprocessedItems with exponential backoff. DynamoDB returns UnprocessedItems
+ * on partial throttling without raising an error — dropping them silently
+ * loses rows, which is exactly how a large import ends up short.
+ */
+async function batchPut(items) {
+  for (let i = 0; i < items.length; i += BATCH_LIMIT) {
+    let pending = items.slice(i, i + BATCH_LIMIT).map((Item) => ({ PutRequest: { Item } }));
+
+    for (let attempt = 0; attempt < MAX_BATCH_ATTEMPTS && pending.length > 0; attempt++) {
+      if (attempt > 0) await sleep(50 * 2 ** (attempt - 1));
+      const res = await db.send(new BatchWriteCommand({
+        RequestItems: { [process.env.TABLE_NAME]: pending }
+      }));
+      pending = (res?.UnprocessedItems?.[process.env.TABLE_NAME]) || [];
+    }
+
+    if (pending.length > 0) {
+      throw new Error(`DynamoDB kept throttling ${pending.length} item(s) after ${MAX_BATCH_ATTEMPTS} attempts`);
+    }
+  }
+}
+
+/** Best-effort removal of rows written by a failed import, so it leaves no orphans. */
+async function deleteKeys(keys) {
+  for (let i = 0; i < keys.length; i += BATCH_LIMIT) {
+    const chunk = keys.slice(i, i + BATCH_LIMIT).map((Key) => ({ DeleteRequest: { Key } }));
+    try {
+      await db.send(new BatchWriteCommand({
+        RequestItems: { [process.env.TABLE_NAME]: chunk }
+      }));
+    } catch (e) {
+      console.error(`⚠️ Rollback batch failed (orphans may remain): ${e.message}`);
+    }
+  }
+}
+
 exports.handler = async (event) => {
   try {
-    const { fileName, fileContent, customTitle, customDescription, customInstructions, aiContextInstructions, promptId, engagementType, isAIGenerated } = JSON.parse(event.body);
+    let payload;
+    try {
+      payload = JSON.parse(event?.body || '{}');
+    } catch (e) {
+      return badRequest('Request body is not valid JSON.');
+    }
+
+    const { fileName, fileContent, customTitle, customDescription, customInstructions, aiContextInstructions, promptId, engagementType, isAIGenerated } = payload;
+
+    if (typeof fileContent !== 'string' || fileContent.trim() === '') {
+      return badRequest('No file content received. Please choose a CSV file and try again.');
+    }
+    if (typeof fileName !== 'string' || fileName.trim() === '') {
+      return badRequest('No file name received. Please choose a CSV file and try again.');
+    }
 
     console.log(`Processing CSV upload: ${fileName}`);
     console.log(`Custom title: ${customTitle}`);
@@ -106,7 +169,15 @@ exports.handler = async (event) => {
 
     // Extract set name from custom title or filename
     const setName = customTitle?.trim() || fileName.replace(/\.csv$/i, '');
-    const setId = setName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    let setId = setName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!setId) {
+      // A title with no ASCII alphanumerics (e.g. "日本語セット") used to slug to
+      // the empty string, producing the bare keys PK/SK "SET#" — every such set
+      // collided with every other one. Fall back to a deterministic hex slug of
+      // the name so the same title still maps to the same id.
+      setId = 'set' + Buffer.from(setName, 'utf8').toString('hex').slice(0, 32);
+      console.log(`ℹ️ Title has no ASCII alphanumerics; derived setId "${setId}"`);
+    }
     const setDescription = customDescription?.trim() || `Imported from ${fileName}`;
 
     // Parse header with flexible mapping
@@ -193,23 +264,33 @@ exports.handler = async (event) => {
     // Parse questions with mapped columns
     const questions = [];
     const categories = new Set();
+    const skippedRows = [];
     let questionCount = 0;
 
+    // Read one already-parsed cell. Deliberately NO `.replace(/"/g, '')` here:
+    // parseCSV has already consumed the CSV quoting and turned `""` back into a
+    // literal `"`, so stripping quotes a second time silently deletes quote
+    // characters that are part of the author's text (e.g. THE "RIGHT" CALL).
+    const cell = (values, idx) => (idx >= 0 ? (values[idx] ?? '').trim() : '');
+
     for (let i = 1; i < rows.length; i++) {
+      const values = rows[i];
       try {
-        const values = rows[i];
-        if (values.length < 2) continue; // Skip empty rows
+        if (values.length < 2) { // Skip empty rows
+          skippedRows.push({ row: i + 1, reason: 'too few columns' });
+          continue;
+        }
 
         // Extract values using mapped indices
-        const category = values[categoryIndex]?.replace(/"/g, '')?.trim();
-        const questionNumber = questionNumberIndex >= 0 ? values[questionNumberIndex]?.replace(/"/g, '')?.trim() : '';
-        const title = values[titleIndex]?.replace(/"/g, '')?.trim();
-        const questionDetail = questionDetailIndex >= 0 ? values[questionDetailIndex]?.replace(/"/g, '')?.trim() : '';
-        const answerDetails = answerDetailsIndex >= 0 ? values[answerDetailsIndex]?.replace(/"/g, '')?.trim() : '';
-        const legacyDetail = detailIndex >= 0 ? values[detailIndex]?.replace(/"/g, '')?.trim() || '' : '';
-        const school = schoolIndex >= 0 ? values[schoolIndex]?.replace(/"/g, '')?.trim() || '' : '';
-        const questionCustomInstruction = customInstructionIndex >= 0 ? values[customInstructionIndex]?.replace(/"/g, '')?.trim() || '' : '';
-        const image = imageIndex >= 0 ? values[imageIndex]?.replace(/"/g, '')?.trim() || '' : '';
+        const category = cell(values, categoryIndex);
+        const questionNumber = cell(values, questionNumberIndex);
+        const title = cell(values, titleIndex);
+        const questionDetail = cell(values, questionDetailIndex);
+        const answerDetails = cell(values, answerDetailsIndex);
+        const legacyDetail = cell(values, detailIndex);
+        const school = cell(values, schoolIndex);
+        const questionCustomInstruction = cell(values, customInstructionIndex);
+        const image = cell(values, imageIndex);
 
         // Use new fields if available, otherwise fall back to legacy
         const finalQuestionDetail = questionDetail || legacyDetail || ''; // Use question detail or legacy detail for trivia
@@ -240,19 +321,18 @@ exports.handler = async (event) => {
           // Add engagement-type specific fields
           if (engagementType === 'trivia') {
             // Only support OptionA/B/C/D/E/F format (up to 6 options)
-            baseQuestion.OptionA = optionAIndex >= 0 ? values[optionAIndex]?.replace(/"/g, '')?.trim() || '' : '';
-            baseQuestion.OptionB = optionBIndex >= 0 ? values[optionBIndex]?.replace(/"/g, '')?.trim() || '' : '';
-            baseQuestion.OptionC = optionCIndex >= 0 ? values[optionCIndex]?.replace(/"/g, '')?.trim() || '' : '';
-            baseQuestion.OptionD = optionDIndex >= 0 ? values[optionDIndex]?.replace(/"/g, '')?.trim() || '' : '';
-            baseQuestion.OptionE = optionEIndex >= 0 ? values[optionEIndex]?.replace(/"/g, '')?.trim() || '' : '';
-            baseQuestion.OptionF = optionFIndex >= 0 ? values[optionFIndex]?.replace(/"/g, '')?.trim() || '' : '';
-            baseQuestion.CorrectAnswer = correctAnswerIndex >= 0 ? values[correctAnswerIndex]?.replace(/"/g, '')?.trim() || '' : '';
-            baseQuestion.Difficulty = difficultyIndex >= 0 ? values[difficultyIndex]?.replace(/"/g, '')?.trim() || 'medium' : 'medium';
+            baseQuestion.OptionA = cell(values, optionAIndex);
+            baseQuestion.OptionB = cell(values, optionBIndex);
+            baseQuestion.OptionC = cell(values, optionCIndex);
+            baseQuestion.OptionD = cell(values, optionDIndex);
+            baseQuestion.OptionE = cell(values, optionEIndex);
+            baseQuestion.OptionF = cell(values, optionFIndex);
+            baseQuestion.CorrectAnswer = cell(values, correctAnswerIndex);
+            baseQuestion.Difficulty = cell(values, difficultyIndex) || 'medium';
           } else if (engagementType === 'poll') {
-            const optionsStr = optionsIndex >= 0 ? values[optionsIndex]?.replace(/"/g, '')?.trim() || '' : '';
+            const optionsStr = cell(values, optionsIndex);
             baseQuestion.Options = optionsStr ? optionsStr.split('|').map(opt => opt.trim()) : [];
-            const allowMultipleStr = allowMultipleIndex >= 0 ? values[allowMultipleIndex]?.replace(/"/g, '')?.trim() || 'false' : 'false';
-            baseQuestion.AllowMultiple = allowMultipleStr.toLowerCase() === 'true';
+            baseQuestion.AllowMultiple = cell(values, allowMultipleIndex).toLowerCase() === 'true';
           }
 
           questions.push(baseQuestion);
@@ -262,9 +342,19 @@ exports.handler = async (event) => {
           if (engagementType === 'call-and-answer' && finalQuestionDetail.length > 200) {
             console.log(`    📝 Long detail field (${finalQuestionDetail.length} chars)`);
           }
+        } else {
+          // A row that parsed fine but is unusable. Previously dropped in total
+          // silence, so an import could report "3 questions" for a 5-row file.
+          const missing = [!category && 'Category', !title && 'Title'].filter(Boolean).join(' + ');
+          skippedRows.push({ row: i + 1, reason: `missing ${missing}` });
+          console.log(`⚠️ Row ${i + 1} skipped: missing ${missing}`);
         }
       } catch (e) {
-        console.log(`⚠️ Skipping malformed row ${i}: ${JSON.stringify(values).substring(0, 100)}...`);
+        // `values` is declared outside the try on purpose: it used to be a
+        // `const` inside it, so this handler threw ReferenceError and turned a
+        // skippable row into a 500 for the whole import.
+        skippedRows.push({ row: i + 1, reason: `malformed row: ${e.message}` });
+        console.log(`⚠️ Skipping malformed row ${i + 1}: ${JSON.stringify(values).substring(0, 100)}...`);
       }
     }
 
@@ -292,59 +382,47 @@ exports.handler = async (event) => {
       };
     }
 
-    // Create set metadata with enhanced information
-    await db.send(new PutCommand({
-      TableName: process.env.TABLE_NAME,
-      Item: {
-        PK: 'SETS',
-        SK: `SET#${setId}`,
-        name: setName,
-        description: setDescription,
-        customInstruction: customInstructions?.trim() || '',
-        aiContextInstruction: aiContextInstructions?.trim() || '',
-        promptId: promptId || 'lessons-learned', // AI prompt template ID
-        questionCount: questions.length,
-        categoryCount: categories.size,
-        active: isAIGenerated ? false : true,  // AI-generated content starts as inactive
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        sourceFile: fileName,
-        engagementType: engagementType || 'call-and-answer',
-        isAIGenerated: isAIGenerated || false
-      }
+    const setMetadataItem = {
+      PK: 'SETS',
+      SK: `SET#${setId}`,
+      name: setName,
+      description: setDescription,
+      customInstruction: customInstructions?.trim() || '',
+      aiContextInstruction: aiContextInstructions?.trim() || '',
+      promptId: promptId || 'lessons-learned', // AI prompt template ID
+      questionCount: questions.length,
+      categoryCount: categories.size,
+      active: isAIGenerated ? false : true,  // AI-generated content starts as inactive
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      sourceFile: fileName,
+      engagementType: engagementType || 'call-and-answer',
+      isAIGenerated: isAIGenerated || false
+    };
+
+    // Build the category rows
+    const categoryItems = Array.from(categories).map((categoryName, idx) => ({
+      PK: `SET#${setId}`,
+      SK: `CATEGORY#c${String(idx + 1).padStart(3, '0')}`,
+      Name: categoryName,
+      Description: `${categoryName} questions`,
+      QuestionCount: questions.filter(q => q.Category === categoryName).length
     }));
-
-    // Create categories
-    const categoryPromises = Array.from(categories).map((categoryName, idx) => {
-      const categoryId = `c${String(idx + 1).padStart(3, '0')}`;
-      return db.send(new PutCommand({
-        TableName: process.env.TABLE_NAME,
-        Item: {
-          PK: `SET#${setId}`,
-          SK: `CATEGORY#${categoryId}`,
-          Name: categoryName,
-          Description: `${categoryName} questions`,
-          QuestionCount: questions.filter(q => q.Category === categoryName).length
-        }
-      }));
-    });
-
-    await Promise.all(categoryPromises);
 
     // Create questions with enhanced data - using category-relative numbering
     console.log(`🔄 Creating ${questions.length} questions in database...`);
-    
+
     // Create a mapping of category names to category IDs
     const categoryNameToId = {};
     Array.from(categories).forEach((categoryName, categoryIndex) => {
       categoryNameToId[categoryName] = `c${String(categoryIndex + 1).padStart(3, '0')}`;
     });
-    
-    const questionPromises = [];
-    
+
+    const questionItems = [];
+
     // Process questions grouped by category to ensure proper category-relative numbering
     const categoryCounters = {};
-    
+
     questions.forEach((question) => {
       const categoryId = categoryNameToId[question.Category];
       
@@ -382,10 +460,8 @@ exports.handler = async (event) => {
       // Add engagement-type specific fields to database item
       if (engagementType === 'trivia') {
         // Only support OptionA/B/C/D/E/F format (up to 6 options)
-        console.log(`🎯 Processing trivia question: ${question.Title}`);
-        console.log(`🎯 Options: A="${question.OptionA}", B="${question.OptionB}", C="${question.OptionC}", D="${question.OptionD}"`);
-        console.log(`🎯 Correct answer: "${question.CorrectAnswer}"`);
-        
+        console.log(`🎯 Trivia "${question.Title}" → correct answer "${question.CorrectAnswer}"`);
+
         questionItem.optionA = question.OptionA || '';
         questionItem.optionB = question.OptionB || '';
         questionItem.optionC = question.OptionC || '';
@@ -401,13 +477,38 @@ exports.handler = async (event) => {
         questionItem.allowMultiple = question.AllowMultiple || false;
       }
 
-      questionPromises.push(db.send(new PutCommand({
-        TableName: process.env.TABLE_NAME,
-        Item: questionItem
-      })));
+      questionItems.push(questionItem);
     });
 
-    await Promise.all(questionPromises);
+    // Write order matters. Content rows go first and the SETS metadata row goes
+    // LAST, so a set only ever becomes visible in the admin list once all of its
+    // questions are actually in the table. Previously metadata was written
+    // first, and any failure mid-import left a browsable set with missing
+    // questions. If anything does fail, roll back everything we wrote so the
+    // import leaves no orphan rows behind for a later re-import to merge with.
+    // Roll back against every key we INTENDED to write, not just the batches
+    // that came back clean: BatchWriteItem is not atomic, so the call that
+    // throws may already have applied some of its items. Deleting a key that
+    // was never written is a harmless no-op.
+    const intendedKeys = [...categoryItems, ...questionItems, setMetadataItem]
+      .map(({ PK, SK }) => ({ PK, SK }));
+
+    try {
+      await batchPut(categoryItems);
+      await batchPut(questionItems);
+      await batchPut([setMetadataItem]);
+    } catch (writeError) {
+      console.error(`❌ Import write failed: ${writeError.message}`);
+      console.log(`🧹 Rolling back up to ${intendedKeys.length} item(s)`);
+      await deleteKeys(intendedKeys);
+      return {
+        statusCode: 500,
+        body: JSON.stringify({
+          error: `Upload failed while writing to the database: ${writeError.message}. No partial set was left behind.`
+        }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
 
     console.log(`✅ Successfully created question set "${setName}"`);
     console.log(`📊 Final stats: ${questions.length} questions, ${categories.size} categories`);
@@ -419,7 +520,12 @@ exports.handler = async (event) => {
         setId: setId,
         questionCount: questions.length,
         categoryCount: categories.size,
+        // Rows the importer could not use. Reported so an import that quietly
+        // drops half a file is visible instead of looking like a clean success.
+        skippedRowCount: skippedRows.length,
+        skippedRows: skippedRows.slice(0, 50),
         message: `Successfully created question set "${setName}" with ${questions.length} questions across ${categories.size} categories`
+          + (skippedRows.length ? ` (${skippedRows.length} row(s) skipped)` : '')
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }
     };
