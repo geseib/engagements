@@ -1,0 +1,75 @@
+{
+  "note": "Public-domain artwork mirrored from Wikimedia Commons and re-encoded to 1200px JPEG. Served from the app origin via CloudFront so a round never depends on an external host mid-session.",
+  "images": [
+    {
+      "file": "the-enigmatic-smile.jpg",
+      "title": "THE ENIGMATIC SMILE",
+      "credit": "Leonardo da Vinci, c. 1503",
+      "source": "https://commons.wikimedia.org/wiki/Special:FilePath/Mona_Lisa,_by_Leonardo_da_Vinci,_from_C2RMF_retouched.jpg",
+      "license": "Public domain (Wikimedia Commons)"
+    },
+    {
+      "file": "a-swirling-night-sky.jpg",
+      "title": "A SWIRLING NIGHT SKY",
+      "credit": "Vincent van Gogh, 1889",
+      "source": "https://commons.wikimedia.org/wiki/Special:FilePath/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg",
+      "license": "Public domain (Wikimedia Commons)"
+    },
+    {
+      "file": "the-towering-sea.jpg",
+      "title": "THE TOWERING SEA",
+      "credit": "Katsushika Hokusai, c. 1831",
+      "source": "https://commons.wikimedia.org/wiki/Special:FilePath/The_Great_Wave_off_Kanagawa.jpg",
+      "license": "Public domain (Wikimedia Commons)"
+    },
+    {
+      "file": "a-glance-over-the-shoulder.jpg",
+      "title": "A GLANCE OVER THE SHOULDER",
+      "credit": "Johannes Vermeer, c. 1665",
+      "source": "https://commons.wikimedia.org/wiki/Special:FilePath/Meisje_met_de_parel.jpg",
+      "license": "Public domain (Wikimedia Commons)"
+    },
+    {
+      "file": "arrival-on-the-shore.jpg",
+      "title": "ARRIVAL ON THE SHORE",
+      "credit": "Sandro Botticelli, c. 1485",
+      "source": "https://commons.wikimedia.org/wiki/Special:FilePath/Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.jpg",
+      "license": "Public domain (Wikimedia Commons)"
+    },
+    {
+      "file": "a-cry-on-the-bridge.jpg",
+      "title": "A CRY ON THE BRIDGE",
+      "credit": "Edvard Munch, 1893",
+      "source": "https://commons.wikimedia.org/wiki/Special:FilePath/The_Scream.jpg",
+      "license": "Public domain (Wikimedia Commons)"
+    },
+    {
+      "file": "an-embrace-in-gold.jpg",
+      "title": "AN EMBRACE IN GOLD",
+      "credit": "Gustav Klimt, 1908",
+      "source": "https://commons.wikimedia.org/wiki/Special:FilePath/Gustav_Klimt_016.jpg",
+      "license": "Public domain (Wikimedia Commons)"
+    },
+    {
+      "file": "above-the-clouds.jpg",
+      "title": "ABOVE THE CLOUDS",
+      "credit": "Caspar David Friedrich, c. 1818",
+      "source": "https://commons.wikimedia.org/wiki/Special:FilePath/Caspar_David_Friedrich_-_Wanderer_above_the_sea_of_fog.jpg",
+      "license": "Public domain (Wikimedia Commons)"
+    },
+    {
+      "file": "the-company-steps-out.jpg",
+      "title": "THE COMPANY STEPS OUT",
+      "credit": "Rembrandt van Rijn, 1642",
+      "source": "https://commons.wikimedia.org/wiki/Special:FilePath/The_Nightwatch_by_Rembrandt_-_Rijksmuseum.jpg",
+      "license": "Public domain (Wikimedia Commons)"
+    },
+    {
+      "file": "an-afternoon-in-the-park.jpg",
+      "title": "AN AFTERNOON IN THE PARK",
+      "credit": "Georges Seurat, 1884",
+      "source": "https://commons.wikimedia.org/wiki/Special:FilePath/A_Sunday_on_La_Grande_Jatte,_Georges_Seurat,_1884.jpg",
+      "license": "Public domain (Wikimedia Commons)"
+    }
+  ]
+}

@@ -1,0 +1,1469 @@
+{
+    "Items": [
+        {
+            "aiContextInstruction": {
+                "S": "These scenarios are designed for professional development and learning. The target audience is kids, adults . These are medium-level scenarios. Provide constructive feedback and encourage specific, detailed responses."
+            },
+            "isAIGenerated": {
+                "BOOL": true
+            },
+            "sourceFile": {
+                "S": "4th_of_July_Activities-1783001358351.csv"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:09:20.093Z"
+            },
+            "promptId": {
+                "S": "lessons-learned"
+            },
+            "name": {
+                "S": "4th of July Activities"
+            },
+            "questionCount": {
+                "N": "10"
+            },
+            "customInstruction": {
+                "S": "Share specific experiences and focus on what was learned and how it changed your approach going forward."
+            },
+            "engagementType": {
+                "S": "call-and-answer"
+            },
+            "active": {
+                "BOOL": false
+            },
+            "categoryCount": {
+                "N": "8"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:09:20.093Z"
+            },
+            "SK": {
+                "S": "SET#4thofjulyactivities"
+            },
+            "description": {
+                "S": "10 AI-generated scenarios for medium difficulty level. Target audience: kids, adults . Context: Real-world situations THings to do with family on 4th of july"
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-07-30T12:28:07.410Z"
+            },
+            "aiContextInstruction": {
+                "S": "80s related trivia that focuses on the Music, Music Videos, Pop culutre"
+            },
+            "isAIGenerated": {
+                "BOOL": false
+            },
+            "sourceFile": {
+                "S": "trivia-80s_Music_Trivia_101-1753050626534.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-20T23:30:01.218Z"
+            },
+            "promptId": {
+                "S": "mdpwd7uw26yo1i5v81g"
+            },
+            "name": {
+                "S": "80s music trivia"
+            },
+            "questionCount": {
+                "N": "20"
+            },
+            "customInstruction": {
+                "S": ""
+            },
+            "engagementType": {
+                "S": "trivia"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "6"
+            },
+            "updatedAt": {
+                "S": "2025-07-20T23:30:01.218Z"
+            },
+            "SK": {
+                "S": "SET#80smusictrivia"
+            },
+            "Quickstart": {
+                "BOOL": true
+            },
+            "description": {
+                "S": "Music and culture from the 80s"
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-07-25T03:01:03.040Z"
+            },
+            "aiContextInstruction": {
+                "S": "You are an Amazon Bar Raiser interviewing candidates. You love clear communication, data, brevity and alignments to the leadership principle being discussed. Provide an assessment and then coaching on how to improve the answer."
+            },
+            "sourceFile": {
+                "S": "amazon_all_leadership_scenarios.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-16T11:56:36.588Z"
+            },
+            "name": {
+                "S": "Amazon Leadership Principles Interviews"
+            },
+            "questionCount": {
+                "N": "160"
+            },
+            "customInstruction": {
+                "S": "Provide a real experience that you have had that relates to the question at hand. Use data and clear communication. The STAR (Situation, Task, Action, and Results) format is preferred."
+            },
+            "engagementType": {
+                "S": "call-and-answer"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "16"
+            },
+            "updatedAt": {
+                "S": "2025-07-16T11:56:36.588Z"
+            },
+            "SK": {
+                "S": "SET#amazonleadershipprinciplesinterviews"
+            },
+            "Quickstart": {
+                "BOOL": true
+            },
+            "description": {
+                "S": "Amazon's peculiar style of interviews"
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-07-20T01:01:30.128Z"
+            },
+            "aiContextInstruction": {
+                "S": "These are medium-level trivia questions about American History. Provide explanations for correct answers and encourage learning."
+            },
+            "isAIGenerated": {
+                "BOOL": true
+            },
+            "sourceFile": {
+                "S": "American_History_Trivia_for_All_people-1752973278919.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-20T01:01:20.415Z"
+            },
+            "promptId": {
+                "S": "lessons-learned"
+            },
+            "name": {
+                "S": "American History Trivia for All people"
+            },
+            "questionCount": {
+                "N": "40"
+            },
+            "customInstruction": {
+                "S": "Select the best answer for each question."
+            },
+            "engagementType": {
+                "S": "trivia"
+            },
+            "active": {
+                "BOOL": false
+            },
+            "categoryCount": {
+                "N": "4"
+            },
+            "updatedAt": {
+                "S": "2025-07-20T14:26:31.198Z"
+            },
+            "SK": {
+                "S": "SET#americanhistorytriviaforallpeople"
+            },
+            "description": {
+                "S": "40 AI-generated trivia questions about American History. Difficulty: medium. 4 choices per question."
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-08-06T21:50:23.922Z"
+            },
+            "aiContextInstruction": {
+                "S": "These are medium-level trivia questions about Aws ai exam. Provide explanations for correct answers and encourage learning."
+            },
+            "isAIGenerated": {
+                "BOOL": true
+            },
+            "sourceFile": {
+                "S": "Aws_ai_exam_Trivia_for_Cloud_engineers-1754516960810.csv"
+            },
+            "createdAt": {
+                "S": "2025-08-06T21:49:22.137Z"
+            },
+            "promptId": {
+                "S": "mdpwd7uw26yo1i5v81g"
+            },
+            "name": {
+                "S": "Aws ai exam Trivia for Cloud engineers"
+            },
+            "questionCount": {
+                "N": "10"
+            },
+            "customInstruction": {
+                "S": "Select the best answer for each question."
+            },
+            "engagementType": {
+                "S": "trivia"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "9"
+            },
+            "updatedAt": {
+                "S": "2025-08-06T21:49:36.365Z"
+            },
+            "SK": {
+                "S": "SET#awsaiexamtriviaforcloudengineers"
+            },
+            "Quickstart": {
+                "BOOL": true
+            },
+            "description": {
+                "S": "10 AI-generated trivia questions about Aws ai exam. Difficulty: medium. 4 choices per question."
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-07-30T12:07:55.087Z"
+            },
+            "aiContextInstruction": {
+                "S": "These are medium-level trivia questions about AWS - Constant Work. Provide explanations for correct answers and encourage learning."
+            },
+            "isAIGenerated": {
+                "BOOL": true
+            },
+            "sourceFile": {
+                "S": "AWS___Constant_Work_Trivia_for_Software_Engineer-1753746588975.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-28T23:49:50.939Z"
+            },
+            "promptId": {
+                "S": "mdnv3wtad6az17tloc"
+            },
+            "name": {
+                "S": "AWS - Constant Work Trivia for Software Engineer"
+            },
+            "questionCount": {
+                "N": "10"
+            },
+            "customInstruction": {
+                "S": "Select the best answer for each question."
+            },
+            "engagementType": {
+                "S": "trivia"
+            },
+            "active": {
+                "BOOL": false
+            },
+            "categoryCount": {
+                "N": "10"
+            },
+            "updatedAt": {
+                "S": "2025-07-28T23:49:50.939Z"
+            },
+            "SK": {
+                "S": "SET#awsconstantworktriviaforsoftwareengineer"
+            },
+            "description": {
+                "S": "10 AI-generated trivia questions about AWS - Constant Work. Difficulty: medium. 4 choices per question."
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-07-25T03:01:14.047Z"
+            },
+            "aiContextInstruction": {
+                "S": "These are medium-level trivia questions about Baseball. Provide explanations for correct answers and encourage learning."
+            },
+            "isAIGenerated": {
+                "BOOL": true
+            },
+            "sourceFile": {
+                "S": "Baseball_Trivia_for_sports_fans-1753315538943.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-24T00:05:40.050Z"
+            },
+            "promptId": {
+                "S": "lessons-learned"
+            },
+            "name": {
+                "S": "Baseball Trivia for sports fans"
+            },
+            "questionCount": {
+                "N": "10"
+            },
+            "customInstruction": {
+                "S": "Select the best answer for each question."
+            },
+            "engagementType": {
+                "S": "trivia"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "8"
+            },
+            "updatedAt": {
+                "S": "2025-07-24T00:06:09.119Z"
+            },
+            "SK": {
+                "S": "SET#baseballtriviaforsportsfans"
+            },
+            "Quickstart": {
+                "BOOL": false
+            },
+            "description": {
+                "S": "10 AI-generated trivia questions about Baseball. Difficulty: medium. 4 choices per question."
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "aiContextInstruction": {
+                "S": "These scenarios are designed for professional development and learning. These are medium-level scenarios. Provide constructive feedback and encourage specific, detailed responses."
+            },
+            "isAIGenerated": {
+                "BOOL": true
+            },
+            "sourceFile": {
+                "S": "Business_Concepts-1783001573645.csv"
+            },
+            "createdAt": {
+                "S": "2026-07-02T14:12:54.472Z"
+            },
+            "promptId": {
+                "S": "lessons-learned"
+            },
+            "name": {
+                "S": "Business Concepts"
+            },
+            "questionCount": {
+                "N": "7"
+            },
+            "customInstruction": {
+                "S": "Engage thoughtfully with each scenario and share your experiences and insights."
+            },
+            "engagementType": {
+                "S": "wavelength"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "3"
+            },
+            "updatedAt": {
+                "S": "2026-07-02T14:13:35.708Z"
+            },
+            "SK": {
+                "S": "SET#businessconcepts"
+            },
+            "description": {
+                "S": "7 AI-generated scenarios for medium difficulty level. Context: Business and management terms for exploration"
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-08-03T23:07:44.427Z"
+            },
+            "aiContextInstruction": {
+                "S": "These scenarios are designed for professional development and learning. These are detailed-level scenarios. Provide constructive feedback and encourage specific, detailed responses."
+            },
+            "isAIGenerated": {
+                "BOOL": true
+            },
+            "sourceFile": {
+                "S": "Complete_this_sentence___Fun_80s_movies-1754262426420.csv"
+            },
+            "createdAt": {
+                "S": "2025-08-03T23:07:07.789Z"
+            },
+            "promptId": {
+                "S": "lessons-learned"
+            },
+            "name": {
+                "S": "Complete this sentence - Fun 80s movies"
+            },
+            "questionCount": {
+                "N": "10"
+            },
+            "customInstruction": {
+                "S": "Follow the specific guidelines provided for your scenario type."
+            },
+            "engagementType": {
+                "S": "call-and-answer"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "8"
+            },
+            "updatedAt": {
+                "S": "2025-08-03T23:07:49.883Z"
+            },
+            "SK": {
+                "S": "SET#completethissentencefun80smovies"
+            },
+            "Quickstart": {
+                "BOOL": true
+            },
+            "description": {
+                "S": "10 AI-generated scenarios for detailed difficulty level. Context: A list of semi famous quotes from 80's movies with the last few worlds left off"
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-08-03T23:07:47.244Z"
+            },
+            "aiContextInstruction": {
+                "S": "These scenarios are designed for professional development and learning. These are medium-level scenarios. Provide constructive feedback and encourage specific, detailed responses."
+            },
+            "isAIGenerated": {
+                "BOOL": true
+            },
+            "sourceFile": {
+                "S": "Complete_this_sentence___Movies_and_Music-1754248642808.csv"
+            },
+            "createdAt": {
+                "S": "2025-08-03T19:17:24.231Z"
+            },
+            "promptId": {
+                "S": "lessons-learned"
+            },
+            "name": {
+                "S": "Complete this sentence - Movies and Music"
+            },
+            "questionCount": {
+                "N": "50"
+            },
+            "customInstruction": {
+                "S": "Follow the specific guidelines provided for your scenario type."
+            },
+            "engagementType": {
+                "S": "call-and-answer"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "15"
+            },
+            "updatedAt": {
+                "S": "2025-08-03T19:17:34.108Z"
+            },
+            "SK": {
+                "S": "SET#completethissentencemoviesandmusic"
+            },
+            "Quickstart": {
+                "BOOL": false
+            },
+            "description": {
+                "S": "50 AI-generated scenarios for medium difficulty level. Context: A list of semi famous quotes from famous songs and movies with the last few worlds left off."
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "aiContextInstruction": {
+                "S": ""
+            },
+            "isAIGenerated": {
+                "BOOL": false
+            },
+            "sourceFile": {
+                "S": "famous-art-titles.csv"
+            },
+            "createdAt": {
+                "S": "2026-08-08T01:12:43.455Z"
+            },
+            "promptId": {
+                "S": "lessons-learned"
+            },
+            "name": {
+                "S": "Famous Art Titles"
+            },
+            "questionCount": {
+                "N": "10"
+            },
+            "customInstruction": {
+                "S": ""
+            },
+            "engagementType": {
+                "S": "call-and-answer"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "8"
+            },
+            "updatedAt": {
+                "S": "2026-08-08T01:12:43.455Z"
+            },
+            "SK": {
+                "S": "SET#famousarttitles"
+            },
+            "description": {
+                "S": "Imported from famous-art-titles.csv"
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "aiContextInstruction": {
+                "S": ""
+            },
+            "isAIGenerated": {
+                "BOOL": false
+            },
+            "sourceFile": {
+                "S": "trivia-GenAI-1753285656730.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-23T15:52:09.728Z"
+            },
+            "promptId": {
+                "S": "mdbowthff9rxrl3iq7q"
+            },
+            "name": {
+                "S": "GenAI"
+            },
+            "questionCount": {
+                "N": "10"
+            },
+            "customInstruction": {
+                "S": "Pick the best answer."
+            },
+            "engagementType": {
+                "S": "trivia"
+            },
+            "active": {
+                "BOOL": false
+            },
+            "categoryCount": {
+                "N": "5"
+            },
+            "updatedAt": {
+                "S": "2025-08-04T02:30:12.371Z"
+            },
+            "SK": {
+                "S": "SET#genai"
+            },
+            "description": {
+                "S": "GenAI for Engineers"
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-08-04T02:37:49.170Z"
+            },
+            "aiContextInstruction": {
+                "S": "These are medium-level trivia questions about GenAI Intro Trivia. Provide explanations for correct answers and encourage learning."
+            },
+            "isAIGenerated": {
+                "BOOL": true
+            },
+            "sourceFile": {
+                "S": "GenAI_Intro_Trivia_Trivia_for_Tech_Professionals-1754274584415.csv"
+            },
+            "createdAt": {
+                "S": "2025-08-04T02:29:45.743Z"
+            },
+            "promptId": {
+                "S": "mdnv3wtad6az17tloc"
+            },
+            "name": {
+                "S": "GenAI Intro Trivia Trivia for Tech Professionals"
+            },
+            "questionCount": {
+                "N": "20"
+            },
+            "customInstruction": {
+                "S": "Select the best answer for each question."
+            },
+            "engagementType": {
+                "S": "trivia"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "15"
+            },
+            "updatedAt": {
+                "S": "2025-08-04T02:29:59.273Z"
+            },
+            "SK": {
+                "S": "SET#genaiintrotriviatriviafortechprofessionals"
+            },
+            "Quickstart": {
+                "BOOL": true
+            },
+            "description": {
+                "S": "20 AI-generated trivia questions about GenAI Intro Trivia. Difficulty: medium. 4 choices per question."
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-08-04T02:30:15.386Z"
+            },
+            "aiContextInstruction": {
+                "S": "These are medium-level trivia questions about GenAI. Provide explanations for correct answers and encourage learning."
+            },
+            "isAIGenerated": {
+                "BOOL": true
+            },
+            "sourceFile": {
+                "S": "GenAI_Trivia_for_engineers-1753285665577.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-23T15:47:46.950Z"
+            },
+            "promptId": {
+                "S": "mdbowthff9rxrl3iq7q"
+            },
+            "name": {
+                "S": "GenAI Trivia for engineers"
+            },
+            "questionCount": {
+                "N": "10"
+            },
+            "customInstruction": {
+                "S": "Select the best answer for each question."
+            },
+            "engagementType": {
+                "S": "trivia"
+            },
+            "active": {
+                "BOOL": false
+            },
+            "categoryCount": {
+                "N": "5"
+            },
+            "updatedAt": {
+                "S": "2025-08-04T02:30:16.034Z"
+            },
+            "SK": {
+                "S": "SET#genaitriviaforengineers"
+            },
+            "Quickstart": {
+                "BOOL": false
+            },
+            "description": {
+                "S": "10 AI-generated trivia questions about GenAI. Difficulty: medium. 4 choices per question."
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-07-23T15:41:59.693Z"
+            },
+            "aiContextInstruction": {
+                "S": "These are medium-level trivia questions about GenAI. Provide explanations for correct answers and encourage learning."
+            },
+            "isAIGenerated": {
+                "BOOL": true
+            },
+            "sourceFile": {
+                "S": "GenAI_Trivia_for_Software_Engineers-1753285304498.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-23T15:41:45.873Z"
+            },
+            "promptId": {
+                "S": "mdbowthff9rxrl3iq7q"
+            },
+            "name": {
+                "S": "GenAI Trivia for Software Engineers"
+            },
+            "questionCount": {
+                "N": "19"
+            },
+            "customInstruction": {
+                "S": "Select the best answer for each question."
+            },
+            "engagementType": {
+                "S": "trivia"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "4"
+            },
+            "updatedAt": {
+                "S": "2025-07-23T15:43:35.240Z"
+            },
+            "SK": {
+                "S": "SET#genaitriviaforsoftwareengineers"
+            },
+            "description": {
+                "S": "19 AI-generated trivia questions about GenAI. Difficulty: medium. 4 choices per question."
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-07-27T22:48:03.572Z"
+            },
+            "aiContextInstruction": {
+                "S": "you are a witty DJ. Comment on the top picks here and share a piece of trivia about that pick. as a side not share your favorite and why."
+            },
+            "sourceFile": {
+                "S": "greatest-hits.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-16T11:50:33.545Z"
+            },
+            "promptId": {
+                "S": "mdaikmsyh34dwoqayi"
+            },
+            "name": {
+                "S": "Greatest Hits"
+            },
+            "questionCount": {
+                "N": "10"
+            },
+            "customInstruction": {
+                "S": "Share who or what you think is the best of the best and why."
+            },
+            "engagementType": {
+                "S": "call-and-answer"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "8"
+            },
+            "updatedAt": {
+                "S": "2025-07-16T11:50:33.545Z"
+            },
+            "SK": {
+                "S": "SET#greatesthits"
+            },
+            "Quickstart": {
+                "BOOL": true
+            },
+            "description": {
+                "S": "Some of our Favorite things"
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-07-20T18:09:50.610Z"
+            },
+            "aiContextInstruction": {
+                "S": "These are medium-level trivia questions about History. Provide explanations for correct answers and encourage learning."
+            },
+            "isAIGenerated": {
+                "BOOL": true
+            },
+            "sourceFile": {
+                "S": "History_Trivia_for_General_Audience-1753021564748.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-20T14:26:05.809Z"
+            },
+            "promptId": {
+                "S": "lessons-learned"
+            },
+            "name": {
+                "S": "History Trivia for General Audience"
+            },
+            "questionCount": {
+                "N": "20"
+            },
+            "customInstruction": {
+                "S": "Select the best answer for each question."
+            },
+            "engagementType": {
+                "S": "trivia"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "3"
+            },
+            "updatedAt": {
+                "S": "2025-07-20T14:26:28.702Z"
+            },
+            "SK": {
+                "S": "SET#historytriviaforgeneralaudience"
+            },
+            "description": {
+                "S": "20 AI-generated trivia questions about History. Difficulty: medium. 4 choices per question."
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-08-05T11:35:02.239Z"
+            },
+            "aiContextInstruction": {
+                "S": "Review the interview via category, title, details and provide your version of the debrief (incline/not inclined vote, Why, and summary of the interview) Think like an Amazon Bar Raiser: Leadership principle aligned, data driven, concise and factual (no weasel words or fluff, but deep diving)"
+            },
+            "isAIGenerated": {
+                "BOOL": false
+            },
+            "sourceFile": {
+                "S": "Interview-Preparation-scenarios-1754390079386.csv"
+            },
+            "createdAt": {
+                "S": "2025-08-05T11:15:48.783Z"
+            },
+            "promptId": {
+                "S": "mdygoawfv321se7pnmq"
+            },
+            "name": {
+                "S": "Interviewer Preperation"
+            },
+            "questionCount": {
+                "N": "20"
+            },
+            "customInstruction": {
+                "S": "Provide a debrief of this interview question. Start with you inclined/not incline vote, why, and then a brief summary of the interview."
+            },
+            "engagementType": {
+                "S": "call-and-answer"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "8"
+            },
+            "updatedAt": {
+                "S": "2025-08-05T11:15:48.783Z"
+            },
+            "SK": {
+                "S": "SET#interviewerpreperation"
+            },
+            "Quickstart": {
+                "BOOL": true
+            },
+            "description": {
+                "S": "Behavior Style Interview Q&A for Debrief Practice"
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-07-30T12:08:19.049Z"
+            },
+            "aiContextInstruction": {
+                "S": ""
+            },
+            "isAIGenerated": {
+                "BOOL": false
+            },
+            "sourceFile": {
+                "S": "lessons.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-20T14:29:22.124Z"
+            },
+            "promptId": {
+                "S": "mdpwf4z7grgqezgkr15"
+            },
+            "name": {
+                "S": "lessons"
+            },
+            "questionCount": {
+                "N": "80"
+            },
+            "customInstruction": {
+                "S": ""
+            },
+            "engagementType": {
+                "S": "call-and-answer"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "8"
+            },
+            "updatedAt": {
+                "S": "2025-07-20T14:29:22.124Z"
+            },
+            "SK": {
+                "S": "SET#lessons"
+            },
+            "Quickstart": {
+                "BOOL": true
+            },
+            "description": {
+                "S": "Questions from user interfaces"
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "aiContextInstruction": {
+                "S": ""
+            },
+            "isAIGenerated": {
+                "BOOL": false
+            },
+            "sourceFile": {
+                "S": "lessons-call-and-answer-fixed.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-20T14:29:08.142Z"
+            },
+            "promptId": {
+                "S": "lessons-learned"
+            },
+            "name": {
+                "S": "Lessons Learned"
+            },
+            "questionCount": {
+                "N": "9"
+            },
+            "customInstruction": {
+                "S": ""
+            },
+            "engagementType": {
+                "S": "call-and-answer"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "1"
+            },
+            "updatedAt": {
+                "S": "2025-07-20T14:29:08.142Z"
+            },
+            "SK": {
+                "S": "SET#lessonslearned"
+            },
+            "description": {
+                "S": "Lessons from various schools such as Law, Medicine, Psychology, and Culinary"
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "aiContextInstruction": {
+                "S": "These scenarios are designed for professional development and learning. The target audience is Team leaders, project managers, and experienced professionals. These are medium-level scenarios. Provide constructive feedback and encourage specific, detailed responses."
+            },
+            "sourceFile": {
+                "S": "Lessons_Learned_Workshop-1752665545269.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-16T11:32:25.569Z"
+            },
+            "name": {
+                "S": "Lessons Learned Workshop"
+            },
+            "questionCount": {
+                "N": "6"
+            },
+            "customInstruction": {
+                "S": "Share specific experiences and focus on what was learned and how it changed your approach going forward."
+            },
+            "engagementType": {
+                "S": "call-and-answer"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "4"
+            },
+            "updatedAt": {
+                "S": "2025-07-16T11:32:25.569Z"
+            },
+            "SK": {
+                "S": "SET#lessonslearnedworkshop"
+            },
+            "description": {
+                "S": "6 AI-generated scenarios for medium difficulty level. Target audience: Team leaders, project managers, and experienced professionals. Context: Professional development workshop focusing on real-world challenges and the valuable lessons learned..."
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-07-25T03:01:20.224Z"
+            },
+            "aiContextInstruction": {
+                "S": "These scenarios are designed for professional development and learning. The target audience is Team leaders, project managers, and experienced professionals. These are medium-level scenarios. Provide constructive feedback and encourage specific, detailed responses."
+            },
+            "isAIGenerated": {
+                "BOOL": true
+            },
+            "sourceFile": {
+                "S": "Lessons_Learned_Workshop2-1753392462376.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-24T21:27:42.978Z"
+            },
+            "promptId": {
+                "S": "lessons-learned"
+            },
+            "name": {
+                "S": "Lessons Learned Workshop2"
+            },
+            "questionCount": {
+                "N": "5"
+            },
+            "customInstruction": {
+                "S": "Share specific experiences and focus on what was learned and how it changed your approach going forward."
+            },
+            "engagementType": {
+                "S": "call-and-answer"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "4"
+            },
+            "updatedAt": {
+                "S": "2025-07-24T21:27:54.061Z"
+            },
+            "SK": {
+                "S": "SET#lessonslearnedworkshop2"
+            },
+            "Quickstart": {
+                "BOOL": false
+            },
+            "description": {
+                "S": "5 AI-generated scenarios for medium difficulty level. Target audience: Team leaders, project managers, and experienced professionals. Context: Professional development workshop focusing on real-world challenges and the valuable lessons learned..."
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-07-29T01:51:21.492Z"
+            },
+            "aiContextInstruction": {
+                "S": "These scenarios are designed for professional development and learning. The target audience is All team members looking to connect and share interests. These are medium-level scenarios. Provide constructive feedback and encourage specific, detailed responses."
+            },
+            "isAIGenerated": {
+                "BOOL": true
+            },
+            "sourceFile": {
+                "S": "Lists___Favorites_Workshop-1753753864619.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-29T01:51:06.336Z"
+            },
+            "promptId": {
+                "S": "lessons-learned"
+            },
+            "name": {
+                "S": "Lists & Favorites Workshop"
+            },
+            "questionCount": {
+                "N": "20"
+            },
+            "customInstruction": {
+                "S": "Engage thoughtfully with each scenario and share your experiences and insights."
+            },
+            "engagementType": {
+                "S": "wavelength"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "5"
+            },
+            "updatedAt": {
+                "S": "2025-07-29T01:51:18.545Z"
+            },
+            "SK": {
+                "S": "SET#listsfavoritesworkshop"
+            },
+            "Quickstart": {
+                "BOOL": true
+            },
+            "description": {
+                "S": "20 AI-generated scenarios for medium difficulty level. Target audience: All team members looking to connect and share interests. Context: Share personal preferences and recommendations with your team through curated lists"
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-07-25T03:01:15.513Z"
+            },
+            "aiContextInstruction": {
+                "S": "These are medium-level trivia questions about Science. Provide explanations for correct answers and encourage learning."
+            },
+            "isAIGenerated": {
+                "BOOL": true
+            },
+            "sourceFile": {
+                "S": "Science_Trivia_for_Everybody-1753293794630.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-23T18:03:15.978Z"
+            },
+            "promptId": {
+                "S": "mdgaiop6iv0x8ratil"
+            },
+            "name": {
+                "S": "Science Trivia for Everybody"
+            },
+            "questionCount": {
+                "N": "10"
+            },
+            "customInstruction": {
+                "S": "Select the best answer for each question."
+            },
+            "engagementType": {
+                "S": "trivia"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "4"
+            },
+            "updatedAt": {
+                "S": "2025-07-23T18:22:31.798Z"
+            },
+            "SK": {
+                "S": "SET#sciencetriviaforeverybody"
+            },
+            "Quickstart": {
+                "BOOL": true
+            },
+            "description": {
+                "S": "10 AI-generated trivia questions about Science. Difficulty: medium. 4 choices per question."
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-07-25T03:00:54.653Z"
+            },
+            "aiContextInstruction": {
+                "S": ""
+            },
+            "isAIGenerated": {
+                "BOOL": false
+            },
+            "sourceFile": {
+                "S": "trivia-Taylor_Swift-1753227583169.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-22T23:46:42.690Z"
+            },
+            "promptId": {
+                "S": "mdbowthff9rxrl3iq7q"
+            },
+            "name": {
+                "S": "Taylor Swift Trivia"
+            },
+            "questionCount": {
+                "N": "20"
+            },
+            "customInstruction": {
+                "S": ""
+            },
+            "engagementType": {
+                "S": "trivia"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "3"
+            },
+            "updatedAt": {
+                "S": "2025-07-22T23:46:42.690Z"
+            },
+            "SK": {
+                "S": "SET#taylorswifttrivia"
+            },
+            "Quickstart": {
+                "BOOL": true
+            },
+            "description": {
+                "S": "Fun Trivia about Taylor"
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "aiContextInstruction": {
+                "S": "These scenarios are designed for professional development and learning. The target audience is Professional teams that intend to work together. These are medium-level scenarios. Provide constructive feedback and encourage specific, detailed responses."
+            },
+            "isAIGenerated": {
+                "BOOL": true
+            },
+            "sourceFile": {
+                "S": "Team_Building_Challenge-1753697749866.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-28T10:15:51.092Z"
+            },
+            "promptId": {
+                "S": "lessons-learned"
+            },
+            "name": {
+                "S": "Team Building Challenge"
+            },
+            "questionCount": {
+                "N": "5"
+            },
+            "customInstruction": {
+                "S": "Follow the specific guidelines provided for your scenario type."
+            },
+            "engagementType": {
+                "S": "call-and-answer"
+            },
+            "active": {
+                "BOOL": false
+            },
+            "categoryCount": {
+                "N": "5"
+            },
+            "updatedAt": {
+                "S": "2025-07-28T10:15:51.092Z"
+            },
+            "SK": {
+                "S": "SET#teambuildingchallenge"
+            },
+            "description": {
+                "S": "5 AI-generated scenarios for medium difficulty level. Target audience: Professional teams that intend to work together. Context: 10 Questions that discover your teams purpose. Requires a bit of Disagree and Commit."
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-07-25T03:00:41.406Z"
+            },
+            "aiContextInstruction": {
+                "S": ""
+            },
+            "isAIGenerated": {
+                "BOOL": false
+            },
+            "sourceFile": {
+                "S": "wavelength-sample-questions.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-24T11:42:37.476Z"
+            },
+            "promptId": {
+                "S": "lessons-learned"
+            },
+            "name": {
+                "S": "Tech Word - Wavelngth Intro"
+            },
+            "questionCount": {
+                "N": "5"
+            },
+            "customInstruction": {
+                "S": "When we speak we often make assumptions that people understand what we are saying. Even when we all know the words meaning, we dont agree on what the word mean in context. So let's clear that up."
+            },
+            "engagementType": {
+                "S": "wavelength"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "5"
+            },
+            "updatedAt": {
+                "S": "2025-07-24T11:42:37.477Z"
+            },
+            "SK": {
+                "S": "SET#techwordwavelngthintro"
+            },
+            "Quickstart": {
+                "BOOL": true
+            },
+            "description": {
+                "S": "Its a buzz word world we live in"
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "aiContextInstruction": {
+                "S": "We are helping a team discover their customer, their purpose and their strategy."
+            },
+            "isAIGenerated": {
+                "BOOL": false
+            },
+            "sourceFile": {
+                "S": "call-and-answer-workbackwards4step.csv"
+            },
+            "createdAt": {
+                "S": "2025-08-03T23:22:04.868Z"
+            },
+            "promptId": {
+                "S": "lessons-learned"
+            },
+            "name": {
+                "S": "Work backwards four steps"
+            },
+            "questionCount": {
+                "N": "4"
+            },
+            "customInstruction": {
+                "S": "Think deeply about who this team is, what we do, who we do it for, and how we do it."
+            },
+            "engagementType": {
+                "S": "call-and-answer"
+            },
+            "active": {
+                "BOOL": true
+            },
+            "categoryCount": {
+                "N": "3"
+            },
+            "updatedAt": {
+                "S": "2025-08-03T23:22:22.162Z"
+            },
+            "SK": {
+                "S": "SET#workbackwardsfoursteps"
+            },
+            "description": {
+                "S": "lets understand our purpose and what we do"
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        },
+        {
+            "UpdatedAt": {
+                "S": "2025-07-25T03:00:47.202Z"
+            },
+            "aiContextInstruction": {
+                "S": "These are medium-level trivia questions about World Travel. Provide explanations for correct answers and encourage learning."
+            },
+            "isAIGenerated": {
+                "BOOL": true
+            },
+            "sourceFile": {
+                "S": "World_Travel_Trivia-1753286227629.csv"
+            },
+            "createdAt": {
+                "S": "2025-07-23T15:57:08.425Z"
+            },
+            "promptId": {
+                "S": "lessons-learned"
+            },
+            "name": {
+                "S": "World Travel Trivia"
+            },
+            "questionCount": {
+                "N": "5"
+            },
+            "customInstruction": {
+                "S": "Select the best answer for each question."
+            },
+            "engagementType": {
+                "S": "trivia"
+            },
+            "active": {
+                "BOOL": false
+            },
+            "categoryCount": {
+                "N": "5"
+            },
+            "updatedAt": {
+                "S": "2025-07-23T15:57:08.425Z"
+            },
+            "SK": {
+                "S": "SET#worldtraveltrivia"
+            },
+            "Quickstart": {
+                "BOOL": false
+            },
+            "description": {
+                "S": "5 AI-generated trivia questions about World Travel. Difficulty: medium. 4 choices per question."
+            },
+            "PK": {
+                "S": "SETS"
+            }
+        }
+    ],
+    "Count": 29,
+    "ScannedCount": 1100,
+    "ConsumedCapacity": null
+}
