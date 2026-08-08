@@ -389,7 +389,19 @@ exports.handler = async (event) => {
       description: setDescription,
       customInstruction: customInstructions?.trim() || '',
       aiContextInstruction: aiContextInstructions?.trim() || '',
-      promptId: promptId || 'lessons-learned', // AI prompt template ID
+      // AI prompt template ID — written ONLY when the importer picked one.
+      //
+      // This used to hardcode `promptId || 'lessons-learned'` for every set
+      // regardless of engagement type, which is how a call-and-answer
+      // lessons-learned prompt ended up attached to 14 trivia and wavelength
+      // sets, including the art set. Leaving it unset is strictly better than
+      // guessing: get-ai-summary.js resolves a per-game-type default at run time
+      // (findDefaultPromptId) using the set's actual engagement type, so an
+      // unset set always gets a type-appropriate prompt and automatically
+      // follows the default if it is later re-pointed. A stamped id freezes one
+      // wrong choice at import time and becomes a dangling reference the moment
+      // that prompt is deleted.
+      ...(String(promptId ?? '').trim() ? { promptId: String(promptId).trim() } : {}),
       questionCount: questions.length,
       categoryCount: categories.size,
       active: isAIGenerated ? false : true,  // AI-generated content starts as inactive

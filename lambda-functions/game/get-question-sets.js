@@ -45,6 +45,13 @@ exports.handler = async (event) => {
           categoryCount: item.categoryCount || categories.length,
           customInstruction: item.customInstruction || null,
           aiContextInstruction: item.aiContextInstruction || null,
+          // The admin projection has carried these for a while; the game-side
+          // picker was missing them, so the host/player surfaces could not badge
+          // an art set, name its persona, or show which summary prompt it uses.
+          promptId: item.promptId || null,
+          personaId: item.personaId || null,
+          roundNoun: item.roundNoun || null,
+          hasImages: item.hasImages === true,
           active: true,
           categories: categories,
           engagementType: item.engagementType || 'call-and-answer'

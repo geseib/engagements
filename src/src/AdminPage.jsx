@@ -15,8 +15,43 @@ import { authFetch } from './auth/authFetch';
 import Icon from './components/Icon';
 import StatusMessage from './components/StatusMessage';
 import SetImageBadge from './components/SetImageBadge';
+import { GAME_TYPE_LIST, gameTypeLabel, normalizeGameType } from './config/gameTypes';
 
 const API_BASE = window.API_BASE;
+
+/**
+ * Question-set fields the editor can change, and how to describe a change to
+ * one of them in the save confirmation.
+ *
+ * The set editor used to report a bare "updated successfully" for every save,
+ * including saves where the field the owner actually cared about was silently
+ * discarded by the backend. Naming each landed change makes a no-op visible.
+ */
+const EDITABLE_SET_FIELDS = {
+  description: 'description',
+  customInstruction: 'custom instructions',
+  aiContextInstruction: 'AI context',
+  promptId: 'AI summary prompt',
+  engagementType: 'engagement type',
+  roundNoun: 'round label'
+};
+
+function describeSetChange(field, value) {
+  const label = EDITABLE_SET_FIELDS[field] || field;
+  if (!value) {
+    return field === 'promptId'
+      ? 'AI summary prompt reset to the game-type default'
+      : `${label} cleared`;
+  }
+  return `${label} set to "${value}"`;
+}
+
+/** One-line preview of a long free-text field for the set list. */
+function truncate(text, max = 90) {
+  const value = String(text || '').trim();
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 1)}…`;
+}
 
 function AdminPage() {
   console.log('🔧 AdminPage component loading with AI builders...');
@@ -82,6 +117,12 @@ function AdminPage() {
   const [editAiContextInstructions, setEditAiContextInstructions] = useState('');
   const [editEngagementType, setEditEngagementType] = useState('call-and-answer');
   const [editPromptId, setEditPromptId] = useState('');
+  const [editRoundNoun, setEditRoundNoun] = useState('');
+  // Snapshot of the set as it was when the editor opened. The save payload is a
+  // diff against this: a field the owner did not touch is omitted entirely, a
+  // field they blanked is sent as '' so the backend can tell "leave it alone"
+  // from "clear it". Sending null for both is what made blanking a no-op.
+  const [editOriginal, setEditOriginal] = useState({});
   const [saveStatus, setSaveStatus] = useState('');
   // Success/failure is explicit state. It used to be inferred by sniffing the
   // status string for a ✅, which silently broke the moment the copy changed.
@@ -142,16 +183,28 @@ function AdminPage() {
   }, []);
 
   const handleEditQuestionSet = (questionSet) => {
+    const original = {
+      description: (questionSet.description || '').trim(),
+      customInstruction: (questionSet.customInstruction || '').trim(),
+      aiContextInstruction: (questionSet.aiContextInstruction || '').trim(),
+      promptId: (questionSet.promptId || '').trim(),
+      engagementType: normalizeGameType(questionSet.engagementType),
+      roundNoun: (questionSet.roundNoun || '').trim()
+    };
+
     setEditMode(true);
     setEditingSetId(questionSet.id);
     setEditTitle(questionSet.name || '');
-    setEditDescription(questionSet.description || '');
-    setEditInstructions(questionSet.customInstruction || '');
-    setEditAiContextInstructions(questionSet.aiContextInstruction || '');
-    setEditEngagementType(questionSet.engagementType || 'call-and-answer');
-    setEditPromptId(questionSet.promptId || '');
+    setEditDescription(original.description);
+    setEditInstructions(original.customInstruction);
+    setEditAiContextInstructions(original.aiContextInstruction);
+    setEditEngagementType(original.engagementType);
+    setEditPromptId(original.promptId);
+    setEditRoundNoun(original.roundNoun);
+    setEditOriginal(original);
     setSaveStatus('');
-    
+    setSaveOk(null);
+
     // Switch to question sets tab and scroll to edit section
     setActiveTab('questionsets');
     setTimeout(() => {
@@ -177,7 +230,10 @@ function AdminPage() {
     setEditAiContextInstructions('');
     setEditEngagementType('call-and-answer');
     setEditPromptId('');
+    setEditRoundNoun('');
+    setEditOriginal({});
     setSaveStatus('');
+    setSaveOk(null);
   };
 
   const handleSaveEdit = async () => {
@@ -187,6 +243,25 @@ function AdminPage() {
       return;
     }
 
+    const current = {
+      description: editDescription.trim(),
+      customInstruction: editInstructions.trim(),
+      aiContextInstruction: editAiContextInstructions.trim(),
+      promptId: editPromptId.trim(),
+      engagementType: normalizeGameType(editEngagementType),
+      roundNoun: editRoundNoun.trim()
+    };
+
+    // Only send what actually changed. An omitted key means "leave it alone";
+    // an empty string means "clear it". The backend guards on `!== undefined`,
+    // so both intentions survive the round trip — which they did not when every
+    // blank field was flattened to null and then skipped.
+    const changed = {};
+    for (const field of Object.keys(EDITABLE_SET_FIELDS)) {
+      if (current[field] !== (editOriginal[field] ?? '')) changed[field] = current[field];
+    }
+
+    const savedName = editTitle.trim();
     setSaveOk(null);
     setSaveStatus('Saving...');
     try {
@@ -195,27 +270,31 @@ function AdminPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: editTitle.trim(),
-          description: editDescription.trim() || null,
-          customInstruction: editInstructions.trim() || null,
-          aiContextInstruction: editAiContextInstructions.trim() || null,
-          promptId: editPromptId.trim() || null
-        })
+        body: JSON.stringify({ name: savedName, ...changed })
       });
 
       const result = await response.json();
 
       if (response.ok) {
+        // Report what the backend says it wrote, not what we hoped it wrote.
+        const applied = result.updated || changed;
+        const summary = Object.keys(applied).map((f) => describeSetChange(f, applied[f]));
         setSaveOk(true);
-        setSaveStatus('Question set updated successfully');
+        setSaveStatus(
+          summary.length
+            ? `Saved "${savedName}" — ${summary.join('; ')}.`
+            : `Saved "${savedName}" — title only, no other fields changed.`
+        );
         setEditMode(false);
         setEditingSetId('');
         setEditTitle('');
         setEditDescription('');
         setEditInstructions('');
         setEditAiContextInstructions('');
+        setEditEngagementType('call-and-answer');
         setEditPromptId('');
+        setEditRoundNoun('');
+        setEditOriginal({});
         // Refresh the question sets list
         await fetchQuestionSets();
       } else {
@@ -1110,7 +1189,19 @@ function AdminPage() {
               <h2><Icon name="Books" weight="duotone" size={16} color="var(--primary)" /> Current Question Sets</h2>
               <HelpButton section="question-sets" variant="inline" size="small" tooltip="Help: Managing Question Sets" />
             </div>
-            
+
+            {/*
+              The save confirmation lives here, not only inside the edit form:
+              a successful save closes that form, which used to unmount the
+              banner in the same tick and leave no evidence the save happened.
+            */}
+            {saveStatus && !editMode && (
+              <StatusMessage
+                message={saveStatus}
+                tone={saveOk === true ? 'success' : saveOk === false ? 'error' : 'pending'}
+              />
+            )}
+
             {/* Horizontal Filtering Controls */}
             <div className="filters-section">
               <div className="filter-row">
@@ -1181,12 +1272,32 @@ function AdminPage() {
                       <p>{set.description}</p>
                       {set.customInstruction && (
                         <p className="custom-instructions">
-                          <strong>Custom Instructions:</strong> {set.customInstruction}
+                          <strong>Custom Instructions:</strong> {truncate(set.customInstruction, 140)}
                         </p>
                       )}
+                      {/*
+                        The row used to show customInstruction and nothing else,
+                        so changing a set's prompt, AI context, round label or
+                        persona looked exactly the same whether it saved or was
+                        silently discarded. Show the effective values.
+                      */}
+                      {set.aiContextInstruction && (
+                        <p className="custom-instructions">
+                          <strong>AI Context:</strong> {truncate(set.aiContextInstruction)}
+                        </p>
+                      )}
+                      <p className="custom-instructions">
+                        <strong>AI Prompt:</strong>{' '}
+                        {set.promptId || <em>default for {gameTypeLabel(set.engagementType)}</em>}
+                        {set.roundNoun && <> · <strong>Round label:</strong> {set.roundNoun}</>}
+                        {set.personaId && <> · <strong>Persona:</strong> {set.personaId}</>}
+                      </p>
                       {set.createdAt && (
                         <p className="creation-date">
-                          <small>Created: {new Date(set.createdAt).toLocaleDateString()}</small>
+                          <small>
+                            Created: {new Date(set.createdAt).toLocaleDateString()}
+                            {set.updatedAt && ` · Updated: ${new Date(set.updatedAt).toLocaleString()}`}
+                          </small>
                         </p>
                       )}
                     </div>
@@ -1194,11 +1305,7 @@ function AdminPage() {
                       <div className="stats-row-1">
                         <span className="stat-badge">{set.totalQuestions} questions</span>
                         <span className="stat-badge">{set.categoryCount} categories</span>
-                        <span className="stat-badge">
-                          {set.engagementType === 'trivia' ? 'Trivia' :
-                           set.engagementType === 'poll' ? 'Poll' :
-                           set.engagementType === 'wavelength' ? 'Wavelength' : 'Call and Answer'}
-                        </span>
+                        <span className="stat-badge">{gameTypeLabel(set.engagementType)}</span>
                       </div>
                       <div className="stats-row-2">
                         <button
@@ -1290,6 +1397,47 @@ function AdminPage() {
                   />
                 </div>
                 
+                {/*
+                  Engagement type was loaded into state but never rendered and
+                  never sent, so a set imported with the wrong type could only be
+                  fixed by deleting and re-importing it — there is no REPLACE
+                  path. It drives phases, default prompt and round label, so it
+                  has to be editable.
+                */}
+                <div className="form-group">
+                  <label htmlFor="edit-engagement-type">Engagement Type</label>
+                  <select
+                    id="edit-engagement-type"
+                    value={editEngagementType}
+                    onChange={(e) => setEditEngagementType(e.target.value)}
+                    className="form-select"
+                  >
+                    {GAME_TYPE_LIST.map(type => (
+                      <option key={type.id} value={type.id}>{type.label}</option>
+                    ))}
+                  </select>
+                  <small className="help-text">
+                    Controls which phases the session runs and which default AI prompt applies.
+                    Changing it does not rewrite the questions themselves.
+                  </small>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="edit-round-noun">Round Label</label>
+                  <input
+                    id="edit-round-noun"
+                    type="text"
+                    value={editRoundNoun}
+                    onChange={(e) => setEditRoundNoun(e.target.value)}
+                    placeholder="Leave blank for the default (Round, Question, Artwork…)"
+                    className="form-input"
+                  />
+                  <small className="help-text">
+                    What one item in this set is called on screen — "Lesson 3", "Scenario 3".
+                    Blank uses the default for the engagement type.
+                  </small>
+                </div>
+
                 <div className="form-group">
                   <label htmlFor="edit-instructions">Custom Instructions</label>
                   <textarea

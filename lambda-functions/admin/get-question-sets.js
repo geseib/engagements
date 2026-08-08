@@ -22,6 +22,12 @@ exports.handler = async (event) => {
       customInstruction: item.customInstruction,
       aiContextInstruction: item.aiContextInstruction,
       promptId: item.promptId,
+      // Per-set persona override. Without this projection the admin form always
+      // reads back `undefined` and silently drops whatever was written.
+      personaId: item.personaId,
+      // Per-set round-label override ("Lesson 3" on a genuine lessons set while
+      // the default stays "Round"). Resolved for display by resolveRoundNoun().
+      roundNoun: item.roundNoun,
       engagementType: item.engagementType,
       questionCount: item.questionCount || 0,
       totalQuestions: item.questionCount || 0, // Add for frontend compatibility
@@ -29,7 +35,11 @@ exports.handler = async (event) => {
       active: item.active !== false,
       quickstart: item.Quickstart || false, // Add quickstart field
       createdAt: item.createdAt,
-      updatedAt: item.updatedAt,
+      // edit-question-set.js used to write `UpdatedAt` while this read
+      // `updatedAt`, so an edit never moved the date. Both writers now agree on
+      // the lower-case spelling; the fallback keeps rows written before the fix
+      // showing a date instead of nothing.
+      updatedAt: item.updatedAt || item.UpdatedAt,
       isAIGenerated: item.isAIGenerated || false,
       hasImages: item.hasImages === true
     }));
