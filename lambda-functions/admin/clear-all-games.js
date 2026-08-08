@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, ScanCommand, BatchWriteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, ScanCommand } = require('@aws-sdk/lib-dynamodb');
+const { batchDeleteKeys } = require('./shared/ddb-delete');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -38,35 +39,14 @@ exports.handler = async (event) => {
           continue;
         }
         
-        // Prepare batch delete requests for game items only
-        const deleteRequests = gameItems.map(item => ({
-          DeleteRequest: {
-            Key: {
-              PK: item.PK,
-              SK: item.SK
-            }
-          }
-        }));
-        
-        // Split into chunks of 25 (DynamoDB batch limit)
-        const chunks = [];
-        for (let i = 0; i < deleteRequests.length; i += 25) {
-          chunks.push(deleteRequests.slice(i, i + 25));
-        }
-        
-        // Process each chunk
-        for (const chunk of chunks) {
-          const batchParams = {
-            RequestItems: {
-              [process.env.TABLE_NAME]: chunk
-            }
-          };
-          
-          await db.send(new BatchWriteCommand(batchParams));
-          totalDeleted += chunk.length;
-          
-          console.log(`🗑️ Deleted batch of ${chunk.length} items, total: ${totalDeleted}`);
-        }
+        // Chunk into 25s and resubmit anything DynamoDB returns as
+        // UnprocessedItems. The previous loop discarded the BatchWrite
+        // response and incremented the counter unconditionally, so throttled
+        // deletes were dropped while still being reported as deleted.
+        const keys = gameItems.map(item => ({ PK: item.PK, SK: item.SK }));
+        totalDeleted += await batchDeleteKeys(db, process.env.TABLE_NAME, keys);
+
+        console.log(`🗑️ Deleted ${keys.length} items, total confirmed: ${totalDeleted}`);
       }
       
       lastEvaluatedKey = scanResult.LastEvaluatedKey;

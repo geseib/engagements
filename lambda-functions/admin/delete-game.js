@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, QueryCommand, BatchWriteCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { collectPartitionKeys, batchDeleteKeys } = require('./shared/ddb-delete');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -31,55 +32,22 @@ exports.handler = async (event) => {
 
     console.log(`Deleting game: ${gameId}`);
 
-    // First, get all items related to this game
-    const queryParams = {
-      TableName: TABLE_NAME,
-      KeyConditionExpression: 'PK = :pk',
-      ExpressionAttributeValues: {
-        ':pk': `GAME#${gameId}`
-      }
-    };
-
+    // First, get all items related to this game.
+    // Paginated: a Query response caps at 1 MB, and a long game accumulates a
+    // row per player and per response. An un-paginated Query would delete only
+    // the first page and orphan the rest in the GAME# partition.
     console.log('Querying all game data...');
-    const gameData = await db.send(new QueryCommand(queryParams));
-    
-    console.log(`Found ${gameData.Items.length} items to delete for game ${gameId}`);
+    const { keys, pages } = await collectPartitionKeys(db, TABLE_NAME, `GAME#${gameId}`);
 
-    // Delete all game-related items in batches
-    const itemsToDelete = gameData.Items.map(item => ({
-      DeleteRequest: {
-        Key: {
-          PK: item.PK,
-          SK: item.SK
-        }
-      }
-    }));
+    console.log(`Found ${keys.length} items to delete for game ${gameId} across ${pages} query page(s)`);
 
-    // DynamoDB batch write can handle max 25 items per request
-    const batchSize = 25;
-    const batches = [];
-    
-    for (let i = 0; i < itemsToDelete.length; i += batchSize) {
-      batches.push(itemsToDelete.slice(i, i + batchSize));
-    }
+    // Delete in chunks of 25, resubmitting anything DynamoDB hands back as
+    // UnprocessedItems. Throws (=> 500) rather than under-delete silently.
+    const deletedCount = keys.length ? await batchDeleteKeys(db, TABLE_NAME, keys) : 0;
 
-    console.log(`Deleting in ${batches.length} batches...`);
-
-    // Execute all batch deletes
-    for (let i = 0; i < batches.length; i++) {
-      const batch = batches[i];
-      console.log(`Processing batch ${i + 1}/${batches.length} with ${batch.length} items`);
-      
-      const batchParams = {
-        RequestItems: {
-          [TABLE_NAME]: batch
-        }
-      };
-
-      await db.send(new BatchWriteCommand(batchParams));
-    }
-
-    // Also remove the game from the GAMES index
+    // Only once the content rows are confirmed gone do we drop the index row —
+    // a partial failure must leave the game still listed and re-deletable,
+    // never an invisible orphan partition.
     const gameIndexParams = {
       TableName: TABLE_NAME,
       Key: {
@@ -99,7 +67,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         success: true,
         message: `Game ${gameId} deleted successfully`,
-        itemsDeleted: gameData.Items.length
+        itemsDeleted: deletedCount + 1
       })
     };
 
@@ -112,7 +80,12 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         success: false,
         error: 'Failed to delete game',
-        details: error.message
+        details: error.message,
+        // The game is still listed and still owns whatever rows survived, so a
+        // retry is safe and is the expected next step.
+        partial: true,
+        itemsDeleted: typeof error.deleted === 'number' ? error.deleted : undefined,
+        remaining: typeof error.deleted === 'number' ? error.remaining.length : undefined
       })
     };
   }
