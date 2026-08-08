@@ -4,6 +4,7 @@ const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanComman
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+const { resolvePersona, buildOutputContract } = require('./personas');
 
 const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const dynamoClient = new DynamoDBClient({});
@@ -54,85 +55,111 @@ const broadcastToGame = async (gameId, message) => {
 };
 
 
-// Parse Claude's response - standardized markdown headers (## Summary, ## Discussion Questions, ## Next Steps)
+// Turn a markdown list (numbered, dashed or starred) into trimmed strings.
+// Falls back to non-empty, non-heading lines so an unformatted section still
+// yields something rather than nothing.
+const extractListItems = (text, limit) => {
+  const lines = String(text || '').split('\n').map((l) => l.trim());
+  const bulleted = lines
+    .filter((l) => /^(\d+[.)]|[-*•])\s+/.test(l))
+    .map((l) => l.replace(/^(\d+[.)]|[-*•])\s+/, '').trim())
+    .filter(Boolean);
+  if (bulleted.length) return bulleted.slice(0, limit);
+  return lines.filter((l) => l.length > 0 && !l.startsWith('#')).slice(0, limit);
+};
+
+// Headings we treat as each canonical section. Structure is appended to every
+// prompt by buildOutputContract(), so conforming responses are the norm — but a
+// hand-written template or a drifting persona can still produce its own
+// headings, and the panel must stay useful when that happens.
+const SECTION_SYNONYMS = {
+  summary: /^(summary|results?|overview|insights?|analysis|key\s*lessons?|key\s*takeaways?|takeaways?|themes?|common\s*themes?|dive\s*deep|game\s*status|challenge)\b/i,
+  discussion: /^(discussion\s*(questions?|topics?|prompts?)|questions?\s*(to\s*discuss)?|talking\s*points?|prompts?)\b/i,
+  nextSteps: /^(next\s*steps?|actions?|action\s*items?|recommendations?|strategic\s*recommendations?|implementation(\s*priority)?)\b/i,
+};
+
+// Parse Claude's response into { summaryText, discussionQuestions, nextSteps }.
+// Tolerant by design: any heading level, any bullet style, and — critically —
+// prose that appears before the first recognised heading is treated as the
+// summary rather than discarded.
 const parseAIResponse = (aiResponse) => {
-  console.log('🔍 PARSING: Full AI response length:', aiResponse.length);
-  console.log('🔍 PARSING: First 300 chars:', aiResponse.substring(0, 300));
-  
-  // Clean up and normalize any non-standard headers to our expected format
-  let cleanedResponse = aiResponse
-    .replace(/##\s*(Results|Dive\s*Deep|Game\s*Status|Insights?|Analysis)/gim, '## Summary')
-    .replace(/##\s*(Discussion\s*Topics?|Questions?)/gim, '## Discussion Questions')
-    .replace(/##\s*(Next\s*Steps?|Actions?|Recommendations?)/gim, '## Next Steps')
-    .replace(/🎡\s*Next\s*Steps/g, '## Next Steps') // Handle emoji headers
-    .replace(/💬\s*Discussion\s*Topics/g, '## Discussion Questions'); // Handle emoji headers
-  
-  console.log('🔍 PARSING: Cleaned response headers for consistency');
-  
-  // Extract content sections using cleaned markdown headers
-  let summaryText = '';
-  let discussionQuestions = [];
-  let nextSteps = [];
-  
-  // Extract summary (content between "## Summary" and next ## section)
-  const summaryMatch = cleanedResponse.match(/##\s*Summary[^\n]*\n([\s\S]*?)(?=\n##|$)/i);
-  if (summaryMatch) {
-    summaryText = summaryMatch[1].trim();
-    // Remove any embedded markdown headers from within the summary
-    summaryText = summaryText.replace(/##\s*[^\n]*\n?/g, '').trim();
-    console.log('🔍 PARSING: Extracted summary:', summaryText.substring(0, 100) + '...');
-  }
-  
-  // Extract discussion questions (content between "## Discussion Questions" and next ## section)
-  const discussionMatch = cleanedResponse.match(/##\s*Discussion\s*Questions[^\n]*\n([\s\S]*?)(?=\n##|$)/i);
-  if (discussionMatch) {
-    const discussionText = discussionMatch[1];
-    // Extract numbered list items (1., 2., 3., etc.)
-    const listItems = discussionText.match(/^\d+\.\s*(.*?)(?=\n\d+\.|$)/gm);
-    if (listItems) {
-      discussionQuestions = listItems.map(item => item.replace(/^\d+\.\s*/, '').trim());
-    } else {
-      // Fallback: split by lines and filter non-empty
-      discussionQuestions = discussionText.split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0 && !line.startsWith('#'))
-        .slice(0, 3); // Limit to 3 questions
+  const raw = String(aiResponse || '');
+  console.log('🔍 PARSING: Full AI response length:', raw.length);
+  console.log('🔍 PARSING: First 300 chars:', raw.substring(0, 300));
+
+  const lines = raw.split('\n');
+
+  // Walk the document once, splitting it at every heading. `preamble` collects
+  // body text that appears before any heading — the case that used to be thrown
+  // away, leaving the panel with a single sentence.
+  const sections = []; // { kind: 'summary'|'discussion'|'nextSteps'|null, title, body[] }
+  const preamble = [];
+  let current = null;
+  let sawHeading = false;
+
+  for (const line of lines) {
+    const heading = line.match(/^\s{0,3}(#{1,6})\s*(.+?)\s*#*\s*$/);
+    if (heading) {
+      const title = heading[2].replace(/[*_`]/g, '').trim();
+      // A lone H1 at the top is a document title ("# Strategic Engagement
+      // Summary"), not a section — skip it rather than let it swallow the body.
+      const isTitleOnly = !sawHeading && heading[1] === '#' && !Object.values(SECTION_SYNONYMS).some((re) => re.test(title));
+      sawHeading = true;
+      if (isTitleOnly) { current = null; continue; }
+
+      let kind = null;
+      for (const [k, re] of Object.entries(SECTION_SYNONYMS)) {
+        if (re.test(title)) { kind = k; break; }
+      }
+      current = { kind, title, body: [] };
+      sections.push(current);
+      continue;
     }
-    console.log('🔍 PARSING: Extracted discussion questions:', discussionQuestions);
+    (current ? current.body : preamble).push(line);
   }
-  
-  // Extract next steps (content between "## Next Steps" and end)
-  const nextStepsMatch = cleanedResponse.match(/##\s*Next\s*Steps[^\n]*\n([\s\S]*?)$/i);
-  if (nextStepsMatch) {
-    const nextStepsText = nextStepsMatch[1];
-    // Extract numbered list items (1., 2., 3., etc.)
-    const listItems = nextStepsText.match(/^\d+\.\s*(.*?)(?=\n\d+\.|$)/gm);
-    if (listItems) {
-      nextSteps = listItems.map(item => item.replace(/^\d+\.\s*/, '').trim());
-    } else {
-      // Fallback: split by lines and filter non-empty
-      nextSteps = nextStepsText.split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0 && !line.startsWith('#'))
-        .slice(0, 4); // Limit to 4 steps
+
+  const bodyOf = (kind) => {
+    const found = sections.filter((s) => s.kind === kind);
+    return found.length ? found.map((s) => s.body.join('\n')).join('\n').trim() : '';
+  };
+
+  let summaryText = bodyOf('summary');
+  const discussionQuestions = extractListItems(bodyOf('discussion'), 5);
+  const nextSteps = extractListItems(bodyOf('nextSteps'), 5);
+
+  // Summary fallback. Previously this took the first line over 20 chars, which
+  // is what made summaries "thin" whenever the model titled its own sections.
+  // Prefer, in order: prose before the first heading, then any unrecognised
+  // section's body, then the whole response.
+  if (summaryText.length < 40) {
+    const preambleText = preamble.join('\n').trim();
+    const unlabelled = sections.filter((s) => s.kind === null).map((s) => s.body.join('\n').trim()).filter(Boolean);
+    const candidate = [preambleText, ...unlabelled].find((t) => t && t.length >= 40);
+    if (candidate) {
+      console.log('⚠️ PARSING: no Summary heading — using leading prose instead');
+      summaryText = candidate;
+    } else if (!summaryText) {
+      summaryText = raw.trim();
     }
-    console.log('🔍 PARSING: Extracted next steps:', nextSteps);
   }
-  
-  // Fallback for summary if empty - use first paragraph that's not a header
-  if (!summaryText || summaryText.length < 20) {
-    console.log('⚠️ PARSING: Summary too short, using first paragraph as fallback');
-    const firstParagraph = cleanedResponse.split('\n').find(line => line.trim().length > 20 && !line.startsWith('#'));
-    summaryText = firstParagraph ? firstParagraph.trim() : cleanedResponse.trim();
-  }
-  
+
+  // Strip any stray heading lines that survived inside the summary body.
+  summaryText = summaryText.split('\n').filter((l) => !/^\s{0,3}#{1,6}\s/.test(l)).join('\n').trim();
+
+  console.log(`🔍 PARSING: summary ${summaryText.length} chars, ${discussionQuestions.length} questions, ${nextSteps.length} next steps`);
+
   return {
-    summaryText: summaryText,
-    discussionQuestions: discussionQuestions,
-    nextSteps: nextSteps,
-    markdownResponse: cleanedResponse
+    summaryText,
+    discussionQuestions,
+    nextSteps,
+    // Always keep the model's own markdown so the panel can render the full
+    // response even when the structured fields are sparse.
+    markdownResponse: raw,
   };
 };
+
+// Exported for tests/ai-response-parsing.js
+exports.parseAIResponse = parseAIResponse;
 
 // Fetch AI prompt from S3
 const fetchPromptFromS3 = async (promptId) => {
@@ -754,6 +781,7 @@ exports.handler = async (event) => {
     // Fetch question set details for AI context and custom instructions
     let customInstruction = null;
     let questionSetAiContext = null;
+    let setPersonaId = null;
     let promptId = null;
     let promptProvenance = {
       source: 'fallback',
@@ -786,6 +814,10 @@ exports.handler = async (event) => {
               source: 'question_set',
               value: questionSetAiContext
             });
+          }
+          if (setResult.Item.personaId) {
+            setPersonaId = setResult.Item.personaId;
+            console.log('🎭 Found question set persona:', setPersonaId);
           }
           if (setResult.Item.promptId) {
             promptId = setResult.Item.promptId;
@@ -850,6 +882,10 @@ exports.handler = async (event) => {
       questionSetAiContext: questionSetAiContext,
       customInstruction: customInstruction,
       promptId: promptId,
+      // Voice selection. The host pick lives on the game so a mid-game switch
+      // takes effect from the next question; the set-level one is authored once.
+      hostPersonaId: metadata.PersonaId || metadata.personaId || null,
+      setPersonaId: setPersonaId,
       promptProvenance: promptProvenance,
       debugMode: debug === 'true',
       questionId: targetQuestionId,
@@ -977,7 +1013,7 @@ exports.handler = async (event) => {
   }
 };
 
-async function generateAISummary({ eventTitle, gameType, gameAiContext, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig }) {
+async function generateAISummary({ eventTitle, gameType, gameAiContext, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId }) {
   // Prepare the context for AI
   const totalParticipants = answers.length;
   const winners = results.winners || [];
@@ -1046,9 +1082,27 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
   }
 
   console.log(`📝 Using prompt template: ${promptData.name}`);
-  
+
+  // Decide whose voice Workie speaks in. Precedence and the fall-through
+  // behaviour live in ./personas.js; a dangling or inactive personaId degrades
+  // to the next level rather than dead-ending.
+  const persona = await resolvePersona({
+    hostPersonaId,
+    setPersonaId,
+    questionSetAiContext,
+    gameAiContext,
+    templateInstructions: promptData.instructions,
+    loadPersona: async (personaId) => {
+      const res = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: 'AIPROMPTS', SK: `PERSONA#${personaId}` },
+      }));
+      return res.Item || null;
+    },
+  });
+
   // Use custom instruction if available, otherwise default context
-  const sessionContext = customInstruction || 
+  const sessionContext = customInstruction ||
     'an "Engagements" strategic thinking session where participants apply lessons to their work context';
   
   // Build context sections for the AI prompt
@@ -1761,19 +1815,27 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
       ''
   };
   
-  // Build the final prompt - support both old (template) and new (instructions + outputFormat) structure
-  let prompt;
+  // Build the final prompt in three layers: VOICE (persona) → the template's
+  // own content framing → STRUCTURE (system contract).
+  //
+  // Order matters. Voice goes first because it establishes identity; the format
+  // contract goes LAST because a model weights the most recent formatting
+  // instruction most heavily, and the legacy templates carry their own
+  // conflicting "Output Format" sections we need to override.
+  let templateBody;
   if (promptData.template) {
-    // Legacy format: use template directly
-    prompt = promptData.template;
+    templateBody = promptData.template;              // legacy single-field prompt
   } else if (promptData.instructions && promptData.outputFormat) {
-    // New format: combine instructions and output format
-    prompt = promptData.instructions + '\n\n' + promptData.outputFormat;
+    templateBody = promptData.instructions + '\n\n' + promptData.outputFormat;
   } else {
     console.error('❌ Invalid prompt structure - missing required fields');
     throw new Error('Prompt must have either template OR both instructions and outputFormat');
   }
-  
+
+  console.log(`🎭 PERSONA: using ${persona.source}${persona.name ? ` (${persona.name})` : ''}${persona.inferred ? ' — adaptive' : ''}`);
+
+  let prompt = `VOICE:\n${persona.voice}\n\n${templateBody}\n\n${buildOutputContract()}`;
+
   // Debug: Log key trivia variables
   if (gameType === 'trivia') {
     console.log('🔍 TRIVIA DEBUG - Template variables:');
