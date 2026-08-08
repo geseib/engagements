@@ -4,6 +4,7 @@ import IssueFab from './components/IssueFab';
 import Icon from './components/Icon';
 import RankIcon, { rankLabel, VOTE_POSITIONS } from './components/RankIcon';
 import { gameTypeMeta } from './config/gameTypes';
+import { resolveInstruction } from './config/instructions';
 
 const API_BASE = window.API_BASE;
 
@@ -35,22 +36,8 @@ const calculatePlayerRankings = (players) => {
 };
 
 // Helper function to get instruction text
-const getPlayerInstructionText = (customInstruction, currentQuestion) => {
-  // Question-level custom instructions take priority
-  if (currentQuestion && currentQuestion.customInstructions) {
-    return currentQuestion.customInstructions;
-  }
-  // Then question set level custom instruction
-  if (customInstruction) {
-    return customInstruction;
-  }
-  // "Art Title" rounds carry an image and ask players to invent a title
-  if (currentQuestion && currentQuestion.image) {
-    return 'Give this masterpiece your own creative title!';
-  }
-  // Default fallback
-  return 'How could you adapt this lesson to your work, project, or team?';
-};
+const getPlayerInstructionText = (customInstruction, currentQuestion) =>
+  resolveInstruction(currentQuestion, customInstruction, 'call-and-answer');
 
 function PlayerPage() {
   const [gameId, setGameId] = useState('');

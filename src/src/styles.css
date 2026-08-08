@@ -9266,3 +9266,23 @@ body {
     gap: 8px;
   }
 }
+/* ---- "this set has images" marker ----
+   Sits inline after a set name wherever a set is picked. Baseline-nudged like
+   every other .ws-icon, and never allowed to push the name onto a new line. */
+.set-image-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.set-image-badge__label {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--primary);
+}

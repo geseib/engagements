@@ -14,6 +14,7 @@ import './BuilderPage.css';
 import { authFetch } from './auth/authFetch';
 import Icon from './components/Icon';
 import StatusMessage from './components/StatusMessage';
+import SetImageBadge from './components/SetImageBadge';
 
 const API_BASE = window.API_BASE;
 
@@ -1176,7 +1177,7 @@ function AdminPage() {
                   filteredQuestionSets.map(set => (
                   <div key={set.id} className="question-set-item">
                     <div className="set-info">
-                      <h3>{set.name}</h3>
+                      <h3>{set.name}<SetImageBadge hasImages={set.hasImages} withLabel /></h3>
                       <p>{set.description}</p>
                       {set.customInstruction && (
                         <p className="custom-instructions">

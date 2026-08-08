@@ -397,7 +397,11 @@ exports.handler = async (event) => {
       updatedAt: new Date().toISOString(),
       sourceFile: fileName,
       engagementType: engagementType || 'call-and-answer',
-      isAIGenerated: isAIGenerated || false
+      isAIGenerated: isAIGenerated || false,
+      // Lets every set picker mark sets that carry artwork without reading all
+      // their questions first. Art Title rounds are ordinary call-and-answer
+      // sets with an Image column, so nothing else distinguishes them in a list.
+      hasImages: questions.some((q) => (q.Image || '').trim().length > 0)
     };
 
     // Build the category rows

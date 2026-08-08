@@ -30,7 +30,8 @@ exports.handler = async (event) => {
       quickstart: item.Quickstart || false, // Add quickstart field
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
-      isAIGenerated: item.isAIGenerated || false
+      isAIGenerated: item.isAIGenerated || false,
+      hasImages: item.hasImages === true
     }));
 
     return {

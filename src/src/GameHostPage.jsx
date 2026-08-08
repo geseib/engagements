@@ -8,6 +8,8 @@ import QuickstartMenu from './components/QuickstartMenu';
 import WavelengthWordCloud from './components/WavelengthWordCloud';
 import Icon from './components/Icon';
 import RankIcon from './components/RankIcon';
+import SetImageBadge, { imageMarkerSuffix } from './components/SetImageBadge';
+import { resolveInstruction, currentQuestionOf } from './config/instructions';
 import { gameTypeMeta } from './config/gameTypes';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
@@ -263,43 +265,6 @@ function GameHostPage() {
   
   // Note: Save Report Modal state moved to GameReport component
   
-  // Get instruction text based on question set
-  const getInstructionText = () => {
-    // First check if we have a current question with custom instructions
-    const currentQuestion = questions.find(q => q.id === currentQuestionId);
-    if (currentQuestion && currentQuestion.customInstructions) {
-      return currentQuestion.customInstructions;
-    }
-    
-    // Try to get setId from current question first, then fall back to selectedSetId
-    const setId = questions[0]?.setId || selectedSetId;
-    
-    // Default instructions based on game type
-    const gameTypeDefaults = {
-      'trivia': 'Select the best answer:',
-      'poll': 'Share your opinion:',
-      'wavelength': 'Enter up to 10 words that come to mind for this subject:',
-      'call-and-answer': 'How could you adapt this lesson to your work, project, or team?'
-    };
-
-    if (!setId) return gameTypeDefaults[currentGameType] || 'Share your response:';
-    
-    // Get current question set info
-    const currentSet = questionSets.find(set => set.id === setId);
-    if (currentSet && currentSet.customInstruction) {
-      return currentSet.customInstruction;
-    }
-    
-    // Default fallback for different sets
-    const setInstructions = {
-      'AmazonBP': 'How could you adapt this Amazon leadership principle to your work, project, or team?',
-      'amazonleadershipprinciples': 'How could you adapt this Amazon leadership principle to your work, project, or team?',
-      'greatest-hits': 'How could you adapt this lesson to your work, project, or team?',
-      'default': gameTypeDefaults[currentGameType] || 'How could you adapt this lesson to your work, project, or team?'
-    };
-    
-    return setInstructions[setId] || setInstructions['default'];
-  };
 
   // Fetch question set custom instruction (similar to player screen)
   const fetchQuestionSetInstruction = async (setId) => {
@@ -326,33 +291,11 @@ function GameHostPage() {
     }
   };
 
-  // Helper function to get instruction text with proper hierarchy (like player screen)
-  const getHostInstructionText = (currentQuestion, gameType = currentGameType) => {
-    // Priority 1: Question-level custom instructions
-    if (currentQuestion && currentQuestion.customInstructions) {
-      return currentQuestion.customInstructions;
-    }
-    
-    // Priority 2: Question set level custom instruction
-    if (customInstruction) {
-      return customInstruction;
-    }
+  // Instruction hierarchy lives in config/instructions.js so the host and the
+  // player screen cannot drift apart (they had, on Art Title rounds).
+  const getHostInstructionText = (currentQuestion, gameType = currentGameType) =>
+    resolveInstruction(currentQuestion, customInstruction, gameType);
 
-    // "Art Title" rounds carry an image and ask players to invent a title
-    if (currentQuestion && currentQuestion.image) {
-      return 'Give this masterpiece your own creative title!';
-    }
-
-    // Priority 3: Default instructions based on game type
-    const gameTypeDefaults = {
-      'trivia': 'Select the best answer:',
-      'poll': 'Share your opinion:',
-      'wavelength': 'Enter up to 10 words that come to mind for this subject:',
-      'call-and-answer': 'How could you adapt this lesson to your work, project, or team?'
-    };
-
-    return gameTypeDefaults[gameType] || 'How could you adapt this lesson to your work, project, or team?';
-  };
 
   // Generate a random 4-digit game ID
   function generateGameId() {
@@ -954,6 +897,10 @@ Focus on actionable business strategy insights.`;
           if (gameStateData.currentQuestionData) {
             // Use the question data from game state
             setQuestions([gameStateData.currentQuestionData]);
+            // Without this the id lookup below misses after a refresh, and the
+            // instruction resolver falls all the way through to the generic
+            // call-and-answer default — even on an Art Title round.
+            setCurrentQuestionId(gameStateData.currentQuestionData.id);
             console.log(`📝 HOST: Loaded question ${questionNumber} from game state:`, gameStateData.currentQuestionData.title);
           } else {
             // Try to fetch question data with question number
@@ -964,6 +911,7 @@ Focus on actionable business strategy insights.`;
               if (questionRes.ok) {
                 const questionData = await questionRes.json();
                 setQuestions([questionData]);
+                setCurrentQuestionId(questionData.id);
                 console.log(`📝 HOST: Loaded question ${questionNumber}:`, questionData.title);
                 console.log('🔍 HOST: Question data keys:', Object.keys(questionData));
                 console.log('🔍 HOST: Updated questions array:', [questionData]);
@@ -2752,7 +2700,10 @@ Ready to engage? See you there!`;
                           </div>
                           <div className="info-item">
                             <span className="info-label">Question Set:</span>
-                            <span className="info-value">{game.questionSetId || 'Unknown'}</span>
+                            <span className="info-value">
+                              {game.questionSetId || 'Unknown'}
+                              <SetImageBadge hasImages={questionSets.find(s => s.id === game.questionSetId)?.hasImages} />
+                            </span>
                           </div>
                           <div className="info-item">
                             <span className="info-label">Created:</span>
@@ -2925,7 +2876,7 @@ Ready to engage? See you there!`;
                   .filter(set => set.engagementType === engagementType)
                   .map(set => (
                     <option key={set.id} value={set.id}>
-                      {set.name} ({set.totalQuestions} questions)
+                      {set.name} ({set.totalQuestions} questions){imageMarkerSuffix(set.hasImages)}
                     </option>
                   ))}
               </select>
@@ -3264,7 +3215,11 @@ Ready to engage? See you there!`;
             <div className="qr-column-right">
               <div className="question-set-panel">
                 <div className="question-set-header">
-                  <h3><Icon name="Books" weight="duotone" size={20} color="var(--primary)" />{questionSets.find(set => set.id === selectedSetId)?.name || 'Unknown Set'}</h3>
+                  <h3>
+                <Icon name="Books" weight="duotone" size={20} color="var(--primary)" />
+                {questionSets.find(set => set.id === selectedSetId)?.name || 'Unknown Set'}
+                <SetImageBadge hasImages={questionSets.find(set => set.id === selectedSetId)?.hasImages} />
+              </h3>
                   <div className="set-details">
                     {categoryCounts ? (
                       // Show dynamic total for active games
@@ -3444,7 +3399,10 @@ Ready to engage? See you there!`;
           <div className="game-title-header">
             <h1 className="game-title-main">{eventTitle}</h1>
             <div className="game-meta-info">
-              <span className="question-set-name">{questionSets.find(set => set.id === selectedSetId)?.name || 'Unknown Set'}</span>
+              <span className="question-set-name">
+                {questionSets.find(set => set.id === selectedSetId)?.name || 'Unknown Set'}
+                <SetImageBadge hasImages={questionSets.find(set => set.id === selectedSetId)?.hasImages} />
+              </span>
               <span className="player-count-info">({players.length} Player{players.length !== 1 ? 's' : ''})</span>
             </div>
           </div>
@@ -3649,7 +3607,7 @@ Ready to engage? See you there!`;
                 <span>How to answer</span>
               </div>
               <p className="application-prompt__body">
-                {getHostInstructionText(questions.find(q => q.id === currentQuestionId))}
+                {getHostInstructionText(currentQuestionOf(questions, currentQuestionId))}
               </p>
             </div>
             <div className="answer-progress">
@@ -4197,7 +4155,7 @@ Ready to engage? See you there!`;
               </div>
             )}
             <div className="expanded-lesson-prompt">
-              <strong>{getHostInstructionText(questions.find(q => q.id === currentQuestionId))}</strong>
+              <strong>{getHostInstructionText(currentQuestionOf(questions, currentQuestionId))}</strong>
             </div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { authFetch } from '../auth/authFetch';
 import Icon from './Icon';
+import SetImageBadge from './SetImageBadge';
 import { gameTypeMeta } from '../config/gameTypes';
 
 const API_BASE = window.API_BASE;
@@ -233,7 +234,7 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
                           onClick={() => !creating && createQuickGame(set)}
                         >
                           <div className="quickstart-set-info">
-                            <h4>{set.name}</h4>
+                            <h4>{set.name}<SetImageBadge hasImages={set.hasImages} /></h4>
                             <p className="quickstart-set-description">
                               {set.description || 'Ready to play'}
                             </p>
