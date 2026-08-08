@@ -51,6 +51,10 @@ const createGame = async (gameId, gameData) => {
         GameType: gameData.engagementType || 'call-and-answer',
         QuestionSetId: gameData.questionSetId,
         AIContext: gameData.aiContext || '',
+        // Workie's voice for this session. `get-ai-summary.js` reads
+        // `metadata.PersonaId`, and `PUT /games/{id}/persona` updates this one
+        // attribute mid-game. Absent/empty means "adapt to the session".
+        ...(gameData.personaId ? { PersonaId: gameData.personaId } : {}),
         Details: gameData.details || '',
         Visibility: gameData.visibility || 'public',
         AccessCode: gameData.accessCode || null,

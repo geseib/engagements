@@ -139,7 +139,21 @@ function GameHostPage() {
   const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer', 'trivia', or 'wavelength'
   const [triviaTimer, setTriviaTimer] = useState(30); // Timer for trivia questions in seconds
   const [randomizeQuestions, setRandomizeQuestions] = useState(true); // Default ON - randomize question order
-  
+
+  // Workie's voice. '' means "adapt to the session" — the designed default, and
+  // deliberately NOT the legacy prompt template's baked-in persona. See
+  // docs/superpowers/specs/2026-08-07-workie-personas-design.md.
+  // Two lists, because the two pickers are filtered by different game types.
+  // `engagementType` is the create dialog's choice; `currentGameType` is loaded
+  // from the game's own metadata when a session is resumed and the two do
+  // diverge — resuming a trivia game leaves `engagementType` on whatever the
+  // dialog last held.
+  const [personas, setPersonas] = useState([]);           // create dialog
+  const [gamePersonas, setGamePersonas] = useState([]);   // live game
+  const [newGamePersonaId, setNewGamePersonaId] = useState('');
+  const [gamePersonaId, setGamePersonaId] = useState('');       // the live game's voice
+  const [personaSwitchStatus, setPersonaSwitchStatus] = useState('');
+
   // Question Set Management
   const [questionSets, setQuestionSets] = useState([]);
   const [selectedSetId, setSelectedSetId] = useState('');
@@ -306,6 +320,74 @@ function GameHostPage() {
   // own ternary, which is why ASK said "Lesson 3" and RESULTS "Question 3".
   const getHostRoundNoun = (question = questions[0], gameType = currentGameType) =>
     resolveRoundNoun(question, gameType, setRoundNoun);
+
+  /**
+   * Load the persona library for an engagement type.
+   *
+   * The endpoint honours the personas' own `gameTypes`, so a trivia session is
+   * only offered voices that suit trivia (plus the ones marked "all"). A
+   * failure here is never fatal: with no personas the picker shows only "Adapt
+   * to the session", which is the default behaviour anyway.
+   */
+  const fetchPersonas = async (gameType, apply) => {
+    try {
+      const query = gameType ? `?gameType=${encodeURIComponent(gameType)}` : '';
+      const response = await authFetch(`${API_BASE}admin/personas${query}`);
+      if (!response.ok) {
+        console.warn(`⚠️ HOST: persona list unavailable (${response.status}) — defaulting to adaptive voice`);
+        apply([]);
+        return;
+      }
+      const data = await response.json();
+      apply(data.personas || []);
+    } catch (error) {
+      console.warn('⚠️ HOST: could not load personas — defaulting to adaptive voice:', error.message);
+      apply([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchPersonas(engagementType, setPersonas);
+    // A voice that no longer suits the newly-chosen type must not stay selected.
+    setNewGamePersonaId((current) => (current ? '' : current));
+  }, [engagementType]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    fetchPersonas(currentGameType, setGamePersonas);
+  }, [currentGameType]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * Switch Workie's voice mid-session.
+   *
+   * This applies from the NEXT question — the summary on screen was already
+   * written. Redo (beside this control) rewrites the current one.
+   */
+  const handleChangeGamePersona = async (personaId) => {
+    const previous = gamePersonaId;
+    setGamePersonaId(personaId);
+    setPersonaSwitchStatus('Saving...');
+    try {
+      const response = await fetch(`${API_BASE}games/${gameId}/persona`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personaId: personaId || '' })
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || `HTTP ${response.status}`);
+      }
+      const picked = gamePersonas.find((p) => p.personaId === personaId);
+      setPersonaSwitchStatus(
+        picked
+          ? `${picked.name} takes over from the next question.`
+          : 'Workie adapts to the session from the next question.'
+      );
+    } catch (error) {
+      console.error('❌ HOST: failed to switch persona:', error);
+      setGamePersonaId(previous); // don't leave the picker claiming a change that never landed
+      setPersonaSwitchStatus(`Could not switch voice: ${error.message}`);
+    }
+  };
 
 
   // Generate a random 4-digit game ID
@@ -865,6 +947,8 @@ Focus on actionable business strategy insights.`;
         if (gameStateData.gameMetadata) {
           setEventTitle(gameStateData.gameMetadata.title || '');
           setCurrentGameType(gameStateData.gameMetadata.gameType || 'call-and-answer');
+          // Show the voice the game is actually set to, not a fresh default.
+          setGamePersonaId(gameStateData.gameMetadata.personaId || '');
           const restoredSetId = gameStateData.gameMetadata.questionSetId || '';
           setSelectedSetId(restoredSetId);
           fetchQuestionSetInstruction(restoredSetId);
@@ -2209,6 +2293,9 @@ Focus on actionable business strategy insights.`;
           randomizeQuestions: randomizeQuestions,
           selectedCategories: selectedCategories,
           triviaTimer: engagementType === 'trivia' ? triviaTimer : null,
+          // '' means "adapt to the session". create-game.js only stores
+          // PersonaId when this is non-empty.
+          personaId: newGamePersonaId || '',
           hostName: 'Host'
         })
       });
@@ -2248,8 +2335,12 @@ Focus on actionable business strategy insights.`;
     
     console.log(`🎯 HOST: New game started with set "${newGameSetId}", title "${eventTitle}", and AI context: ${gameAiContext ? 'provided' : 'none'}`);
     
-    // Reset AI context for next game
+    // Carry the chosen voice into the live game so the in-game picker opens on
+    // it, then reset the dialog's own fields for the next engagement.
+    setGamePersonaId(newGamePersonaId || '');
+    setPersonaSwitchStatus('');
     setGameAiContext('');
+    setNewGamePersonaId('');
   };
 
   const updateGameTitle = async (gameId, title) => {
@@ -2387,11 +2478,14 @@ Ready to engage? See you there!`;
         gameId: targetGameId,
         eventTitle: finalEventTitle,
         gameType: report.gameType, // Include gameType from the report
+        // The set's round-label override. create-report.js emits it at the top
+        // level; this object is rebuilt from scratch, so anything not forwarded
+        // here is invisible to GameReport no matter what the backend sends.
+        roundNoun: report.roundNoun,
         players: report.playerPerformance || [],
         questions: report.detailedQuestions || [],
         allAnswers: [],
-        allVotes: [],
-        aiSummaries: {}
+        allVotes: []
       };
 
       // Transform the detailed questions data to match the frontend report format
@@ -2422,15 +2516,10 @@ Ready to engage? See you there!`;
             votes: questionVotes
           });
           
-          // Add AI summary if available
-          if (question.aiSummary) {
-            gameData.aiSummaries[question.questionNumber] = {
-              summary: question.aiSummary.summaryText,
-              discussionQuestions: question.aiSummary.discussionQuestions || [],
-              nextSteps: question.aiSummary.nextSteps || [],
-              markdownResponse: question.aiSummary.markdownResponse || null
-            };
-          }
+          // No aiSummaries side-table. It was built here, destructured in
+          // GameReport and then never read — the render uses
+          // `question.aiSummary` straight off the question, which is also where
+          // the persona attribution now lives.
         });
       }
 
@@ -2970,8 +3059,33 @@ Ready to engage? See you there!`;
                 This helps AI provide more contextual analysis during the session. {gameAiContext.length}/500 characters
               </small>
             </div>
+
+            <div className="form-group">
+              <label htmlFor="new-game-persona">Workie's Voice (Optional):</label>
+              <select
+                id="new-game-persona"
+                value={newGamePersonaId}
+                onChange={(e) => setNewGamePersonaId(e.target.value)}
+                className="dialog-select"
+              >
+                {/* Adapting to the session is the designed default, not a
+                    fallback — a fixed persona is what made Workie refuse a
+                    holiday icebreaker as "insufficient for business analysis". */}
+                <option value="">Adapt to the session (recommended)</option>
+                {personas.map((persona) => (
+                  <option key={persona.personaId} value={persona.personaId}>
+                    {persona.name}{persona.tagline ? ` — ${persona.tagline}` : ''}
+                  </option>
+                ))}
+              </select>
+              <small className="dialog-help-text">
+                {newGamePersonaId
+                  ? 'Workie will keep this voice for the whole session. You can change it mid-game.'
+                  : 'Workie reads the room and picks its own register — playful for an icebreaker, analytical for a retro.'}
+              </small>
+            </div>
           </div>
-          
+
           <div className="dialog-actions">
             <button 
               className="btn-secondary" 
@@ -3918,10 +4032,32 @@ Ready to engage? See you there!`;
                       <h3><Icon name="Sparkle" weight="duotone" size={24} color="var(--primary)" /> Field Notes</h3>
                       <p>Workie's analysis of your team's responses</p>
                     </div>
-                    <button 
+                    {/* Two different controls, deliberately adjacent:
+                        the picker changes the voice from the NEXT question on,
+                        Redo rewrites the one on screen. */}
+                    <div className="ai-persona-switch">
+                      <label className="ai-persona-switch-label" htmlFor="game-persona">
+                        Voice (next {getHostRoundNoun().toLowerCase()})
+                      </label>
+                      <select
+                        id="game-persona"
+                        className="ai-persona-select"
+                        value={gamePersonaId}
+                        onChange={(e) => handleChangeGamePersona(e.target.value)}
+                        title="Changes Workie's voice from the next question onwards"
+                      >
+                        <option value="">Adapt to the session</option>
+                        {gamePersonas.map((persona) => (
+                          <option key={persona.personaId} value={persona.personaId}>
+                            {persona.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
                       className="regenerate-ai-btn"
                       onClick={handleRegenerateAISummary}
-                      title="Regenerate AI Summary with fresh analysis"
+                      title="Redo: rewrite the summary on screen now, in the current voice"
                       disabled={loadingAIInsights}
                     >
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -3930,7 +4066,11 @@ Ready to engage? See you there!`;
                       </svg>
                     </button>
                   </div>
-                  
+
+                  {personaSwitchStatus && (
+                    <p className="ai-persona-switch-status">{personaSwitchStatus}</p>
+                  )}
+
                   <div className="ai-insights-body">
                     {currentAIInsights.markdownResponse ? (
                       // Use Markdown renderer if available
@@ -4293,11 +4433,22 @@ Ready to engage? See you there!`;
 
 // Game Report Component
 function GameReport({ reportData, onClose }) {
-  const { gameId, eventTitle, players, questions, allAnswers, allVotes, aiSummaries } = reportData;
-  // Same round noun the live screens use. NOTE: create-report.js does not put
-  // `image` on questionData, so an art set reports as its game type's noun.
+  const { gameId, eventTitle, players, questions, allAnswers, allVotes } = reportData;
+  // Same round noun the live screens use. resolveRoundNoun() identifies an art
+  // round by a non-empty `image`/`Image` on the question — art is not a game
+  // type, so the artwork is the only signal. create-report.js projects `image`
+  // onto questionData for exactly this; if it is ever absent the helper simply
+  // falls back to the game type's noun, so the report degrades to "Round"
+  // rather than breaking.
   const reportRoundNoun = (questionData) =>
     resolveRoundNoun(questionData, reportData.gameType, reportData.roundNoun);
+
+  // The header counts the whole set, so it must not judge by question 1 alone —
+  // a set whose first question happens to carry no image would be headed
+  // "3 Rounds" while every row beneath it said "Artwork".
+  const headerSampleQuestion =
+    (questions || []).map((q) => q?.questionData).find((q) => (q?.image || q?.Image || '').trim())
+    || questions?.[0]?.questionData;
   const [isSaving, setIsSaving] = useState(false);
   const [showSaveReportModal, setShowSaveReportModal] = useState(false);
   const [saveModalData, setSaveModalData] = useState(null);
@@ -4450,7 +4601,7 @@ function GameReport({ reportData, onClose }) {
             <span>{players.length} Player{players.length !== 1 ? 's' : ''}</span>
             <span>
               {questions.length}{' '}
-              {pluralRoundNoun(reportRoundNoun(questions[0]?.questionData), questions.length)}
+              {pluralRoundNoun(reportRoundNoun(headerSampleQuestion), questions.length)}
             </span>
           </div>
         </div>

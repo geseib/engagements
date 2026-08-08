@@ -8,6 +8,20 @@ const { resolvePersona, buildOutputContract } = require('./personas');
 const { normalizeGameType } = require('./game-types');
 const { isUsableSummaryPrompt, summaryPromptDefect } = require('./prompt-shape');
 
+/**
+ * Voice attribution carried out of generateAISummary() and onto the stored
+ * AISummary item, so a report can say whose voice produced a section.
+ *
+ * `personaName` is null for the free-text and inferred levels — those have no
+ * named persona, and inventing one ("Adaptive") here would put a label in the
+ * data that nobody chose. `personaSource` tells a reader which level won.
+ */
+const personaAttribution = (persona) => ({
+  personaName: (persona && persona.name) || null,
+  personaId: (persona && persona.personaId) || null,
+  personaSource: (persona && persona.source) || null
+});
+
 const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -529,6 +543,8 @@ exports.handler = async (event) => {
           discussionQuestions: existingSummary.Item.DiscussionQuestions || [],
           nextSteps: existingSummary.Item.NextSteps || [],
           markdownResponse: existingSummary.Item.MarkdownResponse || null,
+          personaName: existingSummary.Item.PersonaName || null,
+          personaSource: existingSummary.Item.PersonaSource || null,
           generatedAt: existingSummary.Item.GeneratedAt,
           fromCache: true
         };
@@ -1002,6 +1018,13 @@ exports.handler = async (event) => {
       NextSteps: summaryData.nextSteps,
       FullResponse: summaryData.fullResponse,
       MarkdownResponse: summaryData.markdownResponse,
+      // Voice attribution. `PersonaName` is the display field the report reads;
+      // it is null when no named persona won (free-text context, or the
+      // adaptive inferred default). `PersonaSource` records which precedence
+      // level supplied the voice.
+      PersonaName: summaryData.personaName || null,
+      PersonaId: summaryData.personaId || null,
+      PersonaSource: summaryData.personaSource || null,
       GeneratedAt: now,
       ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
     };
@@ -1034,6 +1057,8 @@ exports.handler = async (event) => {
       discussionQuestions: summaryData.discussionQuestions,
       nextSteps: summaryData.nextSteps,
       markdownResponse: summaryData.markdownResponse,
+      personaName: summaryData.personaName || null,
+      personaSource: summaryData.personaSource || null,
       generatedAt: now,
       fromCache: false
     };
@@ -2026,7 +2051,11 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
       nextSteps: parsed.nextSteps,
       fullResponse: aiResponse,
       markdownResponse: parsed.markdownResponse,   // present on every success path
-      model: 'claude-haiku-4-5'                     // correct label (was mislabeled 'claude-3.5-*')
+      model: 'claude-haiku-4-5',                    // correct label (was mislabeled 'claude-3.5-*')
+      // Whose voice this section is in. Persisted onto the AISummary item so a
+      // report generated weeks later can attribute it — by then the game's
+      // PersonaId may have been switched again, or the persona edited.
+      ...personaAttribution(persona)
     };
 
     // Include debug information if in debug mode
@@ -2041,7 +2070,7 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
 
     // Data-driven fallback — never chain a second slow model, never return blank.
     console.log(`🚨 BEDROCK FINAL FALLBACK: data-driven summary for ${totalParticipants} participants`);
-    const fallbackResult = buildFallback();
+    const fallbackResult = { ...buildFallback(), ...personaAttribution(persona) };
     if (debugMode) fallbackResult.debugInfo = debugInfo;
     return fallbackResult;
   }

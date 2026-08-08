@@ -136,6 +136,11 @@ exports.handler = async (event) => {
         gameType: gameMetadata.Item.GameType || 'call-and-answer',
         questionSetId: gameMetadata.Item.QuestionSetId,
         selectedCategories: gameMetadata.Item.SelectedCategories || [],
+        // Workie's voice for this session. Another whitelist projection: without
+        // this line the host's in-game voice picker resets to "Adapt to the
+        // session" every time a game is resumed, while the game itself still
+        // has a persona set — a picker that misreports its own state.
+        personaId: gameMetadata.Item.PersonaId || null,
         createdAt: gameMetadata.Item.CreatedAt
       }
     };

@@ -86,6 +86,12 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
           randomizeQuestions: true,
           selectedCategories: [], // Use all categories
           triviaTimer: questionSet.engagementType === 'trivia' ? 30 : null
+          // No `personaId` on purpose. Quickstart's whole premise is zero
+          // decisions, and adding a voice picker here would be one more. The
+          // set's own persona still applies — resolvePersona() falls through
+          // host → set → context → inferred — so a set that has been given a
+          // voice keeps it, and everything else gets the adaptive default,
+          // which is the designed behaviour rather than a gap.
         })
       });
 

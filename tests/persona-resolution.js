@@ -7,6 +7,7 @@
  * meaningful business analysis". Precedence is the fix, and it is what these
  * tests pin down.
  */
+const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
 const {
@@ -164,6 +165,55 @@ const loadPersona = async (id) => STORE[id] || null;
     assert(/never refuse to summarise/i.test(INFERRED_VOICE));
     assert(/one person answered/i.test(INFERRED_VOICE),
       'the single-response case is the one that actually failed in production');
+  });
+
+  console.log('\nattribution\n');
+
+  await run('a named persona is reported so a summary can be attributed', async () => {
+    const r = await resolvePersona({ hostPersonaId: 'comedian', loadPersona });
+    assert.strictEqual(r.name, 'The Comedian');
+    assert.strictEqual(r.personaId, 'comedian');
+  });
+
+  await run('the levels with no named persona report none rather than inventing one', async () => {
+    for (const c of [
+      { questionSetAiContext: 'you are a witty DJ', loadPersona },
+      { gameAiContext: 'keep it upbeat', loadPersona },
+      { loadPersona },
+    ]) {
+      const r = await resolvePersona(c);
+      assert.strictEqual(r.name, undefined, `${r.source} invented a persona name`);
+      assert(r.source, 'every result must say which level won');
+    }
+  });
+
+  console.log('\nseeded records\n');
+
+  // D13: resolvePersona() drops any record whose status is 'inactive'. The
+  // seeder must therefore write a status explicitly — a seeded persona with no
+  // status at all works only by accident of the comparison.
+  check('the seeder writes an explicit active status', () => {
+    const seeder = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'seed-personas.js'), 'utf8');
+    assert(/status:\s*'active'/.test(seeder),
+      "seed-personas.js must write status: 'active' — the resolver reads status and the seeder used to omit it");
+  });
+
+  await run('every seed persona resolves when stored as the seeder stores it', async () => {
+    for (const p of SEED_PERSONAS) {
+      const r = await resolvePersona({
+        hostPersonaId: p.personaId,
+        loadPersona: async () => ({ ...p, status: 'active' }),
+      });
+      assert.strictEqual(r.source, 'host', `${p.personaId} did not resolve`);
+      assert.strictEqual(r.name, p.name);
+    }
+  });
+
+  await run('every seed persona declares the game types it suits', async () => {
+    for (const p of SEED_PERSONAS) {
+      assert(Array.isArray(p.gameTypes) && p.gameTypes.length > 0,
+        `${p.personaId} has no gameTypes — GET /admin/personas filters on it`);
+    }
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

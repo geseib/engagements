@@ -5774,6 +5774,56 @@ body {
 }
 
 /* Regenerate AI Button */
+/* Voice picker, parked to the left of the Redo button. Two adjacent controls
+   with deliberately different scopes: the picker takes effect from the NEXT
+   question, Redo rewrites the summary on screen. The label says so. */
+.ai-persona-switch {
+  position: absolute;
+  top: 14px;
+  right: 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-end;
+}
+
+.ai-persona-switch-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6c757d;
+}
+
+.ai-persona-select {
+  border: 2px solid var(--primary);
+  border-radius: 20px;
+  background: white;
+  color: var(--primary);
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  max-width: 220px;
+  cursor: pointer;
+}
+
+.ai-persona-switch-status {
+  margin: 0;
+  padding: 8px 25px;
+  font-size: 0.85rem;
+  color: #495057;
+  background: #f1f3f5;
+  border-bottom: 1px solid #dee2e6;
+}
+
+@media (max-width: 640px) {
+  /* The absolute controls stack on top of the title on a phone; drop the
+     picker back into the flow rather than letting it overlap. */
+  .ai-persona-switch {
+    position: static;
+    align-items: flex-start;
+    width: 100%;
+  }
+}
+
 .regenerate-ai-btn {
   position: absolute;
   top: 20px;

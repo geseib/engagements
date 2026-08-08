@@ -33,15 +33,16 @@ const EDITABLE_SET_FIELDS = {
   aiContextInstruction: 'AI context',
   promptId: 'AI summary prompt',
   engagementType: 'engagement type',
-  roundNoun: 'round label'
+  roundNoun: 'round label',
+  personaId: "Workie's voice"
 };
 
 function describeSetChange(field, value) {
   const label = EDITABLE_SET_FIELDS[field] || field;
   if (!value) {
-    return field === 'promptId'
-      ? 'AI summary prompt reset to the game-type default'
-      : `${label} cleared`;
+    if (field === 'promptId') return 'AI summary prompt reset to the game-type default';
+    if (field === 'personaId') return "Workie's voice reset to adapting to the session";
+    return `${label} cleared`;
   }
   return `${label} set to "${value}"`;
 }
@@ -118,6 +119,9 @@ function AdminPage() {
   const [editEngagementType, setEditEngagementType] = useState('call-and-answer');
   const [editPromptId, setEditPromptId] = useState('');
   const [editRoundNoun, setEditRoundNoun] = useState('');
+  // Per-set voice. '' means "adapt to the session", which is the default and
+  // beats the prompt template's baked-in persona on purpose.
+  const [editPersonaId, setEditPersonaId] = useState('');
   // Snapshot of the set as it was when the editor opened. The save payload is a
   // diff against this: a field the owner did not touch is omitted entirely, a
   // field they blanked is sent as '' so the backend can tell "leave it alone"
@@ -130,6 +134,10 @@ function AdminPage() {
 
   // Available prompts for selection
   const [availablePrompts, setAvailablePrompts] = useState([]);
+  // The persona library, read from GET /admin/personas. Personas live under
+  // SK='PERSONA#' which get-ai-prompts.js hard-filters out, so they need their
+  // own endpoint — this is the list that used to be unreachable (D8).
+  const [availablePersonas, setAvailablePersonas] = useState([]);
 
   // AI Scenario Builder
   const [showAIScenarioBuilder, setShowAIScenarioBuilder] = useState(false);
@@ -177,9 +185,34 @@ function AdminPage() {
     }
   };
 
+  // Fetch the persona library. Unfiltered on purpose: the editor's engagement
+  // type is itself editable, so filtering here would make voices appear and
+  // disappear mid-edit. The endpoint's gameType filter is for the host's
+  // create dialog, where the type is already fixed.
+  const fetchAvailablePersonas = async () => {
+    try {
+      const response = await authFetch(`${API_BASE}admin/personas`);
+      if (!response.ok) {
+        console.warn(`Persona list unavailable (${response.status})`);
+        return;
+      }
+      const data = await response.json();
+      setAvailablePersonas(data.personas || []);
+    } catch (error) {
+      console.error('Error fetching personas:', error);
+    }
+  };
+
+  /** Display name for a stored personaId, or a warning when it resolves to nothing. */
+  const personaLabel = (personaId) => {
+    const match = availablePersonas.find((p) => p.personaId === personaId);
+    return match ? match.name : `${personaId} (unknown — Workie will adapt instead)`;
+  };
+
   // Load prompts when component mounts
   useEffect(() => {
     fetchAvailablePrompts();
+    fetchAvailablePersonas();
   }, []);
 
   const handleEditQuestionSet = (questionSet) => {
@@ -189,7 +222,8 @@ function AdminPage() {
       aiContextInstruction: (questionSet.aiContextInstruction || '').trim(),
       promptId: (questionSet.promptId || '').trim(),
       engagementType: normalizeGameType(questionSet.engagementType),
-      roundNoun: (questionSet.roundNoun || '').trim()
+      roundNoun: (questionSet.roundNoun || '').trim(),
+      personaId: (questionSet.personaId || '').trim()
     };
 
     setEditMode(true);
@@ -201,6 +235,7 @@ function AdminPage() {
     setEditEngagementType(original.engagementType);
     setEditPromptId(original.promptId);
     setEditRoundNoun(original.roundNoun);
+    setEditPersonaId(original.personaId);
     setEditOriginal(original);
     setSaveStatus('');
     setSaveOk(null);
@@ -231,6 +266,7 @@ function AdminPage() {
     setEditEngagementType('call-and-answer');
     setEditPromptId('');
     setEditRoundNoun('');
+    setEditPersonaId('');
     setEditOriginal({});
     setSaveStatus('');
     setSaveOk(null);
@@ -249,7 +285,8 @@ function AdminPage() {
       aiContextInstruction: editAiContextInstructions.trim(),
       promptId: editPromptId.trim(),
       engagementType: normalizeGameType(editEngagementType),
-      roundNoun: editRoundNoun.trim()
+      roundNoun: editRoundNoun.trim(),
+      personaId: editPersonaId.trim()
     };
 
     // Only send what actually changed. An omitted key means "leave it alone";
@@ -294,6 +331,7 @@ function AdminPage() {
         setEditEngagementType('call-and-answer');
         setEditPromptId('');
         setEditRoundNoun('');
+        setEditPersonaId('');
         setEditOriginal({});
         // Refresh the question sets list
         await fetchQuestionSets();
@@ -1290,7 +1328,11 @@ function AdminPage() {
                         <strong>AI Prompt:</strong>{' '}
                         {set.promptId || <em>default for {gameTypeLabel(set.engagementType)}</em>}
                         {set.roundNoun && <> · <strong>Round label:</strong> {set.roundNoun}</>}
-                        {set.personaId && <> · <strong>Persona:</strong> {set.personaId}</>}
+                        {/* Resolve the id to a name, and say so when it resolves
+                            to nothing — a dangling personaId silently degrades
+                            to the adaptive voice at runtime, which looks
+                            identical to "no persona set". */}
+                        {set.personaId && <> · <strong>Voice:</strong> {personaLabel(set.personaId)}</>}
                       </p>
                       {set.createdAt && (
                         <p className="creation-date">
@@ -1490,7 +1532,30 @@ function AdminPage() {
                     Only active prompts are shown.
                   </small>
                 </div>
-                
+
+                <div className="form-group">
+                  <label htmlFor="edit-persona-id">Workie's Voice</label>
+                  <select
+                    id="edit-persona-id"
+                    value={editPersonaId}
+                    onChange={(e) => setEditPersonaId(e.target.value)}
+                    className="form-select"
+                  >
+                    {/* Adapting is the designed default, not a fallback. A host
+                        who picks a voice at creation still overrides this. */}
+                    <option value="">Adapt to the session (recommended)</option>
+                    {availablePersonas.map(persona => (
+                      <option key={persona.personaId} value={persona.personaId}>
+                        {persona.name}{persona.tagline ? ` — ${persona.tagline}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="help-text">
+                    The voice Workie uses for summaries of this set. A host's pick at engagement
+                    creation takes precedence over this. Leave blank and Workie reads the room.
+                  </small>
+                </div>
+
                 <div className="form-actions">
                   <button
                     className="btn-primary"

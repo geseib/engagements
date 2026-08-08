@@ -1,8 +1,13 @@
 const { createGame } = require('./schema-compliant-manager');
 
 exports.handler = async (event) => {
-  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, randomizeQuestions, selectedCategories, hostName, visibility, accessCode } = JSON.parse(event.body || '{}');
-  
+  // ⚠️ This destructure is a whitelist: anything not named here is dropped on
+  // the floor without a word. `triviaTimer` was sent by the frontend for months
+  // and silently discarded that way. If you add a field to the create payload,
+  // it needs THREE edits — here, the createGame() argument below, and the
+  // METADATA item in schema-compliant-manager.js.
+  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, randomizeQuestions, selectedCategories, hostName, visibility, accessCode, personaId } = JSON.parse(event.body || '{}');
+
   // Generate a unique 4-digit game ID
   const gameId = Math.floor(1000 + Math.random() * 9000).toString();
 
@@ -18,6 +23,9 @@ exports.handler = async (event) => {
         randomizeQuestions: randomizeQuestions !== false // Default to true if not specified
       },
       aiContext: aiContext,
+      // The host's voice pick. Empty means "adapt to the session" — the
+      // designed default — not "fall back to the legacy template".
+      personaId: (personaId || '').trim(),
       details: engagementInfo || '',
       hostName: hostName || 'Host',
       visibility: visibility || 'public',

@@ -471,6 +471,31 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # Mid-game voice switch. Deliberately a narrow UpdateCommand on one attribute
+  # — see the header of update-game-persona.js for why reviving
+  # websocket/save-game-context.js would have destroyed the METADATA item.
+  UpdateGamePersonaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-update-game-persona'
+      CodeUri: lambda-functions/game/
+      Handler: update-game-persona.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        UpdateGamePersonaEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/persona
+            Method: PUT
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   GetQuestionFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -1360,6 +1385,33 @@ Resources:
           Properties:
             ApiId: !Ref RestApi
             Path: /admin/ai-prompts
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  # The persona library. Personas share the AIPROMPTS partition but sit under
+  # SK='PERSONA#', which AdminGetAIPromptsFunction hard-filters out — so without
+  # this route there is no way to read them at all (D8).
+  AdminGetPersonasFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-get-personas'
+      CodeUri: lambda-functions/admin/
+      Handler: get-personas.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+      Events:
+        AdminGetPersonasEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/personas
             Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
