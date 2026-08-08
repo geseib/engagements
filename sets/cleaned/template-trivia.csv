@@ -1,0 +1,11 @@
+Category,Question#,Title,Detail,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Points
+"DevOps",1,"What does CI/CD stand for?","","Continuous Integration / Continuous Delivery","Computer Interface / Computer Design","Code Integration / Code Development","Central Intelligence / Central Database","","","OptionA",10
+"Cloud Computing",2,"Which AWS service runs code without provisioning servers?","","EC2","Lambda","S3","RDS","","","OptionB",10
+"Programming",3,"In which year was Python first released?","","1989","1991","1995","2000","","","OptionB",10
+"DevOps",4,"What problem does Docker primarily solve?","","Database management","Packaging an app with its dependencies","Web hosting","Code compilation","","","OptionB",10
+"Frontend",5,"Which company originally built React?","","Google","Facebook","Microsoft","Twitter","","","OptionB",10
+"Backend",6,"What does REST stand for in API design?","","Remote Execution State Transfer","Representational State Transfer","Rapid Enterprise System Technology","Real-time Event Stream Transfer","","","OptionB",10
+"Networking",7,"Which port does HTTPS use by default?","","80","443","8080","3000","","","OptionB",10
+"Version Control",8,"Which Git command creates a branch and switches to it in one step?","","git branch","git checkout -b","git switch","git create-branch","","","OptionB",10
+"Database",9,"What does SQL stand for?","","System Query Language","Structured Query Language","Simple Question Language","Server Query Language","","","OptionB",10
+"Programming",10,"Which description best fits JavaScript?","","Object-oriented only","Functional only","Multi-paradigm","Procedural only","","","OptionC",10
