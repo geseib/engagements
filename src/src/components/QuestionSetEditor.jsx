@@ -10,6 +10,7 @@ import {
   summarizeEditResult,
   summarizeCsv,
   describeReplacePlan,
+  selectableSummaryPrompts,
   normalizeVersions,
   nextVersionNumber,
   interpretVersionDelete,
@@ -82,6 +83,13 @@ export default function QuestionSetEditor({
   const replaceInputRef = useRef(null);
 
   const activeVersion = questionSet?.activeVersion;
+
+  // Prompts worth offering for THIS set. Keyed off the live engagementType
+  // rather than the saved one, so switching the type re-filters immediately —
+  // otherwise you pick "Trivia", save, reopen, and only then see trivia prompts.
+  const summaryPromptChoices = selectableSummaryPrompts(availablePrompts, engagementType);
+  const hiddenPromptCount = availablePrompts.length - summaryPromptChoices.length;
+
 
   const loadVersions = useCallback(async () => {
     if (!setId) return;
@@ -545,17 +553,22 @@ export default function QuestionSetEditor({
               className="form-select"
             >
               <option value="">Use default prompt for game type</option>
-              {availablePrompts.map((prompt) => (
+              {summaryPromptChoices.map((prompt) => (
                 <option key={prompt.promptId} value={prompt.promptId}>
-                  {prompt.name} ({prompt.gameType} - {prompt.category})
+                  {prompt.name}
+                  {prompt.category ? ` (${prompt.category})` : ''}
+                  {prompt.summaryPromptStatus === 'unusable' ? ' — not a summary prompt' : ''}
                 </option>
               ))}
             </select>
             <small className="help-text">
-              Choose a specific AI prompt for generating summaries, or leave blank to use the
-              default prompt based on game type. Only active prompts are shown.
+              Prompts for <strong>{gameTypeLabel(engagementType)}</strong> sets only.
+              Leave blank to use the default for this game type.
+              {hiddenPromptCount > 0 && ` ${hiddenPromptCount} prompt${
+                hiddenPromptCount === 1 ? '' : 's'
+              } for other game types are hidden.`}
             </small>
-            <PromptShapePreview promptId={promptId} prompts={availablePrompts} />
+            <PromptShapePreview promptId={promptId} prompts={summaryPromptChoices} />
           </div>
 
           <div className="form-group">

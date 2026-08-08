@@ -300,3 +300,41 @@ export function versionDeleteTone(outcome) {
   if (outcome === 'confirm') return 'pending';
   return 'error';
 }
+
+/* -------------------------------------------------------------- prompts --- */
+
+/**
+ * Which AI prompts belong in a question set's "AI Summary Prompt" picker.
+ *
+ * The picker was listing every prompt in the table — 47 of them on engagedev —
+ * for a set that can only use about seven. Two independent reasons a prompt
+ * does not belong:
+ *
+ *   1. It is for a different game type. A trivia analysis prompt cannot say
+ *      anything useful about a call-and-answer round.
+ *   2. It is a GENERATION prompt. Those write questions; they can never drive a
+ *      summary. `get-ai-summary.js` rejects them (no `template`, and no
+ *      `instructions` + `outputFormat`) and silently falls back to the default,
+ *      which is exactly the "I picked a prompt and nothing changed" symptom.
+ *
+ * Game type is compared through `normalizeGameType` because the table holds two
+ * spellings — `callandanswer`/`polls` from the original seeds, `call-and-answer`
+ * /`poll` from later ones. Comparing raw strings is why the upload dropdown has
+ * never shown a single poll prompt.
+ *
+ * `summaryPromptStatus` is deliberately NOT used to exclude. Summary prompts are
+ * metadata-only rows whose content lives in S3, so the list endpoint reports
+ * `unknown` for them; filtering on it would empty the picker entirely. It is
+ * only used to annotate a prompt already known to be unusable.
+ */
+export function selectableSummaryPrompts(prompts = [], engagementType) {
+  const wanted = normalizeGameType(engagementType);
+  return prompts.filter((p) => {
+    if (!p || !p.promptId) return false;              // malformed rows: no usable value
+    if (p.status && p.status !== 'active') return false;
+    if (p.promptType === 'generation') return false;
+    if (String(p.promptId).startsWith('gen-')) return false;
+    const gt = normalizeGameType(p.gameType);
+    return gt === wanted || p.gameType === 'all';
+  });
+}

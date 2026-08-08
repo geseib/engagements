@@ -11,7 +11,8 @@ import {
   normalizeVersions,
   nextVersionNumber,
   interpretVersionDelete,
-  versionDeleteTone
+  versionDeleteTone,
+  selectableSummaryPrompts,
 } from '../utils/questionSetEditing';
 import { statusTone } from '../utils/statusTone';
 
@@ -337,5 +338,64 @@ describe('versionDeleteTone', () => {
     expect(versionDeleteTone('confirm')).toBe('pending');
     expect(versionDeleteTone('refused')).toBe('error');
     expect(versionDeleteTone('error')).toBe('error');
+  });
+});
+
+describe('selectableSummaryPrompts', () => {
+  // Shapes taken from real engagedev rows. Summary prompts are metadata-only
+  // (their template lives in S3); generation prompts carry basePrompt inline.
+  const prompts = [
+    { promptId: 'md9ih6msyezugcusipp', name: 'Lessons Learned', gameType: 'callandanswer', category: 'lessons-learned', status: 'active' },
+    { promptId: 'mskc5h7boibe5abg15', name: 'Art & Creative Titles', gameType: 'call-and-answer', category: 'art-titles', status: 'active' },
+    { promptId: 'mdnrm2awjobwax0vcdl', name: 'Trivia Basic', gameType: 'trivia', category: 'general', status: 'active' },
+    { promptId: 'mdnrm2h1gvg2h5w3sz6', name: 'Opinion Polls', gameType: 'polls', category: 'opinion', status: 'active' },
+    { promptId: 'gen-call-and-answer-lessons-learned', name: 'Lessons Learned Scenarios', gameType: 'call-and-answer', promptType: 'generation', basePrompt: 'write scenarios', status: 'active' },
+    { promptId: 'retired-one', name: 'Retired', gameType: 'call-and-answer', status: 'inactive' },
+    { promptId: undefined, name: 'Malformed', gameType: 'call-and-answer', status: 'active' },
+    { promptId: 'anytype', name: 'Universal', gameType: 'all', status: 'active' },
+  ];
+
+  const names = (t) => selectableSummaryPrompts(prompts, t).map((p) => p.name);
+
+  test('matches the legacy and canonical spellings of one game type', () => {
+    // callandanswer and call-and-answer are the same type; comparing raw
+    // strings is why the upload dropdown never showed a single poll prompt.
+    expect(names('call-and-answer')).toEqual(
+      expect.arrayContaining(['Lessons Learned', 'Art & Creative Titles']));
+  });
+
+  test('polls and poll are the same game type', () => {
+    expect(names('poll')).toContain('Opinion Polls');
+  });
+
+  test('excludes prompts for other game types', () => {
+    expect(names('call-and-answer')).not.toContain('Trivia Basic');
+    expect(names('trivia')).not.toContain('Lessons Learned');
+  });
+
+  test('excludes generation prompts, which can never drive a summary', () => {
+    expect(names('call-and-answer')).not.toContain('Lessons Learned Scenarios');
+  });
+
+  test('excludes inactive and malformed rows', () => {
+    expect(names('call-and-answer')).not.toContain('Retired');
+    expect(names('call-and-answer')).not.toContain('Malformed');
+  });
+
+  test('keeps prompts marked for all game types', () => {
+    expect(names('trivia')).toContain('Universal');
+    expect(names('wavelength')).toContain('Universal');
+  });
+
+  test('does not filter on summaryPromptStatus', () => {
+    // Summary prompts are metadata-only rows, so the list endpoint reports
+    // "unknown" for them. Excluding on that would empty the picker entirely.
+    const unknown = [{ promptId: 'x', name: 'X', gameType: 'trivia', status: 'active', summaryPromptStatus: 'unknown' }];
+    expect(selectableSummaryPrompts(unknown, 'trivia')).toHaveLength(1);
+  });
+
+  test('an empty prompt list is not an error', () => {
+    expect(selectableSummaryPrompts([], 'trivia')).toEqual([]);
+    expect(selectableSummaryPrompts(undefined, 'trivia')).toEqual([]);
   });
 });
