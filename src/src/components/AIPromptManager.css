@@ -148,11 +148,22 @@
 
 .game-type-badge,
 .category-badge,
-.default-badge {
+.default-badge,
+.warning-badge {
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
+}
+
+/* A prompt the summary engine cannot actually run (generation format), or a
+   record with no promptId. Both look fine until you attach them. */
+.warning-badge {
+  background: #fdecea;
+  color: #b3261e;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .game-type-badge {

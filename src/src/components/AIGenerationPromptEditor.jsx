@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './AIPromptManager.css';
 import { authFetch } from '../auth/authFetch';
+import { normalizeGameType } from '../config/gameTypes';
 import Icon from './Icon';
 
 const API_BASE = window.API_BASE;
@@ -92,10 +93,14 @@ function AIGenerationPromptEditor({ onClose }) {
   const fetchPrompts = async () => {
     try {
       setLoading(true);
+      // D16: get-ai-prompts.js used to ignore this param entirely, so this
+      // "generation only" list actually contained every prompt in the table,
+      // summary prompts included. It is honoured now.
       const params = new URLSearchParams({
         promptType: 'generation'
       });
-      
+
+
       const response = await authFetch(`${API_BASE}admin/ai-prompts?${params}`);
       const data = await response.json();
       
@@ -117,7 +122,11 @@ function AIGenerationPromptEditor({ onClose }) {
     let filtered = [...prompts];
 
     if (filters.gameType !== 'all') {
-      filtered = filtered.filter(prompt => prompt.gameType === filters.gameType);
+      // Legacy rows still spell this `callandanswer` / `polls`; the backend now
+      // returns a normalized gameType but normalize here too so this list is
+      // correct even against an older API response.
+      const wanted = normalizeGameType(filters.gameType);
+      filtered = filtered.filter(prompt => normalizeGameType(prompt.gameType) === wanted);
     }
 
     if (filters.scenarioType !== 'all') {

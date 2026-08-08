@@ -101,6 +101,17 @@ Resources:
           KeyType: HASH
         - AttributeName: SK
           KeyType: RANGE
+      # TTL stays ENABLED — GAME#/PLAYER#/CONNECTION# session records rely on it
+      # (90 days creation, 7 days active) and disabling it would retain game data
+      # forever.
+      #
+      # It is a per-ITEM opt-in: only records that carry a `ttl` attribute expire.
+      # AI prompts and personas (PK=AIPROMPTS) are CONFIGURATION and must never
+      # be stamped with one. Every prompt writer used to set now+365d, so prompts
+      # authored in Aug 2025 began silently disappearing in Aug 2026. Those
+      # stamps are gone from create-ai-prompt.js, update-ai-prompt.js and
+      # migrate-ai-prompts.js; update-ai-prompt.js additionally REMOVEs a stale
+      # `ttl` on every save. Do not reintroduce one on an AIPROMPT#/PERSONA# item.
       TimeToLiveSpecification:
         AttributeName: ttl
         Enabled: true

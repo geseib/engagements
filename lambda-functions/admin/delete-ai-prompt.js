@@ -14,6 +14,43 @@ const dynamodb = DynamoDBDocumentClient.from(dynamoClient, {
 
 const s3Client = new S3Client({});
 
+/**
+ * Where does this prompt actually live?
+ *
+ * D14: create/get/update and the game-side reader all use
+ * `PK:'AIPROMPTS', SK:'AIPROMPT#<id>'`, but this handler and
+ * ai-prompt-advisor.js used `PK:'AI_PROMPT#<id>', SK:'METADATA'` — the shape
+ * only `populate-default-prompts.js` (dead, unrouted) ever wrote. The result:
+ * deleting ANY normally-created prompt threw "AI prompt not found".
+ *
+ * Try canonical first, fall back to legacy, and return the key that hit so the
+ * caller deletes/archives the row it actually read. Anything genuinely stored
+ * under the old key stays deletable.
+ */
+const CANONICAL_KEY = (promptId) => ({ PK: 'AIPROMPTS', SK: `AIPROMPT#${promptId}` });
+const LEGACY_KEY = (promptId) => ({ PK: `AI_PROMPT#${promptId}`, SK: 'METADATA' });
+
+const locatePrompt = async (promptId) => {
+  const canonical = await dynamodb.send(new GetCommand({
+    TableName: tableName,
+    Key: CANONICAL_KEY(promptId)
+  }));
+  if (canonical.Item) {
+    return { item: canonical.Item, key: CANONICAL_KEY(promptId), keyShape: 'canonical' };
+  }
+
+  console.warn(`⚠️ ${promptId} not found under AIPROMPTS/AIPROMPT# — trying the legacy AI_PROMPT#/METADATA key`);
+  const legacy = await dynamodb.send(new GetCommand({
+    TableName: tableName,
+    Key: LEGACY_KEY(promptId)
+  }));
+  if (legacy.Item) {
+    return { item: legacy.Item, key: LEGACY_KEY(promptId), keyShape: 'legacy' };
+  }
+
+  return null;
+};
+
 exports.handler = async (event) => {
   console.log('🗑️ Delete AI Prompt - Event:', JSON.stringify(event, null, 2));
 
@@ -61,20 +98,16 @@ exports.handler = async (event) => {
 
     console.log(`🗑️ Deleting AI prompt: ${promptId}, hardDelete: ${hardDelete}, deleteAllVersions: ${deleteAllVersions}`);
 
-    // Get existing prompt metadata
-    const existingPrompt = await dynamodb.send(new GetCommand({
-      TableName: tableName,
-      Key: {
-        PK: `AI_PROMPT#${promptId}`,
-        SK: 'METADATA'
-      }
-    }));
+    // Get existing prompt metadata (canonical key, then legacy — see locatePrompt)
+    const located = await locatePrompt(promptId);
 
-    if (!existingPrompt.Item) {
+    if (!located) {
       throw new Error(`AI prompt not found: ${promptId}`);
     }
 
-    const currentPrompt = existingPrompt.Item;
+    const currentPrompt = located.item;
+    const promptKey = located.key;
+    console.log(`📍 Found ${promptId} under the ${located.keyShape} key: ${JSON.stringify(promptKey)}`);
 
     // Check if this is a default prompt
     if (currentPrompt.isDefault && !hardDelete) {
@@ -147,10 +180,7 @@ exports.handler = async (event) => {
       console.log(`🗑️ Deleting from DynamoDB`);
       await dynamodb.send(new DeleteCommand({
         TableName: tableName,
-        Key: {
-          PK: `AI_PROMPT#${promptId}`,
-          SK: 'METADATA'
-        }
+        Key: promptKey
       }));
 
       console.log(`✅ Hard delete completed for AI prompt: ${promptId}`);
@@ -175,10 +205,7 @@ exports.handler = async (event) => {
 
       await dynamodb.send(new UpdateCommand({
         TableName: tableName,
-        Key: {
-          PK: `AI_PROMPT#${promptId}`,
-          SK: 'METADATA'
-        },
+        Key: promptKey,
         UpdateExpression: 'SET #status = :status, archivedAt = :archivedAt, updatedAt = :updatedAt',
         ExpressionAttributeNames: {
           '#status': 'status'

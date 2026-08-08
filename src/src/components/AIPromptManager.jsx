@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './AIPromptManager.css';
 import { authFetch } from '../auth/authFetch';
+import { normalizeGameType } from '../config/gameTypes';
 import Icon from './Icon';
 
 const API_BASE = window.API_BASE;
@@ -10,7 +11,14 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
   const [formData, setFormData] = useState({
     name: prompt?.name || '',
     description: prompt?.description || '',
-    gameType: prompt?.gameType || 'callandanswer',
+    // This manager only ever authors ANALYSIS (summary) prompts. It used not to
+    // send promptType at all, so create-ai-prompt.js's old `= 'generation'`
+    // default persisted every one of them mislabeled (D15).
+    promptType: 'analysis',
+    // Canonical dashed ids, matching config/gameTypes.js. Storing
+    // `callandanswer` here while the generation editor stored
+    // `call-and-answer` is what made every game-type filter miss (R3).
+    gameType: normalizeGameType(prompt?.gameType),
     category: prompt?.category || '',
     scenario: prompt?.scenario || '',
     template: prompt?.template || '',
@@ -415,26 +423,32 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
     }
   };
 
+  // Canonical dashed ids — the same vocabulary as src/config/gameTypes.js and
+  // AIGenerationPromptEditor. `survey` is included so survey sets can carry a
+  // summary prompt at all; it previously matched nothing anywhere.
   const gameTypes = [
-    { value: 'callandanswer', label: 'Call and Answer' },
+    { value: 'call-and-answer', label: 'Call & Answer' },
     { value: 'trivia', label: 'Trivia' },
-    { value: 'polls', label: 'Polls' },
-    { value: 'wavelength', label: 'Wavelength' }
+    { value: 'poll', label: 'Poll' },
+    { value: 'wavelength', label: 'Wavelength' },
+    { value: 'survey', label: 'Survey' }
   ];
 
   const categories = {
-    callandanswer: [
+    'call-and-answer': [
       'lessons-learned',
       'problem-solving',
       'amazon-principles',
       'interview-prep',
       'team-building',
+      'art-titles',
       'custom',
       'opinions'
     ],
     trivia: ['general', 'business', 'technology', 'history', 'science', 'custom'],
-    polls: ['opinion', 'preference', 'feedback', 'evaluation', 'custom'],
-    wavelength: ['word-association', 'brainstorming', 'creativity', 'team-building', 'custom']
+    poll: ['opinion', 'preference', 'feedback', 'evaluation', 'custom'],
+    wavelength: ['word-association', 'brainstorming', 'creativity', 'team-building', 'general', 'custom'],
+    survey: ['general', 'feedback', 'evaluation', 'custom']
   };
 
   const handleSubmit = async (e) => {
@@ -608,7 +622,7 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
               >
                 <option value="">Select a category...</option>
-                {categories[formData.gameType]?.map(cat => (
+                {categories[normalizeGameType(formData.gameType)]?.map(cat => (
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
               </select>
@@ -697,10 +711,19 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
                       <h5 className="category-header">{category}</h5>
                       <div className="category-variables">
                         {categoryVariables.map(variable => {
-                          const isAvailable = variable.gameTypes.includes(formData.gameType);
-                          const isTriviaMostly = variable.gameTypes.length === 1 && variable.gameTypes[0] === 'trivia';
-                          const isCallAnswerOnly = variable.gameTypes.length === 1 && variable.gameTypes[0] === 'callandanswer';
-                          
+                          // The templateVariables catalogue above still lists
+                          // legacy spellings (`callandanswer`, `polls`), so
+                          // compare NORMALIZED on both sides rather than
+                          // rewriting ~40 literal arrays. Without this, every
+                          // variable would read as unavailable the moment
+                          // formData.gameType became `call-and-answer`.
+                          const currentType = normalizeGameType(formData.gameType);
+                          const availableTypes = variable.gameTypes.map(normalizeGameType);
+                          const isAvailable = availableTypes.includes(currentType);
+                          const isTriviaMostly = availableTypes.length === 1 && availableTypes[0] === 'trivia';
+                          const isCallAnswerOnly = availableTypes.length === 1 && availableTypes[0] === 'call-and-answer';
+
+
                           return (
                             <button
                               key={variable.name}
@@ -711,8 +734,8 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
                               disabled={!isAvailable}
                             >
                               {!isAvailable && <Icon name="Warning" weight="fill" size={13} color="var(--primary)" />}
-                              {isTriviaMostly && formData.gameType === 'trivia' && <Icon name="Brain" weight="bold" size={13} />}
-                              {isCallAnswerOnly && formData.gameType === 'callandanswer' && <Icon name="ChatCircleText" weight="bold" size={13} />}
+                              {isTriviaMostly && currentType === 'trivia' && <Icon name="Brain" weight="bold" size={13} />}
+                              {isCallAnswerOnly && currentType === 'call-and-answer' && <Icon name="ChatCircleText" weight="bold" size={13} />}
                               {' '}
                               {'{' + variable.name + '}'}
                             </button>
@@ -1075,7 +1098,11 @@ function AIPromptManager() {
     let filtered = [...prompts];
 
     if (selectedGameType !== 'all') {
-      filtered = filtered.filter(p => p.gameType === selectedGameType);
+      // Normalize both sides: rows written before the vocabulary was unified
+      // still carry `callandanswer` / `polls`, and an exact-match filter on the
+      // dashed id would show none of them.
+      const wanted = normalizeGameType(selectedGameType);
+      filtered = filtered.filter(p => normalizeGameType(p.gameType) === wanted);
     }
 
     if (selectedCategory !== 'all') {
@@ -1203,10 +1230,15 @@ function AIPromptManager() {
             onChange={(e) => setSelectedGameType(e.target.value)}
             className="filter-select"
           >
+            {/* D20: wavelength was missing entirely, so wavelength prompts were
+                unreachable through this filter; survey matched nothing anywhere.
+                Values are the canonical dashed ids. */}
             <option value="all">All Game Types</option>
-            <option value="callandanswer">Call and Answer</option>
+            <option value="call-and-answer">Call & Answer</option>
             <option value="trivia">Trivia</option>
-            <option value="polls">Polls</option>
+            <option value="poll">Poll</option>
+            <option value="wavelength">Wavelength</option>
+            <option value="survey">Survey</option>
           </select>
 
           <select 
@@ -1220,6 +1252,7 @@ function AIPromptManager() {
             <option value="amazon-principles">Amazon Principles</option>
             <option value="interview-prep">Interview Prep</option>
             <option value="team-building">Team Building</option>
+            <option value="art-titles">Art &amp; Creative Titles</option>
             <option value="custom">Custom</option>
           </select>
 
@@ -1285,6 +1318,27 @@ function AIPromptManager() {
                   )}
                   {prompt.isDefault && (
                     <span className="default-badge">Default</span>
+                  )}
+                  {/* R1b: a generation-format prompt attached to a question set
+                      does nothing at runtime — the summary engine rejects it and
+                      silently uses the game-type default. Say so here rather
+                      than letting someone attach it and wonder why the summary
+                      never changed. */}
+                  {prompt.summaryPromptStatus === 'unusable' && (
+                    <span
+                      className="warning-badge"
+                      title={`Cannot be used as a summary prompt: ${prompt.summaryPromptDefect || 'wrong format'}`}
+                    >
+                      <Icon name="Warning" weight="fill" size={12} color="currentColor" /> Not a summary prompt
+                    </span>
+                  )}
+                  {prompt.malformed && (
+                    <span
+                      className="warning-badge"
+                      title="This record has no promptId attribute. It cannot be attached to a question set safely — run scripts/cull-ai-prompts.js."
+                    >
+                      <Icon name="Warning" weight="fill" size={12} color="currentColor" /> Broken record
+                    </span>
                   )}
                 </div>
 

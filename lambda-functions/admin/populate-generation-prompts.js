@@ -1,5 +1,18 @@
+/**
+ * Seed the built-in question-GENERATION prompts (AIGenerationPromptEditor /
+ * AIScenarioBuilder), as distinct from the summary "analysis" prompts seeded by
+ * ./populate-defaults.js.
+ *
+ * ⚠️ NOT ROUTED. There is no API Gateway event for this handler in
+ * template-clean.yaml, so nothing can invoke it today; the rows it describes
+ * were presumably written by an earlier routed version. It is kept (rather than
+ * deleted) because the prompt text below is the only copy of these generation
+ * prompts, and fixed (rather than left alone) so that routing it later cannot
+ * recreate the promptId bug — see the note on `promptId` in the writer.
+ */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand } = require('@aws-sdk/lib-dynamodb');
+const { normalizeGameType } = require('./shared/game-types');
 
 const tableName = process.env.TABLE_NAME;
 const dynamoClient = new DynamoDBClient({});
@@ -465,13 +478,25 @@ exports.handler = async (event) => {
     const timestamp = new Date().toISOString();
     let totalPrompts = 0;
 
-    for (const [gameType, scenarios] of Object.entries(generationPrompts)) {
+    for (const [rawGameType, scenarios] of Object.entries(generationPrompts)) {
+      const gameType = normalizeGameType(rawGameType);
       console.log(`📝 Processing ${gameType} prompts...`);
-      
+
       for (const [scenarioType, promptData] of Object.entries(scenarios)) {
+        // These rows previously carried NO `promptId` attribute at all while
+        // still matching get-ai-prompts.js's `begins_with(SK, 'AIPROMPT#')`
+        // filter. In a React <select> that means `value={undefined}`, which
+        // React omits — and a DOM <option> with no value attribute reports its
+        // LABEL TEXT as its value. Selecting one wrote a string like
+        // "Lessons Learned Scenarios (call-and-answer - )" into a question
+        // set's promptId: a dangling reference that silently falls back to the
+        // default. The id is derived (not random) so re-running is idempotent.
+        const promptId = `gen-${gameType}-${scenarioType}`;
+
         const promptItem = {
           PK: 'AIPROMPTS',
-          SK: `AIPROMPT#GENERATION#${scenarioType}#${gameType}`,
+          SK: `AIPROMPT#${promptId}`,
+          promptId,
           promptType: 'generation',
           gameType: gameType,
           scenarioType: scenarioType,

@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, ScanCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
+const { normalizeGameType } = require('./shared/game-types');
 
 const tableName = process.env.TABLE_NAME || 'engdev';
 
@@ -43,7 +44,7 @@ async function migrateAIPrompts() {
         promptId: oldPrompt.promptId,
         name: oldPrompt.name,
         description: oldPrompt.description,
-        gameType: oldPrompt.gameType,
+        gameType: normalizeGameType(oldPrompt.gameType),
         category: oldPrompt.category,
         scenario: oldPrompt.scenario,
         isDefault: oldPrompt.isDefault || false,
@@ -53,8 +54,9 @@ async function migrateAIPrompts() {
         s3Key: oldPrompt.s3Key,
         version: oldPrompt.version || 1,
         createdAt: oldPrompt.createdAt,
-        updatedAt: oldPrompt.updatedAt || oldPrompt.createdAt,
-        ttl: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60) // 1 year TTL
+        updatedAt: oldPrompt.updatedAt || oldPrompt.createdAt
+        // NO `ttl`. AI prompts are configuration; the table's TTL exists for
+        // GAME#/PLAYER# records only. See create-ai-prompt.js.
       };
       
       migrations.push(
@@ -72,13 +74,13 @@ async function migrateAIPrompts() {
             TableName: tableName,
             Item: {
               PK: 'AIPROMPTS',
-              SK: `GAMETYPE#${oldPrompt.gameType}#CATEGORY#${oldPrompt.category}`,
+              SK: `GAMETYPE#${newPrompt.gameType}#CATEGORY#${oldPrompt.category}`,
               defaultPrompt: `PROMPT#${oldPrompt.promptId}`,
-              gameType: oldPrompt.gameType,
+              gameType: newPrompt.gameType,
               category: oldPrompt.category,
               promptId: oldPrompt.promptId,
-              updatedAt: newPrompt.updatedAt,
-              ttl: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60)
+              updatedAt: newPrompt.updatedAt
+              // NO `ttl` — see above.
             }
           }))
         );

@@ -1,6 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { normalizeGameType } = require('./shared/game-types');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -199,6 +200,9 @@ exports.handler = async (event) => {
     updateExpression.push('s3Key = :s3Key');
     expressionAttributeValues[':s3Key'] = newS3Key;
 
+    // Needed by the `REMOVE #ttl` clause below — `ttl` is a DynamoDB reserved word.
+    expressionAttributeNames['#ttl'] = 'ttl';
+
     // Handle default prompt management for both setting and unsetting defaults
     if (isDefault !== undefined) {
       if (isDefault === true) {
@@ -208,23 +212,27 @@ exports.handler = async (event) => {
           // First, clear isDefault from all other prompts in the same category
           console.log(`🧹 Clearing default status from other prompts in ${currentPrompt.gameType}/${updatedContent.category}`);
           
-          const { Items: existingPrompts } = await dynamodb.send(new QueryCommand({
+          const { Items: allPrompts } = await dynamodb.send(new QueryCommand({
             TableName: tableName,
             KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-            FilterExpression: 'gameType = :gameType AND category = :category AND promptId <> :currentPromptId',
             ExpressionAttributeValues: {
               ':pk': 'AIPROMPTS',
-              ':sk': 'AIPROMPT#',
-              ':gameType': currentPrompt.gameType,
-              ':category': updatedContent.category,
-              ':currentPromptId': promptId
+              ':sk': 'AIPROMPT#'
             }
           }));
-          
+
+          // One default per GAME TYPE, not per game type + category — see the
+          // matching note in create-ai-prompt.js (D17). Matched on the
+          // normalized type so legacy `callandanswer` rows are cleared too,
+          // which a FilterExpression cannot express.
+          const targetType = normalizeGameType(currentPrompt.gameType);
+          const existingPrompts = (allPrompts || []).filter(p =>
+            p.promptId !== promptId && normalizeGameType(p.gameType) === targetType);
+
           // Clear default status from other prompts
           const clearDefaultPromises = existingPrompts
-            .filter(prompt => prompt.isDefault)
-            .map(prompt => 
+            .filter(prompt => prompt.isDefault && prompt.promptId)
+            .map(prompt =>
               dynamodb.send(new UpdateCommand({
                 TableName: tableName,
                 Key: {
@@ -254,8 +262,10 @@ exports.handler = async (event) => {
               gameType: currentPrompt.gameType,
               category: updatedContent.category,
               promptId,
-              updatedAt: timestamp,
-              ttl: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60) // 1 year TTL
+              updatedAt: timestamp
+              // NO `ttl`. The table's TimeToLiveSpecification exists for
+              // GAME#/PLAYER# session records; AI prompts are configuration and
+              // must never expire. See create-ai-prompt.js for the full note.
             }
           }));
 
@@ -294,7 +304,11 @@ exports.handler = async (event) => {
           PK: 'AIPROMPTS',
           SK: `AIPROMPT#${promptId}`
         },
-        UpdateExpression: `SET ${updateExpression.join(', ')}`,
+        // `REMOVE ttl` self-heals: any prompt row still carrying the old
+        // now+365d stamp loses it the next time anyone saves the prompt, so the
+        // one-off sweep in scripts/cull-ai-prompts.js is a floor, not a
+        // dependency. Removing an absent attribute is a no-op in DynamoDB.
+        UpdateExpression: `SET ${updateExpression.join(', ')} REMOVE #ttl`,
         ExpressionAttributeValues: expressionAttributeValues,
         ...(Object.keys(expressionAttributeNames).length > 0 && { ExpressionAttributeNames: expressionAttributeNames })
       }));

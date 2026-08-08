@@ -144,13 +144,21 @@ exports.handler = async (event) => {
     if (existingPromptId) {
       console.log(`📋 Fetching existing prompt: ${existingPromptId}`);
       
-      const existingPrompt = await dynamodb.send(new GetCommand({
+      // Canonical key first, legacy second — same D14 split that broke delete.
+      // Everything create/get/update writes lives at AIPROMPTS/AIPROMPT#<id>;
+      // only the dead populate-default-prompts.js ever wrote AI_PROMPT#/METADATA.
+      let existingPrompt = await dynamodb.send(new GetCommand({
         TableName: tableName,
-        Key: {
-          PK: `AI_PROMPT#${existingPromptId}`,
-          SK: 'METADATA'
-        }
+        Key: { PK: 'AIPROMPTS', SK: `AIPROMPT#${existingPromptId}` }
       }));
+
+      if (!existingPrompt.Item) {
+        console.warn(`⚠️ ${existingPromptId} not found under AIPROMPTS/AIPROMPT# — trying the legacy AI_PROMPT#/METADATA key`);
+        existingPrompt = await dynamodb.send(new GetCommand({
+          TableName: tableName,
+          Key: { PK: `AI_PROMPT#${existingPromptId}`, SK: 'METADATA' }
+        }));
+      }
 
       if (!existingPrompt.Item) {
         throw new Error(`Prompt not found: ${existingPromptId}`);
@@ -163,7 +171,13 @@ exports.handler = async (event) => {
       }));
       
       const promptData = JSON.parse(await s3Response.Body.transformToString());
-      currentPromptText = promptData.template;
+      // Only legacy prompts carry `template`. Structured (instructions +
+      // outputFormat) and generation (basePrompt) prompts would otherwise hand
+      // the advisor `undefined` and it would critique the string "undefined".
+      currentPromptText = promptData.template
+        || [promptData.instructions, promptData.outputFormat].filter(Boolean).join('\n\n')
+        || promptData.basePrompt
+        || '';
       currentContext = {
         name: promptData.name,
         description: promptData.description,

@@ -63,10 +63,16 @@ const fakeDoc = {
       return { Item: ddbItems.get(`${inp.Key.PK}|${inp.Key.SK}`) };
     }
     if (cmd.type === 'scan') {
-      // findDefaultPromptId scans for PK=AIPROMPTS + gameType + isDefault
+      // findDefaultPromptId scans PK=AIPROMPTS + isDefault. It deliberately no
+      // longer filters on gameType server-side: rows exist under both
+      // `callandanswer` and `call-and-answer`, and a FilterExpression cannot
+      // normalize, so the game-type match happens in JS. Honour whichever
+      // values the handler actually supplied rather than assuming a fixed set.
       const v = inp.ExpressionAttributeValues || {};
       const items = [...ddbItems.values()].filter((i) =>
-        i.PK === v[':pk'] && i.gameType === v[':gameType'] && i.isDefault === v[':isDefault']);
+        (v[':pk'] === undefined || i.PK === v[':pk']) &&
+        (v[':gameType'] === undefined || i.gameType === v[':gameType']) &&
+        (v[':isDefault'] === undefined || i.isDefault === v[':isDefault']));
       return { Items: items, Count: items.length };
     }
     return { Items: [], Count: 0 };
@@ -150,9 +156,22 @@ function check(label, fn) {
   check('a missing promptId still resolves the default', () =>
     assert.strictEqual(none.promptId, DEFAULT_PROMPT_ID));
 
-  // 4. Genuinely nothing available: caller must still get a clean signal so it
-  //    can use the data-driven fallback rather than throwing.
-  const empty = await mod.resolvePromptTemplate('nope', 'no-such-game-type');
+  // 4. An unrecognised game type is NOT a dead end. normalizeGameType maps any
+  //    unknown spelling to call-and-answer (same rule as src/config/gameTypes.js),
+  //    so the call-and-answer default still answers. This used to return null:
+  //    the game silently lost its AI summary because of a typo in a game type.
+  const unknownType = await mod.resolvePromptTemplate('nope', 'no-such-game-type');
+  check('an unrecognised gameType degrades to the call-and-answer default', () =>
+    assert(unknownType && unknownType.promptId === DEFAULT_PROMPT_ID,
+      'an unknown game type must not cost the room its summary'));
+
+  // 5. Genuinely nothing available: caller must still get a clean signal so it
+  //    can use the data-driven fallback rather than throwing. Empty the table
+  //    of defaults to reach that state — an unknown game type no longer does.
+  const savedDefault = ddbItems.get(`AIPROMPTS|AIPROMPT#${DEFAULT_PROMPT_ID}`);
+  ddbItems.delete(`AIPROMPTS|AIPROMPT#${DEFAULT_PROMPT_ID}`);
+  const empty = await mod.resolvePromptTemplate('nope', 'call-and-answer');
+  ddbItems.set(`AIPROMPTS|AIPROMPT#${DEFAULT_PROMPT_ID}`, savedDefault);
   check('unresolvable everything returns null rather than throwing', () =>
     assert.strictEqual(empty, null));
 

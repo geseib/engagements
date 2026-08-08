@@ -1,6 +1,8 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { normalizeGameType, isKnownGameType, GAME_TYPE_IDS } = require('./shared/game-types');
+const { inferPromptType } = require('./shared/prompt-shape');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -46,8 +48,8 @@ exports.handler = async (event) => {
     const {
       name,
       description,
-      gameType,
-      promptType = 'generation',
+      gameType: rawGameType,
+      promptType: requestedPromptType,
       // Old format fields
       category,
       scenario,
@@ -69,20 +71,33 @@ exports.handler = async (event) => {
     } = requestBody;
 
     // Validate required fields - support both old (template) and new (instructions + outputFormat) formats
-    if (!name || !gameType) {
+    if (!name || !rawGameType) {
       throw new Error('Missing required fields: name and gameType are required');
     }
-    
+
     // Either template OR (instructions + outputFormat) OR basePrompt must be provided
     if (!template && (!instructions || !outputFormat) && !basePrompt) {
       throw new Error('Either template OR both instructions and outputFormat OR basePrompt are required');
     }
 
-    // Validate gameType - support both old and new format names
-    const validGameTypes = ['callandanswer', 'call-and-answer', 'trivia', 'polls', 'poll', 'wavelength'];
-    if (!validGameTypes.includes(gameType)) {
-      throw new Error(`Invalid gameType. Must be one of: ${validGameTypes.join(', ')}`);
+    // Validate against the recognised spellings, then STORE THE CANONICAL ONE.
+    // Writing `callandanswer` here and `call-and-answer` from the generation
+    // editor is what made the upload dropdown's filter return nothing.
+    // isKnownGameType (not normalizeGameType) does the validating — normalize
+    // never fails, so on its own it would happily accept "banana".
+    if (!isKnownGameType(rawGameType)) {
+      throw new Error(`Invalid gameType "${rawGameType}". Must be one of: ${GAME_TYPE_IDS.join(', ')}`);
     }
+    const gameType = normalizeGameType(rawGameType);
+
+    // promptType decides which surfaces list this prompt. AIPromptManager used
+    // not to send it at all, and the old `= 'generation'` default then labelled
+    // every hand-written ANALYSIS prompt as a generation prompt (D15). Infer it
+    // from the record's shape when the caller stays silent.
+    const promptType = (requestedPromptType === 'analysis' || requestedPromptType === 'generation')
+      ? requestedPromptType
+      : inferPromptType({ template, instructions, basePrompt });
+    console.log(`🏷️ promptType: ${promptType}${requestedPromptType ? '' : ' (inferred — caller sent none)'}`);
 
     const promptId = generatePromptId();
     const timestamp = new Date().toISOString();
@@ -169,8 +184,12 @@ exports.handler = async (event) => {
       s3Key,
       version,
       createdAt: timestamp,
-      updatedAt: timestamp,
-      ttl: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60) // 1 year TTL
+      updatedAt: timestamp
+      // NO `ttl`. The table has TimeToLiveSpecification on `ttl`
+      // (template-clean.yaml:104-106) because GAME#/PLAYER# records must expire.
+      // AI prompts are configuration, not session data — stamping them with
+      // now+365d meant prompts authored in Aug 2025 started vanishing in Aug
+      // 2026, which is what "I added a prompt and it disappeared" actually was.
     };
 
     console.log(`💾 Saving prompt metadata to DynamoDB`);
@@ -181,29 +200,35 @@ exports.handler = async (event) => {
 
     // If this is marked as default, handle default prompt lookup structure
     if (isDefault) {
-      console.log(`🏷️ Setting as default prompt for ${gameType}/${category}`);
-      
+      console.log(`🏷️ Setting as default prompt for ${gameType}`);
+
       try {
-        // First, clear isDefault from all other prompts in the same category
-        console.log(`🧹 Clearing default status from other prompts in ${gameType}/${category}`);
-        
-        const { Items: existingPrompts } = await dynamodb.send(new QueryCommand({
+        // Clear isDefault from every other prompt of this GAME TYPE — not just
+        // this category. `findDefaultPromptId` (game/get-ai-summary.js) looks up
+        // the default by game type alone, so per-category defaults produced
+        // seven simultaneous call-and-answer "defaults" and an arbitrary winner
+        // (D17). One default per game type, full stop.
+        console.log(`🧹 Clearing default status from other ${gameType} prompts`);
+
+        const { Items: allPrompts } = await dynamodb.send(new QueryCommand({
           TableName: tableName,
           KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-          FilterExpression: 'gameType = :gameType AND category = :category AND promptId <> :currentPromptId',
           ExpressionAttributeValues: {
             ':pk': 'AIPROMPTS',
-            ':sk': 'AIPROMPT#',
-            ':gameType': gameType,
-            ':category': category,
-            ':currentPromptId': promptId
+            ':sk': 'AIPROMPT#'
           }
         }));
-        
+
+        // Match on the NORMALIZED type so a legacy `callandanswer` row is
+        // cleared too, and filter in JS because a FilterExpression cannot
+        // normalize.
+        const existingPrompts = (allPrompts || []).filter(p =>
+          p.promptId !== promptId && normalizeGameType(p.gameType) === gameType);
+
         // Clear default status from other prompts
         const clearDefaultPromises = existingPrompts
-          .filter(prompt => prompt.isDefault)
-          .map(prompt => 
+          .filter(prompt => prompt.isDefault && prompt.promptId)
+          .map(prompt =>
             dynamodb.send(new UpdateCommand({
               TableName: tableName,
               Key: {
@@ -233,8 +258,8 @@ exports.handler = async (event) => {
             gameType,
             category,
             promptId,
-            updatedAt: timestamp,
-            ttl: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60) // 1 year TTL
+            updatedAt: timestamp
+            // NO `ttl` — see the note on the AIPROMPT# item above.
           }
         }));
 

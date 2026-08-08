@@ -5,6 +5,8 @@ const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { resolvePersona, buildOutputContract } = require('./personas');
+const { normalizeGameType } = require('./game-types');
+const { isUsableSummaryPrompt, summaryPromptDefect } = require('./prompt-shape');
 
 const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const dynamoClient = new DynamoDBClient({});
@@ -276,51 +278,88 @@ Ground every insight in the actual responses the team prioritized. Be specific a
   }
 };
 
+/**
+ * Preferred category per game type, used as the first tie-break when more than
+ * one prompt claims `isDefault`. One default per game type is now enforced on
+ * write (admin/create-ai-prompt.js, admin/update-ai-prompt.js), but live data
+ * predates that, so resolution here must still be DETERMINISTIC — the old code
+ * ended with "for polls or other types, just take the first one", i.e. whatever
+ * order DynamoDB happened to return, which could change between two runs of the
+ * same game.
+ */
+const PREFERRED_DEFAULT_CATEGORY = {
+  'call-and-answer': 'lessons-learned',
+  trivia: 'general',
+  poll: 'general',
+  wavelength: 'general',
+  survey: 'general',
+};
+
 // Find default prompt ID for a given game type
 const findDefaultPromptId = async (gameType) => {
+  const canonical = normalizeGameType(gameType);
   try {
-    console.log(`🔍 Finding default prompt for game type: ${gameType}`);
-    
-    // Normalize game type
-    const normalizedGameType = gameType === 'call-and-answer' ? 'callandanswer' : 
-                              gameType === 'wavelength' ? 'wavelength' : gameType;
-    
-    // Scan for default prompts matching the game type
+    console.log(`🔍 Finding default prompt for game type: ${gameType} → ${canonical}`);
+
+    // Rows exist under BOTH spellings (`callandanswer` from the analysis
+    // manager, `call-and-answer` from the generation editor). Scan on PK alone
+    // and match in JS so either spelling resolves.
     const scanResult = await db.send(new ScanCommand({
       TableName: process.env.TABLE_NAME,
-      FilterExpression: 'PK = :pk AND gameType = :gameType AND isDefault = :isDefault',
+      FilterExpression: 'PK = :pk AND isDefault = :isDefault',
       ExpressionAttributeValues: {
         ':pk': 'AIPROMPTS',
-        ':gameType': normalizedGameType,
         ':isDefault': true
       }
     }));
 
-    if (scanResult.Items && scanResult.Items.length > 0) {
-      // Prefer category based on game type
-      let defaultPrompt;
-      if (normalizedGameType === 'callandanswer') {
-        defaultPrompt = scanResult.Items.find(item => item.category === 'lessons-learned') || scanResult.Items[0];
-      } else if (normalizedGameType === 'trivia') {
-        defaultPrompt = scanResult.Items.find(item => item.category === 'general') || scanResult.Items[0];
-      } else {
-        defaultPrompt = scanResult.Items[0]; // For polls or other types, just take the first one
+    const candidates = (scanResult.Items || []).filter(item =>
+      item.promptId && normalizeGameType(item.gameType) === canonical);
+
+    if (candidates.length > 0) {
+      if (candidates.length > 1) {
+        console.warn(`⚠️ ${candidates.length} prompts claim isDefault for ${canonical} ` +
+          `(${candidates.map(c => c.promptId).join(', ')}) — resolving deterministically. ` +
+          `Run scripts/cull-ai-prompts.js to leave exactly one.`);
       }
-      console.log(`✅ Found default prompt: ${defaultPrompt.promptId} (${defaultPrompt.name}) for ${normalizedGameType}`);
+
+      // Deterministic ordering: preferred category, then a usable summary shape,
+      // then oldest-created, then promptId. Never "whatever came back first".
+      const preferred = PREFERRED_DEFAULT_CATEGORY[canonical];
+      const rank = (item) => [
+        item.category === preferred ? 0 : 1,
+        item.basePrompt ? 1 : 0,          // generation-shaped prompts rank last
+        String(item.createdAt || '9999'),
+        String(item.promptId),
+      ];
+      const sorted = [...candidates].sort((a, b) => {
+        const ra = rank(a), rb = rank(b);
+        for (let i = 0; i < ra.length; i++) {
+          if (ra[i] < rb[i]) return -1;
+          if (ra[i] > rb[i]) return 1;
+        }
+        return 0;
+      });
+
+      const defaultPrompt = sorted[0];
+      console.log(`✅ Found default prompt: ${defaultPrompt.promptId} (${defaultPrompt.name}) for ${canonical}`);
       return defaultPrompt.promptId;
     }
 
     // Final fallback - return a hardcoded default based on game type
-    const fallbackPrompt = normalizedGameType === 'trivia' ? 'trivia-basic' : 'lessons-learned';
+    const fallbackPrompt = canonical === 'trivia' ? 'trivia-basic' : 'lessons-learned';
     console.log(`⚠️ No default prompt found for ${gameType}, using hardcoded fallback: ${fallbackPrompt}`);
     return fallbackPrompt;
-    
+
   } catch (error) {
     console.error(`❌ Error finding default prompt for ${gameType}:`, error);
-    const fallbackPrompt = gameType === 'trivia' ? 'trivia-basic' : 'lessons-learned';
+    const fallbackPrompt = canonical === 'trivia' ? 'trivia-basic' : 'lessons-learned';
     return fallbackPrompt; // Fallback
   }
 };
+
+// Exported for tests/ai-prompt-defaults.js
+exports.findDefaultPromptId = findDefaultPromptId;
 
 /**
  * Resolve a usable prompt template, recovering from a dangling promptId.
@@ -333,24 +372,49 @@ const findDefaultPromptId = async (gameType) => {
  * while a set with a BROKEN one silently lost its AI summary — the opposite of
  * what you'd want.
  *
- * Returns { promptId, promptData, recoveredFrom? } or null when genuinely
- * nothing resolves, so the caller can still use its data-driven fallback.
+ * Returns { promptId, promptData, recoveredFrom?, recoveryReason? } or null when
+ * genuinely nothing resolves, so the caller can still use its data-driven
+ * fallback.
+ *
+ * Two distinct failures both land in `recoveredFrom`, and telling them apart is
+ * the whole point of `recoveryReason`:
+ *
+ *   'missing'  — the referenced prompt no longer exists (deleted, or expired
+ *                under the old `ttl` stamp).
+ *   'unusable' — the prompt EXISTS but is generation-shaped
+ *                (basePrompt/contextTemplate, authored in
+ *                AIGenerationPromptEditor) and the summary engine cannot run
+ *                it. This is the "I added an Art prompt and nothing changed"
+ *                report: the fallback fired silently and looked like a no-op.
  */
 const resolvePromptTemplate = async (promptId, gameType) => {
-  const usable = (p) => p && (p.template || (p.instructions && p.outputFormat));
+  let recoveryReason;
+  let unusableDefect;
 
   if (promptId) {
     const promptData = await fetchPromptFromS3(promptId);
-    if (usable(promptData)) return { promptId, promptData };
-    console.warn(`⚠️ Prompt ${promptId} is referenced but unusable — falling back to the ${gameType} default`);
+    if (isUsableSummaryPrompt(promptData)) return { promptId, promptData };
+
+    if (!promptData) {
+      recoveryReason = 'missing';
+      console.warn(`⚠️ Prompt ${promptId} is referenced but could not be loaded — falling back to the ${gameType} default`);
+    } else {
+      recoveryReason = 'unusable';
+      unusableDefect = summaryPromptDefect(promptData);
+      console.error(
+        `❌ Prompt ${promptId} ("${promptData.name || 'unnamed'}") EXISTS but cannot drive a summary: ` +
+        `${summaryPromptDefect(promptData)}. Fields present: ${Object.keys(promptData).join(', ')}. ` +
+        `Falling back to the ${gameType} default — the attached prompt is having NO effect.`
+      );
+    }
   }
 
   const defaultId = await findDefaultPromptId(gameType);
   if (defaultId && defaultId !== promptId) {
     const promptData = await fetchPromptFromS3(defaultId);
-    if (usable(promptData)) {
+    if (isUsableSummaryPrompt(promptData)) {
       return promptId
-        ? { promptId: defaultId, promptData, recoveredFrom: promptId }
+        ? { promptId: defaultId, promptData, recoveredFrom: promptId, recoveryReason, unusableDefect }
         : { promptId: defaultId, promptData };
     }
   }
@@ -361,6 +425,10 @@ const resolvePromptTemplate = async (promptId, gameType) => {
 
 // Exported for tests/ai-prompt-resolution.js
 exports.resolvePromptTemplate = resolvePromptTemplate;
+// Exported so admin surfaces can grey out prompts that cannot serve as summary
+// prompts, instead of letting someone attach one and watch nothing happen.
+exports.isUsableSummaryPrompt = isUsableSummaryPrompt;
+exports.summaryPromptDefect = summaryPromptDefect;
 
 exports.handler = async (event) => {
   // Async worker mode: the HTTP path fires an InvocationType:'Event' self-invoke
@@ -1073,11 +1141,17 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
 
   const promptData = resolved.promptData;
   if (resolved.recoveredFrom) {
-    console.warn(`♻️ Recovered from dangling prompt ${resolved.recoveredFrom} → using default ${resolved.promptId}`);
+    const why = resolved.recoveryReason === 'unusable'
+      ? `exists but is not a usable summary prompt (${resolved.unusableDefect || 'wrong format — likely a generation prompt'})`
+      : 'no longer exists';
+    console.warn(`♻️ Recovered from prompt ${resolved.recoveredFrom} (${why}) → using default ${resolved.promptId}`);
     promptId = resolved.promptId;
     if (promptProvenance) {
       promptProvenance.recoveredFrom = resolved.recoveredFrom;
-      promptProvenance.details = `${promptProvenance.details || ''} (referenced prompt "${resolved.recoveredFrom}" no longer exists; used the ${gameType} default instead)`.trim();
+      promptProvenance.recoveryReason = resolved.recoveryReason || 'missing';
+      // Say WHY in the debug panel. "Nothing changed" was previously
+      // indistinguishable from "working as configured".
+      promptProvenance.details = `${promptProvenance.details || ''} (referenced prompt "${resolved.recoveredFrom}" ${why}; used the ${gameType} default instead)`.trim();
     }
   }
 
