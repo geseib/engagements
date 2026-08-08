@@ -252,3 +252,65 @@ template no longer declares.
 - Retiring the `engdev` stack.
 - Rewriting the five stale pre-auth test suites.
 - The `SET#x`/`METADATA` legacy dual-read (dead code, harmless).
+
+---
+
+## Addendum — live cleanup on engagedev (2026-08-08, executed)
+
+### Correction: the "broken" generation rows were not junk
+
+The owner approved hard-deleting the 22 `AIPROMPT#GENERATION#*` rows on the
+description that they were "unusable by construction". That description was wrong.
+They are unusable **as summary prompts** only. They are the question-*generation*
+library that `components/AIScenarioBuilder.jsx` reads via `?promptType=generation`,
+and `AIScenarioBuilder` is mounted in `AdminPage.jsx`. Deleting them would have
+emptied the AI scenario generator.
+
+The defect was only the missing `promptId`. Migrated instead by
+`scripts/rekey-generation-prompts.js`: write `AIPROMPT#gen-<gameType>-<scenarioType>`
+carrying a real `promptId`, verify it reads back, then delete the legacy row. This
+achieves the approved outcome — the rows that corrupted the dropdown are gone —
+without losing content.
+
+### What TTL actually did
+
+**No prompt row on engagedev carried a `ttl` stamp.** The code defect was real
+(create/update/migrate all stamped `now + 365d`), but the routed seeder
+`populate-defaults.js` never stamped one, and every live prompt came from it. Two
+consequences worth recording:
+
+- The urgency was overstated. Nothing was expiring this week on engagedev.
+- More interesting: **no prompt has ever been created through the admin UI on
+  engagedev.** A UI-created prompt would carry a stamp; none does. Combined with
+  the delete path being broken (D14), the prompt manager has been effectively
+  write-only.
+
+Whether rows were reaped before today is unknowable — no prior inventory exists.
+The code fix still matters for every tier and for every prompt created from now on.
+
+### Applied to engagedev
+
+| Operation | Result |
+|---|---|
+| `--only=defaults --apply` | 14 duplicate `isDefault` flags cleared; now exactly one per game type |
+| `--only=gametype --apply` | 11 rows canonicalised to the dashed vocabulary |
+| `rekey-generation-prompts.js --apply` | 22 rows re-keyed with a real `promptId`; library intact |
+| `--only=ttl` | no-op — zero rows carried a stamp |
+
+Backup of the whole `PK=AIPROMPTS` partition taken first:
+`backups/engagedev-prompts-2026-08-08/aiprompts-partition.json` (50 items).
+
+### Evidence for "the edit didn't stick"
+
+`SET#famousarttitles` on engagedev, read after the owner's attempt:
+
+```
+createdAt          2026-08-08T01:12:43.455Z   <- imported
+updatedAt          2026-08-08T01:12:43.455Z   <- from the import
+UpdatedAt          2026-08-08T11:12:06.406Z   <- the edit lambda ran
+customInstruction  ""                          <- and yet still empty
+```
+
+The capital-`U` `UpdatedAt` moving proves `edit-question-set.js` executed; the
+empty `customInstruction` proves the field never reached the UpdateExpression.
+Both are fixed in `90f29741` — the casing split and the null-means-skip guard.
