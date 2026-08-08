@@ -2,7 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, ListObjectsV2Command, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { normalizeGameType } = require('./shared/game-types');
-const { isUsableSummaryPrompt, summaryPromptDefect, inferPromptType } = require('./shared/prompt-shape');
+const { isUsableSummaryPrompt, summaryPromptDefect, inferPromptType, normalizeOutputSections } = require('./shared/prompt-shape');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -121,6 +121,13 @@ exports.handler = async (event) => {
         gameTypeStored: prompt.gameType,
         promptType: inferPromptType(prompt),
         promptTypeStored: prompt.promptType,
+        // The prompt's declared output shape, for the picker's shape preview.
+        // Prefer the S3 copy when we have it — that is the one the summary
+        // engine actually reads; the DynamoDB copy is a mirror kept so the list
+        // response carries the shape without an S3 read per option.
+        ...(normalizeOutputSections(shapeSource && shapeSource.outputSections)
+          ? { outputSections: normalizeOutputSections(shapeSource.outputSections) }
+          : {}),
         summaryPromptStatus: known
           ? (isUsableSummaryPrompt(shapeSource) ? 'usable' : 'unusable')
           : 'unknown',

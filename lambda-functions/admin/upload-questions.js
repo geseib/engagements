@@ -231,7 +231,15 @@ exports.handler = async (event) => {
     if (titleIndex === -1) titleIndex = headers.findIndex(h => h.toLowerCase().includes('title') && !h.toLowerCase().includes('#'));
     if (questionDetailIndex === -1) questionDetailIndex = headers.findIndex(h => h.toLowerCase().includes('questiondetail'));
     if (answerDetailsIndex === -1) answerDetailsIndex = headers.findIndex(h => h.toLowerCase().includes('answerdetails'));
-    if (detailIndex === -1) detailIndex = headers.findIndex(h => h.toLowerCase().includes('detail') || h.toLowerCase().includes('lesson'));
+    // The loose `includes('detail')` fallback also matches "AnswerDetails". That
+    // was harmless while AnswerDetails was trivia-only; it is a SPOILER now that
+    // art sets keep the real title there, because Detail is shown to players
+    // during ASK. Never let the reveal column become the question detail.
+    if (detailIndex === -1) detailIndex = headers.findIndex((h, i) => {
+      if (i === answerDetailsIndex || i === questionDetailIndex) return false;
+      const hl = h.toLowerCase();
+      return hl.includes('detail') || hl.includes('lesson');
+    });
     if (schoolIndex === -1) schoolIndex = headers.findIndex(h => h.toLowerCase().includes('school'));
     if (customInstructionIndex === -1) customInstructionIndex = headers.findIndex(h => h.toLowerCase().includes('instruction'));
     // Optional Image column: Image / ImageUrl / Artwork / Picture
@@ -312,9 +320,21 @@ exports.handler = async (event) => {
           };
 
           // Remove Prompt field - we use Title and Detail only
-          
-          // For trivia, store additional answer details if available
-          if (engagementType === 'trivia' && finalAnswerDetails) {
+
+          // AnswerDetails is the REVEAL: the fact that only makes sense once the
+          // round is over. For trivia that is why the answer is right; for an
+          // art-title round it is the real title of the work plus a point of
+          // trivia about the piece or the artist.
+          //
+          // This used to be gated to trivia, which is why an art round had
+          // nowhere to keep the real title — the teaser lives in Title, the
+          // artist in School, and Detail must stay blank because Detail is shown
+          // to players and would spoil the round before anyone answers.
+          // AnswerDetails is carried by NO player or host payload
+          // (game/get-question.js, game/get-game-state.js) and is read only by
+          // game/get-ai-summary.js, which runs at RESULTS. That is precisely the
+          // property the reveal needs, so the gate is lifted for every type.
+          if (finalAnswerDetails) {
             baseQuestion.AnswerDetails = finalAnswerDetails;
           }
 
@@ -466,6 +486,13 @@ exports.handler = async (event) => {
         Category: question.Category,
         School: question.School || '',
         Image: question.Image || '', // Optional artwork URL
+        // The reveal, withheld until RESULTS. Read only by
+        // game/get-ai-summary.js; carried by no player or host payload.
+        // This whitelist previously dropped it even for trivia, so the
+        // AnswerDetails column has never reached the table from a CSV import —
+        // parsed at line ~297, assembled onto baseQuestion, then silently lost
+        // here. Written only when non-empty so ordinary sets are unchanged.
+        ...(question.AnswerDetails ? { AnswerDetails: question.AnswerDetails } : {}),
         CustomInstructions: question.CustomInstructions || '',
         OrderInCategory: categoryRelativeNumber,
         QuestionNumber: question.QuestionNumber || categoryCounters[categoryId], // Use CSV value or category counter

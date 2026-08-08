@@ -2,6 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { normalizeGameType } = require('./shared/game-types');
+const { normalizeOutputSections } = require('./shared/prompt-shape');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -50,6 +51,9 @@ exports.handler = async (event) => {
       template,
       instructions,
       outputFormat,
+      // Declared output shape. Omit to leave whatever the prompt already has;
+      // send [] or null to clear it and go back to the system default triad.
+      outputSections: rawOutputSections,
       isDefault,
       status,
       questionSetIds,
@@ -74,6 +78,16 @@ exports.handler = async (event) => {
 
     const currentPrompt = existingPrompt.Item;
     const timestamp = new Date().toISOString();
+
+    // Distinguish "not supplied" from "cleared" — the same null-means-skip trap
+    // that made question-set edits silently no-op (see the rounds/personas
+    // cleanup design, R2). undefined = leave alone; anything else = replace,
+    // and an empty/invalid declaration clears back to the default triad.
+    const outputSectionsSupplied = rawOutputSections !== undefined;
+    const outputSections = outputSectionsSupplied ? normalizeOutputSections(rawOutputSections) : null;
+    if (outputSectionsSupplied && rawOutputSections && !outputSections) {
+      throw new Error('outputSections must be 1-8 entries of { heading, guidance }, each heading unique, single-line plain text without markdown syntax');
+    }
 
     // Get current content from S3
     let currentContent = null;
@@ -114,6 +128,9 @@ exports.handler = async (event) => {
       ...(template === undefined && currentContent?.template && { template: currentContent.template }),
       ...(instructions === undefined && currentContent?.instructions && { instructions: currentContent.instructions }),
       ...(outputFormat === undefined && currentContent?.outputFormat && { outputFormat: currentContent.outputFormat }),
+      ...(outputSectionsSupplied
+        ? (outputSections ? { outputSections } : { outputSections: undefined })
+        : (currentContent?.outputSections ? { outputSections: currentContent.outputSections } : {})),
       isDefault: isDefault !== undefined ? isDefault : currentContent?.isDefault || currentPrompt.isDefault,
       status: status !== undefined ? status : currentContent?.status || currentPrompt.status,
       questionSetIds: questionSetIds !== undefined ? questionSetIds : currentContent?.questionSetIds || currentPrompt.questionSetIds || [],
@@ -188,6 +205,15 @@ exports.handler = async (event) => {
     if (tags !== undefined) {
       updateExpression.push('tags = :tags');
       expressionAttributeValues[':tags'] = tags;
+    }
+
+    if (outputSectionsSupplied) {
+      // Mirror of the S3 copy, so the admin picker can show the shape from the
+      // list response. A cleared shape writes an empty list rather than a
+      // REMOVE, which keeps this in one SET expression and still normalises to
+      // "no declaration" (normalizeOutputSections rejects an empty array).
+      updateExpression.push('outputSections = :outputSections');
+      expressionAttributeValues[':outputSections'] = outputSections || [];
     }
 
     // Always update these fields

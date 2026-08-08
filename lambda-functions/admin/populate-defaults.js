@@ -14,6 +14,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { normalizeGameType } = require('./shared/game-types');
+const { normalizeOutputSections } = require('./shared/prompt-shape');
 const defaultPrompts = require('./default-ai-prompts.json');
 
 // Generate unique ID for prompts (same as other admin functions)
@@ -122,6 +123,13 @@ exports.handler = async (event) => {
           const promptId = promptExists && overwrite ? existingPrompt.promptId : generatePromptId();
           const timestamp = new Date().toISOString();
 
+          // Validate the declared shape at seed time so a typo in the JSON is
+          // caught here rather than silently ignored at runtime.
+          const outputSections = normalizeOutputSections(promptData.outputSections);
+          if (promptData.outputSections && !outputSections) {
+            console.warn(`⚠️ ${promptData.name}: outputSections is malformed — seeding without it (the default triad will apply)`);
+          }
+
           // Store prompt template in S3 (matching create-ai-prompt format)
           const version = 1;
           const s3Key = `prompts/${gameType}/${promptId}/v${version}.json`;
@@ -139,6 +147,11 @@ exports.handler = async (event) => {
             template: promptData.template,
             instructions: promptData.template, // Use template as instructions for legacy prompts
             outputFormat: "Provide your analysis in the specified format with clear sections and actionable insights.",
+            // A prompt's own declared output shape, when it has one. Runtime
+            // reads promptData from S3 first, so it has to travel here — a
+            // shape stored only in DynamoDB would never reach the model.
+            // Absent means "use the system default triad".
+            ...(outputSections && { outputSections }),
             promptType: 'analysis',
             isDefault: promptData.isDefault === true,
             status: 'active',
@@ -177,6 +190,10 @@ exports.handler = async (event) => {
             // Exactly one prompt per game type carries isDefault in the JSON.
             isDefault: promptData.isDefault === true,
             tags: promptData.tags,
+            // Mirrored onto the metadata row so the admin prompt picker can show
+            // a prompt's output shape from the list response, without an S3 read
+            // per option. The runtime authority is still the S3 copy.
+            ...(outputSections && { outputSections }),
             s3Key: s3Key,
             s3Bucket: aiPromptsBucket,
             createdAt: timestamp,

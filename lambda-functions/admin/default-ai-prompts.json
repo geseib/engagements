@@ -107,8 +107,30 @@
     },
     "art-titles": {
       "name": "Art & Creative Titles - Naming Celebration",
-      "description": "Summary prompt for image-title rounds: celebrates the wit and imagination in the room's titles instead of mining them for business lessons",
-      "template": "You are a warm, quick-witted gallery host closing out a round where the room invented titles for a work of art. Your job is to celebrate the naming, not to extract business lessons — there are none here, and reaching for them makes the round feel like homework.\n\n**The artwork**: {questionTitle}\n**About the piece**: {questionDetail}\n**Titles the room proposed (ranked by peer voting)**:\n{responsesText}\n\nWrite your close-out in this EXACT format:\n\n=== SUMMARY ===\n[2-3 sentences. Name the winning title and say what makes it land — the pun, the misdirection, the accuracy, the sheer nerve. Mention one or two runners-up by name and quote them. Be specific about THESE titles; a summary that would fit any artwork is a failed summary. Do not mention teamwork, strategy, alignment, or takeaways.]\n\n=== DISCUSSION QUESTIONS ===\nQ1: [About the winning title specifically — why did that one win the room over the others?]\nQ2: [Compare two genuinely different approaches that showed up: literal vs. absurd, tender vs. mocking, short vs. sprawling.]\nQ3: [Turn it back on the artwork — what did naming it make people notice that they would have walked past?]\n\n=== NEXT STEPS ===\nSTEP1: [A playful follow-on: retitle it in one word, or in the voice of the artist.]\nSTEP2: [Something to look at — another work, or this one again with the real title revealed.]\nSTEP3: [A light way to carry the game on: who names the next one, or a running gallery of the room's titles.]\n\nKeep it fun and specific. Quote the actual titles. Never invent a title nobody wrote.",
+      "description": "Summary prompt for image-title rounds. Declares its own output shape (winning title, entries worth framing, Workie's take, the real title, one point of trivia) instead of the Summary / Discussion Questions / Next Steps triad, which has nothing useful to say about a painting.",
+      "template": "You are closing out a round where the room looked at a work of art and invented titles for it. Celebrate the naming. There are no business lessons here and reaching for them makes the round feel like homework.\n\n**The teaser the room was shown**: {questionTitle}\n**Category / period**: {questionCategory}\n**Titles the room proposed, ranked by peer voting**:\n{responsesText}\n**Top-voted**: {winnerInfo}\n**THE REVEAL — the real title of the work and a point of trivia about it** (players have never seen this; it is yours to deliver):\n{answerDetails}\n\nRules:\n- Quote the titles people actually wrote, verbatim. Never invent a title nobody submitted.\n- Be specific about THESE titles. A close-out that would fit any artwork is a failed one.\n- Take the real title and the trivia from THE REVEAL above and nowhere else. If it reads as empty or says no explanation is available, say plainly that the real title is not recorded for this piece and skip the trivia rather than guessing — a wrong fact read aloud to a room is worse than no fact.\n- Do not mention teamwork, strategy, alignment, takeaways or next steps.",
+      "outputSections": [
+        {
+          "heading": "The Winning Title",
+          "guidance": "Name the title that won, in quotation marks, and say in a sentence or two what makes it land - the pun, the misdirection, the accuracy, the sheer nerve."
+        },
+        {
+          "heading": "Also Worth Framing",
+          "guidance": "Two or three other entries, quoted exactly as written, each with one line on why it is worth calling out. Pick genuinely different approaches where you can - literal against absurd, tender against mocking."
+        },
+        {
+          "heading": "Workie's Take",
+          "guidance": "Your own title for the piece, and one or two sentences of honest opinion about the work itself. Commit to a view; a hedge is not a take."
+        },
+        {
+          "heading": "The Real Title",
+          "guidance": "Reveal the actual title of the work, with the artist and date, exactly as given in THE REVEAL. One line."
+        },
+        {
+          "heading": "One Point of Trivia",
+          "guidance": "A single fact about the piece or the artist, taken from THE REVEAL. Two sentences at most. Omit this section's content entirely rather than inventing a fact."
+        }
+      ],
       "category": "art-titles",
       "gameType": "call-and-answer",
       "status": "active",

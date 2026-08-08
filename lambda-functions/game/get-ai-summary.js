@@ -4,7 +4,7 @@ const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanComman
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
-const { resolvePersona, buildOutputContract } = require('./personas');
+const { resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutputShape } = require('./personas');
 const { normalizeGameType } = require('./game-types');
 const { isUsableSummaryPrompt, summaryPromptDefect } = require('./prompt-shape');
 
@@ -98,12 +98,25 @@ const SECTION_SYNONYMS = {
 // Tolerant by design: any heading level, any bullet style, and — critically —
 // prose that appears before the first recognised heading is treated as the
 // summary rather than discarded.
-const parseAIResponse = (aiResponse) => {
+//
+// `options.customShape` says the prompt declared its own headings (see
+// personas.js). None of the canonical Summary/Discussion/Next Steps headings
+// are expected in that case, so "no Summary section" is normal rather than a
+// parse failure, and the whole document — headings and all — becomes the
+// summary. `markdownResponse` is the primary render path in GameHostPage and
+// the report, so a custom shape displays exactly as written either way; this
+// only makes sure the structured fallback fields are never empty.
+const parseAIResponse = (aiResponse, options = {}) => {
   const raw = String(aiResponse || '');
+  const customShape = options.customShape === true;
   console.log('🔍 PARSING: Full AI response length:', raw.length);
   console.log('🔍 PARSING: First 300 chars:', raw.substring(0, 300));
+  if (customShape) console.log('🔍 PARSING: prompt declares its own output shape');
 
   const lines = raw.split('\n');
+  // Lines with a leading document title (an H1 that is not a section) removed —
+  // the shape that broke game 7971, and the one thing we strip in either mode.
+  const bodyLines = [];
 
   // Walk the document once, splitting it at every heading. `preamble` collects
   // body text that appears before any heading — the case that used to be thrown
@@ -122,6 +135,7 @@ const parseAIResponse = (aiResponse) => {
       const isTitleOnly = !sawHeading && heading[1] === '#' && !Object.values(SECTION_SYNONYMS).some((re) => re.test(title));
       sawHeading = true;
       if (isTitleOnly) { current = null; continue; }
+      bodyLines.push(line);
 
       let kind = null;
       for (const [k, re] of Object.entries(SECTION_SYNONYMS)) {
@@ -132,6 +146,7 @@ const parseAIResponse = (aiResponse) => {
       continue;
     }
     (current ? current.body : preamble).push(line);
+    bodyLines.push(line);
   }
 
   const bodyOf = (kind) => {
@@ -143,24 +158,33 @@ const parseAIResponse = (aiResponse) => {
   const discussionQuestions = extractListItems(bodyOf('discussion'), 5);
   const nextSteps = extractListItems(bodyOf('nextSteps'), 5);
 
-  // Summary fallback. Previously this took the first line over 20 chars, which
-  // is what made summaries "thin" whenever the model titled its own sections.
-  // Prefer, in order: prose before the first heading, then any unrecognised
-  // section's body, then the whole response.
-  if (summaryText.length < 40) {
-    const preambleText = preamble.join('\n').trim();
-    const unlabelled = sections.filter((s) => s.kind === null).map((s) => s.body.join('\n').trim()).filter(Boolean);
-    const candidate = [preambleText, ...unlabelled].find((t) => t && t.length >= 40);
-    if (candidate) {
-      console.log('⚠️ PARSING: no Summary heading — using leading prose instead');
-      summaryText = candidate;
-    } else if (!summaryText) {
-      summaryText = raw.trim();
+  if (customShape) {
+    // The prompt owns the shape, so there is no "summary section" to isolate —
+    // the whole reply IS the summary. Keep its headings: this string is what a
+    // report or a markdown-less client renders, and stripping them would run
+    // five distinct sections together into one wall of prose.
+    const body = bodyLines.join('\n').trim();
+    summaryText = body || raw.trim();
+  } else {
+    // Summary fallback. Previously this took the first line over 20 chars, which
+    // is what made summaries "thin" whenever the model titled its own sections.
+    // Prefer, in order: prose before the first heading, then any unrecognised
+    // section's body, then the whole response.
+    if (summaryText.length < 40) {
+      const preambleText = preamble.join('\n').trim();
+      const unlabelled = sections.filter((s) => s.kind === null).map((s) => s.body.join('\n').trim()).filter(Boolean);
+      const candidate = [preambleText, ...unlabelled].find((t) => t && t.length >= 40);
+      if (candidate) {
+        console.log('⚠️ PARSING: no Summary heading — using leading prose instead');
+        summaryText = candidate;
+      } else if (!summaryText) {
+        summaryText = raw.trim();
+      }
     }
-  }
 
-  // Strip any stray heading lines that survived inside the summary body.
-  summaryText = summaryText.split('\n').filter((l) => !/^\s{0,3}#{1,6}\s/.test(l)).join('\n').trim();
+    // Strip any stray heading lines that survived inside the summary body.
+    summaryText = summaryText.split('\n').filter((l) => !/^\s{0,3}#{1,6}\s/.test(l)).join('\n').trim();
+  }
 
   console.log(`🔍 PARSING: summary ${summaryText.length} chars, ${discussionQuestions.length} questions, ${nextSteps.length} next steps`);
 
@@ -1933,7 +1957,15 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
 
   console.log(`🎭 PERSONA: using ${persona.source}${persona.name ? ` (${persona.name})` : ''}${persona.inferred ? ' — adaptive' : ''}`);
 
-  let prompt = `VOICE:\n${persona.voice}\n\n${templateBody}\n\n${buildOutputContract()}`;
+  // Structure is prompt-owned but system-validated: a prompt that declares a
+  // well-formed `outputSections` gets that shape, anything else (absent, or
+  // malformed) gets the default Summary/Discussion/Next Steps triad. See
+  // personas.js — this is what lets an art round talk about the winning title
+  // and reveal the real one instead of inventing "next steps" for a painting.
+  const customShape = hasCustomOutputShape(promptData);
+  console.log(`🧱 OUTPUT SHAPE: ${describeOutputShape(promptData)}${customShape ? ' (declared by prompt)' : ' (system default)'}`);
+
+  let prompt = `VOICE:\n${persona.voice}\n\n${templateBody}\n\n${buildOutputContract(promptData)}`;
 
   // Debug: Log key trivia variables
   if (gameType === 'trivia') {
@@ -1995,6 +2027,8 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     promptInstructions: promptData.instructions,
     promptOutputFormat: promptData.outputFormat,
     promptFormat: promptData.template ? 'legacy' : 'structured',
+    outputShape: describeOutputShape(promptData),
+    outputShapeSource: customShape ? 'prompt' : 'system-default',
     promptName: promptData.name,
     promptSource: promptProvenance.source
   };
@@ -2041,7 +2075,7 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     console.log('📝 AI Response preview:', aiResponse.substring(0, 200) + '...');
 
     // Parse the structured response
-    const parsed = parseAIResponse(aiResponse);
+    const parsed = parseAIResponse(aiResponse, { customShape });
 
     // Return structured data for storage
     const result = {

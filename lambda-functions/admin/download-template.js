@@ -69,12 +69,19 @@ exports.handler = async (event) => {
     } else if (templateType === 'art-title' || templateType === 'art') {
       // Art Title: an ordinary call-and-answer round that carries an Image URL.
       // Players view the artwork and invent their own title, then vote as usual.
-      // Detail_lesson stays blank so nothing spoils the piece; School credits the artist/era.
+      //
+      // Two columns do the spoiler work, and they are not interchangeable:
+      //   Detail_lesson  is SHOWN TO PLAYERS during ASK — leave it blank, or the
+      //                  round is over before it starts.
+      //   AnswerDetails  is the REVEAL: the real title of the work plus one point
+      //                  of trivia. It reaches no player or host payload; only
+      //                  game/get-ai-summary.js reads it, and that runs at RESULTS.
+      // School credits the artist/era and is safe to show.
       filename = 'art-title-template.csv';
-      csvTemplate = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Image\n' +
-        '"Renaissance",1,"THE ENIGMATIC SMILE","","Leonardo da Vinci, c. 1503","","https://commons.wikimedia.org/wiki/Special:FilePath/Mona_Lisa,_by_Leonardo_da_Vinci,_from_C2RMF_retouched.jpg?width=900"\n' +
-        '"Post-Impressionism",2,"A SWIRLING NIGHT SKY","","Vincent van Gogh, 1889","","https://commons.wikimedia.org/wiki/Special:FilePath/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg?width=900"\n' +
-        '"Ukiyo-e",3,"THE TOWERING SEA","","Katsushika Hokusai, c. 1831","","https://commons.wikimedia.org/wiki/Special:FilePath/The_Great_Wave_off_Kanagawa.jpg?width=900"';
+      csvTemplate = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,AnswerDetails,Image\n' +
+        '"Renaissance",1,"THE ENIGMATIC SMILE","","Leonardo da Vinci, c. 1503","","Real title: Mona Lisa (La Gioconda), Leonardo da Vinci, c. 1503-1519, Louvre, Paris. Trivia: it was stolen from the Louvre in 1911 by a former museum workman, and the two years it spent missing are much of the reason it is the most famous painting in the world.","https://commons.wikimedia.org/wiki/Special:FilePath/Mona_Lisa,_by_Leonardo_da_Vinci,_from_C2RMF_retouched.jpg?width=900"\n' +
+        '"Post-Impressionism",2,"A SWIRLING NIGHT SKY","","Vincent van Gogh, 1889","","Real title: The Starry Night, Vincent van Gogh, 1889, Museum of Modern Art, New York. Trivia: van Gogh painted it from the window of his room at the Saint-Paul asylum in Saint-Remy-de-Provence, where he had admitted himself voluntarily the year before.","https://commons.wikimedia.org/wiki/Special:FilePath/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg?width=900"\n' +
+        '"Ukiyo-e",3,"THE TOWERING SEA","","Katsushika Hokusai, c. 1831","","Real title: The Great Wave off Kanagawa, from Thirty-six Views of Mount Fuji, Katsushika Hokusai, c. 1831. Trivia: it is a woodblock print rather than a painting, so thousands of impressions were pulled - and the small peak in the trough of the wave is Mount Fuji, which most people miss on first look.","https://commons.wikimedia.org/wiki/Special:FilePath/The_Great_Wave_off_Kanagawa.jpg?width=900"';
     } else {
       // call-and-answer (default)
       filename = 'call-and-answer-template.csv';

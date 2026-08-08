@@ -209,6 +209,42 @@ function AdminPage() {
     return match ? match.name : `${personaId} (unknown — Workie will adapt instead)`;
   };
 
+  /*
+   * The headings a prompt will actually produce.
+   *
+   * Mirrors lambda-functions/game/prompt-shape.js: a prompt that declares
+   * `outputSections` gets that shape, and everything else gets the default
+   * triad. Picking a prompt is how you choose the SHAPE of Workie's output, not
+   * just its wording — an art round wants the winning title and the real title,
+   * not "Next Steps" for a painting — and until this was shown there was no way
+   * to tell from the picker which prompt produced which output.
+   */
+  const DEFAULT_OUTPUT_HEADINGS = ['Summary', 'Discussion Questions', 'Next Steps'];
+
+  const promptOutputHeadings = (prompt) => {
+    const declared = prompt && prompt.outputSections;
+    if (!Array.isArray(declared) || declared.length === 0) return DEFAULT_OUTPUT_HEADINGS;
+    const headings = declared
+      .map((s) => (s && typeof s.heading === 'string' ? s.heading.trim() : ''))
+      .filter(Boolean);
+    return headings.length ? headings : DEFAULT_OUTPUT_HEADINGS;
+  };
+
+  /** Renders the shape of whichever prompt is currently selected, or of the default. */
+  const PromptShapePreview = ({ promptId }) => {
+    const prompt = availablePrompts.find((p) => p.promptId === promptId);
+    const headings = promptOutputHeadings(prompt);
+    const isCustom = !!(prompt && Array.isArray(prompt.outputSections) && prompt.outputSections.length);
+    return (
+      <small className="help-text prompt-shape-preview">
+        <strong>Output shape:</strong> {headings.map((h) => `## ${h}`).join('  ')}
+        {promptId
+          ? (isCustom ? ' — declared by this prompt' : ' — this prompt uses the standard shape')
+          : ' — the standard shape'}
+      </small>
+    );
+  };
+
   // Load prompts when component mounts
   useEffect(() => {
     fetchAvailablePrompts();
@@ -1531,6 +1567,7 @@ function AdminPage() {
                     Choose a specific AI prompt for generating summaries, or leave blank to use the default prompt based on game type.
                     Only active prompts are shown.
                   </small>
+                  <PromptShapePreview promptId={editPromptId} />
                 </div>
 
                 <div className="form-group">
@@ -1721,6 +1758,7 @@ function AdminPage() {
                             </option>
                           ))}
                       </select>
+                      <PromptShapePreview promptId={selectedPromptId} />
                     </div>
                   </div>
 

@@ -142,5 +142,72 @@ check('a response with no headings still yields a summary', () =>
 check('raw markdown is retained for display', () =>
   assert(broken.markdownResponse && broken.markdownResponse.length >= GAME_7971.length - 40));
 
+// --- 7. A prompt-declared output shape --------------------------------------
+// A prompt may now declare its own headings (see personas.js / prompt-shape.js).
+// The parser must not mangle a shape it does not recognise: `summaryText` still
+// has to be populated, every section has to survive into it, and the raw
+// markdown must always be kept — GameHostPage and the report both prefer
+// `markdownResponse`, so a custom shape renders as written either way, and
+// these fields are the fallback that must never be an empty panel.
+const ART = `## The Winning Title
+"SMIRK OF THE CENTURY" took it, and deservedly — it names the expression rather than the sitter.
+
+## Also Worth Framing
+"SHE KNOWS SOMETHING" is the one that keeps working after you look away.
+
+## Workie's Take
+I would have gone with THE UNBLINKING APPOINTMENT.
+
+## The Real Title
+Mona Lisa (La Gioconda), Leonardo da Vinci, c. 1503-1519.
+
+## One Point of Trivia
+It was stolen from the Louvre in 1911 by a former museum workman.`;
+
+const art = mod.parseAIResponse(ART, { customShape: true });
+check('custom shape: summaryText is not empty', () =>
+  assert(art.summaryText && art.summaryText.length > 40, JSON.stringify(art.summaryText)));
+check('custom shape: every section survives into summaryText', () => {
+  for (const h of ['The Winning Title', 'Also Worth Framing', "Workie's Take", 'The Real Title', 'One Point of Trivia']) {
+    assert(art.summaryText.includes(h), `"${h}" was dropped`);
+  }
+});
+check('custom shape: headings are kept so the sections stay separable', () =>
+  assert(art.summaryText.includes('## The Real Title'), art.summaryText.slice(0, 120)));
+check('custom shape: the reveal is not lost', () =>
+  assert(art.summaryText.includes('Mona Lisa')));
+check('custom shape: raw markdown retained', () =>
+  assert.strictEqual(art.markdownResponse, ART));
+check('custom shape: triad fields degrade to empty, not to junk', () => {
+  assert.deepStrictEqual(art.discussionQuestions, []);
+  assert.deepStrictEqual(art.nextSteps, []);
+});
+
+// Same response WITHOUT the flag — the old code path. It still yields something
+// usable, but only the first unlabelled section, which is exactly why the flag
+// exists rather than the parser guessing.
+const artNoFlag = mod.parseAIResponse(ART);
+check('without the flag the same response still yields a summary', () =>
+  assert(artNoFlag.summaryText && artNoFlag.summaryText.length > 40));
+check('without the flag the raw markdown is still retained', () =>
+  assert.strictEqual(artNoFlag.markdownResponse, ART));
+
+// A custom shape whose model reply went off the rails entirely.
+const artBroken = mod.parseAIResponse('The room did well and I enjoyed the titles enormously, all of them.', { customShape: true });
+check('custom shape: a reply with no headings at all still yields a summary', () =>
+  assert(artBroken.summaryText.includes('enjoyed the titles'), JSON.stringify(artBroken.summaryText)));
+
+// A leading H1 is stripped in custom mode too — that is the game 7971 defence.
+const artTitled = mod.parseAIResponse('# Gallery Report\n\n## The Real Title\nMona Lisa, Leonardo da Vinci, painted around 1503.', { customShape: true });
+check('custom shape: a leading H1 document title is still stripped', () => {
+  assert(!artTitled.summaryText.includes('# Gallery Report'), artTitled.summaryText);
+  assert(artTitled.summaryText.includes('## The Real Title'), artTitled.summaryText);
+});
+check('custom shape: an empty response does not throw or return undefined', () => {
+  const empty = mod.parseAIResponse('', { customShape: true });
+  assert.strictEqual(typeof empty.summaryText, 'string');
+  assert.strictEqual(empty.markdownResponse, '');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

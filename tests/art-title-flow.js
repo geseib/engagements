@@ -137,6 +137,30 @@ function check(label, fn) {
   check('Detail left blank so the artwork is not spoiled', () =>
     assert.ok(questionItems.every((i) => !i.Detail), 'a Detail was populated'));
 
+  // The reveal. Title is the TEASER ("THE ENIGMATIC SMILE"), School is the
+  // artist credit — neither is the real title, so before this the real title
+  // was nowhere in the system and Workie could not possibly reveal it.
+  // AnswerDetails is the only column that is read by game/get-ai-summary.js and
+  // by no player or host payload, so it is where the reveal has to live.
+  check('every artwork carries a reveal in AnswerDetails', () => {
+    const missing = questionItems.filter((i) => !i.AnswerDetails);
+    assert.strictEqual(missing.length, 0, `${missing.length} artwork(s) with no reveal`);
+  });
+  check('the reveal names the real title, not the teaser', () => {
+    const mona = questionItems.find((i) => i.Title === 'THE ENIGMATIC SMILE');
+    assert.ok(mona, 'the Mona Lisa round is missing from the set');
+    assert.ok(/Mona Lisa/i.test(mona.AnswerDetails), mona.AnswerDetails);
+    assert.ok(!/Mona Lisa/i.test(mona.Title), 'the teaser gives the answer away');
+  });
+  check('every reveal is labelled so the prompt can find the title', () =>
+    assert.ok(questionItems.every((i) => /Real title:/i.test(i.AnswerDetails)),
+      'a reveal is not in the "Real title: ... Trivia: ..." shape the art prompt reads'));
+  check('a trivia hook is present (or deliberately blank, never invented)', () => {
+    const withTrivia = questionItems.filter((i) => /Trivia:\s*\S/.test(i.AnswerDetails));
+    assert.ok(withTrivia.length === questionItems.length,
+      `${questionItems.length - withTrivia.length} artwork(s) have an empty trivia hook`);
+  });
+
   // ---------- 2. Regression: a normal set must be unaffected ----------
   console.log('\n2. upload-questions: ordinary set with NO Image column');
   const plainCsv = [
@@ -190,6 +214,58 @@ function check(label, fn) {
     assert.strictEqual(cq.image, artQ.Image));
   check('school (artist credit) also carried', () =>
     assert.strictEqual(cq.school, artQ.School));
+
+  // The reveal must not reach the room before RESULTS. It is not in
+  // get-game-state's currentQuestionData projection at all, which is the
+  // property that makes AnswerDetails the safe home for it — Detail_lesson
+  // would have been shown to players during ASK and ended the round instantly.
+  const payloadText = stateRes.body;
+  check('the real title is NOT in the player payload', () =>
+    assert.ok(!/Mona Lisa/i.test(payloadText), 'the answer leaked to players before RESULTS'));
+  check('the trivia is NOT in the player payload', () =>
+    assert.ok(!/Vincenzo Peruggia/i.test(payloadText)));
+  check('AnswerDetails is not projected under any spelling', () => {
+    assert.strictEqual(cq.answerDetails, undefined);
+    assert.strictEqual(cq.AnswerDetails, undefined);
+    assert.ok(!/answerdetails/i.test(payloadText), payloadText.slice(0, 200));
+  });
+
+  // ---------- 4. neither role sees the reveal, in any state ----------
+  console.log('\n4. the reveal is withheld from player AND host in every state');
+  const questionHandler = require(path.join(REPO, 'lambda-functions/game/get-question.js')).handler;
+
+  const leaks = (body) => /Mona Lisa/i.test(body) || /Vincenzo Peruggia/i.test(body);
+
+  // get-question only serves the ASK state (it 400s otherwise), so it is checked
+  // there for both roles.
+  for (const role of ['player', 'host']) {
+    store.set(key('GAME#1234', 'STATE'), {
+      PK: 'GAME#1234', SK: 'STATE', State: 'ASK#001',
+      LessonNumber: 1, CurrentQuestionId: artQ.SK,
+    });
+    const qRes = await questionHandler({
+      pathParameters: { gameId: '1234' },
+      queryStringParameters: { role },
+    });
+    check(`get-question, ${role} @ ASK: no reveal in the payload`, () => {
+      assert.strictEqual(qRes.statusCode, 200, `got ${qRes.statusCode}: ${qRes.body}`);
+      assert.ok(!leaks(qRes.body), 'the reveal leaked to the client');
+    });
+  }
+
+  // get-game-state is the payload that drives the player through the whole
+  // round, so it is checked in every state the round passes through.
+  for (const state of ['ASK#001', 'VOTE#001', 'RESULTS#001']) {
+    store.set(key('GAME#1234', 'STATE'), {
+      PK: 'GAME#1234', SK: 'STATE', State: state,
+      LessonNumber: 1, CurrentQuestionId: artQ.SK,
+    });
+    const sRes = await stateHandler({ pathParameters: { gameId: '1234' } });
+    check(`get-game-state @ ${state}: no reveal in the payload`, () => {
+      assert.strictEqual(sRes.statusCode, 200, `got ${sRes.statusCode}: ${sRes.body}`);
+      assert.ok(!leaks(sRes.body), 'the reveal leaked to the client');
+    });
+  }
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

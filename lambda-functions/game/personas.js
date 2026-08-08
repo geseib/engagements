@@ -4,18 +4,34 @@
  * The prompt has three layers with distinct owners:
  *
  *   VOICE      - tone and angle          -> this file (persona, or inference)
- *   STRUCTURE  - headings, section order -> buildOutputContract(), system-owned
+ *   STRUCTURE  - headings, section order -> buildOutputContract(), below
  *   CONTENT    - the session's facts     -> the caller
  *
- * Keeping structure out of the persona's reach is the point. Before this, a
+ * Keeping structure out of the PERSONA's reach is the point. Before this, a
  * prompt template owned both, so a template written for one kind of session
  * ("you are an AI business strategist analyzing lessons learned") would refuse
  * a different kind — on engagedev game 7971 it declined to summarise a holiday
  * icebreaker as "insufficient for meaningful business analysis". A persona can
- * now change how Workie sounds but can never change what it emits.
+ * change how Workie sounds; it can never change what Workie emits.
+ *
+ * The PROMPT can. A prompt attached to a question set may declare its own
+ * `outputSections`, because choosing a prompt is meant to choose the output —
+ * an art round wants the winning title and the real title of the work, and
+ * "Next Steps" for a painting is nonsense. That declaration is validated by
+ * prompt-shape.js before it can reach the model, and anything malformed falls
+ * back to the default triad, so the parser's contract still never depends on
+ * free text someone typed into a textarea.
  *
  * See docs/superpowers/specs/2026-08-07-workie-personas-design.md
  */
+
+const {
+  DEFAULT_OUTPUT_SECTIONS,
+  normalizeOutputSections,
+  resolveOutputSections,
+  hasCustomOutputShape,
+  describeOutputShape,
+} = require('./prompt-shape');
 
 /**
  * Seed library. These are written to DynamoDB (PK=AIPROMPTS, SK=PERSONA#<id>)
@@ -153,22 +169,40 @@ const INFERRED_VOICE =
   'to the person who wrote it, it is.';
 
 /**
+ * The output contract.
+ *
+ * Structure used to be system-owned and unconditional — see prompt-shape.js for
+ * why, and for the validation that keeps it safe now that a prompt may declare
+ * its own `outputSections`. This file only renders the declared (or default)
+ * sections into the FORMAT block appended after the voice.
+ */
+const COUNT_WORD = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
+
+/**
  * The structural contract, appended to every request regardless of voice.
  * Kept deliberately explicit: the headings are what parseAIResponse() keys on.
+ *
+ * Takes the prompt record so a prompt can own its shape. Called with nothing
+ * (or with a prompt that declares nothing) it emits the default triad, so every
+ * prompt authored before this existed is unaffected.
  */
-const buildOutputContract = () =>
-  'FORMAT (this part is not negotiable, and it supersedes any formatting or output-structure ' +
-  'instruction that appeared earlier in this prompt):\n' +
-  'Reply using exactly these three headings, in this order, spelled exactly as shown, and add no other headings:\n\n' +
-  '## Summary\n' +
-  'Two to four sentences on what the group actually said and what stands out.\n\n' +
-  '## Discussion Questions\n' +
-  'Two or three numbered questions the host can ask the room next. Make them specific to these ' +
-  'responses — a question that would fit any session is a wasted one.\n\n' +
-  '## Next Steps\n' +
-  'Two to four numbered, concrete actions.\n\n' +
-  'The voice guidance above governs the words inside these sections. It does not govern the ' +
-  'headings, which must appear exactly as written. Do not add a title above the first heading.';
+const buildOutputContract = (prompt) => {
+  const sections = resolveOutputSections(prompt);
+  const count = COUNT_WORD[sections.length] || String(sections.length);
+
+  const body = sections
+    .map(({ heading, guidance }) => `## ${heading}${guidance ? `\n${guidance}` : ''}`)
+    .join('\n\n');
+
+  return (
+    'FORMAT (this part is not negotiable, and it supersedes any formatting or output-structure ' +
+    'instruction that appeared earlier in this prompt):\n' +
+    `Reply using exactly these ${count} headings, in this order, spelled exactly as shown, and add no other headings:\n\n` +
+    `${body}\n\n` +
+    'The voice guidance above governs the words inside these sections. It does not govern the ' +
+    'headings, which must appear exactly as written. Do not add a title above the first heading.'
+  );
+};
 
 /**
  * Resolve which voice to use.
@@ -235,14 +269,19 @@ const resolvePersona = async ({
 };
 
 /** Assemble the full voice + structure preamble. */
-const buildPromptPreamble = (persona) => {
+const buildPromptPreamble = (persona, prompt) => {
   const voice = (persona && persona.voice) || INFERRED_VOICE;
-  return `VOICE:\n${voice}\n\n${buildOutputContract()}`;
+  return `VOICE:\n${voice}\n\n${buildOutputContract(prompt)}`;
 };
 
 module.exports = {
   SEED_PERSONAS,
   INFERRED_VOICE,
+  DEFAULT_OUTPUT_SECTIONS,
+  normalizeOutputSections,
+  resolveOutputSections,
+  hasCustomOutputShape,
+  describeOutputShape,
   buildOutputContract,
   buildPromptPreamble,
   resolvePersona,

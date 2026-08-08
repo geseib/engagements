@@ -2,7 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { normalizeGameType, isKnownGameType, GAME_TYPE_IDS } = require('./shared/game-types');
-const { inferPromptType } = require('./shared/prompt-shape');
+const { inferPromptType, normalizeOutputSections } = require('./shared/prompt-shape');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -62,6 +62,10 @@ exports.handler = async (event) => {
       audienceTemplate,
       categoryTemplate,
       outputFormat,
+      // Declared output shape: [{ heading, guidance }]. Absent means the prompt
+      // takes the system default triad, which is what every prompt authored
+      // before this field existed does.
+      outputSections: rawOutputSections,
       defaultSettings = {},
       // Common fields
       isDefault = false,
@@ -87,6 +91,14 @@ exports.handler = async (event) => {
     // never fails, so on its own it would happily accept "banana".
     if (!isKnownGameType(rawGameType)) {
       throw new Error(`Invalid gameType "${rawGameType}". Must be one of: ${GAME_TYPE_IDS.join(', ')}`);
+    }
+
+    // Reject a malformed shape at the door rather than storing something that
+    // will be silently ignored at runtime — "I set it and nothing changed" is
+    // the exact complaint this whole area exists to fix.
+    const outputSections = normalizeOutputSections(rawOutputSections);
+    if (rawOutputSections && !outputSections) {
+      throw new Error('outputSections must be 1-8 entries of { heading, guidance }, each heading unique, single-line plain text without markdown syntax');
     }
     const gameType = normalizeGameType(rawGameType);
 
@@ -128,6 +140,7 @@ exports.handler = async (event) => {
       ...(audienceTemplate && { audienceTemplate }),
       ...(categoryTemplate && { categoryTemplate }),
       ...(outputFormat && { outputFormat }),
+      ...(outputSections && { outputSections }),
       ...(Object.keys(defaultSettings).length > 0 && { defaultSettings }),
       isDefault,
       status,
@@ -176,6 +189,7 @@ exports.handler = async (event) => {
       ...(audienceTemplate && { audienceTemplate }),
       ...(categoryTemplate && { categoryTemplate }),
       ...(outputFormat && { outputFormat }),
+      ...(outputSections && { outputSections }),
       ...(Object.keys(defaultSettings).length > 0 && { defaultSettings }),
       isDefault,
       status,

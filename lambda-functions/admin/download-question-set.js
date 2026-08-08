@@ -133,7 +133,20 @@ exports.handler = async (event) => {
         });
       } else {
         // call-and-answer (default)
-        csvContent = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction\n';
+        //
+        // Art-title sets are call-and-answer sets that carry two extra columns:
+        // Image (the artwork) and AnswerDetails (the real title + a point of
+        // trivia, revealed only by the AI summary at RESULTS). Exporting the
+        // fixed six columns silently dropped both, so download → edit → re-upload
+        // destroyed the artwork and the reveal. Emit them only when the set
+        // actually has them, so an ordinary set keeps its familiar shape.
+        const hasImages = questions.some(q => (q.Image || q.image || '').trim());
+        const hasAnswerDetails = questions.some(q => (q.AnswerDetails || q.answerDetails || '').trim());
+
+        csvContent = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction'
+          + (hasAnswerDetails ? ',AnswerDetails' : '')
+          + (hasImages ? ',Image' : '')
+          + '\n';
         questions.forEach((q, index) => {
           const category = q.Category || q.category || '';
           const questionNum = index + 1;
@@ -141,8 +154,13 @@ exports.handler = async (event) => {
           const detail = (q.Detail || q.detail || '').replace(/"/g, '""');
           const school = (q.School || q.school || '').replace(/"/g, '""');
           const customInst = (q.CustomInstructions || q.customInstructions || '').replace(/"/g, '""');
-          
-          csvContent += `"${category}",${questionNum},"${title}","${detail}","${school}","${customInst}"\n`;
+          const answerDetails = (q.AnswerDetails || q.answerDetails || '').replace(/"/g, '""');
+          const image = (q.Image || q.image || '').replace(/"/g, '""');
+
+          csvContent += `"${category}",${questionNum},"${title}","${detail}","${school}","${customInst}"`
+            + (hasAnswerDetails ? `,"${answerDetails}"` : '')
+            + (hasImages ? `,"${image}"` : '')
+            + '\n';
         });
       }
       

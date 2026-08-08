@@ -113,7 +113,12 @@ async function resolveTarget(t) {
     process.stdout.write(`  ${String(i + 1).padStart(2)}. ${t.round} ... `);
     try {
       const r = await resolveTarget(t);
-      // Detail_lesson is deliberately blank: any description would spoil the round.
+      // Detail_lesson is deliberately blank: it is shown to players during ASK,
+      // and any description would spoil the round. The real title goes in
+      // AnswerDetails instead — read only by game/get-ai-summary.js at RESULTS,
+      // so Workie can reveal it once the votes are in. No trivia is emitted:
+      // the Met record does not carry a reliable one, and a wrong fact read
+      // aloud to a room is worse than no fact. Add it by hand.
       rows.push([
         csvEscape(t.category),
         i + 1,
@@ -121,6 +126,7 @@ async function resolveTarget(t) {
         csvEscape(''),
         csvEscape(r.school),
         csvEscape(PROMPT),
+        csvEscape(`Real title: ${r.realTitle}, ${r.school}. Trivia: `),
         csvEscape(r.image),
       ].join(','));
       console.log(`ok  [#${r.objectID} "${r.realTitle}"]`);
@@ -135,7 +141,7 @@ async function resolveTarget(t) {
     process.exit(1);
   }
 
-  const header = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Image';
+  const header = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,AnswerDetails,Image';
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
   fs.writeFileSync(OUT, `${header}\n${rows.join('\n')}\n`);
   console.log(`\nWrote ${rows.length} round(s) to ${OUT}`);
