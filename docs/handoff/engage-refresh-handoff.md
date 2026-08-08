@@ -83,6 +83,62 @@ text-only elements. Live-rendered the player join screen at 375px and 1280px.
 icon-dense states (lobby, ASK/VOTE/RESULTS, big-screen, admin) are still
 eyeball-pending on engagedev.
 
+## Workie personas + output contract — DEPLOYED to engagedev
+Spec: `docs/superpowers/specs/2026-08-07-workie-personas-design.md`.
+
+The prompt is now three layers with distinct owners: **VOICE** (persona or
+inference) → **CONTENT** (the template body) → **STRUCTURE** (system contract,
+appended last). A persona can change how Workie sounds but can never break
+parsing, which is what makes personas safe to add freely.
+
+- `lambda-functions/game/personas.js` — 8 seed personas at `PK=AIPROMPTS` /
+  `SK=PERSONA#<id>`, seeded into engagedev and editable in the admin UI.
+  `resolvePersona()` precedence: **host pick > question set persona > set
+  context > game context > inferred > legacy template.** Inference deliberately
+  outranks the template, because the template's baked-in persona is what
+  misread the room.
+- Anything dangling, inactive or empty falls through to the next level. Never
+  dead-ends.
+- **Inference is not a second model call** — the voice block tells the model to
+  read the session and pick its register, and forbids refusing or asking for
+  more data.
+- `scripts/seed-personas.js <table> [--apply] [--overwrite]` — idempotent.
+
+**Verified live on the game that failed.** Before: *"insufficient for meaningful
+business analysis."* After: *"we've got George spinning the ultimate vacation
+destination, and he's dropping Hawaii on the turntable."* Same data — the set's
+"witty DJ" context now wins. 528-char summary, 3 questions, 3 next steps.
+
+**Still to build (the picker UI):** the resolver reads `metadata.PersonaId` on
+the game and `personaId` on the set, but nothing writes them yet. Needs a
+persona picker in the new-game dialog and the host toolbar, plus the approved
+**Redo** button to regenerate the question on screen. Until then personas
+resolve via set/game context or inference, which is already a large improvement.
+
+## Question-set import — hardened, DEPLOYED
+`tests/import-questions-flow.js`, 61 assertions (11 were failing before).
+Fixed: quote characters silently deleted from imported text; non-ASCII titles
+slugging to an empty setId so every such set collided; metadata written before
+content so a mid-import failure left a browsable half-set; rows silently
+dropped with no trace; a `const`-in-`try` ReferenceError that escalated a
+skippable row to a 500; missing `fileContent` crashing with a 500. Writes are
+now batched (165 items → 9 calls) with `UnprocessedItems` retry.
+
+`sets/new/` has 7 sets ready to import, including `_importer-edge-cases.csv`
+(commas, escaped quotes, non-ASCII, empty optionals, a 315-char title, an
+embedded newline). All verified against the importer's own parser.
+
+⚠️ **`CorrectAnswer` must hold the option id (`OptionA`…), not the answer text** —
+`websocket/message.js` scores with `correctAnswer === \`Option${answer}\``.
+`sets/template-trivia.csv` has answer *text* there and is unscoreable at game
+time. Not fixed; flagged.
+
+⚠️ **No REPLACE path.** Re-importing an existing set id is a hard 400 dead end —
+the biggest remaining UX gap in import. And `delete-question-set.js` has an
+unpaginated Query (partial delete above 1 MB) plus discarded
+`UnprocessedItems`. Both are real data-loss bugs, bundled into the cleanup
+plan's redesign.
+
 ## Known landmines
 - `src/src/components/ArchiveManager.jsx` and `ArchiveSearch.jsx` are **stored as a
   single line with literal `\n` and `\"` escapes** — not valid JS. Nothing imports
