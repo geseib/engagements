@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { isHidden, redactAnswers } = require('./anonymity');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -73,13 +74,35 @@ exports.handler = async (event) => {
     console.log(`📊 Found ${answers.length} answers for question ${targetQuestionId}`);
 
     // Base answer information
-    const baseAnswers = answers.map(answer => ({
+    const fullAnswers = answers.map(answer => ({
       playerName: answer.PlayerName,
       name: answer.PlayerName, // Add name field for frontend compatibility
       answer: answer.Answer,
       answerType: answer.AnswerType || 'text',
       submittedAt: answer.SubmittedAt
     }));
+
+    // Anonymity is decided here, once, for both role branches below.
+    //
+    // There is deliberately no host exemption: `role` arrives as a query
+    // parameter (see :11), so a payload we would emit to role=host we would
+    // emit to anybody who typed it. The only implementable guarantee is that
+    // the names are not in the response at all.
+    const [metaRes, roundRes] = await Promise.all([
+      db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
+      })),
+      db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: `ROUND#${targetQuestionId}` }
+      }))
+    ]);
+
+    const hidden = isHidden(metaRes.Item, roundRes.Item);
+    // Order is preserved by redactAnswers and must stay that way: the ballot is
+    // positional and get-results tallies vote index against answers[index].
+    const baseAnswers = hidden ? redactAnswers(fullAnswers) : fullAnswers;
 
     // Role-specific information
     if (role === 'host') {
