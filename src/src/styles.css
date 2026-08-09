@@ -1180,6 +1180,24 @@ body {
   color: var(--primary);
 }
 
+/* The remote QR is not part of "Join In" above it — same column, different
+   audience, and a host who confuses the two sends a player to a sign-in.
+   The rule and the heading are the separation. */
+.qr-section--remote {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(27, 41, 66, 0.15);
+}
+
+.qr-section-heading {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted, #64748b);
+}
+
 .players-section {
   margin-bottom: 30px;
   padding: 0 20px;

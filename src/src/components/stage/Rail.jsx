@@ -96,14 +96,29 @@ export default function Rail({ phase, title, context = {}, join = {}, timer }) {
                 onBlur={join.onPreviewEnd}
                 onClick={join.onPin}
                 onKeyDown={(e) => {
-                  // React does not synthesize a click from Enter/Space on an
-                  // ARIA role -- only a native <button> gets that for free.
-                  // Without this, Space falls through to HostActionBar's
-                  // window-level listener and advances the round instead of
-                  // pinning the QR, in front of the room. stopPropagation is
-                  // what stops that fallthrough; preventDefault stops the
-                  // page from scrolling on Space.
-                  if (e.key === 'Enter' || e.key === ' ') {
+                  // ENTER PINS. SPACE IS NOT OURS TO TAKE.
+                  //
+                  // React does not synthesize a click from Enter on an ARIA
+                  // role -- only a native <button> gets that for free -- so
+                  // the keyboard path has to be written out.
+                  //
+                  // Space is deliberately NOT handled, even though the ARIA
+                  // pattern for role="button" would take it. On this screen
+                  // Space is the room's advance key: the dock prints `SPACE`
+                  // whenever the shortcut is live, and HostActionBar also
+                  // accepts `ArrowRight` and the legacy `Spacebar` name so a
+                  // presenter's clicker drives the round. An earlier revision
+                  // swallowed Space here with stopPropagation, and clicking
+                  // the code focuses it, so: click to pin, press Escape (which
+                  // clears qrMode but fires no blur, leaving focus right
+                  // here), press Space -- and the QR pinned itself again while
+                  // the dock still advertised SPACE. Escape, dismiss, Space,
+                  // pin: a loop with no way out but the mouse.
+                  //
+                  // Letting Space through means the three advance keys behave
+                  // identically wherever focus happens to be, which is the
+                  // only version a host can predict from across a room.
+                  if (e.key === 'Enter') {
                     e.preventDefault();
                     e.stopPropagation();
                     join.onPin?.();

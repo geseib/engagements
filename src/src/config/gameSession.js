@@ -106,6 +106,11 @@ export function initialGameSession() {
     lessonExpanded: false,
     instructionsVisible: false,
     showExpandedQR: false,
+    // The rail's QR: null | 'preview' | 'pinned'. Session-scoped like every
+    // other overlay flag here — a QR left pinned when the host Quick Starts a
+    // new game would otherwise stay full-screen over the new lobby, still
+    // suppressing SPACE, rendering a join code for a game that no longer runs.
+    qrMode: null,
     questionSetTabVisible: false,
     showQuestionBrowser: false,
     browsingQuestions: [],

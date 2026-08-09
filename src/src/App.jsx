@@ -155,12 +155,13 @@ function AppRouter() {
   // OAuth callback route
   if (path === '/auth/callback') {
     console.log('🔐 OAuth callback route hit');
+    // No onSuccess: OAuthCallback sends the host back to wherever they were
+    // headed (auth/returnPath.js). This route used to override that with a
+    // hardcoded '/', so a host who scanned the panel's remote QR and signed in
+    // with Google opened a SECOND host page on their phone — and a second host
+    // socket, which evicts the projector.
     return (
-      <OAuthCallback 
-        onSuccess={() => {
-          console.log('✅ OAuth success - redirecting to home');
-          window.location.href = '/';
-        }} 
+      <OAuthCallback
         onError={(error) => {
           console.error('❌ OAuth error - redirecting to auth:', error);
           // Add delay to see error

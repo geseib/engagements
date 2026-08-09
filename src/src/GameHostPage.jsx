@@ -16,6 +16,7 @@ import RoomMeter from './components/stage/RoomMeter';
 import Dock from './components/stage/Dock';
 import { loadProfile, saveProfile } from './config/displayProfile';
 import { qrOverlayClassName } from './utils/qrOverlayClassName';
+import { shortcutsSuppressed, qrOverlayInstructions } from './utils/hostOverlays';
 import {
   resolveInstruction, currentQuestionOf, resolveRoundNoun, pluralRoundNoun,
 } from './config/instructions';
@@ -447,6 +448,7 @@ function GameHostPage() {
     lessonExpanded: setLessonExpanded,
     instructionsVisible: setInstructionsVisible,
     showExpandedQR: setShowExpandedQR,
+    qrMode: setQrMode,
     questionSetTabVisible: setQuestionSetTabVisible,
     showQuestionBrowser: setShowQuestionBrowser,
     browsingQuestions: setBrowsingQuestions,
@@ -3519,10 +3521,12 @@ Ready to engage? See you there!`;
 
   // A keyboard shortcut must never fire underneath something the host is
   // reading or filling in.
-  const anyOverlayOpen = Boolean(
-    showConfirmModal || showQuestionBrowser || showExpandedQR ||
-    showReportsModal || lessonExpanded || isLoadingData || qrMode === 'pinned'
-  );
+  // The rule itself lives in utils/hostOverlays.js, where a test can reach it:
+  // a PREVIEW must leave SPACE live, only a PINNED QR gates it.
+  const anyOverlayOpen = shortcutsSuppressed({
+    showConfirmModal, showQuestionBrowser, showExpandedQR,
+    showReportsModal, lessonExpanded, isLoadingData, qrMode,
+  });
 
   const runHostAction = (action) => {
     if (!action) return;
@@ -3821,7 +3825,15 @@ Ready to engage? See you there!`;
                   </span>
                 )}
               </div>
-              <div className="qr-section">
+              {/* NOT PART OF "JOIN IN", and the separator says so.
+                  This QR points at /remote, which is behind the host sign-in.
+                  Sitting under the Join In heading, one paragraph below "Players
+                  can join at:", it read as the player QR — so a host pointing a
+                  latecomer at "the QR in the Join In panel" sent that player to
+                  a login for an account they do not have. The caption was always
+                  right; the framing was not. */}
+              <div className="qr-section qr-section--remote">
+                <h4 className="qr-section-heading">Your remote &mdash; host only</h4>
                 {/* The host's own phone, scanned from arm's length, so 180px is
                     plenty and there is nothing to magnify. The click-to-expand
                     is deliberately gone: the expanded overlay renders `playUrl`,
@@ -3829,7 +3841,7 @@ Ready to engage? See you there!`;
                     a REMOTE one. The room-facing QR is the rail's now (Task 2). */}
                 <div className="qr-code-static">
                   <QRCodeSVG value={remoteUrl} size={180} />
-                  <p>Scan to open the remote on your phone</p>
+                  <p>Scan to open the remote on your phone. Not the player link.</p>
                 </div>
               </div>
 
@@ -4590,8 +4602,10 @@ Ready to engage? See you there!`;
             <div className="expanded-qr-game-id">
               Game ID: <strong>{gameId}</strong>
             </div>
+            {/* A preview overlay is pointer-transparent, so "click anywhere"
+                would be a click straight through onto the dock. */}
             <div className="expanded-qr-instructions">
-              Click anywhere to close
+              {qrOverlayInstructions(qrMode)}
             </div>
           </div>
         </div>

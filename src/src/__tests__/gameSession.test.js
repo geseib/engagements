@@ -70,6 +70,19 @@ describe('initialGameSession', () => {
     expect(s.activeCategoryIds.size).toBe(0);
   });
 
+  it('closes every overlay the previous game left open', () => {
+    // rejects: the shipped list, which registered showExpandedQR but not the
+    // rail's qrMode. Pin the QR, Quick Start a new game, and it stayed
+    // full-screen over the new lobby -- still suppressing SPACE, still
+    // rendering a join code for a session that no longer exists.
+    const s = initialGameSession();
+    expect(s.showExpandedQR).toBe(false);
+    expect(s.qrMode).toBeNull();
+    expect(s.lessonExpanded).toBe(false);
+    expect(s.instructionsVisible).toBe(false);
+    expect(s.showQuestionBrowser).toBe(false);
+  });
+
   it('clears questions and currentQuestionId together', () => {
     // Guards the 6cba1525 class of bug: the instruction resolver looks the live
     // question up by id, so one of these moving without the other makes an art

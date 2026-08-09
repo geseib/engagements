@@ -3,6 +3,7 @@ import { useAuth } from './AuthContext';
 import './auth.css';
 import Icon from '../components/Icon';
 import { takeReturnPath } from './returnPath';
+import { navigateTo } from './navigate';
 
 // ============================================================================
 // LEGACY_POOL — rollback only. Remove after the old Cognito pool is deleted.
@@ -18,7 +19,7 @@ const LEGACY_POOL = {
   knownGoogleUsername: 'Google_113956208956782440356',
 };
 
-const OAuthCallback = ({ onSuccess, onError }) => {
+const OAuthCallback = ({ onError }) => {
   const [processing, setProcessing] = useState(true);
   const [error, setError] = useState(null);
   const { getCurrentUser } = useAuth();
@@ -77,23 +78,28 @@ const OAuthCallback = ({ onSuccess, onError }) => {
           if (isPending) {
             // New user or pending approval - redirect to auth with pending state
             console.log('🔍 OAuth Callback: Redirecting to pending approval...');
-            window.location.href = '/auth?status=pending';
+            navigateTo('/auth?status=pending');
           } else {
             // Approved user — back to wherever they were headed before the
             // redirect, defaulting to the app root only when there was nowhere.
+            //
+            // THIS COMPONENT NAVIGATES. There is no onSuccess hook, on purpose:
+            // the one existed, the only mount site always supplied it, and it
+            // hardcoded `/`. So the destination was computed, logged, and
+            // discarded — every Google sign-in landed on the host page, which
+            // is precisely the second-host-socket eviction the return path was
+            // added to prevent. A destination that reaches a callback but never
+            // reaches the browser is worse than no destination at all, because
+            // the code reads as though it works.
             const back = takeReturnPath();
             console.log('🔍 OAuth Callback: Redirecting approved user to', back || '/');
-            if (onSuccess) {
-              onSuccess(user);
-            } else {
-              window.location.href = back || '/';
-            }
+            navigateTo(back || '/');
           }
         } else {
           // No user found - redirect to auth login
           console.log('🔍 OAuth Callback: No user found, redirecting to login...');
           console.log('🔍 OAuth Callback: This suggests token storage or getCurrentUser() failed');
-          window.location.href = '/auth';
+          navigateTo('/auth');
         }
       } catch (err) {
         console.error('🔍 OAuth Callback: Failed to get user after OAuth:', err);
@@ -181,7 +187,7 @@ const OAuthCallback = ({ onSuccess, onError }) => {
                   
                   if (isFromRegister) {
                     errorMsg = 'This Google account is already registered. Please use the "Continue with Google" option from the Sign In page instead.';
-                    window.location.href = '/auth?mode=login';
+                    navigateTo('/auth?mode=login');
                   } else {
                     // For existing users having trouble with Google OAuth
                     errorMsg = 'Google sign-in is experiencing technical difficulties. Your account exists and is active. Please contact support or try again later.';
@@ -197,7 +203,7 @@ const OAuthCallback = ({ onSuccess, onError }) => {
                     if (onError) {
                       onError(errorMsg);
                     } else {
-                      window.location.href = `/auth?error=${encodeURIComponent(errorMsg)}`;
+                      navigateTo(`/auth?error=${encodeURIComponent(errorMsg)}`);
                     }
                   }, 3000);
                   
@@ -225,7 +231,7 @@ const OAuthCallback = ({ onSuccess, onError }) => {
               onError(errorMsg);
             } else {
               // Redirect to login page with error message
-              window.location.href = `/auth?error=${encodeURIComponent(errorMsg)}`;
+              navigateTo(`/auth?error=${encodeURIComponent(errorMsg)}`);
             }
           }, 2000);
           return;
@@ -426,7 +432,7 @@ const OAuthCallback = ({ onSuccess, onError }) => {
     };
 
     handleOAuthCallback();
-  }, [getCurrentUser, onSuccess, onError]);
+  }, [getCurrentUser, onError]);
 
   if (processing) {
     return (
@@ -458,7 +464,7 @@ const OAuthCallback = ({ onSuccess, onError }) => {
             
             <div style={{ marginTop: '24px', textAlign: 'center' }}>
               <button
-                onClick={() => window.location.href = '/'}
+                onClick={() => navigateTo('/')}
                 className="auth-button primary"
               >
                 Return to Login
