@@ -1,38 +1,115 @@
-# Resume prompt
+# Resume
 
 After `/clear`, paste the block below.
 
 ---
 
-Read these three files before doing anything else, in this order:
+Read `docs/handoff/RESUME.md` in full before doing anything else. It is the whole state.
 
-1. `docs/handoff/anonymous-responses-2026-08-09.md` — current state, baselines, landmines, what is deliberately NOT pushed and why
-2. `.superpowers/sdd/2026-08-09-anonymous-responses/progress.md` — the SDD ledger: per-task commits, review verdicts, deferred minors
-3. `docs/superpowers/plans/2026-08-09-anonymous-responses.md` — the plan being executed
+## Where things stand
 
-Then continue with `superpowers:subagent-driven-development`, executing that plan from **Task 6's review** onward. Tasks 1–5 are complete and review-clean; Task 6 is implemented (`f1d65470`) but has not passed its review gate. Tasks 7–11 are not started.
+`dev` is at **`faa90214`**, tagged **`dev-v1.1.0`**, deployed. Three bodies of work shipped together:
 
-Resume the loop exactly as the ledger describes:
+- **Anonymous responses** — 11 tasks. Until voting closes nobody sees who wrote what, the host included. A redaction over the existing positional ballot; the gate binds only formats that hold a vote. Voting *closing* reveals the round, and the report attributes every one.
+- **AI builders off the 30s API Gateway ceiling** — the four generators poll a job instead of fanning batches inside one request. Tags survive a CSV round trip.
+- **The host stage redesign** — both previous layouts replaced by one fixed-height stage. Four literal type ladders on the root element, a reduction ladder that sacrifices chrome before content, no scrolling and no silent clipping.
 
-- Task 6 needs a review package generated over `8476e704..f1d65470` and a task reviewer dispatched, before Task 7 begins.
-- Work on `dev` directly. Do **not** create a worktree — worktrees here branch from `main` and this project's convention is to work on `dev`.
-- Do **not** push `dev` until Task 10 lands. The reason is in the handoff's "Do not deploy yet" section and it is not negotiable: Tasks 1–6 redact author names with the flag defaulting ON for every existing game, while the host UI gains no reveal control until Task 10.
-- Do **not** deploy anything. `CLAUDE.md` reserves that to the owner.
+Plans: `docs/superpowers/plans/2026-08-09-anonymous-responses.md`, `docs/superpowers/plans/2026-08-09-host-stage-shell.md`. Per-task ledgers, briefs and reports are in `.superpowers/sdd/<plan-basename>/` (git-ignored).
 
-Three hazards that already cost time this session — they are in the handoff but read them twice:
+## Baselines — check before claiming a regression
 
-- **Every `check(...)` in `tests/anonymous-round-flow.js` and `tests/anonymity-contract.js` must be `await`ed.** `check` is async; a bare call exits before the assertion resolves and vanishes from the pass count with no failure signal.
-- **`seedAnonymousRound` seeds no `CONNECTION#` rows.** Any test asserting on a broadcast must `put()` its own connection or the assertion passes vacuously against an empty `sent` array.
-- **A test that cannot fail proves nothing.** Task 5's padding fix needed a *revealed* round to be outcome-determining; an anonymous round would have passed either way. Verify new tests fail before the fix.
+| Suite | Command | Expected |
+|---|---|---|
+| Backend | `for t in tests/*.js; do node "$t"; done` | **27 suites, 919 passed, 0 failed** |
+| Frontend | `cd src && npx jest __tests__/` | 5 failed suites / 30 failed / **378 passed** |
+| Build | `cd src && npm run build` | compiles, 2 pre-existing size warnings |
+| Template | `sam validate --lint -t template-clean.yaml` | valid |
 
-Backend baseline to beat: **20 suites, 690 passed, 0 failed**. Aggregate with `grep -E '^[0-9]+ passed'`, never `tail -1`.
+Aggregate the backend with `grep -E '^[0-9]+ passed'`, **never** `tail -1`.
 
-Two things are outstanding on the owner and are not yours to do: approving the staged prod deploy, and running the last two `engagetest` migrations in the documented order.
+**And assert the suite count.** There are 30 files in `tests/`, of which 27 are node-runnable and print a result line. A crashed suite prints **no** result line, so a grep-based aggregate silently drops it and reports "0 failed". This bit twice in one day — once reporting 17 suites/560 passed when three had crashed. Guard:
 
----
+```bash
+for t in tests/*.js; do out=$(node "$t" 2>&1); echo "$out" | grep -qE '^[0-9]+ passed' || echo "NO RESULT LINE: $t"; done
+```
 
-## If you want the UX work instead
+The 5 failing frontend suites are stale and out of scope — they predate the auth system (`useAuth must be used within an AuthProvider`) and call `new WebSocketClient()` on a singleton export. Do not "fix" them. A sixth is yours.
 
-Say so, and the resume prompt becomes:
+## What is deployed where
 
-> Read `docs/superpowers/specs/2026-08-08-host-screen-redesign-design.md` (§8 has the implementation order, §7 has 18 testable negatives) and browse the approved mockups in `docs/design/host-redesign/` full-screen. Then use `superpowers:writing-plans` to write plan 2 — the stage shell: the fixed-height three-row grid, the four density ladders, and the `fit()` hook. Park the anonymous-responses plan where it is; tasks 1–5 are committed and reviewed, Task 6 is unreviewed, and the gate is inert until something calls it.
+| Tier | Commit | Notes |
+|---|---|---|
+| `dev` | `faa90214` | everything above |
+| `test` | `94c2cccd` | `85ad6043` + the archive art-export fix only |
+| `prod` | see below | |
+
+**Check prod before assuming.** As of this writing prod was serving `2c588841` — anonymity Tasks 1–3 only, which strips author names from every game including trivia with **no way to restore them**, because the reveal endpoint did not exist yet. A rollback to `85ad6043` was staged at the manual approval gate. Verify what actually got approved:
+
+```bash
+for t in dev test prod; do r=$(AWS_PROFILE=adminaccess aws codepipeline list-pipeline-executions --pipeline-name engagecicd-pipeline-$t --max-items 20 --query "pipelineExecutionSummaries[?status=='Succeeded']|[0].sourceRevisions[0].revisionId" --output text); printf "%-5s %s %s\n" "$t" "${r:0:8}" "$(git log --oneline -1 ${r:0:8} 2>/dev/null)"; done
+```
+
+The pipeline execution history is the **only** reliable record of what is deployed. Tags are not: the filters are `branches:[dev]` **OR** `tags:[dev-v*]`, so a `dev-v*` tag on *any* branch deploys that commit, and the pipeline takes whatever arrived last regardless of version ordering.
+
+**Pushing a branch and its tag together fires two executions of the same commit.** Push one or the other.
+
+## Deployment rule — not negotiable
+
+**The pipeline is the only route to dev, test or prod.** Never run `./deployall`, `./scripts/deploy-clean.sh` or any deploy script. The only mechanism is a branch push or a `<tier>-v*` tag. Consequence: you cannot get one fix into an environment without shipping everything else on that branch — when `dev` is held, branch from the last released commit and take the fix to a different tier instead.
+
+`CLAUDE.md` reserves deploys to the owner. Ask before pushing any tier; past authorisation was per-action, not standing.
+
+## Open with the owner
+
+1. **Does §7.15 yield for trivia?** `docs/design/host-redesign/07-results-trivia.html` answers trivia's round standings with a named roster in the meter; `RoomMeter` refuses names **by test**, under the spec's never-name-a-person rule. Two artefacts disagree and one is the rule. **Trivia currently has no per-round payoff on the room's screen at all.** Recorded in the stage-shell plan under "Open decisions this plan surfaced and could not settle".
+2. **Does an approval email exist** when someone is promoted out of `pending`? The entry design assumes something happens; nothing in the code says it does. See `docs/design/entry-redesign/OPEN-QUESTIONS.md`.
+3. **Two `engagetest` migrations are unrun** — `cull-ai-prompts` and `migrate-set-versions`. Order matters and the obvious order destroys data: `cull` hard-deletes prompt rows with no `promptId`, which is exactly what `rekey` (already run) existed to move. `cull` is safe now; both take `AWS_PROFILE=adminaccess node scripts/<name>.js engagetest [--apply]` and are dry-run by default.
+
+## Background tasks running in other sessions
+
+- **Secure the public archive API.** Confirmed by probe: unauthenticated `GET https://archive.seibtribe.us/archive/items` returns **200**, and CORS advertises `DELETE` with `Origin: *`. `ArchivePanel.jsx:271` deletes with a plain `fetch`, no auth header. The archive is **not** in this repo's template — it is its own stack (`engage2-archive-service` is a candidate). A fix there may need a deploy outside the pipeline, which needs a deliberate owner decision.
+- **Fix the blank player screen after reloading post-vote.** `PlayerPage.jsx:705-723` returns early when `checkPlayerVote` is true, so `answers` stays `[]`; the whole VOTE branch is guarded on `answers.length > 0` (`:1855`) and the "Votes Submitted" panel is *inside* that guard. Result: a blank page until the host advances.
+- **Delete the unreachable expanded-lesson modal — STOPPED, and must stay stopped.** Its premise expired. The modal is no longer dead: Task 5 wired `setLessonExpanded(true)` as the recovery for a dropped ASK prompt. The full question is `data-drop`, so the fitter sacrifices it on a dense state, and click-to-expand is the only way back. Deleting it is now a regression. Uncommitted deletions from that session were discarded once already.
+
+## Design work delivered today, not yet built
+
+Three sets, none implemented. Serve them with `python3 -m http.server 8124 --directory docs/design` (there is a `.claude/launch.json` entry, `all-design-mockups`).
+
+- `docs/design/host-redesign/` — the game screen. 21 mockups, `audit.js` at 168 checks / 0 failures. **This is the precedent the other three follow.** `view.html` steps through with arrows; 1–4 switch display profile. Note the audit harness **stalls in the in-app browser** — it hangs with `01-lobby.html` loaded. Not a defect in the mockups.
+- `docs/design/entry-redesign/` — root, join and the seven auth flows. 17 mockups, 612 assertions.
+- `docs/design/admin-redesign/` — the six admin tabs. 22 mockups, 264 assertions. Press **N** to hide the design notes.
+- `docs/design/player-redesign/` — the player's own device, which had **never** been designed. 23 mockups, 690 assertions.
+
+Each carries a `RATIONALE.md` and an `OPEN-QUESTIONS.md`. The design agents were asked to argue back, and did — several of their disagreements were correct and are worth reading before building from them.
+
+## Landmines
+
+**Tests that look like coverage and assert nothing.** Five separate instances in one day. This is the dominant failure mode in this codebase — not tests that fail, tests that quietly stop asserting.
+
+- A crashed suite vanishing from a grep-based count (twice).
+- A search test whose fixture short-circuited before the loop it existed to exercise.
+- Four of five hook lifecycle tests that would pass against a hook doing nothing.
+- A `toMatch` against a 5,200-line file, matching anywhere.
+- A source-grep guarding a **Critical** fix that passed against a hook that never published the value.
+
+**For every test, name the implementation it would reject. If the answer is "none", say so rather than padding the count.**
+
+**jsdom has no layout engine.** Every geometric assertion returns zero and passes unconditionally. `audit.js` guards the *mockups*; **nothing automated verifies the React app's geometry.** Verification is a human in a browser. A browser pass found five defects unit tests structurally could not — including `[hidden]` losing to `display:flex`, which made *every* fitter reduction silently inert.
+
+**When you verify in a browser, vary the configuration, not just the state.** A walkthrough of every phase missed a Critical because no measurement was taken with a side panel open — and the panel is opened by the dock's own button.
+
+**`check()` is async in `tests/anonymous-round-flow.js` and `tests/anonymity-contract.js`.** Every call must be `await`ed; a bare call exits before asserting and vanishes from the count with no failure signal.
+
+**`seedAnonymousRound` seeds no `CONNECTION#` rows.** A broadcast assertion needs its own `put()` or it passes vacuously.
+
+**The mockups are the source of truth for values, not the plan's prose.** Two separate reviews found the plan's inline reproduction of a mockup differed from the mockup. Port from the file.
+
+**`hostControlsFor` rewrites an unrecognised phase to `LOBBY`.** Adding a phase without adding it to `HOST_PHASES` produces something that looks like it works and renders the lobby.
+
+**Pre-existing, unfixed:** `handlePlayerVote` builds `ROUND#` keys unpadded (`message.js:493,513,524`); `message.js` routing makes `handlePlayerMessage`'s `playerVoted` branch unreachable; the positional ballot is stable only because the answer sort key ends in the author's name (risk R1); no `reopen-round` endpoint (R2).
+
+## If you want the next piece of UX
+
+The host redesign's plans 3–5 are unwritten: the Console (operator chrome, question browser, how-to-play), per-state content and the deletions, and ENDED. Spec §8 carries the implementation order; §7 carries 18 testable negatives. Start with `superpowers:writing-plans` against `docs/superpowers/specs/2026-08-08-host-screen-redesign-design.md`.
+
+Two things the stage shell handed forward deliberately: **RESULTS has no sacrifice budget** (solo from first paint, no drop groups, so a dense results state clamps and abbreviates an answer), and **the drop-polarity test is file-wide**, so it will misfire when plan 4 adds per-state content — the mockups number per *box*, starting at 1.
