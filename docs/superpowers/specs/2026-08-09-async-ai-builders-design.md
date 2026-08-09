@@ -58,7 +58,7 @@ A different, silent defect is present instead:
 
 | Decision | Choice |
 |---|---|
-| Survey envelope | Worker stores questions as flat `items[]`; `SurveyAIBuilder` rebuilds `{title, description, ...}` from the config it already holds. `generation-jobs.js` is untouched. The AI no longer rewrites the survey title/description — the typed values are used verbatim. |
+| Survey envelope | Job records gain an optional `meta` object. The survey worker's first pass generates an improved title and description alongside its questions and stores them in `meta`; `SurveyAIBuilder` prefers `job.meta` and falls back to the typed config. The AI keeps its ability to improve the survey framing. |
 | Tags | Generate **and persist** end-to-end. All four lambdas emit tags; the CSV contract and `upload-questions.js` gain an optional `Tags` column. This also makes tags real for the scenarios builder, where they are currently a dead end. |
 | Single-question refine (`AIAssistant`, `questionIndex !== -1`) | Routed through the job like everything else. One code path; no synchronous branch left racing the ceiling. Costs one ~2s poll round trip. |
 
@@ -66,7 +66,19 @@ A different, silent defect is present instead:
 
 ### Shared code
 
-`generation-jobs.js` and `tags.js` are reused unchanged.
+`tags.js` is reused unchanged.
+
+`generation-jobs.js` gains one optional, additive field: `meta`, an arbitrary object
+a worker may attach to describe the result *set* rather than its items. Only the
+survey builder needs it (for an AI-improved title and description), but it is
+declared generically because a set-level summary is not survey-specific.
+
+- `updateJobProgress` and `completeJob` accept `meta` and write it only when present.
+- `failJob` does not touch it, so a `meta` written before a mid-run failure survives.
+- `jobToResponse` returns `meta: item.meta || null`.
+
+Every existing caller omits `meta`, so no write happens and the poll payload gains a
+single `null` field. The scenarios path is unaffected.
 
 `structured-generation.js` gains per-kind entries in `PER_ITEM_TOKENS`
 (`trivia`, `poll`, `survey`, `question`) so `itemsPerCall` / `maxTokensFor` size
@@ -101,6 +113,26 @@ The worker loop, per chunk:
 5. `updateJobProgress` with `completed`, `phase`, `items`, `warnings` — so partial
    results are visible while the run continues and survive a mid-run death.
 6. Stop early if a pass yields zero new items.
+
+### Survey, specifically
+
+The survey lambda is the only one whose current response is a single object rather
+than a list, and the only one that lets the AI rewrite its own framing. Both survive:
+
+- The survey tool schema carries two extra **optional** top-level properties,
+  `surveyTitle` and `surveyDescription`, alongside `items`.
+- Only the **first** pass asks for them; the prompt for later passes omits the
+  request, since the framing is already settled and re-deriving it per chunk would
+  invite the model to contradict itself.
+- Whatever comes back is written once via `updateJobProgress(..., { meta })` and
+  therefore lands on the job row before any later pass can fail.
+- If the model returns neither (or returns blanks), `meta` is simply not written and
+  the client falls back to the typed config. An improved title is an improvement, not
+  a dependency.
+- `SurveyAIBuilder` assembles `{ id, title: meta.title || config.title, description:
+  meta.description || config.description, topic, audience, purpose, createdAt,
+  questions: job.items }` — the same shape `handleSurveyGenerated` already consumes,
+  so `AdminPage.jsx` needs no change.
 
 ### What is deleted
 
@@ -166,6 +198,11 @@ Each asserts the structural regression and the shape-specific ones:
   `numCorrect > 1`); polls keep `options[]` / `allowMultiple`; survey keeps
   `type` / `scale` / `textType`; questions branch by `engagementType`, and the
   refine path forwards `existingQuestion`.
+- Survey `meta`: an AI-improved title/description reaches the poll payload; only the
+  first pass is asked for it; a model that returns neither leaves `meta` unwritten so
+  the client falls back to the typed config.
+- `generation-jobs.js`: a job with no `meta` still polls cleanly (`meta: null`), which
+  is the guard that this additive field did not disturb the scenarios path.
 - Trivia honours `numberOfCategories`, clamped against the total, never collapsing
   to 1 for a single-item chunk.
 - Tags are normalized on every item.
