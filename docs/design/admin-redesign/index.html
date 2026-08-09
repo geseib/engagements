@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Engage2 admin console — redesign mockups</title>
+<style>
+  :root{--bg:#0F1A2E;--surface:#1B2942;--text:#F4EDE4;--muted:#B6C2D4;--primary:#F6A94C;
+        --success:#6FD0A4;--danger:#EF8C86;--rule:rgba(182,194,212,.22)}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:400 16px/1.55 "Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+    padding:52px 26px 90px}
+  .wrap{max-width:980px;margin:0 auto}
+  h1{font-family:"Archivo Expanded","Archivo",system-ui,sans-serif;font-weight:800;
+    font-size:clamp(30px,4.4vw,44px);line-height:1.05;margin:0 0 12px;letter-spacing:-.01em}
+  h2{font-size:15px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+    margin:38px 0 10px;font-weight:700}
+  .sub{color:var(--muted);max-width:78ch;margin:0 0 10px}
+  a{color:var(--primary)}
+  .cta{display:inline-block;background:var(--primary);color:#0F1A2E;font-weight:800;
+    text-decoration:none;padding:11px 20px;border-radius:9px;font-size:16px}
+  .hint{color:var(--muted);font-size:14.5px;border-left:3px solid var(--primary);
+    padding:12px 16px;background:rgba(246,169,76,.07);border-radius:0 8px 8px 0;
+    margin:20px 0;max-width:80ch;line-height:1.55}
+  .hint b{color:var(--text)}
+  .hint.bad{border-left-color:var(--danger);background:rgba(229,100,94,.08)}
+  code{color:var(--primary);font-family:ui-monospace,Menlo,monospace;font-size:.9em}
+  ol{list-style:none;counter-reset:m;padding:0;margin:0}
+  li{counter-increment:m;border-bottom:1px solid var(--rule);padding:15px 0 15px 52px;
+    position:relative}
+  li::before{content:counter(m,decimal-leading-zero);position:absolute;left:0;top:17px;
+    font-family:"Archivo Expanded","Archivo",system-ui,sans-serif;font-weight:800;
+    color:var(--primary);font-size:14px;letter-spacing:.07em}
+  li a.t{color:var(--text);text-decoration:none;font-weight:700;font-size:18px;
+    border-bottom:1px solid transparent}
+  li a.t:hover{border-bottom-color:var(--primary);color:var(--primary)}
+  li p{margin:5px 0 0;color:var(--muted);font-size:15px;max-width:84ch}
+  li p.wc{color:var(--text);font-size:14px;margin-top:6px}
+  li p.wc b{color:var(--primary);font-weight:700;letter-spacing:.06em;font-size:11px;
+    text-transform:uppercase;display:block}
+  .grp{margin:30px 0 4px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--primary);font-weight:800}
+  footer{margin-top:40px;color:var(--muted);font-size:14.5px;max-width:80ch;line-height:1.6}
+  .docs{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;
+    margin:14px 0 0}
+  .docs a{display:block;background:var(--surface);border:1px solid var(--rule);
+    border-radius:9px;padding:12px 14px;text-decoration:none;color:var(--text)}
+  .docs a:hover{border-color:var(--primary)}
+  .docs b{display:block;font-size:16px;margin-bottom:3px}
+  .docs span{color:var(--muted);font-size:13.5px;line-height:1.45;display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Engage2 admin console — redesign</h1>
+
+  <p class="sub">Twenty-two runnable mockups plus an audit, for
+    <code>src/src/AdminPage.jsx</code> and the five components it mounts. No build step,
+    no CDN, no external asset &mdash; every file is self-contained.</p>
+
+  <p style="margin:16px 0 6px">
+    <a class="cta" href="01-sets.html">Open the console &rarr;</a>
+    <a class="cta" style="background:transparent;color:var(--text);
+       border:1px solid var(--rule)" href="audit.html">Run the audit</a>
+  </p>
+
+  <div class="hint">
+    <b>Serve this directory.</b>
+    <code>python3 -m http.server 8123 --directory docs/design/admin-redesign</code><br>
+    The audit reads inside iframes and cannot do that from <code>file://</code>. The mockups
+    themselves open fine either way.
+    <br><br>
+    <b>Every page carries its own design notes</b> in a rail on the right. Press <b>N</b> or
+    use the button at the bottom right to hide them &mdash; with them hidden the rail column
+    collapses to zero and you are looking at the real console at its real width. That is the
+    state to judge it in. The rail needs 1360px; below that it hides itself.
+  </div>
+
+  <div class="hint">
+    <b>These carry worst-case content on purpose.</b> A 98-character set title, 160 questions
+    in the 24-category bitmask ceiling, a set that imported zero rows, a survey set that
+    cannot be played at all, a session whose question set has been deleted, a session dated
+    1969, a user whose name is a UUID, a generation job that died at 41 of 100, and a prompt
+    library with six broken records in it. The host redesign learned this the expensive way:
+    copy chosen to fit produced sixteen green pages that hid nine defects.
+  </div>
+
+  <div class="hint bad">
+    <b>Four things on these screens are defects in the product, drawn as they are.</b>
+    The <i>Joined</i> column on Users shows &ldquo;&mdash;&rdquo; for everybody, because the
+    lambda returns <code>created</code> and the table reads <code>createdAt</code>. A poll CSV
+    with <code>Option1&hellip;Option5</code> imports with no options. A session dated
+    1969&#8209;12&#8209;31 is an epoch of zero formatted without a guard. A survey set can be
+    created and can never be played. Drawing plausible values over any of them would have been
+    the design hiding a bug.
+  </div>
+
+  <h2>The written work</h2>
+  <div class="docs">
+    <a href="INVENTORY.md"><b>INVENTORY.md</b><span>Every element on the current admin
+      surface, with a verdict. Read this first &mdash; it is what the design is a response
+      to.</span></a>
+    <a href="RATIONALE.md"><b>RATIONALE.md</b><span>Decisions and derivations, what was
+      rejected, and every place this disagrees with the host spec or with the brief.</span></a>
+    <a href="OPEN-QUESTIONS.md"><b>OPEN-QUESTIONS.md</b><span>Eleven forks that could not be
+      settled from the code.</span></a>
+    <a href="audit.html"><b>audit.html</b><span>Six assertions &times; 22 mockups &times; 2
+      viewports. Each check was written after a defect it would have caught.</span></a>
+  </div>
+
+  <h2>Mockups</h2>
+
+  <p class="grp">Question sets &mdash; the centre of gravity</p>
+  <ol>
+    <li><a class="t" href="01-sets.html">The set list</a>
+      <p>Home. A table, because someone scanning forty-one sets wants a table. Name, type,
+        question count, one state column, one date.</p>
+      <p class="wc"><b>Worst case</b> 26 rows under scroll; a 98-character title that must
+        ellipsise; a Japanese title whose id is hash-derived; a set with 0 questions; a survey
+        set marked <i>Not playable</i>; a legacy set with no engagement type stored.</p></li>
+
+    <li><a class="t" href="02-sets-empty.html">First run &mdash; no sets at all</a>
+      <p>The highest-leverage empty state in the console, because every other screen is
+        downstream of a question set. Three ranked ways in, not a shrug.</p>
+      <p class="wc"><b>Worst case</b> the genuinely empty database &mdash; nav counts at zero
+        too, which is the detail an empty state usually forgets.</p></li>
+
+    <li><a class="t" href="03-sets-no-match.html">Filters matched nothing</a>
+      <p>A different screen from 02, with different words and different exits. Names which
+        filter is doing the excluding and what dropping each one would return.</p>
+      <p class="wc"><b>Worst case</b> three filters stacked, including a three-word search,
+        against a database with forty-one sets in it.</p></li>
+
+    <li><a class="t" href="04-set-detail.html">Editing a set</a>
+      <p>Its own screen with its own breadcrumb, not a form that appears below the list. Four
+        panels, a pinned save bar that names the dirty fields, and the questions themselves
+        &mdash; which the admin has never been able to see.</p>
+      <p class="wc"><b>Worst case</b> the 98-character title in an <code>h1</code>; 24
+        categories; version 7 of 7 with v6 pinned by two live sessions; a question that was
+        skipped on import; three past sessions in the delete panel.</p></li>
+
+    <li><a class="t" href="05-set-replace.html">Replacing the questions from a CSV</a>
+      <p>The &ldquo;before you replace&rdquo; beat, extended with the diff the current code
+        does not compute: which categories are about to stop existing.</p>
+      <p class="wc"><b>Worst case</b> a replacement that removes two categories and five
+        questions while two sessions are pinned to an older version.</p></li>
+
+    <li><a class="t" href="06-csv-errors.html">CSV import with validation errors</a>
+      <p>A validation report rendered <i>before</i> anything is sent, from the parse the
+        browser already does. Three tiers: stops the import, would be skipped silently, known
+        importer gaps.</p>
+      <p class="wc"><b>Worst case</b> a 61-row file with a missing Title column, four
+        different row-level failure modes including an unbalanced quote, the poll
+        <code>Option1..5</code> mismatch, and three image filenames with no file behind
+        them.</p></li>
+
+    <li><a class="t" href="07-new-set.html">New set &mdash; the five ways in</a>
+      <p>Replaces two duplicated engagement-type selects and five scattered buttons. Each
+        path states what it is best for and what it costs you.</p>
+      <p class="wc"><b>Worst case</b> the archive path, which loses the most, is on the same
+        screen as the lossless one and has to say so.</p></li>
+  </ol>
+
+  <p class="grp">The AI generation job &mdash; the state nobody had drawn</p>
+  <ol start="8" style="counter-reset:m 7">
+    <li><a class="t" href="08-ai-config.html">Setting up a generation</a>
+      <p>The trivia builder&rsquo;s configuration, with the pass count and time estimate
+        derived from the worker&rsquo;s real token budget.</p>
+      <p class="wc"><b>Worst case</b> 100 questions &times; 6 choices &times; 24 categories
+        &mdash; the maximum the API accepts, which is six sequential model calls.</p></li>
+
+    <li><a class="t" href="09-ai-job-running.html">A job in progress</a>
+      <p>The centre of this redesign. The work is server-side, so it gets a home outside the
+        modal that started it: a live count, the questions landing as they are written, a jobs
+        tray in the top bar, and <b>&ldquo;Close &mdash; this keeps running&rdquo;</b> as the
+        primary action.</p>
+      <p class="wc"><b>Worst case</b> two jobs at once, one of them still queued; a
+        third finished and waiting for review; and the honest statement that the job cannot
+        be cancelled, because no cancel endpoint exists.</p></li>
+
+    <li><a class="t" href="10-ai-job-failed.html">A job that failed</a>
+      <p>Partial failure named as partial failure. Today a job that dies with items already
+        written renders the review screen and the error is shown nowhere &mdash; failure looks
+        exactly like success.</p>
+      <p class="wc"><b>Worst case</b> 41 of 100, a rate-limit error with no code and no
+        retryable flag, two warnings that are returned today and displayed nowhere, and
+        sixteen items dropped server-side as near-duplicates without any client-visible
+        signal.</p></li>
+
+    <li><a class="t" href="11-ai-job-review.html">Reviewing what came back</a>
+      <p>A table, not a one-at-a-time carousel, with per-item reject &mdash; which does not
+        exist today, so one bad question means importing it or discarding eighty-three good
+        ones.</p>
+      <p class="wc"><b>Worst case</b> you asked for 100 and got 84, one of which has no
+        mappable correct answer.</p></li>
+  </ol>
+
+  <p class="grp">Sessions &mdash; the tab that had no list</p>
+  <ol start="12" style="counter-reset:m 11">
+    <li><a class="t" href="12-sessions.html">The session list</a>
+      <p>&ldquo;Game Management&rdquo; today is a free-text box for a game id and a Delete All
+        button. <code>GET /games</code> has been deployed all along.</p>
+      <p class="wc"><b>Worst case</b> a live session mid-round; a session whose question set
+        was deleted so no report can ever be built; a session dated 1969; a 187-player
+        session.</p></li>
+
+    <li><a class="t" href="13-sessions-empty.html">No sessions yet</a>
+      <p>An empty state that answers the question behind the question &mdash; a host can only
+        start a session from an <b>active</b> set, and this console knows how many are not.</p>
+      <p class="wc"><b>Worst case</b> the state where the console looks broken but isn&rsquo;t.</p></li>
+  </ol>
+
+  <p class="grp">Destructive actions</p>
+  <ol start="14" style="counter-reset:m 13">
+    <li><a class="t" href="14-confirm-delete-set.html">Deleting a question set</a>
+      <p>Consequence, not danger. Names the three sessions that used the set and says, per
+        session, what deleting it decides &mdash; because a report is built from the live set
+        when it is first requested.</p>
+      <p class="wc"><b>Worst case</b> one session already has a saved report, one is live
+        right now, and one can never produce a report again. Needs one backend change, stated
+        on the screen.</p></li>
+
+    <li><a class="t" href="15-confirm-delete-all.html">Deleting every session</a>
+      <p>Counts before it asks. Type-to-confirm, and the environment repeated in the footer of
+        the dialog.</p>
+      <p class="wc"><b>Worst case</b> a live session with 38 players, six saved reports and
+        ~2,400 answers, all going at once.</p></li>
+  </ol>
+
+  <p class="grp">Users, prompts, archive, settings</p>
+  <ol start="16" style="counter-reset:m 15">
+    <li><a class="t" href="16-users.html">The approval queue</a>
+      <p>A queue at the top of the screen with a named verb, plus a count in the nav visible
+        from every other page. Today it is the second of four filter tabs.</p>
+      <p class="wc"><b>Worst case</b> a 35-character double-barrelled name on a
+        70-character email; a person whose name is a UUID; an unconfirmed address; and someone
+        who has been waiting 21 days.</p></li>
+
+    <li><a class="t" href="17-users-clear.html">Nobody waiting</a>
+      <p>The queue keeps its frame when it is empty. A section that disappears is a section
+        you stop looking for, which is the one thing an approval queue must not be.</p>
+      <p class="wc"><b>Worst case</b> there is no honest &ldquo;no users&rdquo; state &mdash;
+        an admin is reading the screen &mdash; so this is the real steady state instead.</p></li>
+
+    <li><a class="t" href="18-prompts.html">The prompt library</a>
+      <p>One list where there are three today. Generators and summaries are the same record
+        with different shapes; the archive&rsquo;s export tab renders a third variant of the
+        same card.</p>
+      <p class="wc"><b>Worst case</b> 47 prompts of which six are broken in four different
+        ways, including one with no id and one imported without its body.</p></li>
+
+    <li><a class="t" href="19-prompt-editor.html">Editing a prompt</a>
+      <p>Instructions, output format, and the variable palette. Saving writes a new version
+        rather than overwriting the old one &mdash; the versioning code exists and the editor
+        simply never asks for it.</p>
+      <p class="wc"><b>Worst case</b> a Wavelength prompt, whose six variables are
+        <b>unreachable in the current UI</b> because the palette&rsquo;s group ordering is a
+        literal array that omits Wavelength.</p></li>
+
+    <li><a class="t" href="20-archive.html">The cross-environment archive</a>
+      <p>One shared store behind one public URL. Source environment is the first column,
+        because this is a promotion tool.</p>
+      <p class="wc"><b>Worst case</b> an item exported from an environment that resolved to
+        <code>unknown</code>; a trivia set whose tags and images have no column in the archive
+        CSV; an art set whose image files do not travel at all.</p></li>
+
+    <li><a class="t" href="21-archive-down.html">The archive is unreachable</a>
+      <p>Today a failed archive load renders as &ldquo;No archive items found&rdquo; &mdash;
+        an outage indistinguishable from an empty archive.</p>
+      <p class="wc"><b>Worst case</b> a silent timeout with no status code, and a local
+        workaround offered instead.</p></li>
+
+    <li><a class="t" href="22-settings.html">Settings</a>
+      <p>Where you are, what you are pointed at, and two diagnostics described by who sees
+        the result rather than by what they enable.</p>
+      <p class="wc"><b>Worst case</b> the archive row, which has to admit that dev, test and
+        prod share one store.</p></li>
+  </ol>
+
+  <footer>
+    Colours are the Warm Summit tokens from <code>docs/handoff/warm-summit-design-spec.md</code>,
+    unchanged, plus one new text-only tint (<code>--danger-text</code>) derived in
+    <a href="RATIONALE.md">RATIONALE.md</a> &sect;5 for the same reason the host spec added
+    <code>--success-text</code>. Type sizes are <b>not</b> the host spec's ladders &mdash;
+    those are derived for a projected image read at 25 feet, and this is a laptop at 24
+    inches. The derivation is in &sect;3.
+    <br><br>
+    The mockups are generated from <code>_src/</code> so the shell stays identical across all
+    twenty-two: <code>python3 _src/build.py</code>. The generated files are the deliverable;
+    <code>_src/</code> is kept so a change to the shell does not have to be made twenty-two
+    times. Display type falls back to the nearest system face &mdash; production self-hosts
+    Archivo Expanded, which is wider.
+  </footer>
+</div>
+</body>
+</html>

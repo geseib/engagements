@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin console mockups — audit</title>
+<style>
+  :root{--bg:#0F1A2E;--surface:#1B2942;--text:#F4EDE4;--muted:#B6C2D4;--primary:#F6A94C;
+        --ok:#6FD0A4;--bad:#EF8C86;--rule:rgba(182,194,212,.22)}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);padding:26px 22px 80px;
+    font:400 15px/1.5 "Inter",system-ui,sans-serif}
+  .wrap{max-width:1040px;margin:0 auto}
+  h1{font-size:30px;margin:0 0 8px;font-weight:800}
+  p.lede{color:var(--muted);max-width:82ch;margin:0 0 16px}
+  code{color:var(--primary);font-family:ui-monospace,Menlo,monospace;font-size:.92em}
+  button{background:var(--primary);color:#0F1A2E;border:0;border-radius:7px;
+    padding:9px 16px;font:700 14px/1 "Inter",sans-serif;cursor:pointer}
+  button.sec{background:transparent;color:var(--text);border:1px solid var(--rule)}
+  #bar{margin:14px 0 18px;padding:11px 14px;border-radius:8px;background:var(--surface);
+    border:1px solid var(--rule);font-weight:700}
+  #bar.pass{color:var(--ok);border-color:rgba(79,178,134,.5)}
+  #bar.fail{color:var(--bad);border-color:rgba(229,100,94,.55)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--muted);padding:0 8px 6px;border-bottom:1px solid var(--rule)}
+  td{padding:5px 8px;border-bottom:1px solid rgba(182,194,212,.1);vertical-align:top}
+  td.f{color:var(--muted)}
+  .y{color:var(--ok);font-weight:700}
+  .n{color:var(--bad);font-weight:700}
+  .why{color:var(--bad);font-size:12.5px;max-width:60ch}
+  iframe{position:fixed;left:-9999px;top:0;border:0}
+  .checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;
+    margin:0 0 20px}
+  .checks div{background:var(--surface);border:1px solid var(--rule);border-radius:7px;
+    padding:9px 12px;font-size:13px;color:var(--muted)}
+  .checks b{color:var(--text);display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Audit</h1>
+  <p class="lede">Six assertions over all 22 mockups at 1440&times;900 and 1280&times;800.
+    <b>Serve this directory</b> &mdash; from <code>file://</code> the frames are cross-origin
+    and nothing can be read. Every check was written after a real defect it would have caught:
+    A6 exists because a <code>.ico</code> with no width rendered at 300&times;150 in the jobs
+    tray, and A2 because the first cut pinned design notes on top of four table rows.</p>
+
+  <div class="checks">
+    <div><b>A1 &mdash; no horizontal scroll</b>Neither the document nor any scroll container inside it scrolls sideways, at either width.</div>
+    <div><b>A2 &mdash; nothing clips silently</b>No element loses text to <code>overflow:hidden</code>
+      unless it declares an ellipsis or a line clamp that can actually render.</div>
+    <div><b>A3 &mdash; the 12px floor</b>No text below the floor derived in rationale §3.</div>
+    <div><b>A4 &mdash; WCAG 2.1 AA</b>Every text node &ge;4.5:1 against its own background,
+      or &ge;3:1 at 19px bold / 24px regular.</div>
+    <div><b>A5 &mdash; target size</b>Every button and input at least 24px on its short edge
+      (WCAG 2.2 2.5.8 minimum).</div>
+    <div><b>A6 &mdash; no unsized SVG</b>An inline icon wider than 40px is a missing
+      width rule, not a design.</div>
+  </div>
+
+  <p><button id="run">Run</button>
+     <button class="sec" id="only">Show failures only</button></p>
+  <div id="bar">Ready.</div>
+  <table><thead><tr><th style="width:210px">Mockup</th><th style="width:78px">Viewport</th>
+    <th>A1</th><th>A2</th><th>A3</th><th>A4</th><th>A5</th><th>A6</th>
+    <th style="width:44%">First failure</th></tr></thead>
+    <tbody id="rows"></tbody></table>
+</div>
+<iframe id="fr"></iframe>
+<script>
+const PAGES=["01-sets","02-sets-empty","03-sets-no-match","04-set-detail","05-set-replace",
+ "06-csv-errors","07-new-set","08-ai-config","09-ai-job-running","10-ai-job-failed",
+ "11-ai-job-review","12-sessions","13-sessions-empty","14-confirm-delete-set",
+ "15-confirm-delete-all","16-users","17-users-clear","18-prompts","19-prompt-editor",
+ "20-archive","21-archive-down","22-settings"];
+const VIEWS=[[1440,900],[1280,800]];
+
+/* ---- colour ------------------------------------------------------------- */
+function rgb(s){const m=String(s).match(/[\d.]+/g);return m?m.slice(0,3).map(Number):null;}
+function lin(c){c/=255;return c<=.04045?c/12.92:Math.pow((c+.055)/1.055,2.4);}
+function lum(c){return .2126*lin(c[0])+.7152*lin(c[1])+.0722*lin(c[2]);}
+function ratio(a,b){const la=lum(a),lb=lum(b),h=Math.max(la,lb),l=Math.min(la,lb);
+  return (h+.05)/(l+.05);}
+function alphaOver(fg,bg,a){return fg.map((c,i)=>c*a+bg[i]*(1-a));}
+/* Walk up for the first non-transparent background, compositing alpha as we go.
+   Reading only the element's own background is how dark-on-dark passes an audit. */
+function bgOf(el,win){
+  let node=el,stack=[];
+  while(node&&node.nodeType===1){
+    const c=win.getComputedStyle(node).backgroundColor;
+    const m=String(c).match(/[\d.]+/g);
+    if(m){const a=m.length>3?parseFloat(m[3]):1;
+      if(a>0){stack.push([m.slice(0,3).map(Number),a]); if(a>=.999)break;}}
+    node=node.parentElement;
+  }
+  if(!stack.length)return [15,26,46];
+  let out=stack[stack.length-1][0];
+  for(let i=stack.length-2;i>=0;i--)out=alphaOver(stack[i][0],out,stack[i][1]);
+  return out;
+}
+
+/* ---- checks ------------------------------------------------------------- */
+function visible(el,win){
+  const s=win.getComputedStyle(el);
+  if(s.display==="none"||s.visibility==="hidden"||parseFloat(s.opacity)===0)return false;
+  const r=el.getBoundingClientRect();
+  return r.width>0&&r.height>0;
+}
+function hasOwnText(el){
+  for(const n of el.childNodes)
+    if(n.nodeType===3&&n.textContent.trim().length)return true;
+  return false;
+}
+function run(win,doc){
+  const fail={};
+  const all=[...doc.querySelectorAll("body *")].filter(e=>visible(e,win)
+    && !e.closest(".annorail") && !e.closest(".anno-toggle"));
+
+  // A1 — the document must not scroll sideways, AND no scroll container inside
+  // it may either. The first version only checked the document, which the
+  // negative test showed was unfalsifiable: .work-body is overflow:auto, so
+  // anything too wide scrolled inside it and the document never grew.
+  if(doc.documentElement.scrollWidth>win.innerWidth+1)
+    fail.A1=`document scrollWidth ${doc.documentElement.scrollWidth} > ${win.innerWidth}`;
+
+  for(const el of all){
+    const s=win.getComputedStyle(el);
+    const r=el.getBoundingClientRect();
+
+    // A1, continued: a horizontal scrollbar anywhere is the same defect.
+    if(!fail.A1 && (s.overflowX==="auto"||s.overflowX==="scroll")
+       && el.scrollWidth>el.clientWidth+1)
+      fail.A1=`${sel(el)} scrolls sideways (${el.scrollWidth} > ${el.clientWidth})`;
+
+    // A2 — clipping without a declared, renderable truncation.
+    if(!fail.A2 && hasOwnText(el)){
+      const clipsX=(s.overflowX==="hidden"||s.overflowX==="clip");
+      const clipsY=(s.overflowY==="hidden"||s.overflowY==="clip");
+      const declaresX = s.textOverflow==="ellipsis" && s.whiteSpace.indexOf("nowrap")>-1
+                        && s.display.indexOf("flex")<0 && s.display.indexOf("grid")<0;
+      const declaresY = s.webkitLineClamp && s.webkitLineClamp!=="none";
+      if(clipsX && el.scrollWidth>Math.ceil(r.width)+1 && !declaresX)
+        fail.A2=`${sel(el)} clips ${el.scrollWidth-Math.round(r.width)}px of text with no renderable ellipsis`;
+      else if(clipsY && el.scrollHeight>Math.ceil(r.height)+2 && !declaresY
+              && s.overflowY!=="auto" && s.overflowY!=="scroll")
+        fail.A2=`${sel(el)} clips ${el.scrollHeight-Math.round(r.height)}px vertically`;
+    }
+
+    // A3 — type floor
+    if(!fail.A3 && hasOwnText(el)){
+      const px=parseFloat(s.fontSize);
+      if(px<12) fail.A3=`${sel(el)} at ${px.toFixed(1)}px`;
+    }
+
+    // A4 — contrast
+    if(!fail.A4 && hasOwnText(el)){
+      const fg=rgb(s.color), bg=bgOf(el,win);
+      if(fg){
+        const px=parseFloat(s.fontSize), w=parseInt(s.fontWeight)||400;
+        const large=(px>=24)||(px>=18.66&&w>=700);
+        const need=large?3:4.5, got=ratio(fg,bg);
+        if(got<need-0.005)
+          fail.A4=`${sel(el)} ${got.toFixed(2)}:1 (needs ${need}) — "${el.textContent.trim().slice(0,34)}"`;
+      }
+    }
+
+    // A5 — target size (skip controls deliberately drawn disabled/decorative)
+    if(!fail.A5 && /^(BUTTON|INPUT|SELECT|TEXTAREA)$/.test(el.tagName)
+       && s.pointerEvents!=="none"){
+      /* A checkbox's target is its label, not its 16px box: clicking anywhere in
+         the label toggles it. Measure whichever the pointer actually hits. */
+      const t=(el.type==="checkbox"||el.type==="radio")&&el.closest("label")||el;
+      const tr=t.getBoundingClientRect();
+      const short=Math.min(tr.width,tr.height);
+      if(short<24) fail.A5=`${sel(el)} target short edge ${short.toFixed(1)}px`;
+    }
+
+    // A6 — an inline icon that never got a width
+    if(!fail.A6 && el.tagName.toLowerCase()==="svg" && !el.classList.contains("glyph")
+       && (r.width>40||r.height>40) && r.width>1)
+      fail.A6=`${sel(el)} rendered ${Math.round(r.width)}×${Math.round(r.height)}px`;
+  }
+  return fail;
+}
+function sel(el){
+  return el.tagName.toLowerCase()+(el.className&&typeof el.className==="string"
+    ? "."+el.className.trim().split(/\s+/).slice(0,2).join(".") : "");
+}
+
+/* ---- harness ------------------------------------------------------------ */
+const fr=document.getElementById("fr"), rows=document.getElementById("rows"),
+      bar=document.getElementById("bar");
+let onlyFail=false;
+document.getElementById("only").onclick=()=>{onlyFail=!onlyFail;
+  document.querySelectorAll("tr[data-ok=1]").forEach(t=>t.style.display=onlyFail?"none":"");};
+
+function load(url,w,h){
+  return new Promise(res=>{
+    fr.style.width=w+"px"; fr.style.height=h+"px";
+    fr.onload=()=>setTimeout(()=>res(),90);
+    fr.src=url+"?t="+Date.now();
+  });
+}
+document.getElementById("run").onclick=async()=>{
+  rows.innerHTML=""; let total=0, bad=0;
+  bar.className=""; bar.textContent="Running…";
+  for(const p of PAGES){
+    for(const [w,h] of VIEWS){
+      await load(p+".html",w,h);
+      let f;
+      try{ f=run(fr.contentWindow,fr.contentDocument); }
+      catch(e){ f={A1:"cross-origin — serve this directory over http"}; }
+      const keys=["A1","A2","A3","A4","A5","A6"];
+      const ok=keys.every(k=>!f[k]); total+=keys.length; bad+=keys.filter(k=>f[k]).length;
+      const tr=document.createElement("tr");
+      tr.dataset.ok=ok?1:0;
+      tr.innerHTML=`<td class="f">${p}</td><td class="f">${w}×${h}</td>`+
+        keys.map(k=>`<td class="${f[k]?"n":"y"}">${f[k]?"✕":"✓"}</td>`).join("")+
+        `<td class="why">${keys.map(k=>f[k]?k+": "+f[k]:"").filter(Boolean)[0]||""}</td>`;
+      rows.appendChild(tr);
+      if(onlyFail&&ok)tr.style.display="none";
+    }
+  }
+  bar.className=bad?"fail":"pass";
+  bar.textContent=bad?`${bad} failures of ${total} assertions`
+                     :`${total} assertions, all pass`;
+};
+</script>
+</body>
+</html>
