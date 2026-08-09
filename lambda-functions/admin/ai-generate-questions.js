@@ -1,211 +1,217 @@
-const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
-const { invokeClaudeWithRetry, planTopicList, buildTopicAssignmentText } = require('./shared/bedrock-utils');
+/**
+ * AI question generation (the AIAssistant endpoint) — asynchronous, structured.
+ *
+ * Same 30s-gateway fix as the other builders. This one had the worst token
+ * budget of the four: max_tokens was `1000 + count * 700`, i.e. 1700 even at
+ * count=1, and at the ~45 output tokens/sec this account measures from Sonnet
+ * that is ~38 seconds of generation before the response exists — already past
+ * API Gateway's ceiling at the smallest possible request.
+ *
+ * Two modes, both routed through the job so there is no synchronous path left
+ * racing the ceiling:
+ *   - bulk: generate `questionCount` new questions.
+ *   - refine: rewrite ONE existing question from the user's feedback.
+ *
+ * Item shape follows the engagement type, resolved through normalizeGameType
+ * rather than compared as a raw string — comparing raw game-type spellings is
+ * exactly what has silently broken lookups elsewhere in this codebase.
+ */
 
-const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
+const { makeGenerationHandler } = require('./shared/generation-handler');
+const { tagGuidance } = require('./shared/structured-generation');
+const { normalizeTags } = require('./shared/tags');
+const { normalizeGameType } = require('./shared/game-types');
 
-exports.handler = async (event) => {
-  try {
-    console.log('🤖 Lambda function started for question generation');
+const MAX_COUNT = 50;
 
-    // Handle CORS preflight
-    if (event.requestContext?.http?.method === 'OPTIONS') {
-      return {
-        statusCode: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': 'Content-Type',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS'
-        },
-        body: ''
-      };
-    }
+function parseRequest(payload) {
+  const existing = payload.existingQuestion || null;
+  // Refining one question produces exactly one question, whatever was asked.
+  const total = existing
+    ? 1
+    : Math.min(Math.max(parseInt(payload.questionCount, 10) || 1, 1), MAX_COUNT);
+  return {
+    total,
+    config: {
+      gameType: normalizeGameType(payload.engagementType),
+      userInput: String(payload.userInput || '').trim(),
+      existingQuestion: existing,
+      context: payload.context || {},
+    },
+  };
+}
 
-    if (!event.body) {
-      throw new Error('No request body provided');
-    }
-
-    const { engagementType, userInput, questionCount, existingQuestion, context, planTopics, assignedTopics, otherTopics } = JSON.parse(event.body);
-
-    // Phase 1 of two-phase generation: plan distinct sub-topics before the
-    // client fans out parallel batches (each batch is then anchored to its
-    // assigned topics so parallel batches can't duplicate each other)
-    if (planTopics === true) {
-      let brief = `${engagementType} questions. Requirements: ${userInput}`;
-      if (context?.title) brief += `\nQuestion Set Title: ${context.title}`;
-      if (context?.description) brief += `\nDescription: ${context.description}`;
-
-      const topics = await planTopicList(bedrockClient, InvokeModelCommand, {
-        brief,
-        itemNoun: `${engagementType} questions`,
-        count: questionCount
-      });
-
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ topics }),
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': 'Content-Type',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS'
-        }
-      };
-    }
-
-    console.log(`🤖 Generating ${questionCount} ${engagementType} questions`);
-
-    // Build the AI prompt based on engagement type
-    let prompt = `You are an expert educational content creator. `;
-
-    if (existingQuestion) {
-      prompt += `Please improve the following ${engagementType} question based on the user's feedback.\n\n`;
-      prompt += `EXISTING QUESTION:\n`;
-      prompt += `Title: ${existingQuestion.title}\n`;
-      prompt += `Category: ${existingQuestion.category}\n`;
-      prompt += `Detail: ${existingQuestion.detail}\n`;
-      if (engagementType === 'trivia') {
-        prompt += `Option A: ${existingQuestion.optionA}\n`;
-        prompt += `Option B: ${existingQuestion.optionB}\n`;
-        prompt += `Option C: ${existingQuestion.optionC}\n`;
-        prompt += `Option D: ${existingQuestion.optionD}\n`;
-        prompt += `Correct Answer: ${existingQuestion.correctAnswer}\n`;
-        if (existingQuestion.answerDetails) {
-          prompt += `Answer Explanation: ${existingQuestion.answerDetails}\n`;
-        }
-      } else if (engagementType === 'poll') {
-        prompt += `Options: ${existingQuestion.options.join(', ')}\n`;
-      } else if (engagementType === 'wavelength') {
-        prompt += `Topic/Word: ${existingQuestion.title}\n`;
-        if (existingQuestion.detail) {
-          prompt += `Instructions: ${existingQuestion.detail}\n`;
-        }
-      }
-      prompt += `\nUSER FEEDBACK: ${userInput}\n\n`;
-    } else {
-      prompt += `Please create ${questionCount} high-quality ${engagementType} questions based on the following requirements:\n\n`;
-      prompt += `REQUIREMENTS: ${userInput}\n\n`;
-      if (context?.title) prompt += `Question Set Title: ${context.title}\n`;
-      if (context?.description) prompt += `Description: ${context.description}\n`;
-
-      // Phase 2 of two-phase generation: anchor this batch to its assigned
-      // topics so parallel batches stay distinct by construction
-      const topicAssignmentText = buildTopicAssignmentText(assignedTopics, otherTopics, `${engagementType} questions`);
-      if (topicAssignmentText) {
-        prompt += topicAssignmentText;
-      }
-    }
-
-    // Add format instructions based on engagement type
-    if (engagementType === 'trivia') {
-      prompt += '\n\nPlease format your response as a JSON array with this structure:';
-      prompt += '\n[{"title": "Question title", "questionDetail": "Full question text", "category": "Category", "school": "School", "customInstructions": "Instructions", "optionA": "First option", "optionB": "Second option", "optionC": "Third option", "optionD": "Fourth option", "correctAnswer": "OptionA", "difficulty": "medium", "answerDetails": "Explanation of correct answer"}]';
-      prompt += '\n\nFor trivia questions:';
-      prompt += '\n- title: Short descriptive title of the question';
-      prompt += '\n- questionDetail: The actual question text shown to players';
-      prompt += '\n- optionA, optionB, optionC, optionD: The four answer choices';
-      prompt += '\n- correctAnswer: Must be exactly "OptionA", "OptionB", "OptionC", or "OptionD"';
-      prompt += '\n- answerDetails: Educational explanation about why the answer is correct';
-      prompt += '\n- difficulty: "easy", "medium", or "hard"';
-    } else if (engagementType === 'poll') {
-      prompt += '\n\nPlease format your response as a JSON array with this structure:';
-      prompt += '\n[{"title": "Poll question", "category": "Category", "detail": "Context", "school": "School", "customInstructions": "Instructions", "options": ["Option1", "Option2"], "allowMultiple": false}]';
-    } else if (engagementType === 'wavelength') {
-      prompt += '\n\nPlease format your response as a JSON array with this structure:';
-      prompt += '\n[{"title": "Word or phrase", "category": "Category", "detail": "Contextual scenario", "school": "Business School", "customInstructions": "What are the first 10 words you think of when you think of this word?"}]';
-      prompt += '\n\nFor wavelength questions:';
-      prompt += '\n- title: The key word or phrase players will associate with (e.g., "Agentic AI", "Leadership", "Innovation")';
-      prompt += '\n- detail: A brief contextual scenario that introduces the word/concept (e.g., "Your product manager stopped you in the hall and said we need to add **Agentic AI** to our dashboard.")';
-      prompt += '\n- category: The broader theme or subject area (e.g., "AI", "Management", "Technology")';
-      prompt += '\n- customInstructions: Always set to "What are the first 10 words you think of when you think of this word?"';
-      prompt += '\n- school: Always set to "Business School"';
-      prompt += '\n\nCreate scenarios that feel realistic and relevant to business/professional contexts. Use **bold** formatting around the key word/phrase in the detail field.';
-    } else {
-      prompt += '\n\nPlease format your response as a JSON array with this structure:';
-      prompt += '\n[{"title": "Question text", "category": "Category", "detail": "Detailed context", "school": "School", "customInstructions": "Instructions"}]';
-    }
-
-    prompt += '\n\nIMPORTANT: Return ONLY the JSON array, no additional text.';
-
-    // Right-size max_tokens to the requested count so responses finish well
-    // under API Gateway's ~30s integration timeout
-    const maxTokens = Math.min(1000 + ((questionCount || 1) * 700), 8000);
-
-    console.log('🤖 Sending prompt to Claude...', { maxTokens });
-    const aiResponse = await invokeClaudeWithRetry(bedrockClient, InvokeModelCommand, prompt, maxTokens);
-    console.log('✅ Received response from Claude');
-
-    // Parse the JSON response with improved error handling
-    let questions;
-    try {
-      console.log('🔍 Parsing AI response...');
-      
-      // Try multiple parsing strategies
-      let jsonString = aiResponse.trim();
-
-      // Strategy 1: Direct parse if it looks like JSON
-      if (jsonString.startsWith('[') && jsonString.endsWith(']')) {
-        console.log('✅ Direct JSON parsing...');
-        questions = JSON.parse(jsonString);
-      } else {
-        // Strategy 2: Extract JSON array with regex
-        console.log('🔍 Extracting JSON with regex...');
-        const jsonMatch = jsonString.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          console.log('✅ Found JSON match, parsing...');
-          questions = JSON.parse(jsonMatch[0]);
-        } else {
-          // Strategy 3: Try to find and clean JSON
-          console.log('🔍 Cleaning and extracting JSON...');
-          const startIndex = jsonString.indexOf('[');
-          const endIndex = jsonString.lastIndexOf(']');
-          if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
-            const extractedJson = jsonString.substring(startIndex, endIndex + 1);
-            console.log('✅ Extracted JSON, parsing...');
-            questions = JSON.parse(extractedJson);
-          } else {
-            throw new Error('No JSON array found in response');
-          }
-        }
-      }
-
-      console.log('✅ Successfully parsed', questions.length, 'questions');
-    } catch (parseError) {
-      console.error('❌ Failed to parse AI response:', parseError);
-      console.log('Raw response:', aiResponse);
-      throw new Error('Failed to parse AI response as JSON: ' + parseError.message);
-    }
-
-    // Add IDs and ensure proper structure
-    const processedQuestions = questions.map(q => ({
-      id: Date.now() + Math.random(),
-      active: true,
-      ...q
-    }));
-
-    console.log(`✅ Successfully generated ${processedQuestions.length} questions`);
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        questions: processedQuestions,
-        message: `Generated ${processedQuestions.length} questions successfully`
-      }),
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      }
-    };
-
-  } catch (error) {
-    console.error('❌ AI generation error:', error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: `Failed to generate questions: ${error.message}` }),
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      }
-    };
-  }
+const baseProps = {
+  title: { type: 'string', description: 'The question or subject.' },
+  category: { type: 'string', description: 'The category this question belongs to.' },
+  detail: { type: 'string', description: 'Context or the scenario itself, 2-4 sentences, 350 characters maximum.' },
+  school: { type: 'string', description: 'Broader subject area.' },
+  customInstructions: { type: 'string', description: 'What the participant should do, 1-2 sentences.' },
+  tags: { type: 'array', items: { type: 'string' }, description: '3-6 lowercase kebab-case tags for filtering and search.' },
 };
+const baseRequired = ['title', 'category', 'detail', 'customInstructions', 'tags'];
+
+function buildTool(config) {
+  let properties = { ...baseProps };
+  let required = [...baseRequired];
+
+  if (config.gameType === 'trivia') {
+    properties = {
+      ...properties,
+      questionDetail: { type: 'string', description: 'The question text shown to players, 200 characters maximum.' },
+      optionA: { type: 'string', description: 'Answer choice A.' },
+      optionB: { type: 'string', description: 'Answer choice B.' },
+      optionC: { type: 'string', description: 'Answer choice C.' },
+      optionD: { type: 'string', description: 'Answer choice D.' },
+      correctAnswer: {
+        type: 'string',
+        enum: ['OptionA', 'OptionB', 'OptionC', 'OptionD'],
+        description: 'The correct option id. NOT the answer text.',
+      },
+      answerDetails: { type: 'string', description: 'Why the correct answer is correct, 1-3 sentences.' },
+      difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'], description: 'Difficulty of this question.' },
+    };
+    required = [...required, 'questionDetail', 'optionA', 'optionB', 'optionC', 'optionD', 'correctAnswer', 'answerDetails', 'difficulty'];
+  } else if (config.gameType === 'poll') {
+    properties = {
+      ...properties,
+      options: {
+        type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 5,
+        description: '2-5 genuinely distinct answer options, 60 characters each.',
+      },
+      allowMultiple: { type: 'boolean', description: 'True only where picking several options is genuinely useful.' },
+    };
+    required = [...required, 'options', 'allowMultiple'];
+  }
+
+  return {
+    name: 'emit_items',
+    description: 'Return the generated questions as structured data.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          description: 'The generated questions, in order.',
+          items: { type: 'object', properties, required },
+        },
+      },
+      required: ['items'],
+    },
+  };
+}
+
+function lengthGuidanceFor(gameType) {
+  if (gameType === 'wavelength') {
+    return [
+      '',
+      '',
+      'LENGTH LIMITS (hard limits, not targets):',
+      '- title: the subject, 1-4 words. Not a question and not a sentence.',
+      '- detail: one short scenario introducing the subject, 200 characters maximum.',
+      '- customInstructions: "What are the first 10 words you think of when you think of this word?"',
+      '',
+      'Wavelength is a word-association alignment game: every participant lists words',
+      'for the subject and the game measures overlap. Do not write questions or',
+      'anything with a correct answer.',
+    ].join('\n');
+  }
+  return [
+    '',
+    '',
+    'LENGTH LIMITS (hard limits, not targets):',
+    '- title: 3-10 words. Do not use a colon to bolt a subtitle onto the title.',
+    '- detail: 2-4 sentences, 350 characters maximum.',
+    '- customInstructions: 1-2 sentences, 200 characters maximum.',
+    'Write only what the content needs; do not pad to reach a limit.',
+  ].join('\n');
+}
+
+function buildPrompt({ config, count, alreadyUsedTitles }) {
+  const { gameType, existingQuestion, context, userInput } = config;
+  let p = 'You are an expert educational content creator.\n\n';
+
+  if (existingQuestion) {
+    p += `Improve the following ${gameType} question based on the user's feedback.\n\n`;
+    p += 'EXISTING QUESTION:\n';
+    for (const [label, value] of [
+      ['Title', existingQuestion.title],
+      ['Category', existingQuestion.category],
+      ['Detail', existingQuestion.detail],
+      ['Correct Answer', existingQuestion.correctAnswer],
+      ['Answer Explanation', existingQuestion.answerDetails],
+    ]) {
+      if (value) p += `${label}: ${value}\n`;
+    }
+    if (Array.isArray(existingQuestion.options) && existingQuestion.options.length > 0) {
+      p += `Options: ${existingQuestion.options.join(', ')}\n`;
+    }
+    for (const key of ['optionA', 'optionB', 'optionC', 'optionD']) {
+      if (existingQuestion[key]) p += `${key}: ${existingQuestion[key]}\n`;
+    }
+    p += `\nUSER FEEDBACK: ${userInput}\n`;
+    p += '\nReturn exactly ONE improved question.';
+  } else {
+    p += `Create ${count} high-quality ${gameType} questions.\n\nREQUIREMENTS: ${userInput}\n`;
+    if (context?.title) p += `Question Set Title: ${context.title}\n`;
+    if (context?.description) p += `Description: ${context.description}\n`;
+    if (context?.customInstructions) p += `Set Instructions: ${context.customInstructions}\n`;
+    if (context?.aiContextInstructions) p += `Additional Context: ${context.aiContextInstructions}\n`;
+
+    if (alreadyUsedTitles.length > 0) {
+      p += `\nALREADY GENERATED for this set — do not repeat, rephrase, or write a near-variant of any of these:\n`;
+      p += alreadyUsedTitles.map((t) => `- ${t}`).join('\n');
+    }
+  }
+
+  p += lengthGuidanceFor(gameType);
+  p += tagGuidance();
+  p += `\n\nReturn the questions by calling the emit_items tool. Do not write prose.`;
+  return p;
+}
+
+function normalizeItem(raw, config) {
+  const title = String(raw?.title || '').trim();
+  if (!title) return null;
+
+  const item = {
+    id: Date.now() + Math.random(),
+    active: true,
+    title,
+    category: String(raw?.category || 'General').trim(),
+    detail: String(raw?.detail || '').trim(),
+    school: String(raw?.school || 'Business School').trim(),
+    customInstructions: String(raw?.customInstructions || '').trim(),
+    tags: normalizeTags(raw?.tags),
+  };
+
+  if (config.gameType === 'trivia') {
+    const valid = new Set(['OptionA', 'OptionB', 'OptionC', 'OptionD']);
+    const answer = String(raw?.correctAnswer || '').trim();
+    item.questionDetail = String(raw?.questionDetail || title).trim();
+    item.optionA = String(raw?.optionA || '').trim();
+    item.optionB = String(raw?.optionB || '').trim();
+    item.optionC = String(raw?.optionC || '').trim();
+    item.optionD = String(raw?.optionD || '').trim();
+    item.correctAnswer = valid.has(answer) ? answer : 'OptionA';
+    item.answerDetails = String(raw?.answerDetails || '').trim();
+    item.difficulty = String(raw?.difficulty || 'medium').trim();
+  } else if (config.gameType === 'poll') {
+    const options = (Array.isArray(raw?.options) ? raw.options : [])
+      .map((o) => String(o || '').trim()).filter(Boolean).slice(0, 5);
+    if (options.length < 2) return null;
+    item.options = options;
+    item.allowMultiple = raw?.allowMultiple === true;
+  }
+
+  return item;
+}
+
+exports.handler = makeGenerationHandler({
+  kind: 'question',
+  tokenKind: 'question',
+  parseRequest,
+  buildTool,
+  buildPrompt,
+  normalizeItem,
+});
