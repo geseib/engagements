@@ -33,16 +33,10 @@ The 5 failing frontend suites are stale and out of scope: they predate the auth 
 | 2 | `anonymousUntilReveal` persists through create | `37eae389` | clean |
 | 3 | Redact `GET /games/{id}/answers` | `2c588841` + fix `6de72ea8` | clean after 1 fix round |
 | 4 | Redact `POST /games/{id}/start-vote` | `35a922be` | clean |
-| 5 | Redact the `playerAnswered` socket frame | `8476e704` + fix `f4c1a8ac` | spec ❌ → fixed; re-review outstanding |
+| 5 | Redact the `playerAnswered` socket frame | `8476e704` + fix `f4c1a8ac` | clean after 1 fix round |
 | 6 | `POST /games/{id}/reveal-authors` | `f1d65470` | **not yet reviewed** |
 
-**Tasks 5 and 6 have not completed their review gate.** Re-run them before trusting either:
-
-```
-.superpowers/sdd/2026-08-09-anonymous-responses/review-35a922be..8476e704.diff
-```
-
-and generate one for Task 6 with
+**Task 6 has not completed its review gate.** Generate its review package with
 `<skill>/scripts/review-package docs/superpowers/plans/2026-08-09-anonymous-responses.md 8476e704 f1d65470`.
 
 ### Remaining tasks
@@ -99,6 +93,7 @@ All take `AWS_PROFILE=adminaccess node scripts/<name>.js engagetest [--apply]` a
 - **Unawaited async `check()` silently drops assertions.** The plan's test template produced bare `check(...)` calls against an async helper; the process exits before the assertion resolves and the check vanishes from the count with **no failure signal**. Caught empirically in Task 5 (21 call sites, 20 executed). Both test files are now verified clean, but any new test appended to `tests/anonymous-round-flow.js` or `tests/anonymity-contract.js` must `await` every call.
 - **`seedAnonymousRound` seeds no `CONNECTION#` rows.** Any test asserting on a broadcast must `put()` its own connection, or `sent` stays empty and the assertion passes vacuously. Tasks 4, 5 and 6 each add their own inside their own section; the shared helper is deliberately untouched.
 - **`get-answers.js`'s player branch returns no `answers` array at all outside `VOTE#`.** Correct behaviour — players must not see each other's answers during ASK — but it makes any host/player parity check fail if seeded at `ASK`. Pinned by a test so nobody "fixes" it.
+- **`handlePlayerVote` builds `ROUND#` keys unpadded** (`message.js:493,513,524`) — the same defect fixed in the `playerAnswered` branch, left alone because the `VOTE#` branch was out of scope. Worth its own task.
 - **`message.js` routing makes `playerVoted` unreachable.** `isHostMessage` is checked before `isPlayerMessage` and both match a `VOTE#` prefix, so `handlePlayerMessage`'s `playerVoted` branch is dead code. Pre-existing, unrelated to anonymity, worth its own look.
 - **The ballot is positional and stable only by accident** (spec §5.6.5a, risk R1). `submit-vote.js:63` stores `{"0": 1, "1": 2}` and `get-results.js:276` tallies against `answers[index]`; the indices agree only because the answer sort key ends in the author's name. Any re-keying, or an answer arriving mid-round, silently lands votes on the wrong answers. **Independent of anonymity — do not bundle.**
 - **`reopen-round` does not exist** (risk R2). A host who advances early cannot recover.
