@@ -1166,6 +1166,14 @@ body {
   transform: scale(1.05);
 }
 
+/* Same layout as .qr-code-clickable, but there is nothing to click through to
+   -- this QR opens the remote directly, so no pointer affordance or hover. */
+.qr-code-static {
+  border-radius: 12px;
+  padding: 15px;
+  display: inline-block;
+}
+
 .qr-section p {
   margin-top: 10px;
   font-weight: 600;

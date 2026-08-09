@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import './auth.css';
 import Icon from '../components/Icon';
+import { takeReturnPath } from './returnPath';
 
 // ============================================================================
 // LEGACY_POOL — rollback only. Remove after the old Cognito pool is deleted.
@@ -78,12 +79,14 @@ const OAuthCallback = ({ onSuccess, onError }) => {
             console.log('🔍 OAuth Callback: Redirecting to pending approval...');
             window.location.href = '/auth?status=pending';
           } else {
-            // Approved user - redirect to main app
-            console.log('🔍 OAuth Callback: Redirecting approved user to main app...');
+            // Approved user — back to wherever they were headed before the
+            // redirect, defaulting to the app root only when there was nowhere.
+            const back = takeReturnPath();
+            console.log('🔍 OAuth Callback: Redirecting approved user to', back || '/');
             if (onSuccess) {
               onSuccess(user);
             } else {
-              window.location.href = '/';
+              window.location.href = back || '/';
             }
           }
         } else {

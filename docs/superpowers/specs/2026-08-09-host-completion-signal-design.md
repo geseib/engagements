@@ -122,5 +122,9 @@ Neither is optional. A completion signal built on a frozen count is a green ligh
 ## 6. Out of scope, recorded
 
 - **The Console, the question browser, how-to-play and setup** (mockups 11, 18–20). Still plans 3–5 of the host redesign, still unwritten. This spec touches the meter and the rail only.
-- **A QR anywhere but the rail.** The side panel's existing click-to-expand stays exactly as it is.
+- **A QR anywhere but the rail and the host panel.** The rail carries the PLAYER
+  join QR (§3). The host panel's QR now targets the Host Remote instead of the
+  join URL, so the operator can pick the remote up on their own phone — the
+  owner's request, 2026-08-09. The two never compete because they serve
+  different people.
 - **Sound.** A chime would be noticeable and is the wrong instrument in a room where someone may be speaking.

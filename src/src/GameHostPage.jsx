@@ -2891,6 +2891,9 @@ Ready to engage? See you there!`;
   // URL, and a room reading a bare address off a projector needs the shortest
   // thing that works. The player page takes the session code by hand.
   const joinDisplayUrl = `${window.location.host}/play`;
+  // The HOST's own phone, not a player's. The stage's rail carries the player
+  // join QR (see Rail's join code); this one hands the operator the remote.
+  const remoteUrl = `${window.location.origin}/remote?gameId=${gameId}`;
 
   // State for copy confirmation messages
   const [sidebarCopyMessage, setSidebarCopyMessage] = useState(false);
@@ -3819,9 +3822,14 @@ Ready to engage? See you there!`;
                 )}
               </div>
               <div className="qr-section">
-                <div className="qr-code-clickable" onClick={() => setShowExpandedQR(true)}>
-                  <QRCodeSVG value={playUrl} size={180} />
-                  <p>Scan to join!</p>
+                {/* The host's own phone, scanned from arm's length, so 180px is
+                    plenty and there is nothing to magnify. The click-to-expand
+                    is deliberately gone: the expanded overlay renders `playUrl`,
+                    so leaving it here would open a magnified PLAYER QR on top of
+                    a REMOTE one. The room-facing QR is the rail's now (Task 2). */}
+                <div className="qr-code-static">
+                  <QRCodeSVG value={remoteUrl} size={180} />
+                  <p>Scan to open the remote on your phone</p>
                 </div>
               </div>
 

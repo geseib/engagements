@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
 import './auth.css';
 import Icon from '../components/Icon';
+import { rememberReturnPath } from './returnPath';
 
 const LoginForm = ({ onToggleMode, onSuccess, initialError }) => {
   const [formData, setFormData] = useState({
@@ -82,7 +83,11 @@ const LoginForm = ({ onToggleMode, onSuccess, initialError }) => {
     
     // Track that we're in login mode
     sessionStorage.setItem('authMode', 'login');
-    
+    // Where we were headed, so the callback can put us back. Without this the
+    // callback's hardcoded '/' sends a host scanning the remote QR to a second
+    // host page on their phone.
+    rememberReturnPath();
+
     // Use window variables with fallback to env variables (same as AuthContext)
     const userPoolId = window.USER_POOL_ID || process.env.REACT_APP_USER_POOL_ID;
     const clientId = window.USER_POOL_CLIENT_ID || process.env.REACT_APP_CLIENT_ID;
