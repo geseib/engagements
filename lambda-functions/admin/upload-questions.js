@@ -10,6 +10,7 @@ const {
   setPartition,
   toVersion,
 } = require('./shared/set-version');
+const { normalizeTags } = require('./shared/tags');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -270,6 +271,9 @@ exports.handler = async (event) => {
     let schoolIndex = getColumnIndex('School');
     let customInstructionIndex = getColumnIndex('CustomInstruction');
     let imageIndex = getColumnIndex('Image'); // Optional artwork/image URL ("Art Title" sets)
+    // Optional Tags column. Every AI builder now suggests tags, and until this
+    // existed they were displayed, edited and then silently dropped at import.
+    let tagsIndex = getColumnIndex('Tags');
 
     // Engagement-type specific columns
     let correctAnswerIndex = -1;
@@ -320,12 +324,20 @@ exports.handler = async (event) => {
       const hl = h.toLowerCase();
       return hl.includes('image') || hl.includes('artwork') || hl.includes('picture');
     });
+    // Tags / Keywords / Labels. Deliberately an EXACT-ish match rather than a
+    // loose `includes` — a loose match on "tag" would also claim a column like
+    // "Stage", and the instruction fallback below must not claim "Tags" either.
+    if (tagsIndex === -1) tagsIndex = headers.findIndex(h => {
+      const hl = h.toLowerCase().trim();
+      return hl === 'tags' || hl === 'tag' || hl === 'keywords' || hl === 'labels';
+    });
 
     console.log('📋 Column Mapping:');
     console.log(`  Category: ${categoryIndex >= 0 ? headers[categoryIndex] : 'NOT FOUND'} (index: ${categoryIndex})`);
     console.log(`  Title: ${titleIndex >= 0 ? headers[titleIndex] : 'NOT FOUND'} (index: ${titleIndex})`);
     console.log(`  Detail: ${detailIndex >= 0 ? headers[detailIndex] : 'NOT FOUND'} (index: ${detailIndex})`);
     console.log(`  Image: ${imageIndex >= 0 ? headers[imageIndex] : 'NOT FOUND'} (index: ${imageIndex})`);
+    console.log(`  Tags: ${tagsIndex >= 0 ? headers[tagsIndex] : 'NOT FOUND'} (index: ${tagsIndex})`);
 
     // Check required columns
     if (categoryIndex === -1 || titleIndex === -1) {
@@ -372,6 +384,7 @@ exports.handler = async (event) => {
         const school = cell(values, schoolIndex);
         const questionCustomInstruction = cell(values, customInstructionIndex);
         const image = cell(values, imageIndex);
+        const tagsCell = cell(values, tagsIndex);
 
         // Use new fields if available, otherwise fall back to legacy
         const finalQuestionDetail = questionDetail || legacyDetail || ''; // Use question detail or legacy detail for trivia
@@ -391,6 +404,10 @@ exports.handler = async (event) => {
             Image: toMediaKey(image, setId),
             // Use per-question custom instruction if available, otherwise use set-level custom instructions
             CustomInstructions: questionCustomInstruction || customInstructions?.trim() || '',
+            // Pipe-separated, matching the Options column's convention.
+            // normalizeTags also accepts a comma string, so a hand-edited CSV
+            // using commas inside a quoted cell still works.
+            Tags: normalizeTags(tagsCell.includes('|') ? tagsCell.split('|') : tagsCell),
             Active: true,
             QuestionNumber: questionNumber ? parseInt(questionNumber) : questionCount // Use Question# from CSV if available, otherwise use global count
           };
@@ -623,6 +640,7 @@ exports.handler = async (event) => {
         // here. Written only when non-empty so ordinary sets are unchanged.
         ...(question.AnswerDetails ? { AnswerDetails: question.AnswerDetails } : {}),
         CustomInstructions: question.CustomInstructions || '',
+        Tags: question.Tags || [],
         OrderInCategory: categoryRelativeNumber,
         QuestionNumber: question.QuestionNumber || categoryCounters[categoryId], // Use CSV value or category counter
         CategoryQuestionNumber: question.QuestionNumber || categoryCounters[categoryId], // Same as QuestionNumber
