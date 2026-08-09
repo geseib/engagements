@@ -1,6 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, QueryCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, QueryCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { broadcastToGame } = require('./schema-compliant-manager');
+const { isHidden, redactAnswers } = require('./anonymity');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -44,6 +45,29 @@ exports.handler = async (event) => {
     const answers = answersResult.Items || [];
     console.log(`🗳️ Found ${answers.length} answers for question ${paddedQuestionNumber}`);
 
+    // Anonymity gate. The answers travel over HTTP, which is where the
+    // redaction belongs — the votingStarted broadcast below carries no
+    // attribution and never has.
+    const [metaRes, roundRes] = await Promise.all([
+      db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
+      })),
+      db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: `ROUND#${paddedQuestionNumber}` }
+      }))
+    ]);
+    const hidden = isHidden(metaRes.Item, roundRes.Item);
+
+    const ballot = answers.map(answer => ({
+      playerId: answer.PlayerName,
+      playerName: answer.PlayerName,
+      name: answer.PlayerName, // Add name field for frontend compatibility
+      answer: answer.Answer,
+      submittedAt: answer.SubmittedAt
+    }));
+
     // Broadcast voting started to everyone attached to the game, host included.
     //
     // `newState` is not decoration. GameHostPage's votingStarted handler reads
@@ -70,13 +94,7 @@ exports.handler = async (event) => {
         status: 'OK',
         questionNumber: questionNumber,
         newState: newState,
-        answers: answers.map(answer => ({
-          playerId: answer.PlayerName,
-          playerName: answer.PlayerName,
-          name: answer.PlayerName, // Add name field for frontend compatibility
-          answer: answer.Answer,
-          submittedAt: answer.SubmittedAt
-        }))
+        answers: hidden ? redactAnswers(ballot) : ballot
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }
     };

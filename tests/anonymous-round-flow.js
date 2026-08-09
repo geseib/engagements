@@ -132,6 +132,7 @@ process.env.TABLE_NAME = 'test-table';
 process.env.WEBSOCKET_API_ENDPOINT = 'https://ws.test.invalid/dev';
 
 const { handler: getAnswers } = require(path.join(REPO, 'lambda-functions/game/get-answers.js'));
+const { handler: startVote } = require(path.join(REPO, 'lambda-functions/websocket/start-vote.js'));
 
 // ---- Tiny harness ----------------------------------------------------------
 let pass = 0, fail = 0;
@@ -236,6 +237,38 @@ const legacy = JSON.parse((await askAnswers('3004', 'host')).body);
 // Games created before this feature must be anonymous, not accidentally open.
 await check('a pre-feature game defaults to hidden', () =>
   assert.ok(!('playerName' in legacy.answers[0])));
+
+console.log('\n5. POST /start-vote while hidden');
+
+seedAnonymousRound('3005');
+// seedAnonymousRound doesn't seed connections (it's built for get-answers, which
+// doesn't broadcast). start-vote's votingStarted frame only reaches `sent` if
+// broadcastToGame finds at least one CONNECTION# record, so seed one here.
+put({ PK: 'GAME#3005', SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST', IsHost: true });
+const voteRes = await startVote({ pathParameters: { gameId: '3005' }, body: JSON.stringify({ questionNumber: 1 }) });
+const votePayload = JSON.parse(voteRes.body);
+
+await check('start-vote still returns 200', () =>
+  assert.strictEqual(voteRes.statusCode, 200));
+await check('the ballot carries all the answers', () =>
+  assert.strictEqual(votePayload.answers.length, 2));
+await check('no playerId — the label that named the answer', () =>
+  assert.ok(votePayload.answers.every(a => !('playerId' in a)),
+    `leaked: ${JSON.stringify(votePayload.answers[0])}`));
+await check('no playerName and no name', () =>
+  assert.ok(votePayload.answers.every(a => !('playerName' in a) && !('name' in a))));
+await check('answer order is untouched — the ballot runs on it', () =>
+  assert.deepStrictEqual(votePayload.answers.map(a => a.answer),
+    ["Ada's answer", "Grace's answer"]));
+
+// Regression guard for the fix in d9e58aae — this must not be lost.
+await check('votingStarted still carries newState', () =>
+  assert.strictEqual(sent[0]?.message?.newState, 'VOTE#001'));
+await check('votingStarted carries no attribution and never did', () => {
+  const frame = sent[0].message;
+  assert.ok(!('playerName' in frame) && !('answers' in frame),
+    'the broadcast has grown an attribution field');
+});
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
