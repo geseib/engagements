@@ -1,201 +1,186 @@
-const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
-const { invokeClaudeWithRetry, planTopicList, buildTopicAssignmentText } = require('./shared/bedrock-utils');
+/**
+ * AI trivia generation — asynchronous, structured, tag-suggesting.
+ *
+ * THE BUG THIS REPLACES. Generation ran inside the HTTP request, and `RestApi`
+ * is an AWS::Serverless::HttpApi whose 30s integration timeout is a hard
+ * ceiling. The client worked around it by fanning out parallel three-question
+ * batches, but every one of those calls raced the same wall clock, and each was
+ * blind to the other batches — which is why duplicates appeared and why a
+ * "Batch N of M: HTTP 503" could not be retried into success.
+ *
+ * Now: POST creates a job and returns 202, a self-invoked worker generates
+ * against the full 900s, and the client polls. Passes run in sequence and each
+ * one is told what the previous ones wrote, so duplicate avoidance is a
+ * property of the prompt rather than a client-side filter.
+ *
+ * ALSO FIXED: numberOfCategories and mustHaveCategories. TriviaAIBuilder has
+ * sent both on every request since it was written; this handler never
+ * destructured them, so the category controls in the trivia UI have never done
+ * anything at all.
+ */
 
-const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
+const { makeGenerationHandler } = require('./shared/generation-handler');
+const { tagGuidance } = require('./shared/structured-generation');
+const { normalizeTags } = require('./shared/tags');
 
-exports.handler = async (event) => {
-  try {
-    console.log('🧠 Lambda function started for trivia generation');
-    console.log('Event:', JSON.stringify(event, null, 2));
+const MAX_COUNT = 100;
+const OPTION_KEYS = ['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF'];
 
-    // Handle CORS preflight
-    if (event.requestContext?.http?.method === 'OPTIONS' || event.httpMethod === 'OPTIONS') {
-      return {
-        statusCode: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': 'Content-Type',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS'
-        },
-        body: ''
-      };
-    }
+function parseRequest(payload) {
+  const total = Math.min(Math.max(parseInt(payload.count, 10) || 1, 1), MAX_COUNT);
+  const numChoices = Math.min(Math.max(parseInt(payload.numChoices, 10) || 4, 2), 6);
+  const numCorrect = Math.min(Math.max(parseInt(payload.numCorrect, 10) || 1, 1), numChoices);
+  // Clamp against the TOTAL, not the chunk. Clamping against a chunk is what
+  // collapsed the scenario builder's category count to 1 on every pass.
+  const categories = Math.min(parseInt(payload.numberOfCategories, 10) || 3, 24, Math.max(total, 1));
+  return {
+    total,
+    config: {
+      topic: payload.topic || 'general knowledge',
+      category: payload.category || '',
+      audience: payload.audience || '',
+      difficulty: payload.difficulty || 'medium',
+      customPrompt: payload.customPrompt || '',
+      numChoices, numCorrect, categories,
+      mustHaveCategories: payload.mustHaveCategories || '',
+    },
+  };
+}
 
-    if (!event.body) {
-      throw new Error('No request body provided');
-    }
-
-    const { topic, category, audience, difficulty, count, numChoices, numCorrect, customPrompt, planTopics, assignedTopics, otherTopics } = JSON.parse(event.body);
-
-    // Phase 1 of two-phase generation: plan distinct sub-topics before the
-    // client fans out parallel batches (each batch is then anchored to its
-    // assigned topics so parallel batches can't duplicate each other)
-    if (planTopics === true) {
-      let brief = `Trivia questions about ${topic}.`;
-      if (category) brief += ` Category: ${category}.`;
-      if (audience) brief += ` Target audience: ${audience}.`;
-      if (difficulty) brief += ` Difficulty level: ${difficulty}.`;
-      if (customPrompt) brief += ` Additional requirements: ${customPrompt}`;
-
-      const topics = await planTopicList(bedrockClient, InvokeModelCommand, {
-        brief,
-        itemNoun: 'trivia questions',
-        count
-      });
-
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ topics }),
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': 'Content-Type',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS'
-        }
-      };
-    }
-
-    // Allow up to 100 trivia questions
-    const limitedCount = Math.min(count, 100);
-    if (limitedCount !== count) {
-      console.log('⚠️ Limited trivia count from', count, 'to', limitedCount, 'maximum allowed is 100');
-    }
-
-    console.log('🧠 Generating trivia:', { topic, category, audience, difficulty, count: limitedCount, numChoices, numCorrect });
-
-    // Build trivia generation prompt
-    let fullPrompt = 'You are an expert trivia question creator. ';
-    fullPrompt += 'Create ' + limitedCount + ' trivia questions about ' + topic + '. ';
-
-    if (category) fullPrompt += 'Category: ' + category + '. ';
-    if (audience) fullPrompt += 'Target audience: ' + audience + '. ';
-    fullPrompt += 'Difficulty level: ' + difficulty + '. ';
-    fullPrompt += 'Each question should have ' + numChoices + ' answer choices. ';
-    if (numCorrect > 1) {
-      fullPrompt += 'Some questions should have ' + numCorrect + ' correct answers. ';
-    }
-
-    if (customPrompt) {
-      fullPrompt += 'Additional requirements: ' + customPrompt + '. ';
-    }
-
-    // Phase 2 of two-phase generation: anchor this batch to its assigned
-    // topics so parallel batches stay distinct by construction
-    const topicAssignmentText = buildTopicAssignmentText(assignedTopics, otherTopics, 'trivia questions');
-    if (topicAssignmentText) {
-      fullPrompt += topicAssignmentText + '\n\n';
-    }
-
-    fullPrompt += 'Return as JSON array with this structure: ';
-    fullPrompt += '[{"title": "Short descriptive title for the question", "questionDetail": "The actual question text shown to players", "category": "Category", "answerDetails": "Educational explanation about the correct answer", "school": "Context", "optionA": "Choice A", "optionB": "Choice B", "optionC": "Choice C", "optionD": "Choice D"';
-    if (numChoices >= 5) fullPrompt += ', "optionE": "Choice E"';
-    if (numChoices >= 6) fullPrompt += ', "optionF": "Choice F"';
-    
-    if (numCorrect > 1) {
-      fullPrompt += ', "correctAnswer": ["OptionA", "OptionC"]';
-      fullPrompt += ' IMPORTANT: For multiple correct answers, correctAnswer must be an array of option IDs (e.g., ["OptionA", "OptionC"]). ';
-    } else {
-      fullPrompt += ', "correctAnswer": "OptionA"';
-      fullPrompt += ' IMPORTANT: correctAnswer must be the option ID (OptionA, OptionB, OptionC, or OptionD), not the answer text. ';
-    }
-    
-    fullPrompt += ', "difficulty": "' + difficulty + '"}]';
-    fullPrompt += ' Return ONLY the JSON array.';
-
-    // Right-size max_tokens to the requested count so responses finish well
-    // under API Gateway's ~30s integration timeout
-    const maxTokens = Math.min(1000 + (limitedCount * 500), 8000);
-
-    console.log('🤖 Sending prompt to Claude...', { maxTokens });
-    const aiResponse = await invokeClaudeWithRetry(bedrockClient, InvokeModelCommand, fullPrompt, maxTokens);
-    console.log('✅ Received response from Claude');
-
-    // Parse the JSON response with improved error handling
-    let questions;
-    try {
-      console.log('🔍 Parsing AI response...');
-      console.log('Raw response length:', aiResponse.length);
-      console.log('First 500 chars:', aiResponse.substring(0, 500));
-
-      // Try multiple parsing strategies
-      let jsonString = aiResponse.trim();
-
-      // Strategy 1: Direct parse if it looks like JSON
-      if (jsonString.startsWith('[') && jsonString.endsWith(']')) {
-        console.log('✅ Direct JSON parsing...');
-        questions = JSON.parse(jsonString);
-      } else {
-        // Strategy 2: Extract JSON array with regex
-        console.log('🔍 Extracting JSON with regex...');
-        const jsonMatch = jsonString.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          console.log('✅ Found JSON match, parsing...');
-          questions = JSON.parse(jsonMatch[0]);
-        } else {
-          // Strategy 3: Try to find and clean JSON
-          console.log('🔍 Cleaning and extracting JSON...');
-          const startIndex = jsonString.indexOf('[');
-          const endIndex = jsonString.lastIndexOf(']');
-          if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
-            const extractedJson = jsonString.substring(startIndex, endIndex + 1);
-            console.log('✅ Extracted JSON, parsing...');
-            questions = JSON.parse(extractedJson);
-          } else {
-            throw new Error('No JSON array found in response');
-          }
-        }
-      }
-
-      console.log('✅ Successfully parsed', questions.length, 'trivia questions');
-    } catch (parseError) {
-      console.error('❌ Failed to parse AI response:', parseError);
-      console.log('Raw response:', aiResponse);
-      throw new Error('Failed to parse AI response as JSON: ' + parseError.message);
-    }
-
-    // Add IDs and ensure proper structure
-    const processedQuestions = questions.map((question, index) => ({
-      id: Date.now() + index,
-      title: question.title || 'Untitled Question',
-      questionDetail: question.questionDetail || question.prompt || question.title || 'No question text',
-      category: question.category || category || 'General',
-      answerDetails: question.answerDetails || question.detail || '',
-      school: question.school || 'General Knowledge',
-      optionA: question.optionA || '',
-      optionB: question.optionB || '',
-      optionC: question.optionC || '',
-      optionD: question.optionD || '',
-      optionE: question.optionE || '',
-      optionF: question.optionF || '',
-      correctAnswer: question.correctAnswer || 'OptionA', // Default to OptionA if not specified, can be string or array
-      difficulty: question.difficulty || difficulty || 'medium'
-    }));
-
-    console.log('✅ Successfully generated trivia questions');
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        questions: processedQuestions,
-        count: processedQuestions.length,
-        message: 'Generated trivia questions successfully'
-      }),
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      }
-    };
-
-  } catch (error) {
-    console.error('❌ Trivia generation error:', error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'Failed to generate trivia: ' + error.message }),
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      }
-    };
+function buildTool(config) {
+  const optionKeys = OPTION_KEYS.slice(0, config.numChoices);
+  const optionProps = {};
+  for (const key of optionKeys) {
+    optionProps[key] = { type: 'string', description: `Answer choice ${key.slice(-1)}.` };
   }
-};
+  const correctAnswer = config.numCorrect > 1
+    ? {
+        type: 'array',
+        items: { type: 'string', enum: optionKeys.map((k) => `Option${k.slice(-1)}`) },
+        description: `Exactly ${config.numCorrect} correct option ids, e.g. ["OptionA","OptionC"].`,
+      }
+    : {
+        type: 'string',
+        enum: optionKeys.map((k) => `Option${k.slice(-1)}`),
+        description: 'The correct option id, e.g. "OptionA". NOT the answer text.',
+      };
+
+  return {
+    name: 'emit_items',
+    description: 'Return the generated trivia questions as structured data.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          description: 'The generated trivia questions, in order.',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'Short descriptive title for the question, 3-10 words.' },
+              questionDetail: { type: 'string', description: 'The actual question text shown to players, 200 characters maximum.' },
+              category: { type: 'string', description: 'The category this question belongs to. Use only the categories requested.' },
+              ...optionProps,
+              correctAnswer,
+              answerDetails: { type: 'string', description: 'Why the correct answer is correct, 1-3 sentences, 300 characters maximum.' },
+              school: { type: 'string', description: 'Broader subject area, e.g. "General Knowledge".' },
+              difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'], description: 'Difficulty of this question.' },
+              tags: { type: 'array', items: { type: 'string' }, description: '3-6 lowercase kebab-case tags for filtering and search.' },
+            },
+            required: ['title', 'questionDetail', 'category', ...optionKeys, 'correctAnswer', 'answerDetails', 'difficulty', 'tags'],
+          },
+        },
+      },
+      required: ['items'],
+    },
+  };
+}
+
+function buildPrompt({ config, count, alreadyUsedTitles }) {
+  let p = `You are an expert trivia question creator. Create ${count} trivia questions about ${config.topic}.`;
+  if (config.category) p += `\nCategory: ${config.category}.`;
+  if (config.audience) p += `\nTarget audience: ${config.audience}.`;
+  p += `\nDifficulty level: ${config.difficulty}.`;
+  p += `\nEach question has exactly ${config.numChoices} answer choices.`;
+  if (config.numCorrect > 1) p += `\nEach question has exactly ${config.numCorrect} correct answers.`;
+  if (config.customPrompt) p += `\n\nAdditional Requirements: ${config.customPrompt}`;
+
+  p += `\n\nOrganize questions into EXACTLY ${config.categories} categories - no more, no less.`;
+  if (config.mustHaveCategories) p += `\nMust include these categories: ${config.mustHaveCategories}`;
+
+  if (alreadyUsedTitles.length > 0) {
+    p += `\n\nALREADY GENERATED for this set — do not repeat, rephrase, or write a near-variant of any of these:\n`;
+    p += alreadyUsedTitles.map((t) => `- ${t}`).join('\n');
+  }
+
+  p += [
+    '',
+    '',
+    'LENGTH LIMITS (hard limits, not targets):',
+    '- title: 3-10 words, a label for the question, not the question itself.',
+    '- questionDetail: the question as asked, 200 characters maximum.',
+    '- answerDetails: 1-3 sentences, 300 characters maximum.',
+    '- each option: 60 characters maximum.',
+    'Write only what the content needs; do not pad to reach a limit.',
+    '',
+    'The wrong answers must be plausible. An option nobody would pick is a wasted option.',
+  ].join('\n');
+  p += tagGuidance();
+  p += `\n\nReturn the questions by calling the emit_items tool. Do not write prose.`;
+  return p;
+}
+
+function normalizeItem(raw, config) {
+  const title = String(raw?.title || '').trim();
+  if (!title) return null;
+
+  const optionKeys = OPTION_KEYS.slice(0, config.numChoices);
+  const valid = new Set(optionKeys.map((k) => `Option${k.slice(-1)}`));
+
+  // The model occasionally answers with the option TEXT instead of its id. Map
+  // it back rather than dropping the question; an unmappable answer falls back
+  // to OptionA, which is what the old handler did unconditionally.
+  const toId = (value) => {
+    const s = String(value || '').trim();
+    if (valid.has(s)) return s;
+    const match = optionKeys.find((k) => String(raw?.[k] || '').trim() === s);
+    return match ? `Option${match.slice(-1)}` : null;
+  };
+
+  let correctAnswer;
+  if (config.numCorrect > 1) {
+    const list = (Array.isArray(raw?.correctAnswer) ? raw.correctAnswer : [raw?.correctAnswer])
+      .map(toId).filter(Boolean);
+    correctAnswer = list.length > 0 ? list : ['OptionA'];
+  } else {
+    const single = Array.isArray(raw?.correctAnswer) ? raw.correctAnswer[0] : raw?.correctAnswer;
+    correctAnswer = toId(single) || 'OptionA';
+  }
+
+  const item = {
+    id: Date.now() + Math.random(),
+    active: true,
+    title,
+    questionDetail: String(raw?.questionDetail || title).trim(),
+    category: String(raw?.category || config.category || 'General').trim(),
+    answerDetails: String(raw?.answerDetails || '').trim(),
+    school: String(raw?.school || 'General Knowledge').trim(),
+    correctAnswer,
+    difficulty: String(raw?.difficulty || config.difficulty || 'medium').trim(),
+    tags: normalizeTags(raw?.tags),
+  };
+  // Always emit all six keys — generateTriviaCSV writes a fixed-width row.
+  for (const key of OPTION_KEYS) {
+    item[key] = optionKeys.includes(key) ? String(raw?.[key] || '').trim() : '';
+  }
+  return item;
+}
+
+exports.handler = makeGenerationHandler({
+  kind: 'trivia',
+  tokenKind: 'trivia',
+  parseRequest,
+  buildTool,
+  buildPrompt,
+  normalizeItem,
+});
