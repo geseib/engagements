@@ -453,6 +453,54 @@ await check('an unpadded ANSWER# still finds the padded ROUND#001 row once revea
     `padded round lookup regression — unpadded messageType missed ROUND#001 and ` +
     `over-redacted a revealed round: ${JSON.stringify(answeredRevealedUnpadded)}`));
 
+console.log('\n11. Field Notes on an unrevealed round');
+
+// get-ai-summary.js also imports @aws-sdk/client-s3 and @aws-sdk/client-lambda,
+// which (unlike the packages stubbed above) aren't resolvable from local
+// node_modules at all — they exist only in the deployed bundle — so stub()'s
+// require.cache poisoning (which needs require.resolve to succeed first) can't
+// reach them. Hook the loader by name instead, as tests/ai-response-parsing.js
+// already does for this same file.
+const Module = require('module');
+const realLoad = Module._load;
+const noopClient = class { async send() { return {}; } };
+const extraStubs = new Map([
+  ['@aws-sdk/client-s3', { S3Client: noopClient, GetObjectCommand: class {} }],
+  ['@aws-sdk/client-lambda', { LambdaClient: noopClient, InvokeCommand: class {} }],
+]);
+Module._load = function (request, parent, isMain) {
+  if (extraStubs.has(request)) return extraStubs.get(request);
+  return realLoad.call(this, request, parent, isMain);
+};
+
+// Not hypothetical and not the model: get-ai-summary builds this string in code.
+const { buildFallbackSummary } = require(path.join(REPO, 'lambda-functions/game/get-ai-summary.js'));
+Module._load = realLoad; // restore — nothing after this point needs the hook
+
+const top = { playerName: 'Ada', answer: 'a splendid answer', score: 5, votes: 3 };
+
+await check('while hidden, the summary names nobody', () => {
+  const text = buildFallbackSummary({
+    totalParticipants: 2, votesCast: 3, top, gameType: 'call-and-answer',
+    question: 'What should we stop doing?', hidden: true
+  });
+  assert.ok(!text.includes('Ada'), `named an unrevealed author: ${text}`);
+});
+await check('while hidden, it still reports the most-supported answer', () => {
+  const text = buildFallbackSummary({
+    totalParticipants: 2, votesCast: 3, top, gameType: 'call-and-answer',
+    question: 'Q', hidden: true
+  });
+  assert.ok(/most[- ]supported|earned the most support/i.test(text), text);
+});
+await check('once revealed, it names the author as before', () => {
+  const text = buildFallbackSummary({
+    totalParticipants: 2, votesCast: 3, top, gameType: 'call-and-answer',
+    question: 'Q', hidden: false
+  });
+  assert.ok(text.includes("Ada's answer"), text);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
 

@@ -8,6 +8,7 @@ const { resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutpu
 const { normalizeGameType } = require('./game-types');
 const { isUsableSummaryPrompt, summaryPromptDefect } = require('./prompt-shape');
 const { resolveSetPartition } = require('./set-version');
+const { isHidden } = require('./anonymity');
 
 /**
  * Voice attribution carried out of generateAISummary() and onto the stored
@@ -897,6 +898,18 @@ exports.handler = async (event) => {
 
     const metadata = gameMetadata.Item;
 
+    // Whether this round's answers may be attributed. Loaded once, here,
+    // and threaded through to generateAISummary — both the deterministic
+    // fallback template AND the model prompt itself must not name an
+    // unrevealed author, and the round record is what settles that (per
+    // round, not per game — a host may reveal round 1 and still be mid-round
+    // on round 2).
+    const roundRecord = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: `ROUND#${paddedQuestionNumber}` }
+    }));
+    const hidden = isHidden(metadata, roundRecord.Item);
+
     // Fetch question set details for AI context and custom instructions
     let customInstruction = null;
     let questionSetAiContext = null;
@@ -1022,7 +1035,8 @@ exports.handler = async (event) => {
       gameId: gameId,
       questionSetId: questionSetId,
       paddedQuestionNumber: paddedQuestionNumber,
-      scoringConfig: scoringConfig
+      scoringConfig: scoringConfig,
+      hidden: hidden
     };
 
     // Generate AI summary
@@ -1141,17 +1155,87 @@ exports.handler = async (event) => {
   }
 };
 
-async function generateAISummary({ eventTitle, gameType, gameAiContext, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId }) {
+/**
+ * The deterministic fallback summary.
+ *
+ * Exported so the anonymity branch can be tested without invoking Bedrock. This
+ * template — not the model — is what named and quoted the top contributor on
+ * every single round before anonymity existed.
+ *
+ * `hidden` must fall back to an unattributed form. The Field Notes beat is
+ * ordered after the reveal, so in the normal flow attribution is already
+ * public by the time this renders — but a host may press Next Round without
+ * ever revealing, and the promise made to the room has to survive that.
+ */
+function buildFallbackSummary({ totalParticipants, votesCast, top, gameType, question, hidden }) {
+  const isTrivia = gameType === 'trivia';
+  const qText = typeof question === 'string' ? question
+    : (question && (question.title || question.Title || question.questionDetail || question.Detail)) || '';
+  const parts = [`${totalParticipants} ${totalParticipants === 1 ? 'response was' : 'responses were'} submitted${qText ? ` on "${qText}"` : ''}.`];
+  if (votesCast > 0) parts.push(`${votesCast} vote${votesCast === 1 ? '' : 's'} cast.`);
+
+  if (top && top.answer) {
+    const support = `earned the most support (${top.score} point${top.score === 1 ? '' : 's'}${top.votes ? `: ${top.votes}` : ''})`;
+    if (hidden) {
+      // No name, and no verbatim quote either — on a small round a distinctive
+      // phrase identifies its author as surely as the name would.
+      parts.push(`The most-supported response ${support}.`);
+    } else if (top.playerName) {
+      parts.push(`${top.playerName}'s answer${isTrivia ? '' : `, "${top.answer}",`} ${support}.`);
+    }
+  } else if (totalParticipants > 0) {
+    parts.push('The group shared a range of perspectives.');
+  }
+  return parts.join(' ');
+}
+
+exports.buildFallbackSummary = buildFallbackSummary;
+
+async function generateAISummary({ eventTitle, gameType, gameAiContext, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden }) {
+  // ANONYMITY: while hidden, nothing that ties this round's answer to its
+  // author may reach the model — not just the deterministic fallback below.
+  // The model's OWN generated summary is built from the template variables
+  // this function assembles, so leaving real names in `answers` or
+  // `results` would just let the LLM write "Ada's answer..." straight back
+  // into the Field Notes panel.
+  //
+  // `answers` and `results.voteTallies`/`results.winners` are the two places
+  // this round's authorship enters this function (both ultimately sourced
+  // from the same ANSWER# records get-answers.js and start-vote.js already
+  // redact for their own payloads). Swap the name for a placeholder in both,
+  // once, here — the dozen prompt-section builders below then keep working
+  // unmodified instead of each having to special-case anonymity.
+  //
+  // A flat, repeated placeholder (not a numbered "Participant 1",
+  // "Participant 2", ...) is deliberate: a stable per-participant anonymous
+  // identity is the stable-answerId feature, out of scope for this task —
+  // this only has to stop the model being TOLD who wrote what. Substituting
+  // rather than deleting the field also matters here, unlike the "omit, not
+  // null" contract in anonymity.js's own redactAnswer(): these values feed
+  // English prose (`"${a.playerName}'s answer..."`), where an omitted field
+  // renders as the literal string "undefined", not a safely absent key.
+  const AUTHOR_PLACEHOLDER = 'a participant';
+  if (hidden) {
+    answers = answers.map((a) => ({ ...a, playerName: AUTHOR_PLACEHOLDER, PlayerName: AUTHOR_PLACEHOLDER }));
+    results = {
+      ...results,
+      voteTallies: Object.fromEntries(
+        Object.entries(results.voteTallies || {}).map(([idx, data]) => [idx, { ...data, playerName: AUTHOR_PLACEHOLDER }])
+      ),
+      winners: (results.winners || []).map((w) => ({ ...w, playerName: AUTHOR_PLACEHOLDER })),
+    };
+  }
+
   // Prepare the context for AI
   const totalParticipants = answers.length;
   const winners = results.winners || [];
   const voteTallies = results.voteTallies || {};
-  
+
   // Get top 3 answers based on vote tallies (by index like get-results.js)
   const sortedAnswers = Object.entries(voteTallies)
     .sort(([,a], [,b]) => b.totalScore - a.totalScore)
     .slice(0, 3);
-  
+
   const topAnswers = sortedAnswers.map(([index, voteData]) => {
     return {
       playerName: voteData.playerName,
@@ -1167,17 +1251,7 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
   const buildFallback = () => {
     const votesCast = (results && results.totalVotes) || 0;
     const top = topAnswers[0];
-    const isTrivia = gameType === 'trivia';
-    const qText = typeof question === 'string' ? question
-      : (question && (question.title || question.Title || question.questionDetail || question.Detail)) || '';
-    const parts = [`${totalParticipants} ${totalParticipants === 1 ? 'response was' : 'responses were'} submitted${qText ? ` on "${qText}"` : ''}.`];
-    if (votesCast > 0) parts.push(`${votesCast} vote${votesCast === 1 ? '' : 's'} cast.`);
-    if (top && top.playerName && top.answer) {
-      parts.push(`${top.playerName}'s answer${isTrivia ? '' : `, "${top.answer}",`} earned the most support (${top.score} point${top.score === 1 ? '' : 's'}${top.votes ? `: ${top.votes}` : ''}).`);
-    } else if (totalParticipants > 0) {
-      parts.push('The group shared a range of perspectives.');
-    }
-    const summaryText = parts.join(' ');
+    const summaryText = buildFallbackSummary({ totalParticipants, votesCast, top, gameType, question, hidden });
     const discussionQuestions = [
       'What stood out to you in the responses?',
       top && top.answer ? `What made "${top.answer}" resonate with the group?` : 'Where did the group agree or differ most?'
