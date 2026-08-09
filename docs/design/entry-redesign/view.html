@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Entry redesign — deck</title>
+<style>
+  :root{--bg:#0F1A2E;--surface:#1B2942;--text:#F4EDE4;--muted:#B6C2D4;--primary:#F6A94C;
+        --rule:rgba(182,194,212,.20)}
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:#080E1A;color:var(--text);overflow:hidden;
+    font:400 15px/1.5 "Inter",system-ui,sans-serif;display:flex;flex-direction:column}
+  header{display:flex;align-items:center;gap:14px;padding:11px 16px;
+    border-bottom:1px solid var(--rule);background:var(--bg);flex:none;flex-wrap:wrap}
+  .name{font-weight:800;font-size:15px;min-width:0}
+  .name span{color:var(--muted);font-weight:500}
+  .spacer{flex:1}
+  .devs{display:flex;gap:6px}
+  .devs button{background:transparent;color:var(--muted);border:1px solid var(--rule);
+    border-radius:8px;padding:7px 12px;font:600 13px/1 "Inter",system-ui,sans-serif;
+    cursor:pointer;min-height:36px}
+  .devs button[aria-pressed="true"]{background:var(--primary);color:#0F1A2E;
+    border-color:var(--primary)}
+  .nav{display:flex;gap:6px}
+  .nav button{background:var(--surface);color:var(--text);border:1px solid var(--rule);
+    border-radius:8px;width:40px;height:36px;font-size:16px;cursor:pointer}
+  .stage{flex:1;display:grid;place-items:center;padding:20px;overflow:auto}
+  .device{background:var(--bg);border:1px solid var(--rule);border-radius:14px;
+    overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.55);flex:none}
+  iframe{border:0;display:block;background:var(--bg)}
+  .size{position:fixed;right:14px;bottom:12px;color:var(--muted);font-size:12px;
+    background:var(--bg);border:1px solid var(--rule);border-radius:999px;padding:6px 12px}
+  .hint{color:var(--muted);font-size:12.5px}
+  kbd{background:var(--surface);border:1px solid var(--rule);border-radius:5px;
+    padding:1px 6px;font:600 12px/1.6 "Inter",system-ui,sans-serif;color:var(--text)}
+</style>
+</head>
+<body>
+<header>
+  <div class="name" id="name">—</div>
+  <div class="spacer"></div>
+  <div class="hint"><kbd>←</kbd><kbd>→</kbd> screens · <kbd>1</kbd>–<kbd>4</kbd> device</div>
+  <div class="devs" id="devs"></div>
+  <div class="nav"><button id="prev" aria-label="Previous">‹</button>
+                   <button id="next" aria-label="Next">›</button></div>
+</header>
+<div class="stage"><div class="device" id="device"><iframe id="f" title="mockup"></iframe></div></div>
+<div class="size" id="size"></div>
+
+<script>
+const FILES = [
+  ['01-root.html','Root — join code and host sign in'],
+  ['02-join-identity.html','Join — name, and confirming the code was right'],
+  ['03-join-unknown-code.html','Join — the code resolves to nothing'],
+  ['04-join-not-started.html','Join — host has not opened it yet'],
+  ['05-join-ended.html','Join — the session has finished'],
+  ['06-join-private.html','Join — private session, access code'],
+  ['07-join-name-collision.html','Join — that name is already in the room'],
+  ['08-join-offline.html','Join — we could not reach the server'],
+  ['09-join-rejoin.html','Join — coming back after closing the tab'],
+  ['10-signin.html','Host — sign in'],
+  ['11-register.html','Host — create an account'],
+  ['12-verify.html','Host — confirm the email address'],
+  ['13-pending.html','Host — registered, not approved'],
+  ['14-forgot.html','Host — password reset, all four moments'],
+  ['15-oauth-return.html','Host — coming back from Google'],
+  ['16-blocked.html','Host — signed in, but not for this'],
+  ['17-password-change.html','Host — account made by an admin']
+];
+
+// The four devices are the ones that exist, not a taste ladder. 320 is an
+// iPhone SE / a phone with display zoom on and it is where layouts break;
+// 1280x800 is the commonest laptop the host will be on.
+const DEVICES = [
+  ['320 × 568', 320, 568],
+  ['375 × 812', 375, 812],
+  ['768 × 1024', 768, 1024],
+  ['1280 × 800', 1280, 800]
+];
+
+let i = 0, d = 1;
+const f = document.getElementById('f'), dev = document.getElementById('device');
+
+function fit(){
+  const [, w, h] = DEVICES[d];
+  const stage = document.querySelector('.stage');
+  const scale = Math.min(1, (stage.clientHeight - 40) / h, (stage.clientWidth - 40) / w);
+  f.style.width = w + 'px'; f.style.height = h + 'px';
+  f.style.transform = 'scale(' + scale + ')';
+  f.style.transformOrigin = 'top left';
+  dev.style.width = Math.round(w * scale) + 'px';
+  dev.style.height = Math.round(h * scale) + 'px';
+  document.getElementById('size').textContent =
+    DEVICES[d][0] + (scale < 0.999 ? '  ·  shown at ' + Math.round(scale * 100) + '%' : '');
+}
+function show(){
+  f.src = FILES[i][0];
+  document.getElementById('name').innerHTML =
+    (i + 1) + '/' + FILES.length + ' &nbsp; ' + FILES[i][0] +
+    ' <span>— ' + FILES[i][1] + '</span>';
+  fit();
+}
+document.getElementById('devs').innerHTML = DEVICES.map((x, n) =>
+  '<button data-d="' + n + '" aria-pressed="' + (n === d) + '">' + x[0] + '</button>').join('');
+document.getElementById('devs').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  d = +b.dataset.d;
+  [].forEach.call(document.querySelectorAll('#devs button'),
+    x => x.setAttribute('aria-pressed', x === b));
+  fit();
+};
+document.getElementById('prev').onclick = () => { i = (i + FILES.length - 1) % FILES.length; show(); };
+document.getElementById('next').onclick = () => { i = (i + 1) % FILES.length; show(); };
+addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { i = (i + 1) % FILES.length; show(); }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { i = (i + FILES.length - 1) % FILES.length; show(); }
+  if (/^[1-4]$/.test(e.key)) {
+    d = +e.key - 1;
+    [].forEach.call(document.querySelectorAll('#devs button'),
+      (x, n) => x.setAttribute('aria-pressed', n === d));
+    fit();
+  }
+});
+addEventListener('resize', fit);
+show();
+</script>
+</body>
+</html>

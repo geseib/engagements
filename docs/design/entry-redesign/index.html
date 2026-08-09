@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Engage2 entry and authentication — mockups</title>
+<style>
+  :root{--bg:#0F1A2E;--surface:#1B2942;--text:#F4EDE4;--muted:#B6C2D4;--primary:#F6A94C;
+        --success:#4FB286;--success-text:#6FD0A4;--rule:rgba(182,194,212,.20)}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:400 17px/1.55 "Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+    padding:52px 26px 90px}
+  .wrap{max-width:980px;margin:0 auto}
+  h1{font-family:"Archivo Expanded","Archivo",system-ui,sans-serif;font-weight:800;
+    font-size:clamp(30px,4.4vw,44px);line-height:1.05;margin:0 0 12px;letter-spacing:-.015em}
+  h2{font-size:14px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+    margin:38px 0 10px;font-weight:700}
+  .sub{color:var(--muted);max-width:76ch;margin:0 0 10px}
+  .sub a,.hint a{color:var(--primary)}
+  .cta{display:inline-block;background:var(--primary);color:#0F1A2E;font-weight:800;
+    text-decoration:none;padding:12px 21px;border-radius:9px;font-size:16px}
+  .hint{color:var(--muted);font-size:15px;border-left:3px solid var(--primary);
+    padding:12px 16px;background:rgba(246,169,76,.07);border-radius:0 8px 8px 0;
+    margin:20px 0;max-width:78ch}
+  .hint b{color:var(--text)}
+  .hint.flat{border-left-color:var(--muted);background:rgba(182,194,212,.06)}
+  ol{list-style:none;counter-reset:m;padding:0;margin:0}
+  li{counter-increment:m;border-bottom:1px solid var(--rule);padding:15px 0 15px 54px;
+    position:relative}
+  li::before{content:counter(m,decimal-leading-zero);position:absolute;left:0;top:18px;
+    font-family:"Archivo Expanded","Archivo",system-ui,sans-serif;font-weight:800;
+    color:var(--primary);font-size:14px;letter-spacing:.07em}
+  li a{color:var(--text);text-decoration:none;font-weight:700;font-size:18px;
+    border-bottom:1px solid transparent}
+  li a:hover{border-bottom-color:var(--primary);color:var(--primary)}
+  li p{margin:5px 0 0;color:var(--muted);font-size:15px;max-width:82ch}
+  li p b{color:var(--text);font-weight:600}
+  .tag{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.1em;
+    text-transform:uppercase;border:1px solid var(--primary);color:var(--primary);
+    border-radius:999px;padding:2px 9px;margin-left:9px;vertical-align:2px}
+  .tag.new{border-color:var(--success);color:var(--success-text)}
+  code{color:var(--primary);font-size:.9em;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  footer{margin-top:38px;color:var(--muted);font-size:15px;max-width:80ch}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Engage2 entry and authentication — mockups</h1>
+
+  <p class="sub" style="margin-bottom:20px">
+    <a class="cta" href="view.html">Open the deck viewer →</a>
+    <span style="display:block;margin-top:10px">
+      Steps through all seventeen with <b>←</b> <b>→</b>, and switches device with
+      <b>1</b>–<b>4</b>: 320×568, 375×812, 768×1024, 1280×800. The device switch is
+      the reason it exists — every one of these is responsive, and the root page in
+      particular is a different composition at 375 and at 1280.
+      <b>Serve this directory</b> — from <code>file://</code> the viewer and the
+      audit cannot reach inside the frame.
+      <code>python3 -m http.server 8123 --directory docs/design/entry-redesign</code>
+    </span>
+  </p>
+
+  <p class="sub">Mockups for
+    <a href="RATIONALE.md">RATIONALE.md</a>, with the questions I could not settle
+    from the code in <a href="OPEN-QUESTIONS.md">OPEN-QUESTIONS.md</a>. Self-contained
+    HTML — no build step, no CDN, no external assets. The generator in
+    <code>_build/</code> exists so seventeen files cannot drift apart; the output does
+    not depend on it.</p>
+
+  <div class="hint">
+    <b>The one idea.</b> Participants outnumber hosts by something like fifty to one,
+    arrive on a phone, are often late, and need exactly one thing. Hosts arrive on a
+    laptop and need to sign in. So the root page is not a 50/50 split — it is a phone
+    page for participants that grows a second column for hosts at 900px, and the join
+    side is dominant even at 1280 because the participant is the one who is new, in a
+    hurry, and being watched.
+  </div>
+
+  <div class="hint flat">
+    <b>These carry worst-case content on purpose.</b> A 71-character session title
+    with an em dash and an ampersand; a 27-character hyphenated participant name set
+    inside a button; a 58-character email in an error message on a 320px screen; a
+    password failing all five rules at once; a name that collides with someone
+    already in the room. Nothing here was chosen because it fits. Where something
+    does not fit you should see it wrap or the layout change — what you should never
+    see is a string cut off.
+  </div>
+
+  <div class="hint flat">
+    <b>Type is not the stage's type.</b> The host spec's ladders are derived for a
+    projected image read at 25 feet and would be absurd here. Body text is
+    <b>17px</b>, derived twice in <a href="RATIONALE.md">RATIONALE §3</a> — once from
+    the critical print size at a phone held 14 inches away, and once from the 16px
+    threshold under which iOS Safari zooms the page on focus. The floor is 13px and
+    it is for labels, never for a sentence.
+  </div>
+
+  <h2>Verification</h2>
+  <p class="sub"><a href="audit.html">audit.html</a> runs nine checks over every
+    mockup at four viewports — 68 renders, 612 assertions. Three of them were written
+    after they had already failed on this set: <b>E5</b> found three password fields
+    with no accessible name, <b>E7</b> found three panels a user could land on with
+    no heading, and <b>E3</b> measures contrast against the composited background
+    rather than the declared one. There is no projector black-lift model here; these
+    surfaces are not projected, and reusing a number derived for a different display
+    is exactly what the host spec's §7.18 forbids.</p>
+
+  <h2>The participant path</h2>
+  <ol>
+    <li><a href="01-root.html">Root — the code, and a way in for hosts</a>
+      <p>The page at <code>/</code> when nobody is signed in. <b>Worst case:</b> 320px
+        wide, where the four code cells and a 48px tap target have to coexist; and
+        1280px, where the temptation is to give the host half the screen.
+        Press <b>1</b>–<b>4</b> in the viewer — this is one file, not two, because a
+        phone version and a desktop version maintained separately drift.</p></li>
+
+    <li><a href="02-join-identity.html">Join — your name, and confirming the code</a>
+      <p>Where a QR scan lands (<code>/play?gameId=4821</code>) and where typing a
+        code goes. The session title is here because <b>this beat is the only thing
+        standing between a mistyped-but-valid code and the wrong room</b>.
+        <b>Worst case:</b> the 71-character title, a late arrival at round 2 of 9,
+        and a pre-filled name three characters over the limit.</p></li>
+
+    <li><a href="03-join-unknown-code.html">Join — the code resolves to nothing</a>
+      <p>The copy says "nothing is running under 4821", not "that code is wrong",
+        because <b>the server genuinely cannot tell the difference</b> between a
+        typo, an ended session and a deleted one — all three are one 404.
+        <b>Worst case:</b> the error notice added to the tallest column at 320px.</p></li>
+
+    <li><a href="04-join-not-started.html">Join — the host has not opened it yet</a>
+      <p>Today this is an <code>alert()</code> that throws you back to an empty form.
+        Here you are <b>held rather than bounced</b>: the page polls and lets you in
+        the moment the host starts. The last line says nothing is reserved for you,
+        because nothing is — there is no player record until the session opens.</p></li>
+
+    <li><a href="05-join-ended.html">Join — the session has finished</a>
+      <span class="tag">needs a server change</span>
+      <p><code>join-game.js</code> checks <code>!Item</code> and <code>!Item.Started</code>
+        and nothing else, so a finished session still admits people into a dead room.
+        This screen cannot be built until there is a distinct response for it —
+        the exact change is in <a href="RATIONALE.md">RATIONALE §7</a>. Drawn anyway,
+        because the alternative is that the gap stays invisible.</p></li>
+
+    <li><a href="06-join-private.html">Join — private session, access code</a>
+      <p>A state that already exists in the code and has no design. Two panels: asking,
+        and getting it wrong. <b>Worst case:</b> an 18-character access code, and the
+        bug where going back today also wipes the name you already typed.</p></li>
+
+    <li><a href="07-join-name-collision.html">Join — that name is already in the room</a>
+      <span class="tag new">found while reading the code</span>
+      <p>The server keys a player on their name — <code>SK: PLAYER#${playerName}</code>.
+        Two people called Chris are <b>one player</b>, and the second one silently
+        inherits the first one's answers and score. This screen is the only thing
+        standing between that fact and a merged scoreline, and it offers both readings
+        of the collision because both are real.</p></li>
+
+    <li><a href="08-join-offline.html">Join — we could not reach the server</a>
+      <span class="tag new">found while reading the code</span>
+      <p>The state where the participant did nothing wrong, and the copy has to say so
+        without pretending to know whose fault it is. <b>Worst case:</b> three failed
+        attempts, and the 27-character name in a definition list at 320px.</p></li>
+
+    <li><a href="09-join-rejoin.html">Join — coming back after closing the tab</a>
+      <p><b>Worst case:</b> "Rejoin as Bartholomew Fitzgerald-Chen" set inside a
+        button at 320px, which is where a fixed-height button would clip. Today the
+        rejoin button sets <code>joined = true</code> locally and never asks the
+        server, so rejoining a dead session shows a working game that does nothing.</p></li>
+  </ol>
+
+  <h2>The host path</h2>
+  <ol start="10" style="counter-reset:m 9">
+    <li><a href="10-signin.html">Host — sign in</a>
+      <p>Three panels: as shipped, credentials rejected, and what the social block
+        becomes if the other three Cognito providers are ever wired into the app.
+        <b>Only Google exists in the code today</b> — the four-provider panel is the
+        variant, not the design. <b>Worst case:</b> the 58-character email echoed
+        inside the error, which is where it belongs and is not where it is today.</p></li>
+
+    <li><a href="11-register.html">Host — create an account</a>
+      <p>The approval gate is stated <b>before</b> the form, not in a box halfway down
+        it, and it names the thing you can do instead. Password rules are a live
+        checklist from the first keystroke rather than an error after submitting.
+        <b>Worst case:</b> an email that already exists and a password satisfying
+        three of five rules.</p></li>
+
+    <li><a href="12-verify.html">Host — confirm the email address</a>
+      <p>Six digits, same cell treatment as the join code, <code>autocomplete=
+        "one-time-code"</code> so the OS offers it, and it submits itself on the sixth
+        digit. <b>Worst case:</b> six cells at 320px, and the resend button in its
+        47-seconds-to-go state.</p></li>
+
+    <li><a href="13-pending.html">Host — registered, and not approved</a>
+      <span class="tag">the reason this exercise exists</span>
+      <p>A new host's enthusiasm dies here. The redesign does three things: states the
+        gap in the first line, puts <b>a working session-code field on the page</b>
+        because joining is the one thing they can actually do, and gives them a
+        one-tap message to send whoever approves accounts. Gone: the invented
+        "24–48 hours", and the three cards suggesting they go away and think about
+        sessions they might one day host.</p></li>
+
+    <li><a href="14-forgot.html">Host — password reset, all four moments</a>
+      <p>Ask, reset, <b>done</b>, and the Google-account edge. The "done" panel does
+        not exist today — the form drops you on the sign-in screen with nothing said.
+        The second panel's copy is deliberately neutral about whether the account
+        exists; today the app answers "No account found with this email address",
+        which is an account-enumeration oracle.</p></li>
+
+    <li><a href="15-oauth-return.html">Host — coming back from Google</a>
+      <p>Four panels, two of them the same spinner six seconds apart, because a stuck
+        callback is currently a blank page with a spinner on it for as long as the
+        user is willing to wait. The raw exception text — <code>Authentication
+        failed: 400 {"error":…</code> — moves out of the headline and behind a
+        disclosure.</p></li>
+
+    <li><a href="16-blocked.html">Host — signed in, but not for this</a>
+      <span class="tag new">found while reading the code</span>
+      <p>Two panels: a host who opened <code>/admin</code>, and a session that expired
+        mid-task. Both are unstyled inline-JSX pages today, and the second branch in
+        <code>App.jsx:117</code> calls <code>useAuth()</code> inside a click handler,
+        which will throw the moment anyone presses it.</p></li>
+
+    <li><a href="17-password-change.html">Host — an account an admin made for you</a>
+      <p>Cognito's <code>FORCE_CHANGE_PASSWORD</code>. Today it appears with no
+        explanation of why it is being asked. <b>Worst case:</b> a three-character
+        password failing four of five rules, with the primary disabled.</p></li>
+  </ol>
+
+  <footer>
+    Colours are the Warm Summit tokens from
+    <code>docs/handoff/warm-summit-design-spec.md</code>, with the two text-only
+    tints the host spec added. Red is never used for an error here — it means
+    destructive in this system, and a mistyped code is not destructive.
+    Display type falls back to the nearest system face; production self-hosts
+    Archivo Expanded, which is materially wider.
+  </footer>
+</div>
+</body>
+</html>

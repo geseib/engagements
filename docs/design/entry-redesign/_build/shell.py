@@ -1,0 +1,424 @@
+"""
+Shared page shell for the entry-redesign mockups.
+
+The committed .html files are self-contained and runnable on their own; this
+module exists only so the sixteen of them cannot drift apart. Every value in
+CSS below is derived in RATIONALE.md — do not change one here without changing
+it there.
+"""
+
+# ---------------------------------------------------------------------------
+# TOKENS AND TYPE LADDER
+#
+# The host stage derives its type from an arcminute target for a projected
+# image read at 25 feet. None of that applies here: these are one-person
+# surfaces held at 14 inches (phone) or sat in front of at 20 inches (laptop).
+# The ladder below is re-derived for those two distances in RATIONALE.md §3.
+# The short version:
+#
+#   phone   375 CSS px over ~2.60 in of glass  = 144 CSS px/in, viewed at 14 in
+#   laptop  1470 CSS px over ~11.4 in of panel = 129 CSS px/in, viewed at 20 in
+#
+# Measuring x-height (which is what the reading literature measures) rather
+# than cap height, and holding prose at or above the critical print size of
+# ~12 arcminutes:
+#
+#   17px on the phone  = 15.8'   17px on the laptop = 12.3'   -> prose, both
+#   14px on the phone  = 13.0'   14px on the laptop = 10.2'   -> labels
+#   13px on the phone  = 12.1'   13px on the laptop =  9.5'   -> meta, floor
+#
+# 17px is also the smallest size that does not trigger iOS Safari's focus zoom
+# (which fires under 16px). Two independent constraints landing on the same
+# number is the strongest evidence available, so 17px is the body size and
+# every text input uses it.
+# ---------------------------------------------------------------------------
+
+CSS = r"""
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0}
+[hidden]{display:none!important}
+
+:root{
+  /* Warm Summit tokens, unchanged — docs/handoff/warm-summit-design-spec.md */
+  --bg:#0F1A2E; --surface:#1B2942; --surface-2:#25375A;
+  --text:#F4EDE4;
+  --primary:#F6A94C; --primary-deep:#C77B4A;
+  --secondary:#7CA7E6;
+  --success:#4FB286; --danger:#E5645E;
+
+  /* The two text-only tints the host spec added (its §4.3). They exist there
+     because a projector lifts the black point; no projector is involved here
+     and #9BA8BE measures a perfectly legal 7.2:1 on #0F1A2E. They are adopted
+     anyway so one component can be lifted onto the stage without an audit —
+     a consistency choice, not a contrast necessity. See RATIONALE.md §4. */
+  --muted:#B6C2D4;        /* 9.7:1 on --bg, 8.1:1 on --surface */
+  --success-text:#6FD0A4; /* 9.3:1 on --bg */
+
+  --rule:rgba(182,194,212,.20);
+  --rule-strong:rgba(182,194,212,.34);
+  --radius:16px; --radius-sm:10px;
+
+  --font-display:"Archivo Expanded","Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-ui:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+
+  /* ---- ONE ladder for both surfaces. Derived above; see RATIONALE.md §3. --- */
+  --t-code:clamp(38px,10.5vw,46px);
+  --t-display:clamp(26px,6.4vw,34px);
+  --t-title:20px;
+  --t-body:17px;    /* prose AND every input. Never smaller. */
+  --t-label:14px;
+  --t-meta:13px;    /* floor. Labels only, never a sentence. */
+
+  /* Hit targets. 44px is the WCAG 2.5.5 / iOS number; 48px is Material's and
+     is what a cold thumb on a moving train actually needs. 48 wins. */
+  --tap:48px;
+  --gutter:20px;
+}
+@media (min-width:768px){ :root{ --gutter:32px } }
+
+body{
+  background:var(--bg); color:var(--text);
+  font:400 var(--t-body)/1.5 var(--font-ui);
+  -webkit-font-smoothing:antialiased;
+  font-variant-numeric:tabular-nums;
+  min-height:100dvh;
+}
+
+:focus-visible{outline:3px solid var(--primary);outline-offset:2px;border-radius:6px}
+::selection{background:var(--primary);color:var(--bg)}
+
+/* ---------------------------------------------------------------- layout -- */
+.page{min-height:100dvh;display:flex;flex-direction:column}
+.pad{padding-inline:var(--gutter)}
+.col{width:100%;max-width:26rem;margin-inline:auto}   /* 416px: ~46ch at 17px */
+.prose{max-width:56ch}
+.grow{flex:1 1 auto}
+.stack>*+*{margin-top:var(--s,16px)}
+.s8{--s:8px}.s12{--s:12px}.s20{--s:20px}.s24{--s:24px}.s32{--s:32px}
+
+/* ------------------------------------------------------------- top strip -- */
+.top{display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding-block:18px;min-height:60px}
+.brand{display:flex;align-items:baseline;gap:9px;font-weight:800;
+  font-family:var(--font-display);font-size:18px;letter-spacing:-.01em;
+  color:var(--text);text-decoration:none}
+.brand .env{font-family:var(--font-ui);font-weight:600;font-size:var(--t-meta);
+  letter-spacing:.10em;text-transform:uppercase;color:var(--muted)}
+
+/* ------------------------------------------------------------ typography -- */
+.kicker{font-size:var(--t-meta);font-weight:700;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);margin:0}
+h1{font-family:var(--font-display);font-weight:800;font-size:var(--t-display);
+  line-height:1.12;letter-spacing:-.015em;margin:0}
+h2{font-family:var(--font-display);font-weight:800;font-size:var(--t-title);
+  line-height:1.2;margin:0}
+h3{font-size:var(--t-body);font-weight:700;margin:0}
+p{margin:0}
+.lede{color:var(--text)}
+.muted{color:var(--muted)}
+.meta{font-size:var(--t-meta);color:var(--muted)}
+.label{font-size:var(--t-label);color:var(--muted);font-weight:600}
+strong{font-weight:700}
+a{color:var(--secondary)}
+a:hover{color:var(--primary)}
+
+/* --------------------------------------------------------------- surface -- */
+.card{background:var(--surface);border:1px solid var(--rule);
+  border-radius:var(--radius);padding:20px}
+.hr{height:1px;background:var(--rule);border:0;margin:0}
+
+/* ---------------------------------------------------------- code entry ---- */
+/* ONE input behind four painted cells. Four real inputs break paste, break
+   backspace, and read as four unlabelled fields to a screen reader. */
+.codewrap{position:relative}
+.codewrap input{
+  position:absolute;inset:0;width:100%;height:100%;
+  opacity:0;                     /* still focusable, still pasteable */
+  font-size:var(--t-code);       /* >=16px so iOS does not zoom on focus */
+  border:0;background:transparent;color:transparent;
+  letter-spacing:1em;padding:0;
+}
+.cells{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;pointer-events:none}
+.cell{height:76px;display:grid;place-items:center;border-radius:var(--radius-sm);
+  background:var(--surface);border:2px solid var(--rule-strong);
+  font-family:var(--font-display);font-weight:800;font-size:var(--t-code);
+  line-height:1;color:var(--text)}
+.cell.filled{border-color:var(--rule-strong)}
+/* The insertion point is marked whether or not the field has focus — the
+   affordance is "typing goes here", which is true before you tap. The caret
+   only blinks once focus is real, because a caret in an unfocused field is a
+   lie about where the keystrokes are going. */
+.cell.next{border-color:var(--primary)}
+.codewrap.focus .cell.next::after{content:"";width:2px;height:38px;
+  background:var(--primary);animation:caret 1.06s steps(1,end) infinite}
+@keyframes caret{0%,50%{opacity:1}50.01%,100%{opacity:0}}
+.codewrap.err .cell{border-color:var(--primary)}
+
+/* ------------------------------------------------------------- controls --- */
+.btn{display:flex;align-items:center;justify-content:center;gap:10px;
+  width:100%;min-height:52px;padding:14px 20px;border-radius:var(--radius-sm);
+  font:700 var(--t-body)/1.2 var(--font-ui);cursor:pointer;
+  border:2px solid transparent;text-decoration:none;text-align:center}
+.btn-primary{background:var(--primary);color:#0F1A2E;border-color:var(--primary)}
+.btn-primary:hover{background:#FFBB63;border-color:#FFBB63}
+/* A disabled primary must not be mistakable for the secondary sitting under
+   it. Muted text alone was not enough — the border weight has to drop too. */
+.btn-primary[disabled]{background:transparent;color:var(--muted);
+  border-color:var(--rule);cursor:not-allowed;font-weight:600}
+.btn-ghost{background:transparent;color:var(--text);border-color:var(--rule-strong)}
+.btn-ghost:hover{border-color:var(--muted)}
+.btn-quiet{background:transparent;color:var(--muted);border-color:transparent;
+  min-height:var(--tap);font-weight:600}
+.btn-quiet:hover{color:var(--text)}
+.btn-social{background:var(--surface);color:var(--text);border-color:var(--rule-strong);
+  font-weight:600}
+.btn-social:hover{border-color:var(--muted)}
+.btn.sm{min-height:var(--tap);font-size:var(--t-label);padding:10px 16px;width:auto}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.row>.btn{width:auto;flex:1 1 auto}
+
+/* --------------------------------------------------------------- fields --- */
+.field{display:block}
+.field>.label{display:block;margin-bottom:6px}
+.input{width:100%;min-height:var(--tap);padding:13px 14px;
+  background:var(--surface);color:var(--text);
+  border:2px solid var(--rule-strong);border-radius:var(--radius-sm);
+  font:400 var(--t-body)/1.4 var(--font-ui)}
+.input::placeholder{color:var(--muted);opacity:.75}
+.input:focus{border-color:var(--primary);outline:none}
+.input.bad{border-color:var(--primary)}
+.hint{margin-top:6px;font-size:var(--t-label);color:var(--muted)}
+.pwwrap{position:relative}
+.pwwrap .input{padding-right:56px}
+.pwtoggle{position:absolute;right:4px;top:50%;transform:translateY(-50%);
+  min-width:var(--tap);min-height:var(--tap);background:none;border:0;
+  color:var(--muted);font:600 var(--t-label)/1 var(--font-ui);cursor:pointer}
+.pwtoggle:hover{color:var(--text)}
+
+/* -------------------------------------------------------------- notices --- */
+/* No red. --danger is reserved for destructive actions in this design system,
+   and a mistyped code is not destructive. Errors carry a glyph, a word and a
+   2px amber stroke, never colour alone. */
+/* An inline SVG with no intrinsic size fills its container. Sizing .ico only
+   inside .notice let the Google mark render 300px tall in the social button —
+   the audit cannot see that, because a 300px logo breaks no rule it checks. */
+.ico{flex:none;width:22px;height:22px}
+.btn .ico{width:20px;height:20px}
+.pill .ico{width:16px;height:16px}
+
+.notice{display:flex;gap:12px;padding:14px 16px;border-radius:var(--radius-sm);
+  border:1px solid var(--rule);background:var(--surface);
+  border-left:3px solid var(--muted)}
+.notice .ico{margin-top:1px}
+.notice .body{min-width:0}
+.notice h3{margin-bottom:3px}
+.notice p{font-size:var(--t-label);color:var(--muted)}
+.notice.attn{border-left-color:var(--primary);background:rgba(246,169,76,.08)}
+.notice.attn .ico{color:var(--primary)}
+.notice.good{border-left-color:var(--success);background:rgba(79,178,134,.09)}
+.notice.good .ico{color:var(--success-text)}
+.notice.good h3{color:var(--success-text)}
+
+.pill{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;
+  border-radius:999px;border:1px solid var(--rule-strong);
+  font-size:var(--t-meta);font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted)}
+.pill.attn{border-color:var(--primary);color:var(--primary)}
+.pill.good{border-color:var(--success);color:var(--success-text)}
+
+.divider{display:flex;align-items:center;gap:14px;color:var(--muted);
+  font-size:var(--t-meta);font-weight:700;letter-spacing:.13em;text-transform:uppercase}
+.divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--rule)}
+
+/* Long machine strings — emails, pasted URLs — must wrap rather than push the
+   375px viewport sideways. */
+.wrapany{overflow-wrap:anywhere;word-break:break-word}
+
+/* -------------------------------------------------------------- session --- */
+.sess{display:flex;gap:14px;align-items:flex-start;padding:16px;
+  border:1px solid var(--rule);border-radius:var(--radius);background:var(--surface)}
+.sess .code{font-family:var(--font-display);font-weight:800;font-size:26px;
+  line-height:1;color:var(--primary);flex:none;letter-spacing:.02em}
+.sess .ttl{font-weight:700;line-height:1.3}
+
+/* ----------------------------------------------------------------- foot --- */
+.foot{padding-block:26px 34px;border-top:1px solid var(--rule);margin-top:34px}
+.footlinks{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:var(--t-meta)}
+.footlinks a{color:var(--muted);text-decoration:none}
+.footlinks a:hover{color:var(--text);text-decoration:underline}
+
+/* ------------------------------------------------------- panel captions --- */
+/* Used only where one file must show several moments of the same flow. */
+.panels{display:grid;gap:28px;padding-block:8px 40px}
+@media (min-width:900px){.panels{grid-template-columns:repeat(auto-fit,minmax(330px,1fr));
+  align-items:start;gap:26px}}
+.panel{border:1px solid var(--rule);border-radius:var(--radius);overflow:hidden;
+  background:rgba(27,41,66,.35)}
+.panel>.cap{padding:12px 16px;border-bottom:1px solid var(--rule);
+  background:var(--surface);font-size:var(--t-meta);font-weight:700;
+  letter-spacing:.10em;text-transform:uppercase;color:var(--muted)}
+.panel>.cap b{color:var(--primary)}
+.panel>.in{padding:22px 20px 26px}
+
+/* ------------------------------------------------------- root page split -- */
+.shell{width:100%;max-width:62rem;margin-inline:auto}
+
+/* Mobile first, and mobile is not a fallback here: it is the case. The join
+   column is the whole page; the host column is a real, reachable block that
+   follows it and never precedes it in the DOM, so tab order matches the
+   priority ordering as well as the visual one. */
+.split{display:grid;gap:0}
+.split .join{padding-block:8px 30px}
+.split .host{padding-block:26px 8px;border-top:1px solid var(--rule)}
+.split .codeblock{max-width:23rem}
+
+/* 900px is where two columns stop being cramped for a 46ch measure. It is not
+   768 — at 768 the host column squeezes the code cells below their derived
+   size, and the code cells are the one thing that may not shrink. */
+/* The QR line is phone advice. A laptop cannot scan the screen it is looking
+   at, and telling it to is noise. */
+@media (min-width:900px){ .phoneonly{display:none} }
+
+@media (min-width:900px){
+  main.center{display:flex;align-items:center}
+  .split{grid-template-columns:minmax(0,1.5fr) minmax(15rem,1fr);
+    gap:0 clamp(40px,6vw,84px);align-items:stretch;padding-block:26px}
+  .split .join{padding-block:0}
+  .split .host{padding-block:0;border-top:0;border-left:1px solid var(--rule);
+    padding-left:clamp(36px,5vw,64px)}
+}
+
+/* --------------------------------------------------------- six-cell code -- */
+.cells6{grid-template-columns:repeat(6,1fr);gap:7px}
+.cells6 .cell{height:62px;font-size:clamp(24px,7vw,30px)}
+.cells6 .cell.next::after{height:28px}
+
+/* -------------------------------------------------------- rules checklist -- */
+/* Password requirements are shown as a live checklist from the first
+   keystroke, not as an error after submitting. */
+.rules{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}
+.rules li{display:flex;align-items:flex-start;gap:9px;font-size:var(--t-label);
+  color:var(--muted);line-height:1.4}
+.rules li .bx{flex:none;width:18px;height:18px;border-radius:5px;margin-top:1px;
+  border:2px solid var(--rule-strong);display:grid;place-items:center}
+.rules li.ok{color:var(--success-text)}
+.rules li.ok .bx{border-color:var(--success);background:var(--success)}
+.rules li.ok .bx::after{content:"";width:9px;height:5px;margin-top:-2px;
+  border-left:2px solid #0F1A2E;border-bottom:2px solid #0F1A2E;
+  transform:rotate(-45deg)}
+
+.strength{display:flex;align-items:center;gap:10px;margin-top:10px}
+.strength .bar{flex:1;height:5px;border-radius:3px;background:var(--rule);
+  overflow:hidden}
+.strength .bar i{display:block;height:100%;border-radius:3px}
+.strength .txt{font-size:var(--t-meta);font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted)}
+
+/* --------------------------------------------------------------- chips ---- */
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{min-height:var(--tap);display:inline-flex;align-items:center;
+  padding:8px 15px;border-radius:999px;background:var(--surface);
+  border:1px solid var(--rule-strong);color:var(--text);
+  font:600 var(--t-label)/1 var(--font-ui);cursor:pointer}
+.chip:hover{border-color:var(--primary)}
+
+/* -------------------------------------------------------------- inline ---- */
+.codemini .cell{height:58px;font-size:30px}
+.dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;
+  font-size:var(--t-label);margin:0}
+.dl dt{color:var(--muted)}
+.dl dd{margin:0;color:var(--text)}
+"""
+
+ICONS = {
+    # 22x22, currentColor, 2px strokes. Drawn rather than fetched so the files
+    # stay self-contained.
+    "alert": '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><circle cx="12" cy="16.6" r="1.1" fill="currentColor" stroke="none"/></svg>',
+    "clock": '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5.4l3.4 2"/></svg>',
+    "check": '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.6l4.6 4.6L19.5 6.8"/></svg>',
+    "wifi": '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2.6 8.9a15 15 0 0 1 18.8 0"/><path d="M6.1 12.6a10 10 0 0 1 11.8 0"/><path d="M9.6 16.2a5 5 0 0 1 4.8 0"/><circle cx="12" cy="19.6" r="1.2" fill="currentColor" stroke="none"/></svg>',
+    "lock": '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2.2"/><path d="M8.2 10.5V7.6a3.8 3.8 0 0 1 7.6 0v2.9"/></svg>',
+    "person": '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8.4" r="3.6"/><path d="M4.8 19.8a7.2 7.2 0 0 1 14.4 0"/></svg>',
+    "spin": '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 3.2a8.8 8.8 0 1 0 8.8 8.8" opacity=".95"/><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.95s" repeatCount="indefinite"/></svg>',
+    "google": '<svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18Z"/><path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2.01a4.8 4.8 0 0 1-2.7.75 4.92 4.92 0 0 1-4.64-3.4H1.73v2.08A8.02 8.02 0 0 0 8.98 17Z"/><path fill="#FBBC05" d="M4.34 10.4a4.9 4.9 0 0 1 0-3.12V5.2H1.73a8.08 8.08 0 0 0 0 7.28l2.6-2.08Z"/><path fill="#EA4335" d="M8.98 3.58c1.32 0 2.5.45 3.44 1.35l2.54-2.54A7.72 7.72 0 0 0 8.98 1a8.02 8.02 0 0 0-7.25 4.47l2.6 2.08c.6-1.83 2.35-3.4 4.65-3.4Z"/></svg>',
+}
+
+# The code field's behaviour is a deliverable, not decoration — "what happens
+# when someone types the code with a space in it" is in the brief — so it is
+# real script rather than a picture of a field.
+CODE_JS = r"""
+(function(){
+  var wrap = document.querySelector('[data-code]');
+  if(!wrap) return;
+  var input = wrap.querySelector('input');
+  var cells = [].slice.call(wrap.querySelectorAll('.cell'));
+  var say   = document.getElementById('codesay');
+  var go    = document.querySelector('[data-code-submit]');
+
+  // A code is four digits. Everything else a human can produce on the way to
+  // typing it — a space, a dash, a hash, a non-breaking space pasted out of
+  // a calendar invite, the whole join URL off a slide — is noise we remove
+  // rather than an error we report.
+  function fromUrl(raw){
+    var m = /[?&]gameId=(\d{4})(?!\d)/.exec(raw) || /\/play\D{0,12}(\d{4})(?!\d)/.exec(raw);
+    return m ? m[1] : null;
+  }
+  function paint(){
+    var v = input.value;
+    cells.forEach(function(c,i){
+      c.textContent = v[i] || '';
+      c.classList.toggle('filled', !!v[i]);
+      c.classList.toggle('next', i === v.length);
+    });
+    if(go) go.disabled = v.length !== 4;
+  }
+  function set(v, note){
+    input.value = v;
+    wrap.classList.remove('err');
+    if(say) say.textContent = note || '';
+    paint();
+  }
+  input.addEventListener('input', function(){
+    set(input.value.replace(/\D+/g,'').slice(0,4));
+  });
+  input.addEventListener('paste', function(e){
+    e.preventDefault();
+    var raw = (e.clipboardData || window.clipboardData).getData('text') || '';
+    var url = fromUrl(raw);
+    if(url){ set(url, 'Took the code out of that link.'); return; }
+    var d = raw.replace(/\D+/g,'');
+    if(d.length > 4){
+      // Guessing which four is worse than asking. Say so and keep what is there.
+      wrap.classList.add('err');
+      if(say) say.textContent = 'That is ' + d.length + ' digits. The code on screen is 4.';
+      return;
+    }
+    set(d);
+  });
+  input.addEventListener('focus', function(){ wrap.classList.add('focus'); paint(); });
+  input.addEventListener('blur',  function(){ wrap.classList.remove('focus'); paint(); });
+  paint();
+  // Focus is the `autofocus` attribute's job, not a script's. Chrome on
+  // Android raises the keyboard, iOS Safari declines to without a gesture,
+  // and both of those are the right answer for their platform.
+})();
+"""
+
+
+def page(title, body, extra_css="", script="", cls=""):
+    return f"""<!doctype html>
+<html lang="en"{f' class="{cls}"' if cls else ''}>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>{title}</title>
+<style>{CSS}{extra_css}</style>
+</head>
+<body>
+{body}
+{f'<script>{script}</script>' if script else ''}
+</body>
+</html>
+"""
