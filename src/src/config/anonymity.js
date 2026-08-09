@@ -75,3 +75,19 @@ export function anonymityActive({ gameType, anonymousUntilReveal }) {
 export function standingsVisible({ gameType, anonymousUntilReveal, authorsRevealed } = {}) {
   return !anonymityActive({ gameType, anonymousUntilReveal }) || authorsRevealed === true;
 }
+
+/**
+ * Which ballot row is this player's own.
+ *
+ * A player seeing their own answer marked is correct and not a leak (§5.6.7).
+ * But the ballot is redacted, so the only handle is the text they submitted.
+ * Returns -1 when there is no match, including for an empty submission — which
+ * must never match row 0.
+ */
+export function ownAnswerIndex(ballot, ownAnswerText) {
+  const needle = String(ownAnswerText ?? '').trim();
+  if (!needle) return -1;
+  return (ballot || []).findIndex(
+    (row) => String(row?.answer ?? '').trim() === needle
+  );
+}

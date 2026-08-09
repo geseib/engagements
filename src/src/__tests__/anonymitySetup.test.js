@@ -115,3 +115,29 @@ describe('standings before the reveal', () => {
     })).toBe(true);
   });
 });
+
+import { ownAnswerIndex } from '../config/anonymity';
+
+describe('a player finding their own answer in an anonymous ballot', () => {
+  // A player sees their own answer attributed to themselves. Correct, and not
+  // a leak (§5.6.7 item 6) — but the payload is redacted, so the only way to
+  // find it is to match the text they submitted.
+  const ballot = [{ answer: 'first' }, { answer: 'mine' }, { answer: 'third' }];
+
+  test('matches on the submitted text', () => {
+    expect(ownAnswerIndex(ballot, 'mine')).toBe(1);
+  });
+
+  test('returns -1 when the player has not answered', () => {
+    expect(ownAnswerIndex(ballot, 'not submitted')).toBe(-1);
+  });
+
+  test('tolerates surrounding whitespace', () => {
+    expect(ownAnswerIndex(ballot, '  mine  ')).toBe(1);
+  });
+
+  test('returns -1 for an empty submission rather than matching row 0', () => {
+    expect(ownAnswerIndex(ballot, '')).toBe(-1);
+    expect(ownAnswerIndex(ballot, null)).toBe(-1);
+  });
+});

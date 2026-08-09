@@ -5,6 +5,7 @@ import Icon from './components/Icon';
 import RankIcon, { rankLabel, VOTE_POSITIONS } from './components/RankIcon';
 import { gameTypeMeta } from './config/gameTypes';
 import { resolveInstruction, resolveRoundNoun } from './config/instructions';
+import { displayLabelFor, ownAnswerIndex } from './config/anonymity';
 
 const API_BASE = window.API_BASE;
 
@@ -102,6 +103,10 @@ function PlayerPage() {
   const [joined, setJoined] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [answerInput, setAnswerInput] = useState('');
+  // The text the player actually submitted, kept after answerInput clears, so
+  // the anonymous ballot can find this player's own row by content — the only
+  // handle left once the author fields are redacted (see ownAnswerIndex).
+  const [mySubmittedAnswer, setMySubmittedAnswer] = useState('');
   const [hasAnswered, setHasAnswered] = useState(false);
   const [gameState, setGameState] = useState('CREATED'); // CREATED, STARTED, ASK#001, VOTE#001, RESULTS#001
   const [gameType, setGameType] = useState('call-and-answer'); // 'call-and-answer' or 'trivia'
@@ -592,6 +597,7 @@ function PlayerPage() {
         if (!hasAnswered) {
           setAnswerInput('');
           setSelectedTriviaAnswer('');
+          setMySubmittedAnswer('');
         }
         
         // Fetch question set instructions. The payload only started carrying
@@ -682,6 +688,7 @@ function PlayerPage() {
         setAnswers([]);
         setHasAnswered(false);
         setHasVoted(false);
+        setMySubmittedAnswer('');
       }
       
     } catch (error) {
@@ -1161,6 +1168,7 @@ function PlayerPage() {
       });
       
       setHasAnswered(true);
+      setMySubmittedAnswer(answer);
       setAnswerInput('');
       setSelectedTriviaAnswer('');
       setWavelengthWords(Array(10).fill(''));
@@ -1362,7 +1370,7 @@ function PlayerPage() {
   };
 
   // Detailed voting component
-  const DetailedVotingMode = ({ answers, votes, onVoteChange, onSubmitVotes, playerName, requiredVotes }) => {
+  const DetailedVotingMode = ({ answers, votes, onVoteChange, onSubmitVotes, playerName, requiredVotes, mySubmittedAnswer }) => {
     const handleVoteClick = (answerIndex, position) => {
       // Track interaction to prevent polling interference
       setLastVoteInteraction(Date.now());
@@ -1384,17 +1392,20 @@ function PlayerPage() {
       return null;
     };
 
+    const ownIdx = ownAnswerIndex(answers, mySubmittedAnswer);
+
     return (
       <div className="detailed-voting">
         <div className="detailed-answers">
           {answers.map((answer, idx) => {
             const currentPosition = getVotePosition(idx);
-            
+            const isOwn = idx === ownIdx;
+
             return (
-              <div key={idx} className={`detailed-answer-card ${answer.name === playerName ? 'own-answer' : ''}`}>
+              <div key={idx} className={`detailed-answer-card ${isOwn ? 'own-answer' : ''}`}>
                 <div className="answer-content">
                   <div className="answer-text">"{answer.answer}"</div>
-                  <div className="answer-author">by {answer.name}{answer.name === playerName ? ' (You)' : ''}</div>
+                  <div className="answer-author">- {displayLabelFor(answer, idx)}{isOwn ? ' (Yours)' : ''}</div>
                 </div>
                 
                 <div className="vote-buttons">
@@ -1552,6 +1563,10 @@ function PlayerPage() {
       </div>
     );
   }
+
+  // Which ballot row (if any) is this player's own submission — computed once
+  // per render so both voting modes below mark the same row.
+  const ownAnswerIdx = ownAnswerIndex(answers, mySubmittedAnswer);
 
   return (
     <div className="player-outer-container-full">
@@ -1900,20 +1915,21 @@ function PlayerPage() {
                             const isSelected = Object.values(votes).includes(idx.toString());
                             const isCurrentSelection = votes[position] === idx.toString();
                             const shouldDisable = isSelected && !isCurrentSelection;
-                            
+                            const isOwn = idx === ownAnswerIdx;
+
                             // Truncate long answers for dropdown display
-                            const truncatedAnswer = answer.answer.length > 20 
-                              ? answer.answer.substring(0, 20) + '...' 
+                            const truncatedAnswer = answer.answer.length > 20
+                              ? answer.answer.substring(0, 20) + '...'
                               : answer.answer;
-                            
+
                             return (
-                              <option 
-                                key={idx} 
+                              <option
+                                key={idx}
                                 value={idx}
                                 disabled={shouldDisable}
                                 title={answer.answer} // Full answer on hover
                               >
-                                "{truncatedAnswer}" by {answer.name}{answer.name === playerName ? ' (You)' : ''}
+                                "{truncatedAnswer}" - {displayLabelFor(answer, idx)}{isOwn ? ' (Yours)' : ''}
                               </option>
                             );
                           })}
@@ -1933,13 +1949,14 @@ function PlayerPage() {
                   </div>
                   </>
                 ) : (
-                  <DetailedVotingMode 
+                  <DetailedVotingMode
                     answers={answers}
                     votes={votes}
                     onVoteChange={handleVoteChange}
                     onSubmitVotes={handleSubmitVotes}
                     playerName={playerName}
                     requiredVotes={Math.min(3, answers.length)}
+                    mySubmittedAnswer={mySubmittedAnswer}
                   />
                 )}
               </>
