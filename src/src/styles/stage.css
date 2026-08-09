@@ -1,0 +1,145 @@
+/**
+ * The host stage shell: display profiles, the stage grid, and the field
+ * backdrop. Ported verbatim from the audited mockup
+ * docs/design/host-redesign/02-ask-call-and-answer.html (168 checks / 0
+ * failures) — a lost digit in a clamp is invisible and wrong, so these
+ * ranges are copied rather than retyped:
+ *
+ *   lines  63-106  the four root ladders
+ *   lines 108-117  body chrome tokens
+ *   lines 122-131  the .stage grid
+ *   lines 133-144  the .field treatment, including the two :root.d-call
+ *                  overrides
+ *
+ * Color tokens referenced here (--bg, --text, --font-ui, etc.) are declared
+ * in ../styles.css, imported alongside this file.
+ */
+
+/* ---------------------------------------------------------------------------
+   DISPLAY PROFILES — four literal ladders, not one ladder times a scalar.
+
+     Room   projected image >=90in wide, viewer <=30ft, ~20 ppi   floor 20px
+     TV     panel ~65in wide,            viewer <=20ft, ~30 ppi   floor 26px
+     Call   screen-share; the encoder is the constraint, not the
+            eye, so it keeps Room's ladder and changes treatment  floor 20px
+     Table  laptop ~120 ppi,             viewer 2-4ft             floor 16px
+
+   Declared on the ROOT ELEMENT so nothing downstream has already substituted.
+   --------------------------------------------------------------------------- */
+:root, :root.d-room{
+  --L-hero:      clamp(56px, 8.4vh, 104px);
+  --L-primary:   clamp(40px, 5.6vh,  68px);
+  --L-secondary: clamp(28px, 3.7vh,  44px);
+  --L-body:      clamp(22px, 2.8vh,  34px);
+  --L-meta:      clamp(20px, 1.9vh,  24px);
+  --floor:20px; --measure-base:26ch; --bar-h:8px; --fit-min:.55;
+  --dock-h:calc(9vh + 4vh);
+}
+:root.d-tv{
+  --L-hero:      clamp(72px, 11vh, 132px);
+  --L-primary:   clamp(52px, 7.4vh, 88px);
+  --L-secondary: clamp(36px, 4.8vh, 56px);
+  --L-body:      clamp(28px, 3.5vh, 42px);
+  --L-meta:      clamp(26px, 2.4vh, 31px);
+  /* TV may not scale below Room's rendered size — see minFit() in the fitter.
+     56 x .78 = 43.7px, which is Room's 44px secondary tier. Below that it
+     must drop something instead of shrinking. */
+  --floor:26px; --measure-base:22ch; --bar-h:12px; --fit-min:.78;
+  --dock-h:calc(11vh + 4vh);
+}
+:root.d-call{
+  --L-hero:      clamp(56px, 8.4vh, 104px);
+  --L-primary:   clamp(40px, 5.6vh,  68px);
+  --L-secondary: clamp(28px, 3.7vh,  44px);
+  --L-body:      clamp(22px, 2.8vh,  34px);
+  --L-meta:      clamp(20px, 1.9vh,  24px);
+  /* Measure matches Room exactly. A tighter measure wraps more, which makes
+     the fitter scale down, which silently defeated section 4.2's stated
+     intent that Call keeps Room's type — measured ~6% below Room on every
+     dense state. Call differs by field and hairline, not by size. */
+  --floor:20px; --measure-base:26ch; --bar-h:10px; --fit-min:.55;
+  --hair:2px;                         /* 1px rules do not survive a video codec */
+  --dock-h:calc(9vh + 4vh);
+}
+:root.d-table{
+  --L-hero:      clamp(44px, 6.2vh, 64px);
+  --L-primary:   clamp(32px, 4.0vh, 44px);
+  --L-secondary: clamp(22px, 2.6vh, 30px);
+  --L-body:      clamp(18px, 2.0vh, 24px);
+  --L-meta:      clamp(16px, 1.5vh, 19px);
+  --floor:16px; --measure-base:30ch; --bar-h:5px; --fit-min:.55;
+  --dock-h:calc(8vh + 3.5vh);
+}
+
+body{
+  background:var(--bg); color:var(--text);
+  font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased;
+  font-variant-numeric:tabular-nums;
+  /* Chrome tokens read the profile ladder directly. Only .content re-scales. */
+  --t-hero:var(--L-hero); --t-primary:var(--L-primary);
+  --t-secondary:var(--L-secondary); --t-body:var(--L-body); --t-meta:var(--L-meta);
+  --measure:var(--measure-base);
+}
+
+/* --------------------------------------------------------------- the stage */
+.stage{
+  position:relative; height:100dvh; width:100%; overflow:hidden;
+  /* minmax(0,1fr), not 1fr — an auto track refuses to shrink below the
+     min-content of its widest item, and one nowrap rail would otherwise push
+     the whole stage past the viewport. */
+  grid-template-columns:minmax(0,1fr);
+  display:grid;
+  grid-template-rows:auto auto minmax(0,1fr) auto;
+  grid-template-areas:"rail" "bar" "main" "dock";
+}
+
+/* Photo field. Flat in Call: wide low-frequency gradients band badly under
+   video compression and eat the bitrate the text needs. */
+.field{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden;
+  background:
+    radial-gradient(120% 78% at 50% 112%, rgba(246,169,76,.10) 0%, transparent 62%),
+    linear-gradient(180deg,#0C1526 0%, #12203A 46%, #1B2C4A 78%, #2A3A57 100%);}
+.field::after{content:"";position:absolute;left:-4%;right:-4%;bottom:-2%;height:44%;
+  background:linear-gradient(180deg,#17253C 0%, #0E1828 100%);
+  clip-path:polygon(0 62%, 13% 34%, 25% 55%, 38% 22%, 52% 48%, 63% 30%, 78% 58%, 89% 38%, 100% 60%, 100% 100%, 0 100%);
+  opacity:.85;}
+:root.d-call .field{background:var(--bg)}
+:root.d-call .field::after{display:none}
+
+/* ---------------------------------------------------------------------------
+   CONTENT SCALING — the mechanism the floor is enforced by. Every scaled
+   value is wrapped in max(var(--floor), …) so the search can only shrink
+   type as far as the floor and must then find a different lever (a tighter
+   measure, then truncation — see the fitter, a later task). --t-meta is
+   NOT listed here on purpose: labels sit at the profile floor and never
+   scale.
+   --------------------------------------------------------------------------- */
+.content{ --fit:1; }
+.content{
+  --t-hero:max(var(--floor),calc(var(--L-hero) * var(--fit)));
+  --t-primary:max(var(--floor),calc(var(--L-primary) * var(--fit)));
+  --t-secondary:max(var(--floor),calc(var(--L-secondary) * var(--fit)));
+  --t-body:max(var(--floor),calc(var(--L-body) * var(--fit)));
+  /* Label and meta tiers do NOT scale. */
+  --measure:calc(var(--measure-base) + (1 - var(--fit)) * 30ch);
+}
+
+/* NEVER CENTRE A CLIPPING BOX. `justify-content: center` with `overflow:
+   hidden` overflows BOTH ends and clips both — so the top of the question is
+   the first thing to disappear, with no scrollbar and no out-of-bounds rect to
+   detect it by. `flex-start` plus `margin-block: auto` on the child absorbs
+   spare space (short content still centres) but never goes negative, so
+   overflow can only ever appear at the bottom. Losing the tail of a list is
+   survivable; losing the head of the question is not. */
+.content{ display:flex; flex-direction:column; justify-content:flex-start; overflow:hidden; }
+.content > .fitbox{ margin-block:auto; }
+
+/* NO LINE CLAMPS LIVE HERE. Truncation is something the fitter DOES, after
+   exhausting every other lever — never something the base stylesheet applies in
+   advance. A clamp in base CSS makes the fitter blind: content arrives already
+   cut, scrollHeight equals clientHeight, the fitter concludes it fits and
+   stops. That shipped an 800px box holding 669px of content with five of six
+   options truncated mid-word and 131px empty underneath. Clamps belong behind
+   [data-clamped="on"] and nowhere else. */
+.content[data-clamped="on"] .opt .txt{ -webkit-line-clamp:2; display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; }
