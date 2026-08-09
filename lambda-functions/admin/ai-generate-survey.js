@@ -1,174 +1,197 @@
-const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
-const { invokeClaudeWithRetry } = require('./shared/bedrock-utils');
+/**
+ * AI survey generation — asynchronous, structured, tag-suggesting.
+ *
+ * This was the most exposed of the four builders. Unlike trivia and polls it
+ * was never chunked at all: one call for up to 50 questions, against API
+ * Gateway's hard 30s integration timeout. Its own source comment admitted that
+ * counts above ~10 risked the ceiling and that fixing it "needs a design
+ * change". This is that change.
+ *
+ * The survey is also the only builder whose result has a shape of its own — a
+ * title and description wrapping the questions, which the model is allowed to
+ * improve on. Job records store a flat `items` array, so the framing travels in
+ * the job's optional `meta` (see shared/generation-jobs.js). It is asked for on
+ * the FIRST pass only: re-deriving it per chunk invites the model to contradict
+ * itself, and writing it immediately means it survives a later failure.
+ *
+ * If the model returns no framing, `meta` stays null and SurveyAIBuilder falls
+ * back to whatever the admin typed. An improved title is an improvement, not a
+ * dependency.
+ */
 
-const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
+const { makeGenerationHandler } = require('./shared/generation-handler');
+const { tagGuidance } = require('./shared/structured-generation');
+const { normalizeTags } = require('./shared/tags');
 
-exports.handler = async (event) => {
-  try {
-    console.log('📋 Lambda function started for survey generation');
-    console.log('Event:', JSON.stringify(event, null, 2));
+const MAX_COUNT = 50;
+const QUESTION_TYPES = ['rating', 'multiple_choice', 'text_entry'];
 
-    // Handle CORS preflight
-    if (event.requestContext?.http?.method === 'OPTIONS' || event.httpMethod === 'OPTIONS') {
-      return {
-        statusCode: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': 'Content-Type',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS'
+/** Survey questions are numbered 1..n; SurveyAIBuilder renders by index. */
+let sequence = 0;
+
+function parseRequest(payload) {
+  // Reset per job. A warm container would otherwise keep counting from the
+  // previous run's last question and hand SurveyAIBuilder ids starting at 43.
+  sequence = 0;
+  const total = Math.min(Math.max(parseInt(payload.questionCount, 10) || 1, 1), MAX_COUNT);
+  const types = [];
+  if (payload.includeRating) types.push('rating');
+  if (payload.includeMultipleChoice) types.push('multiple_choice');
+  if (payload.includeTextEntry) types.push('text_entry');
+  return {
+    total,
+    config: {
+      title: String(payload.title || '').trim(),
+      description: String(payload.description || '').trim(),
+      topic: String(payload.topic || '').trim(),
+      audience: String(payload.audience || '').trim(),
+      purpose: String(payload.purpose || '').trim(),
+      customPrompt: String(payload.customPrompt || '').trim(),
+      // An admin who unticks every box gets all three rather than none.
+      types: types.length > 0 ? types : QUESTION_TYPES,
+    },
+  };
+}
+
+function buildTool(config) {
+  return {
+    name: 'emit_items',
+    description: 'Return the generated survey questions as structured data.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        // Optional and first-pass only. Declared on every call because the tool
+        // schema is built once per job; the PROMPT is what asks for it.
+        surveyTitle: { type: 'string', description: 'An improved title for the survey as a whole. Omit unless it genuinely improves on the one given.' },
+        surveyDescription: { type: 'string', description: 'An improved one-or-two sentence description of the survey as a whole.' },
+        items: {
+          type: 'array',
+          description: 'The generated survey questions, in order.',
+          items: {
+            type: 'object',
+            properties: {
+              question: { type: 'string', description: 'The question text, 200 characters maximum.' },
+              type: { type: 'string', enum: config.types, description: 'The question type. Use only the types listed.' },
+              scale: {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', description: 'Scale range, e.g. "1-5" or "1-10".' },
+                  lowLabel: { type: 'string', description: 'Label for the low end.' },
+                  highLabel: { type: 'string', description: 'Label for the high end.' },
+                },
+                description: 'Required for rating questions; ignored otherwise.',
+              },
+              options: { type: 'array', items: { type: 'string' }, description: '2-6 options. Required for multiple_choice; empty otherwise.' },
+              allowMultiple: { type: 'boolean', description: 'Multiple_choice only: may the respondent pick several?' },
+              textType: { type: 'string', enum: ['short', 'long', 'email', 'number'], description: 'Text_entry only: the kind of input expected.' },
+              placeholder: { type: 'string', description: 'Text_entry only: placeholder text.' },
+              required: { type: 'boolean', description: 'Must the respondent answer this question?' },
+              tags: { type: 'array', items: { type: 'string' }, description: '3-6 lowercase kebab-case tags for filtering and search.' },
+            },
+            required: ['question', 'type', 'required', 'tags'],
+          },
         },
-        body: ''
-      };
-    }
+      },
+      required: ['items'],
+    },
+  };
+}
 
-    if (!event.body) {
-      throw new Error('No request body provided');
-    }
-
-    const {
-      title, description, topic, audience, purpose, questionCount,
-      includeRating, includeMultipleChoice, includeTextEntry, customPrompt
-    } = JSON.parse(event.body);
-
-    // Allow up to 50 survey questions
-    const limitedCount = Math.min(questionCount, 50);
-    if (limitedCount !== questionCount) {
-      console.log('⚠️ Limited survey question count from', questionCount, 'to', limitedCount, 'maximum allowed is 50');
-    }
-
-    console.log('📋 Generating survey:', { title, topic, audience, purpose, count: limitedCount });
-
-    // Build survey generation prompt
-    let fullPrompt = 'You are an expert survey designer. ';
-    fullPrompt += 'Create a comprehensive survey with ' + limitedCount + ' questions. ';
-    fullPrompt += 'Survey title: "' + title + '". ';
-    fullPrompt += 'Topic: ' + topic + '. ';
-
-    if (description) fullPrompt += 'Description: ' + description + '. ';
-    if (audience) fullPrompt += 'Target audience: ' + audience + '. ';
-    if (purpose) fullPrompt += 'Purpose: ' + purpose + '. ';
-
-    // Specify question types to include
-    const questionTypes = [];
-    if (includeRating) questionTypes.push('rating scale questions (1-5, 1-10, etc.)');
-    if (includeMultipleChoice) questionTypes.push('multiple choice questions');
-    if (includeTextEntry) questionTypes.push('text entry questions (short and long form)');
-
-    if (questionTypes.length > 0) {
-      fullPrompt += 'Include a mix of: ' + questionTypes.join(', ') + '. ';
-    }
-
-    if (customPrompt) {
-      fullPrompt += 'Additional requirements: ' + customPrompt + '. ';
-    }
-
-    fullPrompt += 'Return as JSON object with this structure: ';
-    fullPrompt += '{"title": "Survey Title", "description": "Survey Description", "questions": [';
-    fullPrompt += '{"id": 1, "question": "Question text", "type": "rating|multiple_choice|text_entry", ';
-    fullPrompt += '"scale": {"type": "1-5", "lowLabel": "Low", "highLabel": "High"}, ';
-    fullPrompt += '"options": ["Option 1", "Option 2"], "allowMultiple": false, ';
-    fullPrompt += '"textType": "short|long|email|number", "placeholder": "Placeholder text", "required": true}]}';
-    fullPrompt += ' Return ONLY the JSON object.';
-
-    // Right-size max_tokens to the requested count (flat 4000 truncated large
-    // surveys). NOTE: surveys are still a single call, so counts >~10 risk API
-    // Gateway's ~30s timeout - splitting/merging surveys needs a design change.
-    const maxTokens = Math.min(1500 + (limitedCount * 250), 8000);
-
-    console.log('🤖 Sending prompt to Claude...', { maxTokens });
-    const aiResponse = await invokeClaudeWithRetry(bedrockClient, InvokeModelCommand, fullPrompt, maxTokens);
-    console.log('✅ Received response from Claude');
-
-    // Parse the JSON response with improved error handling
-    let survey;
-    try {
-      console.log('🔍 Parsing AI response...');
-      console.log('Raw response length:', aiResponse.length);
-      console.log('First 500 chars:', aiResponse.substring(0, 500));
-
-      // Try multiple parsing strategies
-      let jsonString = aiResponse.trim();
-
-      // Strategy 1: Direct parse if it looks like JSON
-      if (jsonString.startsWith('{') && jsonString.endsWith('}')) {
-        console.log('✅ Direct JSON parsing...');
-        survey = JSON.parse(jsonString);
-      } else {
-        // Strategy 2: Extract JSON object with regex
-        console.log('🔍 Extracting JSON with regex...');
-        const jsonMatch = jsonString.match(/{[\s\S]*}/);
-        if (jsonMatch) {
-          console.log('✅ Found JSON match, parsing...');
-          survey = JSON.parse(jsonMatch[0]);
-        } else {
-          // Strategy 3: Try to find and clean JSON
-          console.log('🔍 Cleaning and extracting JSON...');
-          const startIndex = jsonString.indexOf('{');
-          const endIndex = jsonString.lastIndexOf('}');
-          if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
-            const extractedJson = jsonString.substring(startIndex, endIndex + 1);
-            console.log('✅ Extracted JSON, parsing...');
-            survey = JSON.parse(extractedJson);
-          } else {
-            throw new Error('No JSON object found in response');
-          }
-        }
-      }
-
-      console.log('✅ Successfully parsed survey with', survey.questions?.length || 0, 'questions');
-    } catch (parseError) {
-      console.error('❌ Failed to parse AI response:', parseError);
-      console.log('Raw response:', aiResponse);
-      throw new Error('Failed to parse AI response as JSON: ' + parseError.message);
-    }
-
-    // Ensure proper structure and add metadata
-    const processedSurvey = {
-      id: Date.now(),
-      title: survey.title || title,
-      description: survey.description || description,
-      topic: topic,
-      audience: audience,
-      purpose: purpose,
-      createdAt: new Date().toISOString(),
-      questions: (survey.questions || []).map((question, index) => ({
-        id: index + 1,
-        question: question.question || 'Untitled Question',
-        type: question.type || 'text_entry',
-        scale: question.scale || { type: '1-5', lowLabel: 'Low', highLabel: 'High' },
-        options: question.options || [],
-        allowMultiple: question.allowMultiple || false,
-        textType: question.textType || 'short',
-        placeholder: question.placeholder || '',
-        required: question.required || false
-      }))
-    };
-
-    console.log('✅ Successfully generated survey:', processedSurvey.title);
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        survey: processedSurvey,
-        message: 'Generated survey successfully'
-      }),
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      }
-    };
-
-  } catch (error) {
-    console.error('❌ Survey generation error:', error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'Failed to generate survey: ' + error.message }),
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      }
-    };
-  }
+const TYPE_LABELS = {
+  rating: 'rating scale questions (1-5, 1-10, etc.)',
+  multiple_choice: 'multiple choice questions',
+  text_entry: 'text entry questions (short and long form)',
 };
+
+function buildPrompt({ config, count, alreadyUsedTitles, isFirstPass }) {
+  let p = `You are an expert survey designer. Create ${count} survey questions.`;
+  if (config.title) p += `\nSurvey title: "${config.title}".`;
+  if (config.topic) p += `\nTopic: ${config.topic}.`;
+  if (config.description) p += `\nDescription: ${config.description}`;
+  if (config.audience) p += `\nTarget audience: ${config.audience}.`;
+  if (config.purpose) p += `\nPurpose: ${config.purpose}.`;
+  p += `\n\nUse ONLY these question types: ${config.types.map((t) => TYPE_LABELS[t]).join(', ')}.`;
+  if (config.customPrompt) p += `\n\nAdditional Requirements: ${config.customPrompt}`;
+
+  if (alreadyUsedTitles.length > 0) {
+    p += `\n\nALREADY ASKED in this survey — do not repeat or rephrase any of these:\n`;
+    p += alreadyUsedTitles.map((t) => `- ${t}`).join('\n');
+  }
+
+  if (isFirstPass) {
+    p += [
+      '',
+      '',
+      'SURVEY FRAMING: you may also return surveyTitle and surveyDescription to',
+      'improve the survey\'s own framing. Return them ONLY if they genuinely',
+      'improve on what was given; omit them otherwise. Do not restate the topic.',
+    ].join('\n');
+  }
+
+  p += [
+    '',
+    '',
+    'LENGTH LIMITS (hard limits, not targets):',
+    '- question: one question, 200 characters maximum. Ask one thing, not two.',
+    '- options: 2-6 of them, 60 characters each, mutually exclusive.',
+    '- placeholder: a short hint, 60 characters maximum.',
+    'Write only what the content needs; do not pad to reach a limit.',
+    '',
+    'Avoid leading questions and double-barrelled questions. A rating question',
+    'must carry a scale with labelled ends.',
+  ].join('\n');
+  p += tagGuidance();
+  p += `\n\nReturn the questions by calling the emit_items tool. Do not write prose.`;
+  return p;
+}
+
+function normalizeItem(raw, config) {
+  const question = String(raw?.question || '').trim();
+  if (!question) return null;
+
+  const type = config.types.includes(raw?.type) ? raw.type : config.types[0];
+  sequence += 1;
+
+  return {
+    id: sequence,
+    question,
+    type,
+    scale: raw?.scale && typeof raw.scale === 'object'
+      ? {
+          type: String(raw.scale.type || '1-5').trim(),
+          lowLabel: String(raw.scale.lowLabel || 'Low').trim(),
+          highLabel: String(raw.scale.highLabel || 'High').trim(),
+        }
+      : { type: '1-5', lowLabel: 'Low', highLabel: 'High' },
+    options: (Array.isArray(raw?.options) ? raw.options : [])
+      .map((o) => String(o || '').trim()).filter(Boolean).slice(0, 6),
+    allowMultiple: raw?.allowMultiple === true,
+    textType: ['short', 'long', 'email', 'number'].includes(raw?.textType) ? raw.textType : 'short',
+    placeholder: String(raw?.placeholder || '').trim(),
+    required: raw?.required !== false,
+    tags: normalizeTags(raw?.tags),
+  };
+}
+
+/** First pass only; blanks are treated as "no improvement offered". */
+function extractMeta(toolInput) {
+  const title = String(toolInput?.surveyTitle || '').trim();
+  const description = String(toolInput?.surveyDescription || '').trim();
+  if (!title && !description) return null;
+  const meta = {};
+  if (title) meta.title = title;
+  if (description) meta.description = description;
+  return meta;
+}
+
+exports.handler = makeGenerationHandler({
+  kind: 'survey',
+  tokenKind: 'survey',
+  parseRequest,
+  buildTool,
+  buildPrompt,
+  normalizeItem,
+  extractMeta,
+  // The near-duplicate net keys on `question`, not `title`.
+  titleOf: (item) => item?.question,
+});
