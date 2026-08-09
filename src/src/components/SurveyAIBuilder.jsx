@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
-import { postGenerationBatch } from '../utils/aiBatchClient';
+import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
+import { normalizeTags } from '../utils/tags';
 
 const API_BASE = window.API_BASE;
 
@@ -23,6 +24,10 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStatus, setGenerationStatus] = useState('');
+  // Raw text of the tag field while it is being edited. null = not editing, so
+  // the input falls back to the question's stored tags. Normalising on every
+  // keystroke would eat the hyphen out of "remote-" as it is typed.
+  const [tagDraft, setTagDraft] = useState(null);
 
   const questionTypes = [
     { id: 'rating', label: 'Rating Questions', description: 'Scale-based questions (1-5, 1-10, etc.)' },
@@ -32,14 +37,28 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
 
   const handleConfigSubmit = async () => {
     setIsGenerating(true);
-    setGenerationStatus('Generating comprehensive survey with AI...');
+    setGenerationStatus('Starting generation...');
     setStep(2);
 
+    // Surveys used to be a single un-chunked call for up to 50 questions
+    // against API Gateway's 30s ceiling. Now a background job, chunked.
+    const endpoint = `${API_BASE}admin/ai-generate-survey`;
+
+    // The job stores a flat item list; the survey's own framing travels in
+    // `meta`. Prefer what the AI improved, fall back to what was typed.
+    const assemble = (items, meta) => ({
+      id: Date.now(),
+      title: meta?.title || surveyConfig.title,
+      description: meta?.description || surveyConfig.description,
+      topic: surveyConfig.topic,
+      audience: surveyConfig.audience,
+      purpose: surveyConfig.purpose,
+      createdAt: new Date().toISOString(),
+      questions: items
+    });
+
     try {
-      // Note: the survey lambda returns a single survey object, so this stays
-      // one call. Large question counts (>~10) risk API Gateway's ~30s timeout;
-      // postGenerationBatch retries transient failures and reports actionable errors.
-      const result = await postGenerationBatch(`${API_BASE}admin/ai-generate-survey`, {
+      const { jobId } = await startGenerationJob(endpoint, {
         title: surveyConfig.title,
         description: surveyConfig.description,
         topic: surveyConfig.topic,
@@ -50,16 +69,31 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
         includeMultipleChoice: surveyConfig.includeMultipleChoice,
         includeTextEntry: surveyConfig.includeTextEntry,
         customPrompt: surveyConfig.customPrompt
-      }, {
+      }, { label: 'Survey generation', onStatus: setGenerationStatus });
+
+      const job = await pollGenerationJob(endpoint, jobId, {
         label: 'Survey generation',
-        onStatus: setGenerationStatus
+        onStatus: setGenerationStatus,
+        onProgress: (update) => {
+          if (Array.isArray(update.items) && update.items.length > 0) {
+            setGeneratedSurvey(assemble(update.items, update.meta));
+          }
+        }
       });
 
-      setGeneratedSurvey(result.survey);
-      setGenerationStatus(`Generated survey with ${result.survey.questions.length} questions successfully`);
+      setGeneratedSurvey(assemble(job.items, job.meta));
       setCurrentQuestionIndex(0);
+      setGenerationStatus(
+        job.warnings?.length
+          ? `Generated survey with ${job.items.length} questions. ${job.warnings.join(' ')}`
+          : `Generated survey with ${job.items.length} questions successfully`
+      );
     } catch (error) {
       console.error('AI survey generation error:', error);
+      if (error.partialItems?.length) {
+        setGeneratedSurvey(assemble(error.partialItems, null));
+        setCurrentQuestionIndex(0);
+      }
       setGenerationStatus(`Generation failed: ${error.message}`);
     } finally {
       setIsGenerating(false);
@@ -96,6 +130,8 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
   };
 
   const navigateQuestion = (direction) => {
+    // Drop any in-flight tag edit; it belongs to the question being left.
+    setTagDraft(null);
     if (direction === 'prev' && currentQuestionIndex > 0) {
       setCurrentQuestionIndex(currentQuestionIndex - 1);
     } else if (direction === 'next' && currentQuestionIndex < generatedSurvey.questions.length - 1) {
@@ -538,6 +574,35 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
                       </div>
 
                       {renderQuestionEditor(currentQuestion, currentQuestionIndex)}
+
+                      {/*
+                        Suggested tags, not imposed tags. The model that just wrote
+                        the question is best placed to say what it is about, but the
+                        owner gets the final word before anything is saved. Stored
+                        as a flat lowercase kebab-case array under `tags`.
+                      */}
+                      <div className="form-group">
+                        <label>Tags <span className="field-hint">suggested — edit freely, comma separated</span></label>
+                        <input
+                          type="text"
+                          value={tagDraft !== null ? tagDraft : (currentQuestion?.tags || []).join(', ')}
+                          onChange={(e) => setTagDraft(e.target.value)}
+                          onBlur={() => {
+                            if (tagDraft !== null) {
+                              handleQuestionEdit(currentQuestionIndex, 'tags', normalizeTags(tagDraft));
+                              setTagDraft(null);
+                            }
+                          }}
+                          placeholder="employee-satisfaction, culture, feedback"
+                        />
+                        {(currentQuestion?.tags || []).length > 0 && (
+                          <div className="tag-chips">
+                            {currentQuestion.tags.map((tag) => (
+                              <span className="tag-chip" key={tag}>{tag}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
 
                       <div className="question-preview">
                         <h4>Preview:</h4>

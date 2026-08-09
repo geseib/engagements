@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
-import { postGenerationBatch, planGenerationTopics, dropNearDuplicates, runWithConcurrency } from '../utils/aiBatchClient';
+import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
+import { normalizeTags } from '../utils/tags';
 
 const API_BASE = window.API_BASE;
 
@@ -20,6 +21,10 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
   const [currentPollIndex, setCurrentPollIndex] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStatus, setGenerationStatus] = useState('');
+  // Raw text of the tag field while it is being edited. null = not editing, so
+  // the input falls back to the poll's stored tags. Normalising on every
+  // keystroke would eat the hyphen out of "remote-" as it is typed.
+  const [tagDraft, setTagDraft] = useState(null);
 
   const difficultyLevels = [
     { value: 'easy', label: 'Easy', description: 'Simple, straightforward poll questions' },
@@ -29,82 +34,49 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
 
   const handleConfigSubmit = async () => {
     setIsGenerating(true);
-    setGenerationStatus('Generating poll questions with AI...');
+    setGenerationStatus('Starting generation...');
     setStep(2);
 
+    // Generation runs as a background job. It cannot run inside the request:
+    // API Gateway's 30s integration timeout is a hard ceiling and a full set
+    // takes minutes, which is what produced the "HTTP 503 - retrying" loop.
+    const endpoint = `${API_BASE}admin/ai-generate-polls`;
     try {
-      // Break large requests into small parallel batches so each API call
-      // completes well under API Gateway's ~30s integration timeout
-      const CHUNK_SIZE = 3;
-      const MAX_PARALLEL = 3;
-      const totalCount = pollConfig.count;
-      const chunks = Math.ceil(totalCount / CHUNK_SIZE);
+      const { jobId } = await startGenerationJob(endpoint, {
+        topic: pollConfig.topic,
+        category: pollConfig.category,
+        audience: pollConfig.audience,
+        difficulty: pollConfig.difficulty,
+        count: pollConfig.count,
+        allowMultiple: pollConfig.allowMultiple,
+        customPrompt: pollConfig.customPrompt
+      }, { label: 'Generation', onStatus: setGenerationStatus });
 
-      // Two-phase generation: when the request spans multiple parallel
-      // batches, first plan ONE list of distinct sub-topics (a small fast
-      // call), then anchor each batch to its assigned slice so batches can't
-      // duplicate each other. Falls back to the older angle hint on failure.
-      let plannedTopics = null;
-      if (chunks > 1) {
-        plannedTopics = await planGenerationTopics(`${API_BASE}admin/ai-generate-polls`, {
-          topic: pollConfig.topic,
-          category: pollConfig.category,
-          audience: pollConfig.audience,
-          difficulty: pollConfig.difficulty,
-          customPrompt: pollConfig.customPrompt
-        }, totalCount, {
-          label: 'Topic planning',
-          onStatus: setGenerationStatus
-        });
-      }
-
-      let completedPolls = 0;
-      const batchTasks = Array.from({ length: chunks }, (_, i) => async () => {
-        const chunkSize = Math.min(CHUNK_SIZE, totalCount - (i * CHUNK_SIZE));
-
-        // Anchor this batch to its assigned topics; the angle hint is only
-        // the fallback when topic planning was unavailable
-        const assignedTopics = plannedTopics
-          ? plannedTopics.slice(i * CHUNK_SIZE, i * CHUNK_SIZE + chunkSize)
-          : undefined;
-        const otherTopics = plannedTopics
-          ? plannedTopics.filter((_, idx) => idx < i * CHUNK_SIZE || idx >= i * CHUNK_SIZE + chunkSize)
-          : undefined;
-
-        let customPrompt = pollConfig.customPrompt;
-        if (chunks > 1 && !plannedTopics) {
-          customPrompt = `${customPrompt ? customPrompt + ' ' : ''}This request is part ${i + 1} of ${chunks} of a larger set generated in parallel - explore a distinct sub-topic or angle for this part and avoid the most obvious questions`;
+      const job = await pollGenerationJob(endpoint, jobId, {
+        label: 'Generation',
+        onStatus: setGenerationStatus,
+        // Show polls as they land rather than a spinner for minutes.
+        onProgress: (update) => {
+          if (Array.isArray(update.items) && update.items.length > 0) {
+            setGeneratedPolls(update.items);
+          }
         }
-
-        const result = await postGenerationBatch(`${API_BASE}admin/ai-generate-polls`, {
-          topic: pollConfig.topic,
-          category: pollConfig.category,
-          audience: pollConfig.audience,
-          difficulty: pollConfig.difficulty,
-          count: chunkSize,
-          allowMultiple: pollConfig.allowMultiple,
-          customPrompt: customPrompt,
-          assignedTopics,
-          otherTopics
-        }, {
-          label: `Batch ${i + 1} of ${chunks}`,
-          onStatus: setGenerationStatus
-        });
-
-        completedPolls += result.questions.length;
-        setGenerationStatus(`Generated ${completedPolls} of ${totalCount} poll questions...`);
-        return result.questions;
       });
 
-      const batchResults = await runWithConcurrency(batchTasks, MAX_PARALLEL);
-      // Safety net: drop any near-duplicate titles that slipped through
-      const allPolls = dropNearDuplicates(batchResults.flat());
-
-      setGeneratedPolls(allPolls);
-      setGenerationStatus(`Generated ${allPolls.length} poll questions successfully`);
+      setGeneratedPolls(job.items);
       setCurrentPollIndex(0);
+      setGenerationStatus(
+        job.warnings?.length
+          ? `Generated ${job.items.length} poll questions. ${job.warnings.join(' ')}`
+          : `Generated ${job.items.length} poll questions successfully`
+      );
     } catch (error) {
       console.error('AI poll generation error:', error);
+      // A failed job still returns whatever it managed to generate.
+      if (error.partialItems?.length) {
+        setGeneratedPolls(error.partialItems);
+        setCurrentPollIndex(0);
+      }
       setGenerationStatus(`Generation failed: ${error.message}`);
     } finally {
       setIsGenerating(false);
@@ -138,6 +110,8 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
   };
 
   const navigatePoll = (direction) => {
+    // Drop any in-flight tag edit; it belongs to the poll being left.
+    setTagDraft(null);
     if (direction === 'prev' && currentPollIndex > 0) {
       setCurrentPollIndex(currentPollIndex - 1);
     } else if (direction === 'next' && currentPollIndex < generatedPolls.length - 1) {
@@ -374,6 +348,35 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                             Allow multiple selections
                           </label>
                         </div>
+                      </div>
+
+                      {/*
+                        Suggested tags, not imposed tags. The model that just wrote
+                        the poll is best placed to say what it is about, but the
+                        owner gets the final word before anything is saved. Stored
+                        as a flat lowercase kebab-case array under `tags`.
+                      */}
+                      <div className="form-group">
+                        <label>Tags <span className="field-hint">suggested — edit freely, comma separated</span></label>
+                        <input
+                          type="text"
+                          value={tagDraft !== null ? tagDraft : (currentPoll?.tags || []).join(', ')}
+                          onChange={(e) => setTagDraft(e.target.value)}
+                          onBlur={() => {
+                            if (tagDraft !== null) {
+                              handlePollEdit(currentPollIndex, 'tags', normalizeTags(tagDraft));
+                              setTagDraft(null);
+                            }
+                          }}
+                          placeholder="remote-work, feedback, decisions"
+                        />
+                        {(currentPoll?.tags || []).length > 0 && (
+                          <div className="tag-chips">
+                            {currentPoll.tags.map((tag) => (
+                              <span className="tag-chip" key={tag}>{tag}</span>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       <div className="poll-options-editor">
