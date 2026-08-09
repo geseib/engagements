@@ -413,6 +413,46 @@ await check('an empty round still reveals and returns 200', () =>
 await check('an empty round returns an empty list', () =>
   assert.deepStrictEqual(JSON.parse(empty.body).answers, []));
 
+console.log('\n10. the playerAnswered round lookup pads the question number');
+
+// Review round 1 finding: message.js's ANSWER# branch built the ROUND# key
+// from the raw `messageNumber = messageType.replace('ANSWER#', '')` with no
+// .padStart(3, '0') — every other ROUND# reader/writer in this file (and in
+// start-vote.js / reveal-authors.js) pads. It fails safe today because a
+// missed lookup returns Item: undefined and isHidden(meta, undefined) still
+// evaluates to hidden — so a round seeded ANONYMOUS (the default) can't
+// distinguish a correct padded lookup from a broken unpadded one; both land on
+// "redact". To actually exercise the key-construction contract, this round is
+// seeded REVEALED: a correct padded lookup finds ROUND#001 (AuthorsRevealed:
+// true) and stops redacting; a broken unpadded lookup for 'ANSWER#1' queries
+// 'ROUND#1', misses the row entirely, falls back to the hidden default, and
+// keeps redacting — which is exactly the wrong answer once revealed, and
+// exactly what this check catches.
+seedAnonymousRound('3010', { revealed: true });
+put({ PK: 'GAME#3010', SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
+sent = [];
+
+await wsMessage({
+  requestContext: { connectionId: 'player-conn-3', domainName: 'ws.test.invalid', stage: 'dev' },
+  body: JSON.stringify({
+    // Unpadded on purpose — '1', not '001'. handlePlayerAnswer's own state
+    // check tolerates this (it tries both padded and unpadded forms), so this
+    // exercises only the notification's round lookup, nothing upstream of it.
+    action: 'message', gameId: '3010', playerName: 'Ada',
+    messageType: 'ANSWER#1', answer: 'a splendid answer'
+  })
+});
+
+const answeredRevealedUnpadded = sent.map(s => s.message)
+  .find(m => m.type === 'playerAnswered' || m.messageType === 'ANSWER#1');
+
+await check('an unpadded ANSWER# still finds the padded ROUND#001 row once revealed', () =>
+  assert.ok(answeredRevealedUnpadded
+    && answeredRevealedUnpadded.playerName === 'Ada'
+    && answeredRevealedUnpadded.answer === 'a splendid answer',
+    `padded round lookup regression — unpadded messageType missed ROUND#001 and ` +
+    `over-redacted a revealed round: ${JSON.stringify(answeredRevealedUnpadded)}`));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
 

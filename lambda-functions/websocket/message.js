@@ -595,9 +595,15 @@ async function handlePlayerMessage(gameId, playerName, messageType, messageData)
             TableName: process.env.TABLE_NAME,
             Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
           })),
+          // ROUND# keys are always stored zero-padded to 3 digits (see
+          // handlePlayerAnswer's own `questionNumber` a few hundred lines up,
+          // and start-vote.js / reveal-authors.js) — an unpadded lookup here
+          // (e.g. from messageType 'ANSWER#1') misses the row entirely. It
+          // fails safe today (isHidden(meta, undefined) still returns hidden),
+          // but that's an accident of the default, not a reason to skip padding.
           db.send(new GetCommand({
             TableName: process.env.TABLE_NAME,
-            Key: { PK: `GAME#${gameId}`, SK: `ROUND#${questionNumber}` }
+            Key: { PK: `GAME#${gameId}`, SK: `ROUND#${String(questionNumber).padStart(3, '0')}` }
           }))
         ]);
 
