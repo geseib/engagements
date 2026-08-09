@@ -561,10 +561,10 @@ async function handlePlayerMessage(gameId, playerName, messageType, messageData)
       await handlePlayerVote(gameId, playerName, messageType, messageData);
     }
     
-    // Get host connection for this game
-    const hostConnection = await getHostConnection(gameId);
-    
-    if (hostConnection) {
+    // Every host screen attached to this game
+    const hostConnections = await getHostConnections(gameId);
+
+    if (hostConnections.length > 0) {
       // Send specific notification types based on message type
       let notificationType = 'playerMessage';
       let notificationData = {
@@ -630,10 +630,12 @@ async function handlePlayerMessage(gameId, playerName, messageType, messageData)
         ...notificationData
       };
       
-      console.log(`📤 Sending notification to host:`, notificationMessage);
-      
-      await sendToConnection(hostConnection.ConnectionId, notificationMessage);
-      
+      console.log(`📤 Sending notification to ${hostConnections.length} host connection(s):`, notificationMessage);
+
+      await Promise.all(hostConnections.map(
+        (connection) => sendToConnection(connection.ConnectionId, notificationMessage)
+      ));
+
       console.log(`✅ Player message ${messageType} sent to host`);
     } else {
       console.log(`⚠️ No host connection found for game ${gameId}`);
@@ -669,9 +671,18 @@ async function getPlayerConnections(gameId) {
 }
 
 /**
- * Get host connection for a game
+ * Every host connection for a game.
+ *
+ * ALL of them, not `Items[0]`. connect.js retires older host rows, but it
+ * deliberately leaves same-millisecond peers alone rather than picking a winner
+ * by coin flip (see tests/host-connection-dedup.js), so more than one row can
+ * legitimately exist for a moment. Taking the first would mean the host screen
+ * the operator is actually looking at is the one that never learns an answer
+ * arrived — the same silent failure the dedup ordering exists to prevent, and
+ * the only remaining place in the system that talks to a single chosen host
+ * instead of broadcasting.
  */
-async function getHostConnection(gameId) {
+async function getHostConnections(gameId) {
   try {
     const result = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
@@ -683,11 +694,11 @@ async function getHostConnection(gameId) {
         ':type': 'HOST'
       }
     }));
-    
-    return result.Items?.[0] || null;
+
+    return result.Items || [];
   } catch (error) {
-    console.error(`❌ Error getting host connection for game ${gameId}:`, error);
-    return null;
+    console.error(`❌ Error getting host connections for game ${gameId}:`, error);
+    return [];
   }
 }
 

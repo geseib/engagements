@@ -100,26 +100,30 @@ exports.handler = async (event) => {
  */
 async function notifyHostOfVote(gameId, playerName, questionNumber, votes) {
   try {
-    // Get host connection
-    const hostConnection = await getHostConnection(gameId);
-    
-    if (hostConnection) {
-      const notification = {
-        type: 'playerVoted',
-        gameId,
-        playerName,
-        questionNumber,
-        questionId: questionNumber,
-        votes,
-        timestamp: new Date().toISOString()
-      };
+    const hostConnections = await getHostConnections(gameId);
 
+    if (hostConnections.length === 0) {
+      console.log(`⚠️ No host connection found for game ${gameId}`);
+      return;
+    }
+
+    const notification = {
+      type: 'playerVoted',
+      gameId,
+      playerName,
+      questionNumber,
+      questionId: questionNumber,
+      votes,
+      timestamp: new Date().toISOString()
+    };
+
+    await Promise.all(hostConnections.map(async (hostConnection) => {
       try {
         await apigateway.send(new PostToConnectionCommand({
           ConnectionId: hostConnection.ConnectionId,
           Data: JSON.stringify(notification)
         }));
-        console.log(`✅ Host notified of vote from ${playerName}`);
+        console.log(`✅ Host ${hostConnection.ConnectionId} notified of vote from ${playerName}`);
       } catch (sendError) {
         // 410 Gone == dead host connection. Delete the stale row inline.
         if (sendError.statusCode === 410 || sendError.name === 'GoneException' || sendError.$response?.statusCode === 410) {
@@ -129,12 +133,10 @@ async function notifyHostOfVote(gameId, playerName, questionNumber, votes) {
             Key: { PK: hostConnection.PK, SK: hostConnection.SK }
           })).catch(() => {});
         } else {
-          throw sendError;
+          console.error(`❌ Failed to notify host ${hostConnection.ConnectionId}:`, sendError.message);
         }
       }
-    } else {
-      console.log(`⚠️ No host connection found for game ${gameId}`);
-    }
+    }));
   } catch (error) {
     console.error(`❌ Error notifying host of vote:`, error);
     // Don't throw error - vote was already saved successfully
@@ -142,9 +144,16 @@ async function notifyHostOfVote(gameId, playerName, questionNumber, votes) {
 }
 
 /**
- * Get host connection for a game
+ * Every host connection for a game.
+ *
+ * ALL of them, not `Items[0]`. connect.js retires older host rows but leaves
+ * same-millisecond peers alone rather than picking a winner by coin flip (see
+ * tests/host-connection-dedup.js), so more than one row can legitimately exist.
+ * Choosing one means the host screen the operator is looking at may be the one
+ * whose "Voted n / m" never moves — the VOTE-phase twin of the frozen answer
+ * meter.
  */
-async function getHostConnection(gameId) {
+async function getHostConnections(gameId) {
   try {
     const result = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
@@ -156,10 +165,10 @@ async function getHostConnection(gameId) {
         ':type': 'HOST'
       }
     }));
-    
-    return result.Items && result.Items.length > 0 ? result.Items[0] : null;
+
+    return result.Items || [];
   } catch (error) {
-    console.error(`❌ Error getting host connection for game ${gameId}:`, error);
-    return null;
+    console.error(`❌ Error getting host connections for game ${gameId}:`, error);
+    return [];
   }
 }

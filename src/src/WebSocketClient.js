@@ -30,6 +30,19 @@ class WebSocketClient {
     this.playerName = playerName;
     this.isHost = isHost;
 
+    // Retire whatever we were holding before opening its replacement.
+    //
+    // This used to assign over the top of a live socket. The abandoned one
+    // stayed open, and the server retires connection rows by identity — one
+    // host screen, one row per player — so the orphan's handshake could take
+    // the row belonging to the socket we actually kept. Every broadcast is a
+    // query over those rows, so the page then received nothing while
+    // `readyState` still said OPEN and the badge still said Connected.
+    //
+    // The handlers come off first: this close is ours, and `onclose` is what
+    // runs the reconnect ladder.
+    this._discardSocket();
+
     const wsUrl = `${window.WS_URL}?gameId=${gameId}${playerName ? `&playerName=${encodeURIComponent(playerName)}` : ''}${isHost ? '&isHost=true' : ''}`;
     
     console.log(`🔌 Connecting to WebSocket: ${wsUrl}`);
@@ -88,6 +101,18 @@ class WebSocketClient {
     }
   }
 
+  /** Detach and close the current socket without triggering our own reconnect. */
+  _discardSocket() {
+    const socket = this.ws;
+    this.ws = null;
+    if (!socket) return;
+    socket.onopen = null;
+    socket.onmessage = null;
+    socket.onclose = null;
+    socket.onerror = null;
+    try { socket.close(1000, 'superseded'); } catch (_) { /* already gone */ }
+  }
+
   _scheduleReconnect() {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.log('🔌 max reconnects hit; will retry on network/visibility event');
@@ -125,7 +150,12 @@ class WebSocketClient {
 
   // Called by page visibility/online/focus handlers. Reconnect if dead, else just resync.
   ensureConnected() {
-    if (this.isConnected()) return true;             // caller still runs checkGameState()
+    // CONNECTING counts as present. Waking a laptop fires visibilitychange,
+    // online, focus and pageshow within a few milliseconds of each other, which
+    // is precisely when a handshake is still open — and starting a rival socket
+    // there is how one of them ends up holding a connection the server has
+    // already retired.
+    if (this.isConnected() || this.isConnecting()) return true;  // caller still runs checkGameState()
     this.reconnectAttempts = 0;                      // FIX: re-arm after permanent give-up
     this.reconnectDelay = this.baseReconnectDelay;
     if (this.gameId) this.connect(this.gameId, this.playerName, this.isHost);
@@ -146,6 +176,11 @@ class WebSocketClient {
 
   isConnected() {
     return this.ws && this.ws.readyState === WebSocket.OPEN;
+  }
+
+  /** Handshake in flight. Not usable yet, but emphatically not absent. */
+  isConnecting() {
+    return !!this.ws && this.ws.readyState === WebSocket.CONNECTING;
   }
 
   sendMessage(action, data = {}) {
