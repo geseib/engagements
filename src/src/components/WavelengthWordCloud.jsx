@@ -208,7 +208,7 @@ const WavelengthWordCloud = ({ answers, promptWord, gameState, stage = false }) 
       <div className="wavelength-word-cloud">
         <svg ref={svgRef} />
         <p className="cloud-caption">
-          {`${answers?.length || 0} contributed words`}
+          {`${allWords.length} contributed words`}
         </p>
       </div>
     );

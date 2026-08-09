@@ -364,7 +364,7 @@ body{
    floor and well below TV's 26px, i.e. unreadable at exactly the distance the
    cut it announces was made for. It is a footnote, so it sits at the label
    tier — but it is the label tier of the ACTIVE profile, not a fixed px. */
-.content > .reduced{font-size:var(--t-meta);color:var(--muted);margin:.6em 0 0}
+.content > .reduced{font-size:var(--t-meta);color:var(--muted);font-weight:600;letter-spacing:.04em;margin:.6em 0 0}
 
 /* trivia options. Two columns whenever there are four or more: with six
    options a single column is TALLER, not shorter — the previous spec had this

@@ -467,6 +467,21 @@ describe('what the host page must now render', () => {
     expect(source.slice(at, at + 200)).not.toMatch(/data-drop=/);
   });
 
+  test('a finished session does not advertise a live join on the rail', () => {
+    // Rail honours `closed` when it is given it (see 'a closed session
+    // states that it is closed' above) — but that only matters if
+    // GameHostPage actually passes it. It used to not: `join={gameId ? {url,
+    // code} : {}}` was unconditional, so a finished room still projected
+    // `JOIN eng.seibtribe.us/play 4821`. Scoped to the join prop's own
+    // window, the same technique as the toggle test above, so a revert of
+    // the ENDED branch fails here even though Rail's own test stays green.
+    const at = source.indexOf('join={gameId');
+    expect(at).toBeGreaterThan(-1);
+    const joinProp = source.slice(at, at + 300);
+    expect(joinProp).toMatch(/hostPhase === 'ENDED'/);
+    expect(joinProp).toMatch(/closed:\s*true/);
+  });
+
   /**
    * CHROME IS SACRIFICED BEFORE CONTENT — the rule the whole drop ladder
    * exists to express, and the one thing nothing asserted.
