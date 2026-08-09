@@ -16,6 +16,7 @@ import {
 import { resetGameSession } from './config/gameSession';
 import { gameTypeMeta } from './config/gameTypes';
 import { hostControlsFor, phaseOfGameState, HOST_INTENTS } from './config/hostControls';
+import { anonymityApplies, createPayloadFor } from './config/anonymity';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
 
@@ -142,6 +143,7 @@ function GameHostPage() {
   const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer', 'trivia', or 'wavelength'
   const [triviaTimer, setTriviaTimer] = useState(30); // Timer for trivia questions in seconds
   const [randomizeQuestions, setRandomizeQuestions] = useState(true); // Default ON - randomize question order
+  const [anonymousResponses, setAnonymousResponses] = useState(true); // Default ON - hide authorship until the round reveals
 
   // Workie's voice. '' means "adapt to the session" — the designed default, and
   // deliberately NOT the legacy prompt template's baked-in persona. See
@@ -2445,7 +2447,8 @@ Focus on actionable business strategy insights.`;
           // '' means "adapt to the session". create-game.js only stores
           // PersonaId when this is non-empty.
           personaId: newGamePersonaId || '',
-          hostName: 'Host'
+          hostName: 'Host',
+          ...createPayloadFor({ gameType: engagementType, anonymousResponses }),
         })
       });
 
@@ -3197,6 +3200,35 @@ Ready to engage? See you there!`;
                 }
               </small>
             </div>
+
+            {/* Checked against `engagementType` — this dialog's own type
+                picker — not `currentGameType`, which still names whatever
+                game is on screen until this new one is created. */}
+            {anonymityApplies(engagementType) && (
+              <div className="setup-section">
+                <h3>Responses</h3>
+                <label className="setup-toggle">
+                  <input
+                    type="checkbox"
+                    checked={anonymousResponses}
+                    onChange={(e) => setAnonymousResponses(e.target.checked)}
+                  />
+                  <span className="setup-toggle-label">Anonymous responses</span>
+                </label>
+                {/* Default ON, so this copy has to make an ALREADY-ACTIVE guarantee legible
+                    to a host who never touches it. The second clause is the surprising one,
+                    so it is stated rather than implied. */}
+                <p className="setup-help">
+                  Until voting closes, nobody sees who wrote which answer — not the room,
+                  not you. The room votes on the answers, not on the people.
+                </p>
+                <p className="setup-help setup-help--muted">
+                  {anonymousResponses
+                    ? 'This hides names, not identities. In a small group, people may still recognise each other’s answers.'
+                    : 'Every answer is labelled with its author from the moment voting opens.'}
+                </p>
+              </div>
+            )}
 
             <div className="form-group">
               <label>AI Context (Optional):</label>
