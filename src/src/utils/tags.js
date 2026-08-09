@@ -57,3 +57,11 @@ export const tagsMatch = (candidateTags, wantedTags) => {
   if (wanted.size === 0) return true;
   return normalizeTags(candidateTags, { max: Infinity }).some((t) => wanted.has(t));
 };
+
+/**
+ * Tags → one CSV cell. Pipe-separated, matching the Options column's existing
+ * convention in upload-questions.js. Normalising first guarantees kebab-case,
+ * which is also why this is safe inside the naive `"${value}"` interpolation
+ * the CSV generators use: a normalised tag cannot contain a quote or a comma.
+ */
+export const tagsToCsvCell = (tags) => normalizeTags(tags).join('|');

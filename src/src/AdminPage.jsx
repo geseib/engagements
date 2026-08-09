@@ -19,6 +19,7 @@ import PromptShapePreview from './components/PromptShapePreview';
 import QuestionSetEditor from './components/QuestionSetEditor';
 import { gameTypeLabel } from './config/gameTypes';
 import { truncate } from './utils/questionSetEditing';
+import { tagsToCsvCell } from './utils/tags';
 
 const API_BASE = window.API_BASE;
 
@@ -612,8 +613,8 @@ function AdminPage() {
   };
 
   const generateScenariosCSV = (scenarios) => {
-    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction';
-    
+    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags';
+
     // First, group scenarios by category
     const scenariosByCategory = {};
     scenarios.forEach(scenario => {
@@ -623,13 +624,13 @@ function AdminPage() {
       }
       scenariosByCategory[category].push(scenario);
     });
-    
+
     // Generate CSV rows with proper category-relative numbering
     const rows = [];
     Object.keys(scenariosByCategory).forEach(category => {
       scenariosByCategory[category].forEach((scenario, index) => {
         const questionNumber = index + 1; // Category-relative numbering (1, 2, 3 for each category)
-        rows.push(`"${category}","${questionNumber}","${scenario.title}","${scenario.detail}","${scenario.school || 'Professional Development'}","${scenario.customInstructions || ''}"`);
+        rows.push(`"${category}","${questionNumber}","${scenario.title}","${scenario.detail}","${scenario.school || 'Professional Development'}","${scenario.customInstructions || ''}","${tagsToCsvCell(scenario.tags)}"`);
       });
     });
     
@@ -683,7 +684,7 @@ function AdminPage() {
 
   const generateTriviaCSV = (questions) => {
     // Use the new CSV format that matches upload-questions.js expectations
-    const headers = 'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty';
+    const headers = 'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty,Tags';
     
     // First, group questions by category
     const questionsByCategory = {};
@@ -705,7 +706,7 @@ function AdminPage() {
         const correctAnswer = Array.isArray(trivia.correctAnswer) ? trivia.correctAnswer.join(',') : trivia.correctAnswer;
         
         // Build the row with new format that matches what upload-questions.js expects
-        rows.push(`"${category}","${questionNumber}","${trivia.title}","${trivia.questionDetail || trivia.detail || ''}","${trivia.answerDetails || ''}","${trivia.school || 'General'}","${trivia.optionA || ''}","${trivia.optionB || ''}","${trivia.optionC || ''}","${trivia.optionD || ''}","${trivia.optionE || ''}","${trivia.optionF || ''}","${correctAnswer}","${trivia.difficulty}"`);
+        rows.push(`"${category}","${questionNumber}","${trivia.title}","${trivia.questionDetail || trivia.detail || ''}","${trivia.answerDetails || ''}","${trivia.school || 'General'}","${trivia.optionA || ''}","${trivia.optionB || ''}","${trivia.optionC || ''}","${trivia.optionD || ''}","${trivia.optionE || ''}","${trivia.optionF || ''}","${correctAnswer}","${trivia.difficulty}","${tagsToCsvCell(trivia.tags)}"`);
       });
     });
     
@@ -758,7 +759,7 @@ function AdminPage() {
   };
 
   const generatePollCSV = (questions) => {
-    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Option1,Option2,Option3,Option4,Option5,AllowMultiple';
+    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Option1,Option2,Option3,Option4,Option5,AllowMultiple,Tags';
     
     // First, group questions by category
     const questionsByCategory = {};
@@ -781,7 +782,7 @@ function AdminPage() {
           options.push('');
         }
 
-        rows.push(`"${category}","${questionNumber}","${poll.title}","${poll.detail || ''}","${poll.school || 'General'}","${poll.customInstructions || ''}","${options[0]}","${options[1]}","${options[2]}","${options[3]}","${options[4]}","${poll.allowMultiple ? 'true' : 'false'}"`);
+        rows.push(`"${category}","${questionNumber}","${poll.title}","${poll.detail || ''}","${poll.school || 'General'}","${poll.customInstructions || ''}","${options[0]}","${options[1]}","${options[2]}","${options[3]}","${options[4]}","${poll.allowMultiple ? 'true' : 'false'}","${tagsToCsvCell(poll.tags)}"`);
       });
     });
     

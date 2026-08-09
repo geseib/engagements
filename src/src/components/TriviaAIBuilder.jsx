@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { postGenerationBatch, planGenerationTopics, dropNearDuplicates, runWithConcurrency } from '../utils/aiBatchClient';
 import Icon from './Icon';
+import { tagsToCsvCell } from '../utils/tags';
 
 const API_BASE = window.API_BASE;
 
@@ -149,11 +150,11 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
   };
 
   const generateTriviaCSV = () => {
-    const headers = 'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty';
+    const headers = 'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty,Tags';
     const rows = generatedTrivia.map((trivia, index) => {
       const correctAnswer = Array.isArray(trivia.correctAnswer) ? trivia.correctAnswer.join(',') : trivia.correctAnswer;
-      
-      return `"${trivia.category}","${index + 1}","${trivia.title}","${trivia.questionDetail}","${trivia.answerDetails}","${trivia.school || 'General'}","${trivia.optionA || ''}","${trivia.optionB || ''}","${trivia.optionC || ''}","${trivia.optionD || ''}","${trivia.optionE || ''}","${trivia.optionF || ''}","${correctAnswer}","${trivia.difficulty}"`;
+
+      return `"${trivia.category}","${index + 1}","${trivia.title}","${trivia.questionDetail}","${trivia.answerDetails}","${trivia.school || 'General'}","${trivia.optionA || ''}","${trivia.optionB || ''}","${trivia.optionC || ''}","${trivia.optionD || ''}","${trivia.optionE || ''}","${trivia.optionF || ''}","${correctAnswer}","${trivia.difficulty}","${tagsToCsvCell(trivia.tags)}"`;
     });
     return headers + '\n' + rows.join('\n');
   };
