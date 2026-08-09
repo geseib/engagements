@@ -1,183 +1,149 @@
-const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
-const { invokeClaudeWithRetry, planTopicList, buildTopicAssignmentText } = require('./shared/bedrock-utils');
+/**
+ * AI poll generation — asynchronous, structured, tag-suggesting.
+ *
+ * Same fix as trivia: generation ran inside the HTTP request against API
+ * Gateway's hard 30s integration timeout, worked around with parallel batches
+ * that each raced the same clock and were blind to each other. POST now returns
+ * 202 + a jobId; a self-invoked worker generates against the full 900s.
+ *
+ * The old handler's option fallback is gone. When the model returned no usable
+ * options it substituted ["Option 1","Option 2","Option 3"] and shipped that as
+ * a poll — a placeholder that looks like content and reaches players. A poll
+ * with fewer than two real options is now dropped, and the pass simply produces
+ * one fewer item.
+ */
 
-const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
+const { makeGenerationHandler } = require('./shared/generation-handler');
+const { tagGuidance } = require('./shared/structured-generation');
+const { normalizeTags } = require('./shared/tags');
 
-exports.handler = async (event) => {
-  try {
-    console.log('📊 Lambda function started for poll generation');
-    console.log('Event:', JSON.stringify(event, null, 2));
+const MAX_COUNT = 100;
+const MIN_OPTIONS = 2;
+const MAX_OPTIONS = 5;
 
-    // Handle CORS preflight
-    if (event.requestContext?.http?.method === 'OPTIONS' || event.httpMethod === 'OPTIONS') {
-      return {
-        statusCode: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': 'Content-Type',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS'
+function parseRequest(payload) {
+  const total = Math.min(Math.max(parseInt(payload.count, 10) || 1, 1), MAX_COUNT);
+  return {
+    total,
+    config: {
+      topic: payload.topic || 'general topics',
+      category: payload.category || '',
+      audience: payload.audience || '',
+      difficulty: payload.difficulty || 'medium',
+      allowMultiple: payload.allowMultiple === true,
+      customPrompt: payload.customPrompt || '',
+    },
+  };
+}
+
+function buildTool(config) {
+  return {
+    name: 'emit_items',
+    description: 'Return the generated poll questions as structured data.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          description: 'The generated poll questions, in order.',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'The poll question itself, 3-20 words.' },
+              category: { type: 'string', description: 'The category this poll belongs to.' },
+              detail: { type: 'string', description: 'Background or context, 1-3 sentences, 300 characters maximum.' },
+              school: { type: 'string', description: 'Broader subject area.' },
+              customInstructions: { type: 'string', description: 'What the participant should do, one sentence.' },
+              options: {
+                type: 'array',
+                items: { type: 'string' },
+                minItems: MIN_OPTIONS,
+                maxItems: MAX_OPTIONS,
+                description: `${MIN_OPTIONS}-${MAX_OPTIONS} answer options, each 60 characters maximum. They must be genuinely distinct.`,
+              },
+              allowMultiple: {
+                type: 'boolean',
+                description: config.allowMultiple
+                  ? 'True where picking several options is genuinely useful.'
+                  : 'Always false for this set.',
+              },
+              tags: { type: 'array', items: { type: 'string' }, description: '3-6 lowercase kebab-case tags for filtering and search.' },
+            },
+            required: ['title', 'category', 'detail', 'customInstructions', 'options', 'allowMultiple', 'tags'],
+          },
         },
-        body: ''
-      };
-    }
+      },
+      required: ['items'],
+    },
+  };
+}
 
-    if (!event.body) {
-      throw new Error('No request body provided');
-    }
+function buildPrompt({ config, count, alreadyUsedTitles }) {
+  let p = `You are an expert poll question creator. Create ${count} poll questions about ${config.topic}.`;
+  if (config.category) p += `\nCategory: ${config.category}.`;
+  if (config.audience) p += `\nTarget audience: ${config.audience}.`;
+  p += `\nComplexity level: ${config.difficulty}.`;
+  p += config.allowMultiple
+    ? `\nSome questions should allow multiple selections where that genuinely helps.`
+    : `\nEvery question is single-select. Set allowMultiple to false on all of them.`;
+  if (config.customPrompt) p += `\n\nAdditional Requirements: ${config.customPrompt}`;
 
-    const { topic, category, audience, difficulty, count, allowMultiple, customPrompt, planTopics, assignedTopics, otherTopics } = JSON.parse(event.body);
-
-    // Phase 1 of two-phase generation: plan distinct sub-topics before the
-    // client fans out parallel batches (each batch is then anchored to its
-    // assigned topics so parallel batches can't duplicate each other)
-    if (planTopics === true) {
-      let brief = `Poll questions about ${topic}.`;
-      if (category) brief += ` Category: ${category}.`;
-      if (audience) brief += ` Target audience: ${audience}.`;
-      if (difficulty) brief += ` Complexity level: ${difficulty}.`;
-      if (customPrompt) brief += ` Additional requirements: ${customPrompt}`;
-
-      const topics = await planTopicList(bedrockClient, InvokeModelCommand, {
-        brief,
-        itemNoun: 'poll questions',
-        count
-      });
-
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ topics }),
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': 'Content-Type',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS'
-        }
-      };
-    }
-
-    // Allow up to 100 poll questions
-    const limitedCount = Math.min(count, 100);
-    if (limitedCount !== count) {
-      console.log('⚠️ Limited poll count from', count, 'to', limitedCount, 'maximum allowed is 100');
-    }
-
-    console.log('📊 Generating polls:', { topic, category, audience, difficulty, count: limitedCount, allowMultiple });
-
-    // Build poll generation prompt
-    let fullPrompt = 'You are an expert poll question creator. ';
-    fullPrompt += 'Create ' + limitedCount + ' poll questions about ' + topic + '. ';
-
-    if (category) fullPrompt += 'Category: ' + category + '. ';
-    if (audience) fullPrompt += 'Target audience: ' + audience + '. ';
-    fullPrompt += 'Complexity level: ' + difficulty + '. ';
-
-    if (allowMultiple) {
-      fullPrompt += 'Some questions should allow multiple selections where appropriate. ';
-    }
-
-    if (customPrompt) {
-      fullPrompt += 'Additional requirements: ' + customPrompt + '. ';
-    }
-
-    // Phase 2 of two-phase generation: anchor this batch to its assigned
-    // topics so parallel batches stay distinct by construction
-    const topicAssignmentText = buildTopicAssignmentText(assignedTopics, otherTopics, 'poll questions');
-    if (topicAssignmentText) {
-      fullPrompt += topicAssignmentText + '\n\n';
-    }
-
-    fullPrompt += 'Return as JSON array with this structure: ';
-    fullPrompt += '[{"title": "Poll question text", "category": "Category", "detail": "Context or explanation", "school": "Context", "customInstructions": "Instructions", "options": ["Option 1", "Option 2", "Option 3"], "allowMultiple": false}]';
-    fullPrompt += ' Return ONLY the JSON array.';
-
-    // Right-size max_tokens to the requested count so responses finish well
-    // under API Gateway's ~30s integration timeout
-    const maxTokens = Math.min(800 + (limitedCount * 300), 8000);
-
-    console.log('🤖 Sending prompt to Claude...', { maxTokens });
-    const aiResponse = await invokeClaudeWithRetry(bedrockClient, InvokeModelCommand, fullPrompt, maxTokens);
-    console.log('✅ Received response from Claude');
-
-    // Parse the JSON response with improved error handling
-    let questions;
-    try {
-      console.log('🔍 Parsing AI response...');
-      console.log('Raw response length:', aiResponse.length);
-      console.log('First 500 chars:', aiResponse.substring(0, 500));
-
-      // Try multiple parsing strategies
-      let jsonString = aiResponse.trim();
-
-      // Strategy 1: Direct parse if it looks like JSON
-      if (jsonString.startsWith('[') && jsonString.endsWith(']')) {
-        console.log('✅ Direct JSON parsing...');
-        questions = JSON.parse(jsonString);
-      } else {
-        // Strategy 2: Extract JSON array with regex
-        console.log('🔍 Extracting JSON with regex...');
-        const jsonMatch = jsonString.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          console.log('✅ Found JSON match, parsing...');
-          questions = JSON.parse(jsonMatch[0]);
-        } else {
-          // Strategy 3: Try to find and clean JSON
-          console.log('🔍 Cleaning and extracting JSON...');
-          const startIndex = jsonString.indexOf('[');
-          const endIndex = jsonString.lastIndexOf(']');
-          if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
-            const extractedJson = jsonString.substring(startIndex, endIndex + 1);
-            console.log('✅ Extracted JSON, parsing...');
-            questions = JSON.parse(extractedJson);
-          } else {
-            throw new Error('No JSON array found in response');
-          }
-        }
-      }
-
-      console.log('✅ Successfully parsed', questions.length, 'poll questions');
-    } catch (parseError) {
-      console.error('❌ Failed to parse AI response:', parseError);
-      console.log('Raw response:', aiResponse);
-      throw new Error('Failed to parse AI response as JSON: ' + parseError.message);
-    }
-
-    // Add IDs and ensure proper structure
-    const processedQuestions = questions.map((question, index) => ({
-      id: Date.now() + index,
-      title: question.title || 'Untitled Poll Question',
-      category: question.category || category || 'General',
-      detail: question.detail || '',
-      school: question.school || 'General Context',
-      customInstructions: question.customInstructions || '',
-      options: Array.isArray(question.options) ? question.options : ['Option 1', 'Option 2', 'Option 3'],
-      allowMultiple: question.allowMultiple || false
-    }));
-
-    console.log('✅ Successfully generated poll questions');
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        questions: processedQuestions,
-        count: processedQuestions.length,
-        message: 'Generated poll questions successfully'
-      }),
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      }
-    };
-
-  } catch (error) {
-    console.error('❌ Poll generation error:', error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'Failed to generate polls: ' + error.message }),
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      }
-    };
+  if (alreadyUsedTitles.length > 0) {
+    p += `\n\nALREADY GENERATED for this set — do not repeat, rephrase, or write a near-variant of any of these:\n`;
+    p += alreadyUsedTitles.map((t) => `- ${t}`).join('\n');
   }
-};
+
+  p += [
+    '',
+    '',
+    'LENGTH LIMITS (hard limits, not targets):',
+    '- title: the question itself, 3-20 words.',
+    '- detail: 1-3 sentences, 300 characters maximum.',
+    '- customInstructions: one sentence.',
+    `- options: ${MIN_OPTIONS}-${MAX_OPTIONS} of them, 60 characters each.`,
+    'Write only what the content needs; do not pad to reach a limit.',
+    '',
+    'A poll measures opinion, so it has no correct answer. Options must cover the',
+    'realistic range of views and must not overlap.',
+  ].join('\n');
+  p += tagGuidance();
+  p += `\n\nReturn the questions by calling the emit_items tool. Do not write prose.`;
+  return p;
+}
+
+function normalizeItem(raw, config) {
+  const title = String(raw?.title || '').trim();
+  if (!title) return null;
+
+  const options = (Array.isArray(raw?.options) ? raw.options : [])
+    .map((o) => String(o || '').trim())
+    .filter(Boolean)
+    .slice(0, MAX_OPTIONS);
+  // A poll with one option is not a poll. Dropping it costs one item; the old
+  // placeholder fallback cost a question set that looked complete and was not.
+  if (options.length < MIN_OPTIONS) return null;
+
+  return {
+    id: Date.now() + Math.random(),
+    active: true,
+    title,
+    category: String(raw?.category || config.category || 'General').trim(),
+    detail: String(raw?.detail || '').trim(),
+    school: String(raw?.school || 'General Context').trim(),
+    customInstructions: String(raw?.customInstructions || '').trim(),
+    options,
+    // An explicit single-select request wins over a model that volunteers
+    // multi-select.
+    allowMultiple: config.allowMultiple ? raw?.allowMultiple === true : false,
+    tags: normalizeTags(raw?.tags),
+  };
+}
+
+exports.handler = makeGenerationHandler({
+  kind: 'poll',
+  tokenKind: 'poll',
+  parseRequest,
+  buildTool,
+  buildPrompt,
+  normalizeItem,
+});

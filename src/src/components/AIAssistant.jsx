@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { postGenerationBatch, planGenerationTopics, dropNearDuplicates, runWithConcurrency } from '../utils/aiBatchClient';
+import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
 
 const API_BASE = window.API_BASE;
@@ -19,82 +19,43 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
     }
 
     setIsGenerating(true);
-    setGenerationStatus('Generating with AI...');
+    setGenerationStatus('Starting generation...');
 
+    // Generation runs as a background job. It cannot run inside the request:
+    // API Gateway's 30s integration timeout is a hard ceiling and a full set
+    // takes minutes, which is what produced the "HTTP 503 - retrying" loop.
+    const endpoint = `${API_BASE}admin/ai-generate-questions`;
     try {
-      // Break bulk requests into small parallel batches so each API call
-      // completes well under API Gateway's ~30s integration timeout
-      const CHUNK_SIZE = 3;
-      const MAX_PARALLEL = 3;
-      const totalCount = isBulkGeneration ? bulkCount : 1;
-      const chunks = Math.ceil(totalCount / CHUNK_SIZE);
-
-      // Two-phase generation: when a bulk request spans multiple parallel
-      // batches, first plan ONE list of distinct sub-topics (a small fast
-      // call), then anchor each batch to its assigned slice so batches can't
-      // duplicate each other. Falls back to the older angle hint on failure.
-      let plannedTopics = null;
-      if (chunks > 1) {
-        plannedTopics = await planGenerationTopics(`${API_BASE}admin/ai-generate-questions`, {
-          engagementType,
-          userInput: userInput.trim(),
-          questionCount: totalCount,
-          context: {
-            title: questionSet.title,
-            description: questionSet.description
-          }
-        }, totalCount, {
-          label: 'Topic planning',
-          onStatus: setGenerationStatus
-        });
-      }
-
-      const batchTasks = Array.from({ length: chunks }, (_, i) => async () => {
-        const chunkSize = Math.min(CHUNK_SIZE, totalCount - (i * CHUNK_SIZE));
-
-        // Anchor this batch to its assigned topics; the angle hint is only
-        // the fallback when topic planning was unavailable
-        const assignedTopics = plannedTopics
-          ? plannedTopics.slice(i * CHUNK_SIZE, i * CHUNK_SIZE + chunkSize)
-          : undefined;
-        const otherTopics = plannedTopics
-          ? plannedTopics.filter((_, idx) => idx < i * CHUNK_SIZE || idx >= i * CHUNK_SIZE + chunkSize)
-          : undefined;
-
-        let batchInput = userInput.trim();
-        if (chunks > 1 && !plannedTopics) {
-          batchInput += `\n\nThis request is part ${i + 1} of ${chunks} of a larger set generated in parallel - cover a distinct sub-topic or angle for this part and avoid the most obvious questions.`;
+      const { jobId } = await startGenerationJob(endpoint, {
+        engagementType,
+        userInput: userInput.trim(),
+        questionCount: isBulkGeneration ? bulkCount : 1,
+        existingQuestion: isBulkGeneration ? null : questionSet.questions[questionIndex],
+        context: {
+          title: questionSet.title,
+          description: questionSet.description,
+          customInstructions: questionSet.customInstructions,
+          aiContextInstructions: questionSet.aiContextInstructions
         }
+      }, { label: 'Generation', onStatus: setGenerationStatus });
 
-        const result = await postGenerationBatch(`${API_BASE}admin/ai-generate-questions`, {
-          engagementType,
-          userInput: batchInput,
-          questionCount: chunkSize,
-          existingQuestion: isBulkGeneration ? null : questionSet.questions[questionIndex],
-          context: {
-            title: questionSet.title,
-            description: questionSet.description,
-            customInstructions: questionSet.customInstructions,
-            aiContextInstructions: questionSet.aiContextInstructions
-          },
-          assignedTopics,
-          otherTopics
-        }, {
-          label: `Batch ${i + 1} of ${chunks}`,
-          onStatus: setGenerationStatus
-        });
-
-        return result.questions;
+      const job = await pollGenerationJob(endpoint, jobId, {
+        label: 'Generation',
+        onStatus: setGenerationStatus,
+        // No list state to stream partial items into here, so just report counts.
+        onProgress: (update) => {
+          if (update.completed > 0) {
+            setGenerationStatus(`Generated ${update.completed} of ${update.requested}...`);
+          }
+        }
       });
 
-      const batchResults = await runWithConcurrency(batchTasks, MAX_PARALLEL);
-      // Safety net (bulk only): drop any near-duplicate titles that slipped through
-      const allQuestions = isBulkGeneration
-        ? dropNearDuplicates(batchResults.flat())
-        : batchResults.flat();
-
-      setGenerationStatus(`Generated ${allQuestions.length} question(s) successfully`);
-      onQuestionsGenerated(allQuestions);
+      setGenerationStatus(
+        job.warnings?.length
+          ? `Generated ${job.items.length} question(s). ${job.warnings.join(' ')}`
+          : `Generated ${job.items.length} question(s) successfully`
+      );
+      onQuestionsGenerated(job.items);
     } catch (error) {
       console.error('AI generation error:', error);
       setGenerationStatus(`Generation failed: ${error.message}`);
