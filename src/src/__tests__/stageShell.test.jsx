@@ -58,6 +58,11 @@ describe('useStageFit lifecycle', () => {
     const added = add.mock.calls.filter(([e]) => e === 'resize').length;
     unmount();
     const removed = remove.mock.calls.filter(([e]) => e === 'resize').length;
+    // `removed === added` alone is satisfied by 0 === 0, so a hook whose whole
+    // effect body were `return undefined` — no listener, no fitting, no
+    // cleanup to get wrong — passed this test. Assert the listener was
+    // actually attached before asserting it was taken away.
+    expect(added).toBeGreaterThan(0);
     expect(removed).toBe(added);
     add.mockRestore();
     remove.mockRestore();
@@ -204,6 +209,20 @@ describe('the rail', () => {
     expect(container.querySelector('.chip')).toBeNull();
   });
 
+  test('a closed session states that it is closed rather than inviting people in', () => {
+    // ENDED passed `join` unconditionally, so a finished session went on
+    // reading "JOIN eng.seibtribe.us/play 4821" at a room that had just been
+    // told the session was over — an instruction to do something that no
+    // longer works, on the one screen that exists to say it is over.
+    // 10-ended.html's rail: `Session 4821 · closed`.
+    const { container } = render(
+      <Rail phase="ENDED" title="T" context={{}} join={{ code: '4821', closed: true }} />
+    );
+    expect(container.querySelector('[data-join-word]')).toBeNull();
+    expect(container.querySelector('[data-join-url]')).toBeNull();
+    expect(container.querySelector('.rail-join').textContent).toBe('Session 4821 · closed');
+  });
+
   test('the timer is absent unless armed', () => {
     const { container, rerender } = render(<Rail title="T" context={{}} join={{ code: '1' }} />);
     expect(container.querySelector('.rail-timer')).toBeNull();
@@ -223,7 +242,14 @@ describe('the phase bar', () => {
   });
 
   test('an unrecognised phase does not crash and does not fabricate a hue', () => {
-    expect(() => render(<PhaseBar phase="NOT_A_REAL_PHASE" />)).not.toThrow();
+    // not.toThrow() alone asserts only half of the test's own name: a PhaseBar
+    // that passed "not_a_real_phase" straight through — or worse, fell back to
+    // "ask" and painted the room amber mid-results — would not throw either.
+    // The named fallback is the neutral one.
+    const { container } = render(<PhaseBar phase="NOT_A_REAL_PHASE" />);
+    const bar = container.querySelector('.bar');
+    expect(bar).not.toBeNull();
+    expect(bar.dataset.phase).toBe('lobby');
   });
 });
 
@@ -256,14 +282,27 @@ describe('the room meter', () => {
 
 describe('the dock', () => {
   test('is a grid row, not a fixed overlay', () => {
-    // position:fixed guarantees the control is visible; a grid row guarantees
-    // it is placed. A regression back to fixed positioning would defeat the
-    // whole point of this component and jsdom can at least catch the
-    // most direct form of that regression: an inline style putting it back.
+    // STRENGTHENED, not deleted. The previous version asserted
+    // `dock.style.position !== 'fixed'` — an INLINE style, which nothing in
+    // this codebase has ever written and no plausible regression would. It
+    // passed against every implementation including ones with no dock at all,
+    // and it would have gone on passing if `.dock` in the stylesheet were
+    // changed to position:fixed, which is the only way this regression can
+    // actually happen. jsdom applies no stylesheet, so the rule is read from
+    // the source instead — the same technique the panel tests below use.
     const { container } = render(<Dock status="" hint="" onSetup={() => {}}><button type="button">Go</button></Dock>);
     const dock = container.querySelector('.dock');
     expect(dock).not.toBeNull();
-    expect(dock.style.position).not.toBe('fixed');
+    // A footer, not a floating div: the element is placed by the grid.
+    expect(dock.tagName).toBe('FOOTER');
+    expect(dock.style.position).toBe('');
+
+    const stageCss = readFileSync(join(__dirname, '..', 'styles', 'stage.css'), 'utf8');
+    const at = stageCss.indexOf('\n.dock{');
+    expect(at).toBeGreaterThan(-1);
+    const rule = stageCss.slice(at, stageCss.indexOf('}', at));
+    expect(rule).toMatch(/grid-area:\s*dock/);
+    expect(rule).not.toMatch(/position:\s*fixed/);
   });
 
   test('the setup control is discoverable and wired, not just present', () => {
@@ -426,6 +465,60 @@ describe('what the host page must now render', () => {
     const at = source.indexOf('stage-authors-toggle');
     expect(at).toBeGreaterThan(-1);
     expect(source.slice(at, at + 200)).not.toMatch(/data-drop=/);
+  });
+
+  /**
+   * CHROME IS SACRIFICED BEFORE CONTENT — the rule the whole drop ladder
+   * exists to express, and the one thing nothing asserted.
+   *
+   * The fitter drops ASCENDING, and the mockups fix the polarity:
+   * 06-results-call-and-answer numbers its un-noted chrome "1" and "2" and its
+   * room-facing content "3" ("3rd place") and "4" ("2nd place"). A group with a
+   * data-drop-note is content — it announces its own loss through .reduced —
+   * and a group without one is chrome, which goes silently. So every chrome
+   * number must sort before every content number.
+   *
+   * This shipped exactly backwards. "Full prompt" was 1 and "How to answer" was
+   * 2 on ASK, "The prompt" was 1 on VOTE, and the host-only Reveal Authors
+   * control and its two-line irreversibility warning were 4 — so a dense ASK
+   * discarded the question's own text, then the instructions for answering it,
+   * and kept a button nobody in the room can press. On VOTE it discarded the
+   * one line saying what was being voted on. Each number was reviewed on its
+   * own, by the task that added it; nothing ever compared them.
+   *
+   * Read from the source rather than rendered: the numbers are scoped per
+   * .content and the phases are mutually exclusive, so no single render shows
+   * more than one state's worth, and GameHostPage cannot mount in jsdom at all
+   * (see the stale suites in the baseline). Asserting it file-wide is stricter
+   * than the DOM requires, which is the right direction for this rule.
+   */
+  test('chrome is sacrificed before content, in every state', () => {
+    // Comments are stripped first. The numbering is documented in prose right
+    // above the markup — including the numbers it used to have — and a scan
+    // that counted those would report the file's own explanation of the bug as
+    // the bug.
+    const markup = source.replace(/\/\*[\s\S]*?\*\//g, '');
+    // Each match runs from `data-drop="N"` to the end of that JSX tag, so the
+    // note is found only when it is on the SAME element.
+    const groups = [];
+    const re = /data-drop="(\d+)"([^>]*)>/g;
+    let m = re.exec(markup);
+    while (m !== null) {
+      groups.push({ order: Number(m[1]), announced: /data-drop-note="/.test(m[2]) });
+      m = re.exec(markup);
+    }
+    // The states this covers: LOBBY, ASK, VOTE and FIELD_NOTES all carry
+    // groups. A refactor that silently stopped matching would pass everything
+    // below on an empty set.
+    expect(groups.length).toBeGreaterThanOrEqual(7);
+
+    const chrome = groups.filter((g) => !g.announced).map((g) => g.order);
+    const content = groups.filter((g) => g.announced).map((g) => g.order);
+    // Both kinds have to exist, or the comparison below is vacuous — the same
+    // 0 === 0 hole the resize-listener test had.
+    expect(chrome.length).toBeGreaterThan(0);
+    expect(content.length).toBeGreaterThan(0);
+    expect(Math.max(...chrome)).toBeLessThan(Math.min(...content));
   });
 
   test('the presentation state is restored on mount and persisted on change', () => {
