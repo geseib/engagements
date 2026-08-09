@@ -117,6 +117,48 @@ describe('the stage grid', () => {
     unmount();
     expect(document.documentElement.classList.contains('d-tv')).toBe(false);
   });
+
+  /**
+   * The named slots — the Task 5 ruling's whole subject, and until now the one
+   * part of it nothing asserted.
+   */
+  test('a supplied rail replaces the placeholder rather than nesting inside it', () => {
+    // The ruling says "rendered inside the wrapper div that already exists".
+    // Taken literally that puts <header class="rail"> inside <div class="rail">:
+    // two elements on one grid area, doubled padding, and TWO boxes for the
+    // fitter's `.rail` query — which measures and sacrifices per box.
+    const { container } = render(
+      <Stage profile="room" phase="ASK" rail={<div className="rail">R</div>}><div /></Stage>
+    );
+    expect(container.querySelectorAll('.rail')).toHaveLength(1);
+    expect(container.querySelector('.rail').textContent).toBe('R');
+    // And the grid areas are still in order with a slot filled.
+    const areas = Array.from(container.querySelectorAll('.stage > *'))
+      .map((el) => el.className.split(' ')[0]);
+    expect(areas).toEqual(['field', 'rail', 'bar', 'main', 'dock']);
+  });
+
+  test('a supplied dock replaces the placeholder rather than nesting inside it', () => {
+    const { container } = render(
+      <Stage profile="room" phase="ASK" dock={<footer className="dock">D</footer>}><div /></Stage>
+    );
+    expect(container.querySelectorAll('.dock')).toHaveLength(1);
+  });
+
+  test('.main runs solo exactly when there is no meter', () => {
+    // `solo` is what collapses the meter's column, and it is also what
+    // widen() toggles when the fitter sacrifices the meter. A .main that is
+    // never solo leaves an empty 233px column on every state that has no
+    // meter — RESULTS, FIELD_NOTES and ENDED, which is half the session.
+    const { container, rerender } = render(<Stage profile="room" phase="RESULTS"><div /></Stage>);
+    expect(container.querySelector('.main').classList.contains('solo')).toBe(true);
+
+    rerender(
+      <Stage profile="room" phase="ASK" meter={<aside className="meter">4</aside>}><div /></Stage>
+    );
+    expect(container.querySelector('.main').classList.contains('solo')).toBe(false);
+    expect(container.querySelectorAll('.main .meter')).toHaveLength(1);
+  });
 });
 
 describe('the rail', () => {
@@ -240,6 +282,22 @@ describe('the dock', () => {
     expect(container.querySelector('.hint').textContent).toBe('Space also advances');
   });
 
+  test('the SPACE affordance is the dock\'s own, not HostActionBar\'s', () => {
+    // HostActionBar renders a `.host-action-bar__kbd` and then hides it under
+    // `.big-screen-mode` — the mode the dock ALWAYS passes — so the hint was
+    // invisible in all four profiles. That is the state the `.dock .kbd` note
+    // in styles/stage.css exists to prevent, undone by composition. Every
+    // mockup dock carries this span.
+    const { container, rerender } = render(<Dock onSetup={() => {}}><button type="button">Go</button></Dock>);
+    expect(container.querySelector('.kbd')).toBeNull();
+    rerender(<Dock kbd="SPACE" onSetup={() => {}}><button type="button">Go</button></Dock>);
+    const kbd = container.querySelector('.kbd');
+    expect(kbd.textContent).toBe('SPACE');
+    // A visual affordance for the operator, not a control the room's assistive
+    // tech should announce between the button and its status.
+    expect(kbd.getAttribute('aria-hidden')).toBe('true');
+  });
+
   test('renders the primary action passed to it rather than building its own', () => {
     // Dock must not reimplement HostActionBar's button/keyboard behaviour —
     // it renders whatever primary control is handed to it.
@@ -322,10 +380,51 @@ describe('what the host page must now render', () => {
     // Named slots, per the Task 5 ruling: Stage owns the grid areas and the
     // caller fills them. A page that rebuilt .rail/.dock markup inline would
     // fork the shell on its first divergence.
+    //
+    // Scoped to the <Stage> element rather than to the file. The first version
+    // of this asserted `/meter=\{/` against the whole 5,000-line source, which
+    // any `meter={` anywhere would satisfy — and it asserted `rail={(<Rail`
+    // with the parenthesis and whitespace spelled out, which had to be widened
+    // twice for the implementer's own formatting. Both are fixed here: the
+    // window makes it falsifiable, and asking for the prop and the component
+    // separately makes it survive a reformat.
     expect(source).toMatch(/import Stage from '\.\/components\/stage\/Stage'/);
-    expect(source).toMatch(/<Stage[\s\S]{0,1500}rail=\{\(?\s*<Rail/);
-    expect(source).toMatch(/meter=\{/);
-    expect(source).toMatch(/dock=\{\(?\s*<Dock/);
+
+    const windows = [];
+    for (let i = source.indexOf('<Stage'); i !== -1; i = source.indexOf('<Stage', i + 1)) {
+      windows.push(source.slice(i, i + 2000));
+    }
+    expect(windows.length).toBeGreaterThan(0);
+
+    // ONE <Stage> has to carry all three, which is what "composed" means. A
+    // window per occurrence because the identifier also appears in prose above
+    // the element; requiring the conjunction is what keeps that from counting.
+    const slots = [['rail', '<Rail'], ['meter', '<RoomMeter'], ['dock', '<Dock']];
+    const composed = windows.some((w) => slots.every(
+      ([slot, component]) => new RegExp(`\\b${slot}=\\{`).test(w) && w.includes(component)
+    ));
+    expect(composed).toBe(true);
+  });
+
+  test('the dock carries the keyboard affordance and the disabled reason', () => {
+    // HostActionBar renders both and then hides both under .big-screen-mode —
+    // the mode the dock always passes — so a dock that does not pass them
+    // itself leaves the host with a greyed-out button and no reason, and a
+    // keyboard shortcut with no sign it exists, in all four profiles.
+    const at = source.indexOf('<Dock');
+    const dockEl = source.slice(at, at + 400);
+    expect(dockEl).toMatch(/\bkbd=\{/);
+    expect(dockEl).toMatch(/\bhint=\{/);
+  });
+
+  test('the RESULTS authors toggle is not something the fitter may sacrifice', () => {
+    // On RESULTS the meter runs solo, so this was the ONLY data-drop group on
+    // the state: the first and only thing dropped before the terminal clamp,
+    // with no note to say it had gone. Losing it while the names are showing
+    // leaves them on the projector with no way to take them down.
+    const at = source.indexOf('stage-authors-toggle');
+    expect(at).toBeGreaterThan(-1);
+    expect(source.slice(at, at + 200)).not.toMatch(/data-drop=/);
   });
 
   test('the presentation state is restored on mount and persisted on change', () => {
@@ -333,5 +432,44 @@ describe('what the host page must now render', () => {
     // deleted reset effect was violating.
     expect(source).toMatch(/loadProfile\(\s*window\.localStorage/);
     expect(source).toMatch(/saveProfile\(\s*window\.localStorage/);
+  });
+});
+
+describe('the side panels and the dock', () => {
+  const css = readFileSync(join(__dirname, '..', 'styles.css'), 'utf8');
+
+  /**
+   * THE CRITICAL, as close as jsdom can get to it.
+   *
+   * Both panels are fixed at z-index 1000; `.stage` is position:relative with
+   * no z-index, so it creates no stacking context and `.dock`'s z-index 12
+   * competes with 1000 in the root stacking context and loses. Measured at
+   * 1920x1080 with a question set chosen, the 600px Game Info panel covered
+   * x∈[1320,1920] and the primary action sat at roughly [1600,1864]: fully
+   * covered, by the panel its own SETUP button opens.
+   *
+   * jsdom applies no stylesheet and cannot see a z-index, so this asserts the
+   * rule and the browser pass asserts the geometry. It fails against the file
+   * as it stood.
+   */
+  for (const selector of ['.instructions-sidebar', '.qr-sidebar']) {
+    test(`${selector} stops short of the dock rather than covering it`, () => {
+      const at = css.indexOf(`\n${selector} {`);
+      expect(at).toBeGreaterThan(-1);
+      const rule = css.slice(at, css.indexOf('}', at));
+      // --dock-measured, not --dock-h: the token is the dock's MIN-height and
+      // the dock outgrows it on a short viewport, which left the panel lapping
+      // over the primary button by 2px at 1280x720 in Table.
+      expect(rule).toMatch(/height:\s*calc\(100dvh - var\(--dock-measured, var\(--dock-h/);
+      expect(rule).not.toMatch(/height:\s*100vh/);
+    });
+  }
+
+  test('the dock publishes its measured height for the panels to subtract', () => {
+    const hook = readFileSync(join(__dirname, '..', 'hooks', 'useStageFit.js'), 'utf8');
+    expect(hook).toMatch(/setProperty\('--dock-measured'/);
+    // And takes it away again — nothing else removes a property set on the
+    // document root, and a stale one would size a panel on a page with no dock.
+    expect(hook).toMatch(/removeProperty\('--dock-measured'\)/);
   });
 });

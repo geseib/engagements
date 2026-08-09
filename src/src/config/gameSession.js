@@ -100,7 +100,6 @@ export function initialGameSession() {
     // --- reports ---------------------------------------------------------
     showReport: false,
     reportData: null,
-    showFinalReport: false,
 
     // --- panels and transient banners tied to the current game ----------
     eventTitle: '',

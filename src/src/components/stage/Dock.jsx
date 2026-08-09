@@ -23,8 +23,17 @@ import React from 'react';
  * disabled-hint (which HostActionBar hides in big-screen mode, because a
  * host-facing hint like "Waiting on 3 more" is a private instruction, not
  * something to project). Neither renders an empty element when absent.
+ *
+ * `kbd` is the key that also fires the primary — "SPACE" in every mockup dock,
+ * on every state. It has to be rendered HERE and not left to HostActionBar,
+ * which hides its own `__kbd` under `.big-screen-mode`, the mode the dock
+ * always passes: without this the affordance is invisible in all four
+ * profiles, which is the state the `.dock .kbd` note in ../../styles/stage.css
+ * was written to prevent. It sits immediately after the primary, as it does in
+ * the mockups, and it is aria-hidden because it is a visual affordance for the
+ * operator, not a control.
  */
-export default function Dock({ status, hint, onSetup, children }) {
+export default function Dock({ status, hint, kbd, onSetup, children }) {
   return (
     <footer className="dock">
       <button
@@ -40,6 +49,7 @@ export default function Dock({ status, hint, onSetup, children }) {
       {status && <span className="status" aria-live="polite">{status}</span>}
       <span className="spacer" />
       {children}
+      {kbd && <span className="kbd" aria-hidden="true">{kbd}</span>}
       {hint && <span className="hint">{hint}</span>}
     </footer>
   );

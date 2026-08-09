@@ -339,6 +339,10 @@ body{
 .q{font-family:var(--font-display);font-weight:800;
   font-size:var(--t-primary);line-height:1.05;letter-spacing:-.005em;
   max-width:var(--measure);margin:0;color:var(--text)}
+/* The one affordance for reading a prompt the fitter dropped. A cursor is the
+   whole of it: anything the room can see would be a second thing competing for
+   the space that ran out in the first place. */
+.q[data-expandable]{cursor:zoom-in}
 /* Detail copy is --text, not --muted. Section 4.3 makes --muted a labelling
    colour; the previous revision then set every explanatory sentence in it. */
 .qdetail{font-size:var(--t-body);color:var(--text);opacity:.82;margin:0;

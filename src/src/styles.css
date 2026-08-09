@@ -408,13 +408,49 @@ body {
 
 .host-action-bar.big-screen-mode .host-action-bar__actions { gap: 18px; }
 
+/* THE PANELS STOP AT THE TOP OF THE DOCK.
+   ---------------------------------------------------------------------------
+   Both side panels are `position: fixed` at `z-index: 1000`. The stage's dock
+   is a grid row at `z-index: 12` inside `.stage`, which is `position:relative`
+   with NO z-index and therefore creates no stacking context — so the two
+   compete in the root stacking context and 1000 wins. The dock's primary
+   action is right-aligned (`.dock .spacer` is `margin-left:auto`), inset only
+   ~56px at 1920, and the Game Info panel widens to 600px the moment a question
+   set is chosen: measured, the panel covered the primary action completely.
+   The SETUP control at the dock's left goes the same way under the
+   instructions panel.
+
+   Three fixes were on the table.
+
+   Raising `.stage` above 1000 cannot work: `.stage` is the whole opaque
+   viewport, so it would hide the panels outright — and giving `.stage` ANY
+   z-index makes it a stacking context, which traps `.dock`'s 12 inside it and
+   loses harder. Padding the dock while a panel is open moves the advance
+   control sideways under the host's hand mid-session, has to be as wide as the
+   panel (600px of a 1280px dock), and needs a mirror rule for the left panel.
+
+   So the panels stop short of the dock instead. Nothing on the stage moves,
+   both panels are handled by the same rule, and it is the spec's own
+   requirement stated literally: the advance control "cannot be scrolled past,
+   clipped by an ancestor's overflow:hidden, or COVERED BY A PANEL." Both
+   panels scroll their own content, so the 13vh they give up costs reach,
+   not access.
+
+   The quantity is `--dock-measured`, which useStageFit publishes from the
+   dock's real box, NOT `--dock-h`. `--dock-h` is the dock's min-height, and
+   the dock is an auto grid row that outgrows it on a short viewport: measured
+   at 1280x720 in Table the dock stood 100px tall against a 82.8px token, so a
+   panel subtracting the token still lapped 17px over the dock and 2px over
+   the primary button. `--dock-h` remains the fallback for the first paint,
+   and the 0px behind it is for any surface that mounts these panels without a
+   stage at all. */
 /* Instructions Sidebar */
 .instructions-sidebar {
   position: fixed;
   top: 0;
   left: -300px;
   width: 300px;
-  height: 100vh;
+  height: calc(100dvh - var(--dock-measured, var(--dock-h, 0px)));
   background: rgba(255, 255, 255, 0.95);
   box-shadow: 2px 0 12px rgba(0, 0, 0, 0.15);
   z-index: 1000;
@@ -487,12 +523,13 @@ body {
 }
 
 /* QR Code Sidebar */
+/* Stops at the top of the dock. See the note above .instructions-sidebar. */
 .qr-sidebar {
   position: fixed;
   top: 0;
   right: -300px;
   width: 300px;
-  height: 100vh;
+  height: calc(100dvh - var(--dock-measured, var(--dock-h, 0px)));
   background: rgba(255, 255, 255, 0.95);
   box-shadow: -2px 0 12px rgba(0, 0, 0, 0.15);
   z-index: 1000;

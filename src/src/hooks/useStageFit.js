@@ -193,9 +193,30 @@ export default function useStageFit(stageRef, deps = []) {
     const root = stageRef.current;
     if (!root) return undefined;
 
+    /**
+     * Publish the dock's MEASURED height as `--dock-measured` on :root.
+     *
+     * The fixed side panels stop at the top of the dock so they cannot cover
+     * the advance control (see styles.css, above `.instructions-sidebar`).
+     * They cannot use `--dock-h` for that: `--dock-h` is the dock's
+     * MIN-height, and the dock is an `auto` grid row whose content outgrows it
+     * on a short viewport — measured at 1280x720 the dock stood 100px tall
+     * against a 82.8px token in Table, so a panel subtracting the token still
+     * lapped 17px over the dock, and 2px over the primary button itself.
+     * Measuring is the only honest answer; `--dock-h` stays as the fallback
+     * for the first paint, before this has run.
+     */
+    const publishDockHeight = () => {
+      const dock = root.querySelector('.dock');
+      if (!dock) return;
+      const h = Math.ceil(dock.getBoundingClientRect().height);
+      if (h > 0) document.documentElement.style.setProperty('--dock-measured', `${h}px`);
+    };
+
     const run = () => {
       root.querySelectorAll('.content').forEach(fitContent);
       root.querySelectorAll('.rail, .meter').forEach(fitChrome);
+      publishDockHeight();
     };
 
     run();
@@ -206,6 +227,9 @@ export default function useStageFit(stageRef, deps = []) {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', run);
+      // Nothing else removes a property set on the document root, and a stale
+      // one would size a panel on a page that has no dock at all.
+      document.documentElement.style.removeProperty('--dock-measured');
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);

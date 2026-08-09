@@ -86,6 +86,24 @@ export function phaseOfGameState(gameState) {
 }
 
 /**
+ * Is the game sitting in the lobby — waiting to begin, as opposed to finished?
+ *
+ * This lives here, next to `phaseOfGameState`, because it is the correction to
+ * a defect in the predicate it replaces. `isWaitingState()` asked "does this
+ * state fail to start with ASK#/VOTE#/RESULTS#", which answers TRUE for
+ * `ENDED` — and that is why a finished session rendered the lobby and told a
+ * room that had just applauded that it was "Waiting for players to join…".
+ * ENDED is excluded explicitly rather than by accident of prefix.
+ *
+ * It was a closure inside GameHostPage, where nothing could test it. The bug
+ * it fixes is the headline defect of the whole change, so it is worth three
+ * lines in a module a test can import.
+ */
+export function isLobbyState(gameState) {
+  return gameState !== 'ENDED' && phaseOfGameState(gameState) === 'LOBBY';
+}
+
+/**
  * Actions the bar can ask the page to run. The page owns the handlers; this
  * module only ever names one.
  */

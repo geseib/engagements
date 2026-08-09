@@ -4,15 +4,20 @@
  * it. These tests pin the invariant that used to be spread across four inline
  * JSX blocks in GameHostPage.jsx.
  */
+import fs from 'fs';
+import path from 'path';
 import {
   HOST_PHASES,
   HOST_INTENTS,
   hostRunsVotePhase,
   hostPhaseSequence,
   phaseOfGameState,
+  isLobbyState,
   hostControlsFor,
 } from '../config/hostControls';
 import { GAME_TYPE_LIST } from '../config/gameTypes';
+
+const HOST_PAGE = path.join(__dirname, '..', 'GameHostPage.jsx');
 
 const ALL_TYPES = GAME_TYPE_LIST.map((t) => t.id);
 
@@ -34,6 +39,36 @@ describe('phaseOfGameState', () => {
   it('treats every non-round state as the lobby, like isWaitingState()', () => {
     ['CREATED', 'STARTED', 'voting', '', null, undefined].forEach((state) => {
       expect(phaseOfGameState(state)).toBe('LOBBY');
+    });
+  });
+});
+
+/**
+ * The headline defect of the stage change, pinned.
+ *
+ * `isWaitingState()` answered "does this state fail to start with
+ * ASK#/VOTE#/RESULTS#", so it answered TRUE for `ENDED` and a finished session
+ * rendered the lobby — "Waiting for players to join…" to a room that had just
+ * applauded. Until now that was guarded only by an absence assertion on the
+ * old NAME, which any reimplementation of the same mistake under a new name
+ * would sail past. This is the behaviour.
+ */
+describe('isLobbyState', () => {
+  it('is false for a finished session — the defect, stated directly', () => {
+    // Rejects `state => phaseOfGameState(state) === 'LOBBY'`, i.e. the old
+    // predicate renamed, which is the likeliest way for this to come back.
+    expect(isLobbyState('ENDED')).toBe(false);
+  });
+
+  it('is true only for the states that really are waiting to begin', () => {
+    ['CREATED', 'STARTED', 'voting', '', null, undefined].forEach((state) => {
+      expect(isLobbyState(state)).toBe(true);
+    });
+  });
+
+  it('is false once a round is running', () => {
+    ['ASK#001', 'VOTE#001', 'RESULTS#001'].forEach((state) => {
+      expect(isLobbyState(state)).toBe(false);
     });
   });
 });
@@ -236,12 +271,25 @@ describe('the two additions the stage needs', () => {
   // Every primary has to name an intent the page can actually run, or the
   // advance control is a button that does nothing — which is worse than a
   // missing one, because the host keeps pressing it.
-  test('the new primaries name an intent the page can dispatch on', () => {
-    const known = new Set(Object.values(HOST_INTENTS));
+  //
+  // The first version of this test asserted that `primary.intent` was a member
+  // of HOST_INTENTS, which primaryFor guarantees by construction: it can only
+  // return the constants, so the assertion could not fail and could not detect
+  // the bug it is named after. The bug it is named after is a `case` missing
+  // from GameHostPage's `runHostAction` switch — which is exactly what shipped
+  // for HOST_INTENTS.REPORT and had to be fixed in 6e5a5fd3. So ask the page.
+  test('the page has a dispatch case for every intent the new phases name', () => {
+    const source = fs.readFileSync(HOST_PAGE, 'utf8');
     for (const phase of ['RESULTS', 'FIELD_NOTES', 'ENDED']) {
       const { primary } = hostControlsFor({ gameType: 'call-and-answer', phase });
-      expect(known.has(primary.intent)).toBe(true);
+      const constant = Object.keys(HOST_INTENTS).find((k) => HOST_INTENTS[k] === primary.intent);
+      expect(constant).toBeTruthy();
+      expect(source).toContain(`case HOST_INTENTS.${constant}:`);
     }
+    // Named explicitly too, so deleting a phase above cannot quietly shrink
+    // what this covers.
+    expect(source).toContain('case HOST_INTENTS.FIELD_NOTES:');
+    expect(source).toContain('case HOST_INTENTS.REPORT:');
   });
 
   // The existing invariant, restated because these additions are exactly the

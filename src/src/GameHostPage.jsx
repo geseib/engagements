@@ -20,7 +20,9 @@ import {
 } from './config/instructions';
 import { resetGameSession } from './config/gameSession';
 import { gameTypeMeta } from './config/gameTypes';
-import { hostControlsFor, phaseOfGameState, HOST_INTENTS } from './config/hostControls';
+import {
+  hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS,
+} from './config/hostControls';
 import {
   anonymityApplies, anonymityActive, createPayloadFor, displayLabelFor,
   stageLabelFor, standingsVisible, playerAnsweredActions, answeredNamesFrom,
@@ -103,19 +105,10 @@ function GameHostPage() {
   // 🎯 GAME ID MANAGEMENT: Use URL as single source of truth
   const [gameId, setGameId] = useState('');
   
-  /**
-   * Is the game sitting in the lobby?
-   *
-   * This replaces the old waiting-state predicate, which answered "does this
-   * state fail to
-   * start with ASK#/VOTE#/RESULTS#" and therefore answered TRUE for `ENDED` —
-   * which is why a finished session rendered the lobby and told a room that
-   * had just applauded that it was "Waiting for players to join…". The phase
-   * comes from config/hostControls.js now, so the page and the dock can never
-   * disagree about which phase is on screen, and ENDED is excluded explicitly
-   * rather than by accident of prefix.
-   */
-  const isLobbyState = (state) => state !== 'ENDED' && phaseOfGameState(state) === 'LOBBY';
+  // `isLobbyState` is imported from config/hostControls.js, beside
+  // `phaseOfGameState`. It was a closure here, where no test could reach it,
+  // and it is the correction to the defect this whole change is named after —
+  // a finished session rendering the lobby.
   const [players, setPlayers] = useState([]);
   const [questions, setQuestions] = useState([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1);
@@ -170,9 +163,11 @@ function GameHostPage() {
   const [gamesList, setGamesList] = useState([]);
   const [reportsModalMode, setReportsModalMode] = useState('reports'); // 'reports' or 'select'
   
-  // Final Report State
-  const [showFinalReport, setShowFinalReport] = useState(false);
-  
+  // `showFinalReport` used to live here. Nothing ever rendered it, and after
+  // the end-of-game dialog was deleted nothing set it either, so it survived
+  // only as a term in `anyOverlayOpen` that could never be true. ENDED's
+  // primary calls generateReportForGame directly.
+
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
   const [useWebSocket, setUseWebSocket] = useState(true); // Always use WebSocket
@@ -412,7 +407,6 @@ function GameHostPage() {
     loadingAIInsights: setLoadingAIInsights,
     showReport: setShowReport,
     reportData: setReportData,
-    showFinalReport: setShowFinalReport,
     eventTitle: setEventTitle,
     lessonExpanded: setLessonExpanded,
     instructionsVisible: setInstructionsVisible,
@@ -632,8 +626,7 @@ function GameHostPage() {
             nextSteps: summary.nextSteps || [],
             markdownResponse: summary.markdownResponse || null,
             prompt: gameDebugMode ? summary.debugPrompt : undefined,
-            debugPrompt: gameDebugMode ? summary.debugPrompt : undefined,
-            debugProvenance: gameDebugMode ? summary.debugProvenance : undefined
+            debugPrompt: gameDebugMode ? summary.debugPrompt : undefined
           });
         }
       }).finally(() => setLoadingAIInsights(false));
@@ -746,8 +739,7 @@ Focus on actionable business strategy insights.`;
               nextSteps: existingSummary.nextSteps || [],
               markdownResponse: existingSummary.markdownResponse || null,
               prompt: gameDebugMode ? existingSummary.debugPrompt : undefined,
-              debugPrompt: gameDebugMode ? existingSummary.debugPrompt : undefined,
-              debugProvenance: gameDebugMode ? existingSummary.debugProvenance : undefined
+              debugPrompt: gameDebugMode ? existingSummary.debugPrompt : undefined
             });
             setLoadingAIInsights(false);
           } else {
@@ -1026,8 +1018,7 @@ Focus on actionable business strategy insights.`;
               nextSteps: summary.nextSteps || [],
               markdownResponse: summary.markdownResponse || null,
               prompt: gameDebugMode ? summary.debugPrompt : undefined,
-              debugPrompt: gameDebugMode ? summary.debugPrompt : undefined,
-              debugProvenance: gameDebugMode ? summary.debugProvenance : undefined
+              debugPrompt: gameDebugMode ? summary.debugPrompt : undefined
             });
             setLoadingAIInsights(false);
             console.log('🔌 AI Summary state updated');
@@ -3481,7 +3472,7 @@ Ready to engage? See you there!`;
   // reading or filling in.
   const anyOverlayOpen = Boolean(
     showConfirmModal || showQuestionBrowser || showExpandedQR ||
-    showReportsModal || lessonExpanded || isLoadingData || showFinalReport
+    showReportsModal || lessonExpanded || isLoadingData
   );
 
   const runHostAction = (action) => {
@@ -3574,24 +3565,49 @@ Ready to engage? See you there!`;
   })();
 
   /**
+   * Why the primary is greyed out, and the key that fires it when it is not.
+   *
+   * HostActionBar renders both itself and then hides both in big-screen mode —
+   * the mode the dock always passes — so without these two the host sees a
+   * disabled button with no reason and a keyboard shortcut with no sign it
+   * exists, in all four profiles. The dock's own `.kbd` / `.hint` slots exist
+   * for exactly this and were, until now, never passed anything.
+   *
+   * LOBBY is excluded because there the dock's STATUS is already the
+   * explanation (see below), and because the lobby hint names a panel, which
+   * the stage does not print.
+   */
+  const dockHint = hostControls.primary.disabled && hostPhase !== 'LOBBY'
+    ? hostControls.primary.hint
+    : '';
+  const dockKbd = !hostControls.primary.disabled && !anyOverlayOpen ? 'SPACE' : '';
+
+  /**
    * The dock's room-facing sentence. Qualitative where the meter is already
    * quantitative, copied from the mockups rather than invented.
+   *
+   * It stands down when the hint is up. On ASK with nobody answered yet the
+   * two said the same thing twice in one viewport — "Some are still answering"
+   * beside "Nobody has answered yet" — and of the pair the hint is the one
+   * that also explains the greyed-out button.
    */
   const everybodyIn = players.length > 0 && (
     hostPhase === 'ASK' ? playersWhoAnswered.length >= players.length
       : hostPhase === 'VOTE' ? playersWhoVoted.length >= players.length
         : false
   );
-  const dockStatus = (hostPhase === 'ASK' || hostPhase === 'VOTE') && players.length > 0
-    ? (everybodyIn
-        ? 'Safe to move on'
-        : `Some are still ${hostPhase === 'ASK' ? 'answering' : 'voting'}`)
-    // In the lobby the meter is already showing the count, so the dock says
-    // whether the host may go — not the same number a second time. When the
-    // primary is disabled the config's copy IS the explanation, so it stands.
-    : (hostPhase === 'LOBBY' && !hostControls.primary.disabled)
-      ? 'Ready when you are'
-      : hostControls.status.text;
+  const dockStatus = dockHint
+    ? ''
+    : (hostPhase === 'ASK' || hostPhase === 'VOTE') && players.length > 0
+      ? (everybodyIn
+          ? 'Safe to move on'
+          : `Some are still ${hostPhase === 'ASK' ? 'answering' : 'voting'}`)
+      // In the lobby the meter is already showing the count, so the dock says
+      // whether the host may go — not the same number a second time. When the
+      // primary is disabled the config's copy IS the explanation, so it stands.
+      : (hostPhase === 'LOBBY' && !hostControls.primary.disabled)
+        ? 'Ready when you are'
+        : hostControls.status.text;
 
   // DEBUG: Track every render with modal state
   console.log(`🎨 RENDER: showQuestionBrowser=${showQuestionBrowser}, showExpandedQR=${showExpandedQR}`);
@@ -4047,6 +4063,8 @@ Ready to engage? See you there!`;
         dock={(
           <Dock
             status={dockStatus}
+            hint={dockHint}
+            kbd={dockKbd}
             onSetup={() => setQrSidebarVisible((open) => !open)}
           >
             {/* Not reimplemented here. HostActionBar keeps its keyboard
@@ -4096,7 +4114,23 @@ Ready to engage? See you there!`;
 
             {hostPhase === 'ASK' && currentQuestion && (
               <>
-                <h1 className="q">{currentQuestion.title || currentQuestion.question}</h1>
+                {/* THE RECOVERY FOR A DROPPED PROMPT.
+                    The full prompt below is data-drop="1" — the first thing
+                    the fitter sacrifices on a dense ASK — and the how-to-answer
+                    line is data-drop="2". Click-to-expand is how the host gets
+                    them back, and without it a dense round loses the prompt
+                    from both the room's screen and the host's with no way to
+                    read it again. Mouse-only on purpose: giving the heading a
+                    tabIndex would put SPACE — the advance shortcut — on a
+                    focusable element that also opens a modal. */}
+                <h1
+                  className="q"
+                  data-expandable="1"
+                  title="Show the full question"
+                  onClick={() => setLessonExpanded(true)}
+                >
+                  {currentQuestion.title || currentQuestion.question}
+                </h1>
                 {currentQuestion.image && (
                   <img
                     className="stage-art"
@@ -4200,17 +4234,42 @@ Ready to engage? See you there!`;
                     enterResultsState) and every row here carries its author, so
                     there is nothing left to fetch — this only decides whether
                     the room sees the names right now. It calls no endpoint. */}
+                {/* NOT DROPPABLE, deliberately, and the one control here that
+                    is not. On RESULTS the meter runs solo, so this was the
+                    only data-drop group on the state — the first and only
+                    thing the fitter sacrificed before the terminal clamp, with
+                    no data-drop-note to say it had gone. Losing it while
+                    `authorsHiddenOnStage` is false leaves every author's name
+                    on the projector with no way to take it down. The
+                    early-reveal control on ASK/VOTE stays droppable because
+                    losing it fails safe in the other direction: it can only
+                    ever reveal names, never strand them. */}
                 {anonymityActive({ gameType: currentGameType, anonymousUntilReveal }) && (
                   <button
                     className="stage-authors-toggle"
-                    data-drop="4"
                     onClick={() => setAuthorsHiddenOnStage((h) => !h)}
                   >
                     {authorsHiddenOnStage ? 'Show authors' : 'Hide authors'}
                   </button>
                 )}
 
-                {currentGameType === 'trivia' ? (
+                {/* WHAT THIS STATE NO LONGER SHOWS, RECORDED.
+                    Trivia's `trivia-player-scores` (every player, their
+                    answer, isCorrect, +points and running total) and
+                    wavelength's `wavelength-player-list` are both gone, and
+                    neither is coming back in this shape: each is a list of
+                    names with a score beside it, and the stage's binding
+                    constraint is that it never names a person. What replaces
+                    them is not decided here — 07-results-trivia's own answer is
+                    a Standings roster in the meter, which RoomMeter refuses by
+                    test for the same reason. That conflict is real and it is
+                    plan 4/5's to settle; until it does, trivia's room-facing
+                    payoff is the correct row and its share of the vote below.
+                    The old empty-state is not restored either: it printed
+                    JSON.stringify(answers) at a room. */}
+                {currentGameType !== 'trivia' && answers.length === 0 ? (
+                  <p className="qdetail">No responses came in for this one.</p>
+                ) : currentGameType === 'trivia' ? (
                   <div className="opts">
                     {TRIVIA_OPTION_KEYS
                       .filter((key) => currentQuestion?.[key])
