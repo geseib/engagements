@@ -35,6 +35,7 @@
 | File | Responsibility |
 |---|---|
 | `lambda-functions/admin/shared/generation-handler.js` | The three-mode handler + worker loop, once. Consumed by all four converted Lambdas. |
+| `tests/helpers/generation-job-harness.js` | AWS stubs, tool-use response shaping, test runner and job driver, shared by the four new suites. |
 | `tests/trivia-generation-job.js` | Trivia conversion contract. |
 | `tests/poll-generation-job.js` | Poll conversion contract. |
 | `tests/question-generation-job.js` | Question/AIAssistant conversion contract, both bulk and refine modes. |
@@ -559,50 +560,198 @@ EOF
 
 ---
 
-## Shared test harness (referenced by Tasks 3-6)
+## Shared test harness (created in Task 3, imported by Tasks 4-6)
 
-Tasks 3, 4, 5 and 6 each create a test file that opens with the same harness and
-asserts the same seven structural properties. Write it once here, mentally, and
-paste it into each of the four files, substituting only the three marked values.
-It is spelled out in full so no task depends on reading another.
+Tasks 3-6 each drive a real handler with Bedrock, DynamoDB and Lambda stubbed. The
+stub machinery is identical for all four, so it lives in one module rather than being
+pasted four times.
 
-**Harness preamble** — copy `tests/scenario-generation-job.js:23-157` verbatim: the
-`Module._load` interception and `stub()`, the `process.env` assignments, the
-DynamoDB stub (`GetCommand`/`PutCommand`/`UpdateCommand`, `applyUpdate`, `docClient`),
-the Bedrock stub (`BedrockRuntimeClient`, `InvokeModelCommand`, `bedrockCalls`,
-`bedrockHandler`, `toolResponse`), the Lambda stub (`LambdaClient`, `InvokeCommand`,
-`dispatched`, `lambdaShouldFail`), the `test()` runner, and `reset()` — but drop the
-`CURATED` prompt row and its seeding, since none of these four reads a prompt
-template.
-
-**Three substitutions per file:**
-
-| Placeholder | Task 3 | Task 4 | Task 5 | Task 6 |
-|---|---|---|---|---|
-| `HANDLER_PATH` | `ai-generate-trivia.js` | `ai-generate-polls.js` | `ai-generate-questions.js` | `ai-generate-survey.js` |
-| `makeItems` | `makeTrivia` | `makePolls` | `makeQuestions` | `makeSurvey` |
-| count field in `BASE` | `count` | `count` | `questionCount` | `questionCount` |
-
-**Job runner** — identical in all four, with `FUNCTION_NAME` set per task:
+**Created in Task 3** (its first consumer proves it) at
+`tests/helpers/generation-job-harness.js`:
 
 ```js
-const postEvent = (body) => ({ requestContext: { http: { method: 'POST' } }, body: JSON.stringify(body) });
-const ctx = (remainingMs = 900000) => ({
-  functionName: 'engagedev-admin-ai-generate-trivia', // per task
-  getRemainingTimeInMillis: () => remainingMs,
+/**
+ * Shared stub harness for the async generation-job Lambdas.
+ *
+ * The four converted builders (trivia, polls, questions, survey) differ only in
+ * their tool schema, prompt and item shape — the AWS surface they touch is
+ * identical, so stubbing it four times would mean four places to fix a stub bug.
+ *
+ * `install()` MUST run before the handler under test is required: it patches
+ * Module._load to intercept the AWS SDK by module name, which only affects
+ * requires that happen afterwards.
+ *
+ * tests/scenario-generation-job.js deliberately keeps its own inline copy. It is
+ * the reference suite for the pattern and predates this helper; coupling it here
+ * would mean a bug in this file could mask a regression in the one handler that
+ * is already deployed.
+ */
+const Module = require('module');
+
+const state = {
+  ddb: new Map(),
+  bedrockCalls: [],
+  bedrockHandler: () => { throw new Error('no bedrock handler installed'); },
+  dispatched: [],
+  lambdaShouldFail: false,
+  passed: 0,
+  failed: 0,
+};
+
+const rowKey = (pk, sk) => `${pk}|${sk}`;
+
+class GetCommand { constructor(input) { this.kind = 'get'; this.input = input; } }
+class PutCommand { constructor(input) { this.kind = 'put'; this.input = input; } }
+class UpdateCommand { constructor(input) { this.kind = 'update'; this.input = input; } }
+class InvokeModelCommand { constructor(input) { this.input = input; } }
+class InvokeCommand { constructor(input) { this.input = input; } }
+
+/** Minimal `SET a = :x, #n = :y` applier — enough for the job record. */
+function applyUpdate(item, input) {
+  const expr = String(input.UpdateExpression).replace(/^SET\s+/i, '');
+  for (const part of expr.split(/,\s*/)) {
+    const [lhs, rhs] = part.split(/\s*=\s*/);
+    const name = (input.ExpressionAttributeNames || {})[lhs] || lhs;
+    item[name] = input.ExpressionAttributeValues[rhs];
+  }
+}
+
+const docClient = {
+  send: async (cmd) => {
+    const { Key, Item } = cmd.input;
+    if (cmd.kind === 'get') return { Item: state.ddb.get(rowKey(Key.PK, Key.SK)) || undefined };
+    if (cmd.kind === 'put') { state.ddb.set(rowKey(Item.PK, Item.SK), { ...Item }); return {}; }
+    if (cmd.kind === 'update') {
+      const k = rowKey(Key.PK, Key.SK);
+      const existing = state.ddb.get(k) || { ...Key };
+      applyUpdate(existing, cmd.input);
+      state.ddb.set(k, existing);
+      return {};
+    }
+    throw new Error(`unexpected command ${cmd.kind}`);
+  },
+};
+
+class BedrockRuntimeClient {
+  async send(cmd) {
+    const body = JSON.parse(cmd.input.body);
+    state.bedrockCalls.push({ modelId: cmd.input.modelId, body, prompt: body.messages[0].content });
+    return state.bedrockHandler(state.bedrockCalls.length, body);
+  }
+}
+
+class LambdaClient {
+  async send(cmd) {
+    if (state.lambdaShouldFail) throw new Error('AccessDeniedException');
+    state.dispatched.push({
+      FunctionName: cmd.input.FunctionName,
+      InvocationType: cmd.input.InvocationType,
+      payload: JSON.parse(Buffer.from(cmd.input.Payload).toString('utf8')),
+    });
+    return {};
+  }
+}
+
+/** Patch the AWS SDK by module name. Call BEFORE requiring the handler. */
+function install() {
+  process.env.TABLE_NAME = 'engage-test';
+  process.env.ACCOUNT_ID = '000000000000';
+  process.env.AWS_REGION = 'us-east-1';
+
+  const stubs = new Map([
+    ['@aws-sdk/client-dynamodb', { DynamoDBClient: class {} }],
+    ['@aws-sdk/lib-dynamodb', {
+      DynamoDBDocumentClient: { from: () => docClient },
+      GetCommand, PutCommand, UpdateCommand,
+    }],
+    ['@aws-sdk/client-bedrock-runtime', { BedrockRuntimeClient, InvokeModelCommand }],
+    ['@aws-sdk/client-lambda', { LambdaClient, InvokeCommand }],
+  ]);
+
+  const realLoad = Module._load;
+  Module._load = function (request, parent, isMain) {
+    if (stubs.has(request)) return stubs.get(request);
+    return realLoad.call(this, request, parent, isMain);
+  };
+}
+
+function reset() {
+  state.ddb.clear();
+  state.bedrockCalls = [];
+  state.dispatched = [];
+  state.lambdaShouldFail = false;
+}
+
+/** Shape a Bedrock tool-use response. `extra` merges into the tool input. */
+const toolResponse = (items, stopReason = 'tool_use', extra = {}) => ({
+  body: new TextEncoder().encode(JSON.stringify({
+    stop_reason: stopReason,
+    content: [{ type: 'tool_use', name: 'emit_items', input: { items, ...extra } }],
+  })),
 });
 
-async function runJob(body, workerCtx = ctx()) {
-  const started = await handler(postEvent(body), ctx());
-  const { jobId } = JSON.parse(started.body);
-  await handler({ __workerMode: true, jobId, payload: body }, workerCtx);
-  const polled = await handler({ requestContext: { http: { method: 'GET' } }, pathParameters: { jobId } }, ctx());
-  return { started, jobId, job: JSON.parse(polled.body) };
+async function test(name, fn) {
+  try { await fn(); state.passed += 1; console.log(`  PASS  ${name}`); }
+  catch (error) { state.failed += 1; console.log(`  FAIL  ${name}\n        ${error.message}`); }
 }
+
+/** Print the tally in the format the repo's aggregate command greps for. */
+function summary() {
+  console.log(`\n${state.passed} passed, ${state.failed} failed\n`);
+  if (state.failed > 0) process.exit(1);
+}
+
+/**
+ * Build the POST/worker/poll driver for one handler. Each suite calls this once
+ * with its own handler and function name.
+ */
+function makeRunner(handler, functionName) {
+  const postEvent = (body) => ({ requestContext: { http: { method: 'POST' } }, body: JSON.stringify(body) });
+  const ctx = (remainingMs = 900000) => ({ functionName, getRemainingTimeInMillis: () => remainingMs });
+
+  /** Start a job over HTTP, then run the worker the way Lambda's Event invoke would. */
+  async function runJob(body, workerCtx = ctx()) {
+    const started = await handler(postEvent(body), ctx());
+    const { jobId } = JSON.parse(started.body);
+    await handler({ __workerMode: true, jobId, payload: body }, workerCtx);
+    const polled = await handler(
+      { requestContext: { http: { method: 'GET' } }, pathParameters: { jobId } },
+      ctx(),
+    );
+    return { started, jobId, job: JSON.parse(polled.body) };
+  }
+
+  return { postEvent, ctx, runJob };
+}
+
+module.exports = { state, install, reset, toolResponse, test, summary, makeRunner, docClient };
 ```
 
-**The seven common cases** — paste into all four files, substituting `BASE`, the
-`makeItems` name, and the count field:
+**How each suite uses it** — this preamble opens Tasks 3, 4, 5 and 6, substituting only
+the handler path and function name:
+
+```js
+const path = require('path');
+const assert = require('assert');
+const harness = require('./helpers/generation-job-harness');
+
+const REPO = path.join(__dirname, '..');
+harness.install();                                     // MUST precede the require below
+
+const { handler } = require(path.join(REPO, 'lambda-functions/admin/ai-generate-trivia.js'));
+
+const { state, reset, toolResponse, test, summary } = harness;
+const { postEvent, ctx, runJob } = harness.makeRunner(handler, 'engagedev-admin-ai-generate-trivia');
+```
+
+Read counters through `state` — `state.bedrockCalls`, `state.dispatched` — and set
+behaviour with `state.bedrockHandler = ...` and `state.lambdaShouldFail = true`. They
+are properties of a shared object, so destructuring them into local `let`s would read a
+stale snapshot.
+
+**The eight common cases** — written once here, included in all four suites. Substitute
+`BASE`, the suite's `makeItems` factory name, and the count field (`count` for Tasks 3-4,
+`questionCount` for Tasks 5-6):
 
 ```js
   console.log('\nthe HTTP request no longer generates');
@@ -619,22 +768,22 @@ async function runJob(body, workerCtx = ctx()) {
   await test('the HTTP request performs ZERO Bedrock calls (this is the 503 fix)', async () => {
     reset();
     await handler(postEvent({ ...BASE, count: 40 }), ctx());
-    assert.strictEqual(bedrockCalls.length, 0,
-      `request path called Bedrock ${bedrockCalls.length} times; it must not touch the 30s gateway budget`);
+    assert.strictEqual(state.bedrockCalls.length, 0,
+      `request path called Bedrock ${state.bedrockCalls.length} times; it must not touch the 30s gateway budget`);
   });
 
   await test('the worker is dispatched as an async Event invoke', async () => {
     reset();
     await handler(postEvent({ ...BASE, count: 5 }), ctx());
-    assert.strictEqual(dispatched.length, 1);
-    assert.strictEqual(dispatched[0].InvocationType, 'Event',
+    assert.strictEqual(state.dispatched.length, 1);
+    assert.strictEqual(state.dispatched[0].InvocationType, 'Event',
       'RequestResponse would put the 900s worker back inside the 30s request');
-    assert.strictEqual(dispatched[0].payload.__workerMode, true);
+    assert.strictEqual(state.dispatched[0].payload.__workerMode, true);
   });
 
   await test('a failed self-invoke marks the job with a readable error', async () => {
     reset();
-    lambdaShouldFail = true;
+    state.lambdaShouldFail = true;
     const res = await handler(postEvent({ ...BASE, count: 5 }), ctx());
     assert.strictEqual(res.statusCode, 500);
     const { jobId } = JSON.parse(res.body);
@@ -649,18 +798,18 @@ async function runJob(body, workerCtx = ctx()) {
   await test('later passes are told what earlier passes produced', async () => {
     reset();
     let call = 0;
-    bedrockHandler = () => { call += 1; return toolResponse(makeItems(8, `pass${call}`)); };
+    state.bedrockHandler = () => { call += 1; return toolResponse(makeItems(8, `pass${call}`)); };
     await runJob({ ...BASE, count: 16 });
-    assert.ok(bedrockCalls.length >= 2, 'expected more than one pass');
-    assert.match(bedrockCalls[1].prompt, /ALREADY (GENERATED|ASKED)/,
+    assert.ok(state.bedrockCalls.length >= 2, 'expected more than one pass');
+    assert.match(state.bedrockCalls[1].prompt, /ALREADY (GENERATED|ASKED)/,
       'parallel batches blind to each other is what produced duplicates');
-    assert.match(bedrockCalls[1].prompt, /pass1/);
+    assert.match(state.bedrockCalls[1].prompt, /pass1/);
   });
 
   await test('truncation halves the pass instead of failing the job', async () => {
     reset();
     let call = 0;
-    bedrockHandler = (n) => {
+    state.bedrockHandler = (n) => {
       call = n;
       if (n === 1) return toolResponse([], 'max_tokens');
       return toolResponse(makeItems(4, 'halved'));
@@ -673,7 +822,7 @@ async function runJob(body, workerCtx = ctx()) {
 
   await test('a mid-run Bedrock failure keeps what was already generated', async () => {
     reset();
-    bedrockHandler = (n) => {
+    state.bedrockHandler = (n) => {
       if (n === 1) return toolResponse(makeItems(8, 'kept'));
       throw new Error('Bedrock is having a day');
     };
@@ -684,14 +833,14 @@ async function runJob(body, workerCtx = ctx()) {
 
   await test('the worker stops cleanly when the function is nearly out of time', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makeItems(8, 'rush'));
+    state.bedrockHandler = () => toolResponse(makeItems(8, 'rush'));
     const { job } = await runJob({ ...BASE, count: 40 }, ctx(5000));
     assert.strictEqual(job.status, 'complete', 'running out of time must not lose the run');
     assert.ok(job.warnings.some((w) => /time limit/.test(w)));
   });
 ```
 
-For Tasks 5 and 6, replace `count:` with `questionCount:` in every `BASE` spread above.
+Every suite ends with `summary();` instead of its own tally block.
 
 ---
 
@@ -709,7 +858,13 @@ Also fixes the defect found during design: `TriviaAIBuilder.jsx:87` has always s
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/trivia-generation-job.js`. Copy the stub harness verbatim from `tests/scenario-generation-job.js:23-157` (the `Module._load` interception, the DynamoDB/Bedrock/Lambda stubs, `toolResponse`, and the `test()` runner), changing only the required handler path and the fixtures:
+First create `tests/helpers/generation-job-harness.js` exactly as given in the "Shared
+test harness" section above — Tasks 4, 5 and 6 import it unchanged.
+
+Then create `tests/trivia-generation-job.js`, opening with the standard preamble from
+that section (handler `ai-generate-trivia.js`, function name
+`engagedev-admin-ai-generate-trivia`), followed by the eight common cases and these
+trivia-specific fixtures and cases:
 
 ```js
 const { handler } = require(path.join(REPO, 'lambda-functions/admin/ai-generate-trivia.js'));
@@ -733,67 +888,16 @@ const makeTrivia = (n, prefix, extra = {}) =>
     ...extra,
   }));
 
-const postEvent = (body) => ({ requestContext: { http: { method: 'POST' } }, body: JSON.stringify(body) });
-const ctx = (remainingMs = 900000) => ({
-  functionName: 'engagedev-admin-ai-generate-trivia',
-  getRemainingTimeInMillis: () => remainingMs,
-});
-
-async function runJob(body, workerCtx = ctx()) {
-  const started = await handler(postEvent(body), ctx());
-  const { jobId } = JSON.parse(started.body);
-  await handler({ __workerMode: true, jobId, payload: body }, workerCtx);
-  const polled = await handler({ requestContext: { http: { method: 'GET' } }, pathParameters: { jobId } }, ctx());
-  return { started, jobId, job: JSON.parse(polled.body) };
-}
-
 const BASE = { topic: 'general science', difficulty: 'medium', numChoices: 4, numCorrect: 1 };
 
 (async function run() {
-  console.log('\ntrivia: the HTTP request no longer generates');
-
-  await test('POST returns 202 with a jobId instead of questions', async () => {
-    reset();
-    const res = await handler(postEvent({ ...BASE, count: 10 }), ctx());
-    assert.strictEqual(res.statusCode, 202, `expected 202, got ${res.statusCode}`);
-    const body = JSON.parse(res.body);
-    assert.ok(body.jobId, 'no jobId returned');
-    assert.strictEqual(body.requested, 10);
-  });
-
-  await test('the HTTP request performs ZERO Bedrock calls (this is the 503 fix)', async () => {
-    reset();
-    await handler(postEvent({ ...BASE, count: 40 }), ctx());
-    assert.strictEqual(bedrockCalls.length, 0,
-      `request path called Bedrock ${bedrockCalls.length} times; it must not touch the 30s gateway budget`);
-  });
-
-  await test('the worker is dispatched as an async Event invoke', async () => {
-    reset();
-    await handler(postEvent({ ...BASE, count: 5 }), ctx());
-    assert.strictEqual(dispatched.length, 1);
-    assert.strictEqual(dispatched[0].InvocationType, 'Event',
-      'RequestResponse would put the 900s worker back inside the 30s request');
-    assert.strictEqual(dispatched[0].payload.__workerMode, true);
-  });
-
-  await test('a failed self-invoke marks the job with a readable error', async () => {
-    reset();
-    lambdaShouldFail = true;
-    const res = await handler(postEvent({ ...BASE, count: 5 }), ctx());
-    assert.strictEqual(res.statusCode, 500);
-    const { jobId } = JSON.parse(res.body);
-    const polled = await handler({ requestContext: { http: { method: 'GET' } }, pathParameters: { jobId } }, ctx());
-    const job = JSON.parse(polled.body);
-    assert.strictEqual(job.status, 'error');
-    assert.match(job.error, /Could not start generation worker/);
-  });
+  // ---- the eight common cases from the "Shared test harness" section ----
 
   console.log('\ntrivia keeps its own item shape');
 
   await test('correctAnswer stays an OptionX id, not the answer text', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makeTrivia(3, 'q'));
+    state.bedrockHandler = () => toolResponse(makeTrivia(3, 'q'));
     const { job } = await runJob({ ...BASE, count: 3 });
     assert.strictEqual(job.items.length, 3);
     for (const item of job.items) {
@@ -805,7 +909,7 @@ const BASE = { topic: 'general science', difficulty: 'medium', numChoices: 4, nu
 
   await test('numCorrect > 1 produces an array of option ids', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makeTrivia(2, 'multi', { correctAnswer: ['OptionA', 'OptionC'] }));
+    state.bedrockHandler = () => toolResponse(makeTrivia(2, 'multi', { correctAnswer: ['OptionA', 'OptionC'] }));
     const { job } = await runJob({ ...BASE, count: 2, numCorrect: 2 });
     for (const item of job.items) {
       assert.ok(Array.isArray(item.correctAnswer), 'multi-answer trivia must keep an array');
@@ -815,14 +919,14 @@ const BASE = { topic: 'general science', difficulty: 'medium', numChoices: 4, nu
 
   await test('the tool schema asks for exactly numChoices options', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makeTrivia(2, 'six', { optionE: 'Fifth', optionF: 'Sixth' }));
+    state.bedrockHandler = () => toolResponse(makeTrivia(2, 'six', { optionE: 'Fifth', optionF: 'Sixth' }));
     await runJob({ ...BASE, count: 2, numChoices: 6 });
-    const props = bedrockCalls[0].body.tools[0].input_schema.properties.items.items.properties;
+    const props = state.bedrockCalls[0].body.tools[0].input_schema.properties.items.items.properties;
     assert.ok(props.optionE && props.optionF, 'numChoices=6 must expose optionE/optionF');
     reset();
-    bedrockHandler = () => toolResponse(makeTrivia(2, 'four'));
+    state.bedrockHandler = () => toolResponse(makeTrivia(2, 'four'));
     await runJob({ ...BASE, count: 2, numChoices: 4 });
-    const four = bedrockCalls[0].body.tools[0].input_schema.properties.items.items.properties;
+    const four = state.bedrockCalls[0].body.tools[0].input_schema.properties.items.items.properties;
     assert.ok(!four.optionE, 'numChoices=4 must NOT offer a fifth option');
   });
 
@@ -830,9 +934,9 @@ const BASE = { topic: 'general science', difficulty: 'medium', numChoices: 4, nu
 
   await test('numberOfCategories reaches the prompt (it never used to)', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makeTrivia(5, 'cat'));
+    state.bedrockHandler = () => toolResponse(makeTrivia(5, 'cat'));
     await runJob({ ...BASE, count: 5, numberOfCategories: 4, mustHaveCategories: 'Physics, Chemistry' });
-    const prompt = bedrockCalls[0].prompt;
+    const prompt = state.bedrockCalls[0].prompt;
     assert.match(prompt, /EXACTLY 4 categories/, 'the trivia UI has always sent this and the handler always dropped it');
     assert.match(prompt, /Physics, Chemistry/);
   });
@@ -840,70 +944,24 @@ const BASE = { topic: 'general science', difficulty: 'medium', numChoices: 4, nu
   await test('the category clamp uses the TOTAL, never the chunk size', async () => {
     reset();
     // One item per pass is the case that used to collapse the clamp to 1.
-    bedrockHandler = () => toolResponse(makeTrivia(1, 'solo'));
+    state.bedrockHandler = () => toolResponse(makeTrivia(1, 'solo'));
     await runJob({ ...BASE, count: 1, numberOfCategories: 5 });
-    const prompt = bedrockCalls[0].prompt;
+    const prompt = state.bedrockCalls[0].prompt;
     assert.match(prompt, /EXACTLY 1 categories/,
       'one item genuinely cannot span 5 categories — but the clamp must come from the total, not the chunk');
 
     reset();
-    bedrockHandler = () => toolResponse(makeTrivia(20, 'many'));
+    state.bedrockHandler = () => toolResponse(makeTrivia(20, 'many'));
     await runJob({ ...BASE, count: 20, numberOfCategories: 5 });
-    assert.match(bedrockCalls[0].prompt, /EXACTLY 5 categories/,
+    assert.match(state.bedrockCalls[0].prompt, /EXACTLY 5 categories/,
       'a 20-item request must keep all 5 categories even though it is generated in passes');
-  });
-
-  console.log('\nlong runs behave');
-
-  await test('later passes are told what earlier passes produced', async () => {
-    reset();
-    let call = 0;
-    bedrockHandler = () => { call += 1; return toolResponse(makeTrivia(8, `pass${call}`)); };
-    await runJob({ ...BASE, count: 16 });
-    assert.ok(bedrockCalls.length >= 2, 'expected more than one pass');
-    assert.match(bedrockCalls[1].prompt, /ALREADY GENERATED/,
-      'parallel batches blind to each other is what produced duplicates');
-    assert.match(bedrockCalls[1].prompt, /pass1/);
-  });
-
-  await test('truncation halves the pass instead of failing the job', async () => {
-    reset();
-    let call = 0;
-    bedrockHandler = (n) => {
-      call = n;
-      if (n === 1) return toolResponse([], 'max_tokens');
-      return toolResponse(makeTrivia(4, 'halved'));
-    };
-    const { job } = await runJob({ ...BASE, count: 8 });
-    assert.ok(call >= 2, 'a truncated pass must be retried smaller, not surfaced as a parse error');
-    assert.strictEqual(job.status, 'complete');
-    assert.ok(job.warnings.some((w) => /output budget/.test(w)));
-  });
-
-  await test('a mid-run Bedrock failure keeps what was already generated', async () => {
-    reset();
-    bedrockHandler = (n) => {
-      if (n === 1) return toolResponse(makeTrivia(8, 'kept'));
-      throw new Error('Bedrock is having a day');
-    };
-    const { job } = await runJob({ ...BASE, count: 24 });
-    assert.strictEqual(job.status, 'error');
-    assert.strictEqual(job.items.length, 8, '8 questions and an explanation beats a bare error');
-  });
-
-  await test('the worker stops cleanly when the function is nearly out of time', async () => {
-    reset();
-    bedrockHandler = () => toolResponse(makeTrivia(8, 'rush'));
-    const { job } = await runJob({ ...BASE, count: 40 }, ctx(5000));
-    assert.strictEqual(job.status, 'complete', 'running out of time must not lose the run');
-    assert.ok(job.warnings.some((w) => /time limit/.test(w)));
   });
 
   console.log('\ntags');
 
   await test('tags are normalised onto every question', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makeTrivia(3, 'tagged'));
+    state.bedrockHandler = () => toolResponse(makeTrivia(3, 'tagged'));
     const { job } = await runJob({ ...BASE, count: 3 });
     for (const item of job.items) {
       assert.deepStrictEqual(item.tags, ['science', 'general-knowledge'],
@@ -913,14 +971,13 @@ const BASE = { topic: 'general science', difficulty: 'medium', numChoices: 4, nu
 
   await test('the prompt asks for tags', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makeTrivia(2, 'tp'));
+    state.bedrockHandler = () => toolResponse(makeTrivia(2, 'tp'));
     await runJob({ ...BASE, count: 2 });
-    assert.match(bedrockCalls[0].prompt, /TAGS:/);
-    assert.match(bedrockCalls[0].prompt, /kebab-case/);
+    assert.match(state.bedrockCalls[0].prompt, /TAGS:/);
+    assert.match(state.bedrockCalls[0].prompt, /kebab-case/);
   });
 
-  console.log(`\n${passed} passed, ${failed} failed\n`);
-  if (failed > 0) process.exit(1);
+  summary();
 })();
 ```
 
@@ -1130,7 +1187,7 @@ Expected: `16 passed, 0 failed`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add lambda-functions/admin/ai-generate-trivia.js tests/trivia-generation-job.js
+git add lambda-functions/admin/ai-generate-trivia.js tests/helpers/generation-job-harness.js tests/trivia-generation-job.js
 git commit -m "$(cat <<'EOF'
 ✨ Trivia generation moves off the 30s gateway
 
@@ -1168,7 +1225,7 @@ EOF
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/poll-generation-job.js` with the same harness as Task 3 (copied from `tests/scenario-generation-job.js:23-157`), requiring `ai-generate-polls.js`, plus:
+Create `tests/poll-generation-job.js`, opening with the standard preamble from the "Shared test harness" section (handler `ai-generate-polls.js`, function name `engagedev-admin-ai-generate-polls`), followed by the eight common cases and these poll-specific fixtures and cases:
 
 ```js
 const SUBJECTS = [
@@ -1191,13 +1248,12 @@ const makePolls = (n, prefix, extra = {}) =>
 
 const BASE = { topic: 'workplace preferences', difficulty: 'medium', allowMultiple: false };
 
-// ... the four structural cases from Task 3, verbatim but with BASE/makePolls ...
 
   console.log('\npolls keep their own item shape');
 
   await test('options survive as an array and are never empty', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makePolls(3, 'p'));
+    state.bedrockHandler = () => toolResponse(makePolls(3, 'p'));
     const { job } = await runJob({ ...BASE, count: 3 });
     for (const item of job.items) {
       assert.ok(Array.isArray(item.options), 'options must stay an array');
@@ -1208,7 +1264,7 @@ const BASE = { topic: 'workplace preferences', difficulty: 'medium', allowMultip
 
   await test('a poll returning too few options is dropped, not shipped broken', async () => {
     reset();
-    bedrockHandler = () => toolResponse([
+    state.bedrockHandler = () => toolResponse([
       ...makePolls(2, 'ok'),
       { ...makePolls(1, 'bad')[0], options: ['Only one'] },
     ]);
@@ -1219,15 +1275,15 @@ const BASE = { topic: 'workplace preferences', difficulty: 'medium', allowMultip
 
   await test('allowMultiple is requested and preserved', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makePolls(2, 'multi', { allowMultiple: true }));
+    state.bedrockHandler = () => toolResponse(makePolls(2, 'multi', { allowMultiple: true }));
     const { job } = await runJob({ ...BASE, count: 2, allowMultiple: true });
-    assert.match(bedrockCalls[0].prompt, /multiple selections/);
+    assert.match(state.bedrockCalls[0].prompt, /multiple selections/);
     assert.ok(job.items.every((i) => i.allowMultiple === true));
   });
 
   await test('allowMultiple stays false when the request did not ask for it', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makePolls(2, 'single', { allowMultiple: true }));
+    state.bedrockHandler = () => toolResponse(makePolls(2, 'single', { allowMultiple: true }));
     const { job } = await runJob({ ...BASE, count: 2, allowMultiple: false });
     assert.ok(job.items.every((i) => i.allowMultiple === false),
       'a model volunteering multi-select must not override an explicit single-select request');
@@ -1235,7 +1291,7 @@ const BASE = { topic: 'workplace preferences', difficulty: 'medium', allowMultip
 
   await test('tags are normalised onto every poll', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makePolls(3, 'tagged'));
+    state.bedrockHandler = () => toolResponse(makePolls(3, 'tagged'));
     const { job } = await runJob({ ...BASE, count: 3 });
     for (const item of job.items) {
       assert.deepStrictEqual(item.tags, ['workplace', 'team-culture']);
@@ -1243,7 +1299,8 @@ const BASE = { topic: 'workplace preferences', difficulty: 'medium', allowMultip
   });
 ```
 
-Include the four structural cases (202 + jobId; zero Bedrock calls in the request; `Event` invoke; failed dispatch marks the job) and the three long-run cases (`ALREADY GENERATED` forwarding, truncation halving, partial-keep on failure) written out in full, exactly as in Task 3 but substituting `BASE` and `makePolls`.
+Wrap the eight common cases and the ones above in `(async function run() { … summary(); })();`, exactly as Task 3 does.
+
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1451,7 +1508,7 @@ This is the AIAssistant endpoint. It has two modes: bulk generation, and refinin
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/question-generation-job.js` with the Task 3 harness requiring `ai-generate-questions.js`, plus:
+Create `tests/question-generation-job.js`, opening with the standard preamble from the "Shared test harness" section (handler `ai-generate-questions.js`, function name `engagedev-admin-ai-generate-questions`). Its BASE uses `questionCount`, not `count`, so substitute that in the eight common cases. Then add these question-specific fixtures and cases:
 
 ```js
 const makeQuestions = (n, prefix, extra = {}) =>
@@ -1467,13 +1524,12 @@ const makeQuestions = (n, prefix, extra = {}) =>
 
 const BASE = { engagementType: 'call-and-answer', userInput: 'leadership scenarios for new managers' };
 
-// ... four structural cases + three long-run cases from Task 3, with BASE/makeQuestions ...
 
   console.log('\nthe item shape follows the engagement type');
 
   await test('trivia questions get options and an option-id answer', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makeQuestions(2, 'triv', {
+    state.bedrockHandler = () => toolResponse(makeQuestions(2, 'triv', {
       optionA: 'A', optionB: 'B', optionC: 'C', optionD: 'D',
       correctAnswer: 'OptionB', answerDetails: 'Because B.', difficulty: 'medium',
     }));
@@ -1483,30 +1539,30 @@ const BASE = { engagementType: 'call-and-answer', userInput: 'leadership scenari
       assert.ok(item.optionA && item.optionD);
       assert.ok(item.answerDetails);
     }
-    const props = bedrockCalls[0].body.tools[0].input_schema.properties.items.items.properties;
+    const props = state.bedrockCalls[0].body.tools[0].input_schema.properties.items.items.properties;
     assert.ok(props.optionA, 'the trivia tool schema must expose options');
   });
 
   await test('poll questions get options, and the schema does NOT offer trivia fields', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makeQuestions(2, 'poll', { options: ['Yes', 'No', 'Unsure'] }));
+    state.bedrockHandler = () => toolResponse(makeQuestions(2, 'poll', { options: ['Yes', 'No', 'Unsure'] }));
     const { job } = await runJob({ ...BASE, engagementType: 'poll', questionCount: 2 });
     assert.ok(job.items.every((i) => Array.isArray(i.options) && i.options.length >= 2));
-    const props = bedrockCalls[0].body.tools[0].input_schema.properties.items.items.properties;
+    const props = state.bedrockCalls[0].body.tools[0].input_schema.properties.items.items.properties;
     assert.ok(!props.correctAnswer, 'a poll has no correct answer; the schema must not invite one');
   });
 
   await test('wavelength gets subject-sized guidance, not scenario-sized', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makeQuestions(4, 'wave'));
+    state.bedrockHandler = () => toolResponse(makeQuestions(4, 'wave'));
     await runJob({ ...BASE, engagementType: 'wavelength', questionCount: 4 });
-    assert.match(bedrockCalls[0].prompt, /1-4 words/,
+    assert.match(state.bedrockCalls[0].prompt, /1-4 words/,
       'a wavelength subject is a short phrase, not a question');
   });
 
   await test('game-type spellings are normalised, not string-compared', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makeQuestions(2, 'alias', {
+    state.bedrockHandler = () => toolResponse(makeQuestions(2, 'alias', {
       optionA: 'A', optionB: 'B', optionC: 'C', optionD: 'D', correctAnswer: 'OptionA',
     }));
     // Whatever legacy spelling the client sends must resolve to the same shape.
@@ -1519,7 +1575,7 @@ const BASE = { engagementType: 'call-and-answer', userInput: 'leadership scenari
 
   await test('refine mode forwards the existing question into the prompt', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makeQuestions(1, 'refined'));
+    state.bedrockHandler = () => toolResponse(makeQuestions(1, 'refined'));
     const { job } = await runJob({
       ...BASE,
       questionCount: 1,
@@ -1527,14 +1583,14 @@ const BASE = { engagementType: 'call-and-answer', userInput: 'leadership scenari
       userInput: 'make it more concrete',
     });
     assert.strictEqual(job.items.length, 1, 'refine produces exactly one replacement');
-    assert.match(bedrockCalls[0].prompt, /EXISTING QUESTION/);
-    assert.match(bedrockCalls[0].prompt, /Original title/);
-    assert.match(bedrockCalls[0].prompt, /make it more concrete/);
+    assert.match(state.bedrockCalls[0].prompt, /EXISTING QUESTION/);
+    assert.match(state.bedrockCalls[0].prompt, /Original title/);
+    assert.match(state.bedrockCalls[0].prompt, /make it more concrete/);
   });
 
   await test('refine mode ignores a count above one', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makeQuestions(5, 'many'));
+    state.bedrockHandler = () => toolResponse(makeQuestions(5, 'many'));
     const { job } = await runJob({
       ...BASE, questionCount: 5,
       existingQuestion: { title: 'Original', category: 'Ops', detail: 'd' },
@@ -1544,24 +1600,27 @@ const BASE = { engagementType: 'call-and-answer', userInput: 'leadership scenari
 
   await test('refine mode never sends the ALREADY GENERATED block', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makeQuestions(1, 'r'));
+    state.bedrockHandler = () => toolResponse(makeQuestions(1, 'r'));
     await runJob({
       ...BASE, questionCount: 1,
       existingQuestion: { title: 'Original', category: 'Ops', detail: 'd' },
     });
-    assert.ok(!/ALREADY GENERATED/.test(bedrockCalls[0].prompt),
+    assert.ok(!/ALREADY GENERATED/.test(state.bedrockCalls[0].prompt),
       'there is nothing to avoid when replacing a single question');
   });
 
   await test('tags are normalised onto every question', async () => {
     reset();
-    bedrockHandler = () => toolResponse(makeQuestions(3, 'tagged'));
+    state.bedrockHandler = () => toolResponse(makeQuestions(3, 'tagged'));
     const { job } = await runJob({ ...BASE, questionCount: 3 });
     for (const item of job.items) {
       assert.deepStrictEqual(item.tags, ['leadership', 'team-dynamics']);
     }
   });
 ```
+
+Wrap the eight common cases and the ones above in `(async function run() { … summary(); })();`, exactly as Task 3 does.
+
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1839,7 +1898,7 @@ The survey endpoint is the most exposed of the four: a single un-chunked call fo
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/survey-generation-job.js` with the Task 3 harness requiring `ai-generate-survey.js`, plus:
+Create `tests/survey-generation-job.js`, opening with the standard preamble from the "Shared test harness" section (handler `ai-generate-survey.js`, function name `engagedev-admin-ai-generate-survey`). Its BASE uses `questionCount`, not `count`, so substitute that in the eight common cases. Then add these survey-specific fixtures and cases:
 
 ```js
 const makeSurvey = (n, prefix, extra = {}) =>
@@ -1856,12 +1915,8 @@ const makeSurvey = (n, prefix, extra = {}) =>
     ...extra,
   }));
 
-const toolResponseWithMeta = (items, meta = {}, stopReason = 'tool_use') => ({
-  body: new TextEncoder().encode(JSON.stringify({
-    stop_reason: stopReason,
-    content: [{ type: 'tool_use', name: 'emit_items', input: { items, ...meta } }],
-  })),
-});
+// The harness's toolResponse takes tool-input extras as its third argument.
+const toolResponseWithMeta = (items, meta = {}) => toolResponse(items, 'tool_use', meta);
 
 const BASE = {
   title: 'Q3 Team Health Check',
@@ -1872,14 +1927,12 @@ const BASE = {
   includeRating: true, includeMultipleChoice: true, includeTextEntry: true,
 };
 
-// ... four structural cases + three long-run cases from Task 3, with BASE/makeSurvey ...
-// NOTE: survey uses `questionCount`, not `count`.
 
   console.log('\nsurvey keeps its own question shape');
 
   await test('question types, scales and text types survive', async () => {
     reset();
-    bedrockHandler = () => toolResponseWithMeta(makeSurvey(6, 'q'));
+    state.bedrockHandler = () => toolResponseWithMeta(makeSurvey(6, 'q'));
     const { job } = await runJob({ ...BASE, questionCount: 6 });
     assert.strictEqual(job.items.length, 6);
     for (const item of job.items) {
@@ -1891,7 +1944,7 @@ const BASE = {
 
   await test('question ids are sequential from 1', async () => {
     reset();
-    bedrockHandler = () => toolResponseWithMeta(makeSurvey(5, 'seq'));
+    state.bedrockHandler = () => toolResponseWithMeta(makeSurvey(5, 'seq'));
     const { job } = await runJob({ ...BASE, questionCount: 5 });
     assert.deepStrictEqual(job.items.map((i) => i.id), [1, 2, 3, 4, 5],
       'SurveyAIBuilder renders by index; ids must not be timestamps');
@@ -1899,9 +1952,9 @@ const BASE = {
 
   await test('excluded question types are not requested', async () => {
     reset();
-    bedrockHandler = () => toolResponseWithMeta(makeSurvey(3, 'norating'));
+    state.bedrockHandler = () => toolResponseWithMeta(makeSurvey(3, 'norating'));
     await runJob({ ...BASE, questionCount: 3, includeRating: false });
-    const prompt = bedrockCalls[0].prompt;
+    const prompt = state.bedrockCalls[0].prompt;
     assert.ok(!/rating scale questions/.test(prompt), 'a type the admin unticked must not be requested');
     assert.match(prompt, /multiple choice questions/);
   });
@@ -1910,7 +1963,7 @@ const BASE = {
 
   await test('an improved title and description reach the poll payload', async () => {
     reset();
-    bedrockHandler = () => toolResponseWithMeta(makeSurvey(4, 'meta'), {
+    state.bedrockHandler = () => toolResponseWithMeta(makeSurvey(4, 'meta'), {
       surveyTitle: 'Q3 Engineering Health Pulse',
       surveyDescription: 'Twelve questions on tooling, workload and growth.',
     });
@@ -1924,7 +1977,7 @@ const BASE = {
   await test('framing is asked for on the FIRST pass only', async () => {
     reset();
     let call = 0;
-    bedrockHandler = (n) => {
+    state.bedrockHandler = (n) => {
       call = n;
       return toolResponseWithMeta(makeSurvey(20, `pass${n}`), n === 1
         ? { surveyTitle: 'First', surveyDescription: 'First description' }
@@ -1932,16 +1985,16 @@ const BASE = {
     };
     const { job } = await runJob({ ...BASE, questionCount: 40 });
     assert.ok(call >= 2, 'expected more than one pass');
-    assert.match(bedrockCalls[0].prompt, /surveyTitle/,
+    assert.match(state.bedrockCalls[0].prompt, /surveyTitle/,
       'the first pass must be asked for the framing');
-    assert.ok(!/surveyTitle/.test(bedrockCalls[1].prompt),
+    assert.ok(!/surveyTitle/.test(state.bedrockCalls[1].prompt),
       're-deriving the framing per pass invites the model to contradict itself');
     assert.strictEqual(job.meta.title, 'First');
   });
 
   await test('no framing returned leaves meta null so the client falls back', async () => {
     reset();
-    bedrockHandler = () => toolResponseWithMeta(makeSurvey(3, 'nometa'));
+    state.bedrockHandler = () => toolResponseWithMeta(makeSurvey(3, 'nometa'));
     const { job } = await runJob({ ...BASE, questionCount: 3 });
     assert.strictEqual(job.meta, null,
       'an improved title is an improvement, not a dependency');
@@ -1949,7 +2002,7 @@ const BASE = {
 
   await test('blank framing is treated as no framing', async () => {
     reset();
-    bedrockHandler = () => toolResponseWithMeta(makeSurvey(3, 'blank'), {
+    state.bedrockHandler = () => toolResponseWithMeta(makeSurvey(3, 'blank'), {
       surveyTitle: '   ', surveyDescription: '',
     });
     const { job } = await runJob({ ...BASE, questionCount: 3 });
@@ -1958,7 +2011,7 @@ const BASE = {
 
   await test('framing written on pass 1 survives a failure on pass 2', async () => {
     reset();
-    bedrockHandler = (n) => {
+    state.bedrockHandler = (n) => {
       if (n === 1) return toolResponseWithMeta(makeSurvey(20, 'kept'), { surveyTitle: 'Survived', surveyDescription: 'd' });
       throw new Error('Bedrock is having a day');
     };
@@ -1970,13 +2023,16 @@ const BASE = {
 
   await test('tags are normalised onto every survey question', async () => {
     reset();
-    bedrockHandler = () => toolResponseWithMeta(makeSurvey(3, 'tagged'));
+    state.bedrockHandler = () => toolResponseWithMeta(makeSurvey(3, 'tagged'));
     const { job } = await runJob({ ...BASE, questionCount: 3 });
     for (const item of job.items) {
       assert.deepStrictEqual(item.tags, ['employee-experience', 'onboarding']);
     }
   });
 ```
+
+Wrap the eight common cases and the ones above in `(async function run() { … summary(); })();`, exactly as Task 3 does.
+
 
 - [ ] **Step 2: Run test to verify it fails**
 
