@@ -15,6 +15,8 @@ Copied verbatim from `docs/superpowers/specs/2026-08-08-host-screen-redesign-des
 - **Omit, do not null.** A redacted field is *absent* from the payload, never `null`. A client that forgets to handle anonymity then renders nothing rather than the string "null", and the redaction is visible in a payload diff.
 - **Answer order is never changed by redaction.** Order is what the ballot runs on (§5.6.5a). Redact fields; never sort, filter or reindex.
 - **Reveal state is per round, not per game:** `Round.AuthorsRevealed` (boolean, default false). A host may reveal round 3 and end the session before round 4.
+- **Voting closing reveals the round.** *(Owner decision, 2026-08-09, amending Tasks 8 and 10.)* The promise this feature makes is the one already written into the room-facing sentence below — *until voting closes*, not "until the host presses a button". So `AuthorsRevealed` flips automatically when the round enters `RESULTS#nnn`, which is the moment voting closes. From that point names are attributed everywhere: results, Field Notes, standings, the report and the archive export. The report attributes **every** round; there is no unattributed-forever case, because Workie and the host need to see who contributed what. `POST /reveal-authors` survives as a manual override for a host who wants names back *before* closing the vote; it is no longer the only path. The host's on-stage reveal becomes a **display** step over data that already carries names — which is why `‹ Hide again` was always described as display-only and never as a security control.
+- **The gate applies only to formats that hold a vote.** Anonymity is meaningless for trivia (the response is a letter) and wavelength (never attributed on stage), and `hostRunsVotePhase()` already computes exactly that set. Because the flag defaults ON for any game with no recorded preference, a format check inside `isHidden` is what stops every pre-existing trivia and wavelength game from being silently redacted.
 - **The host is inside "nobody".** `role` is a client-supplied query parameter (`get-answers.js:11`), so any payload emitted to a caller claiming `role=host` is emitted to anyone. There is no host-only branch anywhere in this feature.
 - **Default ON.** `anonymousUntilReveal: anonymousUntilReveal !== false`.
 - **Applies only to formats that hold a vote** — call-and-answer, poll, survey. `hostRunsVotePhase()` in `src/src/config/hostControls.js` already computes exactly this set. Trivia and wavelength hide the option entirely rather than showing it disabled.
@@ -1384,132 +1386,268 @@ without ever revealing and the promise has to survive that."
 
 ---
 
-### Task 8: A round never revealed stays unattributed in the report
+### Task 8: Voting closing reveals the round, and the gate only binds voting formats
 
-`get-results.js:414` persists `Winners` by name into the round record, so the report can reconstruct attribution even when the response was redacted. The report must read `AuthorsRevealed`, not simply read what is in the table.
+> **Rewritten 2026-08-09 by owner decision.** The original Task 8 made the report
+> withhold attribution for any round the host never revealed. That is no longer the
+> rule. The promise is *until voting closes* — the exact words already in the
+> room-facing sentence — so closing the vote discharges it, and the report attributes
+> every round. Two defects surface at the same time and belong here because they are
+> the same decision: the gate currently fires for trivia and wavelength, which never
+> opted into anonymity, and nothing flips `AuthorsRevealed` on its own.
+
+Two changes, one test section.
+
+**A. `isHidden` must only bind formats that hold a vote.** The flag defaults ON for any
+game with no recorded preference, and every game created before this feature has no
+`HostPreferences` at all — so today a legacy **trivia** game has its answers redacted
+during ASK, which breaks the host's view of who answered what, and a legacy
+**wavelength** game is redacted for a format that never attributes on stage anyway.
+`hostRunsVotePhase()` in `src/src/config/hostControls.js` already computes the set
+(`trivia` and `wavelength` skip the vote); `isHidden` must agree with it.
+
+**B. Entering `RESULTS#nnn` sets `AuthorsRevealed = true`.** `enterResultsState` in
+`get-results.js:118` is the single choke point for that transition — its own comment
+records that the same update used to be pasted into two branches and missing from two
+others, which is exactly why it was consolidated. Flipping the flag there means it
+cannot be forgotten on the wavelength or zero-vote exits either.
+
+**Consequences, so nobody re-adds them later:**
+- `create-report.js` needs **no** change. The report attributes every round. Do not
+  gate it, do not touch those four line numbers.
+- `get-results.js` needs **no** response redaction. It *is* the vote-close handler, so
+  by the time it assembles a response the round is revealed by definition.
+- `POST /reveal-authors` (Task 6) stays exactly as built. It is now a manual override
+  for a host who wants names back before closing the vote, not the only path.
 
 **Files:**
-- Modify: `lambda-functions/game/get-results.js:323`, `:414`
-- Modify: `lambda-functions/game/create-report.js:278`, `:317`, `:436`, `:441`
-- Test: `tests/anonymous-round-flow.js` (append section 11)
+- Modify: `lambda-functions/game/anonymity.js` **and** `lambda-functions/websocket/anonymity.js` — must stay byte-identical; edit both, or the drift test in `tests/anonymity-contract.js` fails
+- Modify: `lambda-functions/game/get-results.js` — `enterResultsState`
+- Test: `tests/anonymity-contract.js` (append a section), `tests/anonymous-round-flow.js` (append a section)
 
 **Interfaces:**
-- Consumes: `isHidden`, `redactAnswers` from Task 1.
-- Produces: `get-results` omits `playerName` from response tally rows while hidden but still persists scores internally; `create-report` omits attribution for any round whose `AuthorsRevealed` is not true.
+- Consumes: `isHidden` from Task 1; `normalizeGameType` from `lambda-functions/game/game-types.js` (for the agreement test only — see the note in Step 3).
+- Produces: `isHidden(metadata, round)` returns `false` for trivia and wavelength regardless of flag or reveal state; `ROUND#nnn.AuthorsRevealed === true` after the round enters `RESULTS#nnn`.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests — the format gate**
 
-Append to `tests/anonymous-round-flow.js`:
+Append a new section to `tests/anonymity-contract.js`, immediately before the final summary. **Every `check(...)` in this file is async — `await` every call you add.** The existing fixtures (`on`, `off`, `bare`) carry no `GameType`, and must keep behaving exactly as they do today: an absent type normalises to `call-and-answer`, which votes, so those tests stay green.
 
 ```js
-console.log('\n11. results and the report');
+console.log('\n7. the gate binds only formats that hold a vote');
+
+const trivia = { GameType: 'trivia', HostPreferences: { anonymousUntilReveal: true } };
+const wavelength = { GameType: 'wavelength', HostPreferences: { anonymousUntilReveal: true } };
+const callAndAnswer = { GameType: 'call-and-answer', HostPreferences: { anonymousUntilReveal: true } };
+
+// Trivia's response is a letter — there is nothing authored to attribute, and
+// redacting it breaks the host's view of who answered what. Wavelength never
+// attributes on the stage. Neither format is ever offered the option, so
+// neither may be caught by a flag that defaults ON.
+await check('trivia is never hidden, even with the flag explicitly on', () =>
+  assert.strictEqual(isHidden(trivia, {}), false));
+await check('wavelength is never hidden, even with the flag explicitly on', () =>
+  assert.strictEqual(isHidden(wavelength, {}), false));
+await check('a voting format with the flag on is still hidden', () =>
+  assert.strictEqual(isHidden(callAndAnswer, {}), true));
+
+// THE CASE THIS TASK EXISTS FOR. Every game created before this feature has no
+// HostPreferences at all, so the default-ON rule caught legacy trivia and
+// wavelength games and silently redacted them.
+await check('a legacy trivia game with no HostPreferences is not hidden', () =>
+  assert.strictEqual(isHidden({ GameType: 'trivia' }, undefined), false));
+await check('a legacy call-and-answer game with no HostPreferences is hidden', () =>
+  assert.strictEqual(isHidden({ GameType: 'call-and-answer' }, undefined), true));
+await check('an absent GameType still defaults to the voting behaviour', () =>
+  assert.strictEqual(isHidden(bare, {}), true));
+
+// Legacy spellings are stored in this table. `quiz` is trivia; a row written
+// under the old spelling must not be redacted either.
+await check('the legacy spelling "quiz" is treated as trivia', () =>
+  assert.strictEqual(isHidden({ GameType: 'quiz' }, {}), false));
+
+// Drift guard, in the spirit of the byte-identical one above. anonymity.js
+// cannot require game-types.js — that module lives only in lambda-functions/game/
+// and anonymity.js must stay byte-identical across both Lambda directories — so
+// the set is inlined there. This asserts the inlined copy still agrees with the
+// canonical vocabulary for every spelling the table can hold.
+const { GAME_TYPE_IDS, ALIASES, normalizeGameType } =
+  require(path.join(REPO, 'lambda-functions/game/game-types.js'));
+
+await check('the inlined skip-set agrees with game-types.js for every spelling', () => {
+  const SKIPS_VOTE = new Set(['trivia', 'wavelength']);
+  for (const spelling of [...GAME_TYPE_IDS, ...Object.keys(ALIASES)]) {
+    const expectedHidden = !SKIPS_VOTE.has(normalizeGameType(spelling));
+    assert.strictEqual(
+      isHidden({ GameType: spelling, HostPreferences: { anonymousUntilReveal: true } }, {}),
+      expectedHidden,
+      `'${spelling}' normalises to '${normalizeGameType(spelling)}' but the gate disagreed`);
+  }
+});
+```
+
+- [ ] **Step 2: Write the failing test — voting closing reveals the round**
+
+Append to `tests/anonymous-round-flow.js` as the **next sequential section number**. Read the end of the file first and continue the numbering — do not assume a number; earlier tasks have already appended sections and a collision makes the output unreadable.
+
+Two hazards, both of which have already cost this project time:
+- `check` is async. **`await` every call.** A bare call exits before its assertion resolves and vanishes from the pass count with no failure signal.
+- `seedAnonymousRound` seeds no `CONNECTION#` rows. `enterResultsState` broadcasts, so `put()` your own connection inside your own section if you assert on `sent` — otherwise the assertion passes vacuously against an empty array. Do not modify the shared helper.
+
+```js
+console.log('\nN. voting closing reveals the round');
 
 const { handler: getResults } = require(path.join(REPO, 'lambda-functions/game/get-results.js'));
 
 seedAnonymousRound('3011');
 put({ PK: 'GAME#3011', SK: 'STATE', State: 'VOTE#001', LessonNumber: 1, CurrentQuestionId: '001' });
 put({ PK: 'GAME#3011', SK: 'QUESTION#001#VOTE#Grace', PlayerName: 'Grace', Votes: { 0: 1 } });
+put({ PK: 'GAME#3011', SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
+sent = [];
 
-const results = JSON.parse((await getResults({
-  body: JSON.stringify({ gameId: '3011', questionNumber: 1 })
-})).body);
+await getResults({ body: JSON.stringify({ gameId: '3011', questionNumber: 1 }) });
 
-check('tally rows carry no playerName while hidden', () => {
-  const rows = results.results || results.answers || [];
-  assert.ok(rows.every(r => !('playerName' in r)),
-    `leaked in results: ${JSON.stringify(rows[0])}`);
-});
-check('scores are still persisted internally', () =>
-  assert.ok(store.get(key('GAME#3011', 'PLAYER#Ada#SCORE')) !== undefined ||
-            store.get(key('GAME#3011', 'ROUND#001')) !== undefined,
-    'the round record was not written — the reveal would have nothing to join'));
+// The promise is "until voting closes", not "until the host presses a button".
+// Closing the vote is what discharges it.
+await check('entering RESULTS sets AuthorsRevealed on the round', () =>
+  assert.strictEqual(store.get(key('GAME#3011', 'ROUND#001')).AuthorsRevealed, true));
+await check('the round is no longer hidden once results are in', () =>
+  assert.strictEqual(
+    isHidden(store.get(key('GAME#3011', 'METADATA')), store.get(key('GAME#3011', 'ROUND#001'))),
+    false));
 
-console.log('\n12. the report honours AuthorsRevealed');
+// And the ordinary answers endpoint carries names again, with no host action.
+const afterVoteClose = JSON.parse((await askAnswers('3011', 'player')).body);
+await check('GET /answers carries attribution once voting has closed', () =>
+  assert.strictEqual(afterVoteClose.answers[0].playerName, 'Ada'));
 
-const { handler: createReport } = require(path.join(REPO, 'lambda-functions/game/create-report.js'));
+console.log('\nN+1. the round record is written even on the exits that used to skip it');
 
-// Round 1 revealed, round 2 never revealed.
-seedAnonymousRound('3012', { revealed: true });
-put({ PK: 'GAME#3012', SK: 'ROUND#002', QuestionNumber: '002', AuthorsRevealed: false });
-put({ PK: 'GAME#3012', SK: 'QUESTION#002#ANSWER#Ada', PlayerName: 'Ada', Answer: 'round two answer', SubmittedAt: '2026-01-01T00:01:00.000Z' });
+// enterResultsState's own comment records that the state write used to be
+// missing from the wavelength and zero-vote exits. The reveal must not inherit
+// that hole: a round with no votes still closes.
+seedAnonymousRound('3013');
+put({ PK: 'GAME#3013', SK: 'STATE', State: 'VOTE#001', LessonNumber: 1, CurrentQuestionId: '001' });
+put({ PK: 'GAME#3013', SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
+sent = [];
 
-const report = JSON.parse((await createReport({
-  body: JSON.stringify({ gameId: '3012' })
-})).body);
-const reportText = JSON.stringify(report);
+await getResults({ body: JSON.stringify({ gameId: '3013', questionNumber: 1 }) });
 
-check('a revealed round keeps its attribution in the report', () =>
-  assert.ok(reportText.includes('Ada'), 'the revealed round lost its author'));
-check('an unrevealed round is not attributed in the report', () => {
-  // Find the round-2 section and assert no author on it. A promise made to the
-  // room must not be broken by an artefact produced after everyone leaves.
-  const round2 = (report.rounds || []).find(r => String(r.questionNumber) === '002');
-  assert.ok(round2, 'round 2 missing from the report entirely');
-  assert.ok(!JSON.stringify(round2).includes('Ada'),
-    `unrevealed round attributed in the report: ${JSON.stringify(round2)}`);
-});
+await check('a round that closed with zero votes is still revealed', () =>
+  assert.strictEqual(store.get(key('GAME#3013', 'ROUND#001'))?.AuthorsRevealed, true));
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [ ] **Step 3: Run them and watch them fail**
 
 ```bash
+node tests/anonymity-contract.js
 node tests/anonymous-round-flow.js
 ```
 
-- [ ] **Step 3: Gate `get-results`**
+Expected: the format-gate checks fail (trivia and wavelength are currently hidden), and the reveal checks fail (`AuthorsRevealed` is `undefined` because nothing writes it).
 
-In `lambda-functions/game/get-results.js`, add the require and load the round record alongside the metadata it already reads. Redact `playerName` from the response tally rows built at `:323` while hidden. **Do not change what is persisted** — `Winners` at `:414` and the `PLAYER#{name}#SCORE` writes at `:336-389` stay, because the reveal needs something to join back on and scoring is per-person by design.
+**Verify the failures are real.** A test that cannot fail proves nothing — this plan has already shipped one vacuous assertion. If a new check passes before you have written any implementation, find out why before continuing.
 
-```js
-const { isHidden } = require('./anonymity');
-```
+- [ ] **Step 4: Add the format gate to `isHidden` — in BOTH copies**
 
-At the point the response is assembled:
+In `lambda-functions/game/anonymity.js`, add the skip-set and extend `isHidden`. Then `cp` it over `lambda-functions/websocket/anonymity.js`; the two must stay byte-identical or `tests/anonymity-contract.js` fails.
 
 ```js
-    // Redact the RESPONSE only. The scores and Winners stay in the table —
-    // the reveal has to have something to join back on, and points genuinely
-    // are per-person. What changes is what leaves the building.
-    const hidden = isHidden(metadata, roundRecord);
-    const responseRows = hidden
-      ? rows.map(({ playerName, ...rest }) => rest)
-      : rows;
+/**
+ * Formats whose round never opens a vote.
+ *
+ * INLINED ON PURPOSE. The canonical vocabulary lives in game-types.js, and the
+ * host's runtime answer lives in src/src/config/hostControls.js
+ * (`hostRunsVotePhase`) — but this file must stay byte-identical across
+ * lambda-functions/game/ and lambda-functions/websocket/, and game-types.js
+ * exists only in the former. A require() that resolves in one bundle and not
+ * the other is worse than a duplicated four-element set.
+ * tests/anonymity-contract.js asserts this set still agrees with game-types.js
+ * for every spelling the table can hold, aliases included.
+ */
+const TYPES_THAT_SKIP_VOTE = new Set(['trivia', 'wavelength', 'quiz']);
+
+function skipsVote(gameType) {
+  return TYPES_THAT_SKIP_VOTE.has(String(gameType || '').trim().toLowerCase());
+}
 ```
 
-- [ ] **Step 4: Gate `create-report`**
-
-In `lambda-functions/game/create-report.js`, load each round's `AuthorsRevealed` and omit author fields for any round where it is not `true`. At each of `:278`, `:317`, `:436`, `:441`, guard the attribution with the round's flag:
+and in `isHidden`, before the flag is read:
 
 ```js
-// A round the host never revealed stays unattributed forever. Reading the
-// table directly would reconstruct attribution the room was promised it
-// would not see, in an artefact produced after everyone has left.
-const attributed = round.AuthorsRevealed === true;
+  // Anonymity binds only the formats that hold a vote. Trivia's response is a
+  // letter, so there is nothing authored to attribute — and redacting it breaks
+  // the host's view of who answered what. Wavelength never attributes on stage.
+  //
+  // This check is not cosmetic. The flag defaults ON, and every game created
+  // before this feature has no HostPreferences at all, so without it every
+  // legacy trivia and wavelength game is silently redacted.
+  if (skipsVote(metadata && metadata.GameType)) return false;
 ```
 
-- [ ] **Step 5: Run the tests**
+- [ ] **Step 5: Reveal the round when it enters RESULTS**
+
+In `lambda-functions/game/get-results.js`, inside `enterResultsState` (`:118`), write `AuthorsRevealed` on the round record alongside the state update. Put it *before* `broadcastResultsReady`, so nothing is announced to the room ahead of the record it describes.
+
+```js
+  // VOTING HAS CLOSED, SO THE PROMISE IS DISCHARGED. The room was told "nobody
+  // sees who wrote what — the host included — until voting closes", and this is
+  // that moment. Attribution returns everywhere from here: results, Field Notes,
+  // standings, the report and the archive export.
+  //
+  // It lives in this function rather than at the call sites for the reason the
+  // comment above records — the state write used to be pasted into two branches
+  // and missing from the wavelength and zero-vote exits, so a round could close
+  // without it. The reveal must not inherit that hole.
+  //
+  // Unconditional SET, so it is idempotent: a host who resolves the same round
+  // twice does not error, and POST /reveal-authors having run first is a no-op.
+  await db.send(new UpdateCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: `ROUND#${paddedQuestionId}` },
+    UpdateExpression: 'SET #revealed = :true, #qn = :qn, #updatedAt = :updatedAt',
+    ExpressionAttributeNames: {
+      '#revealed': 'AuthorsRevealed', '#qn': 'QuestionNumber', '#updatedAt': 'UpdatedAt'
+    },
+    ExpressionAttributeValues: {
+      ':true': true, ':qn': paddedQuestionId, ':updatedAt': new Date().toISOString()
+    }
+  }));
+```
+
+**Do not** add response redaction to `get-results.js`, and **do not** touch `create-report.js`. Both are deliberate: this handler is the vote-close event itself, so by the time it assembles a response the round is revealed by definition, and the report attributes every round.
+
+- [ ] **Step 6: Run the tests**
 
 ```bash
+node tests/anonymity-contract.js
 node tests/anonymous-round-flow.js
 for t in tests/*.js; do node "$t"; done 2>&1 | grep -E '^[0-9]+ passed' | awk '{p+=$1; f+=$3; n++} END {print n" suites, "p" passed, "f" failed"}'
 ```
 
-Expected: 0 failed. `tests/report-payload-flow.js` and `tests/results-state-broadcast.js` must still pass.
+Expected: 0 failed, and the total rises by the number of checks you added. `tests/report-payload-flow.js`, `tests/results-state-broadcast.js` and `tests/trivia-*.js` must still pass — the format gate changes trivia's behaviour back to what those suites expect, so a failure there is a signal, not noise.
 
-- [ ] **Step 6: Commit**
+Aggregate with that `grep`, **never** `tail -1` — some suites print a trailing line and `tail -1` silently drops them.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add lambda-functions/game/get-results.js lambda-functions/game/create-report.js tests/anonymous-round-flow.js
-git commit -m "feat(anonymity): results redaction, and the report honours AuthorsRevealed
+git add lambda-functions/game/anonymity.js lambda-functions/websocket/anonymity.js lambda-functions/game/get-results.js tests/anonymity-contract.js tests/anonymous-round-flow.js
+git commit -m "feat(anonymity): voting closing reveals the round
 
-get-results redacts the response only; Winners and the per-player scores
-stay in the table because the reveal needs something to join back on and
-points genuinely are per-person.
+The promise is the one already written into the room-facing sentence —
+until voting CLOSES, not until the host presses a button. enterResultsState
+is the single choke point for that transition, and its own comment records
+that the state write used to be missing from the wavelength and zero-vote
+exits; putting the reveal there means it cannot inherit that hole.
 
-create-report reads AuthorsRevealed per round rather than reading what is
-in the table, so a round the host never revealed stays unattributed. A
-promise made to the room must not be broken by an artefact produced after
-everyone has left."
+The gate now binds only formats that hold a vote. The flag defaults ON and
+every game created before this feature has no HostPreferences at all, so
+without a format check every legacy trivia game had its answers redacted
+during ASK — which breaks the host's view of who answered what — and every
+legacy wavelength game was redacted for a format that never attributes.
+
+The report is deliberately untouched: it attributes every round."
 ```
 
 ---
@@ -1791,12 +1929,22 @@ export function displayLabelFor(answer, index) {
 
 In `src/src/GameHostPage.jsx`, replace every place the VOTE and RESULTS views print `answer.player` / `answer.playerName` with `displayLabelFor(answer, index)`.
 
-Add the reveal handler:
+Add the reveal handler.
+
+> **Amended 2026-08-09 with Task 8.** `AuthorsRevealed` now flips automatically when
+> the round enters RESULTS, so by the time the host is looking at this screen the
+> payload already carries names and `authorsRevealed` restores as `true`. The on-stage
+> reveal is therefore a **display** step: hold the names back for a beat, then show
+> them. Keep `handleRevealAuthors` anyway — it is the override for a host who wants
+> names back *before* closing the vote, and it is what makes the button correct on a
+> round reopened or resolved out of order. Call it only when `authorsRevealed` is
+> still false; otherwise just flip the local display state.
 
 ```js
-  // The reveal is the primary action of RESULTS, not a consequence of arriving
-  // there — a host cannot forget to reveal because revealing is the only way
-  // forward. See spec §5.6.4.
+  // Display step, plus an override. AuthorsRevealed flips when voting closes
+  // (get-results.js:enterResultsState), so this endpoint is only load-bearing
+  // when the host reveals BEFORE closing the vote. Calling it when the round is
+  // already revealed is a harmless no-op — the endpoint is idempotent.
   const handleRevealAuthors = async () => {
     try {
       const res = await fetch(`${API_BASE}games/${gameId}/reveal-authors`, {

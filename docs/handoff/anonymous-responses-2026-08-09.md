@@ -12,7 +12,7 @@ SDD ledger: `.superpowers/sdd/2026-08-09-anonymous-responses/progress.md` (git-i
 
 | Suite | Command | Expected |
 |---|---|---|
-| Backend | `for t in tests/*.js; do node "$t"; done` | **20 suites, 690 passed, 0 failed** |
+| Backend | `for t in tests/*.js; do node "$t"; done` | **20 suites, 720 passed, 0 failed** |
 | Frontend | `cd src && npx jest __tests__/` | 5 failed suites / 30 failed / 242 passed |
 | Build | `cd src && npm run build` | compiles, 2 pre-existing size warnings |
 | Template | `sam validate --lint -t template-clean.yaml` | valid |
@@ -25,7 +25,16 @@ The 5 failing frontend suites are stale and out of scope: they predate the auth 
 
 ## Where anonymous responses got to
 
-**Tasks 1–6 of 11 are done.** The backend can now complete a full round — redact, vote, reveal. Tasks 7–11 are not started.
+**Tasks 1–8 of 11 are done and review-clean.** The whole backend is in. Task 9 is in flight; Tasks 10–11 are not started.
+
+### The rule changed mid-execution — read this before anything else
+
+**Owner decision, 2026-08-09.** The original design had names return only when the host tapped **Reveal**, and had the report withhold attribution forever for any round that was never revealed. Both are gone.
+
+- **Voting closing reveals the round.** `AuthorsRevealed` flips automatically when a round enters `RESULTS#nnn`, inside `enterResultsState` ([get-results.js:118](../../lambda-functions/game/get-results.js)) — the single choke point whose own doc comment records that this write used to be missing from the wavelength and zero-vote exits. The promise was always *"until voting closes"*; the build had drifted to *"until the host presses a button"*.
+- **The report attributes every round.** There is no unattributed-forever case. `create-report.js` is deliberately **untouched** — do not gate it.
+- **The gate binds only formats that hold a vote.** `isHidden` returns `false` for trivia and wavelength. This was a live defect, not tidiness: the flag defaults ON and every pre-feature game has no `HostPreferences`, so legacy **trivia** games were having their ASK answers redacted, which breaks the host's view of who answered what.
+- **`POST /reveal-authors` survives** as a manual override for a host who wants names back *before* closing the vote. It is no longer the only path, which is why Task 10 shrank: the on-stage reveal is now a display step over data that already carries names.
 
 | # | Task | Commit | Review |
 |---|---|---|---|
@@ -34,24 +43,23 @@ The 5 failing frontend suites are stale and out of scope: they predate the auth 
 | 3 | Redact `GET /games/{id}/answers` | `2c588841` + fix `6de72ea8` | clean after 1 fix round |
 | 4 | Redact `POST /games/{id}/start-vote` | `35a922be` | clean |
 | 5 | Redact the `playerAnswered` socket frame | `8476e704` + fix `f4c1a8ac` | clean after 1 fix round |
-| 6 | `POST /games/{id}/reveal-authors` | `f1d65470` | **not yet reviewed** |
+| 6 | `POST /games/{id}/reveal-authors` | `f1d65470` | clean |
+| 7 | Field Notes names nobody while hidden | `c01571fe` + fix `e3fc7711` | clean after 1 fix round |
+| 8 | Voting closing reveals; gate binds voting formats only | `afd5e7b4` | clean |
 
-**Task 6 has not completed its review gate.** Generate its review package with
-`<skill>/scripts/review-package docs/superpowers/plans/2026-08-09-anonymous-responses.md 8476e704 f1d65470`.
+Task 7 was larger than the plan predicted. The deterministic template was only half of it — the same authorship reached the Bedrock prompt through a **second** independent path (`results.voteTallies` / `winners`, built by the vote-tally scorer from the same raw rows), and a **third** for wavelength rounds via a cached `QUESTION#…#RESULTS` record that fed real names into the prompt *and* into the `?debug=true` response, which anyone can request. All three are gated now.
 
 ### Remaining tasks
 
-7. **Field Notes must not name an unrevealed author.** `get-ai-summary.js:1175-1176` builds `` `${top.playerName}'s answer, "${top.answer}", earned the most support` `` in code — a deterministic template, not the model. Needs an unattributed fallback while hidden, and the model prompt built from redacted rows.
-8. **The report must honour `AuthorsRevealed`.** `get-results.js:414` persists `Winners` by name, so the report can reconstruct attribution even when the response was redacted. A round never revealed must stay unattributed, or a promise made to the room is broken by an artefact produced after everyone leaves.
-9. **Setup control** — `src/src/config/anonymity.js` + the form. Offered only for formats that hold a vote, derived from `hostRunsVotePhase()` so the two cannot drift.
-10. **Host renders redacted rounds and drives the reveal** — plus hiding standings pre-reveal (attribution by arithmetic) and the `‹ Hide again` display-only step.
+9. **Setup control** — `src/src/config/anonymity.js` + the form. Offered only for formats that hold a vote, derived from `hostRunsVotePhase()` so the two cannot drift. *In flight.*
+10. **Host renders redacted rounds and drives the reveal** — smaller than planned. Because voting closing now reveals, the payload already carries names by the time RESULTS is on screen, so the on-stage reveal is a **display** step and `handleRevealAuthors` is only load-bearing when a host reveals *before* closing the vote. Still includes hiding standings pre-reveal (attribution by arithmetic) and the `‹ Hide again` display-only control.
 11. **Player ballot** — label by position, mark the player's own row by matching submitted text.
 
 ---
 
 ## Do not deploy yet
 
-`dev` is **held at `85ad6043`** on the remote. Local `dev` carries Tasks 1–6.
+`dev` is **held at `85ad6043`** on the remote. Local `dev` carries Tasks 1–8.
 
 Pushing now would deploy a backend that redacts author names with `anonymousUntilReveal` defaulting **ON for every existing game**, while the host UI has no reveal control (that is Task 10). Names would vanish from the vote and results views with no button to bring them back — recoverable only by calling `POST /games/{id}/reveal-authors` by hand.
 
@@ -97,6 +105,10 @@ All take `AWS_PROFILE=adminaccess node scripts/<name>.js engagetest [--apply]` a
 - **`message.js` routing makes `playerVoted` unreachable.** `isHostMessage` is checked before `isPlayerMessage` and both match a `VOTE#` prefix, so `handlePlayerMessage`'s `playerVoted` branch is dead code. Pre-existing, unrelated to anonymity, worth its own look.
 - **The ballot is positional and stable only by accident** (spec §5.6.5a, risk R1). `submit-vote.js:63` stores `{"0": 1, "1": 2}` and `get-results.js:276` tallies against `answers[index]`; the indices agree only because the answer sort key ends in the author's name. Any re-keying, or an answer arriving mid-round, silently lands votes on the wrong answers. **Independent of anonymity — do not bundle.**
 - **`reopen-round` does not exist** (risk R2). A host who advances early cannot recover.
+- **`get-ai-summary.js:866` references an undeclared `commonWords`** inside `exports.handler`'s wavelength vote-tally pass; the identifier is only declared inside `generateAISummary`. That is a `ReferenceError` at runtime, so wavelength AI summaries requested through the real handler almost certainly crash in production today. Pre-existing, unrelated to anonymity, confirmed untouched. Spawned as its own task.
+- **`?debug=true` on `get-ai-summary` returns the full assembled prompt and every template variable to any caller.** That is the surface the wavelength name leak reached the outside world through, and it will be the surface the next one reaches too. Anything added to a prompt is public by construction.
+- **A redaction that feeds prose cannot use the omit-don't-null contract.** `redactAnswer` deletes the field, which is right for a JSON payload and wrong for a template literal — an omitted field renders the string `"undefined"` into the prompt. `get-ai-summary.js` substitutes a flat `'a participant'` placeholder instead, at the single point authorship enters the function. Do not "simplify" that into a call to `redactAnswers`.
+- **A flat placeholder collides when it is used as a key.** `playerWordLists[playerName] = words` silently kept only the last participant once every name became the same string. Fixed by keying on an array index; the same trap waits anywhere a name is used as an object key.
 
 ### Deferred minors
 
@@ -111,9 +123,15 @@ All take `AWS_PROFILE=adminaccess node scripts/<name>.js engagetest [--apply]` a
 
 `docs/design/host-redesign/` — 21 mockups, `audit.js` (168 checks over 21 pages × 4 profiles × 2 viewports), `CRITIQUE.md`, `USER-REVIEWS.md`, `USER-REVIEWS-2.md`. Serve it with a static server on any port and open `index.html`; the type is `vh`-scaled so it only tells the truth full-screen.
 
-Reviewed to approval over four rounds — an independent critic and three simulated first-time evaluators who went from two hard noes to unanimous yes. Plans 2–5 are not written yet:
+Reviewed to approval over four rounds — an independent critic and three simulated first-time evaluators who went from two hard noes to unanimous yes.
 
-2. Stage shell + four profile ladders + the `fit()` hook
+**Plan 2 is now written:** [docs/superpowers/plans/2026-08-09-host-stage-shell.md](../superpowers/plans/2026-08-09-host-stage-shell.md). Five tasks — display profiles + ladders, the fitter's policy as pure functions, the `useStageFit` hook, the shell components, then GameHostPage adopting it plus the six deletions §8 names.
+
+**One correction to the spec, found while drafting it.** §8 says `audit.js` "is written to port into component tests unchanged." It is not portable to Jest: every check is geometric (`getBoundingClientRect`, `scrollHeight`, computed font size) and jsdom has no layout engine, so all of them return zero and the port would pass unconditionally — the exact failure mode §4.2b exists to warn about. The plan splits the guarantee: the fitter's *policy* (sacrifice order, the search, the truncation predicate — where all three shipped bugs actually were) becomes pure and is unit-tested; rendered geometry stays guarded by `audit.js` against the mockups. Running the audit against the React app needs a headless-browser harness this repo does not have, and that is recorded as separate work.
+
+Plans 3–5 are not written yet:
+
+2. ~~Stage shell + four profile ladders + the `fit()` hook~~ — written
 3. Console (operator chrome, question browser, how-to-play beat)
 4. Per-state content and the deletions
 5. ENDED, plus two verified defects — `isWaitingState('ENDED')` returns `true` so a finished session renders the lobby, and `setGameState('ENDED')` sits inside the `if (confirmed)` branch of the `gameEnded` dialog so declining strands the game.
