@@ -142,13 +142,17 @@ async function check(label, fn) {
 
 const put = (item) => store.set(key(item.PK, item.SK), item);
 
-/** A call-and-answer game mid-ASK with two answers in. */
-function seedAnonymousRound(gameId, { anonymous = true, revealed = false } = {}) {
+/**
+ * A call-and-answer game mid-round with two answers in. Defaults to ASK#001;
+ * pass `state: 'VOTE#001'` for checks that need the player branch to actually
+ * return an answers array (see section 2 below).
+ */
+function seedAnonymousRound(gameId, { anonymous = true, revealed = false, state = 'ASK#001' } = {}) {
   store.clear();
   sent = [];
   put({ PK: `GAME#${gameId}`, SK: 'METADATA', GameType: 'call-and-answer', Title: 'T',
         HostPreferences: { randomizeQuestions: true, anonymousUntilReveal: anonymous } });
-  put({ PK: `GAME#${gameId}`, SK: 'STATE', State: 'ASK#001', LessonNumber: 1, CurrentQuestionId: '001' });
+  put({ PK: `GAME#${gameId}`, SK: 'STATE', State: state, LessonNumber: 1, CurrentQuestionId: '001' });
   put({ PK: `GAME#${gameId}`, SK: 'ROUND#001', QuestionNumber: '001', AuthorsRevealed: revealed });
   for (const n of ['Ada', 'Grace']) {
     put({ PK: `GAME#${gameId}`, SK: `QUESTION#001#ANSWER#${n}`,
@@ -163,44 +167,68 @@ const askAnswers = (gameId, role) => getAnswers({
 
 (async () => {
 
-console.log('\n1. GET /answers while hidden');
+console.log('\n1. GET /answers while hidden (ASK phase)');
 
 seedAnonymousRound('3001');
 const asHost = JSON.parse((await askAnswers('3001', 'host')).body);
-const asPlayer = JSON.parse((await askAnswers('3001', 'player')).body);
+const asPlayerAsk = JSON.parse((await askAnswers('3001', 'player')).body);
 
 await check('the host payload carries no playerName', () =>
   assert.ok(asHost.answers.every(a => !('playerName' in a)),
     `leaked: ${JSON.stringify(asHost.answers[0])}`));
 await check('the host payload carries no name', () =>
   assert.ok(asHost.answers.every(a => !('name' in a))));
-// role is client-supplied, so "host" is not a trust boundary. Both branches
-// must redact identically or the feature is a label on a leak.
-await check('role=host and role=player return identical attribution', () =>
-  assert.deepStrictEqual(
-    asHost.answers.map(a => Object.keys(a).sort()),
-    asPlayer.answers.map(a => Object.keys(a).sort())));
 await check('the answers themselves survive, in order', () =>
   assert.deepStrictEqual(asHost.answers.map(a => a.answer),
     ["Ada's answer", "Grace's answer"]));
 await check('the count is unchanged', () =>
   assert.strictEqual(asHost.answerCount, 2));
+// During ASK, players don't get anyone's answers yet — count only. That's an
+// older, pre-vote gate, unrelated to anonymity (it exists so players aren't
+// influenced before they answer, and it applies whether or not the round is
+// anonymous). Pin it here: this is exactly the property that broke an
+// earlier version of the parity check below when it was seeded at ASK
+// instead of VOTE.
+await check('during ASK, the player branch returns no answers array at all', () =>
+  assert.ok(!('answers' in asPlayerAsk),
+    `unexpected answers key during ASK: ${JSON.stringify(asPlayerAsk)}`));
 
-console.log('\n2. GET /answers once revealed');
+console.log('\n2. GET /answers while hidden (VOTE phase — parity, host vs. player)');
+
+// Seeded at VOTE#001, not ASK#001. Anonymity is only load-bearing here: VOTE
+// is the one phase where BOTH roles actually receive an answers array (see
+// the ASK invariant above), so it's the only phase where "host and player
+// are given identical attribution" is even a testable claim. Do not move
+// this seed back to ASK — that was the original bug in this file.
+seedAnonymousRound('3005', { state: 'VOTE#001' });
+const asHostVote = JSON.parse((await askAnswers('3005', 'host')).body);
+const asPlayerVote = JSON.parse((await askAnswers('3005', 'player')).body);
+
+// role is client-supplied, so "host" is not a trust boundary. Both branches
+// must redact identically or the feature is a label on a leak.
+await check('role=host and role=player return identical attribution', () =>
+  assert.deepStrictEqual(
+    asHostVote.answers.map(a => Object.keys(a).sort()),
+    asPlayerVote.answers.map(a => Object.keys(a).sort()),
+    'role is client-supplied, so any difference here means a player who asks ' +
+    'for role=host sees names a real player could not — the whole design ' +
+    'assumes both branches are given the same thing to send'));
+
+console.log('\n3. GET /answers once revealed');
 
 seedAnonymousRound('3002', { revealed: true });
 const revealed = JSON.parse((await askAnswers('3002', 'host')).body);
 await check('revealed rounds carry playerName again', () =>
   assert.strictEqual(revealed.answers[0].playerName, 'Ada'));
 
-console.log('\n3. GET /answers with anonymity turned off');
+console.log('\n4. GET /answers with anonymity turned off');
 
 seedAnonymousRound('3003', { anonymous: false });
 const plain = JSON.parse((await askAnswers('3003', 'host')).body);
 await check('opting out carries playerName from the start', () =>
   assert.strictEqual(plain.answers[0].playerName, 'Ada'));
 
-console.log('\n4. a game with no HostPreferences at all');
+console.log('\n5. a game with no HostPreferences at all');
 
 seedAnonymousRound('3004');
 delete store.get(key('GAME#3004', 'METADATA')).HostPreferences;
