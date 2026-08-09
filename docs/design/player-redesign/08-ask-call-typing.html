@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Round 3 — composing</title>
+<style>
+:root{
+  /* Warm Summit, unchanged */
+  --bg:#0F1A2E; --text:#F4EDE4; --primary:#F6A94C; --success:#4FB286;
+  --secondary:#7CA7E6; --danger:#E4695E;
+  /* text-only tints (host spec §4.3) — carried across so the two surfaces
+     cannot drift, even though the phone needs no black-lift allowance */
+  --muted:#B6C2D4; --success-text:#6FD0A4;
+  --surface:#182640; --surface-2:#20304E; --rule:rgba(182,194,212,.20);
+  --phase:var(--muted);
+
+  /* PHONE ladder — read at ~14 in on a ~142 CSS-ppi panel. Derived in
+     RATIONALE.md §3; the arcminute figure for each rung is in the comment. */
+  /* rem, not px, so a reader who has raised their browser or OS text size gets
+     the whole ladder scaled with them (WCAG 1.4.4). The comment gives the px at
+     a 16px root, which is what the derivation produced. */
+  --L-hero:2.125rem;      /* 34px — 42' — one object owns the screen */
+  --L-primary:1.5rem;     /* 24px — 30' — the question */
+  --L-secondary:1.1875rem;/* 19px — 24' — answers, options, button labels */
+  --L-body:1rem;          /* 16px — 20' — detail, instructions, inputs */
+  --L-meta:0.8125rem;     /* 13px — 16' — labels. Nothing is smaller, ever. */
+
+  --tap:44px; --pad:18px; --measure:32ch;
+  /* The gutter, not the content, absorbs a wide window: a phone layout stretched
+     to 1280px is not a laptop design, it is a phone design that was not stopped. */
+  --gut:var(--pad);
+}
+@media (min-width:768px){   /* TABLET — ~18 in, ~132 CSS ppi */
+  :root{--L-hero:2.5rem;--L-primary:1.75rem;--L-secondary:1.375rem;--L-body:1.1875rem;--L-meta:0.9375rem;
+        --pad:28px;--measure:40ch;--gut:clamp(28px,calc((100% - 620px)/2),30%)}
+}
+@media (min-width:1200px){  /* LAPTOP — ~24 in, ~110 CSS ppi */
+  :root{--L-hero:2.8125rem;--L-primary:2rem;--L-secondary:1.625rem;--L-body:1.3125rem;--L-meta:1.0625rem;
+        --pad:36px;--measure:46ch;--gut:clamp(36px,calc((100% - 660px)/2),34%)}
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:400 var(--L-body)/1.5 "Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  display:flex;flex-direction:column;overflow:hidden;
+  -webkit-font-smoothing:antialiased}
+
+/* ---------- volumes ------------------------------------------------------
+   ACT  the phone is the only place the task can be done — full contrast, amber
+        primary, a dock.
+   REST the task is done — no dock at all, no amber, nothing to press.
+   WATCH the shared screen is the show — the phone carries only what is
+        personal and therefore cannot be on the stage.                       */
+body.v-rest, body.v-watch{--phase:var(--rule)}
+
+/* ---------- bar ---------------------------------------------------------- */
+.bar{flex:none;border-bottom:1px solid var(--rule)}
+.strip{height:4px;background:var(--phase)}
+.line{display:flex;align-items:center;gap:12px;padding:10px var(--gut);
+  font-size:var(--L-meta);font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--muted)}
+/* single text node, min-width:0, so the ellipsis actually renders (host §5.1) */
+.ctx{min-width:0;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  display:block}
+/* Ordered sacrifice, horizontally: the CATEGORY goes first and goes whole, rather
+   than shrinking to an unreadable stub. It is on the shared screen anyway. Below
+   the tablet breakpoint it is not rendered at all. */
+.cat{flex:0 1 auto;min-width:9ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:var(--muted);opacity:.8}
+.cat::before{content:"\00b7";margin-right:9px;opacity:.7}
+@media (max-width:767px){.cat{display:none}}
+.spacer{flex:1 1 auto;min-width:0}
+.who{flex:none;display:flex;align-items:center;gap:6px;max-width:11ch;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--success);flex:none}
+.dot.off{background:var(--primary)}
+
+.banner{display:flex;gap:10px;align-items:flex-start;padding:11px var(--gut);
+  background:rgba(246,169,76,.13);border-bottom:1px solid rgba(246,169,76,.4);
+  font-size:var(--L-meta);line-height:1.45;color:var(--text)}
+.banner b{font-weight:700}
+.banner svg{flex:none;margin-top:1px}
+
+/* ---------- stage -------------------------------------------------------- */
+.stage{flex:1;min-height:0;overflow-y:auto;padding:20px var(--gut) 28px;
+  overscroll-behavior:contain}
+.stage.centre{display:flex;flex-direction:column;justify-content:center}
+
+h1{font-size:var(--L-hero);line-height:1.06;font-weight:800;letter-spacing:-.02em;
+  margin:0 0 12px;max-width:var(--measure)}
+.q{font-size:var(--L-primary);line-height:1.24;font-weight:700;letter-spacing:-.01em;
+  margin:0 0 12px;max-width:var(--measure)}
+.detail{font-size:var(--L-body);line-height:1.5;margin:0 0 18px;max-width:var(--measure);
+  color:var(--text)}
+.lede{font-size:var(--L-secondary);line-height:1.4;margin:0 0 16px;max-width:var(--measure)}
+.lab{font-size:var(--L-meta);font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 7px}
+.task{border-left:2px solid var(--rule);padding-left:13px;margin:0 0 20px;max-width:var(--measure)}
+.task p{margin:0;font-size:var(--L-body);line-height:1.45}
+.muted{color:var(--muted)}
+.sep{border:0;border-top:1px solid var(--rule);margin:22px 0}
+
+/* ---------- the look-up cue ---------------------------------------------- */
+.lookup{display:flex;gap:11px;align-items:flex-start;margin:26px 0 0;padding-top:18px;
+  border-top:1px solid var(--rule);color:var(--muted);font-size:var(--L-body);line-height:1.45;
+  max-width:var(--measure)}
+.lookup svg{flex:none;margin-top:2px}
+/* a stat row already drew a rule; do not draw a second one 26px under it */
+.stat + .lookup{border-top:0;padding-top:4px}
+
+/* ---------- dock --------------------------------------------------------- */
+.dock{flex:none;border-top:1px solid var(--rule);background:var(--bg);
+  padding:12px var(--gut) calc(16px + env(safe-area-inset-bottom,0px))}
+.dock .note{font-size:var(--L-meta);color:var(--muted);margin:0 0 9px;line-height:1.4}
+.btn{display:block;width:100%;min-height:56px;border:0;border-radius:14px;padding:15px 16px;
+  background:var(--primary);color:#0F1A2E;font:800 var(--L-secondary)/1.2 inherit;
+  letter-spacing:-.01em;cursor:pointer;text-align:center}
+.btn[disabled]{background:transparent;border:1px solid var(--rule);color:var(--muted);
+  font-weight:700;cursor:default}
+.btn.ghost{background:transparent;border:1px solid var(--rule);color:var(--text);font-weight:700}
+.btn+.btn{margin-top:10px}
+
+/* ---------- form --------------------------------------------------------- */
+.field{margin:0 0 20px}
+.inp{width:100%;min-height:56px;background:var(--surface);border:1px solid var(--rule);
+  border-radius:12px;color:var(--text);padding:14px;
+  font:400 var(--L-secondary)/1.35 inherit}
+.inp::placeholder{color:var(--muted);opacity:.75}
+.inp:focus{outline:2px solid var(--primary);outline-offset:2px}
+.inp.bad{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}
+textarea.inp{min-height:148px;resize:vertical;display:block}
+.code{font:800 var(--L-hero)/1.1 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.3em;text-indent:.3em;text-align:center;min-height:80px}
+.help{font-size:var(--L-meta);color:var(--muted);line-height:1.45;margin:8px 0 0}
+.err{display:flex;gap:8px;align-items:flex-start;margin:9px 0 0;font-size:var(--L-meta);
+  line-height:1.45;color:var(--primary);font-weight:600}
+.err svg{flex:none;margin-top:1px}
+.count{font-size:var(--L-meta);color:var(--muted);text-align:right;margin:7px 0 0}
+
+/* ---------- options (trivia) --------------------------------------------- */
+.opts{margin:0 0 4px}
+.opt{display:flex;gap:12px;align-items:flex-start;width:100%;text-align:left;
+  min-height:var(--tap);padding:13px 14px;margin:0 0 10px;border:1px solid var(--rule);
+  border-radius:13px;background:var(--surface);color:var(--text);
+  font:400 var(--L-secondary)/1.35 inherit;cursor:pointer}
+.opt .k{flex:none;width:30px;height:30px;border-radius:9px;border:1px solid var(--rule);
+  display:grid;place-items:center;font:800 var(--L-meta)/1 inherit;color:var(--muted)}
+.opt[aria-checked="true"]{border-color:var(--primary);background:rgba(246,169,76,.11)}
+.opt[aria-checked="true"] .k{background:var(--primary);border-color:var(--primary);color:#0F1A2E}
+
+/* ---------- cards, receipts, stats --------------------------------------- */
+.card{border:1px solid var(--rule);border-radius:14px;background:var(--surface);
+  padding:15px;margin:0 0 14px}
+.card.good{border-color:rgba(111,208,164,.45)}
+.quote{font-size:var(--L-secondary);line-height:1.4;margin:0}
+.stat{display:flex;justify-content:space-between;align-items:baseline;gap:14px;
+  padding:13px 0;border-bottom:1px solid var(--rule)}
+.stat:last-child{border-bottom:0}
+.stat .k{font-size:var(--L-meta);font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--muted)}
+.stat .v{font-size:var(--L-secondary);font-weight:700;text-align:right}
+.big{font-size:var(--L-hero);font-weight:800;letter-spacing:-.02em;line-height:1.05}
+.flag{display:inline-block;font-size:var(--L-meta);font-weight:800;letter-spacing:.09em;
+  text-transform:uppercase;padding:3px 8px;border-radius:6px;border:1px solid var(--rule);
+  color:var(--muted);white-space:nowrap}
+.flag.ok{color:var(--success-text);border-color:rgba(111,208,164,.5)}
+.flag.mine{color:var(--primary);border-color:rgba(246,169,76,.5)}
+
+/* ---------- ballot ------------------------------------------------------- */
+.anon{font-size:var(--L-meta);line-height:1.5;color:var(--muted);
+  border-left:2px solid var(--rule);padding:2px 0 2px 13px;margin:0 0 18px;max-width:var(--measure)}
+.anon b{color:var(--text);font-weight:600}
+.resp{border:1px solid var(--rule);border-radius:14px;background:var(--surface);
+  padding:13px 14px 12px;margin:0 0 12px}
+.resp.own{border-color:rgba(111,208,164,.45)}
+.rhead{display:flex;align-items:center;gap:9px;margin:0 0 8px}
+.rid{font-size:var(--L-meta);font-weight:800;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--muted)}
+.rtxt{font-size:var(--L-secondary);line-height:1.38;margin:0 0 12px}
+.clamp{display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
+.more{background:none;border:0;padding:8px 0;min-height:var(--tap);color:var(--muted);
+  font:700 var(--L-meta)/1 inherit;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;
+  display:block;margin:-10px 0 6px;text-decoration:underline;text-underline-offset:4px}
+.ranks{display:flex;gap:8px}
+.rk{flex:1;min-height:var(--tap);border:1px solid var(--rule);border-radius:11px;
+  background:transparent;color:var(--muted);font:800 var(--L-meta)/1 inherit;letter-spacing:.07em;
+  cursor:pointer}
+.rk[aria-pressed="true"]{background:var(--primary);border-color:var(--primary);color:#0F1A2E}
+.slots{display:flex;gap:8px;margin:0 0 11px}
+.slot{flex:1;min-height:var(--tap);border:1px dashed var(--rule);border-radius:11px;
+  padding:6px 9px;display:flex;flex-direction:column;justify-content:center}
+.slot.filled{border-style:solid;background:var(--surface)}
+.slot .sk{font-size:var(--L-meta);font-weight:800;letter-spacing:.09em;color:var(--muted);
+  line-height:1.25}
+.slot .sv{font-size:var(--L-meta);font-weight:700;color:var(--text);line-height:1.25;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slot.filled .sv{color:var(--text)}
+.pager{display:flex;gap:8px;align-items:stretch;margin:0 0 16px}
+.pager a{flex:1;min-height:var(--tap);display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--rule);border-radius:11px;color:var(--muted);text-decoration:none;
+  font:700 var(--L-meta)/1.2 inherit;letter-spacing:.05em;text-align:center;padding:6px}
+.pager a.cur{background:var(--surface);color:var(--text);border-color:var(--rule)}
+
+/* ---------- chips (wavelength) ------------------------------------------- */
+.chips{display:flex;flex-wrap:wrap;gap:9px;margin:14px 0 0}
+.chip{display:inline-flex;align-items:center;gap:4px;min-height:var(--tap);
+  padding:8px 4px 8px 14px;border-radius:999px;border:1px solid var(--rule);
+  background:var(--surface);font-size:var(--L-body);line-height:1.2}
+.chip .x{width:var(--tap);height:var(--tap);margin:-8px -4px -8px 0;border:0;background:none;
+  color:var(--muted);cursor:pointer;display:grid;place-items:center;border-radius:999px}
+.chip.shared{border-color:rgba(111,208,164,.5)}
+
+/* ---------- results rows ------------------------------------------------- */
+.row{display:flex;gap:12px;align-items:flex-start;padding:13px 14px;margin:0 0 10px;
+  border:1px solid var(--rule);border-radius:13px;background:var(--surface);
+  font-size:var(--L-secondary);line-height:1.35}
+.row .k{flex:none;width:30px;height:30px;border-radius:9px;border:1px solid var(--rule);
+  display:grid;place-items:center;font:800 var(--L-meta)/1 inherit;color:var(--muted)}
+.row.correct{border-color:var(--success);border-width:2px;padding:12px 13px}
+.row.correct .k{border-color:var(--success);color:var(--success-text)}
+.row.mine{background:var(--surface-2)}
+.row .tail{margin-left:auto;flex:none;display:flex;flex-direction:column;gap:5px;
+  align-items:flex-end}
+
+/* ---------- reference page (22) ------------------------------------------ */
+.doc{padding:26px var(--gut) 60px}
+.doc table{border-collapse:collapse;width:100%;font-size:var(--L-meta);margin:0 0 22px}
+.doc th,.doc td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--rule);
+  vertical-align:top}
+.doc th{color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-size:var(--L-meta)}
+.doc code{color:var(--primary);font-family:ui-monospace,Menlo,monospace}
+.spec{border:1px solid var(--rule);border-radius:12px;padding:14px;margin:0 0 12px}
+.spec .t{font-size:var(--L-meta);color:var(--muted);letter-spacing:.08em;text-transform:uppercase;
+  margin:0 0 8px}
+</style><style>:root{--phase:var(--primary)}</style>
+</head>
+<body class="v-act">
+
+<header class="bar"><div class="strip"></div><div class="line"><span class="ctx">Round 3 of 8</span><span class="cat">Operating Model</span><span class="spacer"></span><span class="who"><span class="dot"></span>Sam</span></div></header>
+<div style="flex:none;padding:12px var(--pad) 0">
+  <p class="q" style="font-size:var(--L-body);font-weight:600;line-height:1.4;margin:0;
+     display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">
+    Our regional teams each built their own intake process, and the three of them now disagree
+    about what counts as a qualified request &mdash; which is why the same customer gets three
+    different answers depending on who picks up the phone.</p>
+  <button class="more" style="margin:6px 0 0">Show the whole question &darr;</button>
+</div>
+<main class="stage" style="padding-top:10px">
+  <label class="lab" for="a">Your response</label>
+  <textarea class="inp" id="a" style="min-height:118px">We could publish one definition of "qualified" and make the three intake forms render from it, so a change lands in all</textarea>
+  <p class="count">139 characters</p>
+</main>
+<footer class="dock">
+  <button class="btn">Submit response</button>
+</footer>
+<div aria-hidden="true" style="flex:none;height:380px;background:#12203A;
+  border-top:1px solid var(--rule);display:grid;place-items:center;color:var(--muted);
+  font-size:var(--L-meta);letter-spacing:.1em;text-transform:uppercase;font-weight:700">
+  Soft keyboard &mdash; 380px
+</div>
+
+</body>
+</html>

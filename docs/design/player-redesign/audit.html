@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Player redesign — audit</title>
+<style>
+  :root{--bg:#0F1A2E;--text:#F4EDE4;--muted:#B6C2D4;--primary:#F6A94C;--ok:#6FD0A4;
+        --rule:rgba(182,194,212,.2)}
+  body{margin:0;background:var(--bg);color:var(--text);padding:32px 24px 80px;
+    font:400 15px/1.5 "Inter",system-ui,sans-serif}
+  h1{font-size:30px;margin:0 0 6px;font-weight:800;letter-spacing:-.02em}
+  h3{font-size:15px;margin:0 0 8px;font-weight:800}
+  .lead{color:var(--muted);max-width:80ch;margin:0 0 18px}
+  #score{font-weight:800;font-size:20px;display:block;margin:0 0 14px}
+  #legend{display:flex;flex-wrap:wrap;gap:6px 18px;color:var(--muted);font-size:13px;
+    margin:0 0 22px;max-width:100ch}
+  #legend b{color:var(--text)}
+  .file{border-top:1px solid var(--rule);padding:14px 0}
+  .dev{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 4px}
+  .dev>b{width:64px;color:var(--muted);font-size:13px;font-weight:700}
+  .dev span{font-size:12px;font-weight:800;letter-spacing:.05em;padding:3px 7px;border-radius:5px}
+  .ok{color:var(--ok);border:1px solid rgba(111,208,164,.4)}
+  .bad{color:var(--primary);border:1px solid var(--primary);background:rgba(246,169,76,.12)}
+  .msg{width:100%;margin:4px 0 0 64px;color:var(--primary);font-size:13px}
+  iframe{position:fixed;left:-9999px;top:0;border:0}
+</style>
+</head>
+<body>
+<h1>Audit</h1>
+<p class="lead">Ten assertions over 23 mockups &times; 3 device profiles.
+  <b>Serve this directory</b>, and keep this tab in the foreground — from <code>file://</code>
+  the frames are cross-origin, and in a background tab <code>requestAnimationFrame</code> is
+  throttled and the run never finishes. A failure here is a design defect, not a lint warning: A2 catches a
+  primary action that can be pushed below the fold, A5 catches type that fell under the
+  derived floor, A8 catches a ballot that reindexed itself, A9 catches a screen that offers
+  something to press when there is nothing to do.</p>
+<span id="score">running…</span>
+<div id="legend"></div>
+<div id="out"></div>
+<iframe id="probe" title="probe"></iframe>
+<script src="audit.js"></script>
+</body>
+</html>

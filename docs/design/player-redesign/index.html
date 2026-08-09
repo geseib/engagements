@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Engage2 player screen — redesign mockups</title>
+<style>
+:root{--bg:#0F1A2E;--surface:#182640;--text:#F4EDE4;--muted:#B6C2D4;--primary:#F6A94C;
+  --success-text:#6FD0A4;--rule:rgba(182,194,212,.20)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);padding:50px 24px 90px;
+  font:400 16px/1.55 "Inter",system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:980px;margin:0 auto}
+h1{font-size:clamp(30px,4.4vw,44px);line-height:1.05;margin:0 0 14px;font-weight:800;
+  letter-spacing:-.02em}
+h2{font-size:14px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+  margin:40px 0 12px;font-weight:800}
+.sub{color:var(--muted);max-width:78ch;margin:0 0 10px}
+a{color:var(--primary)}
+.hint{color:var(--muted);font-size:15px;border-left:3px solid var(--primary);padding:12px 16px;
+  background:rgba(246,169,76,.07);border-radius:0 8px 8px 0;margin:20px 0;max-width:78ch}
+.hint b{color:var(--text)}
+.go{display:inline-block;background:var(--primary);color:#0F1A2E;font-weight:800;
+  text-decoration:none;padding:12px 22px;border-radius:10px}
+ol{list-style:none;padding:0;margin:0}
+li{border-bottom:1px solid var(--rule);padding:16px 0 16px 62px;position:relative}
+li .n{position:absolute;left:0;top:19px;font-weight:800;color:var(--primary);font-size:14px;
+  letter-spacing:.07em}
+li a.t{color:var(--text);text-decoration:none;font-weight:800;font-size:18px}
+li a.t:hover{color:var(--primary)}
+li p{margin:6px 0 0;color:var(--muted);font-size:15px;max-width:84ch}
+li p.w{color:var(--success-text);font-size:14px}
+li p.w b{color:var(--text)}
+code{color:var(--primary);font-size:.92em;font-family:ui-monospace,Menlo,monospace}
+footer{margin-top:40px;color:var(--muted);font-size:14px;max-width:80ch}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Engage2 player screen &mdash; redesign mockups</h1>
+
+  <p class="sub"><a class="go" href="view.html">Open the deck viewer &rarr;</a></p>
+  <p class="sub" style="margin-top:10px">Steps through all 23 in a device frame with
+    <b>&larr;</b> <b>&rarr;</b>, and switches device with <b>1</b> phone 375&times;812,
+    <b>2</b> tablet 768&times;1024, <b>3</b> laptop 1280&times;800. The three type ladders are
+    real media queries, so the device switch is the only way to see them fire.
+    <b>Serve this directory</b> &mdash; <code>python3 -m http.server 8124 --directory
+    docs/design/player-redesign</code>.</p>
+
+  <div class="hint">
+    <b>This surface had never been designed.</b> There is no player-facing design document
+    anywhere in the repository and the host spec does not mention the player's screen once.
+    Read <a href="INVENTORY.md">INVENTORY.md</a> first &mdash; it is the honest accounting of
+    what <code>src/src/PlayerPage.jsx</code> renders today, including four states that cannot
+    render at all and one that renders a blank page. Then
+    <a href="RATIONALE.md">RATIONALE.md</a> for the derivations, the arguments and the places
+    this design disagrees with the host spec and with the brief, and
+    <a href="OPEN-QUESTIONS.md">OPEN-QUESTIONS.md</a> for the ten decisions that are not mine
+    to make. <a href="audit.html">audit.html</a> is the verification: ten assertions &times; 23
+    mockups &times; 3 device profiles, 690 in all, and one of them changed the design.
+  </div>
+
+  <div class="hint">
+    <b>The organising idea is volume.</b> Every state is ACT, REST or WATCH.
+    <b>ACT</b> &mdash; the phone is the only place the task can be done: full contrast, amber
+    primary, a dock. <b>REST</b> &mdash; the task is done: <i>no dock at all</i>, no amber,
+    nothing to press. <b>WATCH</b> &mdash; the shared screen is the show: the phone carries only
+    what is personal and therefore cannot be on the stage. The state machine sets the volume;
+    the player never chooses it.
+  </div>
+
+  <h2>The 23 states</h2>
+  <ol>
+    <li><span class="n">01</span><a class="t" href="01-join.html">Joining — code and name</a><p>The first thing every participant ever sees. Two fields, one button, no account, no app. The name field carries the only honest place to say what a name is for.</p><p class="w"><b>Worst case carried:</b> A 34-character display name; the code typed by hand rather than arriving in the URL.</p></li><li><span class="n">02</span><a class="t" href="02-join-code-bad.html">Joining — the code is wrong</a><p>The single most common failure, and today it is an alert() that says nothing useful. The error is inline, attached to the field that caused it, keeps what was typed, and says where to look for the right value.</p><p class="w"><b>Worst case carried:</b> Amber, not red: red is reserved for destructive. A four-digit code is easy to mistype and easy to misread off a projector, so the message names both causes.</p></li><li><span class="n">03</span><a class="t" href="03-join-ended.html">Joining — the session has finished</a><p>A distinct outcome from a wrong code, and a dead end rather than a retry loop. Today this is the same generic alert as a typo, so a late arrival keeps retyping a code that will never work.</p><p class="w"><b>Worst case carried:</b> No form is rendered at all. The only action offered is the one that can succeed.</p></li><li><span class="n">04</span><a class="t" href="04-join-locked.html">Joining — a private session</a><p>The access-code branch. Today it appears as a second screen after a failed join, having thrown the name away; here it is one screen with three fields and nothing lost.</p><p class="w"><b>Worst case carried:</b> Long instruction copy, and the access code shown as free text because it is not a secret worth masking — it is read aloud in the room.</p></li><li><span class="n">05</span><a class="t" href="05-lobby.html">In, and waiting for round 1</a><p>The first REST screen. The phone has nothing to do, so it offers nothing to do — no dock, no amber, no pulse animation, no player count. It spends the idle minute on the one piece of housekeeping that is worthless later and priceless mid-session: how to get back in.</p><p class="w"><b>Worst case carried:</b> The longest plausible display name, and an event title long enough to force the rail ellipsis.</p></li><li><span class="n">06</span><a class="t" href="06-ask-trivia.html">ASK — trivia</a><p>Pick one of A–F. The whole answering affordance is above the dock and reachable without leaving the question on screen. Selection and the button it enables share one amber thread.</p><p class="w"><b>Worst case carried:</b> Six options, not four — the code renders A–F. Option F is 121 characters, which is the longest option in the shipped question sets.</p></li><li><span class="n">07</span><a class="t" href="07-ask-call.html">ASK — call &amp; answer</a><p>Free text. The question stays on screen while you type — today a full-screen textarea overlay covers it, so people answer from memory. The dock holds one submit, not three.</p><p class="w"><b>Worst case carried:</b> The longest plausible prompt (247 characters) plus a per-set custom instruction, on the narrowest phone. The composer is deliberately not tall: the question must stay visible above the keyboard.</p></li><li><span class="n">08</span><a class="t" href="08-ask-call-typing.html">ASK — composing, keyboard up</a><p>The state that decides whether the previous screen works. A 247-character prompt is nine lines at the primary rung; with a soft keyboard up there is roughly 430px of usable height, and the question and the composer cannot both have it. So on focus the question condenses to three lines at body size and pins itself above the composer, with a control that puts it back. This is a reduction the <i>player</i> can undo, which is the only kind allowed on this surface.</p><p class="w"><b>Worst case carried:</b> The longest prompt in the set, a 380px keyboard, and the caret mid-sentence. The submit stays in the dock, above the keyboard, and never moves.</p></li><li><span class="n">09</span><a class="t" href="09-ask-artwork.html">ASK — call &amp; answer with artwork</a><p>The Art Title round. The artwork is the prompt, so it leads; the instruction is the set-level one the code already resolves. A single-line input, because a title is a title.</p><p class="w"><b>Worst case carried:</b> A wide image on the narrowest phone, and the artwork sized so the input and the dock are both reachable without scrolling the image out of view.</p></li><li><span class="n">10</span><a class="t" href="10-ask-poll.html">ASK — poll</a><p>The state the current code cannot render. Poll and survey fall through every branch to a title-only view, so the background context a poll question carries in <code>detail</code> is never shown to a single player. Here it is.</p><p class="w"><b>Worst case carried:</b> Title, detail and a per-question custom instruction all present at once — the case that proves the branch is missing.</p></li><li><span class="n">11</span><a class="t" href="11-ask-wavelength.html">ASK — wavelength</a><p>Word entry. Today this is ten stacked text inputs, each with a label and an identical placeholder — 20 redundant strings and roughly 900px of form on a 375px phone. One input that commits to a chip does the same job in one screen.</p><p class="w"><b>Worst case carried:</b> Seven of ten slots used, including a long hyphenated term, so the chip wrap is real. The counter names the maximum without implying ten are required.</p></li><li><span class="n">12</span><a class="t" href="12-answered.html">Answer submitted — waiting</a><p>REST. The dock is gone, because there is nothing to press; that absence is the design, not an omission. The receipt is the fix for the current screen's worst small habit: it clears the textarea on submit, so a player cannot see what they wrote while they wait.</p><p class="w"><b>Worst case carried:</b> A long response shown in full rather than truncated — there is a whole screen and nothing else to put on it.</p></li><li><span class="n">13</span><a class="t" href="13-vote.html">VOTE — the anonymous ballot</a><p>The core of the redesign. One ballot, not two competing modes. Rows are numbered positionally and 1-based so a facilitator can say &ldquo;look at response six&rdquo; and everyone is looking at the same thing. Ranks are 44&times;44 buttons in the row itself, and the sticky slot bar is the answer to &ldquo;what have I picked so far&rdquo;.</p><p class="w"><b>Worst case carried:</b> Six responses, one of them the player's own, one of them 520 characters and clamped with a recoverable <b>Show all</b>. Two of three ranks already placed, so the submit is still disabled and says why.</p></li><li><span class="n">14</span><a class="t" href="14-vote-long.html">VOTE — twenty responses, paged</a><p>The worst-case ballot. Pages carry absolute ranges (<b>Responses 9–16 of 20</b>) and the numbers never reindex, so page 2 still contains response eleven and nothing else does. The slot bar keeps picks made on other pages, which is the only reason paging is survivable at all.</p><p class="w"><b>Worst case carried:</b> Twenty responses in a room of twenty; the player is on page 2 with two ranks already placed on page 1 and page 3, and neither is on screen.</p></li><li><span class="n">15</span><a class="t" href="15-vote-submitted.html">Votes submitted — waiting</a><p>REST again, and the receipt matters more here than after an answer: the ballot is about to be replaced by a named one, and a player who cannot remember what they picked has no way to check.</p><p class="w"><b>Worst case carried:</b> The ballot the player submitted, by absolute response number — the same handles the host will read aloud.</p></li><li><span class="n">16</span><a class="t" href="16-results-trivia.html">RESULTS — trivia</a><p>WATCH. The phone answers exactly one question — <i>how did I do</i> — because that is the one thing the host screen is forbidden to show (host spec §7.15: never name a person on the stage). The distribution, the leaderboard and the discussion stay up there.</p><p class="w"><b>Worst case carried:</b> The player got it wrong. Wrong is muted plus the word — never red, and never colour alone. The correct row carries a 2px rule <i>and</i> the word CORRECT.</p></li><li><span class="n">17</span><a class="t" href="17-results-call.html">RESULTS — call &amp; answer</a><p>The reveal. This is the moment the anonymity feature pays off, so the phone says plainly which numbered response was yours — the number the room has been discussing for two minutes — and what it earned. It does not reproduce the room's leaderboard.</p><p class="w"><b>Worst case carried:</b> A middling result, not a win: two votes, third place, a rank that went down. Designed for the eleven players who did not come first.</p></li><li><span class="n">18</span><a class="t" href="18-results-wavelength.html">RESULTS — wavelength</a><p>The cloud is the room's result and it belongs on the stage. The phone's version of the same fact is personal: which of <i>your</i> words the room also said. Today the phone renders a full common-words list, a stats block and your words — three views of one dataset, on the smallest screen in the building.</p><p class="w"><b>Worst case carried:</b> Seven words, three shared. A player whose words were all unique gets the same layout with a different sentence, not an empty state.</p></li><li><span class="n">19</span><a class="t" href="19-between-rounds.html">Between rounds</a><p>A state the current code cannot distinguish from the lobby: any phase that is not ASK, VOTE or RESULTS renders &ldquo;You're in! Waiting for the game to start…&rdquo;, so after round 3 the phone tells you the session has not begun.</p><p class="w"><b>Worst case carried:</b> Round 3 finished, round 4 not yet started, and the discussion is running in the room — which is exactly when the phone should be least interesting.</p></li><li><span class="n">20</span><a class="t" href="20-ended.html">The session has ended</a><p>A designed finale, on the surface that has never had one. Today ENDED satisfies <code>isWaitingState()</code>, so a finished session shows &ldquo;Waiting for the game to start…&rdquo; behind a dismissible modal — and once dismissed, that lobby screen is where the player stays.</p><p class="w"><b>Worst case carried:</b> One player's whole session in four numbers, and an honest final line for somebody who came fifth. No download button that 404s.</p></li><li><span class="n">21</span><a class="t" href="21-offline.html">Connection lost, mid-answer</a><p>The failure that loses work. Today the only connection affordance is a status chip whose click handler is <code>window.location.reload()</code> — offered to a player in the middle of typing, which is the one moment a reload is unforgivable. Here the banner reconnects itself and the reload is withheld while there is unsent text.</p><p class="w"><b>Worst case carried:</b> The banner sits above the bar and pushes nothing off screen; the composed answer is intact and says so; the dock states what will happen rather than failing silently.</p></li><li><span class="n">22</span><a class="t" href="22-rejoin.html">Rejoining mid-round</a><p>The bug this whole screen exists to kill: a player who has voted and then reloads gets a <b>completely blank page</b> today, because the VOTE branch is guarded on <code>answers.length &gt; 0</code> and the already-voted path returns before the answers are ever fetched. A rejoin must always say what it found.</p><p class="w"><b>Worst case carried:</b> The hardest rejoin: back mid-VOTE, with a ballot already cast, and the ballot list deliberately not re-fetched — there is nothing left to do with it.</p></li><li><span class="n">23</span><a class="t" href="23-type-ladder.html">The derivation, shown</a><p>Not a state — the reference card. Three ladders, each derived from a viewing distance and a CSS pixel density rather than chosen, with live specimens so the numbers can be checked against something visible. Open it at 375, 768 and 1280 to see each ladder in force.</p><p class="w"><b>Worst case carried:</b> The rungs are the same angular sizes at all three distances, which is why the pixel numbers differ and the screens look the same size to the reader.</p></li>
+  </ol>
+
+  <footer>
+    Warm Summit tokens unchanged. Type ladders derived per viewing distance in
+    <a href="23-type-ladder.html">23</a> and RATIONALE.md &sect;3 &mdash; the host spec's
+    projector ladder is deliberately <i>not</i> used, and neither is its black-lift contrast
+    model. Every file is standalone HTML: no build step, no CDN, no external asset. They are
+    regenerated by <code>build.py</code> so the one stylesheet cannot drift between states;
+    <code>view.html</code> is hand-written and is not generated.
+  </footer>
+</div>
+</body>
+</html>

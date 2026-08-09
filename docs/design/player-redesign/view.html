@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Player redesign — deck viewer</title>
+<style>
+  :root{--bg:#0B1424;--panel:#0F1A2E;--text:#F4EDE4;--muted:#B6C2D4;--primary:#F6A94C;
+        --rule:rgba(182,194,212,.22)}
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--text);display:flex;flex-direction:column;
+    font:400 15px/1.5 "Inter",system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+  header{flex:none;display:flex;align-items:center;gap:14px;padding:11px 18px;
+    border-bottom:1px solid var(--rule)}
+  header .t{font-weight:800;letter-spacing:-.01em;min-width:0;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  header .n{color:var(--primary);font-weight:800;font-variant-numeric:tabular-nums;flex:none}
+  .grow{flex:1;min-width:0}
+  .devs{display:flex;gap:6px;flex:none}
+  .devs button{background:transparent;border:1px solid var(--rule);color:var(--muted);
+    border-radius:8px;padding:7px 11px;font:700 13px/1 inherit;cursor:pointer}
+  .devs button[aria-pressed="true"]{background:var(--primary);border-color:var(--primary);
+    color:#0F1A2E}
+  a.idx{color:var(--muted);text-decoration:none;font-size:13px;flex:none}
+  main{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:18px;
+    position:relative}
+  .frame{border:1px solid var(--rule);border-radius:20px;overflow:hidden;background:var(--panel);
+    box-shadow:0 24px 70px rgba(0,0,0,.55);max-width:100%;max-height:100%}
+  iframe{display:block;border:0;background:var(--panel)}
+  .nav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(15,26,46,.9);
+    border:1px solid var(--rule);color:var(--text);width:46px;height:70px;border-radius:12px;
+    cursor:pointer;font-size:22px}
+  .nav.prev{left:14px} .nav.next{right:14px}
+  footer{flex:none;padding:9px 18px;border-top:1px solid var(--rule);color:var(--muted);
+    font-size:13px;display:flex;gap:16px;flex-wrap:wrap}
+  footer b{color:var(--text)}
+  .warn{color:var(--primary)}
+</style>
+</head>
+<body>
+<header>
+  <span class="n" id="num">01</span>
+  <span class="t grow" id="title">…</span>
+  <div class="devs">
+    <button data-d="0" aria-pressed="true">1 Phone</button>
+    <button data-d="1" aria-pressed="false">2 Tablet</button>
+    <button data-d="2" aria-pressed="false">3 Laptop</button>
+  </div>
+  <a class="idx" href="index.html">Index →</a>
+</header>
+<main>
+  <button class="nav prev" aria-label="Previous">‹</button>
+  <div class="frame"><iframe id="f" title="mockup"></iframe></div>
+  <button class="nav next" aria-label="Next">›</button>
+</main>
+<footer>
+  <span><b>← →</b> move</span>
+  <span><b>1 2 3</b> device</span>
+  <span id="dims"></span>
+  <span class="warn" id="fw" hidden>Serve this directory — from file:// the frame may be blocked.</span>
+</footer>
+<script>
+const FILES = [
+  ["01-join.html","Joining — code and name"],
+  ["02-join-code-bad.html","Joining — the code is wrong"],
+  ["03-join-ended.html","Joining — the session has finished"],
+  ["04-join-locked.html","Joining — a private session"],
+  ["05-lobby.html","In, and waiting for round 1"],
+  ["06-ask-trivia.html","ASK — trivia"],
+  ["07-ask-call.html","ASK — call & answer"],
+  ["08-ask-call-typing.html","ASK — composing, keyboard up"],
+  ["09-ask-artwork.html","ASK — call & answer with artwork"],
+  ["10-ask-poll.html","ASK — poll"],
+  ["11-ask-wavelength.html","ASK — wavelength"],
+  ["12-answered.html","Answer submitted — waiting"],
+  ["13-vote.html","VOTE — the anonymous ballot"],
+  ["14-vote-long.html","VOTE — twenty responses, paged"],
+  ["15-vote-submitted.html","Votes submitted — waiting"],
+  ["16-results-trivia.html","RESULTS — trivia"],
+  ["17-results-call.html","RESULTS — call & answer"],
+  ["18-results-wavelength.html","RESULTS — wavelength"],
+  ["19-between-rounds.html","Between rounds"],
+  ["20-ended.html","The session has ended"],
+  ["21-offline.html","Connection lost, mid-answer"],
+  ["22-rejoin.html","Rejoining mid-round"],
+  ["23-type-ladder.html","The derivation, shown"]
+];
+const DEVS = [[375,812,"Phone 375×812"],[768,1024,"Tablet 768×1024"],[1280,800,"Laptop 1280×800"]];
+let i = 0, d = 0;
+const f = document.getElementById('f');
+
+function fit(){
+  const [w,h,label] = DEVS[d];
+  const main = document.querySelector('main').getBoundingClientRect();
+  const s = Math.min(1, (main.width-120)/w, (main.height-24)/h);
+  f.width = w; f.height = h;
+  f.style.width = w+'px'; f.style.height = h+'px';
+  const frame = document.querySelector('.frame');
+  frame.style.transform = 'scale('+s.toFixed(4)+')';
+  frame.style.transformOrigin = 'center';
+  document.getElementById('dims').textContent = label + (s<1 ? '  ·  shown at '+Math.round(s*100)+'%' : '');
+  document.querySelectorAll('.devs button').forEach(b =>
+    b.setAttribute('aria-pressed', String(+b.dataset.d === d)));
+}
+function show(){
+  f.src = FILES[i][0];
+  document.getElementById('num').textContent = String(i+1).padStart(2,'0');
+  document.getElementById('title').textContent = FILES[i][1];
+  location.hash = FILES[i][0];
+  fit();
+}
+document.querySelector('.prev').onclick = () => { i = (i-1+FILES.length)%FILES.length; show(); };
+document.querySelector('.next').onclick = () => { i = (i+1)%FILES.length; show(); };
+document.querySelectorAll('.devs button').forEach(b =>
+  b.onclick = () => { d = +b.dataset.d; fit(); });
+addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { i=(i+1)%FILES.length; show(); }
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { i=(i-1+FILES.length)%FILES.length; show(); }
+  else if (e.key >= '1' && e.key <= '3') { d = +e.key - 1; fit(); }
+});
+addEventListener('resize', fit);
+if (location.protocol === 'file:') document.getElementById('fw').hidden = false;
+const start = FILES.findIndex(x => '#'+x[0] === location.hash);
+if (start >= 0) i = start;
+show();
+</script>
+</body>
+</html>
