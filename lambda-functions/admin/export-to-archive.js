@@ -386,15 +386,34 @@ function convertQuestionsToCSV(questions, engagementType) {
       .map(row => row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','))
       .join('\n');
   } else {
-    // Call-and-answer format: Category,Title,Detail,CustomInstructions
-    const headers = ['Category', 'Title', 'Detail', 'CustomInstructions'];
+    // Call-and-answer format: Category,Title,Detail,CustomInstructions[,AnswerDetails][,Image]
+    //
+    // Art-title sets are call-and-answer sets that carry two extra fields: Image
+    // (the artwork key/URL) and AnswerDetails (the real title + a point of
+    // trivia, revealed only at RESULTS). The fixed four columns below used to
+    // silently drop both on every archive export, so an archived art set lost
+    // its artwork and its reveal on import — including a re-import into the
+    // SAME environment it was archived from; it just always gets noticed as a
+    // cross-environment failure because that's when someone re-imports.
+    // Emit them only when the set actually has them, so an ordinary set keeps
+    // its familiar four-column shape. This mirrors the identical fix already
+    // applied to the sibling CSV export in download-question-set.js.
+    const hasAnswerDetails = questions.some(q => (q.AnswerDetails || '').trim());
+    const hasImages = questions.some(q => (q.Image || '').trim());
+
+    const headers = ['Category', 'Title', 'Detail', 'CustomInstructions']
+      .concat(hasAnswerDetails ? ['AnswerDetails'] : [])
+      .concat(hasImages ? ['Image'] : []);
+
     const rows = questions.map(q => [
       q.Category || '',
       q.Title || q.Prompt || '',
       q.Detail || '',
       q.CustomInstructions || ''
-    ]);
-    
+    ]
+      .concat(hasAnswerDetails ? [q.AnswerDetails || ''] : [])
+      .concat(hasImages ? [q.Image || ''] : []));
+
     return [headers, ...rows]
       .map(row => row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','))
       .join('\n');
