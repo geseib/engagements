@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Host stage audit</title>
+<style>
+  :root{--bg:#0F1A2E;--surface:#1B2942;--text:#F4EDE4;--muted:#9BA8BE;--primary:#F6A94C;
+        --success:#4FB286;--danger:#E5645E;--rule:rgba(155,168,190,.22)}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);padding:32px 24px 80px;
+    font:400 15px/1.5 "Inter",system-ui,-apple-system,sans-serif}
+  .wrap{max-width:1100px;margin:0 auto}
+  h1{font-size:28px;margin:0 0 6px;font-weight:800}
+  p.sub{color:var(--muted);margin:0 0 20px;max-width:80ch}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
+  button{font:inherit;font-weight:600;padding:10px 16px;border-radius:8px;cursor:pointer;
+    background:var(--primary);color:#14203A;border:0}
+  button.ghost{background:transparent;color:var(--text);border:1px solid var(--rule)}
+  #status{color:var(--muted);font-variant-numeric:tabular-nums}
+  .verdict{font-weight:800;font-size:20px;padding:12px 16px;border-radius:10px;margin:16px 0}
+  .verdict.pass{background:rgba(79,178,134,.14);color:var(--success);border:1px solid var(--success)}
+  .verdict.fail{background:rgba(229,100,94,.12);color:var(--danger);border:1px solid var(--danger)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{color:var(--muted);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+  td.code{font-weight:700;color:var(--primary);white-space:nowrap}
+  td.file,td.vp,td.prof{color:var(--muted);white-space:nowrap;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  .counts{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 18px}
+  .pill{background:var(--surface);border:1px solid var(--rule);border-radius:999px;
+    padding:5px 12px;font-size:12px;font-weight:700}
+  .pill b{color:var(--danger)}
+  pre{background:#111D33;border:1px solid var(--rule);border-radius:8px;padding:12px;
+    overflow:auto;font-size:12px;color:var(--muted)}
+  .legend{font-size:13px;color:var(--muted);border-left:3px solid var(--primary);
+    padding:10px 14px;background:rgba(246,169,76,.06);margin-bottom:20px}
+  .legend b{color:var(--text)}
+  code{color:var(--primary)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Host stage audit</h1>
+  <p class="sub">Runs every mockup at four display profiles &times; five viewports, plus a wide-face
+    stress pass, and asserts the things the first sweep could not fail on.</p>
+
+  <div class="legend">
+    <b>A1</b> page must not scroll ·
+    <b>A2</b> no element may clip content without a rendering truncation (the decapitation check) ·
+    <b>A3</b> nothing outside the stage ·
+    <b>A4</b> no room-facing text under the profile floor ·
+    <b>A5</b> the profiles must render measurably differently, each above its own floor ·
+    <b>A6</b> the primary action must be on screen, clear of the edge, and topmost at its centre ·
+    <b>A7</b> a declared truncation must actually render (catches inert <code>text-overflow</code> on flex) ·
+    <b>A8</b> A1/A2/A3/A6 re-run with +5.5% tracking to approximate Archivo Expanded ·
+    <b>A9</b> contrast after the projector black-lift model ·
+    <b>A10</b> a reduction may only fire when space is actually exhausted ·
+    <b>A11</b> room-facing content is never abbreviated ·
+    <b>A12</b> progress is stated once per viewport ·
+    <b>A13</b> no roster name on a stage outside a revealed state.
+  </div>
+
+  <div class="row">
+    <button id="run">Run against the revised mockups</button>
+    <button class="ghost" id="runBaseline">Run against <code>_baseline/</code> (pre-critique)</button>
+    <button class="ghost" id="runPrev">Run against <code>_prev/</code> (pre-user-review)</button>
+    <span id="status"></span>
+  </div>
+
+  <div id="verdict"></div>
+  <div class="counts" id="counts"></div>
+  <div id="densities"></div>
+  <div id="out"></div>
+</div>
+
+<script src="audit.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+
+function render(report) {
+  $('verdict').innerHTML = '<div class="verdict ' + (report.pass ? 'pass' : 'fail') + '">' +
+    (report.pass
+      ? 'PASS — ' + report.checks + ' checks over ' + report.pages + ' pages, 0 failures'
+      : 'FAIL — ' + report.failures.length + ' failures over ' + report.checks + ' checks (' + report.pages + ' pages)') +
+    ' <span style="font-weight:400;opacity:.7">base: ' + (report.base || './') + '</span></div>';
+
+  $('counts').innerHTML = Object.keys(report.counts).sort().map((k) =>
+    '<span class="pill">' + k + ' <b>' + report.counts[k] + '</b></span>').join('');
+
+  if (report.densities) {
+    $('densities').innerHTML = '<h3 style="font-size:14px;margin:18px 0 6px">A5 — measured profile ladders (1920&times;1080)</h3><pre>' +
+      JSON.stringify(report.densities, null, 1) + '</pre>';
+  }
+
+  // Collapse identical messages across viewports so the table stays readable.
+  const seen = new Map();
+  report.failures.forEach((f) => {
+    const key = f.code + '|' + f.file + '|' + f.msg;
+    if (!seen.has(key)) seen.set(key, { ...f, where: new Set() });
+    seen.get(key).where.add(f.profile + ' ' + f.vp);
+  });
+  const rows = [...seen.values()].slice(0, 400).map((f) =>
+    '<tr><td class="code">' + f.code + '</td><td class="file">' + f.file +
+    '</td><td class="prof">' + [...f.where].slice(0, 3).join(', ') +
+    (f.where.size > 3 ? ' +' + (f.where.size - 3) : '') +
+    '</td><td>' + f.msg.replace(/</g, '&lt;') + '</td></tr>').join('');
+  $('out').innerHTML = rows
+    ? '<table><thead><tr><th>check</th><th>file</th><th>where</th><th>what</th></tr></thead><tbody>' + rows + '</tbody></table>'
+    : '';
+}
+
+async function go(base) {
+  $('status').textContent = 'running…';
+  $('out').innerHTML = ''; $('verdict').innerHTML = ''; $('counts').innerHTML = '';
+  const t = performance.now();
+  const report = await HostAudit.runAll({ base });
+  window.__AUDIT__ = report;
+  $('status').textContent = ((performance.now() - t) / 1000).toFixed(1) + 's';
+  render(report);
+}
+
+$('run').onclick = () => go('');
+$('runBaseline').onclick = () => go('_baseline/');
+$('runPrev').onclick = () => go('_prev/');
+</script>
+</body>
+</html>

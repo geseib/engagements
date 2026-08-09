@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="en" class="d-room">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Operator console — Engage2 host stage</title>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%;overflow:hidden}
+[hidden]{display:none !important}
+
+:root{
+  /* Warm Summit tokens — docs/handoff/warm-summit-design-spec.md */
+  --bg:#0F1A2E; --surface:#1B2942; --surface-2:#25375A;
+  --text:#F4EDE4;
+  /* --muted is a TEXT tint here, and #9BA8BE does not clear WCAG AA normal
+     text (4.5:1) once section 4.3's black-lift is applied — measured 4.03:1.
+     Warm Summit's 6.1:1 figure is against an unlifted background. Lightened to
+     #B6C2D4 (~6.8:1 lifted), which keeps the same role and hue and is the
+     smallest honest change. Hairlines and inactive fills are rgba literals and
+     are unaffected. */
+  --muted:#B6C2D4;
+  /* Likewise for small success TEXT — the CORRECT flag, "Everyone is in", the
+     completion cue. --success stays #4FB286 for borders, bars and fills. */
+  --success-text:#6FD0A4;
+  --primary:#F6A94C; --primary-deep:#C77B4A; --secondary:#7CA7E6;
+  --success:#4FB286; --danger:#E5645E;
+  --silver:#C0C6D0; --bronze:#B4794A;
+  --rule:rgba(155,168,190,.22);
+  --hair:1px;
+  --radius:16px;
+  --font-display:"Archivo Expanded","Archivo Expanded Bold","Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-ui:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+
+/* ---------------------------------------------------------------------------
+   FOUR DISPLAY PROFILES, FOUR LITERAL LADDERS.
+
+   The previous revision expressed these as one ladder times a --k multiplier.
+   That silently did nothing: --t-primary was declared on :root, where var(--k)
+   substitutes against :root's own --k (1), and custom properties are
+   substituted at computed-value time on the DECLARING element. Setting --k on
+   body — a descendant — could never reach it. Room, Call and Table rendered
+   byte-identical type; only the boxes shrank. Two of the three mandated
+   viewing contexts had never been rendered.
+
+   The deeper problem was that a single multiplier is the wrong abstraction.
+   A pixel floor only means something once viewing distance AND pixel density
+   are fixed, and these four contexts fix them very differently. The floor that
+   matters is ANGULAR: roughly 8.3 arcminutes of cap height, which is where the
+   20px Room floor came from in the first place (20px at 20 ppi, 25 ft).
+   Re-deriving that same angle for each context gives four different pixel
+   floors — and multiplying one ladder can only ever honour one of them.
+
+     Room   projected image >=90in wide, viewer <=30ft, ~20 ppi   floor 20px
+     TV     panel ~65in wide,            viewer <=20ft, ~30 ppi   floor 26px
+     Call   screen-share; the encoder is the constraint, not the
+            eye, so it keeps Room's ladder and changes treatment  floor 20px
+     Table  laptop ~120 ppi,             viewer 2-4ft             floor 16px
+
+   Declared on the ROOT ELEMENT so nothing downstream has already substituted.
+   --------------------------------------------------------------------------- */
+:root, :root.d-room{
+  --L-hero:      clamp(56px, 8.4vh, 104px);
+  --L-primary:   clamp(40px, 5.6vh,  68px);
+  --L-secondary: clamp(28px, 3.7vh,  44px);
+  --L-body:      clamp(22px, 2.8vh,  34px);
+  --L-meta:      clamp(20px, 1.9vh,  24px);
+  --floor:20px; --measure-base:26ch; --bar-h:8px;
+  --dock-h:calc(9vh + 4vh);
+}
+:root.d-tv{
+  --L-hero:      clamp(72px, 11vh, 132px);
+  --L-primary:   clamp(52px, 7.4vh, 88px);
+  --L-secondary: clamp(36px, 4.8vh, 56px);
+  --L-body:      clamp(28px, 3.5vh, 42px);
+  --L-meta:      clamp(26px, 2.4vh, 31px);
+  --floor:26px; --measure-base:22ch; --bar-h:12px;
+  --dock-h:calc(11vh + 4vh);
+}
+:root.d-call{
+  --L-hero:      clamp(56px, 8.4vh, 104px);
+  --L-primary:   clamp(40px, 5.6vh,  68px);
+  --L-secondary: clamp(28px, 3.7vh,  44px);
+  --L-body:      clamp(22px, 2.8vh,  34px);
+  --L-meta:      clamp(20px, 1.9vh,  24px);
+  --floor:20px; --measure-base:24ch; --bar-h:10px;
+  --hair:2px;                         /* 1px rules do not survive a video codec */
+  --dock-h:calc(9vh + 4vh);
+}
+:root.d-table{
+  --L-hero:      clamp(44px, 6.2vh, 64px);
+  --L-primary:   clamp(32px, 4.0vh, 44px);
+  --L-secondary: clamp(22px, 2.6vh, 30px);
+  --L-body:      clamp(18px, 2.0vh, 24px);
+  --L-meta:      clamp(16px, 1.5vh, 19px);
+  --floor:16px; --measure-base:30ch; --bar-h:5px;
+  --dock-h:calc(8vh + 3.5vh);
+}
+
+body{
+  background:var(--bg); color:var(--text);
+  font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased;
+  font-variant-numeric:tabular-nums;
+  /* Chrome tokens read the profile ladder directly. Only .content re-scales. */
+  --t-hero:var(--L-hero); --t-primary:var(--L-primary);
+  --t-secondary:var(--L-secondary); --t-body:var(--L-body); --t-meta:var(--L-meta);
+  --measure:var(--measure-base);
+}
+
+:focus-visible{outline:3px solid var(--primary);outline-offset:3px;border-radius:4px}
+
+/* --------------------------------------------------------------- the stage */
+.stage{
+  position:relative; height:100dvh; width:100%; overflow:hidden;
+  /* minmax(0,1fr), not 1fr — an auto track refuses to shrink below the
+     min-content of its widest item, and one nowrap rail would otherwise push
+     the whole stage past the viewport. */
+  grid-template-columns:minmax(0,1fr);
+  display:grid;
+  grid-template-rows:auto auto minmax(0,1fr) auto;
+  grid-template-areas:"rail" "bar" "main" "dock";
+}
+
+/* Photo field. Flat in Call: wide low-frequency gradients band badly under
+   video compression and eat the bitrate the text needs. */
+.field{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden;
+  background:
+    radial-gradient(120% 78% at 50% 112%, rgba(246,169,76,.10) 0%, transparent 62%),
+    linear-gradient(180deg,#0C1526 0%, #12203A 46%, #1B2C4A 78%, #2A3A57 100%);}
+.field::after{content:"";position:absolute;left:-4%;right:-4%;bottom:-2%;height:44%;
+  background:linear-gradient(180deg,#17253C 0%, #0E1828 100%);
+  clip-path:polygon(0 62%, 13% 34%, 25% 55%, 38% 22%, 52% 48%, 63% 30%, 78% 58%, 89% 38%, 100% 60%, 100% 100%, 0 100%);
+  opacity:.85;}
+:root.d-call .field{background:var(--bg)}
+:root.d-call .field::after{display:none}
+.field.alpenglow::before{content:"";position:absolute;inset:0;
+  background:radial-gradient(130% 85% at 50% 108%, rgba(246,169,76,.34) 0%, rgba(199,123,74,.10) 40%, transparent 68%);}
+
+/* ------------------------------------------------------------------- RAIL */
+.rail{grid-area:rail;position:relative;z-index:2;min-width:0;overflow:hidden;
+  display:flex;align-items:center;gap:calc(1.2vw + 8px);
+  padding:calc(1.1vh + 6px) calc(2.4vw + 10px);}
+.chip{flex:none;display:inline-flex;align-items:center;gap:.5em;
+  font-family:var(--font-display);font-weight:800;
+  font-size:var(--t-meta);letter-spacing:.13em;text-transform:uppercase;
+  padding:.34em .8em;border-radius:999px;border:2px solid currentColor;}
+.chip .dot{width:.6em;height:.6em;border-radius:50%;background:currentColor}
+.chip.lobby{color:var(--muted)}
+.chip.ask{color:var(--primary)}
+.chip.vote{color:var(--secondary)}
+.chip.results{color:var(--success)}
+.chip.done{color:var(--primary)}
+
+/* One text node, display:block, so text-overflow can actually render. On the
+   previous flex container the ellipsis was inert and the title clipped
+   mid-glyph — which is why A7 exists in the audit. */
+.rail-title{flex:0 1 auto;min-width:0;max-width:34ch;display:block;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:var(--t-meta);color:var(--text);font-weight:700;letter-spacing:.02em}
+.rail-ctx{flex:none;display:flex;align-items:baseline;gap:.5em;white-space:nowrap;
+  font-size:var(--t-meta);color:var(--muted);font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase}
+.rail-ctx b{color:var(--text);font-weight:700}
+.rail-ctx i{opacity:.35;font-style:normal}
+.rail-join{flex:none;margin-left:auto;display:flex;align-items:baseline;gap:.5em;
+  font-size:var(--t-meta);color:var(--muted);letter-spacing:.05em;white-space:nowrap}
+.rail-join code{font-family:var(--font-display);font-weight:800;letter-spacing:.11em;
+  color:var(--primary);font-size:calc(var(--t-meta) * 1.3)}
+
+/* PHASE BAR — the room's persistent phase signal. A 20px pill in the corner
+   subtends ~8 arcminutes at 25ft: recognisable as a coloured blob, not
+   readable. A full-width band costs 8px of stage and is perceived without
+   being read. Four distinct hues; COMPLETE is distinguished by a doubled,
+   striped band so it cannot be confused with ASK's amber. */
+.bar{grid-area:bar;position:relative;z-index:2;height:var(--bar-h);width:100%}
+.bar[data-phase="lobby"]{background:linear-gradient(90deg,rgba(155,168,190,.55),rgba(155,168,190,.18))}
+.bar[data-phase="ask"]{background:var(--primary)}
+.bar[data-phase="vote"]{background:var(--secondary)}
+.bar[data-phase="results"]{background:var(--success)}
+.bar[data-phase="done"]{height:calc(var(--bar-h) * 2);
+  background:repeating-linear-gradient(90deg,var(--primary) 0 26px,var(--primary-deep) 26px 52px)}
+
+/* ------------------------------------------------------------------- MAIN */
+.main{grid-area:main;position:relative;z-index:2;min-height:0;
+  display:grid;grid-template-columns:minmax(0,1fr) auto;
+  gap:calc(2vw + 10px);
+  padding:calc(2.4vh + 6px) calc(2.4vw + 10px) calc(1.6vh + 4px);}
+.main.solo{grid-template-columns:minmax(0,1fr)}
+
+/* .content is the clipper the fitter measures against. Its child carries the
+   auto margins: when there is spare room they centre it, and when there is
+   not they resolve to zero, so overflow can only ever appear at the BOTTOM.
+   The previous revision used justify-content:center, which overflows both
+   ends equally — the top of the question was the first thing to disappear,
+   with no scrollbar and no out-of-bounds rect to notice it by. */
+.content{min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.fitbox{display:flex;flex-direction:column;gap:calc(1.5vh + 4px);min-width:0}
+.fitbox.center{margin-block:auto}
+
+/* content rungs — the fitter steps down at most twice, then sacrifices, then
+   clamps. Only the three display tiers scale; body and meta hold near their
+   floors, because the floor is the one thing that is not negotiable.
+
+   Each rung ALSO widens the measure. A tight measure is a comfort
+   optimisation, and when vertical space runs out it is the cheapest thing to
+   spend: four more characters per line removes whole lines from a long
+   question without touching type size at all. Spending measure before size is
+   why the TV profile can hold six long options at all. */
+.content[data-rung="b"]{
+  --t-hero:max(var(--floor),calc(var(--L-hero) * .86));
+  --t-primary:max(var(--floor),calc(var(--L-primary) * .86));
+  --t-secondary:max(var(--floor),calc(var(--L-secondary) * .90));
+  --t-body:max(var(--floor),calc(var(--L-body) * .94));
+  --measure:calc(var(--measure-base) + 5ch);
+}
+.content[data-rung="c"]{
+  --t-hero:max(var(--floor),calc(var(--L-hero) * .72));
+  --t-primary:max(var(--floor),calc(var(--L-primary) * .72));
+  --t-secondary:max(var(--floor),calc(var(--L-secondary) * .80));
+  --t-body:max(var(--floor),calc(var(--L-body) * .88));
+  --measure:calc(var(--measure-base) + 11ch);
+}
+
+/* Final stage. Reached only when rungs and sacrifices are both exhausted —
+   in practice the TV profile with six long options at 720p. Tighter clamps,
+   never smaller type: the room keeps a legible first line of everything and
+   the host has "Expand prompt on stage" in the Console as the recovery, which
+   is what section 7.10 requires of any reduction. */
+.content[data-clamped] .q{-webkit-line-clamp:4}
+.content[data-clamped] .opt{padding-block:calc(.6vh + 3px)}
+.content[data-clamped] .opt .txt{-webkit-line-clamp:1}
+.content[data-clamped] .card .ans{-webkit-line-clamp:2}
+.content[data-clamped] .qdetail{-webkit-line-clamp:2}
+
+.reduced{font-size:var(--t-meta);color:var(--muted);font-weight:600;letter-spacing:.04em}
+
+/* ------------------------------------------------------- the ONE room meter */
+.meter{align-self:start;min-width:0;max-height:100%;overflow:hidden;
+  display:flex;flex-direction:column;
+  gap:calc(.9vh + 3px);
+  border-left:var(--hair) solid var(--rule);padding-left:calc(1.2vw + 8px);
+  width:max-content;max-width:clamp(210px, 21vw, 460px)}
+.meter h4{margin:0;font-size:var(--t-meta);color:var(--muted);font-weight:700;
+  letter-spacing:.13em;text-transform:uppercase;white-space:nowrap}
+.meter .count{font-family:var(--font-display);font-weight:800;line-height:.95;
+  font-size:max(var(--floor),calc(var(--t-primary) * .82));color:var(--text)}
+.meter .count small{font-size:var(--t-meta);color:var(--muted);font-weight:700}
+.meter .bar2{height:calc(.8vh + 5px);border-radius:99px;background:rgba(155,168,190,.16);overflow:hidden}
+.meter .bar2 > i{display:block;height:100%;border-radius:99px;background:var(--primary)}
+.meter .bar2.done > i{background:var(--success)}
+.meter .allin{display:flex;align-items:center;gap:.4em;color:var(--success-text);
+  font-size:var(--t-meta);font-weight:800;white-space:nowrap}
+.dots{display:flex;flex-wrap:wrap;gap:calc(.45vh + 3px);max-width:100%}
+.dots i{flex:none;width:calc(1.3vh + 8px);height:calc(1.3vh + 8px);border-radius:50%;
+  background:rgba(155,168,190,.22);box-shadow:inset 0 0 0 1px rgba(155,168,190,.4)}
+.dots i.in{background:var(--success);box-shadow:none}
+.roster{margin:0;padding:0;display:flex;flex-direction:column;min-height:0}
+.roster li{display:flex;align-items:center;gap:.5em;list-style:none;
+  padding:calc(.42vh + 3px) 0;border-bottom:var(--hair) solid var(--rule);
+  font-size:var(--t-meta);color:var(--text);font-weight:600;white-space:nowrap}
+.roster li:last-child{border-bottom:0}
+.roster li .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  min-width:0;flex:1;max-width:15ch;display:block}
+.roster li .sc{color:var(--muted);font-weight:700;font-family:var(--font-display)}
+.roster li .tick{width:1em;text-align:center;color:var(--success)}
+.roster li .tick.wait{color:var(--muted);opacity:.55}
+.meter .more{font-size:var(--t-meta);color:var(--muted);font-weight:600;white-space:nowrap}
+
+/* ------------------------------------------------------------- typography */
+.kicker{font-size:var(--t-meta);color:var(--muted);font-weight:700;
+  letter-spacing:.15em;text-transform:uppercase}
+.q{font-family:var(--font-display);font-weight:800;
+  font-size:var(--t-primary);line-height:1.05;letter-spacing:-.005em;
+  max-width:var(--measure);margin:0;color:var(--text);
+  display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
+.content[data-rung="c"] .q{-webkit-line-clamp:7}
+/* Detail copy is --text, not --muted. Section 4.3 makes --muted a labelling
+   colour; the previous revision then set every explanatory sentence in it. */
+.qdetail{font-size:var(--t-body);color:var(--text);opacity:.82;margin:0;
+  max-width:44ch;line-height:1.3;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.recap{font-size:var(--t-body);color:var(--text);margin:0;font-weight:600;
+  max-width:60ch;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.hero{font-family:var(--font-display);font-weight:800;font-size:var(--t-hero);
+  line-height:.98;margin:0;letter-spacing:-.01em;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+/* trivia options. Two columns whenever there are four or more: with six
+   options a single column is TALLER, not shorter — the previous spec had this
+   backwards. One column is for few options with long text. */
+.opts{display:grid;grid-template-columns:minmax(0,1fr);gap:calc(1vh + 5px) calc(1vw + 8px)}
+.opts:has(> :nth-child(4)){grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.opts.list{grid-template-columns:minmax(0,1fr)}
+.opt{display:flex;align-items:center;gap:calc(.7vw + 8px);
+  background:rgba(27,41,66,.72);border:var(--hair) solid var(--rule);
+  border-radius:var(--radius);padding:calc(1vh + 5px) calc(1vw + 10px);
+  position:relative;overflow:hidden;min-width:0}
+.opt .ltr{flex:none;display:grid;place-items:center;
+  width:calc(var(--t-secondary) * 1.4);aspect-ratio:1;border-radius:50%;
+  background:rgba(246,169,76,.14);border:2px solid var(--primary);color:var(--primary);
+  font-family:var(--font-display);font-weight:800;
+  font-size:max(var(--floor),calc(var(--t-secondary) * .72))}
+.opt .txt{font-size:var(--t-secondary);font-weight:600;line-height:1.13;min-width:0;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.content[data-rung="c"] .opt .txt{-webkit-line-clamp:2}
+.opt .pct{margin-left:auto;font-family:var(--font-display);font-weight:800;
+  font-size:var(--t-secondary);color:var(--text);z-index:1;white-space:nowrap}
+.opt .fill{position:absolute;left:0;top:0;bottom:0;background:rgba(155,168,190,.13);z-index:0}
+.opt > *{position:relative;z-index:1}
+.opt.correct{border-color:var(--success);border-width:2px}
+.opt.correct .ltr{background:rgba(79,178,134,.16);border-color:var(--success);color:var(--success-text)}
+.opt.correct .fill{background:rgba(79,178,134,.20)}
+.opt.dim .txt{color:var(--muted)}
+.opt.dim .ltr{background:rgba(155,168,190,.10);border-color:var(--muted);color:var(--muted)}
+.opt.hero-row{padding:calc(1.5vh + 6px) calc(1vw + 10px)}
+.opt.hero-row .txt{font-size:max(var(--floor),calc(var(--t-secondary) * 1.2));font-weight:700;-webkit-line-clamp:2}
+.opt.hero-row .ltr{width:calc(var(--t-secondary) * 1.75);font-size:max(var(--floor),calc(var(--t-secondary) * .9))}
+.flag{flex:none;font-family:var(--font-display);font-weight:800;font-size:var(--t-meta);
+  letter-spacing:.14em;text-transform:uppercase;color:var(--success-text);
+  border:2px solid var(--success);border-radius:999px;padding:.24em .7em;white-space:nowrap}
+
+/* answer cards — three per page, full width, four readable lines each */
+.cards{display:grid;gap:calc(1vh + 5px)}
+.card{background:rgba(27,41,66,.74);border:var(--hair) solid var(--rule);
+  border-radius:var(--radius);padding:calc(1vh + 6px) calc(1vw + 10px);
+  display:flex;align-items:center;gap:calc(.8vw + 8px);position:relative;overflow:hidden;min-width:0}
+.card .fill{position:absolute;left:0;top:0;bottom:0;background:rgba(124,167,230,.14);z-index:0}
+.card > *{position:relative;z-index:1}
+.card .body{min-width:0;flex:1}
+.card .ans{font-size:var(--t-body);font-weight:600;line-height:1.24;
+  display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.content[data-rung="c"] .card .ans{-webkit-line-clamp:3}
+.card .who{font-size:var(--t-meta);color:var(--text);opacity:.78;font-weight:600;margin-top:.2em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.card .tally{flex:none;font-family:var(--font-display);font-weight:800;
+  font-size:max(var(--floor),calc(var(--t-secondary)*.9));color:var(--text);
+  display:flex;flex-direction:column;align-items:flex-end;line-height:1}
+.card .tally small{font-size:var(--t-meta);color:var(--text);opacity:.7;letter-spacing:.1em;
+  text-transform:uppercase;font-family:var(--font-ui);font-weight:700}
+.card.lead{border-color:var(--primary);border-width:2px}
+.card.lead .fill{background:rgba(246,169,76,.16)}
+.card .rank{flex:none;font-family:var(--font-display);font-weight:800;
+  font-size:max(var(--floor),calc(var(--t-secondary)*.78));color:var(--muted);width:1.4em;text-align:center}
+.card.lead .rank{color:var(--primary)}
+
+.pager{display:flex;align-items:center;gap:.5em;
+  font-size:var(--t-meta);color:var(--muted);letter-spacing:.09em;
+  text-transform:uppercase;font-weight:700;white-space:nowrap}
+.pager i{width:.6em;height:.6em;border-radius:50%;background:rgba(155,168,190,.3)}
+.pager i.on{background:var(--primary)}
+
+/* podium — 2nd and 3rd only; the champion is the hero above, and stating a
+   name twice in one viewport is the fault this redesign exists to remove */
+.podium{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:calc(1.2vw + 8px);width:min(70%,900px);margin:0 auto}
+.pod{background:rgba(27,41,66,.74);border:var(--hair) solid var(--rule);
+  border-radius:var(--radius);padding:calc(1.1vh + 8px) calc(1vw + 8px);text-align:center;min-width:0}
+.pod .pl{font-family:var(--font-display);font-weight:800;font-size:var(--t-meta);
+  letter-spacing:.13em;color:var(--muted)}
+.pod .nm{font-size:var(--t-secondary);font-weight:600;margin:.2em 0 .08em;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.pod .sc{font-family:var(--font-display);font-weight:800;font-size:max(var(--floor),calc(var(--t-primary)*.66))}
+
+/* join block — exactly one QR exists in the product and it lives here */
+.joinblock{display:flex;align-items:center;gap:calc(2vw + 14px);min-width:0}
+.qr{background:#fff;padding:calc(.7vh + 6px);border-radius:calc(var(--radius) * .8);flex:none;
+  width:clamp(300px, 34vh, 420px);height:clamp(300px, 34vh, 420px);display:grid;place-items:center}
+:root.d-table .qr{width:clamp(220px,30vh,300px);height:clamp(220px,30vh,300px)}
+.qr svg{width:100%;height:100%;display:block}
+.joininfo{min-width:0}
+.joininfo .lbl{font-size:var(--t-meta);color:var(--muted);font-weight:700;
+  letter-spacing:.15em;text-transform:uppercase}
+.joininfo .url{font-family:var(--font-display);font-weight:800;
+  font-size:var(--t-secondary);margin:.1em 0 .25em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.joininfo .code{font-family:var(--font-display);font-weight:800;color:var(--primary);
+  font-size:var(--t-hero);line-height:1;letter-spacing:.06em}
+
+/* wavelength — a ranked, weighted, wrapped flow rather than a packed cloud.
+   A packed cloud needs collision detection to be legible and still cannot
+   guarantee the floor or that the focal term is unobscured; a frequency-
+   ordered flow is deterministic, readable at 25ft, and can state its own
+   reduction honestly. */
+.terms{display:flex;flex-wrap:wrap;align-items:baseline;
+  gap:calc(.6vh + 4px) calc(.9vw + 10px);min-width:0}
+.terms .t{font-family:var(--font-display);font-weight:800;line-height:1;
+  color:var(--text);white-space:nowrap}
+.terms .t sup{font-family:var(--font-ui);font-weight:700;font-size:var(--t-meta);
+  color:var(--muted);margin-left:.18em;vertical-align:super}
+.terms .w1{font-size:var(--t-hero);color:var(--primary)}
+.terms .w2{font-size:max(var(--floor),calc(var(--t-primary) * .96))}
+.terms .w3{font-size:var(--t-secondary)}
+.terms .w4{font-size:var(--t-body)}
+.terms .w5{font-size:var(--t-meta);color:var(--muted)}
+
+/* Field Notes — two columns where there is room. The previous revision set
+   max-width:52ch on a container with no font-size, so 'ch' resolved against
+   the inherited 16px and produced a 520px column for 30px text: a 26-character
+   measure occupying 27% of the stage, with the text clipped and 65% of the
+   screen empty. The measure belongs on the text, at its own size. */
+.notes{display:grid;grid-template-columns:minmax(0,1fr);gap:calc(1.8vh + 6px) calc(2.4vw + 14px);
+  border-left:4px solid var(--primary);padding-left:calc(1.4vw + 12px);min-width:0}
+.notes.two{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr)}
+.notes .lead{font-family:var(--font-display);font-weight:800;
+  font-size:max(var(--floor),calc(var(--t-primary) * .82));line-height:1.08;margin:0;max-width:20ch;
+  display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.notes ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;
+  gap:calc(1.1vh + 4px);min-width:0}
+.notes li{display:flex;gap:.6em;font-size:var(--t-body);line-height:1.28;
+  color:var(--text);min-width:0}
+.notes li b{color:var(--primary);font-family:var(--font-display);font-weight:800;flex:none}
+.notes li span{min-width:0;max-width:34ch;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+
+/* artwork rounds split the stage */
+.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:calc(2vw + 10px);align-items:center;min-width:0}
+.artwork{width:100%;aspect-ratio:4/3;border-radius:var(--radius);
+  border:var(--hair) solid var(--rule);
+  background:radial-gradient(70% 60% at 68% 26%, #E8C88E 0%, #B98A50 34%, transparent 62%),
+             linear-gradient(160deg,#243755 0%, #1A2941 48%, #101B2F 100%)}
+
+/* ------------------------------------------------------------------- DOCK */
+.dock{grid-area:dock;position:relative;z-index:12;min-height:var(--dock-h);
+  display:flex;align-items:center;gap:calc(1.2vw + 8px);
+  padding:calc(1vh + 4px) calc(2.4vw + 10px);
+  border-top:var(--hair) solid var(--rule);
+  background:linear-gradient(180deg, rgba(15,26,46,0) 0%, rgba(11,18,32,.6) 100%);}
+/* The Console's only permanent, discoverable entry point. One glyph of stage,
+   at the label tier, in --muted: a trackpad target from a foot away and an
+   unreadable speck from the back row. */
+.dock-more{flex:none;font:inherit;font-size:calc(var(--t-meta) * .9);line-height:1;
+  color:var(--muted);background:transparent;border:var(--hair) solid var(--rule);
+  border-radius:8px;padding:.34em .6em;cursor:pointer;letter-spacing:.1em}
+.dock .status{font-size:max(var(--floor),calc(var(--t-body) * .9));color:var(--muted);font-weight:600;
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.dock .status.go{color:var(--success-text);font-weight:800}
+@keyframes cue{0%,100%{opacity:1}50%{opacity:.45}}
+.dock .status.go{animation:cue 1.5s ease-in-out 3}
+@media (prefers-reduced-motion:reduce){.dock .status.go{animation:none}}
+.dock .spacer{margin-left:auto}
+.btn{display:inline-flex;align-items:center;gap:.5em;
+  font-family:var(--font-display);font-weight:800;
+  font-size:max(var(--floor),calc(var(--t-secondary) * .84));letter-spacing:.02em;
+  padding:calc(1.2vh + 8px) calc(1.6vw + 18px);border-radius:calc(var(--radius) * .85);
+  border:0;background:var(--primary);color:#14203A;cursor:pointer;white-space:nowrap}
+.btn.ghost{background:transparent;color:var(--text);border:var(--hair) solid var(--rule)}
+.btn[disabled]{background:rgba(155,168,190,.18);color:var(--muted);cursor:not-allowed}
+.dock .kbd{font-size:var(--t-meta);color:var(--muted);opacity:.75;letter-spacing:.07em;
+  border:var(--hair) solid var(--rule);border-radius:6px;padding:.2em .5em;font-weight:700;white-space:nowrap}
+:root.d-room .dock .kbd, :root.d-tv .dock .kbd{display:none}
+.dock .hint{font-size:var(--t-meta);color:var(--muted);text-align:right;max-width:24ch;line-height:1.25}
+
+/* ---------------------------------------------------------------- CONSOLE */
+/* Stops at the dock. The previous revision made this bottom:0, so the drawer
+   sat on top of the primary action while the spec simultaneously disabled the
+   keyboard shortcut — with the Console open there was no way to advance the
+   session at all. */
+.scrim{position:absolute;inset:0 0 var(--dock-h) 0;z-index:8;
+  background:rgba(6,11,21,.74);backdrop-filter:blur(3px)}
+.console{position:absolute;z-index:9;top:0;right:0;bottom:var(--dock-h);
+  width:min(560px,44vw);background:#111D33;border-left:2px solid var(--primary);
+  padding:22px 24px;display:flex;flex-direction:column;gap:14px;overflow:auto;font-size:15px}
+.console h3{margin:0;font-family:var(--font-display);font-weight:800;font-size:19px;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--primary)}
+.console h4{margin:12px 0 4px;font-size:12px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.console .row{display:flex;gap:7px;flex-wrap:wrap}
+.console button{font:inherit;font-weight:600;padding:8px 12px;border-radius:8px;
+  background:var(--surface-2);border:1px solid var(--rule);color:var(--text);cursor:pointer}
+.console .note{color:var(--muted);font-size:13px;line-height:1.45;margin:0}
+.console .cat{display:flex;justify-content:space-between;gap:10px;padding:6px 0;
+  border-bottom:1px solid var(--rule);color:var(--text);font-size:14px}
+.console .cat b{color:var(--muted);font-weight:600}
+.console .banner{background:rgba(246,169,76,.12);border:1px solid rgba(246,169,76,.4);
+  border-radius:8px;padding:9px 11px;color:var(--primary);font-weight:600;font-size:13px}
+.console .close{position:absolute;top:14px;right:16px;width:34px;height:34px;
+  border-radius:50%;display:grid;place-items:center;padding:0;font-size:17px}
+.console-edge{position:absolute;z-index:7;right:0;top:50%;transform:translateY(-50%);
+  writing-mode:vertical-rl;background:rgba(27,41,66,.7);border:var(--hair) solid var(--rule);
+  border-right:0;border-radius:10px 0 0 10px;padding:13px 6px;color:var(--muted);
+  font-size:13px;letter-spacing:.13em;text-transform:uppercase;font-weight:700}
+
+/* phase wipe */
+.wipe{position:absolute;z-index:6;left:0;right:0;top:36%;
+  background:rgba(11,18,32,.93);border-top:2px solid var(--primary);border-bottom:2px solid var(--primary);
+  padding:calc(2vh + 10px) calc(3vw + 16px);
+  font-family:var(--font-display);font-weight:800;font-size:max(var(--floor),calc(var(--t-primary)*.95));
+  letter-spacing:.13em;text-transform:uppercase;color:var(--primary);text-align:center}
+
+/* ---------------------------------------------------------------------------
+   TV PROFILE, SHORT VIEWPORT — fall back to the Room ladder.
+
+   Measured: at 1280x720 the TV ladder cannot hold the trivia-results or
+   six-option states even after both rungs, every sacrifice and the final
+   clamp — it is still ~40px over. The ladder is asking for type the content
+   cannot afford at that resolution, and clipping to honour a number is
+   exactly the failure this design exists to prevent.
+
+   Dropping to the Room ladder is not a compromise here: on a 65-inch panel
+   driven at 720p each pixel covers ~2.25x the area it does at 1080p, so
+   Room's 40-68px primary lands close to the TV target in physical inches
+   anyway. The profile keeps its own bar height and measure; only the ladder
+   and floor revert. The Console should say so when TV is selected on a short
+   viewport, because a host is entitled to know why the type just changed.
+   --------------------------------------------------------------------------- */
+@media (max-height:820px){
+  :root.d-tv{
+    --L-hero:      clamp(56px, 8.4vh, 104px);
+    --L-primary:   clamp(40px, 5.6vh,  68px);
+    --L-secondary: clamp(28px, 3.7vh,  44px);
+    --L-body:      clamp(22px, 2.8vh,  34px);
+    --L-meta:      clamp(20px, 1.9vh,  24px);
+    --floor:20px; --measure-base:26ch;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   COMPACT FALLBACK — below the supported host-display floor of 1100x620.
+   No projector, screen-share or laptop-as-display is this small; this exists
+   so a reviewer's half-height browser window degrades instead of mangling,
+   and so a host who drags the window narrow never sees broken geometry in
+   front of a room. It is not a supported presentation size.
+   --------------------------------------------------------------------------- */
+@media (max-width:1100px), (max-height:620px){
+  :root{
+    --L-hero:clamp(30px,5.6vh,44px); --L-primary:clamp(24px,4vh,32px);
+    --L-secondary:clamp(17px,2.6vh,22px); --L-body:clamp(15px,2.1vh,18px);
+    --L-meta:clamp(13px,1.5vh,15px); --floor:13px; --measure-base:34ch;
+    --dock-h:calc(8vh + 3vh); --bar-h:4px;
+  }
+  .main{grid-template-columns:minmax(0,1fr);gap:calc(1vh + 4px)}
+  .meter{border-left:0;border-top:var(--hair) solid var(--rule);padding-left:0;
+    padding-top:calc(.8vh + 4px);flex-direction:row;align-items:center;gap:10px;
+    flex-wrap:wrap;width:auto;max-width:none}
+  .meter .bar2{flex:1 1 100px}
+  .meter .roster,.meter .dots,.meter .more,.meter .allin{display:none}
+  .meter:not(:has(.count)){display:none}
+  .opts:has(> :nth-child(4)){grid-template-columns:minmax(0,1fr)}
+  .cards .card:nth-child(n+3){display:none}
+  .notes.two{grid-template-columns:minmax(0,1fr)}
+  .rail-title{display:none}
+  .dock .hint,.dock .kbd{display:none}
+  .qr{width:clamp(160px,26vh,220px);height:clamp(160px,26vh,220px)}
+}
+
+.tag{position:fixed;z-index:50;left:0;bottom:0;background:#000;color:#8FA3C0;
+  font:600 11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;padding:4px 9px;
+  letter-spacing:.05em;border-top-right-radius:6px;opacity:.7;pointer-events:none}
+.tag b{color:#F6A94C}
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="field" aria-hidden="true"></div>
+  <header class="rail"><span class="chip ask"><span class="dot"></span>Answering</span><span class="rail-title" data-drop="4">Q3 Leadership Offsite — Pricing Strategy &amp; Competitive Response Workshop</span><span class="rail-ctx"><span>Competitive Response</span><i>/</i><b>Round 3</b><span>of 8</span></span><div class="rail-join" data-drop="3"><span data-drop="2">JOIN</span><span data-drop="1">eng.seibtribe.us/play</span><code>4821</code></div></header><div class="bar" data-phase="ask" role="presentation"></div>
+  <div class="main">
+    <div class="content"><div class="fitbox"><h1 class="q">Our largest competitor cut list price 20% this morning and briefed the trade press before they briefed their own sales team. With no extra budget, no new headcount and no change to the roadmap, what is the first move you would make inside your own function on Monday?</h1><p class="qdetail" data-drop="1">Answer for the function you actually run, not for the company. Name the one thing you would stop doing to pay for it.</p><p class="reduced" hidden></p></div></div>
+    <aside class="meter"><h4>Answered</h4><div class="count">31<small> / 40</small></div><div class="bar2"><i style="width:78%"></i></div><div data-drop="2" data-drop-note="Per-player dots"><div class="dots" role="img" aria-label="31 of 40 in"><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i></div></div></aside>
+  </div>
+  <footer class="dock"><button class="dock-more" type="button" aria-label="Open the operator console" title="Console (\ key)">⋯</button><span class="status" aria-live="polite">31 of 40 answered · waiting on Dana, Tomás, Jordan and 6 more</span><span class="spacer"></span><button class="btn ghost" type="button">Skip Round</button><span class="kbd">SPACE</span><button class="btn primary" type="button">Start Voting</button></footer>
+  <div class="scrim"></div>
+  <aside class="console" role="dialog" aria-modal="true" aria-label="Operator console">
+    <button class="close" type="button" aria-label="Close console">✕</button>
+    <div class="banner">⚙ Setup — the room can see this panel. Esc, the ⋯ button, or advancing closes it.</div>
+    <h3>Console</h3>
+    <h4>This round</h4>
+    <div class="row"><button>Browse questions</button><button>Re-pick question</button><button>Expand prompt on stage</button><button>Skip round</button></div>
+    <h4>Categories · Strategic Pricing Plays · 31 remaining</h4>
+    <div class="cat"><span>Pricing Power</span><b>7 left · on</b></div>
+    <div class="cat"><span>Competitive Response</span><b>9 left · on</b></div>
+    <div class="cat"><span>Packaging</span><b>6 left · on</b></div>
+    <div class="cat"><span>Discount Discipline</span><b>9 left · off</b></div>
+    <h4>Room · 40 joined, 31 answered</h4>
+    <p class="note">Waiting on Dana Whitfield, Tomás Ferreira, Jordan Pike, Yuki Tanaka, Kofi Mensah, Elena Petrova, Henrik Dahl, Rosa Delgado, Idris Suleiman.</p>
+    <div class="row"><button>Copy join link</button><button>Show join code on stage</button><button>Full roster</button></div>
+    <h4>Workie</h4>
+    <div class="row"><button>Voice: Adapt to the session ▾</button><button>Rewrite last notes</button></div>
+    <h4>Display</h4>
+    <div class="row"><button>Profile: Room ▾</button><button>Open phone remote</button><button>Session report</button></div>
+    <h4>Session</h4>
+    <div class="row"><button>How to play</button><button>Switch game</button><button>Report a problem</button><button>Sign out</button></div>
+  </aside>
+</main>
+<div class="tag"><b>OVERLAY</b> · Console stops at the dock — the primary action stays visible and clickable</div>
+<script>
+/* ---------------------------------------------------------------------------
+   fit() — measure, step down a FIXED ladder at most twice, then sacrifice
+   content in a declared order. This is not "auto-shrink to fit", which the
+   spec rejects: the rungs are named and finite, the body and label tiers never
+   drop below the profile floor, and when the ladder runs out the response is
+   to REMOVE content and say so on screen, never to keep shrinking.
+
+   The ordered-sacrifice mechanism is one general rule: any element may carry
+   data-drop="1|2|3..." and an optional data-drop-note. When the content still
+   does not fit at the bottom rung, groups are hidden in ascending order and
+   their notes are collected into .reduced, so the screen states what it left
+   out instead of silently losing it.
+
+   The rail uses the same mechanism on the horizontal axis.
+   --------------------------------------------------------------------------- */
+(function () {
+  function over(el) {
+    return el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
+  }
+  function sacrifice(box) {
+    var groups = Array.prototype.slice.call(box.querySelectorAll('[data-drop]'));
+    groups.sort(function (a, b) { return (+a.dataset.drop) - (+b.dataset.drop); });
+    var note = box.querySelector('.reduced');
+    var lost = [];
+    for (var i = 0; i < groups.length; i++) {
+      groups[i].hidden = true;
+      // Two elements may share one note ("Options E-F" is carried by both E
+      // and F), and the room should not read "Options E-F, Options E-F".
+      var note0 = groups[i].dataset.dropNote;
+      if (note0 && lost.indexOf(note0) === -1) lost.push(note0);
+      if (note && lost.length) {
+        note.hidden = false;
+        note.textContent = lost.join(' \u00b7 ') + ' \u2014 in the session report';
+      }
+      if (!over(box)) return true;
+    }
+    return !over(box);
+  }
+  function fitOne(box, useRungs) {
+    box.removeAttribute('data-rung');
+    box.removeAttribute('data-clamped');
+    Array.prototype.forEach.call(box.querySelectorAll('[data-drop]'), function (e) { e.hidden = false; });
+    var note = box.querySelector('.reduced');
+    if (note) { note.hidden = true; note.textContent = ''; }
+    if (!over(box)) return;
+    if (useRungs) {
+      var rungs = ['b', 'c'];
+      for (var i = 0; i < rungs.length; i++) {
+        box.dataset.rung = rungs[i];
+        if (!over(box)) return;
+      }
+    }
+    if (sacrifice(box)) return;
+    // Last resort: tighten clamps rather than shrink type below the floor.
+    if (useRungs) box.dataset.clamped = 'on';
+  }
+  function fit() {
+    // .content gets the type rungs; the rail and the meter only sacrifice,
+    // because their type is chrome and chrome must not shrink with content.
+    Array.prototype.forEach.call(document.querySelectorAll('.content'), function (c) { fitOne(c, true); });
+    Array.prototype.forEach.call(document.querySelectorAll('.rail'), function (r) { fitOne(r, false); });
+    Array.prototype.forEach.call(document.querySelectorAll('.meter'), function (m) { fitOne(m, false); });
+  }
+  window.__fit = fit;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fit);
+  else fit();
+  window.addEventListener('load', fit);
+  window.addEventListener('resize', fit);
+  requestAnimationFrame(fit);
+})();
+</script>
+</body>
+</html>

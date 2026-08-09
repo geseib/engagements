@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Engage2 host screen redesign — mockups</title>
+<style>
+  :root{--bg:#0F1A2E;--surface:#1B2942;--text:#F4EDE4;--muted:#9BA8BE;--primary:#F6A94C;
+        --success:#4FB286;--rule:rgba(155,168,190,.22)}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:400 16px/1.55 "Inter",system-ui,-apple-system,"Segoe UI",sans-serif;padding:52px 26px 90px}
+  .wrap{max-width:960px;margin:0 auto}
+  h1{font-family:"Archivo Expanded","Archivo",system-ui,sans-serif;font-weight:800;
+    font-size:clamp(30px,4.4vw,44px);line-height:1.05;margin:0 0 12px;letter-spacing:-.01em}
+  h2{font-size:15px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+    margin:36px 0 10px;font-weight:700}
+  .sub{color:var(--muted);max-width:74ch;margin:0 0 8px}
+  .sub a,.hint a{color:var(--primary)}
+  .hint{color:var(--muted);font-size:14px;border-left:3px solid var(--primary);
+    padding:11px 15px;background:rgba(246,169,76,.07);border-radius:0 8px 8px 0;
+    margin:20px 0;max-width:74ch}
+  .hint b{color:var(--text)}
+  .profiles{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 4px}
+  .profiles span{background:var(--surface);border:1px solid var(--rule);border-radius:999px;
+    padding:6px 13px;font-size:13px;color:var(--muted)}
+  .profiles b{color:var(--text)}
+  ol{list-style:none;counter-reset:m;padding:0;margin:0}
+  li{counter-increment:m;border-bottom:1px solid var(--rule);padding:15px 0 15px 52px;position:relative}
+  li::before{content:counter(m,decimal-leading-zero);position:absolute;left:0;top:17px;
+    font-family:"Archivo Expanded","Archivo",system-ui,sans-serif;font-weight:800;
+    color:var(--primary);font-size:14px;letter-spacing:.07em}
+  li a{color:var(--text);text-decoration:none;font-weight:700;font-size:18px;
+    border-bottom:1px solid transparent}
+  li a:hover{border-bottom-color:var(--primary);color:var(--primary)}
+  li p{margin:5px 0 0;color:var(--muted);font-size:15px;max-width:80ch}
+  code{color:var(--primary);font-size:.92em}
+  footer{margin-top:36px;color:var(--muted);font-size:14px;max-width:76ch}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Engage2 host screen — redesign mockups</h1>
+  <p class="sub">Revision 2. Mockups for
+    <code>docs/superpowers/specs/2026-08-08-host-screen-redesign-design.md</code>,
+    revised against <a href="CRITIQUE.md">CRITIQUE.md</a>. One stage, four display profiles,
+    no scrolling and no silent clipping in any state.</p>
+
+  <div class="hint">
+    <b>Revision 3.</b> Three people who run meetings for a living reviewed revision 2 and two of
+    them would not have run it. The headline fix: line clamps used to live in the base CSS, so
+    content reached the fitter pre-truncated and it stopped early — five of six trivia options
+    cut mid-word with 131px of empty space beneath them. Truncation is now the fitter's last
+    act, and audit checks <b>A10</b> and <b>A11</b> fail if a reduction fires before space
+    actually runs out.
+  </div>
+  <div class="hint">
+    <b>These carry worst-case content on purpose.</b> The longest plausible question, six long
+    trivia options, forty players, sixty distinct wavelength terms, a 900-word model response.
+    The previous revision used copy chosen to fit, which is why sixteen green pages hid nine
+    defects. Where a state cannot hold its worst case you should see the reduction fire —
+    smaller type, a different column count, the meter's column taken, or a line saying what
+    moved to the report. What you should <b>never</b> see is text cut off — and never while
+    space sits empty beside it.
+  </div>
+
+  <div class="hint">
+    <b>How to judge them.</b> Type is sized in <code>vh</code> with pixel floors, so a mockup only
+    shows its true size at the true display size. Open one, press <b>F11</b> (or ⌃⌘F),
+    and where you can, put it on the real projector. Switch profile by editing the
+    <code>class</code> on <code>&lt;html&gt;</code>:
+    <code>d-room</code>, <code>d-tv</code>, <code>d-call</code>, <code>d-table</code>.
+  </div>
+
+  <div class="profiles">
+    <span><b>Room</b> projected ≥ 90in, ≤30ft, ~20ppi · floor 20px</span>
+    <span><b>TV</b> ~65in panel, ≤20ft, ~30ppi · floor 26px</span>
+    <span><b>Call</b> screen-share · Room ladder, flat field, 2px rules</span>
+    <span><b>Table</b> laptop, 2–4ft, ~120ppi · floor 16px</span>
+  </div>
+
+  <h2>Verification</h2>
+  <p class="sub"><a href="audit.html">audit.html</a> runs every mockup at four profiles × two
+    viewports, plus a wide-face stress pass approximating Archivo Expanded, and asserts nine
+    properties. Three of them exist because the first sweep was structurally incapable of
+    failing: <b>A2</b> silent clipping, <b>A5</b> a display profile that renders identically to
+    another, <b>A6</b> an overlay covering the primary action. Every check was demonstrated
+    failing against the pre-critique files before being trusted — press
+    <b>Run against <code>_baseline/</code></b> to see that for yourself.</p>
+  <p class="sub" style="font-size:14px">Run the audit with the tab in the foreground. Chrome
+    throttles timers in background tabs and the harness will appear to hang.</p>
+
+  <h2>States</h2>
+  <ol>
+    <li><a href="01-lobby.html">STARTED / lobby</a><p>Longest event title, 40 players. One QR, one code, one meter — the roster is a dot matrix because forty names cannot be read from the back row and are not the question.</p></li>
+    <li><a href="02-ask-call-and-answer.html">ASK · Call &amp; Answer</a><p>The longest prompt a strategic session plausibly produces. The dock names who we are waiting on.</p></li>
+    <li><a href="03-ask-trivia.html">ASK · Trivia</a><p>Six long options — the case that decapitated the question in the previous revision. Watch the fitter step down instead.</p></li>
+    <li><a href="04-ask-wavelength.html">ASK · Wavelength</a><p>The subject owns the screen. Meter says ANSWERED, matching the dock.</p></li>
+    <li><a href="05-vote.html">VOTE (anonymous)</a><p>Answers carry stable numbers, not names. Anonymity is stated once in the kicker rather than on every card.</p></li>
+    <li><a href="06-results-call-and-answer.html">RESULTS before the reveal</a><p>Ranked on merit with no authors and no standings — a live leaderboard would be attribution by arithmetic.</p></li>
+    <li><a href="07-results-trivia.html">RESULTS · Trivia</a><p>Recap, six-option distribution, correct row carrying the headline weight, standings in the meter.</p></li>
+    <li><a href="08-results-wavelength.html">RESULTS · Wavelength</a><p>Sixty distinct terms, top sixteen shown as a ranked weighted flow, the reduction stated on screen. No packed cloud, no collisions.</p></li>
+    <li><a href="09-field-notes.html">RESULTS · Field Notes beat</a><p>A 900-word Workie response reduced to one headline and three prompts, two columns, nothing to scroll.</p></li>
+    <li><a href="10-ended.html">ENDED</a><p>Champion stated once. Join line replaced by the session summary — a finished session must not still be inviting people in.</p></li>
+    <li><a href="11-console.html">Console overlay</a><p>The drawer stops at the dock, so the primary action stays visible and clickable while it is open. Close button, no email address.</p></li>
+    <li><a href="12-density-table.html">Profile: Table</a><p>Laptop as the display. Its own ladder with a 16px angular floor — not the Room ladder times a multiplier.</p></li>
+    <li><a href="13-density-call.html">Profile: Call</a><p>Screen-share. Keeps Room’s type on purpose (the encoder is the constraint, not the eye); flat field, 2px rules.</p></li>
+    <li><a href="14-density-tv.html">Profile: Large TV</a><p>A 65-inch panel at ~30 ppi needs a bigger ladder than a projected image. Less content fits — the reduction firing here is the design working.</p></li>
+    <li><a href="15-edge-minimum.html">Edge: one player, no answers</a><p>The under-filled case, an artwork round, and a disabled primary that explains itself in one line.</p></li>
+    <li><a href="16-phase-wipe.html">Transition: phase wipe</a><p>Four simultaneous signals on every phase change — the one thing worth stating more than once. Unanimously the strongest screen in first-look testing; unchanged.</p></li>
+    <li><a href="17-remote.html">Companion: the phone remote</a><p>Optional, never required — and the only surface that may hold a name or a correct answer. Two screens: driving the round, and browsing questions.</p></li>
+    <li><a href="18-question-browser.html">Setup: choose the next question</a><p>Scan, filter and commit mid-session. Correct answers are absent rather than hidden, because the stage is a shared surface in every profile.</p></li>
+    <li><a href="19-how-to-play.html">Lobby beat: how this works</a><p>The player instructions, rewritten from ~180 words to four lines and put on the stage where players can actually read them.</p></li>
+    <li><a href="20-setup.html">Setup: anonymous responses</a><p>The new option in context, default on, with the guarantee and its limits written out. Not a stage; sized for arm-length reading.</p></li>
+    <li><a href="21-results-revealed.html">RESULTS after the reveal</a><p>Authorship annotated in place and the standings unfrozen. Compare with 06, which is the same round before the host reveals.</p></li>
+  </ol>
+
+  <footer>
+    Colours follow <code>docs/handoff/warm-summit-design-spec.md</code>. The files are
+    self-contained — no CDN, no external assets — so display type falls back to the
+    nearest system face; production self-hosts Archivo Expanded, which is materially wider, and
+    the audit’s A8 pass simulates that penalty with +5.5% tracking. QR codes are drawn
+    placeholders, not scannable.
+  </footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Voting — Engage2 host stage</title>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%;overflow:hidden}
+
+:root{
+  /* Warm Summit tokens — docs/handoff/warm-summit-design-spec.md */
+  --bg:#0F1A2E; --surface:#1B2942; --surface-2:#25375A;
+  --text:#F4EDE4; --muted:#9BA8BE;
+  --primary:#F6A94C; --primary-deep:#C77B4A; --secondary:#7CA7E6;
+  --success:#4FB286; --danger:#E5645E;
+  --silver:#C0C6D0; --bronze:#B4794A;
+  --rule:rgba(155,168,190,.22);
+  --hair:1px;
+  --radius:16px;
+
+  /* Density multiplier. Room = 1. See spec section 4. */
+  --k:1;
+
+  /* THE TYPE LADDER. vh-based so it tracks the projected image, with px
+     floors so a small window never drops below the room-legible floor.
+     Nothing room-facing is ever smaller than --t-meta (20px). */
+  --t-hero:      calc(clamp(56px, 8.4vh, 104px) * var(--k));
+  --t-primary:   calc(clamp(40px, 5.6vh,  68px) * var(--k));
+  --t-secondary: calc(clamp(28px, 3.7vh,  44px) * var(--k));
+  --t-body:      calc(clamp(22px, 2.8vh,  34px) * var(--k));
+  --t-meta:      calc(clamp(20px, 1.9vh,  24px) * var(--k));
+
+  --font-display:"Archivo Expanded","Archivo Expanded Bold","Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-ui:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+
+/* Density: Call — screen-share. One step down, hairlines thickened (video
+   codecs eat 1px lines), flat field instead of the photo gradient (banding). */
+body.d-call{ --k:.82; --hair:2px; }
+/* Density: Table — the host's own laptop is the display for 3-5 people. */
+body.d-table{ --k:.62; }
+
+body{
+  background:var(--bg); color:var(--text);
+  font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased;
+  font-variant-numeric:tabular-nums;
+}
+
+/* ---- the stage: three grid rows, fixed height, never scrolls ---- */
+.stage{
+  position:relative; height:100dvh; width:100vw; overflow:hidden;
+  display:grid;
+  /* minmax(0,1fr), not 1fr: an auto/1fr track refuses to shrink below the
+     min-content of its widest item, so one nowrap rail would push the whole
+     stage past the viewport. This single declaration is what makes the
+     no-scroll promise hold at 1280 as well as 1920. */
+  grid-template-columns:minmax(0,1fr);
+  grid-template-rows:  calc(8vh * var(--k) + 3.2vh)  minmax(0,1fr)  calc(9vh * var(--k) + 4vh);
+  grid-template-areas:"rail" "main" "dock";
+}
+/* Photo field. Flat in Call density. */
+.field{position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(120% 78% at 50% 112%, rgba(246,169,76,.10) 0%, transparent 62%),
+    linear-gradient(180deg,#0C1526 0%, #12203A 46%, #1B2C4A 78%, #2A3A57 100%);}
+.field::after{content:"";position:absolute;left:-4%;right:-4%;bottom:-2%;height:46%;
+  background:
+    linear-gradient(180deg, transparent 0%, rgba(11,18,32,.0) 30%, rgba(9,15,28,.85) 100%),
+    conic-gradient(from 210deg at 22% 100%, #17253C 0deg, #17253C 40deg, transparent 41deg),
+    conic-gradient(from 200deg at 58% 100%, #1D2E4A 0deg, #1D2E4A 44deg, transparent 45deg),
+    conic-gradient(from 205deg at 86% 100%, #223651 0deg, transparent 1deg);
+  clip-path:polygon(0 62%, 13% 34%, 25% 55%, 38% 22%, 52% 48%, 63% 30%, 78% 58%, 89% 38%, 100% 60%, 100% 100%, 0 100%);
+  opacity:.9;}
+body.d-call .field{background:var(--bg)}
+body.d-call .field::after{display:none}
+.field.alpenglow::before{content:"";position:absolute;inset:0;
+  background:radial-gradient(130% 85% at 50% 108%, rgba(246,169,76,.40) 0%, rgba(199,123,74,.12) 40%, transparent 68%);}
+
+/* ---- RAIL: "where are we" — one line, never wraps ---- */
+.rail{grid-area:rail;position:relative;z-index:2;min-width:0;overflow:hidden;
+  display:flex;align-items:center;gap:calc(1.4vw + 8px);
+  padding:0 calc(2.4vw + 10px);
+  border-bottom:var(--hair) solid var(--rule);}
+.chip{flex:none;display:inline-flex;align-items:center;gap:.55em;
+  font-family:var(--font-display);font-weight:800;
+  font-size:var(--t-meta);letter-spacing:.14em;text-transform:uppercase;
+  padding:.42em .85em;border-radius:999px;
+  border:var(--hair) solid currentColor;}
+.chip .dot{width:.62em;height:.62em;border-radius:50%;background:currentColor}
+.chip.lobby{color:var(--secondary)}
+.chip.ask{color:var(--primary)}
+.chip.vote{color:var(--secondary)}
+.chip.results{color:var(--success)}
+.chip.done{color:var(--primary)}
+.rail-meta{flex:0 1 auto;display:flex;align-items:baseline;gap:.7em;min-width:0;
+  font-size:var(--t-meta);color:var(--muted);font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.rail-meta b{color:var(--text);font-weight:700}
+.rail-meta .sep{opacity:.35}
+.rail-join{flex:none;margin-left:auto;display:flex;align-items:baseline;gap:.6em;
+  font-size:var(--t-meta);color:var(--muted);letter-spacing:.06em;white-space:nowrap}
+.rail-join code{font-family:var(--font-display);font-weight:800;letter-spacing:.12em;
+  color:var(--primary);font-size:calc(var(--t-meta) * 1.28)}
+
+/* ---- MAIN: content + one meter aside ---- */
+.main{grid-area:main;position:relative;z-index:2;
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0, calc(19vw * var(--k) + 130px));
+  gap:calc(2.2vw + 10px);
+  padding:calc(2.6vh + 6px) calc(2.4vw + 10px) calc(1.4vh + 4px);
+  min-height:0;}
+.main.solo{grid-template-columns:minmax(0,1fr)}
+.content{min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:center;gap:calc(1.6vh + 4px)}
+.content.top{justify-content:flex-start}
+
+/* ---- the ONE room meter. Its content changes by phase; its job never does. */
+.meter{min-width:0;min-height:0;display:flex;flex-direction:column;gap:calc(1.1vh + 3px);
+  border-left:var(--hair) solid var(--rule);padding-left:calc(1.4vw + 8px)}
+.meter h4{margin:0;font-size:var(--t-meta);color:var(--muted);font-weight:700;
+  letter-spacing:.14em;text-transform:uppercase}
+.meter .count{font-family:var(--font-display);font-weight:800;line-height:.95;
+  font-size:calc(var(--t-primary) * .92);color:var(--text)}
+.meter .count small{font-size:.44em;color:var(--muted);font-weight:700;letter-spacing:.02em}
+.meter .bar{height:calc(.9vh + 5px);border-radius:99px;background:rgba(155,168,190,.16);overflow:hidden}
+.meter .bar > i{display:block;height:100%;border-radius:99px;background:var(--primary)}
+.meter .bar.done > i{background:var(--success)}
+.meter .allin{display:flex;align-items:center;gap:.5em;color:var(--success);
+  font-size:var(--t-meta);font-weight:700;letter-spacing:.04em}
+
+/* dot matrix — the reduction that lets 40 players fit */
+.dots{display:flex;flex-wrap:wrap;gap:calc(.5vh + 3px)}
+.dots i{width:calc(1.5vh + 8px);height:calc(1.5vh + 8px);border-radius:50%;
+  background:rgba(155,168,190,.22);box-shadow:inset 0 0 0 var(--hair) rgba(155,168,190,.4)}
+.dots i.in{background:var(--success);box-shadow:none}
+/* named roster — only rendered when it fits */
+.roster{display:flex;flex-direction:column;gap:0;overflow:hidden;min-height:0}
+.roster li{display:flex;align-items:center;gap:.6em;list-style:none;
+  padding:calc(.55vh + 3px) 0;border-bottom:var(--hair) solid var(--rule);
+  font-size:calc(var(--t-meta) * 1.05);color:var(--text);font-weight:600}
+.roster li:last-child{border-bottom:0}
+.roster li .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+.roster li .sc{color:var(--muted);font-weight:700;font-family:var(--font-display)}
+.roster li .tick{width:1.1em;text-align:center;color:var(--success)}
+.roster li .tick.wait{color:var(--muted);opacity:.55}
+.meter .more{font-size:var(--t-meta);color:var(--muted);font-weight:600;letter-spacing:.04em}
+
+/* ---- content typography ---- */
+.kicker{font-size:var(--t-meta);color:var(--muted);font-weight:700;
+  letter-spacing:.16em;text-transform:uppercase}
+.q{font-family:var(--font-display);font-weight:800;
+  font-size:var(--t-primary);line-height:1.04;letter-spacing:-.005em;
+  max-width:26ch;margin:0;color:var(--text)}
+.q.long{font-size:calc(var(--t-primary) * .78);max-width:30ch}
+.qdetail{font-size:var(--t-body);color:var(--muted);margin:0;max-width:44ch;line-height:1.3}
+.hero{font-family:var(--font-display);font-weight:800;font-size:var(--t-hero);
+  line-height:.98;margin:0;letter-spacing:-.01em}
+
+/* trivia options */
+.opts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:calc(1.3vh + 6px) calc(1.2vw + 8px)}
+.opts.one{grid-template-columns:minmax(0,1fr)}
+.opt{display:flex;align-items:center;gap:calc(.9vw + 8px);
+  background:rgba(27,41,66,.72);border:var(--hair) solid var(--rule);
+  border-radius:var(--radius);padding:calc(1.2vh + 6px) calc(1.1vw + 10px);
+  position:relative;overflow:hidden}
+.opt .ltr{flex:none;display:grid;place-items:center;
+  width:calc(var(--t-secondary) * 1.42);aspect-ratio:1;border-radius:50%;
+  background:rgba(246,169,76,.14);border:2px solid var(--primary);color:var(--primary);
+  font-family:var(--font-display);font-weight:800;font-size:calc(var(--t-secondary) * .74)}
+.opt .txt{font-size:var(--t-secondary);font-weight:600;line-height:1.12;min-width:0;overflow-wrap:anywhere}
+.opt .pct{margin-left:auto;font-family:var(--font-display);font-weight:800;
+  font-size:var(--t-secondary);color:var(--text);position:relative;z-index:1}
+.opt .fill{position:absolute;left:0;top:0;bottom:0;background:rgba(155,168,190,.13);z-index:0}
+.opt > *{position:relative;z-index:1}
+.opt.correct{border-color:var(--success);border-width:2px}
+.opt.correct .ltr{background:rgba(79,178,134,.16);border-color:var(--success);color:var(--success)}
+.opt.correct .fill{background:rgba(79,178,134,.20)}
+.opt.correct .tick{color:var(--success);font-size:calc(var(--t-secondary)*.9);margin-left:.2em}
+/* The correct row IS the headline. Restating the winning answer above the
+   list is the same fact twice inside 100px — the exact redundancy this
+   redesign exists to remove. */
+.opt.hero{padding:calc(1.9vh + 8px) calc(1.1vw + 10px)}
+.opt.hero .txt{font-size:calc(var(--t-secondary) * 1.26);font-weight:700;line-height:1.06}
+.opt.hero .ltr{width:calc(var(--t-secondary) * 1.8);font-size:calc(var(--t-secondary) * .95)}
+.flag{flex:none;font-family:var(--font-display);font-weight:800;font-size:var(--t-meta);
+  letter-spacing:.16em;text-transform:uppercase;color:var(--success);
+  border:2px solid var(--success);border-radius:999px;padding:.3em .8em}
+.opt.dim .txt{color:var(--muted)}
+.opt.dim .ltr{background:rgba(155,168,190,.10);border-color:var(--muted);color:var(--muted)}
+
+/* answer cards (vote / open results) */
+.cards{display:grid;gap:calc(1.1vh + 5px)}
+.cards.two{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:calc(1.1vh + 5px) calc(1vw + 8px)}
+.card{background:rgba(27,41,66,.74);border:var(--hair) solid var(--rule);
+  border-radius:var(--radius);padding:calc(1.1vh + 6px) calc(1vw + 10px);
+  display:flex;align-items:center;gap:calc(.9vw + 8px);position:relative;overflow:hidden}
+.card .fill{position:absolute;left:0;top:0;bottom:0;background:rgba(124,167,230,.14);z-index:0}
+.card > *{position:relative;z-index:1}
+.card .body{min-width:0;flex:1}
+.card .ans{font-size:calc(var(--t-body) * 1.02);font-weight:600;line-height:1.2;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card .who{font-size:var(--t-meta);color:var(--muted);font-weight:600;margin-top:.25em}
+.card .tally{flex:none;font-family:var(--font-display);font-weight:800;
+  font-size:calc(var(--t-secondary)*.92);color:var(--text);display:flex;align-items:baseline;gap:.28em}
+.card .tally small{font-size:var(--t-meta);color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.card.lead{border-color:var(--primary);border-width:2px}
+.card.lead .fill{background:rgba(246,169,76,.16)}
+.card .rank{flex:none;font-family:var(--font-display);font-weight:800;
+  font-size:calc(var(--t-secondary)*.8);color:var(--muted);width:1.6em;text-align:center}
+.card.lead .rank{color:var(--primary)}
+
+/* pagination dots for auto-paged lists */
+.pager{display:flex;align-items:center;gap:.6em;justify-content:center;
+  font-size:var(--t-meta);color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-weight:700}
+.pager i{width:.7em;height:.7em;border-radius:50%;background:rgba(155,168,190,.3)}
+.pager i.on{background:var(--primary)}
+
+/* podium */
+.podium{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:calc(1.2vw + 8px);align-items:end}
+.pod{background:rgba(27,41,66,.74);border:var(--hair) solid var(--rule);
+  border-radius:var(--radius);padding:calc(1.4vh + 8px) calc(1vw + 8px);text-align:center}
+.pod .pl{font-family:var(--font-display);font-weight:800;font-size:var(--t-meta);
+  letter-spacing:.14em;color:var(--muted)}
+.pod .nm{font-size:var(--t-secondary);font-weight:600;margin:.25em 0 .1em;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pod .sc{font-family:var(--font-display);font-weight:800;font-size:calc(var(--t-primary)*.72)}
+.pod .dl{font-size:var(--t-meta);color:var(--success);font-weight:700}
+.pod.first{border-color:var(--primary);border-width:2px;padding-bottom:calc(2.2vh + 10px)}
+.pod.first .pl,.pod.first .sc{color:var(--primary)}
+
+/* QR — exactly one on screen, lobby only */
+.joinblock{display:flex;align-items:center;gap:calc(2vw + 14px)}
+.qr{background:#fff;padding:calc(.9vh + 6px);border-radius:calc(var(--radius) * .8);flex:none;
+  width:calc(26vh * var(--k) + 60px);height:calc(26vh * var(--k) + 60px);display:grid;place-items:center}
+.qr svg{width:100%;height:100%;display:block}
+.joininfo .lbl{font-size:var(--t-meta);color:var(--muted);font-weight:700;
+  letter-spacing:.16em;text-transform:uppercase}
+.joininfo .url{font-family:var(--font-display);font-weight:800;
+  font-size:calc(var(--t-secondary)*1.05);margin:.15em 0 .3em}
+.joininfo .code{font-family:var(--font-display);font-weight:800;color:var(--primary);
+  font-size:var(--t-hero);line-height:1;letter-spacing:.06em}
+
+/* word cloud */
+.cloud{position:relative;height:100%;min-height:0;display:grid;place-items:center}
+.cloud .w{position:absolute;font-family:var(--font-display);font-weight:800;line-height:1;white-space:nowrap}
+
+/* ---- DOCK: "what happens next" ---- */
+.dock{grid-area:dock;position:relative;z-index:2;
+  display:flex;align-items:center;gap:calc(1.6vw + 10px);
+  padding:0 calc(2.4vw + 10px);
+  border-top:var(--hair) solid var(--rule);
+  background:linear-gradient(180deg, rgba(15,26,46,0) 0%, rgba(11,18,32,.55) 100%);}
+.dock .status{font-size:calc(var(--t-body) * .92);color:var(--muted);font-weight:600;
+  letter-spacing:.02em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dock .status.go{color:var(--success)}
+.dock .spacer{margin-left:auto}
+.btn{display:inline-flex;align-items:center;gap:.55em;
+  font-family:var(--font-display);font-weight:800;
+  font-size:calc(var(--t-secondary) * .88);letter-spacing:.02em;
+  padding:calc(1.5vh + 8px) calc(2vw + 18px);border-radius:calc(var(--radius) * .85);
+  border:0;background:var(--primary);color:#14203A;cursor:pointer;white-space:nowrap}
+.btn.ghost{background:transparent;color:var(--muted);border:var(--hair) solid var(--rule)}
+.btn[disabled]{background:rgba(155,168,190,.18);color:var(--muted);cursor:not-allowed}
+.dock .kbd{font-size:var(--t-meta);color:var(--muted);opacity:.7;letter-spacing:.08em;
+  border:var(--hair) solid var(--rule);border-radius:6px;padding:.25em .55em;font-weight:700}
+.dock .hint{font-size:var(--t-meta);color:var(--muted);text-align:right;max-width:22ch;line-height:1.25}
+
+/* ---- Console: the operator's overlay. Obviously temporary, obviously not content. */
+.scrim{position:absolute;inset:0;z-index:8;background:rgba(6,11,21,.74);backdrop-filter:blur(3px)}
+.console{position:absolute;z-index:9;top:0;right:0;bottom:0;width:min(560px,44vw);
+  background:#111D33;border-left:2px solid var(--primary);
+  padding:26px 28px;display:flex;flex-direction:column;gap:18px;overflow:auto;
+  font-size:15px}
+.console h3{margin:0;font-family:var(--font-display);font-weight:800;font-size:20px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--primary)}
+.console h4{margin:14px 0 6px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.console .row{display:flex;gap:8px;flex-wrap:wrap}
+.console button{font:inherit;font-weight:600;padding:9px 13px;border-radius:8px;
+  background:var(--surface-2);border:1px solid var(--rule);color:var(--text);cursor:pointer}
+.console button.warn{color:var(--danger);border-color:rgba(229,100,94,.5)}
+.console .note{color:var(--muted);font-size:13px;line-height:1.45;margin:0}
+.console .cat{display:flex;justify-content:space-between;gap:10px;padding:7px 0;
+  border-bottom:1px solid var(--rule);color:var(--text)}
+.console .cat b{color:var(--muted);font-weight:600}
+.console .banner{background:rgba(246,169,76,.12);border:1px solid rgba(246,169,76,.4);
+  border-radius:8px;padding:10px 12px;color:var(--primary);font-weight:600;font-size:13px}
+.console-edge{position:absolute;z-index:7;right:0;top:50%;transform:translateY(-50%);
+  writing-mode:vertical-rl;background:rgba(27,41,66,.7);border:var(--hair) solid var(--rule);
+  border-right:0;border-radius:10px 0 0 10px;padding:14px 7px;color:var(--muted);
+  font-size:13px;letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+
+/* phase wipe — the room-perceptible transition */
+.wipe{position:absolute;z-index:6;left:0;right:0;top:38%;
+  background:rgba(11,18,32,.92);border-top:2px solid var(--primary);border-bottom:2px solid var(--primary);
+  padding:calc(2vh + 10px) calc(3vw + 16px);
+  font-family:var(--font-display);font-weight:800;font-size:calc(var(--t-primary)*1.1);
+  letter-spacing:.16em;text-transform:uppercase;color:var(--primary);text-align:center}
+
+/* ---------------------------------------------------------------------------
+   COMPACT FALLBACK — below the supported host-display floor (1100x620).
+   No projector, screen-share or laptop-as-display is this small; this exists
+   so a reviewer's half-height browser window degrades instead of mangling,
+   and so a host who drags the window narrow never sees broken geometry in
+   front of a room. The meter stops being a column and becomes one line, the
+   type ladder drops to 0.5, and the option grid collapses to a single column.
+   --------------------------------------------------------------------------- */
+@media (max-width:1100px), (max-height:620px){
+  :root{ --k:.5 }
+  .main{grid-template-columns:minmax(0,1fr);gap:calc(1.2vh + 4px)}
+  .meter{border-left:0;border-top:var(--hair) solid var(--rule);padding-left:0;
+    padding-top:calc(1vh + 4px);flex-direction:row;align-items:center;gap:12px;flex-wrap:wrap}
+  .meter .bar{flex:1 1 120px}
+  .meter .roster,.meter .dots,.meter .more,.meter .allin{display:none}
+  /* a meter with no live count (RESULTS standings) has nothing left to say once
+     the roster is gone — hide the orphan heading rather than print a label. */
+  .meter:not(:has(.count)){display:none}
+  .opts{grid-template-columns:minmax(0,1fr)}
+  .cards.two{grid-template-columns:minmax(0,1fr)}
+  .cards .card:nth-child(n+4){display:none}
+  .joinblock{gap:16px}
+  .rail-meta{display:none}
+  .dock .hint,.dock .kbd{display:none}
+}
+
+/* annotation ribbon so a reviewer knows which state they are looking at */
+.tag{position:fixed;z-index:50;left:0;bottom:0;background:#000;color:#8FA3C0;
+  font:600 11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;padding:5px 10px;
+  letter-spacing:.06em;border-top-right-radius:6px;opacity:.75}
+.tag b{color:#F6A94C}
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="field"></div>
+  <header class="rail">
+    <span class="chip vote"><span class="dot"></span>Voting</span>
+    <div class="rail-meta"><span>Pricing Power</span><span class="sep">/</span><b>Round 3</b><span>of 8</span></div>
+    <div class="rail-join"><span>JOIN</span><span>eng.seibtribe.us/play</span><span class="sep">·</span><code>4821</code></div>
+  </header>
+  <div class="main">
+    <div class="content top">
+      <div class="kicker">Pick the two you would actually fund · on your phone</div>
+      <div class="cards two">
+        <div class="card lead"><span class="fill" style="width:64%"></span><span class="rank">1</span><div class="body"><div class="ans">Freeze discounting entirely for 30 days and publish the win/loss reasons weekly.</div><div class="who">Priya Raghavan</div></div><div class="tally">7<small>votes</small></div></div>
+        <div class="card"><span class="fill" style="width:45%"></span><span class="rank">2</span><div class="body"><div class="ans">Re-price the onboarding package as a paid engagement instead of a giveaway.</div><div class="who">Wes Duncan</div></div><div class="tally">5<small>votes</small></div></div>
+        <div class="card"><span class="fill" style="width:36%"></span><span class="rank">3</span><div class="body"><div class="ans">Call our ten largest accounts before they hear it from the competitor's rep.</div><div class="who">Aisha Bello</div></div><div class="tally">4<small>votes</small></div></div>
+        <div class="card"><span class="fill" style="width:27%"></span><span class="rank">4</span><div class="body"><div class="ans">Move the entry tier to usage-based so the 20% cut is not comparable.</div><div class="who">Lee Chen</div></div><div class="tally">3<small>votes</small></div></div>
+        <div class="card"><span class="fill" style="width:18%"></span><span class="rank">5</span><div class="body"><div class="ans">Do nothing on price. Ship the migration tooling we promised in Q1.</div><div class="who">Marcus Ola</div></div><div class="tally">2<small>votes</small></div></div>
+        <div class="card"><span class="fill" style="width:9%"></span><span class="rank">6</span><div class="body"><div class="ans">Publish a public price-match policy with a 12-month commitment attached.</div><div class="who">Nadia Haddad</div></div><div class="tally">1<small>vote</small></div></div>
+      </div>
+      <div class="pager"><i class="on"></i><i></i><span>Page 1 of 2 · 12 responses</span></div>
+    </div>
+    <aside class="meter">
+    <h4>Voted</h4>
+    <div class="count">7<small> / 12</small></div>
+    <div class="bar"><i style="width:58%"></i></div>
+    
+    <div class="dots"><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class="in"></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i></div>
+    
+  </aside>
+  </div>
+  <footer class="dock"><div class="status">7 of 12 voted…</div><div class="spacer"></div><span class="kbd">SPACE</span><button class="btn">Show Results</button></footer>
+</main>
+<div class="tag"><b>STATE 8</b> · VOTE · Call &amp; Answer · Room density · page 1 of 2, auto-advances</div>
+</body>
+</html>
