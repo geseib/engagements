@@ -902,11 +902,23 @@ Focus on actionable business strategy insights.`;
 
     webSocketClient.onMessage('votingStarted', (data) => {
       console.log('🔌 Voting started notification:', data);
-      // Update game state to voting without full restoration
+
+      // Move the phase immediately when the frame says so — it avoids a beat of
+      // stale header while the restore is in flight.
       if (data.newState) {
         setGameState(data.newState);
         console.log(`🔌 Updated game state to: ${data.newState}`);
       }
+
+      // Then re-sync properly, exactly like questionStarted and
+      // gameStateChanged do. Setting the phase alone was never enough: the
+      // vote screen renders `answers`, and only restoreGameState's VOTE#
+      // branch fetches them. This handler used to do nothing BUT the setState
+      // above, and the broadcast carried no `newState`, so a vote opened from
+      // the phone remote left the host page frozen on ASK with the whole room
+      // already voting. Unconditional, so a frame missing the field still
+      // recovers rather than silently no-op'ing again.
+      restoreGameState();
     });
 
     webSocketClient.onMessage('aiSummaryReady', (data) => {
@@ -1032,6 +1044,11 @@ Focus on actionable business strategy insights.`;
       return true;
     };
 
+    // Cleared in the `finally`, never inline. Four of the early returns below
+    // (the manual-change latch, and every `superseded()` bail) used to skip the
+    // reset entirely and strand this flag `true` for the rest of the session —
+    // which then suppressed question-set auto-selection, because that reads
+    // `isRestoringState` to know whether it is safe to choose one.
     setIsRestoringState(true); // Start restoration
     try {
       console.log(`🔄 HOST: Restoring game state for ${gameId}...`);
@@ -1266,19 +1283,18 @@ Focus on actionable business strategy insights.`;
 
         // Load dynamic category management data for active games
         await loadCategoryCounts();
-        
-        setIsRestoringState(false); // End restoration
+
         return true; // Successfully restored existing game
-        
+
       } else {
         console.log(`ℹ️ HOST: No existing game state found - starting fresh`);
-        setIsRestoringState(false); // End restoration
         return false; // No existing game found
       }
     } catch (e) {
       console.error('Error restoring game state:', e);
-      setIsRestoringState(false); // End restoration
       return false; // Restoration failed
+    } finally {
+      setIsRestoringState(false); // End restoration, on every path out
     }
   };
 

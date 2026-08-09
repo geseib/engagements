@@ -44,10 +44,20 @@ exports.handler = async (event) => {
     const answers = answersResult.Items || [];
     console.log(`🗳️ Found ${answers.length} answers for question ${paddedQuestionNumber}`);
 
-    // Broadcast voting started to all players
+    // Broadcast voting started to everyone attached to the game, host included.
+    //
+    // `newState` is not decoration. GameHostPage's votingStarted handler reads
+    // this exact field and nothing else, so a frame without it made the host
+    // page a no-op: drive the session from the phone remote and every player
+    // moved to VOTE while the projector sat on ASK. It used to live only in the
+    // HTTP response below, which the caller sees and nobody else does.
+    //
+    // get-results.js already puts `newState` on its gameStateChanged frame; the
+    // convention existed, this handler just didn't follow it.
     await broadcastToGame(gameId, {
       type: 'votingStarted',
       gameId: gameId,
+      newState: newState,
       state: `GAME#${gameId} ${newState}`,
       questionNumber: paddedQuestionNumber,
       timestamp: now
