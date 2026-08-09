@@ -792,3 +792,35 @@ jsdom has no layout engine, so none of the following can be a test. Run the app 
 - [ ] Scan the panel's QR with a phone, sign in with **email/password** — it opens the remote with the session loaded.
 - [ ] Scan it again in a clean browser profile, sign in with **Google** — it opens the remote, *not* the host page, and the projector stays live.
 - [ ] All four display profiles, at the real projected size: nothing clips, and the meter's green survives the fitter on a dense round (or is dropped entirely, with the dock still green — that is the designed fallback).
+
+---
+
+## Executed — and one thing parked, deliberately
+
+All three tasks landed and passed review; the final whole-branch review found a
+Critical that per-task review structurally could not see, and its fix wave passed
+a scoped re-review with every negative control reproduced independently.
+
+**Parked, with a ruling.** `shortcutsSuppressed()` is extracted and tested, and
+deleting `=== 'pinned'` from it now fails two tests — the regression spec §4
+named is closed. But deleting `qrMode,` from the argument object at its call site
+in `GameHostPage.jsx` reinstates the original defect (a pinned full-screen QR
+stops suppressing SPACE, so the host advances the round blind behind it) and
+leaves the entire suite green.
+
+**Ruling: the code as committed is correct, nothing downstream builds on this,
+and it does not block merge on behaviour.** It is a coverage gap one layer out
+from the one that was closed — the helper is tested, the wiring of `qrMode` INTO
+the helper is not. Recorded here rather than fixed because the process allows one
+fix wave after the final review and that wave is spent. Close it in the console
+work, which rewrites this call site anyway: assert the argument, not just the
+call.
+
+**Also learned, and worth more than this plan.** `src/src/setupTests.js`'s
+`window.location` mock is a silent no-op under jsdom 26 — `delete window.location`
+returns `false`, so the real `Location` survives and every assignment to
+`pathname`/`search` is a no-op navigation that also emits a jsdom error into each
+suite's console. The reviewer traced it as the root cause of **three of the five
+"stale" failing frontend suites** (`App`, `GameHostPage`, `PlayerPage`), which the
+handoff has been telling everyone not to fix. It is a latent trap for any future
+routing test, not a contaminant of this branch's tests.
