@@ -78,7 +78,30 @@ export default function Rail({ phase, title, context = {}, join = {}, timer }) {
         <div className="rail-join">
           <span data-join-word="" data-drop="2">JOIN</span>
           {join.url && <span data-join-url="" data-drop="3">{join.url}</span>}
-          {join.code && <code>{join.code}</code>}
+          {join.code && (
+            join.onPreview ? (
+              /* The code, and now also the way into the QR. Interactive ONLY when
+                 the caller supplies handlers, so a closed session or a test
+                 rendering a bare rail gets the plain element rather than a button
+                 that does nothing. Hover for a mouse, focus for a keyboard, click
+                 for a touchscreen -- which has no hover at all, so without the
+                 click path the feature would not exist on one. */
+              <code
+                tabIndex={0}
+                role="button"
+                aria-label={`Session code ${join.code}. Show the join QR code`}
+                onMouseEnter={join.onPreview}
+                onMouseLeave={join.onPreviewEnd}
+                onFocus={join.onPreview}
+                onBlur={join.onPreviewEnd}
+                onClick={join.onPin}
+              >
+                {join.code}
+              </code>
+            ) : (
+              <code>{join.code}</code>
+            )
+          )}
         </div>
       )}
     </header>

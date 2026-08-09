@@ -157,6 +157,23 @@ function GameHostPage() {
   const [qrSidebarVisible, setQrSidebarVisible] = useState(false);
   const [instructionsVisible, setInstructionsVisible] = useState(false);
   const [showExpandedQR, setShowExpandedQR] = useState(false);
+  /**
+   * null | 'preview' | 'pinned'.
+   *
+   * Three values rather than a boolean because only ONE of them may suppress
+   * the SPACE shortcut. A host who rests the mouse near the rail and loses
+   * their advance key has been given a worse screen; a pinned QR is a
+   * deliberate act with a deliberate dismissal, so that one counts.
+   */
+  const [qrMode, setQrMode] = useState(null);
+  // No other overlay on this page has an Escape handler to fold into, so this
+  // one is scoped to qrMode alone rather than joining a shared listener.
+  useEffect(() => {
+    if (!qrMode) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setQrMode(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [qrMode]);
   const [questionSetTabVisible, setQuestionSetTabVisible] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [reportData, setReportData] = useState(null);
@@ -3500,7 +3517,7 @@ Ready to engage? See you there!`;
   // reading or filling in.
   const anyOverlayOpen = Boolean(
     showConfirmModal || showQuestionBrowser || showExpandedQR ||
-    showReportsModal || lessonExpanded || isLoadingData
+    showReportsModal || lessonExpanded || isLoadingData || qrMode === 'pinned'
   );
 
   const runHostAction = (action) => {
@@ -3508,6 +3525,8 @@ Ready to engage? See you there!`;
     // Advancing clears the room-facing chrome: the Game Info / How to Play
     // rails are inspection surfaces, not part of the round.
     closeAllSidePanels();
+    // A pinned QR is chrome too -- advancing the round clears it the same way.
+    setQrMode(null);
     switch (action.intent) {
       case HOST_INTENTS.START:
       case HOST_INTENTS.NEXT:
@@ -4090,7 +4109,13 @@ Ready to engage? See you there!`;
             join={gameId
               ? (hostPhase === 'ENDED'
                 ? { code: gameId, closed: true }
-                : { url: joinDisplayUrl, code: gameId })
+                : {
+                    url: joinDisplayUrl,
+                    code: gameId,
+                    onPreview: () => setQrMode((mode) => (mode === 'pinned' ? mode : 'preview')),
+                    onPreviewEnd: () => setQrMode((mode) => (mode === 'pinned' ? mode : null)),
+                    onPin: () => setQrMode('pinned'),
+                  })
               : {}}
           />
         )}
@@ -4525,9 +4550,10 @@ Ready to engage? See you there!`;
         </div>
       </Stage>
 
-      {/* Expanded QR Code Modal */}
-      {showExpandedQR && (
-        <div className="expanded-qr-overlay" onClick={() => setShowExpandedQR(false)}>
+      {/* Expanded QR Code Modal -- also the rail's pinned/previewed QR. Same
+          overlay, same dismissal: the room only ever needs one way in. */}
+      {(showExpandedQR || qrMode) && (
+        <div className="expanded-qr-overlay" onClick={() => { setShowExpandedQR(false); setQrMode(null); }}>
           <div className="expanded-qr-content" onClick={(e) => e.stopPropagation()}>
             <div className="expanded-qr-header">
               <h2>{eventTitle || 'Engagements Session'}</h2>
