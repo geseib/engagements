@@ -96,6 +96,16 @@ const createGame = async (gameId, gameData) => {
           thirdPlacePoints: gameData.scoring?.thirdPlacePoints || 1,
           participationPoints: gameData.scoring?.participationPoints || 0
         },
+        // The host's setup choices. Read by the anonymity gate on every answer
+        // payload; `randomizeQuestions` is read at :264 for question selection.
+        // This is the third of the three edits create-game.js warns about —
+        // destructure, createGame() argument, and here. Miss this one and the
+        // field is accepted by the API and silently discarded, which is what
+        // happened to triviaTimer.
+        HostPreferences: {
+          randomizeQuestions: gameData.hostPreferences?.randomizeQuestions !== false,
+          anonymousUntilReveal: gameData.hostPreferences?.anonymousUntilReveal !== false
+        },
         ttl
       }
     }));

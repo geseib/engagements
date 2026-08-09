@@ -6,7 +6,7 @@ exports.handler = async (event) => {
   // and silently discarded that way. If you add a field to the create payload,
   // it needs THREE edits — here, the createGame() argument below, and the
   // METADATA item in schema-compliant-manager.js.
-  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, questionSetVersion, randomizeQuestions, selectedCategories, hostName, visibility, accessCode, personaId } = JSON.parse(event.body || '{}');
+  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, questionSetVersion, randomizeQuestions, anonymousUntilReveal, selectedCategories, hostName, visibility, accessCode, personaId } = JSON.parse(event.body || '{}');
 
   // Generate a unique 4-digit game ID
   const gameId = Math.floor(1000 + Math.random() * 9000).toString();
@@ -25,7 +25,10 @@ exports.handler = async (event) => {
       questionSetVersion: questionSetVersion,
       selectedCategories: selectedCategories || [],
       hostPreferences: {
-        randomizeQuestions: randomizeQuestions !== false // Default to true if not specified
+        randomizeQuestions: randomizeQuestions !== false, // Default to true if not specified
+        // Default ON, per the owner: a host who never touches setup still gets
+        // an anonymous round. Only an explicit false opts out.
+        anonymousUntilReveal: anonymousUntilReveal !== false
       },
       aiContext: aiContext,
       // The host's voice pick. Empty means "adapt to the session" — the
