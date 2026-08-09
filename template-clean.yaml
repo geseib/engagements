@@ -276,6 +276,31 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  RevealAuthorsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-reveal-authors'
+      CodeUri: lambda-functions/game/
+      Handler: reveal-authors.handler
+      Events:
+        RevealAuthors:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/reveal-authors
+            Method: post
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   ### HTTP API with Simple Naming (like original GameApi)
   RestApi:
     Type: AWS::Serverless::HttpApi

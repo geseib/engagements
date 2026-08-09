@@ -345,6 +345,74 @@ const voted = sent.map(s => s.message).find(m => m.messageType === 'VOTE#001');
 await check('playerVoted keeps its playerName', () =>
   assert.strictEqual(voted?.playerName, 'Ada'));
 
+console.log('\n8. POST /reveal-authors');
+
+const { handler: revealAuthors } = require(path.join(REPO, 'lambda-functions/game/reveal-authors.js'));
+
+seedAnonymousRound('3008');
+put({ PK: 'GAME#3008', SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
+put({ PK: 'GAME#3008', SK: 'CONNECTION#player-1', ConnectionId: 'player-1', ConnectionType: 'PLAYER' });
+sent = [];
+
+const rev = await revealAuthors({
+  pathParameters: { gameId: '3008' },
+  body: JSON.stringify({ questionNumber: 1 })
+});
+const revBody = JSON.parse(rev.body);
+
+await check('responds 200', () =>
+  assert.strictEqual(rev.statusCode, 200, rev.body));
+await check('persists AuthorsRevealed on the round', () =>
+  assert.strictEqual(store.get(key('GAME#3008', 'ROUND#001')).AuthorsRevealed, true));
+await check('returns the rows with attribution joined back on', () =>
+  assert.deepStrictEqual(revBody.answers.map(a => a.playerName), ['Ada', 'Grace']));
+await check('order is still the ballot order', () =>
+  assert.deepStrictEqual(revBody.answers.map(a => a.answer),
+    ["Ada's answer", "Grace's answer"]));
+await check('announces to every connection, host included', () =>
+  assert.deepStrictEqual(sent.map(s => s.connectionId).sort(), ['host-1', 'player-1']));
+await check('the frame is an authorsRevealed carrying the round', () => {
+  const f = sent[0].message;
+  assert.strictEqual(f.type, 'authorsRevealed');
+  assert.strictEqual(f.gameId, '3008');
+  assert.strictEqual(String(f.questionNumber), '001');
+});
+
+// A host double-tapping in front of a room must not error.
+sent = [];
+const again = await revealAuthors({
+  pathParameters: { gameId: '3008' }, body: JSON.stringify({ questionNumber: 1 })
+});
+await check('is idempotent — a second reveal still returns 200', () =>
+  assert.strictEqual(again.statusCode, 200));
+await check('is idempotent — still revealed', () =>
+  assert.strictEqual(store.get(key('GAME#3008', 'ROUND#001')).AuthorsRevealed, true));
+
+// After reveal, the ordinary answers endpoint carries names again.
+// NOTE ON EVENT SHAPE: the brief's draft asked role=player here, but this
+// round is seeded (by seedAnonymousRound's default) at ASK#001, and
+// get-answers.js's player branch only returns an `answers` array at all
+// during VOTE# (see section 1's "during ASK, the player branch returns no
+// answers array at all" — a pre-existing, anonymity-unrelated gate). role=host
+// is the branch that actually carries answers during ASK, matching section 3's
+// use of 'host' to check the same post-reveal property. Fixing the test, not
+// the handler, per the task brief.
+const afterReveal = JSON.parse((await askAnswers('3008', 'host')).body);
+await check('GET /answers now carries attribution', () =>
+  assert.strictEqual(afterReveal.answers[0].playerName, 'Ada'));
+
+console.log('\n9. reveal on a round with no answers');
+
+seedAnonymousRound('3009');
+for (const n of ['Ada', 'Grace']) store.delete(key('GAME#3009', `QUESTION#001#ANSWER#${n}`));
+const empty = await revealAuthors({
+  pathParameters: { gameId: '3009' }, body: JSON.stringify({ questionNumber: 1 })
+});
+await check('an empty round still reveals and returns 200', () =>
+  assert.strictEqual(empty.statusCode, 200));
+await check('an empty round returns an empty list', () =>
+  assert.deepStrictEqual(JSON.parse(empty.body).answers, []));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
 
