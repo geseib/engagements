@@ -142,8 +142,12 @@ const BASE = { topic: 'workplace preferences', difficulty: 'medium', allowMultip
       { ...makePolls(1, 'bad')[0], options: ['Only one'] },
     ]);
     const { job } = await runJob({ ...BASE, count: 3 });
+    assert.strictEqual(job.items.length, 2,
+      'the bad poll (one option) must be dropped, not kept and padded — 3 requested, 1 unusable, 2 survive');
     assert.ok(job.items.every((i) => i.options.length >= 2),
       'the old handler substituted ["Option 1","Option 2","Option 3"] and shipped a placeholder poll');
+    assert.ok(job.items.every((i) => i.options.every((o) => !/^Option \d+$/.test(o))),
+      'a placeholder-padded poll would satisfy options.length >= 2 just as well as a genuine one');
   });
 
   await test('allowMultiple is requested and preserved', async () => {
