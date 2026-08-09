@@ -139,6 +139,30 @@ const enterResultsState = async (gameId, paddedQuestionId) => {
     }
   }));
 
+  // VOTING HAS CLOSED, SO THE PROMISE IS DISCHARGED. The room was told "nobody
+  // sees who wrote what — the host included — until voting closes", and this is
+  // that moment. Attribution returns everywhere from here: results, Field Notes,
+  // standings, the report and the archive export.
+  //
+  // It lives in this function rather than at the call sites for the reason the
+  // comment above records — the state write used to be pasted into two branches
+  // and missing from the wavelength and zero-vote exits, so a round could close
+  // without it. The reveal must not inherit that hole.
+  //
+  // Unconditional SET, so it is idempotent: a host who resolves the same round
+  // twice does not error, and POST /reveal-authors having run first is a no-op.
+  await db.send(new UpdateCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: `ROUND#${paddedQuestionId}` },
+    UpdateExpression: 'SET #revealed = :true, #qn = :qn, #updatedAt = :updatedAt',
+    ExpressionAttributeNames: {
+      '#revealed': 'AuthorsRevealed', '#qn': 'QuestionNumber', '#updatedAt': 'UpdatedAt'
+    },
+    ExpressionAttributeValues: {
+      ':true': true, ':qn': paddedQuestionId, ':updatedAt': new Date().toISOString()
+    }
+  }));
+
   await broadcastResultsReady(gameId, paddedQuestionId);
 };
 

@@ -700,6 +700,58 @@ await check('IMPORTANT 2 fix: hidden — both participants survive the live-calc
   assert.strictEqual((liveHiddenWords.match(/a participant/g) || []).length, 2,
     `expected one redacted entry per participant, got: ${liveHiddenWords}`));
 
+console.log('\n14. voting closing reveals the round');
+
+const { handler: getResults } = require(path.join(REPO, 'lambda-functions/game/get-results.js'));
+const { isHidden } = require(path.join(REPO, 'lambda-functions/game/anonymity.js'));
+
+seedAnonymousRound('3011');
+put({ PK: 'GAME#3011', SK: 'STATE', State: 'VOTE#001', LessonNumber: 1, CurrentQuestionId: '001' });
+put({ PK: 'GAME#3011', SK: 'QUESTION#001#VOTE#Grace', PlayerName: 'Grace', Votes: { 0: 1 } });
+put({ PK: 'GAME#3011', SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
+sent = [];
+
+await getResults({ body: JSON.stringify({ gameId: '3011', questionNumber: 1 }) });
+
+// The promise is "until voting closes", not "until the host presses a button".
+// Closing the vote is what discharges it.
+await check('entering RESULTS sets AuthorsRevealed on the round', () =>
+  assert.strictEqual(store.get(key('GAME#3011', 'ROUND#001')).AuthorsRevealed, true));
+await check('the round is no longer hidden once results are in', () =>
+  assert.strictEqual(
+    isHidden(store.get(key('GAME#3011', 'METADATA')), store.get(key('GAME#3011', 'ROUND#001'))),
+    false));
+
+// And the ordinary answers endpoint carries names again, with no host action.
+//
+// role='host' here, deliberately, not 'player': section 1 above pins the
+// pre-existing, anonymity-unrelated invariant that the player branch only
+// ever returns a full `answers` array during VOTE# ("VOTE is the one phase
+// where BOTH roles actually receive an answers array"); everywhere else,
+// including RESULTS#, players get a count-only response regardless of
+// attribution. That gate predates this feature and is out of this task's
+// scope. role is client-supplied and carries no privilege distinction
+// (get-answers.js:11), so role='host' still proves what this check is
+// for — the endpoint carries names again with no POST /reveal-authors call.
+const afterVoteClose = JSON.parse((await askAnswers('3011', 'host')).body);
+await check('GET /answers carries attribution once voting has closed', () =>
+  assert.strictEqual(afterVoteClose.answers[0].playerName, 'Ada'));
+
+console.log('\n15. the round record is written even on the exits that used to skip it');
+
+// enterResultsState's own comment records that the state write used to be
+// missing from the wavelength and zero-vote exits. The reveal must not inherit
+// that hole: a round with no votes still closes.
+seedAnonymousRound('3013');
+put({ PK: 'GAME#3013', SK: 'STATE', State: 'VOTE#001', LessonNumber: 1, CurrentQuestionId: '001' });
+put({ PK: 'GAME#3013', SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
+sent = [];
+
+await getResults({ body: JSON.stringify({ gameId: '3013', questionNumber: 1 }) });
+
+await check('a round that closed with zero votes is still revealed', () =>
+  assert.strictEqual(store.get(key('GAME#3013', 'ROUND#001'))?.AuthorsRevealed, true));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
 

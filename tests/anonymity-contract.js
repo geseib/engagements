@@ -214,6 +214,57 @@ await check('the persisted flag drives the gate', async () => {
   assert.strictEqual(isHidden(md, {}), false);
 });
 
+console.log('\n7. the gate binds only formats that hold a vote');
+
+const trivia = { GameType: 'trivia', HostPreferences: { anonymousUntilReveal: true } };
+const wavelength = { GameType: 'wavelength', HostPreferences: { anonymousUntilReveal: true } };
+const callAndAnswer = { GameType: 'call-and-answer', HostPreferences: { anonymousUntilReveal: true } };
+
+// Trivia's response is a letter — there is nothing authored to attribute, and
+// redacting it breaks the host's view of who answered what. Wavelength never
+// attributes on the stage. Neither format is ever offered the option, so
+// neither may be caught by a flag that defaults ON.
+await check('trivia is never hidden, even with the flag explicitly on', () =>
+  assert.strictEqual(isHidden(trivia, {}), false));
+await check('wavelength is never hidden, even with the flag explicitly on', () =>
+  assert.strictEqual(isHidden(wavelength, {}), false));
+await check('a voting format with the flag on is still hidden', () =>
+  assert.strictEqual(isHidden(callAndAnswer, {}), true));
+
+// THE CASE THIS TASK EXISTS FOR. Every game created before this feature has no
+// HostPreferences at all, so the default-ON rule caught legacy trivia and
+// wavelength games and silently redacted them.
+await check('a legacy trivia game with no HostPreferences is not hidden', () =>
+  assert.strictEqual(isHidden({ GameType: 'trivia' }, undefined), false));
+await check('a legacy call-and-answer game with no HostPreferences is hidden', () =>
+  assert.strictEqual(isHidden({ GameType: 'call-and-answer' }, undefined), true));
+await check('an absent GameType still defaults to the voting behaviour', () =>
+  assert.strictEqual(isHidden(bare, {}), true));
+
+// Legacy spellings are stored in this table. `quiz` is trivia; a row written
+// under the old spelling must not be redacted either.
+await check('the legacy spelling "quiz" is treated as trivia', () =>
+  assert.strictEqual(isHidden({ GameType: 'quiz' }, {}), false));
+
+// Drift guard, in the spirit of the byte-identical one above. anonymity.js
+// cannot require game-types.js — that module lives only in lambda-functions/game/
+// and anonymity.js must stay byte-identical across both Lambda directories — so
+// the set is inlined there. This asserts the inlined copy still agrees with the
+// canonical vocabulary for every spelling the table can hold.
+const { GAME_TYPE_IDS, ALIASES, normalizeGameType } =
+  require(path.join(REPO, 'lambda-functions/game/game-types.js'));
+
+await check('the inlined skip-set agrees with game-types.js for every spelling', () => {
+  const SKIPS_VOTE = new Set(['trivia', 'wavelength']);
+  for (const spelling of [...GAME_TYPE_IDS, ...Object.keys(ALIASES)]) {
+    const expectedHidden = !SKIPS_VOTE.has(normalizeGameType(spelling));
+    assert.strictEqual(
+      isHidden({ GameType: spelling, HostPreferences: { anonymousUntilReveal: true } }, {}),
+      expectedHidden,
+      `'${spelling}' normalises to '${normalizeGameType(spelling)}' but the gate disagreed`);
+  }
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
 

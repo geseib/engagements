@@ -25,11 +25,38 @@
 const ANON_FIELDS = ['playerId', 'playerName', 'name'];
 
 /**
+ * Formats whose round never opens a vote.
+ *
+ * INLINED ON PURPOSE. The canonical vocabulary lives in game-types.js, and the
+ * host's runtime answer lives in src/src/config/hostControls.js
+ * (`hostRunsVotePhase`) — but this file must stay byte-identical across
+ * lambda-functions/game/ and lambda-functions/websocket/, and game-types.js
+ * exists only in the former. A require() that resolves in one bundle and not
+ * the other is worse than a duplicated four-element set.
+ * tests/anonymity-contract.js asserts this set still agrees with game-types.js
+ * for every spelling the table can hold, aliases included.
+ */
+const TYPES_THAT_SKIP_VOTE = new Set(['trivia', 'wavelength', 'quiz']);
+
+function skipsVote(gameType) {
+  return TYPES_THAT_SKIP_VOTE.has(String(gameType || '').trim().toLowerCase());
+}
+
+/**
  * @param {object} metadata the GAME#id / METADATA item
  * @param {object} round    the round record carrying AuthorsRevealed
  * @returns {boolean} true when attribution must be withheld
  */
 function isHidden(metadata, round) {
+  // Anonymity binds only the formats that hold a vote. Trivia's response is a
+  // letter, so there is nothing authored to attribute — and redacting it breaks
+  // the host's view of who answered what. Wavelength never attributes on stage.
+  //
+  // This check is not cosmetic. The flag defaults ON, and every game created
+  // before this feature has no HostPreferences at all, so without it every
+  // legacy trivia and wavelength game is silently redacted.
+  if (skipsVote(metadata && metadata.GameType)) return false;
+
   const prefs = (metadata && metadata.HostPreferences) || {};
   const anonymous = prefs.anonymousUntilReveal !== false; // default ON
   const revealed = !!(round && round.AuthorsRevealed);
