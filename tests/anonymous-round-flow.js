@@ -270,6 +270,81 @@ await check('votingStarted carries no attribution and never did', () => {
     'the broadcast has grown an attribution field');
 });
 
+console.log('\n6. the playerAnswered socket frame');
+
+// This is the leak a purely HTTP redaction would leave behind: the host's
+// socket receives a live author-to-answer mapping in real time, before any
+// endpoint is called.
+const { handler: wsMessage } = require(path.join(REPO, 'lambda-functions/websocket/message.js'));
+
+seedAnonymousRound('3006');
+put({ PK: 'GAME#3006', SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
+sent = [];
+
+// NOTE ON EVENT SHAPE: handlePlayerMessage(gameId, playerName, messageType,
+// messageData) is called with the ENTIRE parsed body as `messageData` (see
+// message.js's handler: `handlePlayerMessage(gameId, playerName, messageType,
+// body)`), and handlePlayerAnswer destructures `const { answer } =
+// messageData` off that same object. So the answer text belongs at the top
+// level of the body, not nested under a `messageData: {...}` envelope — a
+// nested shape would leave `answer` inaccessible to the handler and would
+// make the leak this test exists to catch invisible by accident rather than
+// by the redaction actually working.
+await wsMessage({
+  requestContext: { connectionId: 'player-conn-1', domainName: 'ws.test.invalid', stage: 'dev' },
+  body: JSON.stringify({
+    action: 'message', gameId: '3006', playerName: 'Ada',
+    messageType: 'ANSWER#001', answer: 'a splendid answer'
+  })
+});
+
+const answered = sent.map(s => s.message).find(m => m.type === 'playerAnswered' || m.messageType === 'ANSWER#001');
+
+// NOTE: `check` is async, so it must be awaited — a bare `check(...)` here
+// races the final summary/process.exit() and can silently drop the LAST
+// unawaited check's result before its microtask ever runs (caught empirically:
+// with these calls unawaited, the file reported 20 checks even though 21
+// check() calls exist in source). Every other section in this file already
+// awaits; matching that here.
+await check('a playerAnswered frame was still sent', () =>
+  assert.ok(answered, 'the host was told nothing at all — progress would stall'));
+await check('the frame names nobody', () =>
+  assert.ok(!('playerName' in answered),
+    `leaked author over the socket: ${JSON.stringify(answered)}`));
+await check('the frame carries no answer text', () =>
+  assert.ok(!('answer' in answered),
+    `leaked answer body over the socket: ${JSON.stringify(answered)}`));
+await check('the frame still identifies the round', () =>
+  assert.strictEqual(String(answered.questionNumber), '001'));
+
+console.log('\n7. playerVoted is NOT anonymised');
+
+seedAnonymousRound('3007');
+put({ PK: 'GAME#3007', SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
+sent = [];
+await wsMessage({
+  requestContext: { connectionId: 'player-conn-2', domainName: 'ws.test.invalid', stage: 'dev' },
+  body: JSON.stringify({
+    action: 'message', gameId: '3007', playerName: 'Ada',
+    messageType: 'VOTE#001', votedFor: 'Grace'
+  })
+});
+// NOTE ON EVENT SHAPE: message.js's isHostMessage() matches ANY
+// 'VOTE#'-prefixed messageType, and the top-level handler checks
+// isHostMessage() before isPlayerMessage() — so a player-originated
+// VOTE#001 message is always routed through handleHostMessage, never through
+// handlePlayerMessage's own VOTE# branch (the one that assigns
+// notificationType = 'playerVoted', and the one this task's binding
+// constraints forbid touching). That branch is unreachable through the real
+// exported handler for any messageType value; it's a pre-existing routing
+// property, not something this task's redaction change affects. §5.6.6: this
+// feature is about who WROTE an answer, not who voted for it — the invariant
+// this test can honestly check against the real handler is that whatever
+// frame VOTE#001 does produce keeps the player's name.
+const voted = sent.map(s => s.message).find(m => m.messageType === 'VOTE#001');
+await check('playerVoted keeps its playerName', () =>
+  assert.strictEqual(voted?.playerName, 'Ada'));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
 

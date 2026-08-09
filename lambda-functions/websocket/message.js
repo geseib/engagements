@@ -2,6 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand, DeleteCommand, PutCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { resolveSetPartition } = require('./set-version');
+const { isHidden } = require('./anonymity');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -579,6 +580,37 @@ async function handlePlayerMessage(gameId, playerName, messageType, messageData)
         const questionNumber = messageType.replace('ANSWER#', '');
         notificationData.questionNumber = questionNumber;
         notificationData.questionId = questionNumber; // For backward compatibility
+
+        // ANONYMITY. This frame is the one leak a purely HTTP redaction would
+        // leave behind: it hands the host's socket a live author-to-answer
+        // mapping the moment an answer lands, before any endpoint is called.
+        // Under §5.6.2 the host is inside "nobody", so while hidden we announce
+        // only THAT an answer arrived and which round it belongs to.
+        //
+        // The host still needs the count to know whether it can move on, and
+        // the count is not attribution — see §5.6.2's split between "who has
+        // not acted" and "who wrote which answer".
+        const [metaRes, roundRes] = await Promise.all([
+          db.send(new GetCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
+          })),
+          db.send(new GetCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: `GAME#${gameId}`, SK: `ROUND#${questionNumber}` }
+          }))
+        ]);
+
+        if (isHidden(metaRes.Item, roundRes.Item)) {
+          notificationData = {
+            messageType,
+            gameId,
+            questionNumber,
+            questionId: questionNumber,
+            timestamp: new Date().toISOString()
+          };
+        }
+
         console.log(`🔔 Preparing playerAnswered notification: questionNumber=${questionNumber}, playerName=${playerName}`);
       } else if (messageType.startsWith('VOTE#')) {
         notificationType = 'playerVoted';
