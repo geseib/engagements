@@ -52,6 +52,66 @@ export function displayLabelFor(answer, index) {
 }
 
 /**
+ * What to print above an answer when the STAGE has its own opinion.
+ *
+ * `displayLabelFor` decides from the row alone, which is right for a payload
+ * the server redacted. It is wrong for the RESULTS view, where every row
+ * already carries its author (voting closed, so the server sent the names) and
+ * the host wants the projector to stop showing them again. Passing
+ * `authorsHidden` makes the label obey the stage instead of the row.
+ *
+ * DISPLAY ONLY, AND SAY SO. The payload was already delivered; this un-sends
+ * nothing. It is a projector control, never a security control.
+ */
+export function stageLabelFor(answer, index, { authorsHidden } = {}) {
+  return authorsHidden ? `Response ${index + 1}` : displayLabelFor(answer, index);
+}
+
+/**
+ * What the host must do when a `playerAnswered` frame arrives.
+ *
+ * THE FRAME IS REDACTED WHILE A ROUND IS HIDDEN — message.js strips
+ * `playerName` on purpose, so the host learns THAT somebody answered without
+ * learning who. Both facts have to survive that:
+ *
+ *   - `refetchQuestion` is unconditional. It is what repopulates the host's
+ *     `answers` array, and `answers.length` is the only thing that enables the
+ *     ASK primary (hostControls.js: 'Nobody has answered yet'). There is no
+ *     poll behind it; if this is skipped the host can never start voting, which
+ *     is the normal path for an anonymous call-and-answer round.
+ *   - `markAnswered` is the name, when there is one. Absent on a hidden round,
+ *     where the roster ticks come from the server's participation list instead
+ *     (get-game-state's answerProgress.answererIds).
+ *
+ * Returned as a decision rather than performed here so it can be tested
+ * without mounting a 5000-line component.
+ */
+export function playerAnsweredActions(data) {
+  const frame = data || {};
+  const name = typeof frame.playerName === 'string' && frame.playerName.length > 0
+    ? frame.playerName
+    : null;
+  const question = frame.questionNumber ?? null;
+  return { markAnswered: name, refetchQuestion: question };
+}
+
+/**
+ * The author names carried by a list of answer rows, with the redacted ones
+ * dropped rather than kept as `undefined`.
+ *
+ * The host's "who has answered" ticks match on player name, so a list of
+ * `undefined` ticks nobody — and worse, overwrites the correct list the server
+ * already supplied. Callers must treat an empty result as "this payload says
+ * nothing about participation" and leave the existing list alone, which is
+ * exactly what a fully-redacted round returns.
+ */
+export function answeredNamesFrom(answers) {
+  return (answers || [])
+    .map((a) => (a && typeof a.playerName === 'string' ? a.playerName : ''))
+    .filter(Boolean);
+}
+
+/**
  * Whether THIS game actually withheld authorship — the type supports it AND
  * the host didn't turn it off for this particular game. `anonymousUntilReveal`
  * is the per-game flag from setup (createPayloadFor), read back from
@@ -68,9 +128,21 @@ export function anonymityActive({ gameType, anonymousUntilReveal }) {
 }
 
 /**
- * Whether standings may be shown. See §5.6.4: a live leaderboard during an
- * anonymous round is attribution by arithmetic, so it waits for the reveal —
- * but only for a round that is actually anonymous in the first place.
+ * Whether standings may be shown ALONGSIDE A ROUND'S ANSWERS. See §5.6.4: a
+ * score printed next to a response is attribution by arithmetic — it names the
+ * author as surely as a label would — so it goes wherever the names go.
+ *
+ * SCOPED TO THE RESULTS VIEW, deliberately. This used to gate the per-player
+ * score on the persistent roster, which renders in every phase, so it deleted
+ * standings from LOBBY, ASK and VOTE as well and kept round 3's
+ * already-revealed totals hidden all through round 4 — with nowhere else for
+ * the host to see them. A cumulative total during an unrevealed round leaks
+ * nothing anyway: no points exist until RESULTS, and entering RESULTS is what
+ * reveals.
+ *
+ * `authorsRevealed` here is whatever currently decides the labels — on the
+ * RESULTS stage that is the local display toggle, not the server flag, so that
+ * hiding the names takes the arithmetic with it.
  */
 export function standingsVisible({ gameType, anonymousUntilReveal, authorsRevealed } = {}) {
   return !anonymityActive({ gameType, anonymousUntilReveal }) || authorsRevealed === true;

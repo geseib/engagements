@@ -16,7 +16,10 @@ import {
 import { resetGameSession } from './config/gameSession';
 import { gameTypeMeta } from './config/gameTypes';
 import { hostControlsFor, phaseOfGameState, HOST_INTENTS } from './config/hostControls';
-import { anonymityApplies, anonymityActive, createPayloadFor, displayLabelFor, standingsVisible } from './config/anonymity';
+import {
+  anonymityApplies, anonymityActive, createPayloadFor, displayLabelFor,
+  stageLabelFor, standingsVisible, playerAnsweredActions, answeredNamesFrom,
+} from './config/anonymity';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
 
@@ -99,11 +102,16 @@ function GameHostPage() {
   const [showReport, setShowReport] = useState(false);
   const [reportData, setReportData] = useState(null);
   const [lessonNumber, setLessonNumber] = useState(0);
-  // Whether this round's authors are showing. AuthorsRevealed flips
+  // SERVER TRUTH: has this round's AuthorsRevealed been set? It flips
   // automatically when the round enters RESULTS (get-results.js's
-  // enterResultsState), so this is mostly a display step; handleRevealAuthors
-  // below is the override for a host who wants names back before that.
+  // enterResultsState); handleRevealAuthors is the override for a host who
+  // wants names back before voting closes.
   const [authorsRevealed, setAuthorsRevealed] = useState(false);
+  // DISPLAY ONLY, and deliberately separate from the above. The RESULTS payload
+  // has already been delivered with its names in it; this decides whether the
+  // projector prints them. It un-sends nothing and must never be described as
+  // a security control. Resets per round.
+  const [authorsHiddenOnStage, setAuthorsHiddenOnStage] = useState(false);
 
   // Custom instruction state for question set instructions
   const [customInstruction, setCustomInstruction] = useState(null);
@@ -313,6 +321,7 @@ function GameHostPage() {
     currentQuestionIndex: setCurrentQuestionIndex,
     lessonNumber: setLessonNumber,
     authorsRevealed: setAuthorsRevealed,
+    authorsHiddenOnStage: setAuthorsHiddenOnStage,
     players: setPlayers,
     answers: setAnswers,
     playersWhoAnswered: setPlayersWhoAnswered,
@@ -881,21 +890,36 @@ Focus on actionable business strategy insights.`;
 
     webSocketClient.onMessage('playerAnswered', (data) => {
       console.log('🔌 Player answered notification:', data);
-      // Update the playersWhoAnswered list directly
-      if (data.playerName) {
+      // The two halves of this frame are INDEPENDENT, and used to be nested.
+      //
+      // message.js strips playerName while a round is hidden — correctly — but
+      // the refetch below is what fills `answers`, and `answers.length` is the
+      // only thing that enables the ASK primary (hostControls.js: 'Nobody has
+      // answered yet'). Nothing polls. So gating the refetch on a name that is
+      // deliberately absent left the host unable to start voting at all on the
+      // normal path for an anonymous call-and-answer round, recoverable only by
+      // a socket reconnect. See config/anonymity.js: playerAnsweredActions.
+      const { markAnswered, refetchQuestion } = playerAnsweredActions(data);
+
+      if (markAnswered) {
         setPlayersWhoAnswered(prev => {
-          if (!prev.includes(data.playerName)) {
-            console.log(`✅ Marking ${data.playerName} as answered`);
-            return [...prev, data.playerName];
+          if (!prev.includes(markAnswered)) {
+            console.log(`✅ Marking ${markAnswered} as answered`);
+            return [...prev, markAnswered];
           }
           return prev;
         });
-        
-        // Refresh answers array to enable vote button
-        if (data.questionNumber) {
-          console.log(`🔄 Refreshing answers for question ${data.questionNumber} to enable vote button`);
-          fetchAnswersForQuestion(data.questionNumber);
-        }
+      } else {
+        // Hidden round: the roster ticks come from the server's participation
+        // list (get-game-state's answerProgress.answererIds) on the next
+        // resync, not from this frame.
+        console.log('🔒 Answer received on an anonymous round — no name to mark');
+      }
+
+      // Unconditional: this is what enables the vote button.
+      if (refetchQuestion) {
+        console.log(`🔄 Refreshing answers for question ${refetchQuestion} to enable vote button`);
+        fetchAnswersForQuestion(refetchQuestion);
       }
     });
 
@@ -1345,10 +1369,20 @@ Focus on actionable business strategy insights.`;
       console.log(`🔍 HOST: Answers for question ${questionNumber}:`, questionAnswers);
       
       setAnswers(questionAnswers);
-      
-      const playerNames = questionAnswers.map(a => a.playerName);
-      setPlayersWhoAnswered(playerNames);
-      console.log(`✅ HOST: Set playersWhoAnswered to:`, playerNames);
+
+      // Participation is derived from these rows ONLY when they carry names.
+      // On a hidden round every row is redacted, so this used to write
+      // [undefined, undefined] over the correct answererIds list restoreGameState
+      // had just set six lines earlier — no player card ever showed its tick.
+      // An empty result means "this payload says nothing about who answered",
+      // which is not the same as "nobody answered". See answeredNamesFrom.
+      const playerNames = answeredNamesFrom(questionAnswers);
+      if (playerNames.length > 0) {
+        setPlayersWhoAnswered(playerNames);
+        console.log(`✅ HOST: Set playersWhoAnswered to:`, playerNames);
+      } else {
+        console.log('🔒 HOST: answers carry no attribution — leaving playersWhoAnswered as the server set it');
+      }
       console.log(`📝 HOST: Loaded ${questionAnswers.length} answers for question ${questionNumber}`);
     } catch (e) {
       console.error('Error fetching answers for question:', e);
@@ -1949,6 +1983,7 @@ Focus on actionable business strategy insights.`;
       setCurrentAnswerIndex(0);
       setLessonNumber(lessonNumber);
       setAuthorsRevealed(false); // A new round starts anonymous, not the last one's reveal
+      setAuthorsHiddenOnStage(false); // and not with the last round's projector override, either
       setCurrentQuestionId(questionId);
       
       // Set the questions array
@@ -2270,6 +2305,9 @@ Focus on actionable business strategy insights.`;
       // unconditionally as part of this same request (Task 8) — mirror that
       // here instead of waiting for a re-sync to notice it.
       setAuthorsRevealed(true);
+      // Results open with the names showing; the stage toggle is an override
+      // the host applies afterwards, not a state a new round inherits.
+      setAuthorsHiddenOnStage(false);
       console.log(`✅ HOST: Set game state to ${resultsState}`);
       
       // Notify players that results are ready
@@ -2295,16 +2333,24 @@ Focus on actionable business strategy insights.`;
     }
   };
 
-  // Display step, plus an override. AuthorsRevealed flips when voting closes
-  // (get-results.js:enterResultsState), so this endpoint is only load-bearing
-  // when the host reveals BEFORE closing the vote. Calling it when the round is
-  // already revealed is a harmless no-op — the endpoint is idempotent — but
-  // there is nothing to fetch, so skip the round-trip and leave the display as
-  // is. `‹ Hide again` is the separate, purely-local toggle back to hidden.
+  // THE EARLY REVEAL — reachable only from ASK# / VOTE#. AuthorsRevealed flips
+  // by itself when voting closes (get-results.js:enterResultsState), so this
+  // endpoint is load-bearing exactly when the host wants the names up first.
+  // The RESULTS-phase control is a separate, purely-local display toggle and
+  // deliberately does NOT come through here: the rows it renders are
+  // tally-shaped (points/votes/placement) and this endpoint answers with
+  // ballot-shaped ones, so calling it there blanked the whole panel.
+  //
+  // The guard stays: an already-revealed round has nothing to fetch, and the
+  // endpoint is idempotent anyway.
+  //
+  // authFetch, not fetch — the route carries the Cognito authorizer, because
+  // any participant knows the four-digit game id and one unauthenticated POST
+  // would otherwise end the whole room's anonymity.
   const handleRevealAuthors = async () => {
     if (authorsRevealed) return;
     try {
-      const res = await fetch(`${API_BASE}games/${gameId}/reveal-authors`, {
+      const res = await authFetch(`${API_BASE}games/${gameId}/reveal-authors`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ questionNumber: lessonNumber })
@@ -3876,13 +3922,15 @@ Ready to engage? See you there!`;
                 <div className="player-name">
                   {rankIcon} <span className="player-name-text">{player.name || player.playerName || 'Unknown Player'}</span>
                 </div>
-                {/* Attribution by arithmetic (see config/anonymity.js: standingsVisible):
-                    withheld while an anonymous round is unrevealed, because a
-                    score jumping here identifies the author of that round's
-                    top-scoring answer as surely as a name would. */}
-                {standingsVisible({ gameType: currentGameType, anonymousUntilReveal, authorsRevealed }) && (
-                  <div className="player-score">{score} pts</div>
-                )}
+                {/* The roster renders in EVERY phase, so gating it here deleted
+                    standings from LOBBY, ASK and VOTE too, and kept round 3's
+                    already-revealed totals hidden all through round 4 — with
+                    nowhere else for the host to see them. Nothing is leaked by
+                    a cumulative total during an anonymous round: no points are
+                    awarded until RESULTS, which is also what reveals. The gate
+                    that the plan actually asked for is the current round's
+                    contribution, in the RESULTS view below. */}
+                <div className="player-score">{score} pts</div>
                 {gameState.startsWith('ASK#') && (
                   <div className={`answer-status ${playersWhoAnswered.includes(player.name) ? 'answered' : 'waiting'}`}>
                     {playersWhoAnswered.includes(player.name)
@@ -4108,6 +4156,30 @@ Ready to engage? See you there!`;
           </div>
         )}
 
+        {/* THE REVEAL, in the only phases where it means anything.
+            AuthorsRevealed flips by itself when voting closes, so
+            POST /reveal-authors is load-bearing exactly here — a host who wants
+            the names on screen BEFORE the vote closes. It previously had no
+            control on this path at all: the only button lived inside the
+            RESULTS block, where the round is already revealed and the handler
+            early-returns. Unlike the RESULTS toggle this is not cosmetic; it
+            ends the round's anonymity for the whole room and cannot be undone,
+            so the copy says so. */}
+        {(gameState.startsWith('ASK#') || gameState.startsWith('VOTE#'))
+          && anonymityActive({ gameType: currentGameType, anonymousUntilReveal })
+          && !authorsRevealed
+          && answers.length > 0 && (
+          <div className="early-reveal">
+            <button className="reveal-authors-btn" onClick={handleRevealAuthors}>
+              Reveal Authors
+            </button>
+            <p className="early-reveal-help">
+              Shows who wrote each response to everyone, now, instead of waiting for
+              voting to close. This cannot be undone.
+            </p>
+          </div>
+        )}
+
         {gameState.startsWith('RESULTS#') && (
           <div className={`results-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
             <h2 className="results-heading">
@@ -4115,21 +4187,26 @@ Ready to engage? See you there!`;
               <span>{getHostRoundNoun()} {parseInt(gameState.split('#')[1])} · Results</span>
             </h2>
 
-            {/* Only a game that actually withheld authorship has anything to
-                reveal — a format that supports anonymity but had it turned off
+            {/* A PROJECTOR CONTROL, NOT A REVEAL. By the time RESULTS is on
+                screen the round is already revealed (get-results.js's
+                enterResultsState) and every row here carries its author, so
+                there is nothing left to fetch — this only decides whether the
+                room sees the names right now. It calls no endpoint: the old
+                "Reveal Authors" half of this control re-POSTed and replaced
+                these tally-shaped rows with ballot-shaped ones, blanking the
+                points, votes and placements after two clicks.
+
+                Only a game that actually withheld authorship has anything to
+                hide — a format that supports anonymity but had it turned off
                 for this game is exactly as inert here as one that never
-                supports it at all (an option that cannot do anything is a
-                question a host should not be asked). */}
+                supports it at all. */}
             {anonymityActive({ gameType: currentGameType, anonymousUntilReveal }) && (
-              authorsRevealed ? (
-                <button className="ghost-step-back" onClick={() => setAuthorsRevealed(false)}>
-                  ‹ Hide again
-                </button>
-              ) : (
-                <button className="reveal-authors-btn" onClick={handleRevealAuthors}>
-                  Reveal Authors
-                </button>
-              )
+              <button
+                className="stage-authors-toggle"
+                onClick={() => setAuthorsHiddenOnStage(h => !h)}
+              >
+                {authorsHiddenOnStage ? 'Show authors' : 'Hide authors'}
+              </button>
             )}
 
             {currentGameType === 'trivia' ? (
@@ -4295,16 +4372,31 @@ Ready to engage? See you there!`;
                 console.log(`🧮 This means previous score was: ${playerTotalScore - totalPoints}`);
                 
                 const previousScore = playerTotalScore - totalPoints;
-                const displayName = displayLabelFor(answer, idx);
+                // The stage toggle beats the row here: these rows always carry
+                // their author by the time RESULTS is showing.
+                const displayName = stageLabelFor(answer, idx, { authorsHidden: authorsHiddenOnStage });
 
                 return (
                   <div key={idx} className={`result-item ${totalPoints > 0 ? 'scored' : ''}`}>
                     <div className="result-player-header">
                       <div className="result-player-name">{displayName}</div>
-                      <div className="result-points">
-                        <span className="points-this-round">+{totalPoints} pts this round</span>
-                        <span className="points-total">Total: {playerTotalScore} pts</span>
-                      </div>
+                      {/* Attribution by arithmetic: this round's contribution
+                          and the running total sit on the row whose name was
+                          just hidden, and a score that jumps names its author
+                          as surely as a label would. Hiding the names on stage
+                          has to take the arithmetic with it, or the button is
+                          decorative. Cumulative standings stay on the roster
+                          throughout — no points exist for an unrevealed round. */}
+                      {standingsVisible({
+                        gameType: currentGameType,
+                        anonymousUntilReveal,
+                        authorsRevealed: !authorsHiddenOnStage,
+                      }) && (
+                        <div className="result-points">
+                          <span className="points-this-round">+{totalPoints} pts this round</span>
+                          <span className="points-total">Total: {playerTotalScore} pts</span>
+                        </div>
+                      )}
                     </div>
                     <div className="result-answer">"{answer.answer}"</div>
                     <div className="result-breakdown">

@@ -64,6 +64,10 @@ export function initialGameSession() {
     // Whether the round in play has shown its authors. Round-scoped, exactly
     // like lessonNumber — a new game must not inherit the last one's reveal.
     authorsRevealed: false,
+    // The projector-only override on top of it. Same reason it is listed here:
+    // a host who hid the names on the last game's final round must not walk
+    // into the next game's results with them already hidden.
+    authorsHiddenOnStage: false,
 
     // --- the room ------------------------------------------------------
     players: [],

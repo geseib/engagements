@@ -9652,3 +9652,122 @@ body {
     justify-content: flex-start;
   }
 }
+
+/* ===========================================================
+   ANONYMOUS RESPONSES
+   Every class below rendered as an unstyled browser-default
+   element before this block existed, two of them on the stage
+   in front of a room. Sized and coloured to match the controls
+   they stand next to rather than inventing a new idiom.
+   =========================================================== */
+
+/* The create-game dialog's "Anonymous responses" section. Matches
+   .form-group / .dialog-help-text, its immediate neighbours. */
+.setup-section {
+  margin-bottom: 20px;
+  padding-top: 16px;
+  border-top: var(--hairline);
+}
+
+.setup-section h3 {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin: 0 0 10px;
+}
+
+.setup-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.setup-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.setup-toggle-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.setup-help {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.setup-help--muted {
+  color: var(--muted);
+  opacity: 0.85;
+  font-style: italic;
+}
+
+/* THE EARLY REVEAL (ASK# / VOTE#). This one is irreversible and ends the
+   room's anonymity, so it is deliberately not a primary-weight button — the
+   host should have to mean it. */
+.early-reveal {
+  margin: 16px auto 0;
+  max-width: 520px;
+  text-align: center;
+}
+
+.reveal-authors-btn {
+  background: transparent;
+  color: var(--primary);
+  border: 2px solid var(--primary);
+  padding: 10px 22px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.reveal-authors-btn:hover {
+  background: var(--primary);
+  color: var(--bg);
+}
+
+.early-reveal-help {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* THE STAGE TOGGLE (RESULTS#). Display only — it calls nothing and un-sends
+   nothing — so it is deliberately the quietest control on the panel. */
+.stage-authors-toggle {
+  display: block;
+  margin: 0 auto 16px;
+  background: transparent;
+  color: var(--muted);
+  border: var(--hairline);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.stage-authors-toggle:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.big-screen-mode .stage-authors-toggle,
+.big-screen-mode .reveal-authors-btn {
+  font-size: 1.1rem;
+  padding: 10px 24px;
+}
