@@ -529,6 +529,47 @@ async function runJob(body, workerCtx = ctx()) {
       'tiny wavelength items should batch larger than scenarios');
   });
 
+  console.log('\njob records carry an optional set-level meta');
+
+  await test('a job with no meta polls cleanly as meta: null', async () => {
+    reset();
+    bedrockHandler = () => toolResponse(makeItems(2, 'nometa'));
+    const { job } = await runJob({ scenarioType: 'custom', engagementType: 'call-and-answer', count: 2 });
+    assert.strictEqual(job.meta, null, 'absent meta must poll as null, not undefined');
+    assert.strictEqual(job.status, 'complete');
+  });
+
+  await test('meta written by a worker survives to the poll payload', async () => {
+    reset();
+    const {
+      newJobId, createJob, updateJobProgress, completeJob, getJob, jobToResponse,
+    } = require(path.join(REPO, 'lambda-functions/admin/shared/generation-jobs.js'));
+    const jobId = newJobId();
+    await createJob(docClient, 'engage-test', { jobId, kind: 'test', requested: 1 });
+    await updateJobProgress(docClient, 'engage-test', jobId, {
+      completed: 0, phase: 'x', meta: { title: 'Improved Title', description: 'Improved description' },
+    });
+    await completeJob(docClient, 'engage-test', jobId, { items: [{ title: 'a' }] });
+    const res = jobToResponse(await getJob(docClient, 'engage-test', jobId));
+    assert.deepStrictEqual(res.meta, { title: 'Improved Title', description: 'Improved description' },
+      'meta written mid-run must survive completeJob');
+  });
+
+  await test('failJob keeps meta and partial items', async () => {
+    reset();
+    const {
+      newJobId, createJob, updateJobProgress, failJob, getJob, jobToResponse,
+    } = require(path.join(REPO, 'lambda-functions/admin/shared/generation-jobs.js'));
+    const jobId = newJobId();
+    await createJob(docClient, 'engage-test', { jobId, kind: 'test', requested: 3 });
+    await updateJobProgress(docClient, 'engage-test', jobId, { meta: { title: 'Kept' } });
+    await failJob(docClient, 'engage-test', jobId, 'bedrock exploded', { items: [{ title: 'partial' }] });
+    const res = jobToResponse(await getJob(docClient, 'engage-test', jobId));
+    assert.deepStrictEqual(res.meta, { title: 'Kept' }, 'a failure must not discard set-level meta');
+    assert.strictEqual(res.items.length, 1);
+    assert.match(res.error, /bedrock exploded/);
+  });
+
   console.log(`\n${passed} passed, ${failed} failed\n`);
   if (failed > 0) process.exit(1);
 })();

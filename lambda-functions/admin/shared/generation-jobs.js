@@ -88,7 +88,9 @@ async function createJob(dynamodb, tableName, { jobId, kind, requested, request 
  * written on every update too, so a worker that dies mid-run still leaves the
  * scenarios it already produced behind rather than throwing them away.
  */
-async function updateJobProgress(dynamodb, tableName, jobId, { completed, phase, items, warnings }) {
+async function updateJobProgress(dynamodb, tableName, jobId, {
+  completed, phase, items, warnings, meta,
+}) {
   const sets = ['#status = :running', 'updatedAt = :now'];
   const names = { '#status': 'status' };
   const values = { ':running': STATUS.RUNNING, ':now': new Date().toISOString() };
@@ -97,6 +99,10 @@ async function updateJobProgress(dynamodb, tableName, jobId, { completed, phase,
   if (phase) { sets.push('phase = :phase'); values[':phase'] = phase; }
   if (Array.isArray(items)) { sets.push('#items = :items'); names['#items'] = 'items'; values[':items'] = items; }
   if (Array.isArray(warnings)) { sets.push('warnings = :warnings'); values[':warnings'] = warnings; }
+  // Set-level result, distinct from the items: the survey builder's AI-improved
+  // title and description. Written only when a worker actually produced one, so
+  // every existing caller is unaffected.
+  if (meta && typeof meta === 'object') { sets.push('#meta = :meta'); names['#meta'] = 'meta'; values[':meta'] = meta; }
 
   await dynamodb.send(new UpdateCommand({
     TableName: tableName,
@@ -107,21 +113,30 @@ async function updateJobProgress(dynamodb, tableName, jobId, { completed, phase,
   }));
 }
 
-async function completeJob(dynamodb, tableName, jobId, { items, warnings = [] }) {
+async function completeJob(dynamodb, tableName, jobId, { items, warnings = [], meta }) {
+  const sets = [
+    '#status = :status', '#items = :items', 'warnings = :warnings',
+    'completed = :completed', 'phase = :phase', 'updatedAt = :now',
+  ];
+  const names = { '#status': 'status', '#items': 'items' };
+  const values = {
+    ':status': STATUS.COMPLETE,
+    ':items': items,
+    ':warnings': warnings,
+    ':completed': items.length,
+    ':phase': `Generated ${items.length} of ${items.length}`,
+    ':now': new Date().toISOString(),
+  };
+  // Omitted meta must LEAVE an earlier one alone, not overwrite it with null —
+  // the survey worker writes meta on its first pass and completes much later.
+  if (meta && typeof meta === 'object') { sets.push('#meta = :meta'); names['#meta'] = 'meta'; values[':meta'] = meta; }
+
   await dynamodb.send(new UpdateCommand({
     TableName: tableName,
     Key: jobKey(jobId),
-    UpdateExpression:
-      'SET #status = :status, #items = :items, warnings = :warnings, completed = :completed, phase = :phase, updatedAt = :now',
-    ExpressionAttributeNames: { '#status': 'status', '#items': 'items' },
-    ExpressionAttributeValues: {
-      ':status': STATUS.COMPLETE,
-      ':items': items,
-      ':warnings': warnings,
-      ':completed': items.length,
-      ':phase': `Generated ${items.length} of ${items.length}`,
-      ':now': new Date().toISOString(),
-    },
+    UpdateExpression: `SET ${sets.join(', ')}`,
+    ExpressionAttributeNames: names,
+    ExpressionAttributeValues: values,
   }));
 }
 
@@ -170,6 +185,7 @@ function jobToResponse(item) {
     completed: item.completed || 0,
     items: item.items || [],
     warnings: item.warnings || [],
+    meta: item.meta || null,
     error: item.errorMessage || null,
     updatedAt: item.updatedAt,
   };
