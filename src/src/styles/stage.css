@@ -10,6 +10,20 @@
  *   lines 122-131  the .stage grid
  *   lines 133-144  the .field treatment, including the two :root.d-call
  *                  overrides
+ *   lines 149-196  .rail and .chip, including the .rail-title min-width:22ch
+ *                  correction (see the comment at that rule)
+ *   lines 198-206  .bar, including the doubled striped "done" band
+ *   lines 207-218  .main and .main.solo, including the minmax(0,1fr)
+ *                  content-track correction (see the comment at that rule)
+ *   lines 463-503  .dock, .dock-more, .btn and the dock's status/hint/kbd
+ *
+ * .content / .fitbox below are MERGED with lines 219-243, not appended as a
+ * second rule set for the same selector — see the merge note at that rule.
+ *
+ * .meter is NOT ported. The mockup's version carries a numeral, a progress
+ * bar, a dot matrix and a roster; RoomMeter.jsx renders one labelled
+ * fraction, so only the surviving rules (the box, the heading, the fraction)
+ * are declared here, freshly.
  *
  * Color tokens referenced here (--bg, --text, --font-ui, etc.) are declared
  * in ../styles.css, imported alongside this file.
@@ -107,6 +121,76 @@ body{
 :root.d-call .field{background:var(--bg)}
 :root.d-call .field::after{display:none}
 
+/* ------------------------------------------------------------------- RAIL */
+.rail{grid-area:rail;position:relative;z-index:2;min-width:0;overflow:hidden;
+  display:flex;align-items:center;gap:calc(1.2vw + 8px);
+  padding:calc(1.1vh + 6px) calc(2.4vw + 10px);}
+.chip{flex:none;display:inline-flex;align-items:center;gap:.5em;
+  font-family:var(--font-display);font-weight:800;
+  font-size:var(--t-meta);letter-spacing:.13em;text-transform:uppercase;
+  padding:.34em .8em;border-radius:999px;border:2px solid currentColor;}
+.chip .dot{width:.6em;height:.6em;border-radius:50%;background:currentColor}
+.chip.lobby{color:var(--muted)}
+.chip.ask{color:var(--primary)}
+.chip.vote{color:var(--secondary)}
+.chip.results{color:var(--success)}
+.chip.done{color:var(--primary)}
+
+/* One text node, display:block, so text-overflow can actually render. On the
+   previous flex container the ellipsis was inert and the title clipped
+   mid-glyph — which is why A7 exists in the audit. */
+/* A minimum width, so the title is either READABLE OR GONE.
+   With min-width:0 it shrank silently to a 14% stub ("Q3 Lead…") while the
+   rail never reported an overflow, so fitChrome() never fired and the drop
+   ladder never ran. The floor makes the rail overflow instead, which is what
+   triggers the sacrifice. The 34ch cap is gone: it truncated the title at 1920
+   with 395-615px of rail sitting free. */
+.rail-title{flex:0 1 auto;min-width:22ch;display:block;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:var(--t-meta);color:var(--text);font-weight:700;letter-spacing:.02em}
+.rail-ctx{flex:none;display:flex;align-items:baseline;gap:.5em;white-space:nowrap;
+  font-size:var(--t-meta);color:var(--muted);font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase}
+.rail-ctx b{color:var(--text);font-weight:700}
+.rail-ctx i{opacity:.35;font-style:normal}
+/* Optional round timer. OFF by default and armed from the setup panel — see
+   the ruling in spec section 5.1. It is a real countdown the host set, not the
+   answer-progress ring dressed as a clock that this redesign removed. */
+.rail-timer{flex:none;display:inline-flex;align-items:baseline;gap:.35em;
+  font-family:var(--font-display);font-weight:800;
+  font-size:calc(var(--t-meta) * 1.5);color:var(--text);
+  border:2px solid var(--rule);border-radius:10px;padding:.12em .5em;white-space:nowrap}
+.rail-timer.low{color:var(--primary);border-color:var(--primary)}
+.rail-join{flex:none;margin-left:auto;display:flex;align-items:baseline;gap:.5em;
+  font-size:var(--t-meta);color:var(--muted);letter-spacing:.05em;white-space:nowrap}
+.rail-join code{font-family:var(--font-display);font-weight:800;letter-spacing:.11em;
+  color:var(--primary);font-size:calc(var(--t-meta) * 1.3)}
+
+/* PHASE BAR — the room's persistent phase signal. A 20px pill in the corner
+   subtends ~8 arcminutes at 25ft: recognisable as a coloured blob, not
+   readable. A full-width band costs 8px of stage and is perceived without
+   being read. Four distinct hues; COMPLETE is distinguished by a doubled,
+   striped band so it cannot be confused with ASK's amber. */
+.bar{grid-area:bar;position:relative;z-index:2;height:var(--bar-h);width:100%}
+.bar[data-phase="lobby"]{background:linear-gradient(90deg,rgba(155,168,190,.55),rgba(155,168,190,.18))}
+.bar[data-phase="ask"]{background:var(--primary)}
+.bar[data-phase="vote"]{background:var(--secondary)}
+.bar[data-phase="results"]{background:var(--success)}
+.bar[data-phase="done"]{height:calc(var(--bar-h) * 2);
+  background:repeating-linear-gradient(90deg,var(--primary) 0 26px,var(--primary-deep) 26px 52px)}
+
+/* ------------------------------------------------------------------- MAIN */
+/* minmax(0,1fr), not auto, for the content column — the same reasoning as
+   the .stage grid above. An auto track refuses to shrink below the
+   min-content of its widest item; here that would let the content column
+   refuse to give up width to the meter column, which is the auto one on
+   purpose. */
+.main{grid-area:main;position:relative;z-index:2;min-height:0;
+  display:grid;grid-template-columns:minmax(0,1fr) auto;
+  gap:calc(2vw + 10px);
+  padding:calc(2.4vh + 6px) calc(2.4vw + 10px) calc(1.6vh + 4px);}
+.main.solo{grid-template-columns:minmax(0,1fr)}
+
 /* ---------------------------------------------------------------------------
    CONTENT SCALING — the mechanism the floor is enforced by. Every scaled
    value is wrapped in max(var(--floor), …) so the search can only shrink
@@ -132,8 +216,18 @@ body{
    spare space (short content still centres) but never goes negative, so
    overflow can only ever appear at the bottom. Losing the tail of a list is
    survivable; losing the head of the question is not. */
-.content{ display:flex; flex-direction:column; justify-content:flex-start; overflow:hidden; }
+.content{ display:flex; flex-direction:column; justify-content:flex-start; overflow:hidden;
+  /* min-width/min-height:0 override the flex-item default of "auto" (which
+     resolves to the content's min-content size). Without them .content
+     cannot shrink below its own longest word/line, which is the same "auto
+     track" failure the .stage and .main column tracks guard against above —
+     it just shows up on a flex item instead of a grid track. Ported from
+     docs/design/host-redesign/02-ask-call-and-answer.html:219. */
+  min-width:0; min-height:0; }
 .content > .fitbox{ margin-block:auto; }
+/* .fitbox itself is the vertical stack the fitter scales; min-width:0 so it
+   can shrink inside .content the same way .content shrinks inside .main. */
+.fitbox{ display:flex; flex-direction:column; gap:calc(1.5vh + 4px); min-width:0; }
 
 /* NO LINE CLAMPS LIVE HERE. Truncation is something the fitter DOES, after
    exhausting every other lever — never something the base stylesheet applies in
@@ -143,3 +237,63 @@ body{
    options truncated mid-word and 131px empty underneath. Clamps belong behind
    [data-clamped="on"] and nowhere else. */
 .content[data-clamped="on"] .opt .txt{ -webkit-line-clamp:2; display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; }
+
+/* ------------------------------------------------------- the ONE room meter
+   Not ported from the mockup: the mockup's .meter still carries a numeral, a
+   progress bar (.bar2), a dot matrix (.dots) and a roster (.roster) — six
+   simultaneous statements of the same fact. RoomMeter.jsx renders exactly
+   one of them, the labelled fraction, so only the rules that survive that
+   cut are declared here. */
+.meter{align-self:start;min-width:0;max-height:100%;overflow:hidden;
+  padding-bottom:4px;
+  display:flex;flex-direction:column;
+  gap:calc(.9vh + 3px);
+  border-left:var(--hair) solid var(--rule);padding-left:calc(1.2vw + 8px);
+  width:max-content;max-width:clamp(210px, 21vw, 460px)}
+.meter h4{margin:0;font-size:var(--t-meta);color:var(--muted);font-weight:700;
+  letter-spacing:.13em;text-transform:uppercase;white-space:nowrap}
+.meter .count{font-family:var(--font-display);font-weight:800;line-height:1.06;
+  font-size:max(var(--floor),calc(var(--L-primary) * .9));color:var(--text);
+  white-space:nowrap}
+
+/* ------------------------------------------------------------------- DOCK */
+.dock{grid-area:dock;position:relative;z-index:12;min-height:var(--dock-h);
+  display:flex;align-items:center;gap:calc(1.2vw + 8px);
+  padding:calc(1vh + 4px) calc(2.4vw + 10px);
+  border-top:var(--hair) solid var(--rule);
+  background:linear-gradient(180deg, rgba(15,26,46,0) 0%, rgba(11,18,32,.6) 100%);}
+/* The Console's only permanent, discoverable entry point. One glyph of stage,
+   at the label tier, in --muted: a trackpad target from a foot away and an
+   unreadable speck from the back row. */
+/* A 30px chip at low contrast in a corner is not a target a facilitator can
+   hit while holding a clicker at a flipchart. Minimum 48x48, with a word
+   beside the glyph so it is also discoverable rather than merely present. */
+.dock-more{flex:none;display:inline-flex;align-items:center;gap:.45em;
+  font:inherit;font-size:var(--t-meta);line-height:1;min-height:48px;min-width:48px;
+  justify-content:center;
+  color:var(--muted);background:transparent;border:var(--hair) solid var(--rule);
+  border-radius:10px;padding:.3em .7em;cursor:pointer;letter-spacing:.06em}
+.dock-more-lbl{font-size:calc(var(--t-meta) * .82);letter-spacing:.1em;text-transform:uppercase;font-weight:700}
+/* Room-facing copy, so it wraps rather than ellipsing — "Results are o…" is
+   not a status. It is in the audit's CONTENT_SEL, which means A11 fails if it
+   ever truncates, which in turn forces the copy to stay short. */
+.dock .status{font-size:max(var(--floor),calc(var(--t-body) * .9));color:var(--muted);
+  font-weight:600;min-width:0;max-width:40ch;line-height:1.25}
+.dock .status.go{color:var(--success-text);font-weight:800}
+@keyframes cue{0%,100%{opacity:1}50%{opacity:.45}}
+.dock .status.go{animation:cue 1.5s ease-in-out 3}
+@media (prefers-reduced-motion:reduce){.dock .status.go{animation:none}}
+.dock .spacer{margin-left:auto}
+.btn{display:inline-flex;align-items:center;gap:.5em;
+  font-family:var(--font-display);font-weight:800;
+  font-size:max(var(--floor),calc(var(--t-secondary) * .84));letter-spacing:.02em;
+  padding:calc(1.2vh + 8px) calc(1.6vw + 18px);border-radius:calc(var(--radius) * .85);
+  border:0;background:var(--primary);color:#14203A;cursor:pointer;white-space:nowrap}
+.btn.ghost{background:transparent;color:var(--text);border:var(--hair) solid var(--rule)}
+.btn[disabled]{background:rgba(155,168,190,.18);color:var(--muted);cursor:not-allowed}
+.dock .kbd{font-size:var(--t-meta);color:var(--muted);opacity:.75;letter-spacing:.07em;
+  border:var(--hair) solid var(--rule);border-radius:6px;padding:.2em .5em;font-weight:700;white-space:nowrap}
+/* The SPACE hint used to be hidden in Room and TV — the two profiles where the
+   operator is furthest from the machine and most dependent on knowing a key
+   exists. That was exactly backwards, and a first-look reviewer caught it. */
+.dock .hint{font-size:var(--t-meta);color:var(--muted);text-align:right;max-width:28ch;line-height:1.25}
