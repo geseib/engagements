@@ -12,7 +12,7 @@ SDD ledger: `.superpowers/sdd/2026-08-09-anonymous-responses/progress.md` (git-i
 
 | Suite | Command | Expected |
 |---|---|---|
-| Backend | `for t in tests/*.js; do node "$t"; done` | **20 suites, 689 passed, 0 failed** |
+| Backend | `for t in tests/*.js; do node "$t"; done` | **20 suites, 690 passed, 0 failed** |
 | Frontend | `cd src && npx jest __tests__/` | 5 failed suites / 30 failed / 242 passed |
 | Build | `cd src && npm run build` | compiles, 2 pre-existing size warnings |
 | Template | `sam validate --lint -t template-clean.yaml` | valid |
@@ -33,7 +33,7 @@ The 5 failing frontend suites are stale and out of scope: they predate the auth 
 | 2 | `anonymousUntilReveal` persists through create | `37eae389` | clean |
 | 3 | Redact `GET /games/{id}/answers` | `2c588841` + fix `6de72ea8` | clean after 1 fix round |
 | 4 | Redact `POST /games/{id}/start-vote` | `35a922be` | clean |
-| 5 | Redact the `playerAnswered` socket frame | `8476e704` | **review was still running at handoff** |
+| 5 | Redact the `playerAnswered` socket frame | `8476e704` + fix `f4c1a8ac` | spec ❌ → fixed; re-review outstanding |
 | 6 | `POST /games/{id}/reveal-authors` | `f1d65470` | **not yet reviewed** |
 
 **Tasks 5 and 6 have not completed their review gate.** Re-run them before trusting either:
