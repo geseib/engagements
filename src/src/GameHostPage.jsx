@@ -3508,7 +3508,11 @@ Ready to engage? See you there!`;
         setResultsBeat('field-notes');
         break;
       case HOST_INTENTS.REPORT:
-        setShowFinalReport(true);
+        // generateReportForGame, not setShowFinalReport: `showFinalReport` is
+        // a flag nothing renders (it only gates the keyboard shortcut), so
+        // pointing ENDED's primary at it would have made the one control on
+        // the last screen of the session do nothing at all.
+        generateReportForGame(gameId, eventTitle);
         break;
       default:
         console.warn(`Unknown host action intent: ${action.intent}`);
@@ -3578,7 +3582,7 @@ Ready to engage? See you there!`;
       : hostPhase === 'VOTE' ? playersWhoVoted.length >= players.length
         : false
   );
-  const dockStatus = hostPhase === 'ASK' || hostPhase === 'VOTE'
+  const dockStatus = (hostPhase === 'ASK' || hostPhase === 'VOTE') && players.length > 0
     ? (everybodyIn
         ? 'Safe to move on'
         : `Some are still ${hostPhase === 'ASK' ? 'answering' : 'voting'}`)
