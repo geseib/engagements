@@ -104,6 +104,28 @@ export function isLobbyState(gameState) {
 }
 
 /**
+ * Is every person in the room accounted for on this beat?
+ *
+ * `playerCount > 0` is not defensive noise: an empty room is not "everyone has
+ * answered", and the naive `responded >= playerCount` answers true for 0 of 0.
+ *
+ * `>=` rather than `===` because the two numbers count different things — answer
+ * rows against deduplicated players — so a rejoin can legitimately put responses
+ * ahead of the roster.
+ *
+ * Only ASK and VOTE have anything to wait for; every other phase is false, so a
+ * caller cannot green the dock on RESULTS.
+ */
+export function roomIsComplete({ phase, responded, playerCount } = {}) {
+  if (phase !== 'ASK' && phase !== 'VOTE') return false;
+  const people = Number(playerCount);
+  const inCount = Number(responded);
+  if (!Number.isFinite(people) || people <= 0) return false;
+  if (!Number.isFinite(inCount)) return false;
+  return inCount >= people;
+}
+
+/**
  * Actions the bar can ask the page to run. The page owns the handlers; this
  * module only ever names one.
  */

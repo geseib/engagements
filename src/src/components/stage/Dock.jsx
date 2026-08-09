@@ -33,7 +33,7 @@ import React from 'react';
  * the mockups, and it is aria-hidden because it is a visual affordance for the
  * operator, not a control.
  */
-export default function Dock({ status, hint, kbd, onSetup, children }) {
+export default function Dock({ status, hint, kbd, onSetup, complete = false, children }) {
   return (
     <footer className="dock">
       <button
@@ -46,7 +46,7 @@ export default function Dock({ status, hint, kbd, onSetup, children }) {
         <span aria-hidden="true">⋯</span>
         <span className="dock-more-lbl">SETUP</span>
       </button>
-      {status && <span className="status" aria-live="polite">{status}</span>}
+      {status && <span className={`status${complete ? ' go' : ''}`} aria-live="polite">{status}</span>}
       <span className="spacer" />
       {children}
       {kbd && <span className="kbd" aria-hidden="true">{kbd}</span>}

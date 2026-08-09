@@ -21,7 +21,7 @@ import {
 import { resetGameSession } from './config/gameSession';
 import { gameTypeMeta } from './config/gameTypes';
 import {
-  hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS,
+  hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
 } from './config/hostControls';
 import {
   anonymityApplies, anonymityActive, createPayloadFor, displayLabelFor,
@@ -3624,11 +3624,11 @@ Ready to engage? See you there!`;
    * beside "Nobody has answered yet" — and of the pair the hint is the one
    * that also explains the greyed-out button.
    */
-  const everybodyIn = players.length > 0 && (
-    hostPhase === 'ASK' ? answeredCount >= players.length
-      : hostPhase === 'VOTE' ? playersWhoVoted.length >= players.length
-        : false
-  );
+  const everybodyIn = roomIsComplete({
+    phase: hostPhase,
+    responded: hostPhase === 'VOTE' ? playersWhoVoted.length : answeredCount,
+    playerCount: players.length,
+  });
   const dockStatus = dockHint
     ? ''
     : (hostPhase === 'ASK' || hostPhase === 'VOTE') && players.length > 0
@@ -4095,7 +4095,7 @@ Ready to engage? See you there!`;
           />
         )}
         meter={meter
-          ? <RoomMeter phase={hostPhase} heading={meter.heading} body={meter.body} />
+          ? <RoomMeter phase={hostPhase} heading={meter.heading} body={meter.body} complete={everybodyIn} />
           : null}
         dock={(
           <Dock
@@ -4103,6 +4103,7 @@ Ready to engage? See you there!`;
             hint={dockHint}
             kbd={dockKbd}
             onSetup={() => setQrSidebarVisible((open) => !open)}
+            complete={everybodyIn}
           >
             {/* Not reimplemented here. HostActionBar keeps its keyboard
                 handling, its typing-target guard and its disabled hint; only

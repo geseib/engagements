@@ -256,6 +256,18 @@ body{
   font-size:max(var(--floor),calc(var(--L-primary) * .9));color:var(--text);
   white-space:nowrap}
 
+/* The completed state. `.dock .status.go` below already carries the same idea
+   for the dock — colour plus the finite `cue` pulse, guarded for reduced
+   motion — and was ported without ever being applied. This is its counterpart
+   on the meter, and the mockup's (02-ask-call-and-answer.html:282).
+
+   Finite iterations on a stable class: the pulse runs once when the class
+   lands and does not restart on a re-render, which is what stops a host page
+   that re-renders on every socket frame from strobing. */
+.meter .count.done{color:var(--success-text)}
+.meter.is-complete .count{animation:cue 1.5s ease-in-out 3}
+@media (prefers-reduced-motion:reduce){.meter.is-complete .count{animation:none}}
+
 /* ------------------------------------------------------------------- DOCK */
 .dock{grid-area:dock;position:relative;z-index:12;min-height:var(--dock-h);
   display:flex;align-items:center;gap:calc(1.2vw + 8px);

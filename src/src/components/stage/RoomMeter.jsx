@@ -15,13 +15,13 @@ import React from 'react';
  * an attendance record, and the room is the wrong audience for one. This
  * binds Table too — Table is a stage profile, not a private one.
  */
-export default function RoomMeter({ phase, heading, body }) {
+export default function RoomMeter({ phase, heading, body, complete = false }) {
   if (!heading && !body) return null;
 
   return (
-    <aside className="meter" data-phase={phase}>
+    <aside className={`meter${complete ? ' is-complete' : ''}`} data-phase={phase}>
       <h4>{heading}</h4>
-      <div className="count">{body}</div>
+      <div className={`count${complete ? ' done' : ''}`}>{body}</div>
     </aside>
   );
 }
