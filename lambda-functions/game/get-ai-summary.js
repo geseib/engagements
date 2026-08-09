@@ -470,6 +470,47 @@ exports.resolvePromptTemplate = resolvePromptTemplate;
 exports.isUsableSummaryPrompt = isUsableSummaryPrompt;
 exports.summaryPromptDefect = summaryPromptDefect;
 
+/**
+ * The words two or more participants submitted in a wavelength round, most
+ * frequent first, as `[{ word, count }]`.
+ *
+ * A wavelength round is scored as a team: the score everyone shares is simply
+ * how many words the room landed on together. That count is needed in two
+ * places that do not share a scope — exports.handler's vote-tally pass (which
+ * scores the players) and generateAISummary's word analysis (which briefs the
+ * model) — and the two must not disagree, or the room is shown one number
+ * while the model is told another. Hence one derivation, here.
+ *
+ * `storedResults` is the QUESTION#nnn#RESULTS record get-results.js writes; it
+ * already holds the analysis, so prefer it. It is absent for rounds whose
+ * results call never completed, so fall back to counting the answers with the
+ * same rule get-results.js used (a word shared by 2+ participants).
+ *
+ * Returns counts only — never author names — so it is safe to call while a
+ * round is still anonymous.
+ */
+function deriveWavelengthCommonWords(storedResults, answers) {
+  const stored = storedResults && storedResults.wordAnalysis && storedResults.wordAnalysis.commonWords;
+  if (Array.isArray(stored)) return stored;
+
+  const wordCounts = {};
+  (answers || []).forEach(answer => {
+    const answerText = answer.Answer || answer.answer || '';
+    answerText.split(',')
+      .map(w => w.trim().toLowerCase())
+      .filter(w => w.length > 0)
+      .forEach(word => { wordCounts[word] = (wordCounts[word] || 0) + 1; });
+  });
+
+  return Object.entries(wordCounts)
+    .filter(([, count]) => count > 1)
+    .sort((a, b) => b[1] - a[1])
+    .map(([word, count]) => ({ word, count }));
+}
+
+// Exported for tests/wavelength-ai-summary.js
+exports.deriveWavelengthCommonWords = deriveWavelengthCommonWords;
+
 exports.handler = async (event) => {
   // Async worker mode: the HTTP path fires an InvocationType:'Event' self-invoke
   // with __workerMode set, so the full generation runs off the API Gateway 30s
@@ -862,8 +903,15 @@ exports.handler = async (event) => {
         console.log(`🔍 AI TRIVIA DEBUG - Player ${voteTallies[index].playerName}: points=${pointsEarned}, correct=${isCorrect}, base=${voteTallies[index].basePoints}, bonus=${voteTallies[index].speedBonus}`);
       });
     } else if (gameType === 'wavelength') {
-      // For wavelength games, everyone gets the same team score (number of common words found)
-      const teamScore = (commonWords && Array.isArray(commonWords)) ? commonWords.length : 0;
+      // For wavelength games, everyone gets the same team score (number of
+      // common words found). This used to read a bare `commonWords`, which is
+      // declared only inside generateAISummary — a different function with no
+      // closure over this scope — so it was an undeclared-variable reference
+      // that threw ReferenceError on every wavelength round, killing Field
+      // Notes for this game type entirely. Derive it here instead, from the
+      // stored results this handler already fetched above.
+      const commonWords = deriveWavelengthCommonWords(storedResults, answers);
+      const teamScore = commonWords.length;
       
       answers.forEach((answer, index) => {
         voteTallies[index].totalScore = teamScore;
@@ -1201,13 +1249,16 @@ exports.buildFallbackSummary = buildFallbackSummary;
 
 // Exported for the same reason as buildFallbackSummary: it lets the anonymity
 // redaction inside this function (below) be exercised directly, without a full
-// exports.handler round trip. That matters specifically for the wavelength
-// branch — reaching it via exports.handler currently throws on an unrelated,
-// pre-existing bug (the outer handler's own vote-tally pass for wavelength
-// games references `commonWords`, which is never declared in that scope; see
-// the fix report for task 7). That bug is out of scope here and left alone,
-// but it means the wavelength redaction fixed in this task could only be
-// given real test coverage by calling this function directly.
+// exports.handler round trip.
+//
+// The wavelength branch used to be unreachable that way at all: the outer
+// handler's own vote-tally pass referenced a `commonWords` that was never
+// declared in its scope, so every wavelength round threw ReferenceError before
+// this function was called. That is fixed (see deriveWavelengthCommonWords
+// above, and tests/wavelength-ai-summary.js, which drives the handler), so the
+// direct-call coverage in tests/anonymous-round-flow.js is no longer the only
+// way in — it is kept because unit-testing the redaction here is still the
+// clearer test.
 exports.generateAISummary = generateAISummary;
 
 async function generateAISummary({ eventTitle, gameType, gameAiContext, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults }) {
