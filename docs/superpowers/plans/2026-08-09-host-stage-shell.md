@@ -1384,6 +1384,16 @@ The Jest suites cover the policy and the lifecycle. These cannot be asserted in 
 3. **A reload mid-session returns on the same profile.** This is the requirement the deleted reset effect was violating.
 4. **A long question at 1280×720 in TV.** TV's ladder cannot be honoured below ~820px of viewport height on dense states even after every reduction; confirm it drops something rather than clipping.
 
+## Open decisions this plan surfaced and could not settle
+
+**Trivia's round standings — two artefacts of this project disagree, and one is the spec's own rule.** Task 5 removed the `trivia-player-scores` block from RESULTS (who answered what, correct/incorrect, points, running total). It cannot come back in the shape the mockup draws: `07-results-trivia.html` answers the question with a **named roster in the meter**, and `RoomMeter` refuses names *by test*, because §7.15 says never name a person on the stage. So the mockup and the constraint contradict each other.
+
+With the meter `null` on RESULTS and the roster now host-only and cumulative, **trivia currently has no per-round payoff on the room's screen at all**. That is a real loss, not a tidy-up.
+
+This is a spec decision, not an implementation one. **Plan 4 or 5 must settle it explicitly**: either §7.15 yields for trivia (whose "authorship" is a letter, not a composed answer, so the privacy argument is weaker), or the mockup is wrong and trivia's payoff is expressed without naming anyone. It currently lives only in a comment at the deletion site, and comments get deleted — which is why it is written here too.
+
+**RESULTS has no sacrifice budget.** The meter is absent on RESULTS, so `.main` is `solo` from first paint, and after Task 5's fix there are no `data-drop` groups left either. A dense results state therefore has no width lever, no chrome to give up, and lands directly on the terminal clamp — abbreviating a participant's actual answer. The trade is right (an abbreviated answer beats stranding every author's name on a projector), but plan 4 should own the RESULTS content budget deliberately rather than inherit this.
+
 ## Out of scope, recorded
 
 - **Running `audit.js` against the React app in a real browser.** The checks are pure functions over a rendered document and a viewport, so they port unchanged — but they need a headless-browser harness this repo does not have, and jsdom cannot substitute. Worth its own plan; until it exists the geometric guarantee is held by the mockups, not by the app.
