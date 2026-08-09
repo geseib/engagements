@@ -713,16 +713,23 @@ In `src/src/GameHostPage.jsx`, beside the existing `playUrl`:
   const remoteUrl = `${window.location.origin}/remote?gameId=${gameId}`;
 ```
 
-In the side panel's `qr-section`, change the QR value and the caption:
+In the side panel's `qr-section`, change the QR value and the caption, **and drop the click-to-expand**:
 
 ```jsx
-                <div className="qr-code-clickable" onClick={() => setShowExpandedQR(true)}>
+                {/* The host's own phone, scanned from arm's length, so 180px is
+                    plenty and there is nothing to magnify. The click-to-expand
+                    is deliberately gone: the expanded overlay renders `playUrl`,
+                    so leaving it here would open a magnified PLAYER QR on top of
+                    a REMOTE one. The room-facing QR is the rail's now (Task 2). */}
+                <div className="qr-code-static">
                   <QRCodeSVG value={remoteUrl} size={180} />
                   <p>Scan to open the remote on your phone</p>
                 </div>
 ```
 
-Leave the expanded overlay pointed at `playUrl` — it is the room-facing QR that Task 2 now drives.
+Add the class beside the existing `.qr-code-clickable` rule in `src/src/styles.css`, copying its layout rules but without the pointer affordance (no `cursor:pointer`, no hover transform).
+
+**`showExpandedQR` is left in place and is now set by nothing.** Removing it means touching `config/gameSession.js` and the test that binds its key, and the console stream is about to rebuild this panel entirely. Out of scope here, deliberately — do not delete it, and do not add a new caller to justify it.
 
 - [ ] **Step 8: Correct the spec**
 
