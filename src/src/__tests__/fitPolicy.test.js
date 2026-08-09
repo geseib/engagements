@@ -68,10 +68,22 @@ describe('the scale search', () => {
   // a join code — may exceed the ladder. The ladder is a legibility FLOOR
   // derived from the room, not a ceiling, and a ladder tuned for a dense screen
   // under-uses a sparse one.
+  // Corrected from the brief's boxCleanBelow(2): with max 2.2 that made the
+  // box dirty AT max by construction, so no correct implementation — and no
+  // clamped one either — could have passed it (see task-2-report.md). This
+  // version is also dirty at max, so it can't take the "isClean() at max"
+  // shortcut the very first test in this block already covers; it must walk
+  // the binary-search loop to land above the ladder's ceiling of 1, which is
+  // the actual invariant this test is named for.
   test('a growable state may exceed 1', () => {
-    const box = boxCleanBelow(2.2);
-    expect(searchScale({ min: 0.55, max: 2.2, isClean: box.isClean, setScale: box.setScale }))
-      .toBe(2.2);
+    const box = boxCleanBelow(1.5);
+    const found = searchScale({ min: 0.55, max: 2.2, isClean: box.isClean, setScale: box.setScale });
+    expect(found).toBeGreaterThan(1); // exceeds the ladder's ceiling
+    expect(found).toBeLessThanOrEqual(1.5);
+    // Seven halvings of a 1.65-wide interval resolves to ~0.0129; double it
+    // for floating-point slack rather than hard-coding an unrelated guess.
+    const resolution = (2.2 - 0.55) / (2 ** ITERATIONS);
+    expect(found).toBeGreaterThan(1.5 - resolution * 2);
   });
 });
 
