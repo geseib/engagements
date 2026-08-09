@@ -22,6 +22,7 @@ class GetCommand { constructor(i) { this.input = i; this.type = 'get'; } }
 class QueryCommand { constructor(i) { this.input = i; this.type = 'query'; } }
 class DeleteCommand { constructor(i) { this.input = i; this.type = 'delete'; } }
 class UpdateCommand { constructor(i) { this.input = i; this.type = 'update'; } }
+class ScanCommand { constructor(i) { this.input = i; this.type = 'scan'; } }
 class PostToConnectionCommand { constructor(i) { this.input = i; } }
 
 const store = new Map();                 // "PK|SK" -> item
@@ -76,6 +77,19 @@ const fakeDoc = {
         );
         return { Items: items, Count: items.length };
       }
+      case 'scan': {
+        // Only real caller is get-ai-summary.js's findDefaultPromptId, which
+        // always scans for `PK = :pk AND isDefault = :isDefault`. A generic
+        // AND-of-equalities filter over ExpressionAttributeValues is enough
+        // for that shape without pretending to be a real Scan.
+        const values = inp.ExpressionAttributeValues || {};
+        const items = [...store.values()].filter((i) => {
+          if (values[':pk'] !== undefined && i.PK !== values[':pk']) return false;
+          if (values[':isDefault'] !== undefined && i.isDefault !== values[':isDefault']) return false;
+          return true;
+        });
+        return { Items: items, Count: items.length };
+      }
       default:
         return {};
     }
@@ -121,7 +135,7 @@ function stub(name, exports) {
 stub('@aws-sdk/client-dynamodb', { DynamoDBClient: class {} });
 stub('@aws-sdk/lib-dynamodb', {
   DynamoDBDocumentClient: { from: () => fakeDoc },
-  PutCommand, GetCommand, QueryCommand, DeleteCommand, UpdateCommand,
+  PutCommand, GetCommand, QueryCommand, DeleteCommand, UpdateCommand, ScanCommand,
 });
 stub('@aws-sdk/client-apigatewaymanagementapi', {
   ApiGatewayManagementApiClient: FakeApiGatewayClient,
@@ -461,12 +475,26 @@ console.log('\n11. Field Notes on an unrevealed round');
 // require.cache poisoning (which needs require.resolve to succeed first) can't
 // reach them. Hook the loader by name instead, as tests/ai-response-parsing.js
 // already does for this same file.
+//
+// @aws-sdk/client-bedrock-runtime IS resolvable locally (unlike the two
+// above), so it would otherwise load for real and try an actual network call
+// to AWS the moment any test below drives generateAISummary() past prompt
+// resolution. Stub it to fail fast and deterministically instead — every
+// test below that reaches Bedrock is exercising the fallback-on-failure path
+// (buildFallback(), with debugInfo still attached under debugMode), which is
+// realistic: Bedrock failing is exactly the everyday case this fallback
+// exists for, and it's the same code path a real throttle or outage takes.
+// The client is a MODULE-LEVEL singleton in get-ai-summary.js (created once,
+// at require time) — this stub has to be in place before the FIRST require
+// of that file below, or a later section stubbing it would be too late.
 const Module = require('module');
 const realLoad = Module._load;
 const noopClient = class { async send() { return {}; } };
+const throwingBedrock = class { async send() { throw new Error('stub: no Bedrock in tests'); } };
 const extraStubs = new Map([
   ['@aws-sdk/client-s3', { S3Client: noopClient, GetObjectCommand: class {} }],
   ['@aws-sdk/client-lambda', { LambdaClient: noopClient, InvokeCommand: class {} }],
+  ['@aws-sdk/client-bedrock-runtime', { BedrockRuntimeClient: throwingBedrock, InvokeModelCommand: class {} }],
 ]);
 Module._load = function (request, parent, isMain) {
   if (extraStubs.has(request)) return extraStubs.get(request);
@@ -474,7 +502,11 @@ Module._load = function (request, parent, isMain) {
 };
 
 // Not hypothetical and not the model: get-ai-summary builds this string in code.
-const { buildFallbackSummary } = require(path.join(REPO, 'lambda-functions/game/get-ai-summary.js'));
+const {
+  buildFallbackSummary,
+  generateAISummary,
+  handler: getAiSummary,
+} = require(path.join(REPO, 'lambda-functions/game/get-ai-summary.js'));
 Module._load = realLoad; // restore — nothing after this point needs the hook
 
 const top = { playerName: 'Ada', answer: 'a splendid answer', score: 5, votes: 3 };
@@ -500,6 +532,173 @@ await check('once revealed, it names the author as before', () => {
   });
   assert.ok(text.includes("Ada's answer"), text);
 });
+
+console.log('\n12. GET AI summary — the model prompt itself is redacted, not just the fallback template');
+
+// Review round 2, IMPORTANT 3: section 11 only unit-tests buildFallbackSummary
+// with hand-built arguments — nothing drove the real isHidden(metadata,
+// roundRecord.Item) wiring added to exports.handler, nor the hidden-gated
+// answers/results.voteTallies/results.winners redaction at the top of
+// generateAISummary, nor whether the redacted values actually reach the
+// assembled Bedrock prompt (and, via debug=true, get-ai-summary.js's own
+// cache-hit/promptDebug branches — the leak this task exists to close). This
+// section drives the REAL exports.handler end to end.
+//
+// A minimal usable prompt template, seeded once and re-seeded per call since
+// seedAnonymousRound() clears the whole store. s3Key present + the stubbed S3
+// client resolving to a bodyless {} makes fetchPromptFromS3 fall through to
+// its OWN "use the DynamoDB record" final fallback (get-ai-summary.js, inside
+// fetchPromptFromS3's catch block) — the simplest way to hand this a usable
+// .template without a real S3 object.
+const AI_PROMPT_TEMPLATE =
+  'Q: {questionTitle}\n' +
+  'RESPONSES: {responsesText}\n' +
+  'WINNER: {winnerInfo}\n' +
+  'TOP: {topVotedAnswers}\n' +
+  'PLAYERS: {playerNames}\n' +
+  'ROUND SCORES: {roundScores}\n' +
+  'SCORE CHANGES: {scoreChanges}\n' +
+  'PLAYER ANSWERS: {playerAnswers}\n' +
+  '=== SUMMARY ===\nx\n=== DISCUSSION QUESTIONS ===\nQ1: x\n=== NEXT STEPS ===\nSTEP1: x';
+
+async function runAiSummaryWorker(gameId, { revealed }) {
+  seedAnonymousRound(gameId, { revealed });
+  put({ PK: 'AIPROMPTS', SK: 'AIPROMPT#lessons-learned', s3Key: 'fake-key', template: AI_PROMPT_TEMPLATE });
+  // seedAnonymousRound's default answer TEXT is "Ada's answer" / "Grace's
+  // answer" — the player's name is literally embedded in the CONTENT, which
+  // is legitimately never redacted (only authorship is). A blanket "does not
+  // include 'Ada'" check on the assembled prompt would otherwise trip on that
+  // correctly-preserved answer text, not on a real name leak. Overwrite the
+  // content here (own put(), not a change to the shared helper) so the checks
+  // below can only be about the playerName field.
+  put({ PK: `GAME#${gameId}`, SK: 'QUESTION#001#ANSWER#Ada', PlayerName: 'Ada', Answer: 'loves the ocean', SubmittedAt: '2026-01-01T00:00:00.000Z' });
+  put({ PK: `GAME#${gameId}`, SK: 'QUESTION#001#ANSWER#Grace', PlayerName: 'Grace', Answer: 'prefers the mountains', SubmittedAt: '2026-01-01T00:00:00.000Z' });
+  // A vote from a THIRD person (not an answer author) gives voteTallies/winners
+  // real, non-zero content to redact — the ocean answer (index 0, seeded
+  // first) gets the first-place vote.
+  put({ PK: `GAME#${gameId}`, SK: 'QUESTION#001#VOTE#Mallory', PlayerName: 'Mallory', Votes: { '0': 1 } });
+  put({ PK: `GAME#${gameId}`, SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
+
+  const res = await getAiSummary({ __workerMode: true, gameId, questionId: '001', debug: 'true' });
+  const stored = store.get(key(`GAME#${gameId}`, 'QUESTION#001#AISummary'));
+  return { res, stored };
+}
+
+const hidden12 = await runAiSummaryWorker('3011', { revealed: false });
+
+await check('worker mode completes and returns ok', () =>
+  assert.strictEqual(hidden12.res.ok, true, JSON.stringify(hidden12.res)));
+await check('an AISummary record was persisted with DebugInfo attached', () =>
+  assert.ok(hidden12.stored && hidden12.stored.DebugInfo, 'debug=true should have attached DebugInfo'));
+
+const hiddenPrompt = hidden12.stored.DebugInfo.fullPrompt;
+const hiddenVars = JSON.stringify(hidden12.stored.DebugInfo.templateVariables);
+
+await check('hidden: no answer author name reaches the assembled prompt sent to the model', () =>
+  assert.ok(!hiddenPrompt.includes('Ada') && !hiddenPrompt.includes('Grace'),
+    `leaked into fullPrompt: ${hiddenPrompt}`));
+await check('hidden: no answer author name reaches any template variable (incl. ones debug=true returns raw)', () =>
+  assert.ok(!hiddenVars.includes('Ada') && !hiddenVars.includes('Grace'),
+    `leaked into templateVariables: ${hiddenVars}`));
+await check('hidden: the placeholder is what was actually substituted, not an empty/undefined field', () =>
+  assert.ok(hiddenPrompt.includes('a participant'),
+    `expected the redaction placeholder somewhere in the prompt: ${hiddenPrompt}`));
+await check('hidden: the persisted fallback summary text also names nobody (end-to-end, not just in isolation)', () =>
+  assert.ok(!hidden12.stored.SummaryText.includes('Ada'), hidden12.stored.SummaryText));
+
+// IMPORTANT 4: discussionQuestions must not quote the answer verbatim while
+// hidden either — same closure (buildFallback()), same markdownResponse.
+await check('IMPORTANT 4 fix: hidden discussion questions do not quote the answer verbatim', () =>
+  assert.ok(!hidden12.stored.DiscussionQuestions.some((q) => q.includes('"')),
+    `still quoting the answer while hidden: ${JSON.stringify(hidden12.stored.DiscussionQuestions)}`));
+await check('hidden discussion questions use the same unattributed phrasing as the fallback summary', () =>
+  assert.ok(hidden12.stored.DiscussionQuestions.some((q) => /most-supported response/i.test(q)),
+    JSON.stringify(hidden12.stored.DiscussionQuestions)));
+
+// Revealed counterpart — proves the checks above are not vacuous (e.g. a
+// broken template that never substitutes anything would also show "no Ada").
+const revealed12 = await runAiSummaryWorker('3012', { revealed: true });
+const revealedVars = JSON.stringify(revealed12.stored.DebugInfo.templateVariables);
+
+await check('revealed: the answer author DOES appear in the template variables (proves the playerName checks above are not vacuous)', () =>
+  assert.ok(revealedVars.includes('Ada'), revealedVars));
+await check('revealed: discussion questions quote the answer verbatim again, as before this task', () =>
+  assert.ok(revealed12.stored.DiscussionQuestions.some((q) => q.includes('"loves the ocean"')),
+    JSON.stringify(revealed12.stored.DiscussionQuestions)));
+
+console.log('\n13. Wavelength: both the stored-results cache path and the live-calculation path redact without dropping participants');
+
+// CRITICAL 1 + IMPORTANT 2: generateAISummary is called directly here
+// (exported above), not through exports.handler. Reaching the wavelength
+// branch through the real handler currently throws on an unrelated,
+// pre-existing bug — exports.handler's OWN wavelength vote-tally pass
+// (get-ai-summary.js, the `else if (gameType === 'wavelength')` block inside
+// the vote-processing section) references a bare `commonWords`, which is
+// never declared anywhere in that function's scope; it is only ever declared
+// inside generateAISummary, a completely separate function with no closure
+// over it. That bug predates this task, is not one of the four review
+// findings, and touches wavelength summary generation generally rather than
+// anonymity — left alone here (see the fix report). Calling generateAISummary
+// directly is the only way to give the wavelength redaction fixed in this
+// task real coverage without also fixing that unrelated crash.
+put({
+  PK: 'AIPROMPTS', SK: 'AIPROMPT#lessons-learned', s3Key: 'fake-key',
+  template: 'WORDS: {wavelengthWords}\n=== SUMMARY ===\nx\n=== DISCUSSION QUESTIONS ===\nQ1: x\n=== NEXT STEPS ===\nSTEP1: x',
+});
+
+const wavelengthAnswers = [
+  { playerName: 'Ada', answer: 'ocean,blue' },
+  { playerName: 'Grace', answer: 'ocean,tide' },
+];
+const wavelengthBaseArgs = {
+  eventTitle: 'Wavelength Test', gameType: 'wavelength', gameAiContext: '', questionSetAiContext: '',
+  customInstruction: '', promptId: 'lessons-learned', promptProvenance: { hierarchy: [] }, debugMode: true,
+  questionId: '001', question: { title: 'Pick a word' },
+  results: { voteTallies: {}, winners: [], totalVotes: 0 },
+  votes: [], gameId: 'wave-1', questionSetId: null, paddedQuestionNumber: '001',
+  scoringConfig: { firstPlacePoints: 3, secondPlacePoints: 2, thirdPlacePoints: 1 },
+  hostPersonaId: null, setPersonaId: null,
+};
+
+// 13a. Stored-results cache path (CRITICAL 1's exact location).
+const storedResultsFixture = {
+  wordAnalysis: { commonWords: [{ word: 'ocean', count: 2 }], wordCounts: { ocean: 2 }, totalUniqueWords: 3, connectionScore: 67 },
+  playerAnswers: wavelengthAnswers,
+};
+
+const storedHidden = await generateAISummary({
+  ...wavelengthBaseArgs, hidden: true, answers: wavelengthAnswers, storedResults: storedResultsFixture,
+});
+const storedHiddenWords = storedHidden.debugInfo.templateVariables.wavelengthWords;
+
+await check('CRITICAL 1 fix: hidden — storedResults.playerAnswers no longer leaks names into wavelengthWords', () =>
+  assert.ok(!storedHiddenWords.includes('Ada') && !storedHiddenWords.includes('Grace'),
+    `leaked via the stored-results cache path: ${storedHiddenWords}`));
+await check('IMPORTANT 2 fix: hidden — both participants survive the stored-results path, not just the last', () =>
+  assert.strictEqual((storedHiddenWords.match(/a participant/g) || []).length, 2,
+    `expected one redacted entry per participant, got: ${storedHiddenWords}`));
+
+const storedRevealed = await generateAISummary({
+  ...wavelengthBaseArgs, hidden: false, answers: wavelengthAnswers, storedResults: storedResultsFixture,
+});
+const storedRevealedWords = storedRevealed.debugInfo.templateVariables.wavelengthWords;
+await check('revealed — both real names appear (proves the two hidden checks above are not vacuous)', () =>
+  assert.ok(storedRevealedWords.includes('Ada') && storedRevealedWords.includes('Grace'), storedRevealedWords));
+
+// 13b. Live-calculation path — no stored-results cache hit (IMPORTANT 2's
+// other half: `answers` was already redacted at the top of generateAISummary,
+// so no name leaks even without this fix, but the naive object-keyed-by-name
+// collision still dropped every participant but the last).
+const liveHidden = await generateAISummary({
+  ...wavelengthBaseArgs, hidden: true, answers: wavelengthAnswers, storedResults: null,
+});
+const liveHiddenWords = liveHidden.debugInfo.templateVariables.wavelengthWords;
+
+await check('hidden — the live-calculation path (no stored results) does not leak names', () =>
+  assert.ok(!liveHiddenWords.includes('Ada') && !liveHiddenWords.includes('Grace'), liveHiddenWords));
+await check('IMPORTANT 2 fix: hidden — both participants survive the live-calculation path too', () =>
+  assert.strictEqual((liveHiddenWords.match(/a participant/g) || []).length, 2,
+    `expected one redacted entry per participant, got: ${liveHiddenWords}`));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

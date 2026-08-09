@@ -1036,7 +1036,15 @@ exports.handler = async (event) => {
       questionSetId: questionSetId,
       paddedQuestionNumber: paddedQuestionNumber,
       scoringConfig: scoringConfig,
-      hidden: hidden
+      hidden: hidden,
+      // Fixes a latent bug found while covering this task's wavelength fix:
+      // generateAISummary's wavelength branch already read `storedResults`
+      // (line ~1830 below) without it ever being passed in — a plain
+      // ReferenceError on every wavelength game that reaches that branch,
+      // unrelated to anonymity. Wiring it through is the minimum needed to
+      // make that branch (and this task's redaction inside it) reachable at
+      // all, let alone testable.
+      storedResults: storedResults
     };
 
     // Generate AI summary
@@ -1191,7 +1199,18 @@ function buildFallbackSummary({ totalParticipants, votesCast, top, gameType, que
 
 exports.buildFallbackSummary = buildFallbackSummary;
 
-async function generateAISummary({ eventTitle, gameType, gameAiContext, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden }) {
+// Exported for the same reason as buildFallbackSummary: it lets the anonymity
+// redaction inside this function (below) be exercised directly, without a full
+// exports.handler round trip. That matters specifically for the wavelength
+// branch — reaching it via exports.handler currently throws on an unrelated,
+// pre-existing bug (the outer handler's own vote-tally pass for wavelength
+// games references `commonWords`, which is never declared in that scope; see
+// the fix report for task 7). That bug is out of scope here and left alone,
+// but it means the wavelength redaction fixed in this task could only be
+// given real test coverage by calling this function directly.
+exports.generateAISummary = generateAISummary;
+
+async function generateAISummary({ eventTitle, gameType, gameAiContext, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults }) {
   // ANONYMITY: while hidden, nothing that ties this round's answer to its
   // author may reach the model — not just the deterministic fallback below.
   // The model's OWN generated summary is built from the template variables
@@ -1252,9 +1271,17 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     const votesCast = (results && results.totalVotes) || 0;
     const top = topAnswers[0];
     const summaryText = buildFallbackSummary({ totalParticipants, votesCast, top, gameType, question, hidden });
+    // Same standard as buildFallbackSummary above: while hidden, no verbatim
+    // quote either — a distinctive phrase can out an author on a small round
+    // just as surely as a name would, and this renders into the same
+    // markdownResponse under "### Discussion topics".
     const discussionQuestions = [
       'What stood out to you in the responses?',
-      top && top.answer ? `What made "${top.answer}" resonate with the group?` : 'Where did the group agree or differ most?'
+      top && top.answer
+        ? (hidden
+            ? 'What made the most-supported response resonate with the group?'
+            : `What made "${top.answer}" resonate with the group?`)
+        : 'Where did the group agree or differ most?'
     ];
     const nextSteps = ['Pick one takeaway from this question to apply to your own work this week.'];
     const markdownResponse =
@@ -1814,22 +1841,35 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
       totalUniqueWords = storedResults.wordAnalysis.totalUniqueWords || 0;
       connectionScore = storedResults.wordAnalysis.connectionScore || 0;
       
-      // Extract player word lists from stored data
-      const playerWordLists = {};
+      // Extract player word lists from stored data. This reads a separately
+      // persisted QUESTION#...#RESULTS record — it is NOT part of the
+      // `answers`/`results` parameters redacted at the top of this function,
+      // so real names here must be scrubbed again, on their own, or they
+      // reach the model (and, via debug=true, any caller) untouched.
+      //
+      // An array of entries, not an object keyed by player name: keying by
+      // name means every redacted row collides on the same placeholder key
+      // and silently overwrites the one before it, so only the last
+      // participant's words would survive into wavelengthWords below. An
+      // array keeps every participant's words without needing a stable
+      // per-participant identity (that would be the stable-answerId feature,
+      // out of scope here) — the placeholder can simply repeat.
+      const playerWordEntries = [];
       if (storedResults.playerAnswers) {
         storedResults.playerAnswers.forEach(playerAnswer => {
-          const playerName = playerAnswer.playerName || playerAnswer.PlayerName;
+          const rawName = playerAnswer.playerName || playerAnswer.PlayerName;
+          const playerName = hidden ? AUTHOR_PLACEHOLDER : rawName;
           const answerText = playerAnswer.answer || playerAnswer.Answer || '';
           const words = answerText.split(',')
             .map(w => w.trim().toLowerCase())
             .filter(w => w.length > 0);
-          playerWordLists[playerName] = words;
+          playerWordEntries.push({ playerName, words });
         });
       }
-      
+
       // Format wavelength data for AI
-      wavelengthWords = Object.entries(playerWordLists)
-        .map(([player, words]) => `${player}: [${words.join(', ')}]`)
+      wavelengthWords = playerWordEntries
+        .map(({ playerName, words }) => `${playerName}: [${words.join(', ')}]`)
         .join('; ');
       
       wordAnalysis = `${commonWords.length} common words found out of ${totalUniqueWords} unique words (${connectionScore}% connection rate). ` +
@@ -1844,41 +1884,47 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     } else {
       console.log('⚠️ No stored results found, calculating wavelength data from scratch');
       
-      // Fallback: Process all player words to find common ones
+      // Fallback: Process all player words to find common ones. `answers` was
+      // already redacted to the shared placeholder at the top of this
+      // function when hidden, so `playerName` below is safe as-is — but an
+      // array of entries, not an object keyed by player name, same reason as
+      // the stored-results branch above: keying by name collapses every
+      // redacted row onto the same placeholder key and drops every
+      // participant but the last from wavelengthWords.
       const wordCounts = {};
-      const playerWordLists = {};
+      const playerWordEntries = [];
       let totalWordsSubmitted = 0;
-      
+
       answers.forEach(answer => {
         const playerName = answer.PlayerName || answer.playerName;
         const answerText = answer.Answer || answer.answer || '';
-        
+
         // Parse words (should already be normalized from message.js processing)
         const words = answerText.split(',')
           .map(w => w.trim().toLowerCase())
           .filter(w => w.length > 0);
-        
-        playerWordLists[playerName] = words;
+
+        playerWordEntries.push({ playerName, words });
         totalWordsSubmitted += words.length;
-        
+
         // Count word frequencies
         words.forEach(word => {
           wordCounts[word] = (wordCounts[word] || 0) + 1;
         });
       });
-      
+
       // Find common words (mentioned by 2+ players)
       commonWords = Object.entries(wordCounts)
         .filter(([word, count]) => count > 1)
         .sort((a, b) => b[1] - a[1]) // Sort by frequency
         .map(([word, count]) => ({ word, count }));
-      
+
       totalUniqueWords = Object.keys(wordCounts).length;
       connectionScore = Math.round((commonWords.length / totalUniqueWords) * 100) || 0;
-      
+
       // Format wavelength data for AI
-      wavelengthWords = Object.entries(playerWordLists)
-        .map(([player, words]) => `${player}: [${words.join(', ')}]`)
+      wavelengthWords = playerWordEntries
+        .map(({ playerName, words }) => `${playerName}: [${words.join(', ')}]`)
         .join('; ');
       
       wordAnalysis = `${commonWords.length} common words found out of ${totalUniqueWords} unique words (${connectionScore}% connection rate). ` +
