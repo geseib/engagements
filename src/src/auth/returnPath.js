@@ -35,9 +35,27 @@ export function takeReturnPath(storage = sessionStorage) {
     return null;
   }
   if (typeof value !== 'string' || !value) return null;
-  // A single leading slash and nothing else: rejects "https://…" and "//host".
-  if (!value.startsWith('/') || value.startsWith('//')) return null;
-  const path = value.split('?')[0];
+
+  // Resolved with the same WHATWG URL algorithm the browser applies to
+  // `window.location.href = value`, not a prefix check. For http/https that
+  // algorithm treats a backslash as a forward slash and strips embedded
+  // tab/CR/LF before it decides what the authority is, so a string like
+  // "/\evil.example/steal" starts with a single "/" and contains no "//" --
+  // passing a `startsWith` guard -- while still resolving to a different
+  // origin. Only a real parse-and-compare catches that.
+  let url;
+  try {
+    url = new URL(value, window.location.origin);
+  } catch (_) {
+    return null;
+  }
+  if (url.origin !== window.location.origin) return null;
+
+  const path = url.pathname;
   if (NEVER_RETURN_TO.some((p) => path === p || path.startsWith(`${p}/`))) return null;
-  return value;
+
+  // Reconstructed from the parsed URL, not the raw stored string -- the raw
+  // string can still carry the backslash/control-character tricks above even
+  // after they've been proven to resolve to our own origin.
+  return `${url.pathname}${url.search}`;
 }
