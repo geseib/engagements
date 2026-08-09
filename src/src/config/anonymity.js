@@ -52,9 +52,26 @@ export function displayLabelFor(answer, index) {
 }
 
 /**
- * Whether standings may be shown. See §5.6.4: a live leaderboard during an
- * anonymous round is attribution by arithmetic, so it waits for the reveal.
+ * Whether THIS game actually withheld authorship — the type supports it AND
+ * the host didn't turn it off for this particular game. `anonymousUntilReveal`
+ * is the per-game flag from setup (createPayloadFor), read back from
+ * get-game.js, which already normalizes it with the same default-ON rule the
+ * backend gate uses — only an explicit `false` turns it off — so this trusts
+ * whatever boolean it was handed rather than re-deriving a default.
+ *
+ * A game whose type supports anonymity but that had it explicitly switched
+ * off never had anything to hide, so nothing here should ever gate on it:
+ * standings stay visible throughout, and there is no reveal to offer.
  */
-export function standingsVisible({ gameType, authorsRevealed } = {}) {
-  return !anonymityApplies(gameType) || authorsRevealed === true;
+export function anonymityActive({ gameType, anonymousUntilReveal }) {
+  return anonymityApplies(gameType) && anonymousUntilReveal !== false;
+}
+
+/**
+ * Whether standings may be shown. See §5.6.4: a live leaderboard during an
+ * anonymous round is attribution by arithmetic, so it waits for the reveal —
+ * but only for a round that is actually anonymous in the first place.
+ */
+export function standingsVisible({ gameType, anonymousUntilReveal, authorsRevealed } = {}) {
+  return !anonymityActive({ gameType, anonymousUntilReveal }) || authorsRevealed === true;
 }

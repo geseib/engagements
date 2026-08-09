@@ -8,7 +8,6 @@
  * or VOTE#; by the time RESULTS is showing, the round is already revealed and a
  * call here is a harmless, idempotent no-op that returns the attributed rows.
  *
-
  * PER ROUND, NOT PER GAME. A host may reveal round 3 and end the session before
  * round 4, and round 4 must stay anonymous forever in the report.
  *

@@ -8,7 +8,7 @@
  */
 import { hostRunsVotePhase } from '../config/hostControls';
 import {
-  anonymityApplies, createPayloadFor, displayLabelFor, isRedacted, standingsVisible,
+  anonymityApplies, anonymityActive, createPayloadFor, displayLabelFor, isRedacted, standingsVisible,
 } from '../config/anonymity';
 
 describe('which formats offer anonymous responses', () => {
@@ -77,14 +77,41 @@ describe('how an answer is labelled', () => {
   });
 });
 
+describe('whether this game actually withheld authorship', () => {
+  test('a voting format with the flag on (or unset) is active', () => {
+    expect(anonymityActive({ gameType: 'call-and-answer', anonymousUntilReveal: true })).toBe(true);
+    expect(anonymityActive({ gameType: 'call-and-answer' })).toBe(true); // default ON
+  });
+  test('a voting format with the flag explicitly off is not active', () => {
+    expect(anonymityActive({ gameType: 'call-and-answer', anonymousUntilReveal: false })).toBe(false);
+  });
+  test('a format with no anonymity is never active, regardless of the flag', () => {
+    expect(anonymityActive({ gameType: 'trivia', anonymousUntilReveal: true })).toBe(false);
+  });
+});
+
 describe('standings before the reveal', () => {
   test('hidden while an anonymous round is unrevealed', () => {
-    expect(standingsVisible({ gameType: 'call-and-answer', authorsRevealed: false })).toBe(false);
+    expect(standingsVisible({
+      gameType: 'call-and-answer', anonymousUntilReveal: true, authorsRevealed: false,
+    })).toBe(false);
   });
   test('shown once revealed', () => {
-    expect(standingsVisible({ gameType: 'call-and-answer', authorsRevealed: true })).toBe(true);
+    expect(standingsVisible({
+      gameType: 'call-and-answer', anonymousUntilReveal: true, authorsRevealed: true,
+    })).toBe(true);
   });
   test('always shown for a format with no anonymity', () => {
-    expect(standingsVisible({ gameType: 'trivia', authorsRevealed: false })).toBe(true);
+    expect(standingsVisible({
+      gameType: 'trivia', anonymousUntilReveal: true, authorsRevealed: false,
+    })).toBe(true);
+  });
+  // IMPORTANT 2: a host who explicitly turned anonymity off for this game never
+  // had anything to hide, so standings must not wait on a reveal that will
+  // never meaningfully happen for this round.
+  test('shown for a voting format when this game turned anonymity off, unrevealed or not', () => {
+    expect(standingsVisible({
+      gameType: 'call-and-answer', anonymousUntilReveal: false, authorsRevealed: false,
+    })).toBe(true);
   });
 });

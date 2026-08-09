@@ -64,6 +64,30 @@ exports.handler = async (event) => {
     
     console.log(`📊 GET-STATE: currentState=${currentState}, lessonNumber=${lessonNumber}, questionNumber=${currentQuestionNumber}`);
 
+    // The durable fact for whether THIS round has shown its authors — read
+    // straight from the ROUND# record rather than inferred from `frontendState`.
+    // enterResultsState (get-results.js) and reveal-authors.js both write it
+    // unconditionally, so it is true the instant either happens, independent of
+    // which state the round is currently in. The frontend used to derive this
+    // from `state.startsWith('RESULTS#')`, which meant an early reveal (the
+    // override for a host who reveals before closing the vote) got silently
+    // reverted by the next ordinary re-sync that ran before RESULTS — a
+    // reconnect, `gameStateChanged`, `questionStarted`, `votingStarted` — none
+    // of which are a page refresh, so this was easy to hit mid-round.
+    let authorsRevealed = false;
+    if (currentQuestionNumber) {
+      try {
+        const roundRecord = await db.send(new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: `ROUND#${currentQuestionNumber}` }
+        }));
+        authorsRevealed = !!(roundRecord.Item && roundRecord.Item.AuthorsRevealed);
+      } catch (error) {
+        console.error(`❌ Error fetching round record for question ${currentQuestionNumber}:`, error);
+        // Fall back to false — undecided is the safe (hidden) state.
+      }
+    }
+
     // If we're in a question state (ASK#, VOTE#, or RESULTS#) but don't have question data, fetch it
     if ((frontendState.startsWith('ASK#') || frontendState.startsWith('VOTE#') || frontendState.startsWith('RESULTS#')) && currentQuestionNumber && !currentQuestionData) {
       console.log(`🔍 Fetching question data for question ${currentQuestionNumber}`);
@@ -138,6 +162,7 @@ exports.handler = async (event) => {
       state: frontendState,
       currentQuestion: lessonNumber, // Return numeric lesson number for frontend
       currentQuestionData: currentQuestionData,
+      authorsRevealed: authorsRevealed,
       gameType: gameMetadata.Item.GameType || 'call-and-answer',
       gameMetadata: {
         title: gameMetadata.Item.Title,

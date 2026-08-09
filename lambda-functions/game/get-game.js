@@ -46,11 +46,19 @@ exports.handler = async (event) => {
       Key: { PK: `GAME#${gameId}`, SK: 'STATE#CATS' }
     }));
 
+    // Same default-ON rule as the anonymity gate (game/anonymity.js:isHidden):
+    // only an explicit `false` turns it off, so a game with no HostPreferences
+    // recorded — including every game created before this flag existed —
+    // reports `true`, matching what the gate would actually do for it.
+    const hostPreferences = gameMetadata.Item.HostPreferences || {};
+    const anonymousUntilReveal = hostPreferences.anonymousUntilReveal !== false;
+
     // Base game information (common to both host and player)
     const baseGameInfo = {
       gameId: gameId,
       title: gameMetadata.Item.Title,
       gameType: gameMetadata.Item.GameType,
+      anonymousUntilReveal: anonymousUntilReveal,
       createdAt: gameMetadata.Item.CreatedAt,
       hostName: gameMetadata.Item.HostName,
       visibility: gameMetadata.Item.Visibility || 'public',

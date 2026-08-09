@@ -16,7 +16,7 @@ import {
 import { resetGameSession } from './config/gameSession';
 import { gameTypeMeta } from './config/gameTypes';
 import { hostControlsFor, phaseOfGameState, HOST_INTENTS } from './config/hostControls';
-import { anonymityApplies, createPayloadFor, displayLabelFor, standingsVisible } from './config/anonymity';
+import { anonymityApplies, anonymityActive, createPayloadFor, displayLabelFor, standingsVisible } from './config/anonymity';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
 
@@ -81,6 +81,10 @@ function GameHostPage() {
     setGameStateRaw(newState);
   };
   const [currentGameType, setCurrentGameType] = useState('call-and-answer'); // Track the type of the current game
+  // Whether THIS game holds authorship back until reveal — the per-game flag
+  // from setup (config/anonymity.js), as opposed to anonymityApplies(), which
+  // only knows whether the TYPE supports it. Default ON, matching the backend.
+  const [anonymousUntilReveal, setAnonymousUntilReveal] = useState(true);
   const [playersWhoAnswered, setPlayersWhoAnswered] = useState([]);
   const [votes, setVotes] = useState([]);
   const [playersWhoVoted, setPlayersWhoVoted] = useState([]);
@@ -303,6 +307,7 @@ function GameHostPage() {
   const gameSessionSetters = {
     gameState: setGameState,
     currentGameType: setCurrentGameType,
+    anonymousUntilReveal: setAnonymousUntilReveal,
     questions: setQuestions,
     currentQuestionId: setCurrentQuestionId,
     currentQuestionIndex: setCurrentQuestionIndex,
@@ -1128,15 +1133,14 @@ Focus on actionable business strategy insights.`;
         setGameState(currentState);
         console.log(`🎮 HOST: Set game state to ${currentState}`);
 
-        // The round record itself, for this purpose, IS the state string:
-        // enterResultsState (get-results.js) sets AuthorsRevealed unconditionally
-        // the moment a round enters RESULTS#, so "in RESULTS" and "revealed" are
-        // the same fact by the time a host is looking at this screen. ASK#/VOTE#
-        // always restore to not-revealed, which is also correct for a host who
-        // revealed early and then refreshed — the durable ROUND# record still
-        // says revealed, but re-fetching it here would need a second round-trip
-        // this screen doesn't otherwise make; re-revealing costs one tap.
-        setAuthorsRevealed(currentState.startsWith('RESULTS#'));
+        // The durable fact, read straight from the ROUND# record (get-game-state
+        // .js now includes it) rather than inferred from the state string. An
+        // early reveal — the override for a host who reveals before closing the
+        // vote — must survive an ordinary re-sync (reconnect, gameStateChanged,
+        // questionStarted, votingStarted) that runs before RESULTS; deriving
+        // from `currentState.startsWith('RESULTS#')` silently reverted exactly
+        // that case, since none of those events are RESULTS transitions.
+        setAuthorsRevealed(!!gameStateData.authorsRevealed);
         console.log(`🔍 HOST: Questions array length: ${questions.length}`);
         
         // If we have a current question, set it up
@@ -1465,6 +1469,10 @@ Focus on actionable business strategy insights.`;
           const gameRes = await fetch(`${API_BASE}games/${gameId}?role=host`);
           if (gameRes.ok) {
             const gameData = await gameRes.json();
+            // The per-game anonymity flag (IMPORTANT 2): this is the one place
+            // GameHostPage already consumes get-game.js's host response, so it
+            // restores here rather than adding a second round-trip.
+            setAnonymousUntilReveal(gameData.anonymousUntilReveal !== false);
             if (gameData.categoryState) {
               // Convert bitmask back to selected categories
               const selectedCategoryIds = convertBitmaskToCategories(gameData.categoryState, fetchedCategories);
@@ -2185,14 +2193,14 @@ Focus on actionable business strategy insights.`;
           basePoints: answer.basePoints || 0,
           submittedAt: answer.submittedAt
         }));
-
-        console.log(`🧠 HOST: Formatted ${formattedAnswers.length} trivia answers:`,
+        
+        console.log(`🧠 HOST: Formatted ${formattedAnswers.length} trivia answers:`, 
           formattedAnswers.map(a => `${a.player}: ${a.answer} (${a.isCorrect ? 'correct' : 'incorrect'}, ${a.points} pts)`));
-
+        
       } else if (resultsData.gameType === 'wavelength' || currentGameType === 'wavelength') {
         // Wavelength results format: Just the raw answers with words
         console.log(`🌊 HOST: Processing wavelength results with ${resultsData.answers?.length || 0} answers`);
-
+        
         formattedAnswers = (resultsData.answers || []).map(answer => ({
           player: answer.playerName,
           playerName: answer.playerName, // for displayLabelFor
@@ -2200,13 +2208,13 @@ Focus on actionable business strategy insights.`;
           points: 0, // No points in wavelength
           submittedAt: answer.submittedAt
         }));
-
+        
         console.log(`🌊 HOST: Formatted ${formattedAnswers.length} wavelength answers for word cloud`);
-
+        
       } else {
         // Call-and-answer results format: { voteTallies: {...} }
         console.log(`💬 HOST: Processing call-and-answer results with voteTallies`);
-
+        
         formattedAnswers = resultsData.voteTallies && Object.keys(resultsData.voteTallies).length > 0
           ? Object.values(resultsData.voteTallies).map(tally => ({
               player: tally.playerName,
@@ -2258,6 +2266,10 @@ Focus on actionable business strategy insights.`;
       
       setManualStateChange(true);
       setGameState(resultsState);
+      // get-results.js's enterResultsState already set AuthorsRevealed
+      // unconditionally as part of this same request (Task 8) — mirror that
+      // here instead of waiting for a re-sync to notice it.
+      setAuthorsRevealed(true);
       console.log(`✅ HOST: Set game state to ${resultsState}`);
       
       // Notify players that results are ready
@@ -2481,6 +2493,11 @@ Focus on actionable business strategy insights.`;
       eventTitle,
       currentGameType: engagementType,
       selectedSetId: newGameSetId,
+      // Also an override rather than a post-reset setAnonymousUntilReveal:
+      // the create call below sends this same value, so seeding it here
+      // means the host screen never shows the (safe-default) previous
+      // game's flag for the moment before the create response returns.
+      anonymousUntilReveal: createPayloadFor({ gameType: engagementType, anonymousResponses }).anonymousUntilReveal,
     });
     fetchQuestionSetInstruction(newGameSetId);
 
@@ -3863,7 +3880,7 @@ Ready to engage? See you there!`;
                     withheld while an anonymous round is unrevealed, because a
                     score jumping here identifies the author of that round's
                     top-scoring answer as surely as a name would. */}
-                {standingsVisible({ gameType: currentGameType, authorsRevealed }) && (
+                {standingsVisible({ gameType: currentGameType, anonymousUntilReveal, authorsRevealed }) && (
                   <div className="player-score">{score} pts</div>
                 )}
                 {gameState.startsWith('ASK#') && (
@@ -4098,9 +4115,12 @@ Ready to engage? See you there!`;
               <span>{getHostRoundNoun()} {parseInt(gameState.split('#')[1])} · Results</span>
             </h2>
 
-            {/* Only formats that held a vote have anything to reveal — an option
-                that cannot do anything is a question a host should not be asked. */}
-            {anonymityApplies(currentGameType) && (
+            {/* Only a game that actually withheld authorship has anything to
+                reveal — a format that supports anonymity but had it turned off
+                for this game is exactly as inert here as one that never
+                supports it at all (an option that cannot do anything is a
+                question a host should not be asked). */}
+            {anonymityActive({ gameType: currentGameType, anonymousUntilReveal }) && (
               authorsRevealed ? (
                 <button className="ghost-step-back" onClick={() => setAuthorsRevealed(false)}>
                   ‹ Hide again

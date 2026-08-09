@@ -51,6 +51,12 @@ export function initialGameSession() {
     // --- the round in play ---------------------------------------------
     gameState: 'CREATED',
     currentGameType: 'call-and-answer',
+    // Whether THIS game holds authorship back until reveal — set once at
+    // creation (config/anonymity.js: createPayloadFor) and constant for the
+    // game's lifetime. Default ON, matching the backend gate's own default,
+    // so the brief window before a restored game's real value loads is the
+    // safe (hidden) state rather than the open one.
+    anonymousUntilReveal: true,
     questions: [],
     currentQuestionId: '',
     currentQuestionIndex: -1,
