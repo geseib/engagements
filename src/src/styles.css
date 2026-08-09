@@ -3811,6 +3811,17 @@ body {
   cursor: pointer;
 }
 
+/* The rail's hover/focus preview mounts this same overlay on top of the
+   `<code>` that opened it. Without pointer-events:none the browser re-hit-tests
+   on the very next mousemove, fires mouseleave on the now-occluded code,
+   unmounts the overlay, re-hovers the code, and loops. The pointer must keep
+   landing on the trigger underneath so mouseleave only fires when the mouse
+   genuinely leaves it. The pinned state (no modifier) keeps normal pointer
+   events -- click-away is how a deliberate pin gets dismissed. */
+.expanded-qr-overlay--preview {
+  pointer-events: none;
+}
+
 .expanded-qr-content {
   background: white;
   border-radius: 20px;

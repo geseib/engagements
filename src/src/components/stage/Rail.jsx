@@ -95,6 +95,20 @@ export default function Rail({ phase, title, context = {}, join = {}, timer }) {
                 onFocus={join.onPreview}
                 onBlur={join.onPreviewEnd}
                 onClick={join.onPin}
+                onKeyDown={(e) => {
+                  // React does not synthesize a click from Enter/Space on an
+                  // ARIA role -- only a native <button> gets that for free.
+                  // Without this, Space falls through to HostActionBar's
+                  // window-level listener and advances the round instead of
+                  // pinning the QR, in front of the room. stopPropagation is
+                  // what stops that fallthrough; preventDefault stops the
+                  // page from scrolling on Space.
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    join.onPin?.();
+                  }
+                }}
               >
                 {join.code}
               </code>

@@ -67,4 +67,25 @@ describe('the session code as a QR trigger', () => {
     );
     expect(container.querySelector('.rail-join code')).toBeNull();
   });
+
+  test('Enter and Space pin the QR and never reach a window-level shortcut listener', () => {
+    // rejects: role="button" with no onKeyDown, which looks activatable but
+    // isn't -- React does not synthesize a click from Enter/Space the way a
+    // native <button> does. Without stopPropagation, the same keypress falls
+    // through to HostActionBar's window keydown listener and advances the
+    // round instead of pinning the QR, in front of the room.
+    const onPin = jest.fn();
+    const windowKeydown = jest.fn();
+    window.addEventListener('keydown', windowKeydown);
+    const { container } = render(
+      <Rail phase="ASK" title="Q3" join={join({ onPreview: jest.fn(), onPreviewEnd: jest.fn(), onPin })} />
+    );
+    const code = container.querySelector('.rail-join code');
+    fireEvent.keyDown(code, { key: 'Enter' });
+    fireEvent.keyDown(code, { key: ' ' });
+    window.removeEventListener('keydown', windowKeydown);
+
+    expect(onPin).toHaveBeenCalledTimes(2);
+    expect(windowKeydown).not.toHaveBeenCalled();
+  });
 });

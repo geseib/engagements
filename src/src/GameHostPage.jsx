@@ -15,6 +15,7 @@ import Rail from './components/stage/Rail';
 import RoomMeter from './components/stage/RoomMeter';
 import Dock from './components/stage/Dock';
 import { loadProfile, saveProfile } from './config/displayProfile';
+import { qrOverlayClassName } from './utils/qrOverlayClassName';
 import {
   resolveInstruction, currentQuestionOf, resolveRoundNoun, pluralRoundNoun,
 } from './config/instructions';
@@ -4551,9 +4552,14 @@ Ready to engage? See you there!`;
       </Stage>
 
       {/* Expanded QR Code Modal -- also the rail's pinned/previewed QR. Same
-          overlay, same dismissal: the room only ever needs one way in. */}
+          overlay, same dismissal: the room only ever needs one way in.
+          The preview modifier keeps the backdrop pointer-transparent -- see
+          the class's comment in styles.css for why. */}
       {(showExpandedQR || qrMode) && (
-        <div className="expanded-qr-overlay" onClick={() => { setShowExpandedQR(false); setQrMode(null); }}>
+        <div
+          className={qrOverlayClassName(qrMode)}
+          onClick={() => { setShowExpandedQR(false); setQrMode(null); }}
+        >
           <div className="expanded-qr-content" onClick={(e) => e.stopPropagation()}>
             <div className="expanded-qr-header">
               <h2>{eventTitle || 'Engagements Session'}</h2>
