@@ -59,6 +59,25 @@ The pipeline execution history is the **only** reliable record of what is deploy
 
 `CLAUDE.md` reserves deploys to the owner. Ask before pushing any tier; past authorisation was per-action, not standing.
 
+### Proposed: go tag-only. Owner agreed in principle 2026-08-09; not yet implemented.
+
+**The change.** In `cicd/pipeline-clean.yaml`, each of the three pipelines has a `Triggers` block with two `Push` entries — a `Branches` filter and a `Tags` filter (dev at `:304-321`, test at `:364-374`, prod at `:418`). **Delete the `- Branches:` entry from all three, keep `- Tags:`.** The file's own comments record why they are separate entries: `Tags` and `Branches` cannot be combined inside one filter, so they are OR'd — which is exactly why a `dev-v*` tag on *any* branch deploys today.
+
+Note the comment at `:369-370`: when `Triggers` is present the default branch trigger is disabled and has to be restated. So removing the restatement is precisely what yields tag-only, with no other side effect.
+
+**Why.** A push is currently a deploy, and that cost real time on 2026-08-09 in two ways: `dev` was unpushable for hours because it carried a defect, so ~68 commits of finished work existed only on one laptop with no remote copy; and a verified one-line archive fix could not reach the dev environment at all without dragging unfinished work with it. Tag-only decouples "save and share" from "make it live". It is also the structural fix for the incident that started that day — `prod` received a half-finished feature because someone pushed mid-feature.
+
+Apply it to **`dev` as well as test and prod.** Dev is precisely where you most want to push freely without shipping.
+
+**Two weaknesses you are accepting, both real and neither fixable:**
+
+1. **Tags do not sort — last write wins.** Tagging `1.0.4` after `1.0.5` deploys `1.0.4`. Never read the tag list as the record of what is deployed; the pipeline execution history is the only truth (command above).
+2. **A tag on any branch deploys.** There is no branch guard available for a tag filter. This is useful — it is how you would get a hotfix into `dev` while `dev` is held — and dangerous, with no technical mitigation, only convention.
+
+Rollback is unaffected and stays easy: the old tag still points at its commit, so re-run the pipeline at that revision. No recommit, no tag surgery.
+
+**Open question before doing it:** how does the `engagecicd` stack itself get deployed? It is defined in this repo but the pipelines deploy the *application* stacks, so changing the pipeline may not be a change the pipeline can make. Establish that first — the pipeline-only rule has to survive its own bootstrap.
+
 ## Open with the owner
 
 1. **Does §7.15 yield for trivia?** `docs/design/host-redesign/07-results-trivia.html` answers trivia's round standings with a named roster in the meter; `RoomMeter` refuses names **by test**, under the spec's never-name-a-person rule. Two artefacts disagree and one is the rule. **Trivia currently has no per-round payoff on the room's screen at all.** Recorded in the stage-shell plan under "Open decisions this plan surfaced and could not settle".
