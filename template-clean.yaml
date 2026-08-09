@@ -289,6 +289,13 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/reveal-authors
             Method: post
+            # HOST ONLY. This ends the anonymity of a round for the whole room
+            # and answers with every author's name. A participant knows the
+            # four-digit game id, so without this any player could have flipped
+            # it from a phone. Players never call it — the reveal they see
+            # arrives over the WebSocket.
+            Auth:
+              Authorizer: CognitoAuthorizer
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable

@@ -1465,12 +1465,26 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
         name: scoreRecord.PlayerName,
         score: scoreRecord.score || 0  // Note: lowercase 'score' based on get-results.js
       })).sort((a, b) => b.score - a.score);
-      
-      leaderboard = playerScores;
-      totalScores = playerScores.slice(0, 5).map((p, idx) => 
-        `${idx + 1}. ${p.name}: ${p.score} pts`
-      ).join(', ');
-      
+
+      // ANONYMITY: cumulative standings are attribution by arithmetic — the
+      // same leak `standingsVisible` exists to prevent on the host screen. A
+      // name-and-score list handed to the model while the round is hidden puts
+      // "Ada leads with 12 points" straight into the summary the room reads,
+      // and into the ?debug=true prompt echo any caller can request.
+      //
+      // The leaderboard is emptied rather than placeholdered: unlike an answer
+      // row, a ranking of "a participant, a participant" says nothing, and an
+      // empty template variable is what every other absent-data path here
+      // already produces. averageScore survives — it names nobody.
+      if (hidden) {
+        console.log('🔒 Round is unrevealed — withholding the leaderboard from the prompt');
+      } else {
+        leaderboard = playerScores;
+        totalScores = playerScores.slice(0, 5).map((p, idx) =>
+          `${idx + 1}. ${p.name}: ${p.score} pts`
+        ).join(', ');
+      }
+
       if (playerScores.length > 0) {
         const totalSum = playerScores.reduce((sum, p) => sum + p.score, 0);
         averageScore = Math.round(totalSum / playerScores.length);

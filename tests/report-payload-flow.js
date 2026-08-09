@@ -137,7 +137,7 @@ function seedQuestion(setId, sk, attrs) {
 const seedRef = (n, sourceQuestionId) =>
   put({ PK: `GAME#${GAME}`, SK: `QUESTION#${n}#REF`, SourceQuestionId: sourceQuestionId, SetId: SET });
 
-const seedResults = (n, sourceQuestionId, extra = {}) =>
+const seedResults = (n, sourceQuestionId, extra = {}) => {
   put({
     PK: `GAME#${GAME}`, SK: `QUESTION#${n}#RESULTS`,
     SourceQuestionId: sourceQuestionId,
@@ -145,6 +145,18 @@ const seedResults = (n, sourceQuestionId, extra = {}) =>
     CompletedAt: '2026-08-01T00:21:00.000Z',
     ...extra,
   });
+  // The ROUND# record enterResultsState writes in the SAME call that writes the
+  // RESULTS record above (get-results.js). Seeding one without the other
+  // described a state production never produces — a round that finished but was
+  // never revealed — which the report now correctly declines to attribute.
+  // These fixtures are about tally and winner computation, so they need the
+  // round in the state a finished round is actually in.
+  put({
+    PK: `GAME#${GAME}`, SK: `ROUND#${n}`,
+    QuestionNumber: n, AuthorsRevealed: true,
+    UpdatedAt: '2026-08-01T00:20:00.000Z',
+  });
+};
 
 const seedAnswer = (n, player, text) =>
   put({ PK: `GAME#${GAME}`, SK: `QUESTION#${n}#ANSWER#${player}`, PlayerName: player, Answer: text });

@@ -1,6 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { resolveSetPartition } = require('./set-version');
+const { isHidden } = require('./anonymity');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client, {
@@ -69,6 +70,33 @@ exports.handler = async (event) => {
     }));
 
     // All question-related data is retrieved in the single query above
+
+    // ANONYMITY. POST /games/{id}/report is a PUBLIC route, and the rounds it
+    // reports on are not all finished: questionNumbers below is built from
+    // votes ∪ results ∪ AI summaries, so a round still in VOTE joins the list
+    // the moment the first ballot lands. Without this, anyone holding the
+    // four-digit game id could ask the report for the names the ballot itself
+    // is withholding, mid-vote, from the projector in the room.
+    //
+    // Per round, from the same ROUND# records the rest of the feature reads,
+    // through the same isHidden() gate — so the report cannot drift from what
+    // GET /answers decided. In practice this narrows nothing: entering RESULTS
+    // sets AuthorsRevealed by itself, so every round that finished is still
+    // fully attributed. Only a round abandoned mid-vote loses its names.
+    const roundsQuery = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: {
+        ':pk': `GAME#${gameId}`,
+        ':sk': 'ROUND#'
+      }
+    }));
+    const roundsByNumber = new Map(
+      (roundsQuery.Items || []).map((r) => [String(r.SK).replace('ROUND#', ''), r])
+    );
+    /** True when THIS round's authors must stay off the report. */
+    const roundIsHidden = (paddedQuestionNumber) =>
+      isHidden(gameMetadata.Item, roundsByNumber.get(paddedQuestionNumber));
 
     // Process the data with proper filtering
     const players = playersQuery.Items || [];
@@ -269,13 +297,23 @@ exports.handler = async (event) => {
       // Calculate vote tallies for ranking (same logic as get-ai-summary.js)
       const voteTallies = {};
       const answerScores = {};
+      const hideAuthors = roundIsHidden(questionNumber);
+      if (hideAuthors) {
+        console.log(`🔒 Question ${questionNumber} is unrevealed — reporting it without attribution`);
+      }
 
-      // Initialize scores for each answer
+      // Initialize scores for each answer.
+      //
+      // Index-keyed and never filtered or reordered: the ballot is positional
+      // (submit-vote stores {"0": 1}), so dropping a redacted row here would
+      // land every later vote on the wrong answer. Authorship is OMITTED, not
+      // nulled — same rule as the runtime payloads (game/anonymity.js) — so a
+      // renderer that forgets about anonymity shows nothing rather than "null".
       questionAnswers.forEach((answer, index) => {
         answerScores[index] = 0;
         voteTallies[index] = {
           answerText: answer.Answer,
-          playerName: answer.PlayerName,
+          ...(hideAuthors ? {} : { playerName: answer.PlayerName }),
           firstPlace: 0,
           secondPlace: 0,
           thirdPlace: 0,
@@ -314,7 +352,8 @@ exports.handler = async (event) => {
       const rankedAnswers = Object.entries(voteTallies)
         .map(([index, voteData]) => ({
           answerIndex: parseInt(index),
-          playerName: voteData.playerName,
+          // Absent on an unrevealed round — voteTallies omitted it above.
+          ...(hideAuthors ? {} : { playerName: voteData.playerName }),
           answerText: voteData.answerText,
           totalScore: voteData.totalScore,
           firstPlace: voteData.firstPlace,
@@ -433,12 +472,16 @@ exports.handler = async (event) => {
       questionId: q.questionId,
       answerCount: q.answers.length,
       voteCount: q.voteStats.totalVotes,
-      winners: q.answers.filter(a => a.rank === 1).map(a => a.playerName),
+      // filter(Boolean): a redacted winner carries no playerName, and a
+      // winners list of [undefined] is worse than an empty one — it renders as
+      // a blank name and counts as a person.
+      winners: q.answers.filter(a => a.rank === 1).map(a => a.playerName).filter(Boolean),
       maxVotes: q.voteStats.maxScore,
       voteTallies: q.answers.reduce((acc, answer) => {
         acc[answer.answerIndex] = {
           answerText: answer.answerText,
-          playerName: answer.playerName,
+          // Omitted, not nulled, when the round it came from is unrevealed.
+          ...(answer.playerName === undefined ? {} : { playerName: answer.playerName }),
           firstPlace: answer.firstPlace,
           secondPlace: answer.secondPlace,
           thirdPlace: answer.thirdPlace,
@@ -495,7 +538,12 @@ exports.handler = async (event) => {
         // Fallback: Calculate from vote tallies across all questions if no score record exists
         console.log(`⚠️ Player ${playerName}: No score record found, calculating from question tallies`);
         detailedQuestions.forEach(question => {
-          const playerAnswer = question.answers.find(a => a.playerName === playerName);
+          // `a.playerName &&` matters: rows from an unrevealed round omit it,
+          // and a player record with no name would otherwise match every one
+          // of them on undefined === undefined and collect the whole round's
+          // points. An unrevealed round simply contributes nothing here — it
+          // has no attributable score to contribute.
+          const playerAnswer = question.answers.find(a => a.playerName && a.playerName === playerName);
           if (playerAnswer) {
             totalScore += playerAnswer.totalScore || 0;
           }

@@ -9,15 +9,25 @@
  * call here is a harmless, idempotent no-op that returns the attributed rows.
  *
  * PER ROUND, NOT PER GAME. A host may reveal round 3 and end the session before
- * round 4, and round 4 must stay anonymous forever in the report.
+ * round 4, and round 4's authors are never revealed by this endpoint. (It does
+ * not follow that round 4 stays anonymous in the report — the amendment above
+ * means entering RESULTS reveals a round on its own, so in practice every round
+ * that finished is attributed. Only a round abandoned before RESULTS, and never
+ * revealed here, stays unattributed. create-report.js reads AuthorsRevealed for
+ * exactly that reason.)
+ *
+ * HOST ONLY. The route carries the Cognito authorizer (template-clean.yaml):
+ * a participant knows the four-digit game id, and this both flips the flag for
+ * the whole room and returns every name.
  *
  * IDEMPOTENT. The host is standing in front of a room; a double-tap must not
  * produce an error, and revealing something already revealed is a no-op that
  * still returns the rows.
  *
- * This does not un-send anything. `‹ Hide again` on the stage is display-only —
- * the payload has already been delivered. Do not describe it as a security
- * control.
+ * This does not un-send anything, and neither does its counterpart: the
+ * `Hide authors` control on the RESULTS stage is display-only and calls nothing
+ * here — the payload has already been delivered. Do not describe it as a
+ * security control.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
@@ -56,15 +66,19 @@ exports.handler = async (event) => {
   const { gameId } = event.pathParameters || {};
   const { questionNumber } = JSON.parse(event.body || '{}');
 
-  if (!gameId || questionNumber === undefined || questionNumber === null) {
+  // The question number becomes part of the SK, so anything that is not a
+  // plain round number is rejected rather than padded. `''` used to pass the
+  // presence check and pad to '000'; any other junk wrote a ROUND#<junk> item
+  // into the game's partition that nothing would ever read again.
+  if (!gameId || !/^\d+$/.test(String(questionNumber ?? '').trim())) {
     return {
       statusCode: 400,
-      body: JSON.stringify({ error: 'gameId and questionNumber are required' }),
+      body: JSON.stringify({ error: 'gameId and a numeric questionNumber are required' }),
       headers: { 'Access-Control-Allow-Origin': '*' }
     };
   }
 
-  const padded = String(questionNumber).padStart(3, '0');
+  const padded = String(questionNumber).trim().padStart(3, '0');
   const now = new Date().toISOString();
 
   try {

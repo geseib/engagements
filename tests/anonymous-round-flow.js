@@ -578,6 +578,15 @@ async function runAiSummaryWorker(gameId, { revealed }) {
   // first) gets the first-place vote.
   put({ PK: `GAME#${gameId}`, SK: 'QUESTION#001#VOTE#Mallory', PlayerName: 'Mallory', Votes: { '0': 1 } });
   put({ PK: `GAME#${gameId}`, SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
+  // WHOLE-BRANCH REVIEW, IMPORTANT 8: seedAnonymousRound seeds no
+  // PLAYER#…#SCORE records, which made every "no Ada anywhere" assertion in
+  // this section VACUOUS for the cumulative-standings variables — leaderboard,
+  // totalScores/cumulativeScores, topPerformers and playerRankings are all
+  // built from these records, and with none seeded they were empty for reasons
+  // that had nothing to do with anonymity. Seed them, and the assertions below
+  // start doing the job they claimed to be doing.
+  put({ PK: `GAME#${gameId}`, SK: 'PLAYER#Ada#SCORE', PlayerName: 'Ada', score: 12 });
+  put({ PK: `GAME#${gameId}`, SK: 'PLAYER#Grace#SCORE', PlayerName: 'Grace', score: 5 });
 
   const res = await getAiSummary({ __workerMode: true, gameId, questionId: '001', debug: 'true' });
   const stored = store.get(key(`GAME#${gameId}`, 'QUESTION#001#AISummary'));
@@ -615,6 +624,21 @@ await check('hidden discussion questions use the same unattributed phrasing as t
   assert.ok(hidden12.stored.DiscussionQuestions.some((q) => /most-supported response/i.test(q)),
     JSON.stringify(hidden12.stored.DiscussionQuestions)));
 
+// IMPORTANT 8: attribution by arithmetic. "Ada leads with 12 points" names the
+// author of the round's top answer as surely as a label would, and it reached
+// the model AND the debug echo through four separate template variables. Named
+// individually rather than left to the blanket string checks above so a
+// regression says WHICH variable started leaking again.
+const hiddenTemplateVars = hidden12.stored.DebugInfo.templateVariables;
+for (const varName of ['totalScores', 'cumulativeScores', 'topPerformers', 'playerRankings', 'leaderboard']) {
+  await check(`IMPORTANT 8 fix: hidden — templateVars.${varName} carries no cumulative standings`, () =>
+    assert.strictEqual(hiddenTemplateVars[varName], '',
+      `expected empty while hidden, got: ${JSON.stringify(hiddenTemplateVars[varName])}`));
+}
+await check('IMPORTANT 8 fix: hidden — the aggregate average still survives, because it names nobody', () =>
+  assert.ok(/^\d+ points$/.test(String(hiddenTemplateVars.averageScore)),
+    `expected an aggregate average, got: ${JSON.stringify(hiddenTemplateVars.averageScore)}`));
+
 // Revealed counterpart — proves the checks above are not vacuous (e.g. a
 // broken template that never substitutes anything would also show "no Ada").
 const revealed12 = await runAiSummaryWorker('3012', { revealed: true });
@@ -625,6 +649,15 @@ await check('revealed: the answer author DOES appear in the template variables (
 await check('revealed: discussion questions quote the answer verbatim again, as before this task', () =>
   assert.ok(revealed12.stored.DiscussionQuestions.some((q) => q.includes('"loves the ocean"')),
     JSON.stringify(revealed12.stored.DiscussionQuestions)));
+
+// The counterpart that stops the five checks above from passing on a
+// leaderboard that is simply broken.
+const revealedTemplateVars = revealed12.stored.DebugInfo.templateVariables;
+for (const varName of ['totalScores', 'cumulativeScores', 'topPerformers', 'playerRankings', 'leaderboard']) {
+  await check(`revealed: templateVars.${varName} DOES carry the standings (proves the hidden checks are not vacuous)`, () =>
+    assert.ok(String(revealedTemplateVars[varName]).includes('Ada'),
+      `expected the standings once revealed, got: ${JSON.stringify(revealedTemplateVars[varName])}`));
+}
 
 console.log('\n13. Wavelength: both the stored-results cache path and the live-calculation path redact without dropping participants');
 
@@ -751,6 +784,144 @@ await getResults({ body: JSON.stringify({ gameId: '3013', questionNumber: 1 }) }
 
 await check('a round that closed with zero votes is still revealed', () =>
   assert.strictEqual(store.get(key('GAME#3013', 'ROUND#001'))?.AuthorsRevealed, true));
+
+console.log('\n16. GET /games/{id}/state reports the reveal back to the host');
+
+// This is the read that makes an EARLY reveal survive a resync — without it a
+// host who revealed during VOTE gets silently reverted by the next
+// gameStateChanged/reconnect. It was reachable from this harness all along and
+// simply never driven.
+// revealAuthors is already required by section 8 above.
+const { handler: getGameState } = require(path.join(REPO, 'lambda-functions/game/get-game-state.js'));
+
+const askState = (gameId) => getGameState({ pathParameters: { gameId }, queryStringParameters: { role: 'host' } });
+
+seedAnonymousRound('3014', { state: 'VOTE#001' });
+const stateBeforeReveal = JSON.parse((await askState("3014")).body);
+await check('an unrevealed round reports authorsRevealed false', () =>
+  assert.strictEqual(stateBeforeReveal.authorsRevealed, false));
+
+await revealAuthors({ pathParameters: { gameId: '3014' }, body: JSON.stringify({ questionNumber: 1 }) });
+const stateAfterReveal = JSON.parse((await askState("3014")).body);
+await check('after an early reveal the state read carries it, so a resync cannot revert it', () =>
+  assert.strictEqual(stateAfterReveal.authorsRevealed, true));
+
+console.log('\n17. POST /reveal-authors rejects a question number that is not a round number');
+
+// The value becomes part of the SK. '' used to pass the presence check and pad
+// to ROUND#000; anything else wrote ROUND#<junk> into the game partition that
+// nothing would ever read. Combined with the route having been public, that was
+// an unauthenticated write primitive.
+for (const bad of ['', '  ', 'abc', '1; DROP', '../../x', null, undefined, {}, -1, 1.5]) {
+  seedAnonymousRound('3015');
+  const res = await revealAuthors({
+    pathParameters: { gameId: '3015' },
+    body: JSON.stringify({ questionNumber: bad })
+  });
+  await check(`rejects questionNumber ${JSON.stringify(bad)} with 400`, () =>
+    assert.strictEqual(res.statusCode, 400, `got ${res.statusCode}: ${res.body}`));
+  await check(`writes no ROUND# record for questionNumber ${JSON.stringify(bad)}`, () =>
+    assert.strictEqual(
+      [...store.keys()].filter((k) => k.startsWith('GAME#3015|ROUND#')).length, 1,
+      'only the seeded ROUND#001 should exist'));
+}
+
+// The counterpart: a legitimate number still works, in both spellings.
+for (const good of [1, '1', '001']) {
+  seedAnonymousRound('3016');
+  const res = await revealAuthors({
+    pathParameters: { gameId: '3016' },
+    body: JSON.stringify({ questionNumber: good })
+  });
+  await check(`accepts questionNumber ${JSON.stringify(good)} and reveals ROUND#001`, () =>
+    assert.ok(res.statusCode === 200 && store.get(key('GAME#3016', 'ROUND#001')).AuthorsRevealed === true,
+      `${res.statusCode}: ${res.body}`));
+}
+
+console.log('\n18. POST /games/{id}/report does not attribute an unrevealed round');
+
+// The route is PUBLIC (template-clean.yaml), and the rounds it reports on are
+// not all finished — questionNumbers is built from votes ∪ results ∪ AI
+// summaries, so a round still in VOTE joins the list the moment the first
+// ballot lands. Anyone holding the four-digit game id could therefore ask the
+// report for the names the ballot in the room is withholding.
+const { handler: createReport } = require(path.join(REPO, 'lambda-functions/game/create-report.js'));
+
+const askReport = async (gameId) => {
+  const res = await createReport({ pathParameters: { gameId } });
+  return { res, body: JSON.parse(res.body) };
+};
+
+/**
+ * A game mid-vote on round 1: answers in, one ballot cast, nothing revealed.
+ *
+ * Overwrites the answer TEXT for the same reason section 12 does — the shared
+ * helper's default content is literally "Ada's answer", so a blanket "the
+ * report contains no 'Ada'" check would trip on correctly-preserved answer
+ * text rather than on a real attribution leak. Only authorship is redacted;
+ * what a participant wrote is never touched.
+ */
+function seedReportableRound(gameId, { revealed }) {
+  seedAnonymousRound(gameId, { revealed, state: 'VOTE#001' });
+  put({ PK: `GAME#${gameId}`, SK: 'QUESTION#001#ANSWER#Ada', PlayerName: 'Ada', Answer: 'loves the ocean', SubmittedAt: '2026-01-01T00:00:00.000Z' });
+  put({ PK: `GAME#${gameId}`, SK: 'QUESTION#001#ANSWER#Grace', PlayerName: 'Grace', Answer: 'prefers the mountains', SubmittedAt: '2026-01-01T00:00:00.000Z' });
+  put({ PK: `GAME#${gameId}`, SK: 'QUESTION#001#VOTE#Mallory', PlayerName: 'Mallory', Votes: { '0': 1 } });
+}
+
+seedReportableRound('3017', { revealed: false });
+const hiddenReport = await askReport('3017');
+
+await check('the report is still produced for an unrevealed round', () =>
+  assert.strictEqual(hiddenReport.res.statusCode, 200, hiddenReport.res.body));
+await check('the unrevealed round is still IN the report — redaction, not omission', () =>
+  assert.strictEqual(hiddenReport.body.report.detailedQuestions.length, 1,
+    JSON.stringify(hiddenReport.body.report.detailedQuestions)));
+await check('no author name reaches the report while the round is unrevealed', () => {
+  const serialized = JSON.stringify(hiddenReport.body.report.detailedQuestions);
+  assert.ok(!serialized.includes('Ada') && !serialized.includes('Grace'), serialized);
+});
+await check('authorship is OMITTED, not nulled — no playerName key at all', () => {
+  const rows = hiddenReport.body.report.detailedQuestions[0].answers;
+  assert.ok(rows.every((r) => !('playerName' in r)), JSON.stringify(rows));
+});
+await check('the ballot is neither reordered nor filtered — both rows survive, in index order', () => {
+  const rows = hiddenReport.body.report.detailedQuestions[0].answers;
+  assert.deepStrictEqual(rows.map((r) => r.answerIndex).sort(), [0, 1], JSON.stringify(rows));
+});
+await check('the answer TEXT is untouched — only authorship is withheld', () => {
+  const serialized = JSON.stringify(hiddenReport.body.report.detailedQuestions[0].answers);
+  assert.ok(serialized.includes('loves the ocean') && serialized.includes('prefers the mountains'), serialized);
+});
+await check('winners is empty rather than a list of blanks', () =>
+  assert.deepStrictEqual(hiddenReport.body.report.questionSummaries[0].winners, [],
+    JSON.stringify(hiddenReport.body.report.questionSummaries[0])));
+await check('the legacy voteTallies block omits playerName too', () => {
+  const tallies = Object.values(hiddenReport.body.report.questionSummaries[0].voteTallies);
+  assert.ok(tallies.every((t) => !('playerName' in t)), JSON.stringify(tallies));
+});
+
+// The counterpart. In practice this is EVERY finished round, because entering
+// RESULTS reveals on its own — so this is also the check that stops the gate
+// above from quietly emptying the ordinary report.
+seedReportableRound('3018', { revealed: true });
+const revealedReport = await askReport('3018');
+
+await check('a revealed round is attributed exactly as before this task', () => {
+  const rows = revealedReport.body.report.detailedQuestions[0].answers;
+  assert.ok(rows.some((r) => r.playerName === 'Ada'), JSON.stringify(rows));
+});
+await check('a revealed round names its winner', () =>
+  assert.deepStrictEqual(revealedReport.body.report.questionSummaries[0].winners, ['Ada'],
+    JSON.stringify(revealedReport.body.report.questionSummaries[0])));
+
+// And a game that never had anonymity at all is untouched by any of this.
+seedAnonymousRound('3019', { anonymous: false, state: 'VOTE#001' });
+put({ PK: 'GAME#3019', SK: 'QUESTION#001#VOTE#Mallory', PlayerName: 'Mallory', Votes: { '0': 1 } });
+const optedOutReport = await askReport('3019');
+await check('a game with anonymity switched off is attributed even mid-vote', () => {
+  const rows = optedOutReport.body.report.detailedQuestions[0].answers;
+  assert.ok(rows.some((r) => r.playerName === 'Ada'), JSON.stringify(rows));
+});
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
