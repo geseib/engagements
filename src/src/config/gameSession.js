@@ -55,6 +55,9 @@ export function initialGameSession() {
     currentQuestionId: '',
     currentQuestionIndex: -1,
     lessonNumber: 0,
+    // Whether the round in play has shown its authors. Round-scoped, exactly
+    // like lessonNumber — a new game must not inherit the last one's reveal.
+    authorsRevealed: false,
 
     // --- the room ------------------------------------------------------
     players: [],

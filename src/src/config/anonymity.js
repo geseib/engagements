@@ -33,3 +33,28 @@ export function createPayloadFor({ gameType, anonymousResponses } = {}) {
   if (!anonymityApplies(gameType)) return { anonymousUntilReveal: false };
   return { anonymousUntilReveal: anonymousResponses !== false };
 }
+
+/**
+ * A row is redacted when it has no usable author, which is the client half of
+ * the backend's omit-don't-null rule. Treats null and '' as redacted too, so a
+ * partial payload can never render an empty label or the string "null".
+ */
+export function isRedacted(answer) {
+  return !(answer && typeof answer.playerName === 'string' && answer.playerName.length > 0);
+}
+
+/**
+ * What to print above an answer. `Response N` is 1-based because it is read
+ * aloud in a room — "look at response three", not "response two".
+ */
+export function displayLabelFor(answer, index) {
+  return isRedacted(answer) ? `Response ${index + 1}` : answer.playerName;
+}
+
+/**
+ * Whether standings may be shown. See §5.6.4: a live leaderboard during an
+ * anonymous round is attribution by arithmetic, so it waits for the reveal.
+ */
+export function standingsVisible({ gameType, authorsRevealed } = {}) {
+  return !anonymityApplies(gameType) || authorsRevealed === true;
+}

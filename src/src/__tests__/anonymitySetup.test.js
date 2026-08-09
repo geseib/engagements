@@ -7,7 +7,9 @@
  * the option at all, and what the create payload carries.
  */
 import { hostRunsVotePhase } from '../config/hostControls';
-import { anonymityApplies, createPayloadFor } from '../config/anonymity';
+import {
+  anonymityApplies, createPayloadFor, displayLabelFor, isRedacted, standingsVisible,
+} from '../config/anonymity';
 
 describe('which formats offer anonymous responses', () => {
   // Not a new taxonomy — exactly the set that holds a vote.
@@ -44,5 +46,45 @@ describe('the create payload', () => {
   test('a non-voting type sends false explicitly, not undefined', () => {
     const payload = createPayloadFor({ gameType: 'trivia' });
     expect(payload.anonymousUntilReveal).toBe(false);
+  });
+});
+
+describe('how an answer is labelled', () => {
+  const anon = { answer: 'a splendid answer' };
+  const named = { playerName: 'Ada', answer: 'a splendid answer' };
+
+  test('a redacted row is labelled by position, 1-based', () => {
+    expect(displayLabelFor(anon, 0)).toBe('Response 1');
+    expect(displayLabelFor(anon, 2)).toBe('Response 3');
+  });
+
+  test('an attributed row is labelled by name', () => {
+    expect(displayLabelFor(named, 0)).toBe('Ada');
+  });
+
+  // Omit-not-null is the backend contract; this is the client half of it.
+  test('the absence of playerName is what marks a row redacted', () => {
+    expect(isRedacted(anon)).toBe(true);
+    expect(isRedacted(named)).toBe(false);
+  });
+
+  test('a literal null never renders as the string "null"', () => {
+    expect(displayLabelFor({ playerName: null, answer: 'x' }, 0)).toBe('Response 1');
+  });
+
+  test('an empty-string name is treated as redacted, not as a blank label', () => {
+    expect(displayLabelFor({ playerName: '', answer: 'x' }, 1)).toBe('Response 2');
+  });
+});
+
+describe('standings before the reveal', () => {
+  test('hidden while an anonymous round is unrevealed', () => {
+    expect(standingsVisible({ gameType: 'call-and-answer', authorsRevealed: false })).toBe(false);
+  });
+  test('shown once revealed', () => {
+    expect(standingsVisible({ gameType: 'call-and-answer', authorsRevealed: true })).toBe(true);
+  });
+  test('always shown for a format with no anonymity', () => {
+    expect(standingsVisible({ gameType: 'trivia', authorsRevealed: false })).toBe(true);
   });
 });

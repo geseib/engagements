@@ -1,11 +1,14 @@
 /**
  * End the anonymity of one round.
  *
- * The reveal is the primary action of RESULTS, not an automatic consequence of
- * arriving there (§5.6.4) — so this is an endpoint the host calls, and the beat
- * order is RESULTS (anonymous) -> RESULTS (revealed) -> What we heard -> Next.
- * A host cannot forget to reveal, because revealing is the only way forward.
+ * AMENDED 2026-08-09, alongside Task 8: AuthorsRevealed now flips automatically
+ * when the round enters RESULTS (get-results.js's enterResultsState), so a host
+ * cannot fail to reveal — it is no longer a gate. This endpoint is only
+ * load-bearing for a host who reveals BEFORE closing the vote, i.e. from ASK#
+ * or VOTE#; by the time RESULTS is showing, the round is already revealed and a
+ * call here is a harmless, idempotent no-op that returns the attributed rows.
  *
+
  * PER ROUND, NOT PER GAME. A host may reveal round 3 and end the session before
  * round 4, and round 4 must stay anonymous forever in the report.
  *

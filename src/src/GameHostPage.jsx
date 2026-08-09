@@ -16,7 +16,7 @@ import {
 import { resetGameSession } from './config/gameSession';
 import { gameTypeMeta } from './config/gameTypes';
 import { hostControlsFor, phaseOfGameState, HOST_INTENTS } from './config/hostControls';
-import { anonymityApplies, createPayloadFor } from './config/anonymity';
+import { anonymityApplies, createPayloadFor, displayLabelFor, standingsVisible } from './config/anonymity';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
 
@@ -95,7 +95,12 @@ function GameHostPage() {
   const [showReport, setShowReport] = useState(false);
   const [reportData, setReportData] = useState(null);
   const [lessonNumber, setLessonNumber] = useState(0);
-  
+  // Whether this round's authors are showing. AuthorsRevealed flips
+  // automatically when the round enters RESULTS (get-results.js's
+  // enterResultsState), so this is mostly a display step; handleRevealAuthors
+  // below is the override for a host who wants names back before that.
+  const [authorsRevealed, setAuthorsRevealed] = useState(false);
+
   // Custom instruction state for question set instructions
   const [customInstruction, setCustomInstruction] = useState(null);
   const [setRoundNoun, setSetRoundNoun] = useState(null); // per-set override, e.g. "Lesson"
@@ -302,6 +307,7 @@ function GameHostPage() {
     currentQuestionId: setCurrentQuestionId,
     currentQuestionIndex: setCurrentQuestionIndex,
     lessonNumber: setLessonNumber,
+    authorsRevealed: setAuthorsRevealed,
     players: setPlayers,
     answers: setAnswers,
     playersWhoAnswered: setPlayersWhoAnswered,
@@ -923,6 +929,13 @@ Focus on actionable business strategy insights.`;
       restoreGameState();
     });
 
+    webSocketClient.onMessage('authorsRevealed', (data) => {
+      console.log('🔌 Authors revealed notification:', data);
+      // Re-sync rather than patching state, exactly like questionStarted and
+      // gameStateChanged. The attributed rows come back from the API.
+      restoreGameState();
+    });
+
     webSocketClient.onMessage('aiSummaryReady', (data) => {
       console.log('🔌 AI Summary ready notification:', data);
       if (aiWatchdogRef.current) clearTimeout(aiWatchdogRef.current);
@@ -999,6 +1012,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('playerAnswered');
       webSocketClient.offMessage('playerVoted');
       webSocketClient.offMessage('votingStarted');
+      webSocketClient.offMessage('authorsRevealed');
       webSocketClient.offMessage('aiSummaryReady');
       webSocketClient.offMessage('aiSummaryError');
     };
@@ -1113,6 +1127,16 @@ Focus on actionable business strategy insights.`;
         // Use server state directly instead of mapping to legacy format
         setGameState(currentState);
         console.log(`🎮 HOST: Set game state to ${currentState}`);
+
+        // The round record itself, for this purpose, IS the state string:
+        // enterResultsState (get-results.js) sets AuthorsRevealed unconditionally
+        // the moment a round enters RESULTS#, so "in RESULTS" and "revealed" are
+        // the same fact by the time a host is looking at this screen. ASK#/VOTE#
+        // always restore to not-revealed, which is also correct for a host who
+        // revealed early and then refreshed — the durable ROUND# record still
+        // says revealed, but re-fetching it here would need a second round-trip
+        // this screen doesn't otherwise make; re-revealing costs one tap.
+        setAuthorsRevealed(currentState.startsWith('RESULTS#'));
         console.log(`🔍 HOST: Questions array length: ${questions.length}`);
         
         // If we have a current question, set it up
@@ -1222,6 +1246,7 @@ Focus on actionable business strategy insights.`;
                   
                   formattedAnswers = (resultsData.answers || []).map(answer => ({
                     player: answer.playerName,
+                    playerName: answer.playerName, // for displayLabelFor
                     answer: answer.answer, // Letter like 'A', 'B', 'C'
                     points: answer.pointsEarned || 0,
                     isCorrect: answer.isCorrect || false,
@@ -1238,6 +1263,7 @@ Focus on actionable business strategy insights.`;
                         console.log(`📊 HOST: Formatting tally ${index}:`, tally);
                         return {
                           player: tally.playerName,
+                          playerName: tally.playerName, // for displayLabelFor
                           answer: tally.answerText,
                           points: tally.totalScore,
                           placement: tally.firstPlace > 0 ? 1 : tally.secondPlace > 0 ? 2 : tally.thirdPlace > 0 ? 3 : 0,
@@ -1720,7 +1746,8 @@ Focus on actionable business strategy insights.`;
       setGameState(newState);
       setQuestions([questionData]);
       setLessonNumber(lessonNumber);
-      
+      setAuthorsRevealed(false); // A new round starts anonymous, not the last one's reveal
+
       // Notify players via WebSocket (exactly like handleNextQuestion)
       if (webSocketClient.isConnected()) {
         const messageType = newState;
@@ -1913,6 +1940,7 @@ Focus on actionable business strategy insights.`;
       setCurrentQuestionVotes([]);
       setCurrentAnswerIndex(0);
       setLessonNumber(lessonNumber);
+      setAuthorsRevealed(false); // A new round starts anonymous, not the last one's reveal
       setCurrentQuestionId(questionId);
       
       // Set the questions array
@@ -2148,6 +2176,7 @@ Focus on actionable business strategy insights.`;
         
         formattedAnswers = (resultsData.answers || []).map(answer => ({
           player: answer.playerName,
+          playerName: answer.playerName, // for displayLabelFor
           answer: answer.answer, // Letter like 'A', 'B', 'C'
           points: answer.pointsEarned || 0,
           isCorrect: answer.isCorrect || false,
@@ -2156,30 +2185,32 @@ Focus on actionable business strategy insights.`;
           basePoints: answer.basePoints || 0,
           submittedAt: answer.submittedAt
         }));
-        
-        console.log(`🧠 HOST: Formatted ${formattedAnswers.length} trivia answers:`, 
+
+        console.log(`🧠 HOST: Formatted ${formattedAnswers.length} trivia answers:`,
           formattedAnswers.map(a => `${a.player}: ${a.answer} (${a.isCorrect ? 'correct' : 'incorrect'}, ${a.points} pts)`));
-        
+
       } else if (resultsData.gameType === 'wavelength' || currentGameType === 'wavelength') {
         // Wavelength results format: Just the raw answers with words
         console.log(`🌊 HOST: Processing wavelength results with ${resultsData.answers?.length || 0} answers`);
-        
+
         formattedAnswers = (resultsData.answers || []).map(answer => ({
           player: answer.playerName,
+          playerName: answer.playerName, // for displayLabelFor
           answer: answer.answer || answer.ProcessedWords?.join(',') || '', // Comma-separated words
           points: 0, // No points in wavelength
           submittedAt: answer.submittedAt
         }));
-        
+
         console.log(`🌊 HOST: Formatted ${formattedAnswers.length} wavelength answers for word cloud`);
-        
+
       } else {
         // Call-and-answer results format: { voteTallies: {...} }
         console.log(`💬 HOST: Processing call-and-answer results with voteTallies`);
-        
+
         formattedAnswers = resultsData.voteTallies && Object.keys(resultsData.voteTallies).length > 0
           ? Object.values(resultsData.voteTallies).map(tally => ({
               player: tally.playerName,
+              playerName: tally.playerName, // for displayLabelFor
               answer: tally.answerText,
               points: tally.totalScore,
               placement: tally.firstPlace > 0 ? 1 : tally.secondPlace > 0 ? 2 : tally.thirdPlace > 0 ? 3 : 0,
@@ -2249,6 +2280,32 @@ Focus on actionable business strategy insights.`;
     } finally {
       // Hide loading overlay
       setIsLoadingData(false);
+    }
+  };
+
+  // Display step, plus an override. AuthorsRevealed flips when voting closes
+  // (get-results.js:enterResultsState), so this endpoint is only load-bearing
+  // when the host reveals BEFORE closing the vote. Calling it when the round is
+  // already revealed is a harmless no-op — the endpoint is idempotent — but
+  // there is nothing to fetch, so skip the round-trip and leave the display as
+  // is. `‹ Hide again` is the separate, purely-local toggle back to hidden.
+  const handleRevealAuthors = async () => {
+    if (authorsRevealed) return;
+    try {
+      const res = await fetch(`${API_BASE}games/${gameId}/reveal-authors`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questionNumber: lessonNumber })
+      });
+      if (!res.ok) {
+        console.error('❌ HOST: reveal failed:', res.status);
+        return;
+      }
+      const data = await res.json();
+      setAnswers(data.answers || []);
+      setAuthorsRevealed(true);
+    } catch (e) {
+      console.error('❌ HOST: reveal error', e);
     }
   };
 
@@ -3802,7 +3859,13 @@ Ready to engage? See you there!`;
                 <div className="player-name">
                   {rankIcon} <span className="player-name-text">{player.name || player.playerName || 'Unknown Player'}</span>
                 </div>
-                <div className="player-score">{score} pts</div>
+                {/* Attribution by arithmetic (see config/anonymity.js: standingsVisible):
+                    withheld while an anonymous round is unrevealed, because a
+                    score jumping here identifies the author of that round's
+                    top-scoring answer as surely as a name would. */}
+                {standingsVisible({ gameType: currentGameType, authorsRevealed }) && (
+                  <div className="player-score">{score} pts</div>
+                )}
                 {gameState.startsWith('ASK#') && (
                   <div className={`answer-status ${playersWhoAnswered.includes(player.name) ? 'answered' : 'waiting'}`}>
                     {playersWhoAnswered.includes(player.name)
@@ -4008,7 +4071,7 @@ Ready to engage? See you there!`;
                   
                   <div className="single-answer-display">
                     <div className="answer-text">"{answers[currentAnswerIndex]?.answer}"</div>
-                    <div className="answer-author">- {answers[currentAnswerIndex]?.name}</div>
+                    <div className="answer-author">- {displayLabelFor(answers[currentAnswerIndex] || {}, currentAnswerIndex)}</div>
                   </div>
                   
                   <button 
@@ -4034,7 +4097,21 @@ Ready to engage? See you there!`;
               <Icon name="Trophy" weight="duotone" size={30} color="var(--primary)" />
               <span>{getHostRoundNoun()} {parseInt(gameState.split('#')[1])} · Results</span>
             </h2>
-            
+
+            {/* Only formats that held a vote have anything to reveal — an option
+                that cannot do anything is a question a host should not be asked. */}
+            {anonymityApplies(currentGameType) && (
+              authorsRevealed ? (
+                <button className="ghost-step-back" onClick={() => setAuthorsRevealed(false)}>
+                  ‹ Hide again
+                </button>
+              ) : (
+                <button className="reveal-authors-btn" onClick={handleRevealAuthors}>
+                  Reveal Authors
+                </button>
+              )
+            )}
+
             {currentGameType === 'trivia' ? (
               <div className="trivia-results-display">
                 <div className="trivia-question-recap">
@@ -4117,15 +4194,16 @@ Ready to engage? See you there!`;
                   {answers.map((answer, idx) => {
                     // Use the already calculated data from the API instead of recalculating
                     const playerName = answer.player; // Correct property name for trivia results
+                    const displayName = displayLabelFor(answer, idx); // trivia never redacts, so this is always playerName
                     const isCorrect = answer.isCorrect; // From API calculation
                     const roundPoints = answer.points || 0; // From API calculation (includes speed bonus)
                     const player = players.find(p => p.name === playerName);
-                    
+
                     console.log(`🏆 TRIVIA PLAYER RESULT: ${playerName} answered ${answer.answer}, isCorrect: ${isCorrect}, points: ${roundPoints}, total: ${player?.score}`);
-                    
+
                     return (
                       <div key={idx} className={`trivia-player-result ${isCorrect ? 'correct' : 'incorrect'}`}>
-                        <span className="player-name">{playerName}</span>
+                        <span className="player-name">{displayName}</span>
                         <span className="player-answer">Answer: {answer.answer}</span>
                         <span className="player-points">
                           {isCorrect
@@ -4154,11 +4232,12 @@ Ready to engage? See you there!`;
                     {answers.map((answer, idx) => {
                       const player = players.find(p => p.name === answer.player);
                       const playerTotalScore = player?.score || 0;
-                      
+                      const displayName = displayLabelFor(answer, idx); // wavelength never redacts, so this is always the name
+
                       return (
                         <div key={idx} className="result-item wavelength-contribution">
                           <div className="result-player-header">
-                            <div className="result-player-name">{answer.player}</div>
+                            <div className="result-player-name">{displayName}</div>
                             <div className="result-points">
                               <span className="points-total">Score: {playerTotalScore} pts</span>
                             </div>
@@ -4196,11 +4275,12 @@ Ready to engage? See you there!`;
                 console.log(`🧮 This means previous score was: ${playerTotalScore - totalPoints}`);
                 
                 const previousScore = playerTotalScore - totalPoints;
-                
+                const displayName = displayLabelFor(answer, idx);
+
                 return (
                   <div key={idx} className={`result-item ${totalPoints > 0 ? 'scored' : ''}`}>
                     <div className="result-player-header">
-                      <div className="result-player-name">{answer.player}</div>
+                      <div className="result-player-name">{displayName}</div>
                       <div className="result-points">
                         <span className="points-this-round">+{totalPoints} pts this round</span>
                         <span className="points-total">Total: {playerTotalScore} pts</span>
