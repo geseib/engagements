@@ -896,6 +896,15 @@ Resources:
                 - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
                 - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
                 - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-6'
+        # Async generation: self-invoke worker (Event). Generation cannot run
+        # inside the request — API Gateway's 30s integration timeout is a hard
+        # ceiling. POST returns 202 and this invoke does the work against the
+        # 900s function timeout.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-admin-ai-generate-questions'
       Events:
         AdminAIGenerateQuestionsEvent:
           Type: HttpApi
@@ -903,6 +912,16 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-generate-questions
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # Job status poll. The admin builders have no gameId and no WebSocket,
+        # so results come back by polling rather than by broadcast.
+        AdminAIGenerateQuestionsStatusEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/ai-generate-questions/{jobId}
+            Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:
@@ -999,6 +1018,15 @@ Resources:
                 - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
                 - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
                 - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+        # Async generation: self-invoke worker (Event). Generation cannot run
+        # inside the request — API Gateway's 30s integration timeout is a hard
+        # ceiling. POST returns 202 and this invoke does the work against the
+        # 900s function timeout.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-admin-ai-generate-trivia'
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
@@ -1011,6 +1039,16 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-generate-trivia
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # Job status poll. The admin builders have no gameId and no WebSocket,
+        # so results come back by polling rather than by broadcast.
+        AdminAIGenerateTriviaStatusEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/ai-generate-trivia/{jobId}
+            Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:
@@ -1044,6 +1082,15 @@ Resources:
                 - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
                 - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
                 - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+        # Async generation: self-invoke worker (Event). Generation cannot run
+        # inside the request — API Gateway's 30s integration timeout is a hard
+        # ceiling. POST returns 202 and this invoke does the work against the
+        # 900s function timeout.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-admin-ai-generate-polls'
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
@@ -1056,6 +1103,16 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-generate-polls
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # Job status poll. The admin builders have no gameId and no WebSocket,
+        # so results come back by polling rather than by broadcast.
+        AdminAIGeneratePollsStatusEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/ai-generate-polls/{jobId}
+            Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:
@@ -1089,6 +1146,15 @@ Resources:
                 - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
                 - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
                 - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+        # Async generation: self-invoke worker (Event). Generation cannot run
+        # inside the request — API Gateway's 30s integration timeout is a hard
+        # ceiling. POST returns 202 and this invoke does the work against the
+        # 900s function timeout.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-admin-ai-generate-survey'
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
@@ -1101,6 +1167,16 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-generate-survey
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # Job status poll. The admin builders have no gameId and no WebSocket,
+        # so results come back by polling rather than by broadcast.
+        AdminAIGenerateSurveyStatusEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/ai-generate-survey/{jobId}
+            Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
-import { normalizeTags } from '../utils/tags';
+import { normalizeTags, tagsToCsvCell } from '../utils/tags';
 
 const API_BASE = window.API_BASE;
 
@@ -133,14 +133,14 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
   };
 
   const generatePollCSV = () => {
-    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Option1,Option2,Option3,Option4,Option5,AllowMultiple';
+    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Option1,Option2,Option3,Option4,Option5,AllowMultiple,Tags';
     const rows = generatedPolls.map((poll, index) => {
       const options = [...poll.options];
       while (options.length < 5) {
         options.push('');
       }
-      
-      return `"${poll.category}","${index + 1}","${poll.title}","${poll.detail}","${poll.school || 'General'}","${poll.customInstructions || ''}","${options[0]}","${options[1]}","${options[2]}","${options[3]}","${options[4]}","${poll.allowMultiple ? 'true' : 'false'}"`;
+
+      return `"${poll.category}","${index + 1}","${poll.title}","${poll.detail}","${poll.school || 'General'}","${poll.customInstructions || ''}","${options[0]}","${options[1]}","${options[2]}","${options[3]}","${options[4]}","${poll.allowMultiple ? 'true' : 'false'}","${tagsToCsvCell(poll.tags)}"`;
     });
     return headers + '\n' + rows.join('\n');
   };

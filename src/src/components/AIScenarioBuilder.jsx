@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { authFetch } from '../auth/authFetch';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
-import { normalizeTags } from '../utils/tags';
+import { normalizeTags, tagsToCsvCell } from '../utils/tags';
 import Icon from './Icon';
 
 const API_BASE = window.API_BASE;
@@ -501,8 +501,8 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   };
 
   const generateCSVContent = () => {
-    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction';
-    
+    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags';
+
     // First, group scenarios by category
     const scenariosByCategory = {};
     generatedScenarios.forEach(scenario => {
@@ -512,13 +512,13 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
       }
       scenariosByCategory[category].push(scenario);
     });
-    
+
     // Generate CSV rows with proper category-relative numbering
     const rows = [];
     Object.keys(scenariosByCategory).forEach(category => {
       scenariosByCategory[category].forEach((scenario, index) => {
         const questionNumber = index + 1; // Category-relative numbering
-        rows.push(`"${category}","${questionNumber}","${scenario.title}","${scenario.detail}","${scenario.school || 'Professional Development'}","${scenario.customInstructions || ''}"`);
+        rows.push(`"${category}","${questionNumber}","${scenario.title}","${scenario.detail}","${scenario.school || 'Professional Development'}","${scenario.customInstructions || ''}","${tagsToCsvCell(scenario.tags)}"`);
       });
     });
     
