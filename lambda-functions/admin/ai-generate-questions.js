@@ -22,7 +22,7 @@ const { tagGuidance } = require('./shared/structured-generation');
 const { normalizeTags } = require('./shared/tags');
 const { normalizeGameType } = require('./shared/game-types');
 
-const MAX_COUNT = 50;
+const MAX_COUNT = 100;
 
 function parseRequest(payload) {
   const existing = payload.existingQuestion || null;

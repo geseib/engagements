@@ -112,7 +112,7 @@ exports.handler = async (event) => {
       let csvContent = '';
       
       if (engagementType === 'trivia') {
-        csvContent = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,CorrectAnswer,WrongAnswer1,WrongAnswer2,WrongAnswer3,Difficulty\n';
+        csvContent = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,CorrectAnswer,WrongAnswer1,WrongAnswer2,WrongAnswer3,Difficulty,Tags\n';
         questions.forEach((q, index) => {
           const category = q.Category || q.category || '';
           const questionNum = index + 1;
@@ -125,11 +125,14 @@ exports.handler = async (event) => {
           const wrong2 = (q.WrongAnswer2 || q.wrongAnswer2 || q.optionB || '').replace(/"/g, '""');
           const wrong3 = (q.WrongAnswer3 || q.wrongAnswer3 || q.optionC || '').replace(/"/g, '""');
           const difficulty = q.Difficulty || q.difficulty || 'medium';
-          
-          csvContent += `"${category}",${questionNum},"${title}","${detail}","${school}","${customInst}","${correct}","${wrong1}","${wrong2}","${wrong3}","${difficulty}"\n`;
+          // Pipe-separated, matching the Options column's convention that
+          // upload-questions.js already parses (tagsCell.split('|')).
+          const tags = Array.isArray(q.Tags) ? q.Tags.join('|') : (q.Tags || '');
+
+          csvContent += `"${category}",${questionNum},"${title}","${detail}","${school}","${customInst}","${correct}","${wrong1}","${wrong2}","${wrong3}","${difficulty}","${tags}"\n`;
         });
       } else if (engagementType === 'poll') {
-        csvContent = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple\n';
+        csvContent = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple,Tags\n';
         questions.forEach((q, index) => {
           const category = q.Category || q.category || '';
           const questionNum = index + 1;
@@ -139,8 +142,10 @@ exports.handler = async (event) => {
           const customInst = (q.CustomInstructions || q.customInstructions || '').replace(/"/g, '""');
           const options = Array.isArray(q.Options) ? q.Options.join('|') : (q.Options || '');
           const allowMultiple = q.AllowMultiple || q.allowMultiple || false;
-          
-          csvContent += `"${category}",${questionNum},"${title}","${detail}","${school}","${customInst}","${options}","${allowMultiple}"\n`;
+          // Pipe-separated, matching the Options column's convention.
+          const tags = Array.isArray(q.Tags) ? q.Tags.join('|') : (q.Tags || '');
+
+          csvContent += `"${category}",${questionNum},"${title}","${detail}","${school}","${customInst}","${options}","${allowMultiple}","${tags}"\n`;
         });
       } else {
         // call-and-answer (default)
@@ -157,6 +162,7 @@ exports.handler = async (event) => {
         csvContent = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction'
           + (hasAnswerDetails ? ',AnswerDetails' : '')
           + (hasImages ? ',Image' : '')
+          + ',Tags'
           + '\n';
         questions.forEach((q, index) => {
           const category = q.Category || q.category || '';
@@ -167,10 +173,13 @@ exports.handler = async (event) => {
           const customInst = (q.CustomInstructions || q.customInstructions || '').replace(/"/g, '""');
           const answerDetails = (q.AnswerDetails || q.answerDetails || '').replace(/"/g, '""');
           const image = (q.Image || q.image || '').replace(/"/g, '""');
+          // Pipe-separated, matching the Options column's convention.
+          const tags = Array.isArray(q.Tags) ? q.Tags.join('|') : (q.Tags || '');
 
           csvContent += `"${category}",${questionNum},"${title}","${detail}","${school}","${customInst}"`
             + (hasAnswerDetails ? `,"${answerDetails}"` : '')
             + (hasImages ? `,"${image}"` : '')
+            + `,"${tags}"`
             + '\n';
         });
       }

@@ -50,7 +50,11 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
         }
       });
 
-      setGenerationStatus(`Generated ${job.items.length} question(s) successfully`);
+      setGenerationStatus(
+        job.warnings?.length
+          ? `Generated ${job.items.length} question(s). ${job.warnings.join(' ')}`
+          : `Generated ${job.items.length} question(s) successfully`
+      );
       onQuestionsGenerated(job.items);
     } catch (error) {
       console.error('AI generation error:', error);
