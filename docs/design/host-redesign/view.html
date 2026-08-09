@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Host redesign — deck viewer</title>
+<!--
+  A viewer for the 21 mockups. Arrows, or the chevrons, move between them.
+
+  WHY A WRAPPER AND NOT NAVIGATION INSIDE EACH PAGE. The mockups are the
+  audited source of truth — 21 pages x 4 profiles x 2 viewports, 168 checks,
+  0 failures — and audit.js runs against them directly. Putting chrome inside
+  them would break at least A6, which asserts the primary action is the
+  TOPMOST element at its own centre point precisely so an overlay cannot sit
+  on the advance control. A prev/next chevron is exactly such an overlay. So
+  the pages are not touched, the audit stays valid byte-for-byte, and the
+  navigation lives out here.
+
+  The iframe is exactly the viewport, so `vh` resolves the same as it would
+  full-screen. That matters: the type ladders are vh-based on purpose, so a
+  mockup in a letterboxed or padded frame would lie about its own sizes.
+-->
+<style>
+  :root{
+    --bg:#0F1A2E; --text:#F4EDE4; --muted:#9BA8BE; --primary:#F6A94C;
+    --surface:rgba(27,41,66,.92); --rule:rgba(155,168,190,.28);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  body{font:400 14px/1.4 "Inter",system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--text)}
+
+  /* The stage under test. Exactly the viewport — see the note above. */
+  #frame{position:fixed;inset:0;width:100%;height:100%;border:0;display:block;background:var(--bg)}
+
+  /* All viewer chrome fades out of the way. The point of these mockups is to
+     be looked at, not to be looked at through a toolbar. */
+  .chrome{position:fixed;z-index:10;transition:opacity .25s ease;opacity:0}
+  body.awake .chrome{opacity:1}
+  body.awake{cursor:default}
+  body:not(.awake){cursor:none}
+
+  .hud{top:0;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:14px;
+    background:var(--surface);border:1px solid var(--rule);border-top:0;
+    border-radius:0 0 12px 12px;padding:8px 14px;backdrop-filter:blur(8px);
+    box-shadow:0 6px 24px rgba(0,0,0,.35)}
+  .count{font-family:"Archivo Expanded","Archivo",system-ui,sans-serif;font-weight:800;
+    color:var(--primary);letter-spacing:.06em;font-size:13px;font-variant-numeric:tabular-nums}
+  .title{font-weight:700;white-space:nowrap;max-width:34ch;overflow:hidden;text-overflow:ellipsis}
+  .file{color:var(--muted);font-size:12px;white-space:nowrap}
+
+  .sep{width:1px;align-self:stretch;background:var(--rule)}
+
+  .btn{background:transparent;border:1px solid var(--rule);color:var(--muted);
+    border-radius:7px;padding:4px 9px;font:inherit;font-size:12px;cursor:pointer;line-height:1.1}
+  .btn:hover{color:var(--text);border-color:var(--muted)}
+  .btn[aria-pressed="true"]{background:var(--primary);border-color:var(--primary);color:#0F1A2E;font-weight:700}
+  .btn:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+
+  /* Vertical movement, asked for alongside left/right. Kept in the HUD rather
+     than at the bottom edge: a chevron centred on the bottom of the screen
+     would sit on the dock, which is the one control that must never be
+     covered. */
+  .updown{display:flex;flex-direction:column;gap:2px}
+  .updown .btn{padding:1px 7px;font-size:11px}
+
+  /* Edge chevrons. Vertically centred, so they land beside the content and
+     the meter rather than on the rail or the dock. */
+  .edge{top:50%;transform:translateY(-50%);width:56px;height:96px;display:grid;place-items:center;
+    background:var(--surface);border:1px solid var(--rule);color:var(--text);
+    font-size:26px;cursor:pointer;backdrop-filter:blur(8px)}
+  .edge:hover{color:var(--primary);border-color:var(--primary)}
+  .edge.prev{left:0;border-left:0;border-radius:0 12px 12px 0}
+  .edge.next{right:0;border-right:0;border-radius:12px 0 0 12px}
+  .edge:focus-visible{outline:2px solid var(--primary);outline-offset:-4px}
+
+  .keys{bottom:0;left:50%;transform:translateX(-50%);background:var(--surface);
+    border:1px solid var(--rule);border-bottom:0;border-radius:12px 12px 0 0;
+    padding:6px 14px;color:var(--muted);font-size:12px;backdrop-filter:blur(8px)}
+  .keys kbd{font:inherit;color:var(--text);background:rgba(244,237,228,.09);
+    border:1px solid var(--rule);border-radius:4px;padding:1px 5px;margin:0 1px}
+
+  .note{position:fixed;z-index:11;left:50%;top:64px;transform:translateX(-50%);
+    background:var(--surface);border:1px solid var(--primary);border-radius:9px;
+    padding:9px 14px;max-width:60ch;color:var(--text);font-size:13px;display:none;
+    box-shadow:0 8px 30px rgba(0,0,0,.45)}
+  .note.show{display:block}
+  .note b{color:var(--primary)}
+</style>
+</head>
+<body>
+
+<iframe id="frame" title="Mockup under review"></iframe>
+
+<button class="chrome edge prev" id="prev" aria-label="Previous mockup">‹</button>
+<button class="chrome edge next" id="next" aria-label="Next mockup">›</button>
+
+<div class="chrome hud">
+  <span class="count" id="count">01 / 21</span>
+  <span class="title" id="title">STARTED / lobby</span>
+  <span class="file" id="file">01-lobby.html</span>
+  <span class="sep"></span>
+  <div class="updown">
+    <button class="btn" id="up" aria-label="Previous mockup">▲</button>
+    <button class="btn" id="down" aria-label="Next mockup">▼</button>
+  </div>
+  <span class="sep"></span>
+  <button class="btn" data-profile="room"  aria-pressed="true">Room</button>
+  <button class="btn" data-profile="tv"    aria-pressed="false">TV</button>
+  <button class="btn" data-profile="call"  aria-pressed="false">Call</button>
+  <button class="btn" data-profile="table" aria-pressed="false">Table</button>
+  <span class="sep"></span>
+  <a class="btn" href="index.html">Index</a>
+  <a class="btn" href="audit.html">Audit</a>
+</div>
+
+<div class="chrome keys">
+  <kbd>←</kbd><kbd>↑</kbd> back · <kbd>→</kbd><kbd>↓</kbd> forward ·
+  <kbd>1</kbd>–<kbd>4</kbd> profile · <kbd>Home</kbd>/<kbd>End</kbd> · <kbd>Esc</kbd> index
+</div>
+
+<div class="note" id="note"></div>
+
+<script>
+/* The deck, in the order index.html lists it. */
+var DECK = [
+  ['01-lobby.html',                  'STARTED / lobby'],
+  ['02-ask-call-and-answer.html',    'ASK · Call & Answer'],
+  ['03-ask-trivia.html',             'ASK · Trivia'],
+  ['04-ask-wavelength.html',         'ASK · Wavelength'],
+  ['05-vote.html',                   'VOTE (anonymous)'],
+  ['06-results-call-and-answer.html','RESULTS before the reveal'],
+  ['07-results-trivia.html',         'RESULTS · Trivia'],
+  ['08-results-wavelength.html',     'RESULTS · Wavelength'],
+  ['09-field-notes.html',            'RESULTS · Field Notes beat'],
+  ['10-ended.html',                  'ENDED'],
+  ['11-console.html',                'Console overlay'],
+  ['12-density-table.html',          'Profile: Table'],
+  ['13-density-call.html',           'Profile: Call'],
+  ['14-density-tv.html',             'Profile: Large TV'],
+  ['15-edge-minimum.html',           'Edge: one player, no answers'],
+  ['16-phase-wipe.html',             'Transition: phase wipe'],
+  ['17-remote.html',                 'Companion: the phone remote'],
+  ['18-question-browser.html',       'Setup: choose the next question'],
+  ['19-how-to-play.html',            'Lobby beat: how this works'],
+  ['20-setup.html',                  'Setup: anonymous responses'],
+  ['21-results-revealed.html',       'RESULTS after the reveal']
+];
+
+var PROFILES = ['room', 'tv', 'call', 'table'];
+
+var frame  = document.getElementById('frame');
+var elCount = document.getElementById('count');
+var elTitle = document.getElementById('title');
+var elFile  = document.getElementById('file');
+var elNote  = document.getElementById('note');
+
+var index = 0;
+var profile = 'room';
+var crossOriginWarned = false;
+
+function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+/* Deep-linkable: #05-vote, #05, or #5 all resolve. */
+function indexFromHash() {
+  var h = decodeURIComponent(location.hash.replace(/^#/, '')).trim();
+  if (!h) return 0;
+  var n = parseInt(h, 10);
+  if (!isNaN(n) && String(n) === h.replace(/^0+/, '')) return clamp(n - 1);
+  for (var i = 0; i < DECK.length; i++) {
+    if (DECK[i][0] === h || DECK[i][0].replace(/\.html$/, '') === h) return i;
+  }
+  return 0;
+}
+
+function clamp(i) {
+  if (i < 0) return DECK.length - 1;          // wrap, so a deck has no dead ends
+  if (i >= DECK.length) return 0;
+  return i;
+}
+
+function show(i, pushHash) {
+  index = clamp(i);
+  var entry = DECK[index];
+  // Only reload when the file actually changes. show() writes the hash, which
+  // fires hashchange, which calls show() again — without this guard every
+  // navigation loaded the frame twice and flashed.
+  if (frame.getAttribute('src') !== entry[0]) frame.src = entry[0];
+  elCount.textContent = pad(index + 1) + ' / ' + DECK.length;
+  elTitle.textContent = entry[1];
+  elFile.textContent = entry[0];
+  document.title = entry[1] + ' — ' + pad(index + 1) + '/' + DECK.length;
+  if (pushHash !== false) {
+    location.replace('#' + entry[0].replace(/\.html$/, ''));
+  }
+  wake();
+}
+
+/**
+ * Apply a display profile to the page inside the frame.
+ *
+ * The ladders are declared on the ROOT element (:root.d-tv and friends) —
+ * custom properties are substituted at computed-value time on the declaring
+ * element, which is exactly why the design's earlier one-ladder-times-a-scalar
+ * approach could never work. So the class goes on documentElement, not on a
+ * wrapper.
+ *
+ * Then re-run the fitter: the ladder changed, so every measurement it took is
+ * stale. Each mockup exposes it as window.__fit for this reason.
+ */
+function applyProfile() {
+  var doc;
+  try {
+    doc = frame.contentDocument;
+    if (!doc) throw new Error('no document');
+  } catch (e) {
+    warnCrossOrigin();
+    return;
+  }
+  if (!doc.documentElement) return;
+  PROFILES.forEach(function (p) { doc.documentElement.classList.remove('d-' + p); });
+  doc.documentElement.classList.add('d-' + profile);
+  try {
+    if (frame.contentWindow && typeof frame.contentWindow.__fit === 'function') {
+      frame.contentWindow.__fit();
+    }
+  } catch (e) { /* a page without the fitter is fine — 17-remote has none */ }
+}
+
+/* file:// blocks contentDocument, and the profile switch is the one feature
+   that needs it. Say so once, plainly, with the fix. */
+function warnCrossOrigin() {
+  if (crossOriginWarned) return;
+  crossOriginWarned = true;
+  elNote.innerHTML =
+    '<b>Profile switching needs a server.</b> Opened from <code>file://</code> the viewer ' +
+    'cannot reach inside the frame. Run <code>python3 -m http.server</code> in this ' +
+    'directory and open <code>http://localhost:8000/view.html</code>. Arrow navigation ' +
+    'works either way.';
+  elNote.classList.add('show');
+  setTimeout(function () { elNote.classList.remove('show'); }, 9000);
+}
+
+function setProfile(p) {
+  if (PROFILES.indexOf(p) === -1) return;
+  profile = p;
+  document.querySelectorAll('[data-profile]').forEach(function (b) {
+    b.setAttribute('aria-pressed', String(b.dataset.profile === p));
+  });
+  applyProfile();
+  wake();
+}
+
+/* Chrome sleeps so the mockup can be judged without a toolbar in the way. */
+var sleepTimer = null;
+function wake() {
+  document.body.classList.add('awake');
+  clearTimeout(sleepTimer);
+  sleepTimer = setTimeout(function () {
+    document.body.classList.remove('awake');
+  }, 2200);
+}
+
+frame.addEventListener('load', function () {
+  applyProfile();
+  // The frame swallows key events once it has focus, so forward them out.
+  try {
+    frame.contentWindow.addEventListener('keydown', onKey);
+    frame.contentWindow.addEventListener('mousemove', wake);
+  } catch (e) { /* cross-origin: the outer listeners still work */ }
+});
+
+function onKey(e) {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  switch (e.key) {
+    case 'ArrowLeft': case 'ArrowUp':    show(index - 1); e.preventDefault(); break;
+    case 'ArrowRight': case 'ArrowDown':
+    case ' ': case 'PageDown':           show(index + 1); e.preventDefault(); break;
+    case 'PageUp':                       show(index - 1); e.preventDefault(); break;
+    case 'Home':                         show(0); e.preventDefault(); break;
+    case 'End':                          show(DECK.length - 1); e.preventDefault(); break;
+    case '1': case '2': case '3': case '4':
+      setProfile(PROFILES[+e.key - 1]); e.preventDefault(); break;
+    case 'Escape':                       location.href = 'index.html'; break;
+    default: wake();
+  }
+}
+
+document.getElementById('prev').addEventListener('click', function () { show(index - 1); });
+document.getElementById('next').addEventListener('click', function () { show(index + 1); });
+document.getElementById('up').addEventListener('click',   function () { show(index - 1); });
+document.getElementById('down').addEventListener('click', function () { show(index + 1); });
+document.querySelectorAll('[data-profile]').forEach(function (b) {
+  b.addEventListener('click', function () { setProfile(b.dataset.profile); });
+});
+
+window.addEventListener('keydown', onKey);
+window.addEventListener('mousemove', wake);
+window.addEventListener('hashchange', function () {
+  // Back/forward and hand-edited URLs land here. Ignore the echo of our own
+  // location.replace(), which would otherwise re-enter show() on every step.
+  var i = indexFromHash();
+  if (i !== index) show(i, false);
+});
+window.addEventListener('resize', function () {
+  // The ladders are vh-based, so a resize changes every size in the frame.
+  try {
+    if (frame.contentWindow && typeof frame.contentWindow.__fit === 'function') {
+      frame.contentWindow.__fit();
+    }
+  } catch (e) { /* nothing to do */ }
+});
+
+show(indexFromHash(), false);
+wake();
+</script>
+</body>
+</html>
