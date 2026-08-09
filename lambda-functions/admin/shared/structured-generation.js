@@ -42,8 +42,22 @@ const TOOL_NAME = 'emit_items';
 const MAX_TOKENS_PER_CALL = 8000;
 const PROMPT_OVERHEAD_TOKENS = 600;
 
-/** With the length limits enforced below, an item costs roughly this much. */
-const PER_ITEM_TOKENS = { wavelength: 110, default: 420 };
+/**
+ * With the length limits enforced below, an item costs roughly this much.
+ *
+ * Keyed by engagement type for the scenario builder and by generation kind for
+ * the others. Measured against real output: a trivia question carries 4-6
+ * options plus an explanation, a poll carries 3-5 short options and no
+ * explanation, a survey question is mostly a scale or a placeholder.
+ */
+const PER_ITEM_TOKENS = {
+  wavelength: 110,
+  survey: 200,
+  poll: 260,
+  trivia: 380,
+  question: 420,
+  default: 420,
+};
 
 const perItemTokens = (engagementType) =>
   PER_ITEM_TOKENS[engagementType] || PER_ITEM_TOKENS.default;
