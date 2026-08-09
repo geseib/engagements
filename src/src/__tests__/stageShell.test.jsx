@@ -12,7 +12,7 @@ import React, { useRef } from 'react';
 import { render, act, screen, fireEvent } from '@testing-library/react';
 import useStageFit from '../hooks/useStageFit';
 
-function Harness({ deps = [] }) {
+function Harness({ deps = [], dock = false }) {
   const ref = useRef(null);
   useStageFit(ref, deps);
   return (
@@ -24,6 +24,7 @@ function Harness({ deps = [] }) {
         </div>
         <p className="reduced" hidden />
       </div>
+      {dock && <footer className="dock" />}
     </div>
   );
 }
@@ -465,11 +466,27 @@ describe('the side panels and the dock', () => {
     });
   }
 
-  test('the dock publishes its measured height for the panels to subtract', () => {
-    const hook = readFileSync(join(__dirname, '..', 'hooks', 'useStageFit.js'), 'utf8');
-    expect(hook).toMatch(/setProperty\('--dock-measured'/);
-    // And takes it away again — nothing else removes a property set on the
-    // document root, and a stale one would size a panel on a page with no dock.
-    expect(hook).toMatch(/removeProperty\('--dock-measured'\)/);
+  test('the dock publishes its measured height for the panels to subtract, and clears it on unmount', () => {
+    // jsdom reports every box as zero-sized (scrollHeight/clientHeight are
+    // always 0), but getBoundingClientRect is a separate code path — the one
+    // publishDockHeight actually reads — so it can be stubbed here without
+    // disturbing the fitter's own scrollHeight-based measurements elsewhere
+    // in this file. That is what makes this assertion real rather than a
+    // restatement of the source: delete the `publishDockHeight()` call in
+    // useStageFit.js and this fails, because nothing sets the property.
+    const getRect = jest.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({
+        height: 100, width: 0, top: 0, left: 0, right: 0, bottom: 100, x: 0, y: 0, toJSON() {},
+      });
+    try {
+      const { unmount } = render(<Harness dock />);
+      expect(document.documentElement.style.getPropertyValue('--dock-measured')).toBe('100px');
+      unmount();
+      // Nothing else removes a property set on the document root, and a
+      // stale one would size a panel on a page that has no dock at all.
+      expect(document.documentElement.style.getPropertyValue('--dock-measured')).toBe('');
+    } finally {
+      getRect.mockRestore();
+    }
   });
 });

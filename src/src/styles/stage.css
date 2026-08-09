@@ -574,5 +574,11 @@ body{
 /* The report FAB is fixed bottom-right and would otherwise sit on the dock's
    primary button. It used to be lifted by `.main-layout.has-host-bar`, which
    reserved a flat 76px for the OLD fixed action bar; the dock's height is a
-   profile token, so read that instead. */
-.issue-fab-container{bottom:calc(var(--dock-h, 76px) + 16px)}
+   profile token, so read that instead. --dock-measured first, same as the
+   side panels above: --dock-h is the dock's MIN-height and the dock is an
+   auto grid row that outgrows it — measured at 1280x720 in Table the token
+   (82.8px) was short of the real dock (100px) by 17px, enough for the FAB's
+   box to overlap the dock's top edge by about 1px. --dock-h stays as the
+   fallback for the first paint, and 76px behind it for a surface that mounts
+   this FAB without a stage at all. */
+.issue-fab-container{bottom:calc(var(--dock-measured, var(--dock-h, 76px)) + 16px)}

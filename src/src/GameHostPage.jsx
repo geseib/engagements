@@ -3577,7 +3577,12 @@ Ready to engage? See you there!`;
    * explanation (see below), and because the lobby hint names a panel, which
    * the stage does not print.
    */
-  const dockHint = hostControls.primary.disabled && hostPhase !== 'LOBBY'
+  // With nobody in the room yet, `hostControls.primary.hint` reads "Nobody
+  // has answered yet" — true of an empty ASK, but the wrong reason: nobody
+  // has JOINED. Dropping the hint here lets dockStatus below fall through to
+  // statusTextFor's "Waiting for players to join…", which is already keyed
+  // off playerCount === 0 for this exact case.
+  const dockHint = hostControls.primary.disabled && hostPhase !== 'LOBBY' && players.length > 0
     ? hostControls.primary.hint
     : '';
   const dockKbd = !hostControls.primary.disabled && !anyOverlayOpen ? 'SPACE' : '';
