@@ -2879,7 +2879,22 @@ grep -n "{jobId}" template-clean.yaml
 ```
 Expected: `lambda:InvokeFunction` count is 5 (scenarios + the four new); five `{jobId}` paths, one per builder.
 
-- [ ] **Step 4: Delete the now-dead bedrock-utils exports**
+- [ ] **Step 4: Close the two CSV generators Task 8 missed**
+
+Task 8 enumerated five CSV generators. There are seven. `grep -rn "headers = '" src/src` finds the two that were skipped, and both are the "Export CSV" download button inside a builder:
+
+- `src/src/components/PollAIBuilder.jsx` — its local `generatePollCSV`
+- `src/src/components/AIScenarioBuilder.jsx` — its local `generateCSVContent`
+
+The scenario one matters most: that builder has been suggesting tags since before this plan existed, so its own export silently dropping them is precisely the round-trip hole this work exists to close. A user who exports and re-imports loses every tag.
+
+Apply the same change Task 8 made to the other five — import `tagsToCsvCell` from `../utils/tags`, append `,Tags` to the header, and append `,"${tagsToCsvCell(item.tags)}"` to the row template, keeping `Tags` last. Then recount the header fields against the row values in both; a header with N columns and a row with N-1 misaligns every field after the gap.
+
+`AIScenarioBuilder.jsx` was off-limits during Tasks 3-9 to protect the polling reference implementation while the four conversions were in flight. Those are done, and this change touches only its CSV export — not its generation flow. Do not modify anything else in that file.
+
+Verify with the same round trip Task 8 used: feed a generated row through the split-and-normalize logic in `lambda-functions/admin/upload-questions.js` and confirm the tags return intact.
+
+- [ ] **Step 5: Delete the now-dead bedrock-utils exports**
 
 Confirm first:
 
@@ -2888,7 +2903,7 @@ Expected: no output.
 
 Then delete those three functions from `lambda-functions/admin/shared/bedrock-utils.js` and remove them from its `module.exports`. Keep `retryWithBackoff` — `structured-generation.js` uses it. Update the file's header comment if it describes the deleted helpers.
 
-- [ ] **Step 5: Run the whole backend suite**
+- [ ] **Step 6: Run the whole backend suite**
 
 Run:
 ```bash
@@ -2896,7 +2911,7 @@ for t in tests/*.js; do case "$t" in *.spec.js) continue;; esac; node "$t"; done
 ```
 Expected: `24 suites, 0 failed`, with a total of at least 652 + 3 (Task 1) + 16 + 15 + 18 + 17 + 5 = 726 passing. **Any failure count above 0 blocks this task.**
 
-- [ ] **Step 6: Confirm no host-redesign file was touched**
+- [ ] **Step 7: Confirm no host-redesign file was touched**
 
 Run:
 ```bash
@@ -2904,7 +2919,7 @@ git diff --name-only dev...HEAD | grep -E "GameHostPage|host-redesign|anonymity|
 ```
 Expected: `clean — no host redesign files touched`
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add template-clean.yaml lambda-functions/admin/shared/bedrock-utils.js
