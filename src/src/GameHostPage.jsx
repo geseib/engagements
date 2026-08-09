@@ -26,6 +26,7 @@ import {
 import {
   anonymityApplies, anonymityActive, createPayloadFor, displayLabelFor,
   stageLabelFor, standingsVisible, playerAnsweredActions, answeredNamesFrom,
+  answeredCountFrom,
 } from './config/anonymity';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
@@ -128,6 +129,23 @@ function GameHostPage() {
   // only knows whether the TYPE supports it. Default ON, matching the backend.
   const [anonymousUntilReveal, setAnonymousUntilReveal] = useState(true);
   const [playersWhoAnswered, setPlayersWhoAnswered] = useState([]);
+
+  /**
+   * How many responses are in — the number the meter prints, the number the
+   * dock reasons about, and the number the "not everyone has answered" warnings
+   * quote.
+   *
+   * NOT `playersWhoAnswered.length`. That list is names, and on an anonymous
+   * round the `playerAnswered` frame carries none by design, so it could only
+   * grow on a re-sync: the count sat still while the room typed and jumped when
+   * the host happened to refocus the tab, and "Start Voting" warned that 0 of 8
+   * had answered when all 8 had. See config/anonymity.js: answeredCountFrom.
+   *
+   * Declared up here with the state it derives from, because the confirmation
+   * handlers below close over it as well as the render does.
+   */
+  const answeredCount = answeredCountFrom(playersWhoAnswered, answers);
+
   const [votes, setVotes] = useState([]);
   const [playersWhoVoted, setPlayersWhoVoted] = useState([]);
   const [currentQuestionVotes, setCurrentQuestionVotes] = useState([]);
@@ -771,10 +789,10 @@ Focus on actionable business strategy insights.`;
   // taking the screen to say it.
   useEffect(() => {
     if (gameState.startsWith('ASK#') && players.length > 0
-        && playersWhoAnswered.length === players.length && lessonExpanded) {
+        && answeredCount >= players.length && lessonExpanded) {
       setLessonExpanded(false);
     }
-  }, [gameState, players.length, playersWhoAnswered.length, lessonExpanded]);
+  }, [gameState, players.length, answeredCount, lessonExpanded]);
 
   // 🔗 Initialize game ID and event title from URL or generate new one
   useEffect(() => {
@@ -1235,11 +1253,21 @@ Focus on actionable business strategy insights.`;
           if (currentState.startsWith('ASK#') && gameStateData.answerProgress) {
             setPlayersWhoAnswered(gameStateData.answerProgress.answererIds || []);
             console.log(`📝 HOST: ${gameStateData.answerProgress.answersReceived}/${gameStateData.answerProgress.totalPlayers} players have answered`);
-            
+
             // If there are answers, load them to show the host what has been submitted
             if (gameStateData.answerProgress.answersReceived > 0) {
               console.log(`📝 HOST: Loading ${gameStateData.answerProgress.answersReceived} existing answers for display`);
               fetchAnswersForQuestion(questionNumber);
+            } else {
+              // ...and if there are NOT, say so. This branch used to be absent,
+              // so `answers` kept the PREVIOUS round's rows whenever a round
+              // opened through a re-sync rather than through this page's own
+              // button — which is every round the phone remote deals. The host
+              // then read the last round's count on the meter and got a live
+              // "Start Voting" on a round nobody had answered, because
+              // hostControls enables it from `answers.length`.
+              console.log('🧹 HOST: no answers in for this round yet — clearing the previous round\'s');
+              setAnswers([]);
             }
           }
           
@@ -2135,10 +2163,10 @@ Focus on actionable business strategy insights.`;
     // For trivia and wavelength, go straight to results using the same unified mechanism as call-and-answer
     if (currentGameType === 'trivia' || currentGameType === 'wavelength') {
       // Warn if not all players have answered
-      if (playersWhoAnswered.length < players.length) {
+      if (answeredCount < players.length) {
         const proceed = await showConfirmation(
           'Show Results?',
-          `Only ${playersWhoAnswered.length} of ${players.length} players have answered. Do you want to show results anyway?`,
+          `Only ${answeredCount} of ${players.length} players have answered. Do you want to show results anyway?`,
           'Show Results'
         );
         if (!proceed) return;
@@ -2152,10 +2180,10 @@ Focus on actionable business strategy insights.`;
     
     // Call and Answer flow - proceed to voting
     // Warn if not all players have answered
-    if (playersWhoAnswered.length < players.length) {
+    if (answeredCount < players.length) {
       const proceed = await showConfirmation(
         'Proceed to Voting?',
-        `Only ${playersWhoAnswered.length} of ${players.length} players have answered. Do you want to proceed to voting anyway?`,
+        `Only ${answeredCount} of ${players.length} players have answered. Do you want to proceed to voting anyway?`,
         'Proceed to Voting'
       );
       if (!proceed) return;
@@ -3462,7 +3490,7 @@ Ready to engage? See you there!`;
     phase: hostPhase,
     roundNoun: getHostRoundNoun(),
     playerCount: players.length,
-    answeredCount: playersWhoAnswered.length,
+    answeredCount,
     votedCount: playersWhoVoted.length,
     answerCount: answers.length,
     hasQuestionSet: Boolean(selectedSetId),
@@ -3550,7 +3578,7 @@ Ready to engage? See you there!`;
     if (hostPhase === 'ASK') {
       return {
         heading: 'Answered',
-        body: <>{playersWhoAnswered.length}<small>{` / ${players.length}`}</small></>,
+        body: <>{answeredCount}<small>{` / ${players.length}`}</small></>,
       };
     }
     if (hostPhase === 'VOTE') {
@@ -3597,7 +3625,7 @@ Ready to engage? See you there!`;
    * that also explains the greyed-out button.
    */
   const everybodyIn = players.length > 0 && (
-    hostPhase === 'ASK' ? playersWhoAnswered.length >= players.length
+    hostPhase === 'ASK' ? answeredCount >= players.length
       : hostPhase === 'VOTE' ? playersWhoVoted.length >= players.length
         : false
   );

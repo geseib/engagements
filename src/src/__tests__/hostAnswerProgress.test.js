@@ -14,6 +14,7 @@
 import {
   playerAnsweredActions,
   answeredNamesFrom,
+  answeredCountFrom,
   stageLabelFor,
   displayLabelFor,
 } from '../config/anonymity';
@@ -73,6 +74,35 @@ describe('answeredNamesFrom — the roster ticks must survive a redacted payload
   test('nothing at all is an empty list, not a throw', () => {
     expect(answeredNamesFrom(null)).toEqual([]);
     expect(answeredNamesFrom(undefined)).toEqual([]);
+  });
+});
+
+describe('answeredCountFrom — the meter must move on an anonymous round', () => {
+  test('CRITICAL: redacted rows still count, so "Answered 3 / 8" is reachable with no names', () => {
+    // The live path on a hidden round: `playerAnswered` carries no name, so
+    // playersWhoAnswered cannot grow, but the unconditional refetch fills
+    // `answers` with one redacted row per responder. Counting only names left
+    // the host's one progress number frozen between resyncs — it moved on a tab
+    // focus or a socket reconnect, which is what "it goes up eventually" was.
+    const rows = [{ answer: 'a' }, { answer: 'b' }, { answer: 'c' }];
+    expect(answeredCountFrom([], rows)).toBe(3);
+  });
+
+  test('an attributed round is unchanged — the two sources agree', () => {
+    expect(answeredCountFrom(['Ada', 'Grace'], [
+      { playerName: 'Ada' }, { playerName: 'Grace' },
+    ])).toBe(2);
+  });
+
+  test('the server participation list wins when the rows have not been fetched yet', () => {
+    // restoreGameState sets playersWhoAnswered from answerProgress.answererIds
+    // before any /answers call returns. Taking the rows alone would flash 0.
+    expect(answeredCountFrom(['Ada', 'Grace', 'Hedy'], [])).toBe(3);
+  });
+
+  test('nobody has answered is zero, not NaN', () => {
+    expect(answeredCountFrom([], [])).toBe(0);
+    expect(answeredCountFrom(null, undefined)).toBe(0);
   });
 });
 

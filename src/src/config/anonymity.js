@@ -112,6 +112,30 @@ export function answeredNamesFrom(answers) {
 }
 
 /**
+ * How many responses are in for the round on the stage.
+ *
+ * THE METER'S NUMERATOR, and it needs two sources because on a hidden round
+ * neither is complete on its own:
+ *
+ *   - `answeredNames` is the server's participation list, written by
+ *     restoreGameState from `answerProgress.answererIds`. Authoritative, but
+ *     only as fresh as the last resync — and nothing resyncs when an answer
+ *     lands, so on its own this froze the count until the host happened to
+ *     refocus the tab or the socket reconnected.
+ *   - `answerRows` is the `/answers` payload, refetched on EVERY `playerAnswered`
+ *     frame (that refetch is unconditional — see playerAnsweredActions). One row
+ *     per responder, redacted or not, so its length is the live count even when
+ *     it carries no names at all.
+ *
+ * The larger of the two, never a sum: they describe the same people. The rows
+ * lead between resyncs; the server's list leads in the moment after a restore,
+ * before the first `/answers` call has returned.
+ */
+export function answeredCountFrom(answeredNames, answerRows) {
+  return Math.max((answeredNames || []).length, (answerRows || []).length);
+}
+
+/**
  * Whether THIS game actually withheld authorship — the type supports it AND
  * the host didn't turn it off for this particular game. `anonymousUntilReveal`
  * is the per-game flag from setup (createPayloadFor), read back from
