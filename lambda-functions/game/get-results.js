@@ -95,6 +95,36 @@ const broadcastResultsReady = async (gameId, paddedQuestionId) => {
 };
 
 /**
+ * The route this request actually came in on — the only thing that decides
+ * whether it may CLOSE a round or merely READ one.
+ *
+ * This handler sits behind TWO routes (template-clean.yaml):
+ *
+ *   POST /games/get-results            public — PlayerPage calls it with a
+ *                                      plain fetch, so it cannot carry the
+ *                                      Cognito authorizer without breaking
+ *                                      every player client
+ *   POST /games/{gameId}/close-round   host only — carries the authorizer,
+ *                                      the same way /reveal-authors does
+ *
+ * HTTP API authorizers are per-route and not optional: a route either has one
+ * or it does not, so "same route, sometimes authenticated" is not expressible.
+ * Two routes onto one handler is how the read stays public while the
+ * transition stays host-only, and this predicate is the seam between them.
+ *
+ * `requestContext.routeKey` is stamped by API Gateway from the route that
+ * MATCHED. It is not part of the request the caller composes — no body field,
+ * header or path trick can set it — so reaching this handler with the
+ * close-round routeKey is itself proof the authorizer let the caller through.
+ *
+ * FAILS CLOSED. Anything else — the public route, a missing requestContext, a
+ * future caller — is not a host.
+ */
+const HOST_TRANSITION_ROUTE = 'POST /games/{gameId}/close-round';
+const isHostTransitionRoute = (event) =>
+  (event?.requestContext?.routeKey || event?.routeKey) === HOST_TRANSITION_ROUTE;
+
+/**
  * Move the game into RESULTS#nnn and tell the room.
  *
  * The same six-line UpdateCommand was pasted into the call-and-answer branch and
@@ -114,8 +144,31 @@ const broadcastResultsReady = async (gameId, paddedQuestionId) => {
  *
  * `Started: true` is preserved from the original copies: resolving a round is
  * also proof the game is underway.
+ *
+ * WHO IS ALLOWED TO DO THIS is decided HERE, not at the call sites, for the
+ * same reason the write itself lives here: there are four exits, two of them
+ * once forgot the write entirely, and a permission check pasted into some of
+ * them would grow the identical hole. `event` is threaded in so this function
+ * can answer the question itself; a public read reaches this point only when
+ * the round it asked about is ALREADY in RESULTS (the handler refuses
+ * otherwise), so there is genuinely nothing to transition and returning early
+ * is the whole of the read path's write behaviour: no state, no reveal, no
+ * re-announcement.
+ *
+ * A missing `event` is a programming error — a fifth exit that forgot to pass
+ * it — and throws rather than silently declining, because silently declining
+ * is how a host ends up staring at a round that will not close.
  */
-const enterResultsState = async (gameId, paddedQuestionId) => {
+const enterResultsState = async (event, gameId, paddedQuestionId) => {
+  if (!event || typeof event !== 'object') {
+    throw new Error('enterResultsState: the request event is required to authorise the transition');
+  }
+
+  if (!isHostTransitionRoute(event)) {
+    console.log(`👀 Public read of RESULTS#${paddedQuestionId} for ${gameId} — reporting only, no transition`);
+    return;
+  }
+
   const lessonNumber = parseInt(paddedQuestionId, 10);
   console.log(`🏷️ Updating game state to RESULTS#${paddedQuestionId} (LessonNumber ${lessonNumber})`);
 
@@ -168,10 +221,13 @@ const enterResultsState = async (gameId, paddedQuestionId) => {
 
 exports.handler = async (event) => {
   try {
-    // Handle POST request with body containing gameId and questionNumber
+    // Handle POST request with body containing gameId and questionNumber.
+    // The host route is nested under the game (/games/{gameId}/close-round) and
+    // so carries no gameId in the body; the public one takes it in the body.
     const body = JSON.parse(event.body || '{}');
-    const { gameId, questionNumber } = body;
-    
+    const { questionNumber } = body;
+    const gameId = event.pathParameters?.gameId || body.gameId;
+
     if (!gameId) {
       return {
         statusCode: 400,
@@ -191,16 +247,28 @@ exports.handler = async (event) => {
     const gameType = gameMetadata.Item?.GameType || 'call-and-answer';
     console.log(`🎮 Game type: ${gameType}`);
 
+    // The STATE record is wanted twice at most — to fill in an omitted round,
+    // and to decide whether a public caller is reading an already-resolved
+    // one — so read it once, lazily.
+    let cachedGameState;
+    const readGameState = async () => {
+      if (cachedGameState === undefined) {
+        const res = await db.send(new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: 'STATE' }
+        }));
+        cachedGameState = res.Item || null;
+      }
+      return cachedGameState;
+    };
+
     let targetQuestionId = questionNumber;
-    
+
     // If no specific question ID provided, get current question from game state
     if (!targetQuestionId) {
-      const gameState = await db.send(new GetCommand({
-        TableName: process.env.TABLE_NAME,
-        Key: { PK: `GAME#${gameId}`, SK: 'STATE' }
-      }));
+      const gameState = await readGameState();
 
-      if (!gameState.Item) {
+      if (!gameState) {
         return {
           statusCode: 404,
           body: JSON.stringify({ error: 'Game not found' }),
@@ -208,14 +276,54 @@ exports.handler = async (event) => {
         };
       }
 
-      targetQuestionId = gameState.Item.CurrentQuestionId;
-      
+      targetQuestionId = gameState.CurrentQuestionId;
+
       if (!targetQuestionId) {
         return {
           statusCode: 400,
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             error: 'No current question',
             message: 'No question is currently active'
+          }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+    }
+
+    // READ FREELY, CLOSE ONLY AS THE HOST.
+    //
+    // Everything below this point can move the room: it writes RESULTS#nnn,
+    // flips AuthorsRevealed — which is what ends the room's anonymity —
+    // awards scores and announces the transition to every connection. A
+    // participant knows the four-digit game id, so on the public route that
+    // was a button any phone in the room could press mid-vote, and (this
+    // handler does not redact) the response handed back every author's name.
+    //
+    // The read that players actually make is the one AFTER the transition:
+    // PlayerPage waits for the state to say RESULTS#nnn and only then fetches
+    // that same nnn. That call has nothing left to do but report, so it is
+    // allowed through and enterResultsState declines to write.
+    //
+    // Scoped to the round the room is ON, not merely "this game has resolved
+    // something": a game sitting on RESULTS#003 must not hand out the authors
+    // of round 2, which may have been abandoned before RESULTS and so is still
+    // anonymous. Compared numerically because callers spell the round 1, '1'
+    // or '001' while the state stores it padded.
+    if (!isHostTransitionRoute(event)) {
+      const gameState = await readGameState();
+      const resolvedRound = String(gameState?.State || '').startsWith('RESULTS#')
+        ? String(gameState.State).split('#')[1]
+        : null;
+      const readingTheResolvedRound = resolvedRound !== null
+        && parseInt(resolvedRound, 10) === parseInt(String(targetQuestionId), 10);
+
+      if (!readingTheResolvedRound) {
+        console.log(`🔒 Refusing to close round ${targetQuestionId} of ${gameId}: not the host`);
+        return {
+          statusCode: 403,
+          body: JSON.stringify({
+            error: 'Host authentication required',
+            message: 'Results for this round are not available yet'
           }),
           headers: { 'Access-Control-Allow-Origin': '*' }
         };
@@ -226,12 +334,12 @@ exports.handler = async (event) => {
 
     // Handle trivia results differently from call-and-answer
     if (gameType === 'trivia') {
-      return await handleTriviaResults(gameId, targetQuestionId);
+      return await handleTriviaResults(event, gameId, targetQuestionId);
     }
     
     // Handle wavelength results with word comparison logic
     if (gameType === 'wavelength') {
-      return await handleWavelengthResults(gameId, targetQuestionId);
+      return await handleWavelengthResults(event, gameId, targetQuestionId);
     }
 
     // Extract scoring configuration with defaults
@@ -262,7 +370,7 @@ exports.handler = async (event) => {
       // A round nobody voted on is still a resolved round. This used to return
       // without touching the state, so the game sat on VOTE#nnn while the host
       // screen (which sets RESULTS# locally regardless) showed results.
-      await enterResultsState(gameId, paddedQuestionId);
+      await enterResultsState(event, gameId, paddedQuestionId);
 
       return {
         statusCode: 200,
@@ -352,7 +460,7 @@ exports.handler = async (event) => {
     });
 
     // Update game state to results (preserve LessonNumber!)
-    await enterResultsState(gameId, paddedQuestionId);
+    await enterResultsState(event, gameId, paddedQuestionId);
 
     // Update player scores using simplified PLAYER#{playerName}#SCORE architecture
     console.log(`🏆 Updating player scores for ${gameId} using simplified score records`);
@@ -468,7 +576,7 @@ exports.handler = async (event) => {
 /**
  * Handle trivia results - show all answers with correctness and scoring
  */
-async function handleTriviaResults(gameId, questionId) {
+async function handleTriviaResults(event, gameId, questionId) {
   try {
     console.log(`🧠 Handling trivia results for game ${gameId}, question ${questionId}`);
     
@@ -657,7 +765,7 @@ async function handleTriviaResults(gameId, questionId) {
   await decrementCategoryCount(gameId, paddedQuestionId);
 
   // Update game state to RESULTS (important for trivia flow!)
-  await enterResultsState(gameId, paddedQuestionId);
+  await enterResultsState(event, gameId, paddedQuestionId);
 
   return {
     statusCode: 200,
@@ -747,7 +855,7 @@ async function handleTriviaResults(gameId, questionId) {
  * Handle Wavelength Results - Word Association Analysis
  * Returns team-based scoring with common word analysis
  */
-async function handleWavelengthResults(gameId, questionId) {
+async function handleWavelengthResults(event, gameId, questionId) {
   try {
     console.log(`🌊 Handling wavelength results for game ${gameId}, question ${questionId}`);
     
@@ -884,7 +992,7 @@ async function handleWavelengthResults(gameId, questionId) {
     // React state moved, so a refresh (or the Host Remote, which reads the state
     // back rather than remembering what it asked for) put the room back on the
     // answering screen.
-    await enterResultsState(gameId, paddedQuestionId);
+    await enterResultsState(event, gameId, paddedQuestionId);
 
     // Store results for future retrieval
     await db.send(new PutCommand({

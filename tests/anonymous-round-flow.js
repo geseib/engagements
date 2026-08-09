@@ -738,13 +738,24 @@ console.log('\n14. voting closing reveals the round');
 const { handler: getResults } = require(path.join(REPO, 'lambda-functions/game/get-results.js'));
 const { isHidden } = require(path.join(REPO, 'lambda-functions/game/anonymity.js'));
 
+/** An authenticated host closing a round: POST /games/{gameId}/close-round. */
+const closeRound = (gameId, questionNumber) => ({
+  requestContext: { routeKey: 'POST /games/{gameId}/close-round' },
+  pathParameters: { gameId },
+  body: JSON.stringify({ questionNumber }),
+});
+
 seedAnonymousRound('3011');
 put({ PK: 'GAME#3011', SK: 'STATE', State: 'VOTE#001', LessonNumber: 1, CurrentQuestionId: '001' });
 put({ PK: 'GAME#3011', SK: 'QUESTION#001#VOTE#Grace', PlayerName: 'Grace', Votes: { 0: 1 } });
 put({ PK: 'GAME#3011', SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
 sent = [];
 
-await getResults({ body: JSON.stringify({ gameId: '3011', questionNumber: 1 }) });
+// The HOST route. Closing a round — and so discharging the anonymity promise —
+// is host-only: the public POST /games/get-results may only read a round that
+// is already resolved (get-results.js: isHostTransitionRoute). The refusal
+// itself is pinned in tests/results-route-auth.js.
+await getResults(closeRound('3011', 1));
 
 // The promise is "until voting closes", not "until the host presses a button".
 // Closing the vote is what discharges it.
@@ -780,7 +791,7 @@ put({ PK: 'GAME#3013', SK: 'STATE', State: 'VOTE#001', LessonNumber: 1, CurrentQ
 put({ PK: 'GAME#3013', SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
 sent = [];
 
-await getResults({ body: JSON.stringify({ gameId: '3013', questionNumber: 1 }) });
+await getResults(closeRound('3013', 1));
 
 await check('a round that closed with zero votes is still revealed', () =>
   assert.strictEqual(store.get(key('GAME#3013', 'ROUND#001'))?.AuthorsRevealed, true));

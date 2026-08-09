@@ -176,8 +176,24 @@ const answer = (gameId, player, text) => ({
   PlayerName: player, Answer: text, SubmittedAt: '2026-01-01T00:00:00.000Z',
 });
 
+/**
+ * Always the HOST route.
+ *
+ * Closing a round is host-only since the results route was split in two
+ * (get-results.js: isHostTransitionRoute): `POST /games/get-results` stays
+ * public but may only READ a round that is already resolved, while
+ * `POST /games/{gameId}/close-round` carries the Cognito authorizer and is the
+ * only way to perform the transition. Every transition this file asserts is
+ * therefore driven through the authenticated route — driving them through the
+ * public one would now (correctly) 403, and tests/results-route-auth.js is
+ * where that refusal is pinned.
+ */
 const invoke = (gameId, questionNumber = 1) =>
-  handler({ body: JSON.stringify({ gameId, questionNumber }) });
+  handler({
+    requestContext: { routeKey: 'POST /games/{gameId}/close-round' },
+    pathParameters: { gameId },
+    body: JSON.stringify({ questionNumber }),
+  });
 
 /** Every assertion that must hold on EVERY exit path. */
 function assertResolved(gameId, label) {

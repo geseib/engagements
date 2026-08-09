@@ -1247,7 +1247,11 @@ Focus on actionable business strategy insights.`;
           }
           
           if (currentState.startsWith('RESULTS#')) {
-            // Get results data
+            // A READ, deliberately on the public route: the round is already
+            // RESULTS#, so there is nothing to transition and this is the same
+            // call a player's page makes. Only handleShowResults, which
+            // actually closes the round, uses the authenticated close-round
+            // route.
             try {
               const resultsRes = await fetch(`${API_BASE}games/get-results`, {
                 method: 'POST',
@@ -2191,12 +2195,16 @@ Focus on actionable business strategy insights.`;
       
       console.log(`🎯 Getting results for question ${questionNumber}`);
       
-      // Use new getResults API to calculate scores and get formatted results
-      const resultsRes = await fetch(`${API_BASE}games/get-results`, {
+      // CLOSING the round, not reading it — so this goes to the authenticated
+      // route, with authFetch rather than fetch. Same handler and the same
+      // response shape as POST /games/get-results, but that route is public
+      // (PlayerPage needs it) and therefore now refuses to perform the
+      // transition: the state write, the anonymity reveal, the scoring and the
+      // broadcast are host-only. The player's read below is untouched.
+      const resultsRes = await authFetch(`${API_BASE}games/${gameId}/close-round`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          gameId: gameId,
           questionNumber: questionNumber
         })
       });

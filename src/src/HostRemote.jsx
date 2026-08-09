@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
 import './HostRemote.css';
 import Icon from './components/Icon';
+import { authFetch } from './auth/authFetch';
 import {
   primaryAction,
   skipAction,
@@ -211,7 +212,12 @@ function HostRemote() {
     setBusyAction(actionId);
 
     try {
-      const res = await fetch(`${apiBase()}${request.path}`, {
+      // authFetch, not fetch: closing a round is now an authenticated route
+      // (games/{id}/close-round), because it ends the room's anonymity and
+      // moves everyone's screen. The other actions sit on public routes and
+      // simply ignore the header. This page is behind ProtectedRoute, so the
+      // host is signed in and the token is there to attach.
+      const res = await authFetch(`${apiBase()}${request.path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request.body),

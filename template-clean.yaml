@@ -596,12 +596,34 @@ Resources:
               - execute-api:ManageConnections
             Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
       Events:
+        # THE READ. Public, and it has to be: PlayerPage calls this with a
+        # plain fetch the moment the room enters RESULTS, so an authorizer
+        # here would break every player client. The handler refuses to perform
+        # the transition on this route — it will only report a round that is
+        # already resolved (get-results.js: isHostTransitionRoute).
         GetResultsEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
             Path: /games/get-results
             Method: POST
+        # THE TRANSITION. Host only.
+        #
+        # Same handler, second route — HTTP API authorizers are per-route and
+        # not optional, so "public to read, authenticated to write" cannot be
+        # expressed on one route. Closing a round writes RESULTS#nnn, flips
+        # AuthorsRevealed (ending the room's anonymity), awards scores and
+        # announces the move to everyone. A participant knows the four-digit
+        # game id, so on a public route that was a button any phone in the room
+        # could press mid-vote. Same reasoning as /reveal-authors above.
+        CloseRoundEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/close-round
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName

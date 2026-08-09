@@ -201,11 +201,15 @@ export function requestFor(actionId, { gameId, round } = {}) {
       if (!round) return null;
       return { path: `games/${gameId}/start-vote`, body: { questionNumber: round } };
 
-    // The odd one out: get-results is not nested under the game, it takes the
-    // gameId in the body. Matches GameHostPage.handleShowResults.
+    // Closing the round. This is the host-only half of the results handler:
+    // POST /games/get-results stays public so players can READ a resolved
+    // round, while the transition — the state write, the anonymity reveal, the
+    // scoring, the broadcast — lives behind the Cognito authorizer on
+    // /close-round. Matches GameHostPage.handleShowResults, and the remote is
+    // behind ProtectedRoute so the host already holds a token.
     case 'results':
       if (!round) return null;
-      return { path: 'games/get-results', body: { gameId, questionNumber: round } };
+      return { path: `games/${gameId}/close-round`, body: { questionNumber: round } };
 
     default:
       return null;

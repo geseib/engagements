@@ -168,11 +168,17 @@ describe('requestFor', () => {
       path: 'games/4821/start-vote',
       body: { questionNumber: 3 },
     });
-    // get-results is not nested under the game — it takes gameId in the body.
+    // Closing the round is the AUTHENTICATED half of the results handler. The
+    // public POST /games/get-results may only read a round that is already
+    // resolved, so a remote pointed at it would 403 instead of advancing the
+    // room — and, before the split, any participant could have driven the room
+    // and ended its anonymity from a phone.
     expect(requestFor('results', { gameId: '4821', round: 3 })).toEqual({
-      path: 'games/get-results',
-      body: { gameId: '4821', questionNumber: 3 },
+      path: 'games/4821/close-round',
+      body: { questionNumber: 3 },
     });
+    expect(requestFor('results', { gameId: '4821', round: 3 }).path)
+      .not.toContain('get-results');
   });
 
   it('refuses round-addressed calls when the round is unknown', () => {
