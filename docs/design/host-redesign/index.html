@@ -81,9 +81,15 @@
   <div class="hint">
     <b>How to judge them.</b> Type is sized in <code>vh</code> with pixel floors, so a mockup only
     shows its true size at the true display size. Open one, press <b>F11</b> (or ⌃⌘F),
-    and where you can, put it on the real projector. Switch profile by editing the
-    <code>class</code> on <code>&lt;html&gt;</code>:
-    <code>d-room</code>, <code>d-tv</code>, <code>d-call</code>, <code>d-table</code>.
+    and where you can, put it on the real projector. Switch profile in the
+    <a href="view.html">viewer</a> with <b>1</b>–<b>4</b>, or by editing the <code>class</code> on
+    <code>&lt;html&gt;</code> — <code>d-room</code>, <code>d-tv</code>, <code>d-call</code>,
+    <code>d-table</code> — if you have a single page open on its own.
+    <br><br>
+    One thing that looks like a bug and is not: on a viewport under <b>820px tall</b>, TV renders at
+    Room's sizes. That is a deliberate <code>@media (max-height:820px)</code> fallback — the TV
+    ladder cannot be honoured on a short viewport without clipping the trivia states, so it reverts
+    rather than protecting a number. Judge TV at 900px or more.
   </div>
 
   <div class="profiles">
