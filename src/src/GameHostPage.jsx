@@ -4059,7 +4059,11 @@ Ready to engage? See you there!`;
               round: (hostPhase === 'LOBBY' || hostPhase === 'ENDED') ? undefined : lessonNumber,
               of: (hostPhase === 'LOBBY' || hostPhase === 'ENDED') ? undefined : roundOf,
             }}
-            join={gameId ? { url: joinDisplayUrl, code: gameId } : {}}
+            join={gameId
+              ? (hostPhase === 'ENDED'
+                ? { code: gameId, closed: true }
+                : { url: joinDisplayUrl, code: gameId })
+              : {}}
           />
         )}
         meter={meter
@@ -4089,6 +4093,26 @@ Ready to engage? See you there!`;
             The ladder is a legibility floor, not a ceiling: a state carrying
             one object — a join code, a single prompt — under-uses a ladder
             derived for a dense screen, and 01-lobby/02-ask say by how much. */}
+        {/* THE data-drop CONVENTION, stated once because it was inverted once.
+            The fitter sacrifices ASCENDING: data-drop="1" goes first. The
+            mockups fix the polarity — 06-results-call-and-answer numbers its
+            un-noted CHROME "1" and "2" and its room-facing CONTENT "3" and
+            "4" — so LOW NUMBERS ARE CHROME, HIGH NUMBERS ARE CONTENT, and a
+            group carrying a data-drop-note (content announces its own loss)
+            may never sort before a group without one (chrome goes silently).
+
+            Numbering per state, in this file:
+              1  early-reveal / fn-controls   host-only controls
+              2  debug-prompt-content         host-only, debug builds only
+              3  anon-line / "How to answer"  room-facing, secondary
+              4  "Full prompt" / .recap       room-facing, primary
+
+            The numbers are scoped per .content and the phases are mutually
+            exclusive, so ASK's 4 and VOTE's 4 never meet. Enforced by
+            __tests__/stageShell.test.jsx, "chrome is sacrificed before
+            content, in every state" — the check that was missing when a dense
+            ASK threw away the question's full prompt and kept a host-only
+            Reveal Authors button plus its two-line explanation. */}
         <div className="content" data-grow={STAGE_GROW[hostPhase] || '1'}>
           <div className="fitbox">
 
@@ -4109,7 +4133,7 @@ Ready to engage? See you there!`;
                   </div>
                 )}
                 {anonymityApplies(currentGameType) && anonymousUntilReveal && (
-                  <p className="anon-line" data-drop="2" data-drop-note="Anonymity note">
+                  <p className="anon-line" data-drop="3" data-drop-note="Anonymity note">
                     <b>Answers are anonymous.</b> Nobody sees who wrote what — the
                     host included — until voting closes.
                   </p>
@@ -4120,12 +4144,13 @@ Ready to engage? See you there!`;
             {hostPhase === 'ASK' && currentQuestion && (
               <>
                 {/* THE RECOVERY FOR A DROPPED PROMPT.
-                    The full prompt below is data-drop="1" — the first thing
-                    the fitter sacrifices on a dense ASK — and the how-to-answer
-                    line is data-drop="2". Click-to-expand is how the host gets
-                    them back, and without it a dense round loses the prompt
-                    from both the room's screen and the host's with no way to
-                    read it again. Mouse-only on purpose: giving the heading a
+                    The full prompt below is data-drop="4" — the LAST thing the
+                    fitter sacrifices on a dense ASK, after both host controls
+                    and the how-to-answer line at "3" — but it can still go.
+                    Click-to-expand is how the host gets it back, and without it
+                    a dense round loses the prompt from both the room's screen
+                    and the host's with no way to read it again. Mouse-only on
+                    purpose: giving the heading a
                     tabIndex would put SPACE — the advance shortcut — on a
                     focusable element that also opens a modal. */}
                 <h1
@@ -4145,7 +4170,7 @@ Ready to engage? See you there!`;
                   />
                 )}
                 {(currentQuestion.questionDetail || currentQuestion.detail || currentQuestion.topic) && (
-                  <p className="qdetail" data-drop="1" data-drop-note="Full prompt">
+                  <p className="qdetail" data-drop="4" data-drop-note="Full prompt">
                     {currentGameType === 'wavelength' && currentQuestion.topic
                       ? currentQuestion.topic
                       : (currentQuestion.questionDetail || currentQuestion.detail)}
@@ -4163,7 +4188,7 @@ Ready to engage? See you there!`;
                       ))}
                   </div>
                 )}
-                <p className="qdetail" data-drop="2" data-drop-note="How to answer">
+                <p className="qdetail" data-drop="3" data-drop-note="How to answer">
                   {getHostInstructionText(currentQuestionOf(questions, currentQuestionId))}
                 </p>
               </>
@@ -4175,7 +4200,7 @@ Ready to engage? See you there!`;
                   {currentQuestion?.image ? 'Vote for the best title' : 'Vote for the best response'}
                 </div>
                 {currentQuestion && (
-                  <p className="recap" data-drop="1" data-drop-note="The prompt">
+                  <p className="recap" data-drop="4" data-drop-note="The prompt">
                     {currentQuestion.title || currentQuestion.question}
                   </p>
                 )}
@@ -4212,12 +4237,20 @@ Ready to engage? See you there!`;
                 wants the names on screen BEFORE the vote closes. Unlike the
                 RESULTS toggle this is not cosmetic; it ends the round's
                 anonymity for the whole room and cannot be undone, so the copy
-                says so. It is chrome, so it is droppable. */}
+                says so.
+
+                It is host-only chrome, so it is droppable — and it is
+                data-drop="1", the FIRST thing sacrificed on a dense ASK or
+                VOTE, ahead of every room-facing line. It shipped at "4" once,
+                which sorted it after the question's full prompt and after the
+                VOTE recap: a dense round threw away the one sentence telling
+                the room what it was voting about and kept a button only the
+                host can press, plus two lines explaining it. */}
             {(hostPhase === 'ASK' || hostPhase === 'VOTE')
               && anonymityActive({ gameType: currentGameType, anonymousUntilReveal })
               && !authorsRevealed
               && answers.length > 0 && (
-              <div className="early-reveal" data-drop="4">
+              <div className="early-reveal" data-drop="1">
                 <button className="reveal-authors-btn" onClick={handleRevealAuthors}>
                   Reveal Authors
                 </button>
@@ -4295,7 +4328,13 @@ Ready to engage? See you there!`;
                       })}
                   </div>
                 ) : currentGameType === 'wavelength' ? (
+                  /* `stage` drops the white card, the panel's own name and the
+                     duplicate word list, and lets styles/stage.css cap the
+                     drawing so it cannot be clipped by .content's overflow.
+                     The cloud itself is unchanged and still provisional —
+                     .terms replaces it in plan 4. */
                   <WavelengthWordCloud
+                    stage
                     answers={answers}
                     promptWord={currentQuestion?.topic || currentQuestion?.title || 'WAVELENGTH'}
                     gameState={gameState}
@@ -4387,7 +4426,7 @@ Ready to engage? See you there!`;
                     Two different things, deliberately adjacent: the picker
                     changes the voice from the NEXT round on, Redo rewrites the
                     one on screen. */}
-                <div className="fn-controls" data-drop="3">
+                <div className="fn-controls" data-drop="1">
                   <label className="ai-persona-switch-label" htmlFor="game-persona">
                     {`Voice (next ${getHostRoundNoun().toLowerCase()})`}
                   </label>
@@ -4420,7 +4459,7 @@ Ready to engage? See you there!`;
 
                 {gameDebugMode && currentAIInsights
                   && (currentAIInsights.debugPrompt || currentAIInsights.prompt) && (
-                  <div className="debug-prompt-content" data-drop="5">
+                  <div className="debug-prompt-content" data-drop="2">
                     <div className="prompt-display">
                       {currentAIInsights.debugPrompt || currentAIInsights.prompt}
                     </div>
@@ -4429,12 +4468,24 @@ Ready to engage? See you there!`;
               </>
             )}
 
+            {/* ENDED LEADS WITH THE CONCLUSION, NOT THE TITLE — 10-ended.
+                This printed <h1 class="q">{eventTitle}</h1> while the rail
+                printed the same title two inches above it: the same fact
+                stated twice in one viewport, which the stage's binding
+                constraints forbid. The title belongs to the rail, which
+                carries it in every other state too; what the content owes the
+                room here is what happened. The mockup's hero is a decided
+                conclusion, which nothing in the game state can supply yet
+                (that is plan 4/5's, with Field Notes) — so the hero is the
+                honest one we do have, and the roll-up sits beneath it. */}
             {hostPhase === 'ENDED' && (
               <>
                 <div className="kicker">Session complete</div>
-                <h1 className="q">{eventTitle || 'Engagements'}</h1>
+                <h1 className="hero">
+                  {`${lessonNumber} ${pluralRoundNoun(getHostRoundNoun(), lessonNumber).toLowerCase()} played`}
+                </h1>
                 <p className="qdetail">
-                  {`${lessonNumber} ${pluralRoundNoun(getHostRoundNoun(), lessonNumber).toLowerCase()} played · ${players.length} in the room`}
+                  {`${players.length} in the room · the full write-up is in the session report`}
                 </p>
               </>
             )}

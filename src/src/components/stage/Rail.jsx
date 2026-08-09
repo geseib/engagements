@@ -40,6 +40,12 @@ const CHIP = {
 
 export default function Rail({ phase, title, context = {}, join = {}, timer }) {
   const hasJoin = Boolean(join && (join.code || join.url));
+  // A FINISHED SESSION MUST NOT ADVERTISE A LIVE ONE. The join block was
+  // rendered whenever a gameId existed, so ENDED still read "JOIN
+  // eng.seibtribe.us/play 4821" at a room that had just been told the session
+  // was complete — an instruction to do something that no longer works.
+  // 10-ended's rail answers it in four words: `Session 4821 · closed`.
+  const closed = Boolean(join && join.closed);
   // An unrecognised phase renders no chip rather than a fabricated one — a
   // mislabelled state is worse than an unlabelled bar.
   const chip = CHIP[String(phase ?? '').toUpperCase()] || null;
@@ -63,7 +69,12 @@ export default function Rail({ phase, title, context = {}, join = {}, timer }) {
         {context.of != null && <span>{`of ${context.of}`}</span>}
       </span>
       {timer && <span className="rail-timer">{timer}</span>}
-      {hasJoin && (
+      {hasJoin && closed && (
+        <div className="rail-join">
+          <span data-join-closed="">{join.code ? `Session ${join.code} · closed` : 'Session closed'}</span>
+        </div>
+      )}
+      {hasJoin && !closed && (
         <div className="rail-join">
           <span data-join-word="" data-drop="2">JOIN</span>
           {join.url && <span data-join-url="" data-drop="3">{join.url}</span>}

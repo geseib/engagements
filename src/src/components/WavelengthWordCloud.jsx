@@ -3,7 +3,7 @@ import * as d3 from 'd3';
 import cloud from 'd3-cloud';
 import Icon from './Icon';
 
-const WavelengthWordCloud = ({ answers, promptWord, gameState }) => {
+const WavelengthWordCloud = ({ answers, promptWord, gameState, stage = false }) => {
   const svgRef = useRef();
   const [wordFrequency, setWordFrequency] = useState({});
   const [allWords, setAllWords] = useState([]);
@@ -91,7 +91,14 @@ const WavelengthWordCloud = ({ answers, promptWord, gameState }) => {
     const width = 800;
     const height = 400;
     
-    svg.attr('width', width).attr('height', height);
+    // The viewBox is what lets a stylesheet resize this. Without one, a fixed
+    // 800x400 SVG given width:100% crops its contents rather than scaling
+    // them — and on the stage, where .content clips with overflow:hidden and
+    // the fitter's scale search cannot touch a fixed drawing, "cannot shrink"
+    // means "is silently cut off at the bottom".
+    svg.attr('width', width).attr('height', height)
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet');
 
     // Warm Summit palette (token values as literals — d3 fills are data-driven)
     const engageColors = [
@@ -177,9 +184,39 @@ const WavelengthWordCloud = ({ answers, promptWord, gameState }) => {
     }
   };
 
+  /**
+   * THE STAGE VARIANT — the same cloud, with nothing on it that a room may
+   * not see. Minimal on purpose: the real answer for wavelength RESULTS is
+   * the ranked `.terms` flow whose CSS is already ported in styles/stage.css,
+   * and rendering it is plan 4's. This only stops the projected version being
+   * wrong in ways that cannot wait.
+   *
+   * What comes off, and why:
+   *   the white card   — a paper-theme panel dropped onto the dusk stage
+   *   the h3           — "Wavelength Word Cloud" is the panel's name, not the
+   *                      room's business (spec §7: no internal vocabulary)
+   *   the 3x note      — an explanation of the sizing algorithm
+   *   the word list    — every word in it is already in the cloud above it,
+   *                      and the stage may not state a fact twice; each chip
+   *                      also carries `title="By <player>"`, and the stage
+   *                      never names a person
+   * The SVG's own size is capped in styles/stage.css; the viewBox below is
+   * what makes that cap scale the drawing instead of cropping it.
+   */
+  if (stage) {
+    return (
+      <div className="wavelength-word-cloud">
+        <svg ref={svgRef} />
+        <p className="cloud-caption">
+          {`${answers?.length || 0} contributed words`}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="wavelength-word-cloud">
-      <div style={{ 
+      <div style={{
         background: 'white',
         borderRadius: '12px',
         padding: '20px',

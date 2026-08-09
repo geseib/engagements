@@ -9758,13 +9758,18 @@ body {
   text-align: center;
 }
 
+/* SIZE LIVES IN styles/stage.css, NOT HERE. These three controls are rendered
+   inside .content, which means they are projected at a room. A fixed px
+   font-size on projected text reads nothing from the profile ladder, sits
+   below every profile's floor, and is invisible to both the fitter's scale
+   search and the floor clamp — so all four profiles drew them identically.
+   Colour, border and hover stay; font-size is set by the profile. */
 .reveal-authors-btn {
   background: transparent;
   color: var(--primary);
   border: 2px solid var(--primary);
   padding: 10px 22px;
   border-radius: 8px;
-  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -9777,7 +9782,6 @@ body {
 
 .early-reveal-help {
   margin: 8px 0 0;
-  font-size: 13px;
   line-height: 1.45;
   color: var(--muted);
 }
@@ -9792,7 +9796,6 @@ body {
   border: var(--hairline);
   padding: 6px 14px;
   border-radius: 6px;
-  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -9803,11 +9806,11 @@ body {
   border-color: var(--primary);
 }
 
-.big-screen-mode .stage-authors-toggle,
-.big-screen-mode .reveal-authors-btn {
-  font-size: 1.1rem;
-  padding: 10px 24px;
-}
+/* The `.big-screen-mode .stage-authors-toggle, .big-screen-mode
+   .reveal-authors-btn` override that used to sit here is deleted. There is no
+   .big-screen-mode ancestor over these elements any more — there is no second
+   layout mode at all — so it was dead, and it was also the only thing in the
+   file that pretended these controls scaled with the display. */
 
 /* ---------------------------------------------------------------------------
    HOST-ONLY PANEL ADDITIONS (see components/stage/ and styles/stage.css for

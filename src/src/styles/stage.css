@@ -353,6 +353,18 @@ body{
    is not a reminder. */
 .recap{font-size:var(--t-body);color:var(--text);margin:0;font-weight:600;
   max-width:56ch;line-height:1.25}
+/* Ported from 10-ended.html:321-322 now that ENDED renders one. It is already
+   in the fitter's CONTENT list, so it may shrink but may never be abbreviated. */
+.hero{font-family:var(--font-display);font-weight:800;font-size:var(--t-hero);
+  line-height:.98;margin:0;letter-spacing:-.01em;max-width:var(--measure);color:var(--text)}
+
+/* THE FITTER'S OWN VOICE — "Full prompt · How to answer — in the session
+   report". It had no rule at all, so the one sentence whose entire job is to
+   stop a cut being silent inherited body's 16px: below Room's and Call's 20px
+   floor and well below TV's 26px, i.e. unreadable at exactly the distance the
+   cut it announces was made for. It is a footnote, so it sits at the label
+   tier — but it is the label tier of the ACTIVE profile, not a fixed px. */
+.content > .reduced{font-size:var(--t-meta);color:var(--muted);margin:.6em 0 0}
 
 /* trivia options. Two columns whenever there are four or more: with six
    options a single column is TALLER, not shorter — the previous spec had this
@@ -520,6 +532,46 @@ body{
 .fn-controls select,.fn-controls button{font:inherit;font-size:var(--t-meta);
   color:var(--text);background:transparent;
   border:var(--hair) solid var(--rule);border-radius:8px;padding:.3em .6em;cursor:pointer}
+
+/* THE ANONYMITY CONTROLS, SIZED BY THE PROFILE INSTEAD OF BY A CONSTANT.
+   All three of these live inside .content now, which means all three are
+   PROJECTED — and all three carried fixed px in styles.css: the button at
+   15px, the help sentence and the RESULTS toggle at 13px. Every one of those
+   is below every profile's floor (Room/Call 20px, TV 26px), and .early-reveal-
+   help is a whole sentence explaining an action that cannot be undone: 13px at
+   25ft subtends about 5 arcminutes against an 8.3' target. Reading nothing
+   from --t-* also made them invisible to the fitter's scale search and to the
+   floor clamp, so they rendered pixel-identical in all four profiles — the
+   same defect §4.2 records the scalar approach shipping.
+
+   Sizes only. The colours, borders and hover states stay in styles.css; the
+   .big-screen-mode override that used to sit beside them is deleted, because
+   no .big-screen-mode ancestor exists over these elements any more. */
+.content .reveal-authors-btn{font-size:max(var(--floor),calc(var(--t-body) * .9))}
+.content .early-reveal-help{font-size:var(--t-meta)}
+.content .stage-authors-toggle{font-size:var(--t-meta)}
+
+/* WAVELENGTH RESULTS, CAPPED SO IT CANNOT CLIP.
+   WavelengthWordCloud draws a fixed 800x400 SVG. Fixed means the scale search
+   cannot shrink it — --fit moves only --t-* values — so on RESULTS, which has
+   no meter and no drop groups, every rung of the search returned null, the
+   sacrifice loop had nothing to sacrifice, and the terminal search left
+   --fit at .55 with [data-clamped] clamping nothing that was rendered. The
+   bottom of the cloud was then cut off by .content{overflow:hidden} with no
+   truncation the room could see — a silent clip, which §7 forbids outright.
+
+   The cap is .stage-art's, for the same reason: the fitter can shrink type,
+   but it cannot shrink a raster or a fixed-size drawing, so the drawing has to
+   agree to be shrunk. The component supplies the viewBox that makes width:100%
+   actually scale the contents rather than crop them.
+
+   NOT the real fix. The real fix is .terms above — a ranked, weighted flow
+   that reads at 25ft and can state its own reduction — which is plan 4's. */
+.content .wavelength-word-cloud{width:100%;min-width:0;text-align:center}
+.content .wavelength-word-cloud svg{display:block;margin:0 auto;
+  width:100%;max-width:100%;height:auto;max-height:44vh}
+.content .wavelength-word-cloud .cloud-caption{font-size:var(--t-meta);
+  color:var(--muted);margin:.6em 0 0}
 
 /* ===========================================================================
    TOKENS THE PORT ASSUMED AND THE APP DOES NOT HAVE.
