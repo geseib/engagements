@@ -28,9 +28,10 @@
  *     randomizeQuestions, newGameSetId, eventDetails) — they are the form, not
  *     the game.
  *   - libraries that are refetched anyway (questionSets, personas).
- *   - bigScreenMode / qrSidebarVisible — room-display preferences. A host who
- *     put the projector into big-screen mode wants it to stay there across
- *     games.
+ *   - the display profile and qrSidebarVisible — room-display preferences. A
+ *     host running a projector wants it to stay a projector across games; the
+ *     profile is persisted to localStorage for the same reason, and a reset
+ *     here would undo a reload's whole point.
  *   - wsConnected — owned by the WebSocket client's own callback.
  */
 
@@ -76,7 +77,6 @@ export function initialGameSession() {
     votes: [],
     playersWhoVoted: [],
     currentQuestionVotes: [],
-    currentAnswerIndex: 0,
 
     // --- what the question set says ------------------------------------
     selectedSetId: '',
@@ -111,9 +111,6 @@ export function initialGameSession() {
     showQuestionBrowser: false,
     browsingQuestions: [],
     selectedCategory: '',
-    showAllAnsweredAlert: false,
-    showAllVotedAlert: false,
-    showInviteCreated: false,
     inviteCopied: false,
     isLoadingData: false,
     isRestoringState: false,

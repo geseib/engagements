@@ -10,6 +10,11 @@ import Icon from './components/Icon';
 import RankIcon from './components/RankIcon';
 import SetImageBadge, { imageMarkerSuffix } from './components/SetImageBadge';
 import HostActionBar from './components/HostActionBar';
+import Stage from './components/stage/Stage';
+import Rail from './components/stage/Rail';
+import RoomMeter from './components/stage/RoomMeter';
+import Dock from './components/stage/Dock';
+import { loadProfile, saveProfile } from './config/displayProfile';
 import {
   resolveInstruction, currentQuestionOf, resolveRoundNoun, pluralRoundNoun,
 } from './config/instructions';
@@ -52,6 +57,45 @@ const calculatePlayerRankings = (players) => {
   return rankedPlayers;
 };
 
+/**
+ * How far above its ladder each state may grow, from the mockups' own
+ * `data-grow` attributes (01-lobby: 1.5, 02-ask: 1.35). Everything denser than
+ * those runs at the ladder.
+ */
+const STAGE_GROW = { LOBBY: '1.5', ASK: '1.35', ENDED: '1.5' };
+
+/** Trivia answer slots, in display order. */
+const TRIVIA_OPTION_KEYS = ['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF'];
+
+/**
+ * Is this option slot the correct answer?
+ *
+ * Question sets in the wild record `correctAnswer` four different ways —
+ * "OptionA", "A", the option's own text, or an array of any of those — so the
+ * comparison has to try all of them. Lifted verbatim out of the RESULTS render
+ * when that moved onto the stage; the logic is unchanged.
+ */
+function isCorrectTriviaOption(question, key, letter) {
+  if (!question) return false;
+  const optionId = `Option${letter}`;
+  const candidates = Array.isArray(question.correctAnswer)
+    ? question.correctAnswer
+    : [question.correctAnswer];
+
+  for (const correct of candidates) {
+    if (!correct) continue;
+    if (correct === optionId || correct === letter || correct === question[key]) return true;
+    if (typeof correct === 'string' && correct.startsWith('Option')) {
+      const correctLetter = correct.replace('Option', '');
+      if (`option${correctLetter}` === key || correctLetter === letter) return true;
+    }
+    if (typeof correct === 'string' && correct.length === 1 && /[A-F]/.test(correct)) {
+      if (`option${correct}` === key || correct === letter) return true;
+    }
+  }
+  return false;
+}
+
 function GameHostPage() {
   // 🎯 AUTHENTICATION
   const { currentUser, signOut } = useAuth();
@@ -59,17 +103,19 @@ function GameHostPage() {
   // 🎯 GAME ID MANAGEMENT: Use URL as single source of truth
   const [gameId, setGameId] = useState('');
   
-  // Helper function to check if game is in waiting state
-  const isWaitingState = (state) => {
-    if (!state) {
-      console.log('🚨 DEBUG: isWaitingState - no state provided, returning true');
-      return true; // Default to waiting state if no state
-    }
-    const isWaiting = state === 'CREATED' || state === 'STARTED' || 
-           (!state.startsWith('ASK#') && !state.startsWith('VOTE#') && !state.startsWith('RESULTS#'));
-    console.log(`🚨 DEBUG: isWaitingState - state: ${state}, isWaiting: ${isWaiting}`);
-    return isWaiting;
-  };
+  /**
+   * Is the game sitting in the lobby?
+   *
+   * This replaces the old waiting-state predicate, which answered "does this
+   * state fail to
+   * start with ASK#/VOTE#/RESULTS#" and therefore answered TRUE for `ENDED` —
+   * which is why a finished session rendered the lobby and told a room that
+   * had just applauded that it was "Waiting for players to join…". The phase
+   * comes from config/hostControls.js now, so the page and the dock can never
+   * disagree about which phase is on screen, and ENDED is excluded explicitly
+   * rather than by accident of prefix.
+   */
+  const isLobbyState = (state) => state !== 'ENDED' && phaseOfGameState(state) === 'LOBBY';
   const [players, setPlayers] = useState([]);
   const [questions, setQuestions] = useState([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1);
@@ -92,10 +138,12 @@ function GameHostPage() {
   const [votes, setVotes] = useState([]);
   const [playersWhoVoted, setPlayersWhoVoted] = useState([]);
   const [currentQuestionVotes, setCurrentQuestionVotes] = useState([]);
-  const [currentAnswerIndex, setCurrentAnswerIndex] = useState(0);
   const [manualStateChange, setManualStateChange] = useState(false);
   const [lessonExpanded, setLessonExpanded] = useState(false);
-  const [qrSidebarVisible, setQrSidebarVisible] = useState(true);
+  // Closed by default. It is a fixed 300–600px panel over a fixed-height
+  // stage; opening it is a deliberate inspection, and the dock's SETUP button
+  // is its permanent, discoverable entry point.
+  const [qrSidebarVisible, setQrSidebarVisible] = useState(false);
   const [instructionsVisible, setInstructionsVisible] = useState(false);
   const [showExpandedQR, setShowExpandedQR] = useState(false);
   const [questionSetTabVisible, setQuestionSetTabVisible] = useState(false);
@@ -201,14 +249,36 @@ function GameHostPage() {
   // Debug mode for AI prompts
   const [gameDebugMode, setGameDebugMode] = useState(false);
   
-  // Big screen mode for conference room displays (always defaults to false on page load)
-  const [bigScreenMode, setBigScreenMode] = useState(false);
-  
-  // Ensure big screen mode is always false on page load/refresh
-  useEffect(() => {
-    setBigScreenMode(false);
-    console.log('🖥️ Big screen mode reset to false on component mount');
-  }, []);
+  /**
+   * WHICH DISPLAY THE STAGE IS ON — the one parameter the whole shell reads.
+   *
+   * This replaces the old big-screen boolean, and replaces it rather than
+   * joining it. Two layouts is what produced two ASK headers and two QR
+   * blocks, and the mode reset itself to OFF on every mount, so a projector
+   * browser that reloaded mid-session came back in the wrong layout in front
+   * of a room. The profile is read from localStorage on mount and written back
+   * on every change: never lose the presentation state on reload.
+   *
+   * TV and Call are undetectable in principle and are chosen in the Console
+   * (spec §5.4, plan 3). Until that ships they are reachable by setting
+   * `engage.displayProfile` in localStorage; Room and Table are inferred from
+   * the viewport width.
+   */
+  const [profile, setProfile] = useState(
+    () => loadProfile(window.localStorage, window.innerWidth)
+  );
+  useEffect(() => { saveProfile(window.localStorage, profile); }, [profile]);
+
+  /**
+   * Which beat of RESULTS is on screen.
+   *
+   * RESULTS is two beats now (config/hostControls.js): the tally, then the
+   * discussion prompt. A host who wants to talk over the scores should not
+   * also be projecting the AI's paragraph. Reset whenever the round changes,
+   * so the next round's results open on the tally.
+   */
+  const [resultsBeat, setResultsBeat] = useState('results');
+  useEffect(() => { setResultsBeat('results'); }, [currentQuestionId, gameState]);
 
   // Host Remote drives the same actions the host toolbar does. The listener below
   // is registered once, so it must not close over a single render's handlers —
@@ -290,12 +360,11 @@ function GameHostPage() {
   // missed (e.g. host WS reconnect), clear the spinner and re-fetch the now-persisted item.
   const aiWatchdogRef = useRef(null);
   
-  // Flash alerts for when all players have answered/voted
-  const [showAllAnsweredAlert, setShowAllAnsweredAlert] = useState(false);
-  const [showAllVotedAlert, setShowAllVotedAlert] = useState(false);
-  
-  // Invite creation state
-  const [showInviteCreated, setShowInviteCreated] = useState(false);
+  // The three celebratory flash alerts are gone — see the render. They were
+  // full-screen overlays that covered the stage, including the advance
+  // control, for three or four seconds while a room waited on the host. The
+  // room meter already states where the room is, continuously and without
+  // taking the screen.
   const [inviteCopied, setInviteCopied] = useState(false);
   
   // Loading overlay state
@@ -328,7 +397,6 @@ function GameHostPage() {
     votes: setVotes,
     playersWhoVoted: setPlayersWhoVoted,
     currentQuestionVotes: setCurrentQuestionVotes,
-    currentAnswerIndex: setCurrentAnswerIndex,
     selectedSetId: setSelectedSetId,
     customInstruction: setCustomInstruction,
     setRoundNoun: setSetRoundNoun,
@@ -353,9 +421,6 @@ function GameHostPage() {
     showQuestionBrowser: setShowQuestionBrowser,
     browsingQuestions: setBrowsingQuestions,
     selectedCategory: setSelectedCategory,
-    showAllAnsweredAlert: setShowAllAnsweredAlert,
-    showAllVotedAlert: setShowAllVotedAlert,
-    showInviteCreated: setShowInviteCreated,
     inviteCopied: setInviteCopied,
     isLoadingData: setIsLoadingData,
     isRestoringState: setIsRestoringState,
@@ -706,37 +771,18 @@ Focus on actionable business strategy insights.`;
     }
   }, [gameState, currentQuestionIndex, answers.length, gameId, gameDebugMode, useWebSocket]);
 
-  // Check if all players have answered and trigger flash alert
+  // When the room finishes answering, close the expanded-question overlay so
+  // the host is looking at the stage again. The celebratory full-screen alert
+  // that used to fire here is deleted: it covered the stage — the advance
+  // control included — for three seconds at exactly the moment the host wanted
+  // to move on. The dock's status line already says "safe to move on", without
+  // taking the screen to say it.
   useEffect(() => {
-    if (gameState.startsWith('ASK#') && players.length > 0 && playersWhoAnswered.length === players.length && playersWhoAnswered.length > 0) {
-      console.log('🎉 All players have answered! Triggering flash alert.');
-      setShowAllAnsweredAlert(true);
-      
-      // Auto-close lesson expansion if open
-      if (lessonExpanded) {
-        setLessonExpanded(false);
-        console.log('📚 Auto-closing lesson expansion since all players answered');
-      }
-      
-      // Hide alert after 3 seconds
-      setTimeout(() => {
-        setShowAllAnsweredAlert(false);
-      }, 3000);
+    if (gameState.startsWith('ASK#') && players.length > 0
+        && playersWhoAnswered.length === players.length && lessonExpanded) {
+      setLessonExpanded(false);
     }
   }, [gameState, players.length, playersWhoAnswered.length, lessonExpanded]);
-
-  // Check if all players have voted and trigger flash alert (only for call-and-answer)
-  useEffect(() => {
-    if (gameState.startsWith('VOTE#') && currentGameType !== 'trivia' && players.length > 0 && playersWhoVoted.length === players.length && playersWhoVoted.length > 0) {
-      console.log('🗳️ All players have voted! Triggering flash alert.');
-      setShowAllVotedAlert(true);
-      
-      // Hide alert after 3 seconds
-      setTimeout(() => {
-        setShowAllVotedAlert(false);
-      }, 3000);
-    }
-  }, [gameState, currentGameType, players.length, playersWhoVoted.length]);
 
   // 🔗 Initialize game ID and event title from URL or generate new one
   useEffect(() => {
@@ -1004,24 +1050,14 @@ Focus on actionable business strategy insights.`;
 
     webSocketClient.onMessage('gameEnded', (data) => {
       console.log('🔌 Game ended notification:', data);
-      // Show stylized modal and transition to final report
-      showConfirmation(
-        'End of Game',
-        'All questions have been completed. Would you like to view the final report?',
-        'View Report'
-      ).then((confirmed) => {
-        if (confirmed) {
-          // Set game state to ended and navigate to report
-          setGameState('ENDED');
-          setShowFinalReport(true);
-          setShowSidebar(false);
-          setShowAdminSidebar(false);
-          setShowHostControls(false);
-          setShowSetSelector(false);
-          setShowCategoryManager(false);
-          console.log('🔌 Navigating to final report after game end');
-        }
-      });
+      // A dialog box is not how a session ends. The stage moves to its ENDED
+      // phase — its own chip, its own band, its own status line — and the
+      // report is the dock's primary action there, reachable whenever the host
+      // is ready rather than the instant the last round closes. The modal this
+      // replaces also called five setters that do not exist on this component,
+      // so confirming it threw.
+      setGameState('ENDED');
+      closeAllSidePanels();
     });
 
     // Connect as host - WebSocket is required
@@ -1332,7 +1368,6 @@ Focus on actionable business strategy insights.`;
           setVotes([]);
           setPlayersWhoVoted([]);
           setCurrentQuestionVotes([]);
-          setCurrentAnswerIndex(0);
           setCurrentAIInsights(null);
           setLoadingAIInsights(false);
         }
@@ -1463,12 +1498,12 @@ Focus on actionable business strategy insights.`;
         selectedSetId,
         gameState,
         duringRestoration,
-        shouldAutoSelect: activeSets.length > 0 && !selectedSetId && isWaitingState(gameState) && !duringRestoration
+        shouldAutoSelect: activeSets.length > 0 && !selectedSetId && isLobbyState(gameState) && !duringRestoration
       });
       
       // Auto-select first set if none selected and no game is running
       // CRITICAL: Don't auto-select during state restoration to prevent override of restored questionSetId
-      if (activeSets.length > 0 && !selectedSetId && isWaitingState(gameState) && !isRestoringState && !duringRestoration) {
+      if (activeSets.length > 0 && !selectedSetId && isLobbyState(gameState) && !isRestoringState && !duringRestoration) {
         const firstSetId = activeSets[0].id;
         setSelectedSetId(firstSetId);
         fetchCategories(firstSetId);
@@ -1476,7 +1511,7 @@ Focus on actionable business strategy insights.`;
         console.log(`🎯 HOST: Auto-selected first question set: ${firstSetId}`);
       } else if (selectedSetId) {
         console.log(`⏳ HOST: Question set already selected: ${selectedSetId}`);
-      } else if (!isWaitingState(gameState)) {
+      } else if (!isLobbyState(gameState)) {
         console.log(`⏳ HOST: Game in progress (${gameState}) - not auto-selecting question set`);
       } else if (isRestoringState || duringRestoration) {
         console.log(`🔄 HOST: State restoration in progress - skipping auto-selection`);
@@ -1984,7 +2019,6 @@ Focus on actionable business strategy insights.`;
       setVotes([]);
       setPlayersWhoVoted([]);
       setCurrentQuestionVotes([]);
-      setCurrentAnswerIndex(0);
       setLessonNumber(lessonNumber);
       setAuthorsRevealed(false); // A new round starts anonymous, not the last one's reveal
       setAuthorsHiddenOnStage(false); // and not with the last round's projector override, either
@@ -2138,7 +2172,6 @@ Focus on actionable business strategy insights.`;
 
     setManualStateChange(true);
     setGameState('voting');
-    setCurrentAnswerIndex(0); // Reset to first answer for navigation
 
     // Get answers and update state to voting using new API
     try {
@@ -2680,14 +2713,10 @@ Ready to engage? See you there!`;
 
     try {
       await navigator.clipboard.writeText(inviteText);
+      // The button itself says "Copied!" for four seconds. A full-screen
+      // overlay to say the same thing is a modal in front of a live room.
       setInviteCopied(true);
-      setShowInviteCreated(true);
-      
-      // Hide success feedback after 4 seconds
-      setTimeout(() => {
-        setInviteCopied(false);
-        setShowInviteCreated(false);
-      }, 4000);
+      setTimeout(() => setInviteCopied(false), 4000);
       
       console.log('📋 Invite copied to clipboard');
       console.log('Invite text:', inviteText);
@@ -2821,7 +2850,11 @@ Ready to engage? See you there!`;
   };
 
   const playUrl = `${window.location.protocol}//${window.location.host}/play?gameId=${gameId}`;
-  
+  // What the RAIL prints, which is a different job: the QR carries the whole
+  // URL, and a room reading a bare address off a projector needs the shortest
+  // thing that works. The player page takes the session code by hand.
+  const joinDisplayUrl = `${window.location.host}/play`;
+
   // State for copy confirmation messages
   const [sidebarCopyMessage, setSidebarCopyMessage] = useState(false);
   const [expandedCopyMessage, setExpandedCopyMessage] = useState(false);
@@ -2909,22 +2942,11 @@ Ready to engage? See you there!`;
   if (showWelcomeScreen) {
     return (
       <div className="welcome-screen">
-        <div className="parallax">
-          <section className="parallax__header">
-            <div className="parallax__visuals">
-              <div className="parallax__black-line-overflow"></div>
-              <div data-parallax-layers className="parallax__layers">
-                <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795be09b462b2e8ebf71_osmo-parallax-layer-3.webp" loading="eager" width="800" data-parallax-layer="1" alt="" className="parallax__layer-img" />
-                <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" width="800" data-parallax-layer="2" alt="" className="parallax__layer-img" />
-                <div data-parallax-layer="3" className="parallax__layer-title">
-                  <h2 className="parallax__title">{currentGameType === 'trivia' ? 'Trivia' : 'Engagements'}</h2>
-                </div>
-                <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" width="800" data-parallax-layer="4" alt="" className="parallax__layer-img" />
-              </div>
-              <div className="parallax__fade"></div>
-            </div>
-          </section>
-        </div>
+        {/* The decorative parallax hero is gone. It was 250px+ of CDN-hosted
+            stock photography above every screen it appeared on, and its own
+            stylesheet already collapsed it during a live round because it was
+            spending the fold on a word the host already knew. */}
+        <h2 className="welcome-title">{currentGameType === 'trivia' ? 'Trivia' : 'Engagements'}</h2>
 
         <div className="welcome-content">
           <div className="welcome-card">
@@ -3178,7 +3200,7 @@ Ready to engage? See you there!`;
               className="btn-secondary modal-close-btn" 
               onClick={() => {
                 setShowReportsModal(false);
-                if (reportsModalMode === 'select' && isWaitingState(gameState) && lessonNumber === 0) {
+                if (reportsModalMode === 'select' && isLobbyState(gameState) && lessonNumber === 0) {
                   setShowWelcomeScreen(true);
                 }
               }}
@@ -3196,7 +3218,7 @@ Ready to engage? See you there!`;
     return (
       <div className="new-game-overlay">
         <div className="new-game-dialog">
-          <h2>{isWaitingState(gameState) && lessonNumber === 0 ? 'Create Engagement' : 'Start New Game'}</h2>
+          <h2>{isLobbyState(gameState) && lessonNumber === 0 ? 'Create Engagement' : 'Start New Game'}</h2>
           <div className="dialog-content">
             <div className="form-group">
               <label>Event Title:</label>
@@ -3404,7 +3426,7 @@ Ready to engage? See you there!`;
               className="btn-secondary" 
               onClick={() => {
                 setShowNewGameDialog(false);
-                if (isWaitingState(gameState) && lessonNumber === 0) {
+                if (isLobbyState(gameState) && lessonNumber === 0) {
                   setShowWelcomeScreen(true);
                 }
               }}
@@ -3432,7 +3454,18 @@ Ready to engage? See you there!`;
   // on a 1280×800 laptop. config/hostControls.js now decides which one action
   // is available, and <HostActionBar> is the only thing that draws it.
   // ---------------------------------------------------------------------
-  const hostPhase = phaseOfGameState(gameState);
+  //
+  // Two phases exist that the raw game state cannot express. FIELD_NOTES is a
+  // second beat inside RESULTS, held on the client. ENDED is a session state
+  // the backend does set, but `phaseOfGameState` maps anything that is not an
+  // ASK#/VOTE#/RESULTS# marker onto the lobby — deliberately, since that is
+  // the rule the rest of the page uses — so it is named here rather than by
+  // widening that function and changing what every other caller sees.
+  const roundPhase = phaseOfGameState(gameState);
+  const hostPhase = gameState === 'ENDED'
+    ? 'ENDED'
+    : (roundPhase === 'RESULTS' && resultsBeat === 'field-notes' ? 'FIELD_NOTES' : roundPhase);
+
   const hostControls = hostControlsFor({
     gameType: currentGameType,
     phase: hostPhase,
@@ -3470,30 +3503,103 @@ Ready to engage? See you there!`;
       case HOST_INTENTS.REVEAL:
         handleShowResults();
         break;
+      case HOST_INTENTS.FIELD_NOTES:
+        // Client-side beat: the round does not move, the stage does.
+        setResultsBeat('field-notes');
+        break;
+      case HOST_INTENTS.REPORT:
+        setShowFinalReport(true);
+        break;
       default:
         console.warn(`Unknown host action intent: ${action.intent}`);
     }
   };
 
-  // Fixed rails reserve real space instead of covering the content column.
-  // The Game Info panel is 300px on its own and 600px once a question set is
-  // chosen (`two-column`); the old CSS reserved a flat 320px *and* was
-  // over-constrained by `width:100%`, so the panel sat on top of up to 480px
-  // of content at 1280px wide. Big-screen mode is a full-bleed stage and
-  // reserves nothing.
-  const railClasses = bigScreenMode
-    ? ''
-    : [
-        qrSidebarVisible ? (selectedSetId ? 'rail-right-wide' : 'rail-right-narrow') : '',
-        instructionsVisible ? 'rail-left' : '',
-      ].filter(Boolean).join(' ');
+  // ---------------------------------------------------------------------
+  // THE STAGE
+  //
+  // The rails no longer reserve a gutter. The stage is `height:100dvh` and it
+  // is the whole viewport; Game Info and How to Play are fixed inspection
+  // panels the host opens over it and that advancing closes again. Reserving
+  // space for them would shrink the fixed-height stage every time one opened,
+  // which is the fastest possible way to make a state stop fitting.
+  // ---------------------------------------------------------------------
+
+  const currentQuestion = questions[0] || null;
+  const roundOf = questionSets.find(
+    (s) => s.id === (currentQuestion?.setId || selectedSetId)
+  )?.totalQuestions;
+
+  // The phase BAR speaks in hues and knows five of them; the phase CHIP names
+  // the state. FIELD_NOTES stays inside RESULTS' green — it is the same beat
+  // of the round — and is distinguished by its word, not its colour.
+  const BAR_PHASE = {
+    LOBBY: 'lobby', ASK: 'ask', VOTE: 'vote',
+    RESULTS: 'results', FIELD_NOTES: 'results', ENDED: 'done',
+  };
+
+  /**
+   * The ONE progress count, and the only place it is stated.
+   *
+   * `hostControls.status.text` says the same thing in numerals ("31 of 40
+   * answered…"), so it is deliberately NOT passed to the dock while the meter
+   * is up — never state the same fact twice in one viewport. The dock gets a
+   * sentence instead, which is what the mockups carry.
+   */
+  const meter = (() => {
+    if (hostPhase === 'LOBBY') {
+      return players.length
+        ? { heading: 'In the room', body: String(players.length) }
+        : null;
+    }
+    if (hostPhase === 'ASK') {
+      return {
+        heading: 'Answered',
+        body: <>{playersWhoAnswered.length}<small>{` / ${players.length}`}</small></>,
+      };
+    }
+    if (hostPhase === 'VOTE') {
+      return {
+        heading: 'Voted',
+        body: <>{playersWhoVoted.length}<small>{` / ${players.length}`}</small></>,
+      };
+    }
+    // RESULTS, FIELD_NOTES and ENDED run solo. The mockup's standings column
+    // is a roster of names, which RoomMeter refuses on purpose.
+    return null;
+  })();
+
+  /**
+   * The dock's room-facing sentence. Qualitative where the meter is already
+   * quantitative, copied from the mockups rather than invented.
+   */
+  const everybodyIn = players.length > 0 && (
+    hostPhase === 'ASK' ? playersWhoAnswered.length >= players.length
+      : hostPhase === 'VOTE' ? playersWhoVoted.length >= players.length
+        : false
+  );
+  const dockStatus = hostPhase === 'ASK' || hostPhase === 'VOTE'
+    ? (everybodyIn
+        ? 'Safe to move on'
+        : `Some are still ${hostPhase === 'ASK' ? 'answering' : 'voting'}`)
+    // In the lobby the meter is already showing the count, so the dock says
+    // whether the host may go — not the same number a second time. When the
+    // primary is disabled the config's copy IS the explanation, so it stands.
+    : (hostPhase === 'LOBBY' && !hostControls.primary.disabled)
+      ? 'Ready when you are'
+      : hostControls.status.text;
 
   // DEBUG: Track every render with modal state
   console.log(`🎨 RENDER: showQuestionBrowser=${showQuestionBrowser}, showExpandedQR=${showExpandedQR}`);
 
   return (
     <>
-    <div className={`main-layout ${railClasses} has-host-bar`}>
+    {/* No `rail-right-*` / `rail-left` classes any more: those reserved a
+        300–600px gutter for whichever panel was open, and the stage is a
+        fixed-height grid — shrinking it every time the host opened Game Info
+        is the fastest possible way to make a state stop fitting. The panels
+        are fixed and overlay; advancing closes them. */}
+    <div className="main-layout">
       {/* Instructions Sidebar */}
       <div className={`instructions-sidebar ${instructionsVisible ? 'visible' : ''}`}>
         <div className="instructions-content">
@@ -3645,6 +3751,45 @@ Ready to engage? See you there!`;
                   <p>Scan to join!</p>
                 </div>
               </div>
+
+              {/* THE ROSTER, off the stage.
+                  A count is a nudge; a list of names is an attendance record,
+                  and the room is the wrong audience for one — so this is not
+                  in the stage's meter. It is not deleted either: the anonymity
+                  work depends on the host being able to see cumulative
+                  standings in every phase (no points exist for an unrevealed
+                  round, so a running total leaks nothing), and before this
+                  there was nowhere else to see them. This panel is host-only
+                  and closed by default. */}
+              {players.length > 0 && (
+                <div className="host-roster">
+                  <h4>{`Standings · ${players.length} player${players.length === 1 ? '' : 's'}`}</h4>
+                  <ul>
+                    {calculatePlayerRankings(players).map((player) => {
+                      const name = player.name || player.playerName || 'Unknown Player';
+                      const done = gameState.startsWith('ASK#')
+                        ? playersWhoAnswered.includes(player.name)
+                        : gameState.startsWith('VOTE#')
+                          ? playersWhoVoted.includes(player.name)
+                          : null;
+                      return (
+                        <li key={name}>
+                          <span className="host-roster-name">{name}</span>
+                          <span className="host-roster-score">{`${player.score || 0} pts`}</span>
+                          {done !== null && (
+                            <Icon
+                              name={done ? 'CheckCircle' : 'Timer'}
+                              weight={done ? 'fill' : 'bold'}
+                              size={16}
+                              color={done ? 'var(--success)' : 'var(--muted)'}
+                            />
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
             </div>
             <div className="qr-controls">
               <button 
@@ -3654,17 +3799,29 @@ Ready to engage? See you there!`;
               >
                 <Icon name={inviteCopied ? 'Check' : 'ClipboardText'} weight="bold" size={16} /> {inviteCopied ? 'Copied!' : 'Copy Invite'}
               </button>
-              <button 
-                className={`btn-${bigScreenMode ? 'primary' : 'secondary'}`} 
-                onClick={() => {
-                  const newMode = !bigScreenMode;
-                  console.log(`🖥️ Toggling big screen mode: ${bigScreenMode} → ${newMode}`);
-                  setBigScreenMode(newMode);
-                }}
-                title="Toggle big screen mode for conference room displays"
-              >
-                <Icon name="Monitor" weight="bold" size={18} /> Big Screen {bigScreenMode ? 'ON' : 'OFF'}
-              </button>
+              {/* WHICH DISPLAY, not whether. This replaces the Big Screen ON/OFF
+                  toggle: there is one layout now, and this chooses the type
+                  ladder it is drawn at. Room and Table are inferred from the
+                  viewport on first load; TV and Call cannot be detected in
+                  principle — nothing reports a panel's physical size, and
+                  nothing reports that the surface is being re-encoded into a
+                  video call — so they are chosen here. The choice is persisted,
+                  because a projector browser that reloads must come back
+                  exactly as it was. The Console (spec §5.4) owns this
+                  permanently; this is its interim home. */}
+              <label className="display-profile-picker">
+                <span>Display</span>
+                <select
+                  value={profile}
+                  onChange={(e) => setProfile(e.target.value)}
+                  title="The type ladder the stage is drawn at"
+                >
+                  <option value="room">Room — projector</option>
+                  <option value="tv">TV — large panel</option>
+                  <option value="call">Call — screen share</option>
+                  <option value="table">Table — laptop</option>
+                </select>
+              </label>
               <button className="btn-secondary" onClick={handleViewReports}>
                 View Reports
               </button>
@@ -3838,770 +3995,387 @@ Ready to engage? See you there!`;
         </span>
       </div>
       
-      <div
-        className={`outer-container ${!qrSidebarVisible ? 'qr-hidden' : ''} ${instructionsVisible ? 'instructions-open' : ''} ${bigScreenMode ? 'big-screen-mode' : ''} ${hostPhase !== 'LOBBY' ? 'round-live' : ''}`}
-        data-theme={bigScreenMode ? 'dark' : undefined}
-      >
-      
-      <div className="game-host-container">
-        <div className="parallax">
-          <section className="parallax__header">
-            <div className="parallax__visuals">
-              <div className="parallax__black-line-overflow"></div>
-              <div data-parallax-layers className="parallax__layers">
-                <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795be09b462b2e8ebf71_osmo-parallax-layer-3.webp" loading="eager" width="800" data-parallax-layer="1" alt="" className="parallax__layer-img" />
-                <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" width="800" data-parallax-layer="2" alt="" className="parallax__layer-img" />
-                <div data-parallax-layer="3" className="parallax__layer-title">
-                  <h2 className="parallax__title">{currentGameType === 'trivia' ? 'Trivia' : 'Engagements'}</h2>
-                </div>
-                <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" width="800" data-parallax-layer="4" alt="" className="parallax__layer-img" />
-              </div>
-              <div className="parallax__fade"></div>
-            </div>
-          </section>
-        </div>
+      {/* ------------------------------------------------------------------
+          THE STAGE — one layout, four profiles, fixed height, never scrolls.
 
-        {/* Warm Summit dusk-stage photo hero — persistent mountain-hiker
-            parallax layers behind every big-screen state. The scrim recedes /
-            deepens per phase and an amber alpenglow washes in on results. */}
-        {bigScreenMode && (
-          <div
-            className="big-screen-hero"
-            aria-hidden="true"
-            data-phase={
-              gameState.startsWith('RESULTS#') ? 'results' :
-              gameState.startsWith('VOTE#') ? 'voting' :
-              gameState.startsWith('ASK#') ? 'question' : 'lobby'
-            }
+          This replaces BOTH of the layouts that used to live here: the
+          standard document (a 250px decorative hero, a player roster, then the
+          state) and the projector layout (a second, parallel set of headers
+          and QR blocks inside the same JSX). Two modes is what produced two
+          ASK headers and two QR blocks, and the mode reset on every reload, so
+          it failed silently in front of a room. There is no third mode: what
+          used to be the projector toggle is now the Room profile, and it
+          survives a reload.
+
+          Everything the ROOM sees is inside <Stage>. Everything only the HOST
+          needs — Game Info, How to Play, the question browser, the report —
+          is a fixed panel over it, opened deliberately and closed by
+          advancing.
+          ------------------------------------------------------------------ */}
+      <Stage
+        profile={profile}
+        phase={BAR_PHASE[hostPhase] || 'lobby'}
+        /* The fitter's deps live in Stage but the content that changes lives
+           here. Without this a question arriving, an answer list growing or a
+           reveal flipping would re-render the stage and never re-measure it. */
+        fitKey={[
+          hostPhase, currentQuestionId, questions.length, answers.length,
+          players.length, playersWhoAnswered.length, playersWhoVoted.length,
+          authorsRevealed, authorsHiddenOnStage,
+          loadingAIInsights, currentAIInsights ? 1 : 0,
+        ].join('|')}
+        rail={(
+          <Rail
+            phase={hostPhase}
+            title={eventTitle || 'Engagements'}
+            context={{
+              category: currentQuestion?.field || currentQuestion?.category || undefined,
+              noun: getHostRoundNoun(),
+              round: (hostPhase === 'LOBBY' || hostPhase === 'ENDED') ? undefined : lessonNumber,
+              of: (hostPhase === 'LOBBY' || hostPhase === 'ENDED') ? undefined : roundOf,
+            }}
+            join={gameId ? { url: joinDisplayUrl, code: gameId } : {}}
+          />
+        )}
+        meter={meter
+          ? <RoomMeter phase={hostPhase} heading={meter.heading} body={meter.body} />
+          : null}
+        dock={(
+          <Dock
+            status={dockStatus}
+            onSetup={() => setQrSidebarVisible((open) => !open)}
           >
-            <div className="bsh-scene">
-              <img className="bsh-l3" src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795be09b462b2e8ebf71_osmo-parallax-layer-3.webp" loading="eager" alt="" />
-              <img className="bsh-l2" src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" alt="" />
-              <img className="bsh-l1" src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" alt="" />
-            </div>
-            <div className="bsh-scrim"></div>
-            <div className="bsh-amberwash"></div>
-          </div>
-        )}
-
-      <div className="players-section">
-        {bigScreenMode && gameId && (
-          <div className="big-screen-players-qr">
-            <QRCodeSVG 
-              value={`${window.location.origin}/play?gameId=${gameId}`}
-              size={120}
-              level="M"
-              includeMargin={true}
-              className="players-qr-code"
+            {/* Not reimplemented here. HostActionBar keeps its keyboard
+                handling, its typing-target guard and its disabled hint; only
+                its positioning changes, and `bigScreen` is what makes it a
+                static element in a grid row rather than a fixed overlay. */}
+            <HostActionBar
+              controls={hostControls}
+              onAction={runHostAction}
+              bigScreen
+              shortcutsEnabled={!anyOverlayOpen}
             />
-            <p className="players-qr-text">Scan to Join</p>
-          </div>
+          </Dock>
         )}
-        {eventTitle && (
-          <div className="game-title-header">
-            <h1 className="game-title-main">{eventTitle}</h1>
-            <div className="game-meta-info">
-              <span className="question-set-name">
-                {questionSets.find(set => set.id === selectedSetId)?.name || 'Unknown Set'}
-                <SetImageBadge hasImages={questionSets.find(set => set.id === selectedSetId)?.hasImages} />
-              </span>
-              <span className="player-count-info">({players.length} Player{players.length !== 1 ? 's' : ''})</span>
-            </div>
-          </div>
-        )}
-        {!eventTitle && (
-          <div className="players-header-simple">
-            <h2>{players.length} Player{players.length !== 1 ? 's' : ''}</h2>
-          </div>
-        )}
-        <div className="players-grid">
-          {calculatePlayerRankings(players).map((player) => {
-            const score = player.score || 0;
-            const hasPoints = score > 0;
-            
-            // Rank marker (Warm Summit) — see components/RankIcon.jsx. A player
-            // with no points yet gets a neutral avatar rather than a placement.
-            const rankIcon = hasPoints
-              ? <RankIcon rank={player.rank} size={22} className="rank-icon" />
-              : <Icon name="UserCircle" weight="fill" size={22} color="var(--muted)" className="rank-icon" />;
+      >
+        {/* data-grow is the fitter's CEILING for this state, from the mockups.
+            The ladder is a legibility floor, not a ceiling: a state carrying
+            one object — a join code, a single prompt — under-uses a ladder
+            derived for a dense screen, and 01-lobby/02-ask say by how much. */}
+        <div className="content" data-grow={STAGE_GROW[hostPhase] || '1'}>
+          <div className="fitbox">
 
-            return (
-              <div key={player.name || `player-${Math.random()}`} className="player-card">
-                <div className="player-name">
-                  {rankIcon} <span className="player-name-text">{player.name || player.playerName || 'Unknown Player'}</span>
-                </div>
-                {/* The roster renders in EVERY phase, so gating it here deleted
-                    standings from LOBBY, ASK and VOTE too, and kept round 3's
-                    already-revealed totals hidden all through round 4 — with
-                    nowhere else for the host to see them. Nothing is leaked by
-                    a cumulative total during an anonymous round: no points are
-                    awarded until RESULTS, which is also what reveals. The gate
-                    that the plan actually asked for is the current round's
-                    contribution, in the RESULTS view below. */}
-                <div className="player-score">{score} pts</div>
-                {gameState.startsWith('ASK#') && (
-                  <div className={`answer-status ${playersWhoAnswered.includes(player.name) ? 'answered' : 'waiting'}`}>
-                    {playersWhoAnswered.includes(player.name)
-                      ? <Icon name="CheckCircle" weight="fill" size={20} color="var(--success)" />
-                      : <Icon name="Timer" weight="bold" size={20} color="var(--muted)" />}
+            {hostPhase === 'LOBBY' && (
+              <>
+                <div className="kicker">Scan to join · no app, no account</div>
+                {gameId && (
+                  <div className="joinblock">
+                    <div className="qr">
+                      <QRCodeSVG value={playUrl} size={512} level="M" includeMargin={false} />
+                    </div>
+                    <div className="joininfo">
+                      <div className="lbl">Open on your phone</div>
+                      <div className="url">{joinDisplayUrl}</div>
+                      <div className="lbl">Session code</div>
+                      <div className="code">{gameId}</div>
+                    </div>
                   </div>
                 )}
-                {gameState.startsWith('VOTE#') && (
-                  <div className={`answer-status ${playersWhoVoted.includes(player.name) ? 'answered' : 'waiting'}`}>
-                    {playersWhoVoted.includes(player.name)
-                      ? <Icon name="CheckCircle" weight="fill" size={20} color="var(--success)" />
-                      : <Icon name="Timer" weight="bold" size={20} color="var(--muted)" />}
+                {anonymityApplies(currentGameType) && anonymousUntilReveal && (
+                  <p className="anon-line" data-drop="2" data-drop-note="Anonymity note">
+                    <b>Answers are anonymous.</b> Nobody sees who wrote what — the
+                    host included — until voting closes.
+                  </p>
+                )}
+              </>
+            )}
+
+            {hostPhase === 'ASK' && currentQuestion && (
+              <>
+                <h1 className="q">{currentQuestion.title || currentQuestion.question}</h1>
+                {currentQuestion.image && (
+                  <img
+                    className="stage-art"
+                    src={currentQuestion.image}
+                    alt={currentQuestion.title || 'Artwork'}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                )}
+                {(currentQuestion.questionDetail || currentQuestion.detail || currentQuestion.topic) && (
+                  <p className="qdetail" data-drop="1" data-drop-note="Full prompt">
+                    {currentGameType === 'wavelength' && currentQuestion.topic
+                      ? currentQuestion.topic
+                      : (currentQuestion.questionDetail || currentQuestion.detail)}
+                  </p>
+                )}
+                {currentGameType === 'trivia' && (
+                  <div className="opts">
+                    {TRIVIA_OPTION_KEYS
+                      .filter((key) => currentQuestion[key])
+                      .map((key, index) => (
+                        <div key={key} className="opt">
+                          <span className="ltr">{String.fromCharCode(65 + index)}</span>
+                          <span className="txt">{currentQuestion[key]}</span>
+                        </div>
+                      ))}
                   </div>
                 )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+                <p className="qdetail" data-drop="2" data-drop-note="How to answer">
+                  {getHostInstructionText(currentQuestionOf(questions, currentQuestionId))}
+                </p>
+              </>
+            )}
 
-      <div className={`game-content ${bigScreenMode ? 'big-screen-mode' : ''}`}>
-        {isWaitingState(gameState) && (
-          <div className={`waiting-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
-            {bigScreenMode && (
-              <div className="bs-lobby-eyebrow">
-                <span className="kicker-dot"></span>
-                {currentGameType === 'trivia' ? 'Team Trivia' :
-                 currentGameType === 'wavelength' ? 'Wavelength' : 'Live Engagement'} · Live
-              </div>
-            )}
-            {bigScreenMode && eventTitle && (
-              <h1 className="bs-lobby-title">{eventTitle}</h1>
-            )}
-            {gameId && (
-              <div className={bigScreenMode ? "big-screen-join-qr" : "join-qr"}>
-                <QRCodeSVG 
-                  value={`${window.location.origin}/play?gameId=${gameId}`}
-                  size={bigScreenMode ? 300 : 200}
-                  level="M"
-                  includeMargin={true}
-                  className="join-qr-code"
-                />
-                <div className="join-instructions">
-                  <p className="join-url-text">Scan to join the game</p>
-                  <p className="game-id-display">Game ID: <strong>{gameId}</strong></p>
+            {hostPhase === 'VOTE' && (
+              <>
+                <div className="kicker">
+                  {currentQuestion?.image ? 'Vote for the best title' : 'Vote for the best response'}
                 </div>
-              </div>
-            )}
-            <h2>Waiting for players to join...</h2>
-            {/* Start / skip / advance all live in <HostActionBar> at the foot
-                of the page — see config/hostControls.js. */}
-          </div>
-        )}
-
-        {gameState.startsWith('ASK#') && questions.length > 0 && (
-          <div className={`question-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
-            <div className="question-header">
-              {bigScreenMode ? (
-                <>
-                  <div className="bs-kicker">
-                    <span className="kicker-dot"></span>
-                    <span className="bs-kicker-cat">{questions[0].field || questions[0].category}</span>
-                    <span className="bs-kicker-sep">/</span>
-                    <span className="bs-kicker-num">
-                      {getHostRoundNoun()} {lessonNumber}
-                      {(() => {
-                        const total = questionSets.find(s => s.id === (questions[0]?.setId || selectedSetId))?.totalQuestions;
-                        return total ? ` / ${total}` : '';
-                      })()}
-                    </span>
-                  </div>
-                  {(() => {
-                    const frac = players.length ? playersWhoAnswered.length / players.length : 0;
-                    const C = 270; // 2πr for r=43
-                    return (
-                      <div className="bs-timer-ring" title={`${playersWhoAnswered.length} of ${players.length} answered`}>
-                        <svg viewBox="0 0 100 100">
-                          <circle className="ring-track" cx="50" cy="50" r="43" />
-                          <circle className="ring-fill" cx="50" cy="50" r="43"
-                            style={{ strokeDasharray: C, strokeDashoffset: C * (1 - frac) }} />
-                        </svg>
-                        <b className="tnum">{playersWhoAnswered.length}</b>
+                {currentQuestion && (
+                  <p className="recap" data-drop="1" data-drop-note="The prompt">
+                    {currentQuestion.title || currentQuestion.question}
+                  </p>
+                )}
+                {currentQuestion?.image && (
+                  <img
+                    className="stage-art"
+                    src={currentQuestion.image}
+                    alt={currentQuestion.title || 'Artwork'}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                )}
+                {/* Every response, at once. What used to be here was a
+                    one-at-a-time carousel with ‹ › arrows: it asked a room to
+                    vote on a list it could only ever see one line of, and
+                    asked the host to drive it while the room waited. */}
+                <div className="cards">
+                  {answers.map((answer, idx) => (
+                    <div key={idx} className="card">
+                      <div className="body">
+                        <div className="ans">{`“${answer.answer}”`}</div>
+                        <span className={`who ${authorsRevealed ? 'revealed' : 'anon'}`}>
+                          {displayLabelFor(answer, idx)}
+                        </span>
                       </div>
-                    );
-                  })()}
-                </>
-              ) : (
-                <>
-                  <h2>{getHostRoundNoun()} {lessonNumber}</h2>
-                  <div className="field-badge">
-                    {questions[0].field || questions[0].category}
-                  </div>
-                  {questions[0].school && currentGameType === 'call-and-answer' && (
-                    <div className="school-name">{questions[0].school}</div>
-                  )}
-                </>
-              )}
-            </div>
-            <div 
-              className="lesson-title clickable-lesson"
-              onClick={() => setLessonExpanded(true)}
-              title="Click to expand"
-            >
-              {currentGameType === 'trivia' ? 
-                (questions[0].title || questions[0].question) :
-                (questions[0].title || questions[0].question)
-              }
-            </div>
-            {questions[0].image && (
-              <img
-                src={questions[0].image}
-                alt={questions[0].title || 'Artwork'}
-                className="artwork-image"
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            )}
-            {!lessonExpanded && currentGameType === 'trivia' && questions[0].questionDetail && (
-              <div 
-                className="lesson-detail clickable-lesson" 
-                onClick={() => setLessonExpanded(true)}
-                title="Click to expand"
-              >
-                {questions[0].questionDetail}
-              </div>
-            )}
-            {!lessonExpanded && questions[0].detail && currentGameType === 'call-and-answer' && (
-              <div 
-                className="lesson-detail clickable-lesson" 
-                onClick={() => setLessonExpanded(true)}
-                title="Click to expand"
-              >
-                {questions[0].detail}
-              </div>
-            )}
-            {!lessonExpanded && currentGameType === 'wavelength' && (questions[0].topic || questions[0].detail) && (
-              <div className="wavelength-topic-display lesson-detail">
-                {questions[0].topic
-                  ? (<><strong>Topic:</strong> {questions[0].topic}</>)
-                  : questions[0].detail}
-              </div>
-            )}
-            
-            {currentGameType === 'trivia' && questions[0] && (
-              <div className="trivia-options">
-                {['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF']
-                  .filter(key => questions[0][key])
-                  .map((key, index) => (
-                    <div key={key} className="category-item trivia-option">
-                      <span className="category-name">
-                        <span className="option-letter">{String.fromCharCode(65 + index)}</span>
-                        <span className="option-text">{questions[0][key]}</span>
-                      </span>
                     </div>
                   ))}
-              </div>
-            )}
-            
-            <div className="application-prompt">
-              <div className="application-prompt__label">
-                <Icon name="ChatCircleText" weight="bold" size={16} color="var(--muted)" />
-                <span>How to answer</span>
-              </div>
-              <p className="application-prompt__body">
-                {getHostInstructionText(currentQuestionOf(questions, currentQuestionId))}
-              </p>
-            </div>
-            <div className="answer-progress">
-              {playersWhoAnswered.length} of {players.length} players answered
-            </div>
-          </div>
-        )}
-
-        {gameState.startsWith('VOTE#') && (
-          <div className={`voting-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
-            <h2>{questions[0]?.image ? 'Vote for the Best Title!' : 'Vote for the Best Applications!'}</h2>
-            <p>{questions[0]?.image
-              ? 'Which title best captures this masterpiece?'
-              : 'Which applications of this lesson would be most valuable for teams to implement?'}</p>
-
-            {questions[0]?.image && (
-              <img
-                src={questions[0].image}
-                alt={questions[0].title || 'Artwork'}
-                className="artwork-image artwork-image-voting"
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            )}
-
-            {answers.length > 0 && (
-              <div className="answer-navigator">
-                <div className="answer-counter">
-                  Answer {currentAnswerIndex + 1} of {answers.length}
                 </div>
-                
-                <div className="answer-display-container">
-                  <button 
-                    className="nav-arrow nav-arrow-left"
-                    onClick={() => setCurrentAnswerIndex(Math.max(0, currentAnswerIndex - 1))}
-                    disabled={currentAnswerIndex === 0}
+              </>
+            )}
+
+            {/* THE REVEAL, in the only phases where it means anything.
+                AuthorsRevealed flips by itself when voting closes, so
+                POST /reveal-authors is load-bearing exactly here — a host who
+                wants the names on screen BEFORE the vote closes. Unlike the
+                RESULTS toggle this is not cosmetic; it ends the round's
+                anonymity for the whole room and cannot be undone, so the copy
+                says so. It is chrome, so it is droppable. */}
+            {(hostPhase === 'ASK' || hostPhase === 'VOTE')
+              && anonymityActive({ gameType: currentGameType, anonymousUntilReveal })
+              && !authorsRevealed
+              && answers.length > 0 && (
+              <div className="early-reveal" data-drop="4">
+                <button className="reveal-authors-btn" onClick={handleRevealAuthors}>
+                  Reveal Authors
+                </button>
+                <p className="early-reveal-help">
+                  Shows who wrote each response to everyone, now, instead of waiting for
+                  voting to close. This cannot be undone.
+                </p>
+              </div>
+            )}
+
+            {hostPhase === 'RESULTS' && (
+              <>
+                <div className="kicker">
+                  {`${getHostRoundNoun()} ${lessonNumber} · Results`}
+                </div>
+
+                {/* A PROJECTOR CONTROL, NOT A REVEAL. By the time RESULTS is on
+                    screen the round is already revealed (get-results.js's
+                    enterResultsState) and every row here carries its author, so
+                    there is nothing left to fetch — this only decides whether
+                    the room sees the names right now. It calls no endpoint. */}
+                {anonymityActive({ gameType: currentGameType, anonymousUntilReveal }) && (
+                  <button
+                    className="stage-authors-toggle"
+                    data-drop="4"
+                    onClick={() => setAuthorsHiddenOnStage((h) => !h)}
                   >
-                    ‹
+                    {authorsHiddenOnStage ? 'Show authors' : 'Hide authors'}
                   </button>
-                  
-                  <div className="single-answer-display">
-                    <div className="answer-text">"{answers[currentAnswerIndex]?.answer}"</div>
-                    <div className="answer-author">- {displayLabelFor(answers[currentAnswerIndex] || {}, currentAnswerIndex)}</div>
-                  </div>
-                  
-                  <button 
-                    className="nav-arrow nav-arrow-right"
-                    onClick={() => setCurrentAnswerIndex(Math.min(answers.length - 1, currentAnswerIndex + 1))}
-                    disabled={currentAnswerIndex === answers.length - 1}
-                  >
-                    ›
-                  </button>
-                </div>
-              </div>
-            )}
-            
-            <div className="voting-progress">
-              {playersWhoVoted.length} of {players.length} players voted
-            </div>
-          </div>
-        )}
-
-        {/* THE REVEAL, in the only phases where it means anything.
-            AuthorsRevealed flips by itself when voting closes, so
-            POST /reveal-authors is load-bearing exactly here — a host who wants
-            the names on screen BEFORE the vote closes. It previously had no
-            control on this path at all: the only button lived inside the
-            RESULTS block, where the round is already revealed and the handler
-            early-returns. Unlike the RESULTS toggle this is not cosmetic; it
-            ends the round's anonymity for the whole room and cannot be undone,
-            so the copy says so. */}
-        {(gameState.startsWith('ASK#') || gameState.startsWith('VOTE#'))
-          && anonymityActive({ gameType: currentGameType, anonymousUntilReveal })
-          && !authorsRevealed
-          && answers.length > 0 && (
-          <div className="early-reveal">
-            <button className="reveal-authors-btn" onClick={handleRevealAuthors}>
-              Reveal Authors
-            </button>
-            <p className="early-reveal-help">
-              Shows who wrote each response to everyone, now, instead of waiting for
-              voting to close. This cannot be undone.
-            </p>
-          </div>
-        )}
-
-        {gameState.startsWith('RESULTS#') && (
-          <div className={`results-state ${bigScreenMode ? 'big-screen-mode' : ''}`}>
-            <h2 className="results-heading">
-              <Icon name="Trophy" weight="duotone" size={30} color="var(--primary)" />
-              <span>{getHostRoundNoun()} {parseInt(gameState.split('#')[1])} · Results</span>
-            </h2>
-
-            {/* A PROJECTOR CONTROL, NOT A REVEAL. By the time RESULTS is on
-                screen the round is already revealed (get-results.js's
-                enterResultsState) and every row here carries its author, so
-                there is nothing left to fetch — this only decides whether the
-                room sees the names right now. It calls no endpoint: the old
-                "Reveal Authors" half of this control re-POSTed and replaced
-                these tally-shaped rows with ballot-shaped ones, blanking the
-                points, votes and placements after two clicks.
-
-                Only a game that actually withheld authorship has anything to
-                hide — a format that supports anonymity but had it turned off
-                for this game is exactly as inert here as one that never
-                supports it at all. */}
-            {anonymityActive({ gameType: currentGameType, anonymousUntilReveal }) && (
-              <button
-                className="stage-authors-toggle"
-                onClick={() => setAuthorsHiddenOnStage(h => !h)}
-              >
-                {authorsHiddenOnStage ? 'Show authors' : 'Hide authors'}
-              </button>
-            )}
-
-            {currentGameType === 'trivia' ? (
-              <div className="trivia-results-display">
-                <div className="trivia-question-recap">
-                  <h3>{questions[0]?.questionDetail || questions[0]?.detail || questions[0]?.title}</h3>
-                </div>
-                
-                <div className="trivia-options-results">
-                  {['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF']
-                    .filter(key => questions[0]?.[key])
-                    .map((key, index) => {
-                      const optionLetter = String.fromCharCode(65 + index);
-                      const optionId = `Option${optionLetter}`;
-                      const correctAnswers = Array.isArray(questions[0]?.correctAnswer) ? 
-                        questions[0]?.correctAnswer : [questions[0]?.correctAnswer];
-                      
-                      // Comprehensive correct answer checking (same logic as PlayerPage)
-                      let isCorrect = false;
-                      
-                      for (const correctAns of correctAnswers) {
-                        if (!correctAns) continue;
-                        
-                        // Direct matches
-                        if (correctAns === optionId || // "OptionA"
-                            correctAns === optionLetter || // "A"  
-                            correctAns === questions[0]?.[key]) { // actual option text
-                          isCorrect = true;
-                          break;
-                        }
-                        
-                        // Handle "OptionA" format - convert to actual text and compare
-                        if (typeof correctAns === 'string' && correctAns.startsWith('Option')) {
-                          const correctLetter = correctAns.replace('Option', '');
-                          const correctOptionKey = `option${correctLetter}`;
-                          if (correctOptionKey === key || correctLetter === optionLetter) {
-                            isCorrect = true;
-                            break;
-                          }
-                        }
-                        
-                        // Handle letter format - convert to option key and compare  
-                        if (typeof correctAns === 'string' && correctAns.length === 1 && correctAns.match(/[A-F]/)) {
-                          const correctOptionKey = `option${correctAns}`;
-                          if (correctOptionKey === key || correctAns === optionLetter) {
-                            isCorrect = true;
-                            break;
-                          }
-                        }
-                      }
-                      
-                      // Calculate how many players selected this option
-                      const playersWhoSelectedThis = answers.filter(answer => answer.answer === optionLetter).length;
-                      const totalPlayers = answers.length;
-                      const percentage = totalPlayers > 0 ? Math.round((playersWhoSelectedThis / totalPlayers) * 100) : 0;
-                      
-                      return (
-                        <div
-                          key={key}
-                          className={`category-item trivia-result-option ${isCorrect ? 'correct' : 'incorrect'}`}
-                          style={{ '--pct': `${percentage}%` }}
-                        >
-                          <span className="category-name">
-                            <span className="option-letter">{optionLetter}</span>
-                            <span className="option-text">{questions[0][key]}</span>
-                            {isCorrect && (
-                              <span className="correct-indicator">
-                                <Icon name="CheckCircle" weight="fill" size={26} color="var(--success)" />
-                              </span>
-                            )}
-                          </span>
-                          <span className="category-count">
-                            {percentage}%
-                          </span>
-                        </div>
-                      );
-                    })}
-                </div>
-                
-                <div className="trivia-player-scores">
-                  <h4>Player Scores This Round:</h4>
-                  {answers.map((answer, idx) => {
-                    // Use the already calculated data from the API instead of recalculating
-                    const playerName = answer.player; // Correct property name for trivia results
-                    const displayName = displayLabelFor(answer, idx); // trivia never redacts, so this is always playerName
-                    const isCorrect = answer.isCorrect; // From API calculation
-                    const roundPoints = answer.points || 0; // From API calculation (includes speed bonus)
-                    const player = players.find(p => p.name === playerName);
-
-                    console.log(`🏆 TRIVIA PLAYER RESULT: ${playerName} answered ${answer.answer}, isCorrect: ${isCorrect}, points: ${roundPoints}, total: ${player?.score}`);
-
-                    return (
-                      <div key={idx} className={`trivia-player-result ${isCorrect ? 'correct' : 'incorrect'}`}>
-                        <span className="player-name">{displayName}</span>
-                        <span className="player-answer">Answer: {answer.answer}</span>
-                        <span className="player-points">
-                          {isCorrect
-                            ? <Icon name="CheckCircle" weight="fill" size={18} color="var(--success)" />
-                            : <Icon name="XCircle" weight="fill" size={18} color="var(--muted)" />}
-                          {' '}+{roundPoints} pts
-                        </span>
-                        <span className="player-total">Total: {player?.score || 0} pts</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : currentGameType === 'wavelength' ? (
-              <div className="wavelength-results-display">
-                <WavelengthWordCloud 
-                  answers={answers}
-                  promptWord={questions[0]?.topic || questions[0]?.title || 'WAVELENGTH'}
-                  gameState={gameState}
-                />
-                
-                {/* Show individual player contributions below the cloud */}
-                <div className="wavelength-player-list" style={{ marginTop: '20px' }}>
-                  <h4>Player Contributions:</h4>
-                  <div className="results-display">
-                    {answers.map((answer, idx) => {
-                      const player = players.find(p => p.name === answer.player);
-                      const playerTotalScore = player?.score || 0;
-                      const displayName = displayLabelFor(answer, idx); // wavelength never redacts, so this is always the name
-
-                      return (
-                        <div key={idx} className="result-item wavelength-contribution">
-                          <div className="result-player-header">
-                            <div className="result-player-name">{displayName}</div>
-                            <div className="result-points">
-                              <span className="points-total">Score: {playerTotalScore} pts</span>
-                            </div>
-                          </div>
-                          <div className="result-answer" style={{ fontSize: '14px', color: '#666' }}>
-                            Words: {answer.answer || '(no words submitted)'}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="results-display">
-                {answers.length === 0 && (
-                  <div className="no-results-message">
-                    <p>No results available. Results should load automatically when the game transitions to RESULTS state.</p>
-                    <p>Current answers array: {JSON.stringify(answers)}</p>
-                  </div>
                 )}
-                {answers.map((answer, idx) => {
-                // 🎯 RESULTS DISPLAY: Use data from get-results API (already calculated)
-                console.log(`🖥️ RENDERING RESULT FOR ANSWER ${idx}: "${answer.answer}" by ${answer.player}`);
-                console.log(`📊 Using get-results data: ${answer.points} points, ${answer.votes} votes, placement: ${answer.placement}`);
-                
-                const totalPoints = answer.points || 0;
-                
-                console.log(`💰 TOTAL POINTS FOR ANSWER ${idx}: ${totalPoints}`);
-                
-                // Find the player's current total score from backend
-                const player = players.find(p => p.name === answer.player);
-                const playerTotalScore = player?.score || 0;
-                console.log(`👤 Player ${answer.player} total score from backend: ${playerTotalScore}`);
-                console.log(`🧮 This means previous score was: ${playerTotalScore - totalPoints}`);
-                
-                const previousScore = playerTotalScore - totalPoints;
-                // The stage toggle beats the row here: these rows always carry
-                // their author by the time RESULTS is showing.
-                const displayName = stageLabelFor(answer, idx, { authorsHidden: authorsHiddenOnStage });
 
-                return (
-                  <div key={idx} className={`result-item ${totalPoints > 0 ? 'scored' : ''}`}>
-                    <div className="result-player-header">
-                      <div className="result-player-name">{displayName}</div>
-                      {/* Attribution by arithmetic: this round's contribution
-                          and the running total sit on the row whose name was
-                          just hidden, and a score that jumps names its author
-                          as surely as a label would. Hiding the names on stage
-                          has to take the arithmetic with it, or the button is
-                          decorative. Cumulative standings stay on the roster
-                          throughout — no points exist for an unrevealed round. */}
-                      {standingsVisible({
+                {currentGameType === 'trivia' ? (
+                  <div className="opts">
+                    {TRIVIA_OPTION_KEYS
+                      .filter((key) => currentQuestion?.[key])
+                      .map((key, index) => {
+                        const letter = String.fromCharCode(65 + index);
+                        const isCorrect = isCorrectTriviaOption(currentQuestion, key, letter);
+                        const picked = answers.filter((a) => a.answer === letter).length;
+                        const pct = answers.length
+                          ? Math.round((picked / answers.length) * 100) : 0;
+                        return (
+                          <div key={key} className={`opt ${isCorrect ? 'correct' : 'dim'}`}>
+                            <span className="fill" style={{ width: `${pct}%` }} />
+                            <span className="ltr">{letter}</span>
+                            <span className="txt">{currentQuestion[key]}</span>
+                            <span className="pct">{`${pct}%`}</span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                ) : currentGameType === 'wavelength' ? (
+                  <WavelengthWordCloud
+                    answers={answers}
+                    promptWord={currentQuestion?.topic || currentQuestion?.title || 'WAVELENGTH'}
+                    gameState={gameState}
+                  />
+                ) : (
+                  <div className="cards">
+                    {answers.map((answer, idx) => {
+                      const points = answer.points || 0;
+                      const player = players.find((p) => p.name === answer.player);
+                      // The stage toggle beats the row here: these rows always
+                      // carry their author by the time RESULTS is showing.
+                      const displayName = stageLabelFor(answer, idx, { authorsHidden: authorsHiddenOnStage });
+                      // Attribution by arithmetic: a score that jumps names its
+                      // author as surely as a label would, so hiding the names
+                      // takes the arithmetic with it or the button is
+                      // decorative. Cumulative standings stay off the stage
+                      // entirely — a list of names is an attendance record.
+                      const showPoints = standingsVisible({
                         gameType: currentGameType,
                         anonymousUntilReveal,
                         authorsRevealed: !authorsHiddenOnStage,
-                      }) && (
-                        <div className="result-points">
-                          <span className="points-this-round">+{totalPoints} pts this round</span>
-                          <span className="points-total">Total: {playerTotalScore} pts</span>
+                      });
+                      return (
+                        <div key={idx} className={`card ${answer.placement === 1 ? 'lead' : ''}`}>
+                          <span className="rank">{answer.placement || '·'}</span>
+                          <div className="body">
+                            <div className="ans">{`“${answer.answer}”`}</div>
+                            <span className="who revealed">{displayName}</span>
+                          </div>
+                          {showPoints && (
+                            <span className="tally">
+                              {`+${points}`}
+                              <small>{`${answer.votes || 0} votes · ${player?.score || 0} total`}</small>
+                            </span>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <div className="result-answer">"{answer.answer}"</div>
-                    <div className="result-breakdown">
-                      <span className="vote-summary">
-                        {answer.votes} votes • Placement:{' '}
-                        {answer.placement ? (
-                          <Icon name="Medal" weight="fill" size={18}
-                            color={answer.placement === 1 ? 'var(--primary)' : answer.placement === 2 ? 'var(--silver)' : 'var(--bronze)'} />
-                        ) : '-'}
-                      </span>
-                    </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-              </div>
+                )}
+              </>
             )}
-            
-            {/* AI Insights Section - Inline Display */}
-            <div className="ai-insights-section">
-              {loadingAIInsights ? (
-                <div className="ai-insights-loading">
-                  <img src="/workie.png" alt="Workie" className="workie-avatar" />
-                  <div className="ai-insights-content">
-                    <h3><Icon name="Sparkle" weight="duotone" size={24} color="var(--primary)" /> Workie is analyzing responses...</h3>
-                    <p>Please wait while I generate strategic insights</p>
-                  </div>
-                </div>
-              ) : currentAIInsights ? (
-                <div className="ai-insights-inline">
-                  <div className="ai-insights-header">
-                    <img src="/workie.png" alt="Workie" className="workie-avatar" />
-                    <div className="ai-insights-title">
-                      <h3><Icon name="Sparkle" weight="duotone" size={24} color="var(--primary)" /> Field Notes</h3>
-                      <p>Workie's analysis of your team's responses</p>
-                    </div>
-                    {/* Two different controls, deliberately adjacent:
-                        the picker changes the voice from the NEXT question on,
-                        Redo rewrites the one on screen. */}
-                    <div className="ai-persona-switch">
-                      <label className="ai-persona-switch-label" htmlFor="game-persona">
-                        Voice (next {getHostRoundNoun().toLowerCase()})
-                      </label>
-                      <select
-                        id="game-persona"
-                        className="ai-persona-select"
-                        value={gamePersonaId}
-                        onChange={(e) => handleChangeGamePersona(e.target.value)}
-                        title="Changes Workie's voice from the next question onwards"
-                      >
-                        <option value="">Adapt to the session</option>
-                        {gamePersonas.map((persona) => (
-                          <option key={persona.personaId} value={persona.personaId}>
-                            {persona.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <button
-                      className="regenerate-ai-btn"
-                      onClick={handleRegenerateAISummary}
-                      title="Redo: rewrite the summary on screen now, in the current voice"
-                      disabled={loadingAIInsights}
-                    >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
-                  </div>
 
-                  {personaSwitchStatus && (
-                    <p className="ai-persona-switch-status">{personaSwitchStatus}</p>
-                  )}
-
-                  <div className="ai-insights-body">
+            {hostPhase === 'FIELD_NOTES' && (
+              <>
+                <div className="kicker">What we heard</div>
+                {loadingAIInsights ? (
+                  <p className="qdetail">Workie is reading the responses…</p>
+                ) : currentAIInsights ? (
+                  // `two` is the mockup's own two-column Field Notes grid
+                  // (09-field-notes): width is the cheapest lever on the
+                  // stage, and this state needs it most. It only applies to
+                  // the structured path, which has two children to split. The
+                  // markdown path is ONE child, so a two-column grid would
+                  // squeeze it into half the stage; stage.css splits that one
+                  // with CSS columns instead.
+                  <div className={`notes${currentAIInsights.markdownResponse ? '' : ' two'}`}>
                     {currentAIInsights.markdownResponse ? (
-                      // Use Markdown renderer if available
-                      <MarkdownRenderer 
-                        content={currentAIInsights.markdownResponse} 
-                        className="ai-insights-markdown"
+                      <MarkdownRenderer
+                        content={currentAIInsights.markdownResponse}
+                        className="notes-md"
                       />
                     ) : (
-                      // Fallback to structured display
                       <>
-                        {/* Summary */}
-                        <div className="ai-insights-section-item">
-                          <h4><Icon name="ClipboardText" weight="bold" size={20} color="var(--primary)" /> Summary</h4>
-                          <p>{currentAIInsights.summary}</p>
-                        </div>
-
-                        {/* Discussion Topics */}
-                        <div className="ai-insights-section-item">
-                          <h4><Icon name="ChatCircleText" weight="bold" size={20} color="var(--primary)" /> Discussion Topics</h4>
-                          <ul>
-                            {currentAIInsights.discussionTopics.map((topic, idx) => (
-                              <li key={idx}>{topic}</li>
-                            ))}
-                          </ul>
-                        </div>
-
-                        {/* Next Steps */}
-                        <div className="ai-insights-section-item">
-                          <h4><Icon name="ListChecks" weight="bold" size={20} color="var(--primary)" /> Next Steps</h4>
-                          <ul>
-                            {currentAIInsights.nextSteps.map((step, idx) => (
-                              <li key={idx}>{step}</li>
-                            ))}
-                          </ul>
-                        </div>
+                        <p className="lead">{currentAIInsights.summary}</p>
+                        <ol>
+                          {(currentAIInsights.discussionTopics || []).map((topic, idx) => (
+                            <li key={idx}><b>{idx + 1}</b><span>{topic}</span></li>
+                          ))}
+                          {(currentAIInsights.nextSteps || []).map((step, idx) => (
+                            <li key={`n${idx}`}><b>→</b><span>{step}</span></li>
+                          ))}
+                        </ol>
                       </>
                     )}
-                    
-                    {/* Debug Prompt Display */}
-                    {gameDebugMode && (currentAIInsights.prompt || currentAIInsights.debugPrompt || currentAIInsights.debugProvenance) && (
-                      <div className="ai-insights-section-item debug-section">
-                        <h4><Icon name="Bug" weight="bold" size={18} color="var(--muted)" /> Debug: AI Prompt Information</h4>
-                        
-                        {/* Prompt Provenance Information */}
-                        {currentAIInsights.debugProvenance && (
-                          <div className="debug-provenance-section">
-                            <h5><Icon name="ClipboardText" weight="bold" size={16} color="var(--muted)" /> Prompt Source</h5>
-                            <div className="provenance-info">
-                              <strong>Source:</strong> {currentAIInsights.debugProvenance.source === 'question_set' ? 'Custom prompt from question set' : 
-                                                       currentAIInsights.debugProvenance.source === 'default_category' ? 'Default prompt for game type + category' :
-                                                       currentAIInsights.debugProvenance.source === 'default_game_type' ? 'Default prompt for game type' :
-                                                       'Fallback prompt'}
-                              <br />
-                              <strong>Details:</strong> {currentAIInsights.debugProvenance.details}
-                              {currentAIInsights.debugProvenance.promptName && (
-                                <>
-                                  <br />
-                                  <strong>Prompt Name:</strong> {currentAIInsights.debugProvenance.promptName}
-                                </>
-                              )}
-                              {currentAIInsights.debugProvenance.category && (
-                                <>
-                                  <br />
-                                  <strong>Category:</strong> {currentAIInsights.debugProvenance.category}
-                                </>
-                              )}
-                            </div>
-                            
-                            {/* Context Hierarchy */}
-                            {currentAIInsights.debugProvenance.hierarchy && currentAIInsights.debugProvenance.hierarchy.length > 0 && (
-                              <div className="context-hierarchy">
-                                <h6><Icon name="Target" weight="bold" size={16} color="var(--muted)" /> Context Sources:</h6>
-                                <ul>
-                                  {currentAIInsights.debugProvenance.hierarchy.map((item, idx) => (
-                                    <li key={idx}>
-                                      <strong>{item.type === 'customInstruction' ? 'Custom Instructions' : 'AI Context'}:</strong> 
-                                      <span className="context-source"> from {item.source === 'question_set' ? 'question set' : item.source}</span>
-                                      <div className="context-preview">{item.value.substring(0, 100)}...</div>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        
-                        {/* Full Prompt Display */}
-                        <div className="debug-prompt-content">
-                          <h5><Icon name="Note" weight="bold" size={16} color="var(--muted)" /> Full AI Prompt</h5>
-                          <div className="prompt-display">{currentAIInsights.debugPrompt || currentAIInsights.prompt}</div>
-                        </div>
-                      </div>
-                    )}
                   </div>
+                ) : (
+                  <p className="qdetail">
+                    Nothing to read back yet — this fills in once responses are in.
+                  </p>
+                )}
+
+                {/* Host controls, so they are chrome and they are droppable —
+                    but with NO data-drop-note. The note is the room-facing
+                    announcement ("… — in the session report"), and a host
+                    control that the fitter hid is not something the room lost;
+                    saying so would print a sentence about a picker nobody in
+                    the room can see. Notes belong on content.
+                    Two different things, deliberately adjacent: the picker
+                    changes the voice from the NEXT round on, Redo rewrites the
+                    one on screen. */}
+                <div className="fn-controls" data-drop="3">
+                  <label className="ai-persona-switch-label" htmlFor="game-persona">
+                    {`Voice (next ${getHostRoundNoun().toLowerCase()})`}
+                  </label>
+                  <select
+                    id="game-persona"
+                    className="ai-persona-select"
+                    value={gamePersonaId}
+                    onChange={(e) => handleChangeGamePersona(e.target.value)}
+                    title="Changes Workie's voice from the next question onwards"
+                  >
+                    <option value="">Adapt to the session</option>
+                    {gamePersonas.map((persona) => (
+                      <option key={persona.personaId} value={persona.personaId}>
+                        {persona.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="regenerate-ai-btn"
+                    onClick={handleRegenerateAISummary}
+                    title="Redo: rewrite the summary on screen now, in the current voice"
+                    disabled={loadingAIInsights}
+                  >
+                    Redo
+                  </button>
+                  {personaSwitchStatus && (
+                    <span className="ai-persona-switch-status">{personaSwitchStatus}</span>
+                  )}
                 </div>
-              ) : (
-                <div className="ai-insights-placeholder">
-                  <img src="/workie.png" alt="Workie" className="workie-avatar-disabled" />
-                  <div className="ai-insights-content">
-                    <h3><Icon name="Sparkle" weight="duotone" size={24} color="var(--muted)" /> Field Notes</h3>
-                    <p>Strategic insights will appear here after responses are submitted</p>
+
+                {gameDebugMode && currentAIInsights
+                  && (currentAIInsights.debugPrompt || currentAIInsights.prompt) && (
+                  <div className="debug-prompt-content" data-drop="5">
+                    <div className="prompt-display">
+                      {currentAIInsights.debugPrompt || currentAIInsights.prompt}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </>
+            )}
+
+            {hostPhase === 'ENDED' && (
+              <>
+                <div className="kicker">Session complete</div>
+                <h1 className="q">{eventTitle || 'Engagements'}</h1>
+                <p className="qdetail">
+                  {`${lessonNumber} ${pluralRoundNoun(getHostRoundNoun(), lessonNumber).toLowerCase()} played · ${players.length} in the room`}
+                </p>
+              </>
+            )}
+
           </div>
-        )}
-      </div>
-
-      {/* The one advance control, for every phase and every game type.
-          Standard mode: fixed to the foot of the content column, with an equal
-          strip of reserved padding below the content so it never permanently
-          covers the Field Notes. Big-screen mode: in normal flow at the foot of
-          the stage, which does not scroll. */}
-      <HostActionBar
-        controls={hostControls}
-        onAction={runHostAction}
-        bigScreen={bigScreenMode}
-        shortcutsEnabled={!anyOverlayOpen}
-      />
-
-      </div>
-      </div>
+          {/* What the fitter sacrificed, said out loud. Never a silent cut. */}
+          <p className="reduced" hidden />
+        </div>
+      </Stage>
 
       {/* Expanded QR Code Modal */}
       {showExpandedQR && (
@@ -4646,39 +4420,13 @@ Ready to engage? See you there!`;
         </div>
       )}
 
-      {/* Flash Alert for All Players Answered */}
-      {showAllAnsweredAlert && (
-        <div className="flash-alert-overlay">
-          <div className="flash-alert">
-            <div className="flash-alert-icon"><Icon name="Confetti" weight="duotone" size={64} color="var(--primary)" /></div>
-            <div className="flash-alert-text">All Players Have Answered!</div>
-            <div className="flash-alert-subtext">Ready to proceed to voting</div>
-          </div>
-        </div>
-      )}
-      
-      {/* Flash Alert for All Players Voted */}
-      {showAllVotedAlert && (
-        <div className="flash-alert-overlay">
-          <div className="flash-alert">
-            <div className="flash-alert-icon"><Icon name="ListChecks" weight="duotone" size={64} color="var(--primary)" /></div>
-            <div className="flash-alert-text">All Players Have Voted!</div>
-            <div className="flash-alert-subtext">Ready to see results</div>
-          </div>
-        </div>
-      )}
-      
-      {/* Invite Created Success Alert */}
-      {showInviteCreated && (
-        <div className="flash-alert-overlay">
-          <div className="flash-alert">
-            <div className="flash-alert-icon"><Icon name="ClipboardText" weight="duotone" size={64} color="var(--primary)" /></div>
-            <div className="flash-alert-text">Invite Created & Copied!</div>
-            <div className="flash-alert-subtext">Meeting invitation copied to clipboard</div>
-          </div>
-        </div>
-      )}
-      
+      {/* The three celebratory flash alerts are gone. Each was a full-screen
+          overlay that covered the stage — including the advance control — for
+          three or four seconds, at exactly the moment the host wanted to move
+          on. The room meter and the dock's status line already say where the
+          room is, continuously, without taking the screen to say it. The
+          loading overlay above stays: it reports a real wait. */}
+
       {/* Expanded Lesson Modal */}
       {lessonExpanded && questions.length > 0 && (
         <div className="expanded-lesson-overlay" onClick={() => setLessonExpanded(false)}>
@@ -4989,22 +4737,7 @@ function GameReport({ reportData, onClose }) {
     <>
     <div className="report-container">
       <div className="report-header">
-        <div className="parallax">
-          <section className="parallax__header">
-            <div className="parallax__visuals">
-              <div className="parallax__black-line-overflow"></div>
-              <div data-parallax-layers className="parallax__layers">
-                <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795be09b462b2e8ebf71_osmo-parallax-layer-3.webp" loading="eager" width="800" data-parallax-layer="1" alt="" className="parallax__layer-img" />
-                <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" width="800" data-parallax-layer="2" alt="" className="parallax__layer-img" />
-                <div data-parallax-layer="3" className="parallax__layer-title">
-                  <h2 className="parallax__title report-title">Engagements Game Report</h2>
-                </div>
-                <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" width="800" data-parallax-layer="4" alt="" className="parallax__layer-img" />
-              </div>
-              <div className="parallax__fade"></div>
-            </div>
-          </section>
-        </div>
+        <h2 className="report-title">Engagements Game Report</h2>
         
         <div className="report-summary">
           <h3>{eventTitle}</h3>

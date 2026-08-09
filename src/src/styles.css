@@ -9771,3 +9771,59 @@ body {
   font-size: 1.1rem;
   padding: 10px 24px;
 }
+
+/* ---------------------------------------------------------------------------
+   HOST-ONLY PANEL ADDITIONS (see components/stage/ and styles/stage.css for
+   the room-facing stage). Both of these used to live ON the projected screen:
+   the roster as a player grid at the top of every state, and the display
+   choice as a "Big Screen ON/OFF" toggle. Neither belongs in front of a room.
+   --------------------------------------------------------------------------- */
+.host-roster { margin-top: 16px; }
+.host-roster h4 {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+.host-roster ul { list-style: none; margin: 0; padding: 0; }
+.host-roster li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 0.85rem;
+  border-bottom: 1px solid rgba(155, 168, 190, 0.18);
+}
+.host-roster-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.host-roster-score { flex: none; font-weight: 700; color: var(--muted); }
+
+.display-profile-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.display-profile-picker select {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  color: #333;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+}

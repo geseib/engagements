@@ -16,15 +16,33 @@ import PhaseBar from './PhaseBar';
  * removes a class living on the document root.
  *
  * `phase` drives the persistent `.bar` signal (via PhaseBar) directly,
- * since Stage already owns that prop. The rail and dock areas carry no
- * per-state content in this task — wiring Rail/RoomMeter/Dock's real data
- * into them is Task 5's job, in GameHostPage. `children` is the main
- * content column.
+ * since Stage already owns that prop. `children` is the main content column.
+ *
+ * NAMED SLOTS (the Task 5 ruling). `rail`, `meter` and `dock` are optional
+ * nodes. Stage owns the grid areas, so without them the caller has nowhere to
+ * put a Rail; with them the caller composes
+ *
+ *   <Stage rail={<Rail …/>} meter={<RoomMeter …/>} dock={<Dock …/>}>{content}</Stage>
+ *
+ * A supplied slot REPLACES the empty placeholder rather than nesting inside
+ * it — Rail already renders `<header class="rail">` and Dock already renders
+ * `<footer class="dock">`, so wrapping them would produce two nested elements
+ * carrying the same grid area, double padding, and two boxes for the fitter's
+ * `.rail` query to chew on. `meter` has no placeholder: it is a column of
+ * `.main`, not a grid area of `.stage`, and `.main.solo` collapses that column
+ * when there is nothing to put in it.
+ *
+ * `fitKey` exists because the fitter's deps live here but the content that
+ * changes lives in the caller. Without it a question arriving, an answer list
+ * growing or a reveal flipping would re-render the stage and never re-measure
+ * it, because `profile` and `phase` are unchanged.
  */
-export default function Stage({ profile, phase, children }) {
+export default function Stage({
+  profile, phase, rail = null, meter = null, dock = null, fitKey = '', children,
+}) {
   const stageRef = useRef(null);
 
-  useStageFit(stageRef, [profile, phase]);
+  useStageFit(stageRef, [profile, phase, fitKey]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -37,10 +55,13 @@ export default function Stage({ profile, phase, children }) {
   return (
     <main className="stage" ref={stageRef}>
       <div className="field" aria-hidden="true" />
-      <div className="rail" />
+      {rail || <div className="rail" />}
       <PhaseBar phase={phase} />
-      <div className="main">{children}</div>
-      <div className="dock" />
+      <div className={`main${meter ? '' : ' solo'}`}>
+        {children}
+        {meter}
+      </div>
+      {dock || <div className="dock" />}
     </main>
   );
 }

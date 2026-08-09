@@ -34,8 +34,21 @@
 import { normalizeGameType } from './gameTypes';
 import { statusTone } from '../utils/statusTone';
 
-/** Host-facing phases, in the order a round moves through them. */
-export const HOST_PHASES = ['LOBBY', 'ASK', 'VOTE', 'RESULTS'];
+/**
+ * Host-facing phases.
+ *
+ * The first four are the order a ROUND moves through. `FIELD_NOTES` is a
+ * second beat inside RESULTS (the tally, then what we heard) and `ENDED` is a
+ * session state, not a round one — which is why neither joins
+ * `hostPhaseSequence()` below: folding them in would make the phase bar draw a
+ * fifth segment per round.
+ *
+ * They still have to be listed HERE, because `hostControlsFor()` opens with
+ * `HOST_PHASES.includes(phase) ? phase : 'LOBBY'`. A phase missing from this
+ * array does not fail loudly; it silently renders the lobby, which is the same
+ * class of bug as `isWaitingState('ENDED')` returning true.
+ */
+export const HOST_PHASES = ['LOBBY', 'ASK', 'VOTE', 'RESULTS', 'FIELD_NOTES', 'ENDED'];
 
 /**
  * Types whose ASK jumps straight to RESULTS.
@@ -82,6 +95,8 @@ export const HOST_INTENTS = {
   REVEAL: 'reveal',    // handleShowResults()      — close voting
   NEXT: 'next',        // handleNextQuestion(false)
   SKIP: 'skip',        // handleNextQuestion(true) — abandon this round
+  FIELD_NOTES: 'field-notes', // move RESULTS on to its second beat
+  REPORT: 'report',    // open the session report — the only way out of ENDED
 };
 
 function primaryFor(phase, { runsVote, roundNoun, playerCount, answerCount, hasQuestionSet }) {
@@ -129,7 +144,28 @@ function primaryFor(phase, { runsVote, roundNoun, playerCount, answerCount, hasQ
         disabled: false,
         hint: '',
       };
+    // RESULTS is two beats, not one long screen. The tally goes up first; the
+    // discussion prompt is a separate, deliberate move, so a host who wants to
+    // talk over the scores is not also projecting the AI's paragraph.
     case 'RESULTS':
+      return {
+        id: 'field-notes',
+        label: 'What We Heard',
+        icon: 'Sparkle',
+        intent: HOST_INTENTS.FIELD_NOTES,
+        disabled: false,
+        hint: '',
+      };
+    case 'ENDED':
+      return {
+        id: 'report',
+        label: 'Open Session Report',
+        icon: 'FileText',
+        intent: HOST_INTENTS.REPORT,
+        disabled: false,
+        hint: '',
+      };
+    case 'FIELD_NOTES':
     default:
       return {
         id: 'next',
@@ -158,6 +194,13 @@ function statusTextFor(phase, { playerCount, answeredCount, votedCount, hasQuest
       return votedCount >= playerCount
         ? `All ${playerCount} voted`
         : `${votedCount} of ${playerCount} voted…`;
+    // Both of these are keyed here rather than left to the default, because the
+    // default is the LOBBY branch's neighbour and a fall-through would tell a
+    // room that has just finished that it is waiting for players to join.
+    case 'FIELD_NOTES':
+      return 'Discussion prompt on screen';
+    case 'ENDED':
+      return 'All rounds played';
     case 'RESULTS':
     default:
       return 'Results are on screen';

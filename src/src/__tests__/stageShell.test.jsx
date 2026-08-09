@@ -139,6 +139,28 @@ describe('the rail', () => {
     expect(container.querySelector('code').dataset.drop).toBeUndefined();
   });
 
+  test('the phase chip names what the bar only colours', () => {
+    // .chip's CSS was ported in Task 4 with nothing rendering it. It is wired
+    // rather than deleted because a colour band is unnameable without a
+    // legend, and because RESULTS and FIELD_NOTES share the bar's green — the
+    // chip is the only place they differ.
+    const { container, rerender } = render(<Rail phase="ASK" title="T" context={{}} join={{ code: '1' }} />);
+    const chip = container.querySelector('.chip');
+    expect(chip).not.toBeNull();
+    expect(chip.className).toBe('chip ask');
+    expect(chip.textContent).toBe('Answering');
+    // Not droppable: the title is what the rail sacrifices, never the state.
+    expect(chip.dataset.drop).toBeUndefined();
+
+    rerender(<Rail phase="FIELD_NOTES" title="T" context={{}} join={{ code: '1' }} />);
+    expect(container.querySelector('.chip').textContent).toBe('What we heard');
+  });
+
+  test('an unrecognised phase renders no chip rather than a wrong one', () => {
+    const { container } = render(<Rail phase="NOPE" title="T" context={{}} join={{ code: '1' }} />);
+    expect(container.querySelector('.chip')).toBeNull();
+  });
+
   test('the timer is absent unless armed', () => {
     const { container, rerender } = render(<Rail title="T" context={{}} join={{ code: '1' }} />);
     expect(container.querySelector('.rail-timer')).toBeNull();
@@ -227,5 +249,89 @@ describe('the dock', () => {
       </Dock>
     );
     expect(screen.getByRole('button', { name: 'Start Voting' })).toBeInTheDocument();
+  });
+});
+
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+/**
+ * The deletions, and the composition, asserted against the source.
+ *
+ * These are not style preferences — each deletion is a named defect in the
+ * spec, and each is the kind of thing that survives a refactor by being left
+ * "just in case". Reading the file is crude, and it is also the only way to
+ * prove a line is gone without rendering a 5,000-line component that currently
+ * cannot mount in jsdom at all (see the five stale suites in the baseline).
+ */
+describe('what must be deleted, not adapted', () => {
+  const source = readFileSync(join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
+
+  test('the bigScreenMode reset effect is gone', () => {
+    // A projector browser that reloads must come back exactly as it was.
+    expect(source).not.toMatch(/setBigScreenMode\(false\)/);
+  });
+
+  test('there is no second layout mode at all', () => {
+    // Two modes is what produced two ASK headers and two QR blocks, and the
+    // mode did not survive a reload. The profile replaces it, and the profile
+    // is persisted.
+    expect(source).not.toMatch(/bigScreenMode/);
+    expect(source).not.toMatch(/big-screen-mode/);
+  });
+
+  test('ENDED is no longer treated as a waiting state', () => {
+    // isWaitingState('ENDED') returning true is why a finished session renders
+    // the lobby — "Waiting for players to join…" after everyone has left. The
+    // predicate is gone entirely; the lobby is now whatever the host phase
+    // says it is, and ENDED is a phase of its own.
+    expect(source).not.toMatch(/isWaitingState/);
+    expect(source).not.toMatch(/isWaitingState[\s\S]{0,400}['"]ENDED['"]/);
+  });
+
+  test('the end-of-game dialog is gone', () => {
+    // A dialog box is not how a session ends. The gameEnded push moves the
+    // stage to its ENDED phase; the report is the dock's primary action there.
+    expect(source).not.toMatch(/showConfirmation\(\s*\n?\s*['"]End of Game['"]/);
+    expect(source).toMatch(/setGameState\('ENDED'\)/);
+  });
+
+  test('the answer-navigator is gone', () => {
+    expect(source).not.toMatch(/answer-navigator/);
+  });
+
+  test('the three non-loading flash alerts are gone', () => {
+    // Full-screen celebratory overlays that cover the stage — including the
+    // advance control — for three seconds while a room waits.
+    expect(source).not.toMatch(/showAllAnsweredAlert/);
+    expect(source).not.toMatch(/showAllVotedAlert/);
+    expect(source).not.toMatch(/showInviteCreated/);
+    // The loading overlay stays: it is the one that reports a real wait.
+    expect(source).toMatch(/isLoadingData/);
+  });
+
+  test('the parallax block is gone', () => {
+    expect(source).not.toMatch(/className=["'][^"']*\bparallax\b/);
+  });
+});
+
+describe('what the host page must now render', () => {
+  const source = readFileSync(join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
+
+  test('the shell is composed rather than reimplemented', () => {
+    // Named slots, per the Task 5 ruling: Stage owns the grid areas and the
+    // caller fills them. A page that rebuilt .rail/.dock markup inline would
+    // fork the shell on its first divergence.
+    expect(source).toMatch(/import Stage from '\.\/components\/stage\/Stage'/);
+    expect(source).toMatch(/<Stage[\s\S]{0,1500}rail=\{\(?\s*<Rail/);
+    expect(source).toMatch(/meter=\{/);
+    expect(source).toMatch(/dock=\{\(?\s*<Dock/);
+  });
+
+  test('the presentation state is restored on mount and persisted on change', () => {
+    // "Never lose the presentation state on reload" is the requirement the
+    // deleted reset effect was violating.
+    expect(source).toMatch(/loadProfile\(\s*window\.localStorage/);
+    expect(source).toMatch(/saveProfile\(\s*window\.localStorage/);
   });
 });

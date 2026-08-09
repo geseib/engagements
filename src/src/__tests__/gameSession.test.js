@@ -54,7 +54,6 @@ describe('initialGameSession', () => {
     expect(s.votes).toEqual([]);
     expect(s.playersWhoVoted).toEqual([]);
     expect(s.currentQuestionVotes).toEqual([]);
-    expect(s.currentAnswerIndex).toBe(0);
     expect(s.aiSummaries).toEqual({});
     expect(s.currentAIInsights).toBeNull();
     expect(s.reportData).toBeNull();

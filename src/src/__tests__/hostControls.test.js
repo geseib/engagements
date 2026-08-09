@@ -115,7 +115,9 @@ describe('the primary action per phase', () => {
   });
 
   it('names the round the way the question set names it', () => {
-    const trivia = hostControlsFor({ gameType: 'trivia', phase: 'RESULTS', roundNoun: 'Lesson', ...READY });
+    // "Next <round>" moved from RESULTS to FIELD_NOTES when RESULTS became two
+    // beats — the noun still has to follow it there.
+    const trivia = hostControlsFor({ gameType: 'trivia', phase: 'FIELD_NOTES', roundNoun: 'Lesson', ...READY });
     expect(trivia.primary.label).toBe('Next Lesson');
 
     const lobby = hostControlsFor({ gameType: 'trivia', phase: 'LOBBY', roundNoun: 'Lesson', ...READY });
@@ -197,5 +199,88 @@ describe('status line', () => {
   it('counts one player without pluralising', () => {
     const lobby = hostControlsFor({ gameType: 'poll', phase: 'LOBBY', ...READY, playerCount: 1 });
     expect(lobby.status.text).toBe('1 player ready');
+  });
+});
+
+/**
+ * The two additions the stage needs.
+ *
+ * RESULTS becomes two beats (the tally, then "what we heard") rather than one
+ * long screen, and a finished session stops being a dead end.
+ */
+describe('the two additions the stage needs', () => {
+  // The trap first: an unknown phase resolves to LOBBY, so a new phase that is
+  // not in HOST_PHASES looks like it works and is actually rendering the lobby.
+  test('both new phases are recognised rather than falling back to LOBBY', () => {
+    expect(HOST_PHASES).toContain('FIELD_NOTES');
+    expect(HOST_PHASES).toContain('ENDED');
+    expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'ENDED' }).phase).toBe('ENDED');
+    expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'FIELD_NOTES' }).phase).toBe('FIELD_NOTES');
+  });
+
+  // RESULTS becomes two beats rather than one long screen.
+  test('RESULTS advances to the Field Notes beat before the next round', () => {
+    expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'RESULTS' }).primary.id)
+      .toBe('field-notes');
+    expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'FIELD_NOTES' }).primary.id)
+      .toBe('next');
+  });
+
+  // Today ENDED is a dead end: isWaitingState('ENDED') returns true, so a
+  // finished session renders the lobby.
+  test('ENDED offers a way forward', () => {
+    expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'ENDED' }).primary)
+      .toEqual(expect.objectContaining({ id: 'report', label: 'Open Session Report' }));
+  });
+
+  // Every primary has to name an intent the page can actually run, or the
+  // advance control is a button that does nothing — which is worse than a
+  // missing one, because the host keeps pressing it.
+  test('the new primaries name an intent the page can dispatch on', () => {
+    const known = new Set(Object.values(HOST_INTENTS));
+    for (const phase of ['RESULTS', 'FIELD_NOTES', 'ENDED']) {
+      const { primary } = hostControlsFor({ gameType: 'call-and-answer', phase });
+      expect(known.has(primary.intent)).toBe(true);
+    }
+  });
+
+  // The existing invariant, restated because these additions are exactly the
+  // kind of change that breaks it.
+  test('every (type × phase) pair still yields exactly one primary', () => {
+    for (const type of ['call-and-answer', 'trivia', 'poll', 'wavelength', 'survey']) {
+      for (const phase of hostPhaseSequence(type).concat(['FIELD_NOTES', 'ENDED'])) {
+        const controls = hostControlsFor({ gameType: type, phase });
+        expect(controls.primary).toBeTruthy();
+        expect(controls.primary.id).toBeTruthy();
+      }
+    }
+  });
+
+  // ASK is the one phase with a secondary. Adding phases must not grow that.
+  test('the new phases add no secondary action', () => {
+    expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'FIELD_NOTES' }).secondary).toBeNull();
+    expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'ENDED' }).secondary).toBeNull();
+  });
+
+  // statusTextFor is keyed on phase and falls through to the lobby's copy for
+  // anything it does not name — so a finished session would announce
+  // "Waiting for players to join…" to a room that has just applauded.
+  test('the new phases get their own status copy, not the lobby default', () => {
+    const lobby = hostControlsFor({ gameType: 'call-and-answer', phase: 'LOBBY', playerCount: 0 }).status.text;
+    for (const phase of ['FIELD_NOTES', 'ENDED']) {
+      const text = hostControlsFor({ gameType: 'call-and-answer', phase, playerCount: 0 }).status.text;
+      expect(text).not.toBe(lobby);
+      expect(text.length).toBeGreaterThan(0);
+    }
+  });
+
+  // FIELD_NOTES is a beat inside RESULTS and ENDED is a session state. Folding
+  // either into the round sequence makes the phase bar draw a fifth segment
+  // per round.
+  test('neither new phase joins the round sequence', () => {
+    for (const type of ['call-and-answer', 'trivia']) {
+      expect(hostPhaseSequence(type)).not.toContain('FIELD_NOTES');
+      expect(hostPhaseSequence(type)).not.toContain('ENDED');
+    }
   });
 });

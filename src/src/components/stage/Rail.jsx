@@ -16,17 +16,50 @@ import React from 'react';
  * word JOIN (2), then the URL (3). The session code is never part of this
  * list — an earlier revision numbered it backwards and sacrificed the code
  * before the title, and the code is what the room actually needs to get in.
+ *
+ * THE CHIP. Task 4 ported `.chip`'s CSS and nothing rendered one, because Rail
+ * had no slot for the phase. It is wired here rather than deleted: the mockups
+ * carry both the chip and the full-width bar on every state (01:4, 02:4, 05,
+ * 06, 09, 10), and they are not the same statement. The bar is a colour — it
+ * is perceived without being read, and a colour alone is unnameable without a
+ * legend. The chip is the legend: one word saying what the room is doing right
+ * now. It is also the only place FIELD_NOTES and RESULTS are distinguishable,
+ * since they share the bar's green.
+ *
+ * The chip is NOT droppable. It is one short word at the label tier and it
+ * carries the state; the title is what goes when the rail runs out of room.
  */
-export default function Rail({ title, context = {}, join = {}, timer }) {
+const CHIP = {
+  LOBBY: ['lobby', 'Lobby'],
+  ASK: ['ask', 'Answering'],
+  VOTE: ['vote', 'Voting'],
+  RESULTS: ['results', 'Results'],
+  FIELD_NOTES: ['results', 'What we heard'],
+  ENDED: ['done', 'Complete'],
+};
+
+export default function Rail({ phase, title, context = {}, join = {}, timer }) {
   const hasJoin = Boolean(join && (join.code || join.url));
+  // An unrecognised phase renders no chip rather than a fabricated one — a
+  // mislabelled state is worse than an unlabelled bar.
+  const chip = CHIP[String(phase ?? '').toUpperCase()] || null;
 
   return (
     <header className="rail">
+      {chip && (
+        <span className={`chip ${chip[0]}`}>
+          <span className="dot" />
+          {chip[1]}
+        </span>
+      )}
       <span className="rail-title" data-drop="1">{title}</span>
       <span className="rail-ctx">
         {context.category && <span>{context.category}</span>}
         {context.category && context.round != null && <i>/</i>}
-        {context.round != null && <b>{`Round ${context.round}`}</b>}
+        {/* The noun is the question set's, not this component's — the same
+            resolveRoundNoun() every other label site reads, which is why ASK
+            once said "Lesson 3" while RESULTS said "Question 3". */}
+        {context.round != null && <b>{`${context.noun || 'Round'} ${context.round}`}</b>}
         {context.of != null && <span>{`of ${context.of}`}</span>}
       </span>
       {timer && <span className="rail-timer">{timer}</span>}
