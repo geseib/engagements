@@ -1189,6 +1189,7 @@ they were the second and third statements of a fact that needed one."
 The replacement, and the deletions. Both current layouts go at once — **do not add a third mode.**
 
 **Files:**
+- Modify: `src/src/components/stage/Stage.jsx` — add the slot props (see the ruling below)
 - Modify: `src/src/GameHostPage.jsx`
 - Modify: `src/src/config/hostControls.js` — two additions
 - Test: `src/src/__tests__/stageShell.test.jsx` (append), `src/src/__tests__/hostControls.test.js` (append)
@@ -1196,6 +1197,20 @@ The replacement, and the deletions. Both current layouts go at once — **do not
 **Interfaces:**
 - Consumes: everything from Tasks 1, 3 and 4.
 - Produces: nothing new.
+
+> **Ruling, added after Task 4.** The plan documented `Stage` as taking `profile`, `phase` and `children`, *and* documented `Rail`, `RoomMeter` and `Dock` as separate components. Those two statements do not compose — if `Stage` owns the grid areas, the caller has nowhere to put a `Rail`. Task 4 resolved it conservatively by rendering empty placeholders and flagging the gap rather than inventing a signature.
+>
+> **The shape is named slots.** `Stage` gains three **optional** node props, each defaulting to `null` and rendered inside the wrapper div that already exists for that grid area:
+>
+> ```jsx
+> <Stage profile={profile} phase={phase} rail={<Rail … />} meter={<RoomMeter … />} dock={<Dock …>{primary}</Dock>}>
+>   {content}
+> </Stage>
+> ```
+>
+> This is backward-compatible — every test written in Task 4 still passes, because the ordering test inspects only the first class name of each top-level child, and an empty wrapper and a filled one are indistinguishable to it. Adding the props is the whole change to `Stage.jsx`; do not restructure it.
+>
+> One loose end to close while you are here: Task 4 ported the `.chip` CSS but no component renders a `.chip`, because `Rail`'s signature has no slot for it. Either give `Rail` a `phase` prop and render the chip, or delete the dead CSS. **Do not leave it dead and unexplained** — say in your report which you chose and why. The full-width phase bar may genuinely make the chip redundant, in which case deleting it is right.
 
 - [ ] **Step 1: Write the failing test**
 
