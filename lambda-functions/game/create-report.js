@@ -586,8 +586,28 @@ exports.handler = async (event) => {
       // Statistics
       gameStats,
       
-      // Player performance
-      playerPerformance: playerPerformance.sort((a, b) => b.gamesWon - a.gamesWon),
+      // Player performance, ordered by SCORE.
+      //
+      // This sorted by `gamesWon` and that was wrong for most of the product.
+      // `wins` above is counted from `result.Winners`, and `Winners` is only
+      // ever written in the vote-tally branch (game/get-results.js:546,
+      // websocket/message.js:265), both gated on a VOTE# state. Trivia and
+      // wavelength never enter one, so every one of their players carried
+      // `gamesWon: 0` and Array#sort left them in whatever order DynamoDB
+      // happened to return — a leaderboard that looked authoritative and was
+      // arbitrary.
+      //
+      // `totalScore` on the same object is correct and is computed just above
+      // from the consolidated score record. Ties break on name so the order is
+      // stable across regenerations of the same report rather than reshuffling
+      // on every call.
+      //
+      // The host stage's top-three reads this ordering, so it is a
+      // prerequisite for that podium being truthful and not merely present.
+      playerPerformance: playerPerformance.sort((a, b) => (
+        (b.totalScore || 0) - (a.totalScore || 0)
+        || String(a.playerName || '').localeCompare(String(b.playerName || ''))
+      )),
       
       // Enhanced question data with rankings and AI summaries
       detailedQuestions: detailedQuestions.sort((a, b) => 

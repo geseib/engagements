@@ -130,6 +130,14 @@ function seedPlayer(name) {
   put({ PK: `GAME#${GAME}`, SK: `PLAYER#${name}#SCORE`, PlayerName: name, score: 0, afterRound: 1 });
 }
 
+// The consolidated score record is create-report.js's single source of truth
+// for totalScore (it looks up PLAYER#{name}#SCORE and only falls back to
+// per-question tallies when there is none). seedPlayer writes a zero; this
+// overwrites it, so a fixture can give players scores that disagree with wins.
+function seedScore(name, score, afterRound = 1) {
+  put({ PK: `GAME#${GAME}`, SK: `PLAYER#${name}#SCORE`, PlayerName: name, score, afterRound });
+}
+
 function seedQuestion(setId, sk, attrs) {
   put({ PK: `SET#${setId}`, SK: sk, ...attrs });
 }
@@ -390,6 +398,77 @@ const seedAISummary = (n, extra = {}) =>
     assert.strictEqual(questionOf(report, '001').aiSummary.personaName, 'The Coach'));
   check('personaId read from the lower-case attribute', () =>
     assert.strictEqual(questionOf(report, '001').aiSummary.personaId, 'coach'));
+
+  // ---- playerPerformance is ordered by SCORE, not by wins ------------------
+  //
+  // This sorted by `gamesWon`, which is counted from `result.Winners` — and
+  // `Winners` is only ever written in the vote-tally branch. Trivia and
+  // wavelength never enter a VOTE# state, so every one of their players
+  // carried `gamesWon: 0`, the comparator returned 0 for every pair, and
+  // Array#sort left the leaderboard in whatever order DynamoDB returned.
+  //
+  // REJECTS: `(a, b) => b.gamesWon - a.gamesWon`. The players below are seeded
+  // in an order that is NOT score order precisely so the old comparator's
+  // no-op is visible — under it this reads alice, bob, cara.
+  say('\n   playerPerformance ordering');
+  resetDb();
+  seedGame({ gameType: 'trivia' });
+  seedPlayer('alice'); seedScore('alice', 10);
+  seedPlayer('bob');   seedScore('bob', 30);
+  seedPlayer('cara');  seedScore('cara', 20);
+  seedQuestion(SET, 'QUESTION#001', { Title: 'Round one' });
+  seedRef('001', 'QUESTION#001');
+  seedResults('001', 'QUESTION#001');
+
+  report = parse(await build()).report;
+  check('a trivia leaderboard is ordered by totalScore, highest first', () =>
+    assert.deepStrictEqual(
+      report.playerPerformance.map((p) => p.playerName),
+      ['bob', 'cara', 'alice']
+    ));
+  check('every trivia player still has gamesWon 0, so wins cannot be the key', () =>
+    assert.deepStrictEqual(
+      [...new Set(report.playerPerformance.map((p) => p.gamesWon))],
+      [0]
+    ));
+
+  // REJECTS: a compromise comparator that sorts on gamesWon and only falls
+  // back to totalScore. Here the round's winner is the LOWEST scorer, so wins
+  // and score disagree and only one of them can be first.
+  say('\n   score outranks wins when the two disagree');
+  resetDb();
+  seedGame();
+  seedPlayer('alice'); seedScore('alice', 5);
+  seedPlayer('bob');   seedScore('bob', 40);
+  seedQuestion(SET, 'QUESTION#001', { Title: 'Round one' });
+  seedRef('001', 'QUESTION#001');
+  seedResults('001', 'QUESTION#001', { Winners: ['alice'] });
+
+  report = parse(await build()).report;
+  check('the higher score leads even though the other player won the round', () =>
+    assert.strictEqual(report.playerPerformance[0].playerName, 'bob'));
+  check('the win is still reported, it just does not order the table', () =>
+    assert.strictEqual(
+      report.playerPerformance.find((p) => p.playerName === 'alice').gamesWon, 1
+    ));
+
+  // REJECTS: an unstable comparator. Equal scores used to leave order to
+  // DynamoDB; a report regenerated twice must not reshuffle its own podium.
+  say('\n   ties are stable');
+  resetDb();
+  seedGame({ gameType: 'trivia' });
+  seedPlayer('zoe');   seedScore('zoe', 10);
+  seedPlayer('adam');  seedScore('adam', 10);
+  seedQuestion(SET, 'QUESTION#001', { Title: 'Round one' });
+  seedRef('001', 'QUESTION#001');
+  seedResults('001', 'QUESTION#001');
+
+  report = parse(await build()).report;
+  check('players on equal scores are ordered by name, not by scan order', () =>
+    assert.deepStrictEqual(
+      report.playerPerformance.map((p) => p.playerName),
+      ['adam', 'zoe']
+    ));
 
   say(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
