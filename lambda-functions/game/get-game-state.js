@@ -75,6 +75,19 @@ exports.handler = async (event) => {
     // reconnect, `gameStateChanged`, `questionStarted`, `votingStarted` — none
     // of which are a page refresh, so this was easy to hit mid-round.
     let authorsRevealed = false;
+    /**
+     * Which beat of RESULTS this round is on — the tally, or the AI read-back.
+     *
+     * Same record, same read, no extra round trip. It is here because the Host
+     * Remote holds no WebSocket (HostRemote.jsx explains why) and polls this
+     * endpoint every two seconds, so this field is the ONLY way a beat pushed
+     * from the projector reaches the phone.
+     *
+     * Defaults to 'results' rather than undefined: a round nobody has moved is
+     * showing its tally, and saying so explicitly keeps every client off the
+     * business of inventing a default.
+     */
+    let stageBeat = 'results';
     if (currentQuestionNumber) {
       try {
         const roundRecord = await db.send(new GetCommand({
@@ -82,6 +95,9 @@ exports.handler = async (event) => {
           Key: { PK: `GAME#${gameId}`, SK: `ROUND#${currentQuestionNumber}` }
         }));
         authorsRevealed = !!(roundRecord.Item && roundRecord.Item.AuthorsRevealed);
+        if (roundRecord.Item && roundRecord.Item.StageBeat === 'field-notes') {
+          stageBeat = 'field-notes';
+        }
       } catch (error) {
         console.error(`❌ Error fetching round record for question ${currentQuestionNumber}:`, error);
         // Fall back to false — undecided is the safe (hidden) state.
@@ -163,6 +179,7 @@ exports.handler = async (event) => {
       currentQuestion: lessonNumber, // Return numeric lesson number for frontend
       currentQuestionData: currentQuestionData,
       authorsRevealed: authorsRevealed,
+      stageBeat: stageBeat,
       gameType: gameMetadata.Item.GameType || 'call-and-answer',
       gameMetadata: {
         title: gameMetadata.Item.Title,

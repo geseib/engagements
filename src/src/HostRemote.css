@@ -193,6 +193,107 @@
   color: var(--muted);
 }
 
+/* ---------------------------------------------------- who we are waiting on
+
+   17-remote.html's `Still to vote` card. Names as chips, and the privacy note
+   kept with them: it is the argument for why this surface may name people, and
+   it belongs where the person holding the phone can read it. */
+
+.hr-wait,
+.hr-notes {
+  background: var(--surface);
+  border: var(--hairline, 1px solid rgba(155, 168, 190, .18));
+  border-radius: var(--radius-md, 14px);
+  padding: 14px;
+}
+
+.hr-wait-heading,
+.hr-notes-kicker {
+  margin: 0 0 8px;
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hr-wait-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hr-wait-name {
+  font-size: .8125rem;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 99px;
+  background: rgba(155, 168, 190, .12);
+  border: var(--hairline, 1px solid rgba(155, 168, 190, .18));
+}
+
+.hr-wait-private {
+  margin: 10px 0 0;
+  font-size: .75rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.hr-wait-private b {
+  color: var(--success);
+  font-weight: 800;
+}
+
+/* --------------------------------------------------------- what we heard
+
+   09-field-notes.html reflowed to one phone column: the stage runs the lead
+   and the numbered points side by side, which a 390px column cannot do. The
+   type scale, the accented numerals and the closing "…in the session report"
+   line are the mockup's. */
+
+.hr-notes-lead {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-weight: 800;
+  font-size: 1.375rem;
+  line-height: 1.16;
+}
+
+.hr-notes-list {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hr-notes-list li {
+  display: flex;
+  gap: .6em;
+  font-size: .9375rem;
+  line-height: 1.35;
+}
+
+.hr-notes-list li b {
+  flex: none;
+  color: var(--primary);
+  font-family: var(--font-display, inherit);
+  font-weight: 800;
+}
+
+.hr-notes-list li span { min-width: 0; }
+
+.hr-notes-waiting,
+.hr-notes-foot {
+  margin: 0;
+  font-size: .8125rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.hr-notes-foot { margin-top: 14px; }
+
 /* --------------------------------------------------------------- flash */
 
 .hr-flash {

@@ -51,6 +51,51 @@ import { statusTone } from '../utils/statusTone';
 export const HOST_PHASES = ['LOBBY', 'ASK', 'VOTE', 'RESULTS', 'FIELD_NOTES', 'ENDED'];
 
 /**
+ * The two beats of RESULTS, spelled the way the server spells them.
+ *
+ * Mirrors `BEATS` in lambda-functions/game/stage-beat.js. Closed on both sides:
+ * an open set means the write succeeds, the frame goes out, every client
+ * compares it against 'field-notes', and the host watches a button do nothing.
+ */
+export const STAGE_BEATS = ['results', 'field-notes'];
+
+/**
+ * Should the stage act on a `stageBeatChanged` announcement?
+ *
+ * The beat is a server fact now (`POST /games/{id}/stage-beat`), which is what
+ * makes the phone and the projector one control instead of two: tap it on
+ * either and the other follows. This is the guard on the receiving end.
+ *
+ * IT IS ROUND-ADDRESSED, and that is the whole reason it is a function rather
+ * than `setResultsBeat(data.beat)`. The host can tap "What We Heard" and then
+ * "Next Round" inside one socket round trip; round 3's announcement then lands
+ * with the room already on round 4, and applying it would open round 4's fresh
+ * tally on round 3's discussion prompt. Same class of defect as the one that
+ * cost the beat in the first place — a stale message rewriting live state.
+ *
+ * @returns 'results' | 'field-notes' to adopt, or null to ignore the frame.
+ */
+export function stageBeatFromFrame(frame, gameState) {
+  const beat = frame && typeof frame === 'object' ? frame.beat : null;
+  if (!STAGE_BEATS.includes(beat)) return null;
+
+  // A beat is a beat OF RESULTS. Acting on one during ASK would put the stage
+  // into FIELD_NOTES, whose control is "Next Round" — an advance offered to the
+  // host while the room is still typing.
+  const onScreen = String(gameState ?? '').match(/^RESULTS#(\d+)$/);
+  if (!onScreen) return null;
+
+  // stage-beat.js pads to three digits before it writes the SK, and puts the
+  // padded string on the wire. Compare as numbers, or '003' never equals 3 and
+  // the stage ignores every frame it is sent.
+  const announced = String(frame.questionNumber ?? '').trim();
+  if (!/^\d+$/.test(announced)) return null;
+  if (parseInt(announced, 10) !== parseInt(onScreen[1], 10)) return null;
+
+  return beat;
+}
+
+/**
  * Types whose ASK jumps straight to RESULTS.
  * Mirrors the `currentGameType === 'trivia' || currentGameType === 'wavelength'`
  * branch in handleFinishQuestion() / handleShowResults().

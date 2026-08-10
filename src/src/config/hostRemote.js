@@ -116,17 +116,46 @@ export const ACTIONS = {
     icon: 'ChartLineUp',
     confirmWhenIncomplete: true,
   },
+  /**
+   * RESULTS' second beat: the AI's read-back of the round.
+   *
+   * Same id, label and icon as the stage's own control
+   * (config/hostControls.js:190-198) — deliberately, because they are one
+   * button on two devices. The remote used to skip this beat entirely and
+   * offer "Next Round" from RESULTS, so the phone and the projector disagreed
+   * about how many beats a round's results have.
+   *
+   * Discards nothing, so it never earns the second tap.
+   */
+  fieldNotes: {
+    id: 'field-notes',
+    label: 'What We Heard',
+    icon: 'Sparkle',
+    confirmWhenIncomplete: false,
+  },
 };
+
+// The beat vocabulary itself lives in config/hostControls.js (STAGE_BEATS),
+// which owns the stage's phases and the FIELD_NOTES intent. Deliberately NOT
+// redeclared here: this module's own history is a cautionary tale about
+// carrying a second answer to a question another module already answers — see
+// TYPES_WITH_NO_VOTE_AT_RUNTIME above, which drifted from the config table and
+// had to be demoted to documentation.
 
 /**
  * The one button that should be big and at the bottom of the screen.
+ *
+ * @param stageBeat which beat of RESULTS the SERVER says is showing, from
+ *        `get-game-state`'s `stageBeat`. Only consulted inside RESULTS; a beat
+ *        left over from a previous round must never rewrite the ASK or VOTE
+ *        control, so the check lives inside the phase, not above the switch.
  *
  * @returns an ACTIONS entry with a phase-specific `label`, or null when there
  *          is nothing to advance to (the game has ended, or the state is not
  *          one we recognise — in which case we would rather show nothing than
  *          guess and fire the wrong transition).
  */
-export function primaryAction(state, gameType) {
+export function primaryAction(state, gameType, stageBeat) {
   const { phase } = parseGamePhase(state);
 
   switch (phase) {
@@ -142,8 +171,16 @@ export function primaryAction(state, gameType) {
     case 'VOTE':
       return { ...ACTIONS.results };
 
+    // Two beats, in order: the tally, then the read-back, then out.
+    //
+    // Compared against the ONE value rather than tested for truthiness: the
+    // server sends an explicit 'results' for a round nobody has moved, and a
+    // truthy check would read that as "already past the read-back" and skip the
+    // beat — which is the defect this whole path exists to fix.
     case 'RESULTS':
-      return { ...ACTIONS.next, label: `Next ${roundNounFor(gameType)}` };
+      return stageBeat === 'field-notes'
+        ? { ...ACTIONS.next, label: `Next ${roundNounFor(gameType)}` }
+        : { ...ACTIONS.fieldNotes };
 
     case 'ENDED':
     case 'UNKNOWN':
@@ -210,6 +247,19 @@ export function requestFor(actionId, { gameId, round } = {}) {
     case 'results':
       if (!round) return null;
       return { path: `games/${gameId}/close-round`, body: { questionNumber: round } };
+
+    // The stage beat. Round-addressed like the two above, and for the same
+    // reason: the beat is written on ROUND#nnn, so guessing the round would set
+    // it on a round that is not on screen — the phone would show the beat as
+    // taken and the projector would never move.
+    //
+    // Behind the Cognito authorizer (template-clean.yaml), like close-round.
+    case 'field-notes':
+      if (!round) return null;
+      return {
+        path: `games/${gameId}/stage-beat`,
+        body: { beat: 'field-notes', questionNumber: round },
+      };
 
     default:
       return null;
@@ -296,6 +346,105 @@ export function needsConfirmation(action, progress) {
   if (!action.confirmWhenIncomplete) return false;
   if (!progress || !progress.applicable) return false;
   return !progress.allIn;
+}
+
+/* ---------------------------------------------------------- waiting list */
+
+/**
+ * Who the room is still waiting for, by name.
+ *
+ * The owner's ruling, verbatim: *"so they could call out 'hey George, we are
+ * waiting on you'"*. The phone is the only surface allowed to name people —
+ * `17-remote.html` prints the argument next to the list, and the remote prints
+ * it too: **who has not acted yet is a different fact from who wrote what**.
+ * `message.js:592-614` states the project's anonymity rule in exactly those
+ * terms, and `get-players.js` never returns answer text, so this list is on the
+ * allowed side of it.
+ *
+ * Reads `hasAnswered` / `hasVoted`, NOT `isReady`. get-players computes
+ * `isReady` per phase — `hasAnswered` during ASK, `hasVoted` during VOTE, and
+ * literally `true` for everyone during RESULTS — so a filter on it is right in
+ * one phase by accident and wrong in the rest.
+ *
+ * `GET /games/{id}/players` was already being polled every six seconds and its
+ * array thrown away for a single count. No new endpoint; just stop discarding.
+ *
+ * @returns { applicable, heading, verb, names } — `applicable: false` outside
+ *          ASK/VOTE, where nobody is being waited for and get-players reports
+ *          `hasVoted: false` for the whole room, which would otherwise render
+ *          as "the entire room is holding us up" on the results screen.
+ */
+export function waitingOn(rosterResponse, state) {
+  const { phase } = parseGamePhase(state);
+
+  const field = phase === 'ASK' ? 'hasAnswered' : phase === 'VOTE' ? 'hasVoted' : null;
+  if (!field) {
+    return { applicable: false, heading: '', verb: '', names: [] };
+  }
+
+  const payload = rosterResponse && typeof rosterResponse === 'object' ? rosterResponse : {};
+  const players = Array.isArray(payload.players) ? payload.players : [];
+
+  const names = players
+    // A row with no readiness block has not been seen to act, so it stays in
+    // the list. Dropping it would quietly under-report who the room is waiting
+    // for, which is the one thing this list must not do.
+    .filter((player) => player && typeof player === 'object' && !player.readiness?.[field])
+    .map((player) => player.playerName || player.PlayerName || '')
+    // A row with no name cannot be called out, so it is not a chip.
+    .filter(Boolean);
+
+  return phase === 'ASK'
+    ? { applicable: true, heading: 'Still to answer', verb: 'answered', names }
+    : { applicable: true, heading: 'Still to vote', verb: 'voted', names };
+}
+
+/* ----------------------------------------------------------- field notes */
+
+/**
+ * The AI read-back, normalised for the phone.
+ *
+ * Reads the SERVER's names. `GET /games/{id}/ai-summary` returns
+ * `summary` / `summaryText` / `discussionQuestions` / `nextSteps`;
+ * GameHostPage renames `discussionQuestions` → `discussionTopics` on the way
+ * into its own state (GameHostPage.jsx:775), and copying that name here would
+ * read a field the endpoint has never emitted — a headline with nothing under
+ * it, silently.
+ *
+ * `summary` is absent from the freshly generated response
+ * (get-ai-summary.js:1113-1116) and present only on the cached read (:568), so
+ * both are consulted. That difference bites in exactly the moment this is
+ * used: the first time a round closes.
+ *
+ * `ready: false` covers the endpoint's 404 `{ status: 'not_ready' }`, which is
+ * the normal state for the first second or two of RESULTS.
+ */
+export function fieldNotesFrom(summaryResponse) {
+  const payload = summaryResponse && typeof summaryResponse === 'object' ? summaryResponse : {};
+
+  const lead = textOf(payload.summary) || textOf(payload.summaryText);
+  const topics = listOf(payload.discussionQuestions);
+  const nextSteps = listOf(payload.nextSteps);
+
+  return {
+    ready: !!(lead || topics.length || nextSteps.length),
+    lead,
+    topics,
+    nextSteps,
+  };
+}
+
+function textOf(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/**
+ * The parser's fallback paths can leave an unparsed section as a bare string
+ * rather than a list, and a blank entry renders as an empty numbered row.
+ */
+function listOf(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map(textOf).filter(Boolean);
 }
 
 /**

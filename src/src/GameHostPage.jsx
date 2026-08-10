@@ -24,6 +24,7 @@ import { resetGameSession } from './config/gameSession';
 import { gameTypeMeta } from './config/gameTypes';
 import {
   hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
+  stageBeatFromFrame,
 } from './config/hostControls';
 import {
   anonymityApplies, anonymityActive, createPayloadFor, displayLabelFor,
@@ -125,6 +126,18 @@ function GameHostPage() {
     console.trace('🚨 DEBUG: setGameState call stack');
     setGameStateRaw(newState);
   };
+
+  /**
+   * `gameState`, readable from inside the WebSocket effect.
+   *
+   * That effect is registered once per (gameId, useWebSocket), so anything it
+   * closes over is frozen at the render that registered it — the same trap
+   * `remoteActionsRef` exists for further down. A handler that needs to know
+   * which round is on screen (`stageBeatChanged`) would otherwise compare every
+   * announcement against 'CREATED' and silently ignore all of them.
+   */
+  const gameStateRef = useRef(gameState);
+  useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
   const [currentGameType, setCurrentGameType] = useState('call-and-answer'); // Track the type of the current game
   // Whether THIS game holds authorship back until reveal — the per-game flag
   // from setup (config/anonymity.js), as opposed to anonymityApplies(), which
@@ -310,7 +323,81 @@ function GameHostPage() {
    * so the next round's results open on the tally.
    */
   const [resultsBeat, setResultsBeat] = useState('results');
-  useEffect(() => { setResultsBeat('results'); }, [currentQuestionId, gameState]);
+
+  /**
+   * The beat the SERVER last reported, AND the exact game state it reported it
+   * for. Both halves, because a bare beat outlives the round it belongs to.
+   *
+   * The failure it prevents: the host opens the read-back on round 2, a
+   * restore stamps 'field-notes' here, the room moves to round 3, and the
+   * `questionStarted` broadcast that would have refreshed this never arrives —
+   * host connections have been evicted mid-session before, and that is the
+   * defect this whole feature was built on top of. Round 3's results would
+   * then open straight on the AI paragraph with the tally never shown, which
+   * is precisely what the reset below exists to prevent.
+   *
+   * Addressing it by state string rather than trusting a refresh makes the
+   * stale case unrepresentable: the beat applies to one state and no other.
+   * Same discipline as `stageBeatFromFrame`, which ignores an announcement for
+   * a round the room has left.
+   */
+  const serverStageBeatRef = useRef({ state: null, beat: 'results' });
+  // ─────────────────────────────────────────────────────────────────────────
+  // FRAGILE ON PURPOSE, AND ALREADY EXPENSIVE ONCE. Read before touching.
+  //
+  // Any change that makes one of these deps move WITHOUT the round moving
+  // silently knocks the stage back to the tally beat. That is exactly what
+  // happened: handleShowResults wrote a round number into `currentQuestionId`,
+  // the close-round broadcast's restoreGameState rewrote it to the question's
+  // real id, this effect re-ran, and the host's "What We Heard" tap was
+  // discarded (see the long note at handleShowResults).
+  //
+  // The server-side beat does NOT fire this — `stageBeatChanged` sets
+  // `resultsBeat` directly and deliberately does not call restoreGameState, so
+  // neither dep moves. Do not widen these deps, and do not add a re-sync to
+  // that handler.
+  // ─────────────────────────────────────────────────────────────────────────
+  //
+  // It resets to the SERVER's beat for the round, not the literal 'results'.
+  // For a round change that is the same thing — a fresh ROUND# record has no
+  // StageBeat and get-game-state reports 'results' — but on a host reload
+  // mid-discussion it is the difference between the stage coming back on the
+  // read-back the room is looking at and snapping to the tally while the phone
+  // still says "Next Round". A ref, not state: this effect runs after the
+  // render that restoreGameState triggered, so a setState there would lose to
+  // it every time.
+  //
+  // The server's beat is honoured ONLY for the state it was read for. Anything
+  // else — a new round, a phase move, a stale ref — falls back to the tally.
+  useEffect(() => {
+    const seen = serverStageBeatRef.current;
+    setResultsBeat(seen && seen.state === gameState ? seen.beat : 'results');
+  }, [currentQuestionId, gameState]);
+
+  /**
+   * Publish the beat so the OTHER device follows.
+   *
+   * Bidirectional is the point: tap "What We Heard" on the projector and the
+   * phone's control moves on to "Next Round"; tap it on the phone and the
+   * projector shows the read-back. The local setState below is optimistic so
+   * the stage does not wait on a round trip; the POST is what carries it.
+   *
+   * Fire-and-forget. A failed publish must never block the beat the host asked
+   * for on the screen they are standing in front of — the phone falls back to
+   * its own two-second poll of get-game-state, which reads the same record.
+   */
+  const publishStageBeat = (beat) => {
+    const round = phaseOfGameState(gameState) === 'RESULTS'
+      ? parseInt(String(gameState).split('#')[1], 10)
+      : null;
+    if (!gameId || !round) return;
+    // authFetch: /stage-beat carries the Cognito authorizer, like /close-round.
+    authFetch(`${API_BASE}games/${gameId}/stage-beat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ beat, questionNumber: round }),
+    }).catch((err) => console.error('Stage beat publish failed (continuing):', err));
+  };
 
   // Host Remote drives the same actions the host toolbar does. The listener below
   // is registered once, so it must not close over a single render's handlers —
@@ -1041,6 +1128,26 @@ Focus on actionable business strategy insights.`;
       restoreGameState();
     });
 
+    // The phone moved the beat. Follow it.
+    //
+    // NOTE THE ABSENCE OF restoreGameState. Every handler around this one
+    // re-syncs, and this one must not: restoring rewrites `currentQuestionId`,
+    // which is a dependency of the effect that RESETS `resultsBeat` to the
+    // tally. A re-sync here would discard the very beat this frame delivered —
+    // the precise mechanism of the defect fixed in Wave 0. The beat is not a
+    // game-state fact; it needs no game-state read.
+    //
+    // The frame is round-addressed and stageBeatFromFrame enforces that: an
+    // announcement for a round the room has already left is ignored rather than
+    // opening the next round's tally on the previous round's prompt.
+    webSocketClient.onMessage('stageBeatChanged', (data) => {
+      console.log('🔌 Stage beat notification:', data);
+      // gameStateRef, not gameState: this effect registered once and its
+      // closure is frozen at 'CREATED'.
+      const beat = stageBeatFromFrame(data, gameStateRef.current);
+      if (beat) setResultsBeat(beat);
+    });
+
     webSocketClient.onMessage('aiSummaryReady', (data) => {
       console.log('🔌 AI Summary ready notification:', data);
       if (aiWatchdogRef.current) clearTimeout(aiWatchdogRef.current);
@@ -1107,8 +1214,13 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('playerVoted');
       webSocketClient.offMessage('votingStarted');
       webSocketClient.offMessage('authorsRevealed');
+      webSocketClient.offMessage('stageBeatChanged');
       webSocketClient.offMessage('aiSummaryReady');
       webSocketClient.offMessage('aiSummaryError');
+      // `gameEnded` was registered above and never removed here — a handler
+      // that outlived its session and fired with a stale closure. Found by the
+      // registered/removed symmetry test in __tests__/hostControls.test.js.
+      webSocketClient.offMessage('gameEnded');
     };
   }, [gameId, useWebSocket]);
 
@@ -1176,6 +1288,20 @@ Focus on actionable business strategy insights.`;
       if (stateRes.ok) {
         const gameStateData = await stateRes.json();
         console.log(`📊 HOST: Found existing game state:`, gameStateData);
+
+        // Which beat of RESULTS this round is on, per the ROUND# record. The
+        // reset effect beside `resultsBeat` reads this, so a reload lands the
+        // stage back where the room actually is rather than on the tally.
+        // Normalised here so nothing downstream has to defend against a value
+        // no client renders.
+        //
+        // Stamped WITH the state it describes. The reset effect honours the
+        // beat only when the two still match, so this cannot outlive its round
+        // if the broadcast that would have refreshed it never arrives.
+        serverStageBeatRef.current = {
+          state: gameStateData.state ?? null,
+          beat: gameStateData.stageBeat === 'field-notes' ? 'field-notes' : 'results',
+        };
 
         // First, load question sets for the restored game
         console.log(`🔍 HOST: Loading question sets for restored game...`);
@@ -3577,8 +3703,11 @@ Ready to engage? See you there!`;
         handleShowResults();
         break;
       case HOST_INTENTS.FIELD_NOTES:
-        // Client-side beat: the round does not move, the stage does.
+        // The round does not move; the stage does. Local first so the stage
+        // does not wait on a round trip, then published to /stage-beat so the
+        // phone follows — that is what makes the two devices one control.
         setResultsBeat('field-notes');
+        publishStageBeat('field-notes');
         break;
       case HOST_INTENTS.REPORT:
         // generateReportForGame, not setShowFinalReport: `showFinalReport` is

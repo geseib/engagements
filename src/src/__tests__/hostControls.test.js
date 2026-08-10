@@ -14,6 +14,7 @@ import {
   phaseOfGameState,
   isLobbyState,
   hostControlsFor,
+  stageBeatFromFrame,
 } from '../config/hostControls';
 import { GAME_TYPE_LIST } from '../config/gameTypes';
 
@@ -330,5 +331,182 @@ describe('the two additions the stage needs', () => {
       expect(hostPhaseSequence(type)).not.toContain('FIELD_NOTES');
       expect(hostPhaseSequence(type)).not.toContain('ENDED');
     }
+  });
+});
+
+/**
+ * The stage beat, now that it is a SERVER fact.
+ *
+ * `resultsBeat` used to be client-only React state, so the phone could not
+ * drive it and the projector could not announce it. It is written by
+ * `POST /games/{id}/stage-beat`, announced as `stageBeatChanged`, and read back
+ * by get-game-state — one source of truth for both surfaces.
+ */
+describe('stageBeatFromFrame — which beat announcements the stage may act on', () => {
+  const frame = (beat, questionNumber) => ({
+    type: 'stageBeatChanged', gameId: '4821', beat, questionNumber,
+  });
+
+  test('accepts a beat for the round that is on screen', () => {
+    expect(stageBeatFromFrame(frame('field-notes', '003'), 'RESULTS#003')).toBe('field-notes');
+    expect(stageBeatFromFrame(frame('results', '003'), 'RESULTS#003')).toBe('results');
+  });
+
+  test('reads the padded round number the broadcast actually carries', () => {
+    // stage-beat.js pads to three digits before it writes the SK and puts the
+    // padded string on the wire. A strict === against the number 3 never
+    // matches, and the stage would ignore every frame it is sent.
+    expect(stageBeatFromFrame(frame('field-notes', '003'), 'RESULTS#003')).toBe('field-notes');
+    expect(stageBeatFromFrame(frame('field-notes', 3), 'RESULTS#003')).toBe('field-notes');
+  });
+
+  test('IGNORES a beat for a round that is no longer on screen', () => {
+    // The race: the host taps "What We Heard" and then "Next Round" inside one
+    // socket round trip. The round-3 announcement lands after the room is
+    // already on round 4, and applying it would open round 4's fresh tally on
+    // round 3's discussion prompt. Same class of defect as the one that cost
+    // the beat in the first place (GameHostPage.jsx:313).
+    expect(stageBeatFromFrame(frame('field-notes', '003'), 'RESULTS#004')).toBeNull();
+    expect(stageBeatFromFrame(frame('field-notes', '004'), 'RESULTS#003')).toBeNull();
+  });
+
+  test('ignores a beat it does not recognise', () => {
+    // The server validates its own closed set, but an older deploy or a
+    // hand-rolled frame must not push `resultsBeat` to a value nothing renders.
+    for (const beat of [undefined, null, '', 'FIELD-NOTES', 'fieldnotes', 'tally', 42]) {
+      expect(stageBeatFromFrame(frame(beat, '003'), 'RESULTS#003')).toBeNull();
+    }
+  });
+
+  test('ignores a frame that does not say which round it is about', () => {
+    expect(stageBeatFromFrame(frame('field-notes', undefined), 'RESULTS#003')).toBeNull();
+    expect(stageBeatFromFrame(frame('field-notes', 'three'), 'RESULTS#003')).toBeNull();
+  });
+
+  test('never throws on junk, whatever the socket delivers', () => {
+    for (const junk of [undefined, null, {}, 'nope', 42, []]) {
+      expect(() => stageBeatFromFrame(junk, 'RESULTS#003')).not.toThrow();
+      expect(stageBeatFromFrame(junk, 'RESULTS#003')).toBeNull();
+      expect(() => stageBeatFromFrame(frame('results', '003'), junk)).not.toThrow();
+    }
+  });
+
+  test('ignores a beat while the room is not showing results at all', () => {
+    // A beat is a beat OF RESULTS. Acting on one during ASK would put the stage
+    // into FIELD_NOTES, whose control is "Next Round" — an advance offered
+    // while the room is still typing.
+    for (const state of ['ASK#003', 'VOTE#003', 'ENDED', 'CREATED']) {
+      expect(stageBeatFromFrame(frame('field-notes', '003'), state)).toBeNull();
+    }
+  });
+});
+
+/**
+ * The wiring. config/hostRemote.js shipped a correct OAuth-shaped fix as dead
+ * code once already; a handler that is never registered, or never removed, is
+ * the same failure with a socket attached.
+ */
+describe('GameHostPage listens for the beat, and lets go of it', () => {
+  const source = fs.readFileSync(HOST_PAGE, 'utf8');
+  // This file is heavily commented, and a comment is not an implementation.
+  // Assertions about what the page DOES run against the code with the prose
+  // removed, so a deleted call cannot be covered for by the note above it.
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n').filter((line) => !/^\s*(\/\/|\*)/.test(line)).join('\n');
+
+  test('every WebSocket handler it registers, it also removes', () => {
+    // The teardown list is maintained by hand next to a growing registration
+    // list. A handler left registered survives a gameId change and fires with a
+    // stale closure over the previous session's state.
+    const registered = [...source.matchAll(/webSocketClient\.onMessage\('([^']+)'/g)].map((m) => m[1]);
+    const removed = [...source.matchAll(/webSocketClient\.offMessage\('([^']+)'/g)].map((m) => m[1]);
+    expect(registered.length).toBeGreaterThan(11);
+    expect([...new Set(registered)].sort()).toEqual([...new Set(removed)].sort());
+  });
+
+  test('stageBeatChanged is one of them', () => {
+    expect(source).toContain("webSocketClient.onMessage('stageBeatChanged'");
+  });
+
+  test('the beat handler does NOT re-sync the whole game state', () => {
+    // restoreGameState rewrites `currentQuestionId`, and that is a dependency of
+    // the effect at GameHostPage.jsx:313 which resets `resultsBeat` to the
+    // tally. A beat handler that re-syncs therefore throws away the beat it was
+    // sent to apply — the precise mechanism of the defect fixed in Wave 0.
+    const start = code.indexOf("webSocketClient.onMessage('stageBeatChanged'");
+    expect(start).toBeGreaterThan(-1);
+    const body = code.slice(start, code.indexOf('});', start));
+    expect(body).toContain('setResultsBeat');
+    expect(body).not.toContain('restoreGameState');
+  });
+
+  test('the beat handler reads the CURRENT round, not the one it was registered with', () => {
+    // The WebSocket effect's deps are [gameId, useWebSocket], so every handler
+    // in it is frozen at the render that registered it — `gameState` is
+    // 'CREATED' there, forever. stageBeatFromFrame is round-addressed, so a
+    // closure over the frozen value makes it reject EVERY announcement and the
+    // projector silently never follows the phone: a green module, a dead
+    // feature. The same trap `remoteActionsRef` exists for.
+    const start = code.indexOf("webSocketClient.onMessage('stageBeatChanged'");
+    const body = code.slice(start, code.indexOf('});', start));
+    expect(body).toContain('gameStateRef.current');
+    expect(body).not.toMatch(/stageBeatFromFrame\(\s*\w+\s*,\s*gameState\s*\)/);
+  });
+
+  test('a reload comes back on the beat the room is actually reading', () => {
+    // get-game-state carries `stageBeat` so BOTH surfaces read one record. If
+    // the host page ignores it, reloading mid-discussion snaps the projector to
+    // the tally while the phone — which polls the same field — still offers
+    // "Next Round". The two controls disagree, which is the whole failure this
+    // stream exists to remove.
+    expect(code).toContain('gameStateData.stageBeat');
+    expect(code).toContain('serverStageBeatRef.current');
+    // The reset must consult it rather than hardcoding the tally.
+    expect(code).toMatch(/setResultsBeat\(\s*seen/);
+    expect(code).not.toMatch(/useEffect\(\(\)\s*=>\s*\{\s*setResultsBeat\('results'\)/);
+  });
+
+  test('the remembered beat is addressed to one game state and cannot outlive it', () => {
+    // A bare beat outlives its round. The host opens the read-back on round 2,
+    // a restore stamps 'field-notes', the room moves to round 3, and the
+    // `questionStarted` broadcast that would have refreshed the ref never
+    // arrives — host connections HAVE been evicted mid-session, and that is the
+    // defect this whole feature is built on top of. Round 3's results would
+    // then open straight on the AI paragraph with the tally never shown, which
+    // is exactly what the reset exists to prevent. Refreshing the ref is not a
+    // guarantee; addressing it is.
+    //
+    // Rejects: storing a bare string in serverStageBeatRef, and reading the
+    // beat back without comparing the state it was stamped with.
+    expect(code).toMatch(/serverStageBeatRef\s*=\s*useRef\(\{\s*state:/);
+    expect(code).toMatch(/state:\s*gameStateData\.state/);
+    expect(code).toMatch(/seen\.state === gameState \? seen\.beat : 'results'/);
+  });
+
+  test('the stage button posts the beat instead of only setting it locally', () => {
+    // Bidirectional is the point: tap it on the projector and the phone
+    // follows. A purely local setState leaves the phone offering "What We
+    // Heard" for a beat the room is already reading.
+    //
+    // Comments are stripped first: the earlier version of this test matched a
+    // sentence in the comment above the call and would have passed with the
+    // call itself deleted.
+    const start = code.indexOf('case HOST_INTENTS.FIELD_NOTES:');
+    expect(start).toBeGreaterThan(-1);
+    const body = code.slice(start, code.indexOf('break;', start));
+    expect(body).toContain("publishStageBeat('field-notes')");
+  });
+
+  test('publishStageBeat actually posts to the stage-beat route', () => {
+    // …and the call above is only worth anything if the thing it calls talks to
+    // the server. Authenticated, because /stage-beat carries the Cognito
+    // authorizer like /close-round: a plain fetch would 401 every tap.
+    const start = code.indexOf('const publishStageBeat');
+    expect(start).toBeGreaterThan(-1);
+    const body = code.slice(start, start + 700);
+    expect(body).toContain('/stage-beat');
+    expect(body).toContain('authFetch');
+    expect(body).toContain("method: 'POST'");
   });
 });

@@ -308,6 +308,44 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  StageBeatFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-stage-beat'
+      CodeUri: lambda-functions/game/
+      Handler: stage-beat.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Events:
+        StageBeatEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/stage-beat
+            Method: post
+            # HOST ONLY, exactly like /close-round and /reveal-authors above.
+            # This moves what the whole room is looking at — from the round's
+            # tally to the AI's read-back and back — and a participant knows the
+            # four-digit game id, so on a public route it would be a button any
+            # phone in the room could press mid-discussion.
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        # The beat is only useful if the OTHER surface hears it: the projector
+        # when the host taps the phone, the phone when the host taps the
+        # projector. Without this the broadcast is a silent AccessDenied and the
+        # two devices disagree about what the room is reading.
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   ### HTTP API with Simple Naming (like original GameApi)
   RestApi:
     Type: AWS::Serverless::HttpApi

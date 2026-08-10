@@ -10,6 +10,8 @@ import {
   roundProgress,
   needsConfirmation,
   phaseSummary,
+  waitingOn,
+  fieldNotesFrom,
 } from './config/hostRemote';
 
 /**
@@ -63,6 +65,17 @@ import {
 const STATE_POLL_MS = 2000;
 const ROSTER_POLL_MS = 6000;
 
+/**
+ * How often to re-ask for the AI read-back while it is on screen but not
+ * written yet.
+ *
+ * The host page is told over the WebSocket (`aiSummaryReady`); this page holds
+ * no socket, so it asks again. Only while the beat is actually showing — the
+ * endpoint 404s on a cache miss, and asking every two seconds from the moment
+ * results open would be a request per poll for a screen nobody opened.
+ */
+const AI_POLL_MS = 4000;
+
 /** How long an armed confirmation stays armed before it relaxes again. */
 const ARM_TIMEOUT_MS = 5000;
 
@@ -83,7 +96,8 @@ function HostRemote() {
   const [gameId, setGameId] = useState('');
   const [gameIdDraft, setGameIdDraft] = useState('');
   const [snapshot, setSnapshot] = useState(null);
-  const [rosterCount, setRosterCount] = useState(null);
+  const [roster, setRoster] = useState(null);
+  const [aiSummary, setAiSummary] = useState(null);
   const [connected, setConnected] = useState(false);
 
   const [busyAction, setBusyAction] = useState(null);
@@ -147,12 +161,16 @@ function HostRemote() {
     }
   }, []);
 
+  // KEEP THE ARRAY. This used to reduce the whole roster to
+  // `data.stats.totalPlayers` and throw away every name — while the one thing a
+  // facilitator actually needs mid-round is who has NOT acted yet, so they can
+  // say "hey George, we are waiting on you". That is a different fact from who
+  // wrote what, and get-players never returns answer text; see waitingOn().
   const pollRoster = useCallback(async (id) => {
     try {
       const res = await fetch(`${apiBase()}games/${id}/players`);
       if (!res.ok || activeGameRef.current !== id) return;
-      const data = await res.json();
-      setRosterCount(data?.stats?.totalPlayers ?? data?.players?.length ?? null);
+      setRoster(await res.json());
     } catch {
       /* roster is a nicety; the status card does not depend on it */
     }
@@ -161,7 +179,7 @@ function HostRemote() {
   useEffect(() => {
     if (!gameId) return undefined;
     setSnapshot(null);
-    setRosterCount(null);
+    setRoster(null);
 
     pollState(gameId);
     pollRoster(gameId);
@@ -175,10 +193,57 @@ function HostRemote() {
   const gameType = snapshot?.gameType || snapshot?.gameMetadata?.gameType;
   const summary = useMemo(() => phaseSummary(snapshot), [snapshot]);
   const progress = useMemo(() => roundProgress(snapshot), [snapshot]);
-  const action = useMemo(() => primaryAction(snapshot?.state, gameType), [snapshot, gameType]);
+  // `stageBeat` comes from the SERVER (get-game-state), so the phone follows
+  // the projector as well as driving it. Without passing it here the two-step
+  // in primaryAction is dead code: the phone would offer "What We Heard"
+  // forever and never advance.
+  const stageBeat = snapshot?.stageBeat;
+  const action = useMemo(
+    () => primaryAction(snapshot?.state, gameType, stageBeat),
+    [snapshot, gameType, stageBeat]
+  );
   const skip = useMemo(() => skipAction(snapshot?.state), [snapshot]);
   const round = snapshot?.currentQuestion || null;
   const title = snapshot?.gameMetadata?.title || '';
+
+  // The count the status card shows outside ASK/VOTE. Same number as before —
+  // it is now derived from the roster rather than being the only thing kept.
+  const rosterCount = roster
+    ? (roster.stats?.totalPlayers ?? roster.players?.length ?? null)
+    : null;
+
+  const waiting = useMemo(() => waitingOn(roster, snapshot?.state), [roster, snapshot]);
+  const notes = useMemo(() => fieldNotesFrom(aiSummary), [aiSummary]);
+
+  /** Is the room reading the AI's read-back right now? */
+  const onFieldNotes = summary.phase === 'RESULTS' && stageBeat === 'field-notes';
+
+  /* ------------------------------------------------------- the read-back */
+
+  // A new round's summary is a different document. Dropping the old one is what
+  // stops round 4's phone showing round 3's paragraph for a few seconds.
+  useEffect(() => { setAiSummary(null); }, [gameId, round]);
+
+  useEffect(() => {
+    if (!gameId || !onFieldNotes || notes.ready) return undefined;
+
+    let cancelled = false;
+    const load = async () => {
+      try {
+        // Public route, no authorizer (template-clean.yaml:744) — a plain
+        // fetch. 404 is the endpoint's honest "not written yet", not an error.
+        const res = await fetch(`${apiBase()}games/${gameId}/ai-summary`);
+        if (cancelled || !res.ok || activeGameRef.current !== gameId) return;
+        setAiSummary(await res.json());
+      } catch {
+        /* the beat is still on screen; the next tick asks again */
+      }
+    };
+
+    load();
+    const timer = setInterval(load, AI_POLL_MS);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [gameId, onFieldNotes, notes.ready]);
 
   const confirmNeeded = needsConfirmation(action, progress);
   const primaryArmed = armedAction === 'primary';
@@ -375,6 +440,58 @@ function HostRemote() {
             </p>
           )}
         </section>
+
+        {/* WHO THE ROOM IS WAITING FOR — 17-remote.html's `Still to vote`
+            block, names and all.
+
+            This is the one surface allowed to name people, and the note below
+            is the argument for why, printed where the person holding the phone
+            can read it rather than buried in a spec. Kept out of the list once
+            everybody is in: an empty heading is noise. */}
+        {waiting.applicable && waiting.names.length > 0 && (
+          <section className="hr-wait" role="group" aria-label={waiting.heading}>
+            <h2 className="hr-wait-heading">{waiting.heading}</h2>
+            <div className="hr-wait-names">
+              {waiting.names.map((name) => (
+                <span className="hr-wait-name" key={name}>{name}</span>
+              ))}
+            </div>
+            <p className="hr-wait-private">
+              <b>Private</b> Who has not acted yet is a different fact from who wrote what.
+              This list is safe to hold during an anonymous round; authorship is not, so it is
+              not here either — the server has not sent it to anyone.
+            </p>
+          </section>
+        )}
+
+        {/* WHAT WE HEARD — 09-field-notes.html, reflowed to one phone column.
+            The eyebrow, the lead, the numbered points, and the line that says
+            where the rest of it lives. */}
+        {onFieldNotes && (
+          <section className="hr-notes" aria-label="What we heard">
+            <p className="hr-notes-kicker">What we heard</p>
+            {!notes.ready ? (
+              <p className="hr-notes-waiting">Workie is reading the responses…</p>
+            ) : (
+              <>
+                {notes.lead && <p className="hr-notes-lead">{notes.lead}</p>}
+                {(notes.topics.length > 0 || notes.nextSteps.length > 0) && (
+                  <ol className="hr-notes-list">
+                    {notes.topics.map((topic, idx) => (
+                      <li key={`t${idx}`}><b>{idx + 1}</b><span>{topic}</span></li>
+                    ))}
+                    {notes.nextSteps.map((step, idx) => (
+                      <li key={`n${idx}`}><b>→</b><span>{step}</span></li>
+                    ))}
+                  </ol>
+                )}
+                <p className="hr-notes-foot">
+                  Full notes, next steps and every response are in the session report.
+                </p>
+              </>
+            )}
+          </section>
+        )}
 
         {error && (
           <p className="hr-flash hr-flash--error" role="alert">
