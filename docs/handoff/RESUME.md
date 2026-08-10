@@ -8,129 +8,137 @@ Read `docs/handoff/RESUME.md` in full before doing anything else. It is the whol
 
 ## Where things stand
 
-`dev` is at **`0dc39ae9`**, tagged **`dev-v1.2.0`**, deployed and verified in a browser. Today shipped two waves:
+`dev` is at **`c147ca70`**, **22 commits ahead of `origin/dev`**, nothing pushed and nothing deployed. The working tree is clean.
 
-**Wave 1 (`dev-v1.1.1`)** — two defects found by the owner running a live session, both reproduced against dev before a line was changed:
+The last session shipped a five-stream program plus two defect fixes. The design that governs all of it is
+`docs/superpowers/specs/2026-08-09-entry-console-scoreboard-design.md` — read its **§0.0 first**, because it records the rule the owner gave mid-session and it governs every UI change from here on:
 
-- **The answered count only moved on refresh.** On an anonymous round `message.js` strips `playerName` from the `playerAnswered` frame by design, and the meter's numerator was a list of *names*, so it could not grow between re-syncs. `answeredCountFrom` now takes the larger of the server's participation list and the `/answers` rows, which do arrive live.
-- **The remote advanced the round and the host screen didn't follow.** Not a missing broadcast — the host's `CONNECTION#` row was deleted by a later `$connect` while its socket stayed open. Every broadcast is a query over those rows, so the page received nothing while reporting `readyState === OPEN` and painting a green "Connected" badge. `connect.js` now claims its row before retiring older ones and only retires *strictly older* ones; `WebSocketClient` no longer orphans a socket; `message.js` and `submit-vote.js` notify every host row rather than `Items[0]`.
+> **The mockups in `docs/design/` ARE the design.** Specs record decisions, defects and constraints; they do not re-draw a screen. Open the mockups in a browser before writing UI code.
+> `python3 -m http.server 8124 --directory docs/design` (`.claude/launch.json` → `all-design-mockups`).
 
-**Wave 2 (`dev-v1.2.0`)** — three features on the host stage, built task-by-task with review between each:
+Silence in a mockup is **not** an instruction to delete — the mockups routinely omit shipped behaviour that is correct.
 
-- the meter and dock go green and pulse once when everyone has responded;
-- the rail's session code opens the player-join QR (hover/focus previews, click pins, only pinned suppresses SPACE);
-- the host panel's QR opens the **Host Remote** on the host's own phone, with the OAuth return path that makes signing in land there.
+### What shipped
 
-**Verified by the owner in a browser:** the QR popup, the remote QR, the count incrementing live, and the host screen following the remote.
+| Commit | |
+|---|---|
+| `53412404` | **The "What We Heard" defect** — it was never missing; it was taken back ~300ms after the press |
+| `b28adac3` | **The root page** — `/` now carries both audiences |
+| `10917c7c` | **The report leaderboard** sorted by a field trivia never writes |
+| `c542e3d2` | **The remote's AI beat**, the AI text on the phone, and the waiting list |
+| `b66d5d89` | **The engagement setup dialog**, extracted and de-lied |
+| `36e45851` | **One setup panel** behind SETUP, three tabs, and the SPACE defect |
+| `c147ca70` | **The top three** on the room's screen |
 
-Spec: `docs/superpowers/specs/2026-08-09-host-completion-signal-design.md`. Plan, including what was parked and why: `docs/superpowers/plans/2026-08-09-completion-signal-and-qr.md`.
+Highlights worth carrying forward:
 
----
-
-## THE ONE OPEN DEFECT — start here
-
-**There is no "What We Heard" button on the RESULTS screen.** Reported by the owner after `dev-v1.2.0`. It is a defect, not unbuilt work — the button is wired:
-
-- `config/hostControls.js` `case 'RESULTS':` returns `{ id: 'field-notes', label: 'What We Heard', intent: FIELD_NOTES, disabled: false }`.
-- `GameHostPage.jsx` `runHostAction` handles `HOST_INTENTS.FIELD_NOTES` by `setResultsBeat('field-notes')`.
-- `hostPhase` is `FIELD_NOTES` when `roundPhase === 'RESULTS' && resultsBeat === 'field-notes'`, and that branch renders the "What we heard" kicker and the AI insights.
-
-So the action exists, is not disabled, and has a handler. **Do not "fix" it by adding a second button — find why the existing one is not on screen.** Suspects, cheapest first:
-
-1. **`resultsBeat` is already `'field-notes'` when RESULTS arrives**, so `hostPhase` skips straight past the beat that offers the button and the primary reads "Next Round". It is reset by `useEffect(() => setResultsBeat('results'), [currentQuestionId, gameState])` — and React bails on a `setState` to an identical value, so if neither dep actually *changes* on the way into RESULTS the effect never re-runs.
-2. **The round never reaches `RESULTS#nnn`** in the host's React state, so `phaseOfGameState` returns LOBBY. Note `hostControlsFor` rewrites any unrecognised phase to `LOBBY` silently.
-3. **The dock is rendering the primary but it is not visible** — check the fitter and `HostActionBar`'s big-screen branch, which already hides its own `kbd` and `hint` in the mode the dock always passes.
-
-Reproduce in a browser with the console open and log `hostPhase`, `resultsBeat` and `gameState` on the RESULTS transition. **jsdom cannot answer this** — it has no layout engine and `GameHostPage` cannot be rendered under test at all (see Landmines).
+- **The beat defect.** `handleShowResults` wrote `setCurrentQuestionId(questionNumber)` — a round number where every other writer puts the question's id — so `close-round`'s broadcast rewrote it and that changed dep re-fired the reset effect, discarding the beat. Path-dependent: it fired only when the round was closed **from the host page**, never from the remote or a re-sync. It was invisible until `dev-v1.2.0` stopped the host's `CONNECTION#` row being evicted; that fix was correct and exposed this.
+- **Copy Invite hardcoded `https://eng.dev.seibtribe.us`** — one environment, and the off-pipeline one being retired. A host running a **prod** session copied an invitation that sent the whole room to dev. Now derived from `window.location` like every other url on the page.
+- **The SPACE defect.** `isTypingTarget` covers inputs only and the handler calls `preventDefault()`, which suppresses space-activation of *any* focused button. A host who tabbed to a button and pressed Space advanced the round instead of pressing it. Fixed by event target, not geometry. `HostActionBar` also gained an `event.repeat` guard — a held key or a clicker's auto-repeat fired the primary at the OS repeat rate, and the primary's *meaning* changes between repeats.
+- **The trivia timer is deleted.** It never worked: `create-game.js:9`'s destructure never named it and nothing reads a timer. **Do not restore it.**
 
 ---
 
-## The streams, and what each needs to start
+## THE ONE THING BLOCKED ON THE OWNER
 
-Six bodies of work. Each is its own spec → plan → execution cycle; do not try to run them from one session. Decisions already made by the owner are recorded here — **treat them as settled, not as suggestions.**
+**Stream E is not real until the pipeline runs.** It is the only change with a `template-clean.yaml` edit — `POST /games/{gameId}/stage-beat`. Until it deploys, the phone's *What We Heard* tap 404s and the stage keeps its client-side beat. It degrades safely; nothing crashes.
 
-### 1. Wavelength — the room's shared vocabulary
+Everything else in the 22 commits is frontend-only except `create-report.js`'s sort and `get-game-state.js` returning `stageBeat`.
 
-**Spec written and committed:** `docs/superpowers/specs/2026-08-09-wavelength-convergence-design.md`. Every decision is made; it needs a plan and a crew.
+---
 
-The owner corrected the model: wavelength measures **how many words match across the whole team**, not player performance. `totalScore: 0` in `handleWavelengthResults` is *correct* — players have no scores and never should. An earlier note in the session calling that a gap was applying the wrong model.
+## Deployment — corrected, and the correction matters
 
-Rulings: a word counts only when **everyone who submitted** said it (near-misses still show, dimmer); players are asked for ten words and fewer are accepted; matching uses **conservative automatic AI clustering** (no host review step) to catch misspellings and abbreviations of the same term without merging merely-related ones; **no team-splitting mechanic** — the product just says *works best with groups of ten or less*.
+**The owner believes tagging is what deploys to dev and test. It is not — a branch push deploys too.** Verified against `cicd/pipeline-clean.yaml`: all three `Triggers` blocks (`:304-321`, `:364-375`, `:418-431`) carry a `- Branches:` entry **and** a `- Tags:` entry as separate `Push` entries, which are ORed. The config says so itself:
 
-Four data changes are needed, all named in the spec: "common" means count > 1 rather than everyone; `connectionScore` is words ÷ words and answers no question; matching is exact-string; nothing aggregates across rounds.
+> *"The branch filter below is what keeps `git push origin dev` deploying."*
+
+So **`git push origin dev` IS a deploy.** That is also why `origin/dev` sits 22 commits behind.
+
+- Prod has one extra guard: a `prod-v*` tag starts the pipeline but still lands on `ApprovalForProd`. Dev and test have no such stage.
+- **Pushing a branch and its tag together fires two executions of the same commit.** Push one or the other.
+- Never run `./deployall`, `./scripts/deploy-clean.sh` or any deploy script.
+- **Committing locally is authorised** (owner, 2026-08-09). Pushing is not. Prod requires checking first.
+- The pipeline execution history is the only reliable record of what is deployed:
+
+```bash
+AWS_PROFILE=adminaccess aws codepipeline list-pipeline-executions --pipeline-name engagecicd-pipeline-dev --max-items 5 --query "pipelineExecutionSummaries[].{status:status,rev:sourceRevisions[0].revisionId}" --output table
+```
+
+**Still proposed, agreed in principle, not implemented: go tag-only.** Delete the three `- Branches:` entries, keep `- Tags:`. That would make the owner's mental model true. Open question first: how does the `engagecicd` stack itself get deployed?
+
+---
+
+## Open with the owner
+
+1. **Auto-submit on the fourth digit of the join code.** `entry-redesign/RATIONALE.md` §5 specifies it; `01-root.html`'s own live script does **not** — it enables a Join button, and `03-join-unknown-code.html` draws a "Try again" button an auto-submitting field would not need. Built to the mockup. The rationale and the mockup contradict each other.
+2. **Do the live defects jump the queue?** (§2 below.) Name collision and rejoin corrupt real sessions.
+3. **Archive auth.** `GET https://archive.seibtribe.us/archive/items` returns 200 unauthenticated and CORS advertises `DELETE` with `Origin: *`. `ArchivePanel.jsx` hardcodes that URL **six times** with plain `fetch`, no auth, including DELETE. The service is **not in this repo** and fixing it needs a deploy outside the pipeline.
+4. **The parallax hero.** The admin designers cut it and asked to be told they are wrong: between the host and admin redesigns the product loses its whole visual signature in one week.
+
+---
+
+## The streams still to run
+
+### 1. Auth screens — `10-signin.html`, `11-register.html`
+
+Not built. Scoped out of the root-page work deliberately. They carry a shared password checklist, Cognito error mapping and an account-enumeration fix (`entry-redesign/RATIONALE.md` §8.2–8.4, §8.7).
+
+**Three client password validators currently disagree**, so a password can be valid at reset and rejected at signup, and none is necessarily the Cognito pool's real policy.
+
+Also here: **`rememberReturnPath()` buys nothing today** — `LoginForm:89` / `RegisterForm:118` call it again *from* `/auth`, overwriting the stored path with `/auth`, which `takeReturnPath` rejects, falling back to `/`. Same destination, so no visible bug — but it silently disarms any caller that sets a real path, and the remote QR flow depends on exactly that.
+
+And: `RegisterForm` promises an approval email. **There is no SES, no `sendEmail`, nothing, anywhere in `lambda-functions/`.** `PendingApproval.jsx` hardcodes a "24–48 hours" promise nothing backs, and its "Check again" button calls `refreshSession`, which is not exported from `AuthContext`.
 
 ### 2. The live defects — these corrupt real sessions
 
-Not redesign work. **The owner has not yet said whether these jump the queue** — ask.
-
-- **Two players with the same name silently merge.** `join-game.js` keys players by `PLAYER#{playerName}` and returns `isReconnection: true`. The second Chris inherits the first Chris's answers and score, with no warning. No collision UI, no availability endpoint.
+- **Two players with the same name silently merge.** `join-game.js` keys players by `PLAYER#{playerName}` and returns `isReconnection: true`. The second Chris inherits the first Chris's answers and score, with no warning. `07-join-name-collision.html` is designed; it needs a name-availability check that does not expose the roster.
 - **Rejoin never contacts the server** — `handleRejoinConfirm` sets `joined = true` locally and nothing else.
-- **Poll and Survey cannot be created.** The format picker offers three types; `config/gameTypes.js` defines five. **Poll is fully ready** — offer it. **Survey is not**: `upload-questions.js` rejects survey uploads outright, so no survey set can exist and a Survey option would be permanently dead.
-- **The trivia timer has never worked.** `create-game.js`'s destructure is a whitelist that omits `triviaTimer`; its own comment says the field "was sent by the frontend for months and silently discarded". Nothing anywhere reads a timer. The setup screen promises players 30 seconds.
-- **Event Details is stored, returned to players by `get-game.js`, and rendered by nothing.** Its label says it will be shown to participants.
+- **Survey cannot be created.** `upload-questions.js:146-157` rejects survey uploads outright, so no survey set can exist. The picker holds it behind `UNPLAYABLE_GAME_TYPES` in `config/gameTypes.js`, with the reason in a comment — **when upload lands, removing the entry is the whole fix.**
+- **Poll plays as free-text-then-vote.** `get-question.js:154` forwards options for trivia only, so multiple-choice options in an uploaded poll set are stored and never shown. Adding Poll to the picker exposed this; it did not create it.
 
-### 3. The host tools / setup panel — one Console
+### 3. Wavelength — the room's shared vocabulary
 
-**Reviewer recommendation on disk:** `docs/superpowers/reviews/2026-08-09-console-review.md`.
+**Spec written and committed:** `docs/superpowers/specs/2026-08-09-wavelength-convergence-design.md`. Every decision is made; it needs a plan and a crew.
 
-Owner ruling: **the pull tabs are deleted.** "As much as I like the pull tab, I think they somewhat distract from the game — primarily the how-to-play one is in the way." Replacement is **one button in the dock**, with everything inside it. Do not argue for keeping the tabs.
+Wavelength measures **how many words match across the whole team**, not player performance. `totalScore: 0` is *correct* — players have no scores and never should. A word counts only when **everyone who submitted** said it (near-misses show, dimmer); ten words asked for, fewer accepted; **conservative automatic AI clustering**, no host review step; **no team-splitting mechanic** — the product just says *works best with groups of ten or less*.
 
-The owner's own contents list, all of which exist today in a cumbersome form: category list with on/off selection; question list with search and select-next; **a players tab showing every player and their score**; display selector; report viewer; switch game; one-click copy link; WebSocket status icon.
+Four data changes, all named in the spec: "common" means count > 1 rather than everyone; `connectionScore` is words ÷ words and answers no question; matching is exact-string; nothing aggregates across rounds.
 
-The reviewer's structure orders it hot→cold and merges categories with the question browser — they are the same job at two zoom levels. Two things it found that the owner does not know: the shipped how-to-play renders for only **three of five game types** (wavelength and survey hosts get an empty panel with a Sign Out button in it), and the SPACE shortcut's typing guard only excludes inputs while the handler calls `preventDefault()`, so **a host who tabs to any focused button and presses Space advances the round** instead of pressing that button.
+**The setup screen's group-size caveat ships WITH this, not before it.** Writing the copy does not make the rule true, and `get-ai-summary.js:866` references an undeclared `commonWords` inside the wavelength pass — a runtime `ReferenceError` any wavelength work lands on top of.
 
-Do not print the word "Console" — user testing killed it and the dock already says SETUP.
+### 4. The ENDED screen — Tiers 0, 2 and 3
 
-### 4. Top three players
+**Reviewer recommendation:** `docs/superpowers/reviews/2026-08-09-ended-screen-review.md`. Tier 1 (the podium) shipped; the sort fix shipped. Remaining:
 
-Owner ruling: **top three only, never a full roster**, on the room's screen. A podium, not an attendance record. This resolves the open question that had been sitting unanswered since the redesign shipped.
+- **Tier 0, and it is the highest-value fix in that document because it is a deletion.** `participationRate` and `votingParticipation` (`get-ai-summary.js:1511`, `:1599`) are interpolated into the **live prompt**, so the model is told every round had 100% participation — and hosts read those summaries out loud. You only count rounds that happened, so the figure can only ever read 100%.
+- **Tier 0.** `gameStats.totalPlayers` (`create-report.js:115`) counts `PLAYER#`, `#SCORE` and `#STATE` rows together. Use the `uniquePlayers` set already built at `:512`.
+- **The participation sentence.** *"34 of 40 people took part"* needs one server-computed count of distinct answerers that does not exist. **If only one thing ships, ship this** — it is the only claim on that screen currently absent or false.
+- Tier 2 (AI session summary) and Tier 3 (wavelength's unison band).
 
-`RoomMeter` refuses names **by test**, and that test **stands unmodified** — the podium is not rendered by RoomMeter. Put it on the stage; the meter is `null` on RESULTS/ENDED already and is the first thing the fitter sacrifices.
+### 5. The remote's unbuilt half
 
-**It must be gated on `standingsVisible(...)`.** A podium during an unrevealed anonymous round is attribution by arithmetic — the exact leak that got the pre-reveal standings meter removed.
+`17-remote.html` draws, and `HostRemote.jsx` does not have: a **`This round`** block (`Choose next question`, `Expand on stage`, `Timer 2:00`, `Skip round`), a **`Session`** block (`Categories`, `Join code`, `Session report`, `Switch game`), and a **full phone question browser including the correct answer** — which is right: *the stage browser shows what a question is about, the remote shows what it says*.
 
-Wavelength gets **no podium** (§1).
+`09-field-notes.html` also draws a `‹ Results` secondary that walks the beat backwards. The server and `stage-beat.js` support `beat: 'results'` in both directions and it is tested; no stage control calls it yet.
 
-### 5. The root screen, and setup
+**The timer exists nowhere in the product.** It is a new feature — backend field, broadcast, player-side clock — not a control to add.
 
-**Reviewer recommendation on disk:** `docs/superpowers/reviews/2026-08-09-setup-screen-review.md`. Owner instruction on the mockups generally: *"review those mockups and incorporate the ones that make sense"* — **they are input, not gospel.** Where the app is better, keep the app and say why.
+### 6. Admin — phased, none started
 
-**Root must carry both sides** — player code entry and host/admin sign-in, per `docs/design/entry-redesign/01-root.html`. Today `/` is the host page behind `ProtectedRoute`, so a participant who types the URL hits a sign-in wall and `/play` is the only way in.
+**Scout inventory:** `docs/design/admin-redesign/INVENTORY.md`, a pre-design audit of the current code. Read it before re-deriving anything.
 
-**Setup is not a screen** — it is an early-return overlay inside `GameHostPage.jsx` reached only from the welcome screen. Make it a **component, not a route**: `App.jsx` is a `window.location.pathname` switch with no client-side navigation, so a route means a full reload that destroys the session it exists to hand off.
+Order is forced by the code, not preference:
 
-The anonymity copy ruling, which matters because it is a promise about anonymity: `get-results.js` sets `AuthorsRevealed` **unconditionally** on entering RESULTS, and `/reveal-authors` is only an *early* reveal. So the shipped **"Until voting closes" is true** and the mockup's "Until you reveal them" tells the host they hold a switch they do not hold. Adopt the mockup's card layout, keep the shipped sentence.
+1. **The shell, alone** — left vertical nav, top bar, breadcrumb, environment chip. All 22 mockups sit inside it. Two agents touching it collide.
+2. **Users** — already its own component, and the most broken: `approveUser`, `updateUserStatus` and `deleteUser` all call **routes that do not exist**, and none is wired to a button; the Enabled badge counts one predicate while the filter matches a value that is not a Cognito group, so a non-zero badge can sit over an empty table.
+3. **Settings** — small, self-contained, and it gains the thing the console has never had: which of the three environments is loaded.
+4. **Sessions** — there is no session list at all; the tab is a delete box you type a game ID into. `GET /games` exists and admin never calls it.
+5. **Question sets + AI generation together** — they share `engagementType` and the builder modals. This is where **a failed generation looks like a success**: on partial failure the builder populates the review UI from partial results and puts `Generation failed:` into a field the review branch never displays.
 
-**Access codes for a game id are deferred** by the owner. The backend accepts and enforces `visibility`/`accessCode` and the participant side is designed, but no host UI sets them and none is wanted yet.
+**Archive and Prompts stay parked** until the archive auth ruling.
 
-### 6. Admin — phased
-
-**Scout inventory:** the admin design set carries its own `INVENTORY.md`, a pre-design audit of the current code. Read it before re-deriving anything.
-
-The owner wants phases so each lands visibly in dev. The order is forced by the code, not by preference:
-
-1. **The shell, alone** — left vertical nav, top bar, breadcrumb, environment chip. All 22 mockups sit inside it and it replaces the current tab strip wholesale. Two agents touching it collide.
-2. **Users** — already its own component. Also the most broken: `approveUser`, `updateUserStatus` and `deleteUser` all call **routes that do not exist**, and none is wired to a button; the Enabled badge counts one predicate while the filter matches a value that is not a Cognito group, so a non-zero badge can sit over an empty table.
-3. **Settings** — small, self-contained, and it gains the thing the console has never had: a statement of which of the three environments is loaded.
-4. **Sessions** — there is no session list at all; the entire tab is a delete box you type a game ID into. `GET /games` exists and admin never calls it.
-5. **Question sets + AI generation together** — they share `engagementType` and the builder modals; splitting them puts two agents in one file. This is where **a failed generation looks like a success**: on partial failure the builder populates the review UI from partial results and puts `Generation failed:` into a field the review branch never displays.
-
-**Archive and Prompts stay parked** until the owner rules on the archive's open API (below).
-
-Extract each tab as part of its own phase rather than doing one big invisible refactor — `AdminPage.jsx` is 1,769 lines with four of six tabs inline, sharing one 90-line `useState` block and a root-level modal stack, so "independent" tabs still collide until they are extracted.
-
----
-
-## Decisions still open with the owner
-
-1. **Do the live defects (§2) jump the queue?** Name collision and rejoin corrupt real sessions.
-2. **Archive auth.** `GET https://archive.seibtribe.us/archive/items` returns 200 unauthenticated and CORS advertises `DELETE` with `Origin: *`. `ArchivePanel.jsx` hardcodes that URL **six times** with plain `fetch`, no auth, including DELETE. The designer marked the Archive mockup *provisional* and refused to draw a delete button on it. The service is **not in this repo** and fixing it needs a deploy outside the pipeline — a deliberate owner decision.
-3. **The parallax hero.** The admin designers cut it and asked to be told they are wrong: between the host and admin redesigns the product loses its whole visual signature in one week.
-
-## Resolved since the last handoff
-
-- **"Does an approval email exist when someone is promoted out of `pending`?"** — **No.** There is no SES, no `sendEmail`, nothing, anywhere in `lambda-functions/`. Approval is a client-side group change. Meanwhile `PendingApproval.jsx` hardcodes a "24–48 hours" promise nothing backs, and its "Check again" button calls `refreshSession`, which is not exported from `AuthContext`.
-- **"Does §7.15 yield for trivia?"** — superseded by the top-three ruling (§4).
+Extract each tab as part of its own phase rather than one big invisible refactor — `AdminPage.jsx` is 1,769 lines with four of six tabs inline, sharing one 90-line `useState` block and a root-level modal stack.
 
 ---
 
@@ -138,69 +146,66 @@ Extract each tab as part of its own phase rather than doing one big invisible re
 
 | Suite | Command | Expected |
 |---|---|---|
-| Backend | `for t in tests/*.js; do node "$t"; done` | **28 suites, 927 passed, 0 failed** |
-| Frontend | `cd src && npx jest __tests__/` | 5 failed suites / 30 failed / **445 passed** |
+| Backend | `for t in tests/*.js; do node "$t"; done` | **29 suites, 983 passed, 0 failed** |
+| Frontend | `cd src && npx jest __tests__/` | 5 failed suites / 30 failed / **686 passed** |
 | Build | `cd src && npm run build` | compiles, 2 pre-existing size warnings |
 | Template | `sam validate --lint -t template-clean.yaml` | valid |
 
-Aggregate the backend with `grep -E '^[0-9]+ passed'`, **never** `tail -1`, **and assert the suite count** — a crashed suite prints no result line, so a grep-based aggregate silently drops it and reports "0 failed". Guard:
+Aggregate the backend with `grep -E '^[0-9]+ passed'`, **never** `tail -1`, **and assert the suite count** — a crashed suite prints no result line, so a grep aggregate silently drops it and reports "0 failed". The ten `tests/*.spec.js` files are Playwright and legitimately print no result line. Guard:
 
 ```bash
 for t in tests/*.js; do out=$(node "$t" 2>&1); echo "$out" | grep -qE '^[0-9]+ passed' || echo "NO RESULT LINE: $t"; done
 ```
 
-## Deployment rule — not negotiable
-
-**The pipeline is the only route to dev, test or prod.** Never run `./deployall`, `./scripts/deploy-clean.sh` or any deploy script. The only mechanism is a branch push or a `<tier>-v*` tag.
-
-**Pushing a branch and its tag together fires two executions of the same commit. Push one or the other.** Today's two releases were tag-only; `origin/dev` is therefore behind the local branch while the commit objects are on the remote via the tags.
-
-`CLAUDE.md` reserves deploys to the owner. **Ask before pushing any tier** — past authorisation was per-action, not standing.
-
-The pipeline execution history is the **only** reliable record of what is deployed; tags are not, because a `dev-v*` tag on *any* branch deploys and the pipeline takes whatever arrived last regardless of version ordering:
-
-```bash
-AWS_PROFILE=adminaccess aws codepipeline list-pipeline-executions --pipeline-name engagecicd-pipeline-dev --max-items 5 --query "pipelineExecutionSummaries[].{status:status,rev:sourceRevisions[0].revisionId}" --output table
-```
-
-**Still proposed, agreed in principle, not implemented: go tag-only.** Delete the `- Branches:` entry from all three `Triggers` blocks in `cicd/pipeline-clean.yaml`, keep `- Tags:`. Open question first: how does the `engagecicd` stack itself get deployed? The pipeline-only rule has to survive its own bootstrap.
+The five failing frontend suites are `AdminPage`, `App`, `GameHostPage`, `PlayerPage`, `WebSocketClient`. **Three of them are broken by a harness bug, not obsolete** — see Landmines.
 
 ---
 
 ## Landmines
 
-**Tests that look like coverage and assert nothing.** This is the dominant failure mode in this codebase — not tests that fail, tests that quietly stop asserting. **For every test, name the implementation it would reject. If the answer is "none", say so rather than padding the count.**
+**Tests that look like coverage and assert nothing.** This is the dominant failure mode in this codebase. **For every test, name the implementation it would reject. If the answer is "none", say so rather than padding the count.** Better: break the implementation and watch the test fail. Every stream last session did this, and it caught three tests that asserted nothing — a focus-trap test that passed with the trap deleted (jsdom has no default Tab behaviour), a mount assertion that matched a renamed element, and a source assertion that passed **on a comment**. Run source assertions against comment-stripped code.
 
-Today's review loop caught three defects that every passing suite missed, all three introduced by the *plan* rather than by an implementer:
+**Test the call site, not just the module.** `shortcutsSuppressed()` is the standing example: it is extracted and tested, but deleting an argument from its *call site* reinstates the defect with the whole suite green. `hostOverlays.test.js` now parses the call-site argument object and asserts its contents. Keep that pattern.
 
-- an ARIA `role="button"` does not get keyboard activation for free, so pressing Space on the focused join code **advanced the round**;
-- a same-origin guard written as "reject anything starting `//`" is an **open redirect** — browsers normalise backslashes, so `/\evil.example/steal` passes it;
-- the entire OAuth return-path fix was **dead code**: the destination was computed, logged and discarded because the route always passed an `onSuccess` that hardcoded `/`. Twelve passing tests on the module; nothing tested its only call site.
+**`setupTests.js`'s `window.location` mock is a silent no-op** under jsdom 26 — `delete window.location` returns `false`, so the real `Location` survives and every assignment to `pathname`/`search` is an ignored navigation. It is the root cause of three of the five failing suites. **They are not obsolete; they are broken by a harness bug.** Fixing it is cheap and retires a standing rule — but it moves the frontend baseline, so do it as its own change. Until then, route navigation through `auth/navigate.js`'s `navigateTo` and assert on that.
 
-**Test the call site, not just the module.** All three above were invisible to unit tests of the units involved.
+**jsdom has no layout engine.** Every geometric assertion returns zero and passes unconditionally. Verification is a human in a browser, at the projected size, **varying the configuration and not just the state**.
 
-**`setupTests.js`'s `window.location` mock is a silent no-op** under jsdom 26 — `delete window.location` returns `false`, so the real `Location` survives, every assignment to `pathname`/`search` is an ignored navigation, and each suite emits a jsdom navigation error to its console. It is the **root cause of three of the five "stale" failing frontend suites** (`App`, `GameHostPage`, `PlayerPage`) that this handoff has been telling everyone not to fix. **They are not obsolete; they are broken by a harness bug.** Fixing it is cheap, makes routing testable, and retires a standing rule — but it moves the frontend baseline, so do it as its own change.
-
-**jsdom has no layout engine.** Every geometric assertion returns zero and passes unconditionally. Nothing automated verifies the React app's geometry; verification is a human in a browser, at the projected size. When you verify, **vary the configuration, not just the state** — a walkthrough of every phase once missed a Critical because no measurement was taken with a side panel open.
-
-**`GameHostPage` cannot be rendered in jsdom at all** — it dies on the auth provider. The established workaround is to extract the decision into a pure module and test that (`config/hostControls.js`, `config/anonymity.js`, `utils/hostOverlays.js`, `utils/qrOverlayClassName.js`). Two tests currently assert against `GameHostPage.jsx` **source text**; that technique is anchored between unique markers rather than matched file-wide, but treat it as a last resort.
-
-**Parked, and worth closing in the console work:** `shortcutsSuppressed()` is extracted and tested, but deleting `qrMode` from its *call site* reinstates the defect with the whole suite green. Assert the argument, not just the call.
+**`GameHostPage` cannot be rendered in jsdom at all** — it dies on the auth provider. The workaround that now has three successful precedents: extract the surface into its own component that *can* be rendered (`GameSetupDialog`, `SessionSetupPanel`, `Podium`) and put the decision in a pure module (`config/setupPanel.js`, `config/podium.js`, `config/hostControls.js`).
 
 **`hostControlsFor` rewrites an unrecognised phase to `LOBBY`.** Adding a phase without adding it to `HOST_PHASES` produces something that looks like it works and renders the lobby.
 
-**Pre-existing, unfixed:** `handlePlayerVote` builds `ROUND#` keys unpadded; `message.js` routing makes `handlePlayerMessage`'s `playerVoted` branch unreachable (`isHostMessage` matches `VOTE#` first); the positional ballot is stable only because the answer sort key ends in the author's name; no `reopen-round` endpoint, so a host who advances early cannot recover.
+**The `resultsBeat` reset effect is fragile on purpose and has already cost one live defect.** Any change that moves one of its deps *without the round moving* knocks the stage back to the tally. The server beat is stamped with the game state it was read for and honoured only while they match — do not reduce it to a bare value, and do not add a re-sync to the `stageBeatChanged` handler.
+
+**Do not delete the expanded-lesson modal.** It is the recovery path for a dropped ASK prompt, which the fitter sacrifices on a dense round.
+
+**Pre-existing, unfixed:** `handlePlayerVote` builds `ROUND#` keys unpadded; `message.js` routing makes `handlePlayerMessage`'s `playerVoted` branch unreachable (`isHostMessage` matches `VOTE#` first); the positional ballot is stable only because the answer sort key ends in the author's name; no `reopen-round` endpoint, so a host who advances early cannot recover; `setGameState('voting')` maps to LOBBY, so the host stage renders the lobby for the duration of the `start-vote` round-trip on every call-and-answer round.
 
 **Two `engagetest` migrations are unrun** — `cull-ai-prompts` and `migrate-set-versions`. Order matters and the obvious order destroys data. Both take `AWS_PROFILE=adminaccess node scripts/<name>.js engagetest [--apply]` and are dry-run by default.
 
-**Do not delete the expanded-lesson modal.** Its premise expired: it is the recovery path for a dropped ASK prompt, which the fitter sacrifices on a dense round. Deleting it is a regression, and uncommitted deletions from an earlier session were discarded once already.
-
 **`ArchiveManager.jsx` and `ArchiveSearch.jsx` are dead** — single-line escaped garbage, not valid JS, imported by nothing. Exclude them from sweeps.
+
+**Orphaned CSS remains** after the panel deletion — `.qr-content`, `.qr-controls`, `.host-roster`, `.question-browser-*`, `.questions-table`. Only rules naming removed elements were deleted; `.category-button` and others are shared with `GameSetupDialog` and `PlayerPage`, so a full sweep needs its own change.
+
+**`Unasked only` in the question browser is session-local.** The server tracks used questions by *round number*, never as set-question ids, and `GET /games/{id}` returns a `usedQuestions` array **nothing ever writes** — reading it would report everything unasked. The filter accumulates ids client-side and resets on reload. A durable fix is a backend change.
+
+---
+
+## Owed: a human in a browser
+
+Nothing below can be asserted in jsdom, and none of it has been checked:
+
+- **A dense revealed RESULTS with the podium** — a call-and-answer round now carries three answer cards *and* a podium. `07-results-trivia.html` at 1280×720 already renders `--fit: 0.55` with `data-clamped="on"` **before** any podium, so that is the state most worth measuring.
+- **Contrast at all four display profiles** for the setup panel.
+- **The remote QR scanning at 160–180px** from arm's length, on a real phone camera.
+- **The full auth round-trip on a phone**, both email/password and Google.
+- **A clicker pass** — `Space`/`→` advance and `←` step back with the panel open and closed, since a clicker sends keys with no meaningful `event.target`.
+- **The root page's 404 state** was driven against the live dev API and matches; the 900px breakpoint is guarded only by a CSS-text assertion.
 
 ## Design sets
 
-Serve with `python3 -m http.server 8124 --directory docs/design` (there is a `.claude/launch.json` entry, `all-design-mockups`).
+`python3 -m http.server 8124 --directory docs/design`
 
-`host-redesign/` (21 mockups, the precedent the others follow) · `entry-redesign/` (17) · `admin-redesign/` (22, plus `INVENTORY.md`) · `player-redesign/` (23, the player's own device, which had never been designed).
+`host-redesign/` (21, plus `CRITIQUE.md` and `USER-REVIEWS-2.md` — this set has **no** `RATIONALE.md`) · `entry-redesign/` (17) · `admin-redesign/` (22, plus `INVENTORY.md`) · `player-redesign/` (23).
 
-Each carries a `RATIONALE.md` and an `OPEN-QUESTIONS.md`. The design agents were asked to argue back and did; several of their disagreements were correct and are worth reading before building from them.
+Each of the other three carries `RATIONALE.md` and `OPEN-QUESTIONS.md`. The design agents were asked to argue back and did; several of their disagreements were correct and are worth reading before building from them.
