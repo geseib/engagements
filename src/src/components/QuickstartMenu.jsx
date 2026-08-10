@@ -85,7 +85,9 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
           questionSetId: questionSet.id,
           randomizeQuestions: true,
           selectedCategories: [], // Use all categories
-          triviaTimer: questionSet.engagementType === 'trivia' ? 30 : null
+          // `triviaTimer` used to be sent here. It was deleted: create-game.js:9's
+          // destructure is a whitelist that never named it, nothing anywhere
+          // reads a timer, and no countdown exists on any screen.
           // No `personaId` on purpose. Quickstart's whole premise is zero
           // decisions, and adding a voice picker here would be one more. The
           // set's own persona still applies — resolvePersona() falls through

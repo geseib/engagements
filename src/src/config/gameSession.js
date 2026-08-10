@@ -24,9 +24,15 @@
  *   - navigation/modal flags (showWelcomeScreen, showQuickstartMenu,
  *     showNewGameDialog, showReportsModal) — the caller drives those, and
  *     resetting them here would fight the caller.
- *   - the create dialog's own inputs (engagementType, triviaTimer,
- *     randomizeQuestions, newGameSetId, eventDetails) — they are the form, not
- *     the game.
+ *   - the create dialog's own inputs — they are the form, not the game, and
+ *     since the extraction they live inside components/GameSetupDialog.jsx,
+ *     which unmounts when the dialog closes: engagementType, newGameSetId,
+ *     randomizeQuestions, anonymousResponses, eventDetails, gameAiContext,
+ *     newGamePersonaId. (This list named five and omitted three until the
+ *     extraction. `__tests__/gameSession.test.js` now fails if the dialog owns
+ *     a key this file is responsible for, or owns one this list does not name.
+ *     `triviaTimer` was on the old list and is deleted outright — the backend
+ *     never read it.)
  *   - libraries that are refetched anyway (questionSets, personas).
  *   - the display profile and qrSidebarVisible — room-display preferences. A
  *     host running a projector wants it to stay a projector across games; the

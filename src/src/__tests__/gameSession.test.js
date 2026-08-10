@@ -182,3 +182,39 @@ describe('GameHostPage wiring', () => {
     expect(source).not.toMatch(/const handleNewGame\s*=/);
   });
 });
+
+describe('the setup dialog / game session boundary', () => {
+  const dialog = fs.readFileSync(
+    path.join(__dirname, '..', 'components', 'GameSetupDialog.jsx'), 'utf8'
+  );
+  const dialogOwnedKeys = [...dialog.matchAll(/const \[([A-Za-z0-9_]+),\s*set[A-Za-z0-9_]+\] = useState/g)]
+    .map((m) => m[1]);
+
+  it('finds the dialog\'s own state, so the check below means something', () => {
+    // If the dialog stops using useState this assertion goes quiet and the
+    // disjointness check below becomes vacuously true.
+    expect(dialogOwnedKeys.length).toBeGreaterThanOrEqual(5);
+    expect(dialogOwnedKeys).toContain('engagementType');
+  });
+
+  // THE boundary. resetGameSession() drives every per-game key through
+  // GameHostPage's setter map; a key that moved into the dialog has no setter
+  // there, so leaving a game would silently stop clearing it.
+  // rejects: moving `categories`, `activeCategoryIds`, `eventTitle` or any other
+  // per-game value into the dialog.
+  it('owns nothing that resetGameSession is responsible for', () => {
+    const overlap = dialogOwnedKeys.filter((k) => gameSessionKeys().includes(k));
+    expect(overlap).toEqual([]);
+  });
+
+  // The mirror of the above: gameSession.js's header names the keys it excludes
+  // on purpose, and it named five while omitting three.
+  it('every key the dialog owns is named in gameSession.js\'s exclusion list', () => {
+    const header = fs.readFileSync(
+      path.join(__dirname, '..', 'config', 'gameSession.js'), 'utf8'
+    ).slice(0, 2000);
+    for (const key of dialogOwnedKeys) {
+      expect(header).toContain(key);
+    }
+  });
+});

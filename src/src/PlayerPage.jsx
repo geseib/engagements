@@ -129,6 +129,12 @@ function PlayerPage() {
   const [allPlayers, setAllPlayers] = useState([]);
   const [customInstruction, setCustomInstruction] = useState(null);
   const [setRoundNoun, setSetRoundNoun] = useState(null); // per-set override, e.g. "Lesson"
+  // What the host typed into Event Details at setup. Stored by create-game.js
+  // as `Details` and returned to participants by get-game.js as
+  // `engagementInfo` — and until this existed, read by nothing at all, which
+  // made the setup field's own help text ("shown to participants when they
+  // join") false for the whole life of the field.
+  const [engagementInfo, setEngagementInfo] = useState('');
   const [lastProcessedQuestionId, setLastProcessedQuestionId] = useState(null);
   const [results, setResults] = useState(null);
 
@@ -300,6 +306,35 @@ function PlayerPage() {
     const modeInterval = setInterval(checkWebSocketMode, 1000);
     return () => clearInterval(modeInterval);
   }, [useWebSocket]);
+
+  /**
+   * The host's session brief, fetched once the participant is in.
+   *
+   * `role=player` explicitly: the host view of the same endpoint returns the
+   * access code (get-game.js:79), which is not a participant's to see.
+   *
+   * Every failure is swallowed. The brief is a nicety; being in the room is
+   * not, and a 404 or a flaky network must never take the lobby down with it.
+   */
+  useEffect(() => {
+    if (!joined || !gameId) return undefined;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}games/${gameId}?role=player`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && typeof data.engagementInfo === 'string') {
+          setEngagementInfo(data.engagementInfo);
+        }
+      } catch (error) {
+        console.warn('PLAYER: session details unavailable:', error.message);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [joined, gameId]);
 
   // WebSocket connection effect - only runs when WebSocket is enabled and player has joined
   useEffect(() => {
@@ -1631,6 +1666,16 @@ function PlayerPage() {
               <div className="pulse"></div>
               <span>Ready to play</span>
             </div>
+            {/* The setup screen's Event Details, on the screen it promises them
+                on. Rendered only when there is something to render — the field
+                is optional, and an empty labelled box on every lobby would be
+                worse than the silence it replaces. */}
+            {engagementInfo.trim() && (
+              <div className="session-brief">
+                <h3>About this session</h3>
+                <p>{engagementInfo}</p>
+              </div>
+            )}
           </div>
         )}
 

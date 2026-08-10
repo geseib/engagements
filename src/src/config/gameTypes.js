@@ -138,3 +138,30 @@ export function hasVotePhase(type) {
 
 /** Ordered list for pickers/filters. */
 export const GAME_TYPE_LIST = Object.values(GAME_TYPES);
+
+/**
+ * Types a host may NOT create, and why. One id per reason, so the fix is a
+ * deletion rather than an edit.
+ *
+ * `survey` — `lambda-functions/admin/upload-questions.js:146-157` rejects survey
+ * uploads outright ("surveys cannot be imported as playable question sets until
+ * game sessions support the survey engagement type"). So no survey question set
+ * can exist; the create dialog's set dropdown filters by type, so a Survey
+ * option would open onto a permanently empty list with Create permanently
+ * disabled — a dead end that looks like a feature. When that upload block is
+ * lifted, delete the id from this array and the option appears. Nothing else
+ * changes, because the picker renders from GAME_TYPE_LIST rather than a
+ * hand-written list of its own.
+ */
+export const UNPLAYABLE_GAME_TYPES = ['survey'];
+
+/**
+ * The types the create dialog offers today.
+ *
+ * Derived rather than hand-listed. The shipped <select> named three of five and
+ * its own state comment repeated the omission — a picker that had drifted from
+ * the very table built to stop it drifting.
+ */
+export const PICKER_GAME_TYPES = GAME_TYPE_LIST.filter(
+  (type) => !UNPLAYABLE_GAME_TYPES.includes(type.id)
+);

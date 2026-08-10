@@ -4,7 +4,7 @@ import Icon, { ICONS } from '../components/Icon';
 import RankIcon, { rankLabel } from '../components/RankIcon';
 import StatusMessage from '../components/StatusMessage';
 import { statusTone } from '../utils/statusTone';
-import { GAME_TYPES, GAME_TYPE_LIST, gameTypeMeta, gameTypeLabel, gameTypePromptKey, normalizeGameType, hasVotePhase } from '../config/gameTypes';
+import { GAME_TYPES, GAME_TYPE_LIST, PICKER_GAME_TYPES, UNPLAYABLE_GAME_TYPES, gameTypeMeta, gameTypeLabel, gameTypePromptKey, normalizeGameType, hasVotePhase } from '../config/gameTypes';
 
 describe('Icon', () => {
   it('renders an svg for a known name', () => {
@@ -88,6 +88,41 @@ describe('gameTypes registry', () => {
       expect(type.label).toBeTruthy();
       expect(type.accent).toMatch(/^var\(--/);
     }
+  });
+
+  describe('what the create picker may offer', () => {
+    // rejects: hand-listing the offered types, which is how the shipped
+    // <select> ended up naming three of five and never noticing.
+    it('is the whole registry minus the types that cannot be played', () => {
+      expect(PICKER_GAME_TYPES.map((t) => t.id)).toEqual(
+        GAME_TYPE_LIST.filter((t) => !UNPLAYABLE_GAME_TYPES.includes(t.id)).map((t) => t.id)
+      );
+    });
+
+    // rejects: an exclusion id that does not name a real type — 'surveys',
+    // 'Survey', a stale id — which would silently let the dead pill through.
+    it('every excluded id names a real type', () => {
+      for (const id of UNPLAYABLE_GAME_TYPES) {
+        expect(GAME_TYPES[id]).toBeDefined();
+      }
+    });
+
+    // upload-questions.js:146-157 rejects survey uploads outright, so a Survey
+    // set cannot exist and the pill would be a dead end.
+    it('holds survey, and offers poll', () => {
+      expect(UNPLAYABLE_GAME_TYPES).toContain('survey');
+      expect(PICKER_GAME_TYPES.map((t) => t.id)).toContain('poll');
+      expect(PICKER_GAME_TYPES.map((t) => t.id)).not.toContain('survey');
+    });
+
+    // rejects: rendering a blurb line under the picker for a type that has none,
+    // which would print an empty row.
+    it('every offered type carries a blurb to print under the picker', () => {
+      for (const type of PICKER_GAME_TYPES) {
+        expect(typeof type.blurb).toBe('string');
+        expect(type.blurb.length).toBeGreaterThan(0);
+      }
+    });
   });
 });
 

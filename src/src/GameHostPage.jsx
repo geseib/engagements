@@ -5,10 +5,11 @@ import webSocketClient from './WebSocketClient';
 import MarkdownRenderer from './components/MarkdownRenderer';
 import IssueFab from './components/IssueFab';
 import QuickstartMenu from './components/QuickstartMenu';
+import GameSetupDialog from './components/GameSetupDialog';
 import WavelengthWordCloud from './components/WavelengthWordCloud';
 import Icon from './components/Icon';
 import RankIcon from './components/RankIcon';
-import SetImageBadge, { imageMarkerSuffix } from './components/SetImageBadge';
+import SetImageBadge from './components/SetImageBadge';
 import HostActionBar from './components/HostActionBar';
 import Stage from './components/stage/Stage';
 import Rail from './components/stage/Rail';
@@ -21,7 +22,8 @@ import {
   resolveInstruction, currentQuestionOf, resolveRoundNoun, pluralRoundNoun,
 } from './config/instructions';
 import { resetGameSession } from './config/gameSession';
-import { gameTypeMeta } from './config/gameTypes';
+import { createGameBody } from './config/createGame';
+import { gameTypeMeta, gameTypeLabel } from './config/gameTypes';
 import {
   hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
   stageBeatFromFrame,
@@ -246,26 +248,26 @@ function GameHostPage() {
   // New Game Dialog
   const [showNewGameDialog, setShowNewGameDialog] = useState(false);
   const [showQuickstartMenu, setShowQuickstartMenu] = useState(false);
-  const [newGameSetId, setNewGameSetId] = useState('');
   const [eventTitle, setEventTitle] = useState('');
-  const [eventDetails, setEventDetails] = useState('');
-  const [gameAiContext, setGameAiContext] = useState('');
-  const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer', 'trivia', or 'wavelength'
-  const [triviaTimer, setTriviaTimer] = useState(30); // Timer for trivia questions in seconds
-  const [randomizeQuestions, setRandomizeQuestions] = useState(true); // Default ON - randomize question order
-  const [anonymousResponses, setAnonymousResponses] = useState(true); // Default ON - hide authorship until the round reveals
+
+  // EVERY OTHER FIELD ON THE CREATE SCREEN LIVES IN <GameSetupDialog>.
+  // `eventTitle` stays because it is not only the form's — it is a per-game key
+  // (config/gameSession.js) that the live host screen reads and that
+  // resetGameSession() clears.
+  //
+  // `triviaTimer` used to live here too. It was deleted: create-game.js:9's
+  // destructure is a whitelist that never named it, nothing in the product
+  // reads a timer, and there is no countdown on any screen. The control did
+  // nothing and its help text promised players thirty seconds they never got.
 
   // Workie's voice. '' means "adapt to the session" — the designed default, and
   // deliberately NOT the legacy prompt template's baked-in persona. See
   // docs/superpowers/specs/2026-08-07-workie-personas-design.md.
   // Two lists, because the two pickers are filtered by different game types.
-  // `engagementType` is the create dialog's choice; `currentGameType` is loaded
-  // from the game's own metadata when a session is resumed and the two do
-  // diverge — resuming a trivia game leaves `engagementType` on whatever the
-  // dialog last held.
+  // The create dialog owns its own choice; `currentGameType` is loaded from the
+  // game's own metadata when a session is resumed.
   const [personas, setPersonas] = useState([]);           // create dialog
   const [gamePersonas, setGamePersonas] = useState([]);   // live game
-  const [newGamePersonaId, setNewGamePersonaId] = useState('');
   const [gamePersonaId, setGamePersonaId] = useState('');       // the live game's voice
   const [personaSwitchStatus, setPersonaSwitchStatus] = useState('');
 
@@ -647,11 +649,10 @@ function GameHostPage() {
     }
   };
 
-  useEffect(() => {
-    fetchPersonas(engagementType, setPersonas);
-    // A voice that no longer suits the newly-chosen type must not stay selected.
-    setNewGamePersonaId((current) => (current ? '' : current));
-  }, [engagementType]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The create dialog owns its own format choice, so it tells us when to
+  // reload the voices it may offer. (Clearing a now-unsuitable selection is the
+  // dialog's own business and happens there.)
+  const handleSetupFormatChange = (gameType) => fetchPersonas(gameType, setPersonas);
 
   useEffect(() => {
     fetchPersonas(currentGameType, setGamePersonas);
@@ -1737,6 +1738,23 @@ Focus on actionable business strategy insights.`;
     }
   };
 
+  /**
+   * The create dialog picked (or cleared) a question set.
+   *
+   * The set id itself is the dialog's; what it hangs off — the category list,
+   * the selection, the set's custom instruction — are per-game values this page
+   * owns, so loading them stays here. Clearing goes through the same path so a
+   * format switch cannot leave the previous set's categories on screen.
+   */
+  const handleSetupSetChange = (setId) => {
+    fetchCategories(setId);
+    if (setId) {
+      fetchQuestionSetInstruction(setId);
+    } else {
+      setCustomInstruction(null);
+    }
+  };
+
   // Convert bitmask back to selected category names
   const convertBitmaskToCategories = (categoryState, allCategories) => {
     const selectedCategories = [];
@@ -2727,8 +2745,17 @@ Focus on actionable business strategy insights.`;
     });
   };
 
-  const handleStartNewGame = async () => {
-    if (!newGameSetId || !eventTitle.trim()) {
+  /**
+   * Create the engagement <GameSetupDialog> just described.
+   *
+   * `form` is the dialog's whole payload — title, format, set, the selected
+   * CATEGORY IDS, details, AI context, persona, shuffle and anonymity. Taking
+   * the ids in the argument is what removed this function's dependency on
+   * closure timing: `leaveCurrentGame()` below clears `activeCategoryIds`, and
+   * the create call used to read them back out of the pre-reset closure.
+   */
+  const handleStartNewGame = async (form) => {
+    if (!form?.setId || !form.title?.trim()) {
       alert('Please select a question set and enter an event title.');
       return;
     }
@@ -2765,44 +2792,29 @@ Focus on actionable business strategy insights.`;
     // panel" failure. One list now, in config/gameSession.js.
     //
     // `eventTitle` is carried through as an override because on this path it is
-    // also the create dialog's own input, which the host has just typed.
-    // `activeCategoryIds` is read from this closure below (pre-reset), so the
-    // categories the host picked still reach the create call.
+    // also the create dialog's own input, which the host has just typed. The
+    // categories are already in `form`, so nothing here has to be read back out
+    // of a closure that this call is about to invalidate.
     leaveCurrentGame({
-      eventTitle,
-      currentGameType: engagementType,
-      selectedSetId: newGameSetId,
+      eventTitle: form.title,
+      currentGameType: form.gameType,
+      selectedSetId: form.setId,
       // Also an override rather than a post-reset setAnonymousUntilReveal:
       // the create call below sends this same value, so seeding it here
       // means the host screen never shows the (safe-default) previous
       // game's flag for the moment before the create response returns.
-      anonymousUntilReveal: createPayloadFor({ gameType: engagementType, anonymousResponses }).anonymousUntilReveal,
+      anonymousUntilReveal: createPayloadFor({
+        gameType: form.gameType, anonymousResponses: form.anonymousResponses,
+      }).anonymousUntilReveal,
     });
-    fetchQuestionSetInstruction(newGameSetId);
+    fetchQuestionSetInstruction(form.setId);
 
     // Create the game directly with the backend API
     try {
-      // Convert activeCategoryIds Set to array for selectedCategories
-      const selectedCategories = Array.from(activeCategoryIds);
-      
       const createResponse = await fetch(`${API_BASE}games`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eventTitle: eventTitle,
-          engagementInfo: eventDetails || null,
-          aiContext: gameAiContext || null,
-          gameType: engagementType,
-          questionSetId: newGameSetId,
-          randomizeQuestions: randomizeQuestions,
-          selectedCategories: selectedCategories,
-          triviaTimer: engagementType === 'trivia' ? triviaTimer : null,
-          // '' means "adapt to the session". create-game.js only stores
-          // PersonaId when this is non-empty.
-          personaId: newGamePersonaId || '',
-          hostName: 'Host',
-          ...createPayloadFor({ gameType: engagementType, anonymousResponses }),
-        })
+        body: JSON.stringify(createGameBody(form))
       });
 
       if (createResponse.ok) {
@@ -2815,17 +2827,17 @@ Focus on actionable business strategy insights.`;
         console.log(`🎯 HOST: IMPORTANT - We should now see the game history modal instead of going to game screen`);
         
         // Store event title in localStorage as backup
-        localStorage.setItem(`game_${newGameId}_title`, eventTitle);
-        
+        localStorage.setItem(`game_${newGameId}_title`, form.title);
+
         // Close new game dialog
         setShowNewGameDialog(false);
-        
+
         // Show game history with the new game highlighted
         await fetchGamesList();
         setReportsModalMode('select');
         setShowReportsModal(true);
-        
-        console.log(`🎯 HOST: New game created with ID ${newGameId}, set "${newGameSetId}", title "${eventTitle}" - showing in history`);
+
+        console.log(`🎯 HOST: New game created with ID ${newGameId}, set "${form.setId}", title "${form.title}" - showing in history`);
       } else {
         const errorData = await createResponse.json();
         console.error(`❌ HOST: Failed to create game:`, errorData);
@@ -2838,14 +2850,12 @@ Focus on actionable business strategy insights.`;
       return;
     }
     
-    console.log(`🎯 HOST: New game started with set "${newGameSetId}", title "${eventTitle}", and AI context: ${gameAiContext ? 'provided' : 'none'}`);
-    
+    console.log(`🎯 HOST: New game started with set "${form.setId}", title "${form.title}", and AI context: ${form.aiContext ? 'provided' : 'none'}`);
+
     // Carry the chosen voice into the live game so the in-game picker opens on
-    // it, then reset the dialog's own fields for the next engagement.
-    setGamePersonaId(newGamePersonaId || '');
+    // it. The dialog's own fields need no clearing: closing it unmounts it.
+    setGamePersonaId(form.personaId || '');
     setPersonaSwitchStatus('');
-    setGameAiContext('');
-    setNewGamePersonaId('');
   };
 
   const updateGameTitle = async (gameId, title) => {
@@ -2868,7 +2878,13 @@ Focus on actionable business strategy insights.`;
       return;
     }
 
-    const gameUrl = `https://eng.dev.seibtribe.us/play?gameId=${gameId}`;
+    // Derived, never hardcoded. This read `https://eng.dev.seibtribe.us` — a
+    // single environment, and the off-pipeline one being retired — so a host
+    // running a PROD session copied an invitation that sent the whole room to
+    // dev. Every other url on this page is already built this way (`playUrl`,
+    // `joinDisplayUrl`, `remoteUrl`); this one was missed because it is a
+    // string in a template rather than a value anything renders.
+    const gameUrl = `${window.location.origin}/play?gameId=${gameId}`;
     const questionSet = questionSets.find(set => set.id === selectedSetId);
     
     // Get selected categories text
@@ -2884,12 +2900,9 @@ ${eventTitle}
 You're invited to participate in an interactive engagement session!
 
 DETAILS:
-• Type: ${engagementType === 'call-and-answer' ? 'Call and Answer (Discussion + Voting)' : 
-                engagementType === 'trivia' ? 'Trivia (Questions Only)' : 
-                'Wavelength (Word Association & Alignment)'}
+• Type: ${gameTypeLabel(currentGameType)} — ${gameTypeMeta(currentGameType).blurb}
 • Question Set: ${questionSet?.name || questionSet?.title || 'Unknown Set'}
 • Categories: ${catText}
-${gameAiContext ? `• Context: ${gameAiContext}` : ''}
 
 TO JOIN:
 Click this link or copy it to your browser:
@@ -3408,236 +3421,31 @@ Ready to engage? See you there!`;
     );
   }
 
-  // Render the new game dialog if it's being shown
+  // THE CREATE SCREEN. Extracted to components/GameSetupDialog.jsx: it owns
+  // the form and nothing else, and hands back one payload — including the
+  // selected category ids, which is what freed handleStartNewGame from reading
+  // them out of a closure leaveCurrentGame() had already invalidated.
   if (showNewGameDialog) {
     return (
-      <div className="new-game-overlay">
-        <div className="new-game-dialog">
-          <h2>{isLobbyState(gameState) && lessonNumber === 0 ? 'Create Engagement' : 'Start New Game'}</h2>
-          <div className="dialog-content">
-            <div className="form-group">
-              <label>Event Title:</label>
-              <input
-                type="text"
-                value={eventTitle}
-                onChange={(e) => setEventTitle(e.target.value)}
-                placeholder="Enter event title (e.g., Team Leadership Workshop)"
-                className="dialog-input"
-              />
-            </div>
-            
-            <div className="form-group">
-              <label>Event Details (Optional):</label>
-              <textarea
-                value={eventDetails}
-                onChange={(e) => setEventDetails(e.target.value)}
-                placeholder="Describe the session details, purpose, or context that will be visible to participants (e.g., 'This workshop focuses on improving team collaboration and communication skills')"
-                className="dialog-textarea"
-                rows="2"
-                maxLength="300"
-              />
-              <small className="dialog-help-text">
-                This information will be shown to participants when they join. {eventDetails.length}/300 characters
-              </small>
-            </div>
-            
-            <div className="form-group">
-              <label>Engagement Type:</label>
-              <select 
-                value={engagementType} 
-                onChange={(e) => {
-                  setEngagementType(e.target.value);
-                  setNewGameSetId(''); // Reset selected set when type changes
-                }}
-                className="dialog-select"
-              >
-                <option value="call-and-answer">Call and Answer</option>
-                <option value="trivia">Trivia</option>
-                <option value="wavelength">Wavelength</option>
-              </select>
-            </div>
-            
-            <div className="form-group">
-              <label>Question Set:</label>
-              <select 
-                value={newGameSetId} 
-                onChange={(e) => {
-                  setNewGameSetId(e.target.value);
-                  if (e.target.value) {
-                    fetchCategories(e.target.value);
-                    fetchQuestionSetInstruction(e.target.value);
-                  } else {
-                    setCustomInstruction(null);
-                  }
-                }}
-                className="dialog-select"
-              >
-                <option value="">Select a question set...</option>
-                {questionSets
-                  .filter(set => set.engagementType === engagementType)
-                  .map(set => (
-                    <option key={set.id} value={set.id}>
-                      {set.name} ({set.totalQuestions} questions){imageMarkerSuffix(set.hasImages)}
-                    </option>
-                  ))}
-              </select>
-            </div>
-            
-            {newGameSetId && (
-              <div className="form-group">
-                <label>Categories:</label>
-                <div className="category-selection">
-                  <div className="category-button-grid">
-                    {categories.map(category => (
-                      <button
-                        key={category.name}
-                        type="button"
-                        className={`category-button ${activeCategoryIds.has(category.name) ? 'selected' : ''}`}
-                        onClick={() => toggleCategoryActive(category.name)}
-                      >
-                        <span className="category-name">{category.name}</span>
-                        <span className="category-count">({category.questionCount})</span>
-                      </button>
-                    ))}
-                  </div>
-                  <small>
-                    {activeCategoryIds.size === 0 
-                      ? 'No categories selected - all categories will be included'
-                      : `${activeCategoryIds.size} category(ies) selected`
-                    }
-                  </small>
-                </div>
-              </div>
-            )}
-            
-            {engagementType === 'trivia' && (
-              <div className="form-group">
-                <label>Timer (seconds per question):</label>
-                <input
-                  type="number"
-                  value={triviaTimer}
-                  onChange={(e) => setTriviaTimer(Math.max(10, Math.min(300, parseInt(e.target.value) || 30)))}
-                  min="10"
-                  max="300"
-                  step="10"
-                  className="dialog-input"
-                />
-                <small className="dialog-help-text">
-                  Players will have {triviaTimer} seconds to answer each question.
-                </small>
-              </div>
-            )}
-
-            <div className="form-group">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={randomizeQuestions}
-                  onChange={(e) => setRandomizeQuestions(e.target.checked)}
-                  className="dialog-checkbox"
-                />
-                Randomize Question Order
-              </label>
-              <small className="dialog-help-text">
-                {randomizeQuestions
-                  ? "Questions will be selected randomly from available categories"
-                  : "Questions will be asked in order, completing each category before moving to the next"
-                }
-              </small>
-            </div>
-
-            {/* Checked against `engagementType` — this dialog's own type
-                picker — not `currentGameType`, which still names whatever
-                game is on screen until this new one is created. */}
-            {anonymityApplies(engagementType) && (
-              <div className="setup-section">
-                <h3>Responses</h3>
-                <label className="setup-toggle">
-                  <input
-                    type="checkbox"
-                    checked={anonymousResponses}
-                    onChange={(e) => setAnonymousResponses(e.target.checked)}
-                  />
-                  <span className="setup-toggle-label">Anonymous responses</span>
-                </label>
-                {/* Default ON, so this copy has to make an ALREADY-ACTIVE guarantee legible
-                    to a host who never touches it. The second clause is the surprising one,
-                    so it is stated rather than implied. */}
-                <p className="setup-help">
-                  Until voting closes, nobody sees who wrote which answer — not the room,
-                  not you. The room votes on the answers, not on the people.
-                </p>
-                <p className="setup-help setup-help--muted">
-                  {anonymousResponses
-                    ? 'This hides names, not identities. In a small group, people may still recognise each other’s answers.'
-                    : 'Every answer is labelled with its author from the moment voting opens.'}
-                </p>
-              </div>
-            )}
-
-            <div className="form-group">
-              <label>AI Context (Optional):</label>
-              <textarea
-                value={gameAiContext}
-                onChange={(e) => setGameAiContext(e.target.value)}
-                placeholder="Describe your project, team context, or goals to help AI provide more relevant analysis (e.g., 'Building a new application to support engineering learning' or 'Team working on improving collaboration and communication')"
-                className="dialog-textarea"
-                rows="3"
-                maxLength="500"
-              />
-              <small className="dialog-help-text">
-                This helps AI provide more contextual analysis during the session. {gameAiContext.length}/500 characters
-              </small>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="new-game-persona">Workie's Voice (Optional):</label>
-              <select
-                id="new-game-persona"
-                value={newGamePersonaId}
-                onChange={(e) => setNewGamePersonaId(e.target.value)}
-                className="dialog-select"
-              >
-                {/* Adapting to the session is the designed default, not a
-                    fallback — a fixed persona is what made Workie refuse a
-                    holiday icebreaker as "insufficient for business analysis". */}
-                <option value="">Adapt to the session (recommended)</option>
-                {personas.map((persona) => (
-                  <option key={persona.personaId} value={persona.personaId}>
-                    {persona.name}{persona.tagline ? ` — ${persona.tagline}` : ''}
-                  </option>
-                ))}
-              </select>
-              <small className="dialog-help-text">
-                {newGamePersonaId
-                  ? 'Workie will keep this voice for the whole session. You can change it mid-game.'
-                  : 'Workie reads the room and picks its own register — playful for an icebreaker, analytical for a retro.'}
-              </small>
-            </div>
-          </div>
-
-          <div className="dialog-actions">
-            <button 
-              className="btn-secondary" 
-              onClick={() => {
-                setShowNewGameDialog(false);
-                if (isLobbyState(gameState) && lessonNumber === 0) {
-                  setShowWelcomeScreen(true);
-                }
-              }}
-            >
-              Cancel
-            </button>
-            <button 
-              className="btn-primary" 
-              onClick={handleStartNewGame}
-              disabled={!newGameSetId || !eventTitle.trim()}
-            >
-              Create Engagement
-            </button>
-          </div>
-        </div>
-      </div>
+      <GameSetupDialog
+        isFirstEngagement={isLobbyState(gameState) && lessonNumber === 0}
+        eventTitle={eventTitle}
+        onEventTitleChange={setEventTitle}
+        questionSets={questionSets}
+        personas={personas}
+        categories={categories}
+        activeCategoryIds={activeCategoryIds}
+        onToggleCategory={toggleCategoryActive}
+        onFormatChange={handleSetupFormatChange}
+        onQuestionSetChange={handleSetupSetChange}
+        onCancel={() => {
+          setShowNewGameDialog(false);
+          if (isLobbyState(gameState) && lessonNumber === 0) {
+            setShowWelcomeScreen(true);
+          }
+        }}
+        onCreate={handleStartNewGame}
+      />
     );
   }
 
