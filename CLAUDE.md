@@ -4,6 +4,15 @@
 **ALWAYS LET USER DEPLOY - NEVER AUTO-DEPLOY OR SUGGEST DEPLOYMENT**
 User handles all deployments manually. Claude should never attempt to deploy.
 
+**What counts as a deploy, as of 2026-08-10: pushing a `<tier>-v*` tag. That is the only
+thing that reaches an environment.** The pipelines are tag-triggered only
+(`cicd/pipeline-clean.yaml`), so `git push origin dev` is now just a push. It used to deploy —
+each `Triggers` block carried a `- Branches:` entry — and any older instruction saying a branch
+merge auto-deploys is stale.
+
+Never run `./deployall`, `./scripts/deploy-clean.sh` or `./scripts/deploy-frontend-eng.sh`. They
+target the off-pipeline `engdev` stack, not the CI/CD tiers.
+
 ## Project Overview
 Real-time engagement platform for strategic thinking sessions with AWS serverless architecture.
 
@@ -11,13 +20,23 @@ Real-time engagement platform for strategic thinking sessions with AWS serverles
 - **Frontend**: React, WebSockets, QR codes
 - **Backend**: AWS Lambda (Node.js), DynamoDB, API Gateway, WebSocket API
 - **Infrastructure**: SAM (Serverless Application Model), CloudFormation
-- **Deployment**: Custom scripts + GitHub branch-based CI/CD
+- **Deployment**: CodePipeline per tier, **triggered by git tags only**
 
 ## Deployment Strategy
-- **Dev**: Manual deployment via `./deployall` or individual scripts
-- **Test**: Auto-deploy on merge to `test` branch
-- **Prod**: Auto-deploy on merge to `prod` branch
-- **Flow**: `main` → `test` → `prod`
+Three CodePipelines, one per tier, each started by **one thing: a tag**. A branch push shares
+code and deploys nothing. See `DEPLOYMENT.md` for the full picture.
+
+| Tier | Stack | Trigger | Gate |
+|---|---|---|---|
+| **dev** | `engagedev` | `dev-v*` tag | none — deploys immediately |
+| **test** | `engagetest` | `test-v*` tag | none — deploys immediately |
+| **prod** | `engageprod` | `prod-v*` tag | halts at `ApprovalForProd` until a human approves |
+
+- **Flow**: `dev` → `test` → `prod`
+- `main` triggers nothing and has no pipeline attached.
+- The `engagecicd` stack itself is **not** deployed by any pipeline — it is applied by hand with
+  `aws cloudformation deploy --template-file cicd/pipeline-clean.yaml --stack-name engagecicd`.
+- The `eng*` / `engdev` stacks are an off-pipeline duplicate being retired. Not a CI/CD tier.
 
 ## Architecture Overview
 

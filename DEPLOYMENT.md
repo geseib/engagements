@@ -63,15 +63,31 @@ There is **one** infrastructure template — `template-clean.yaml` — parameter
 
 ## CI/CD — what triggers a deploy
 
-Each tier has its own CodePipeline, and **two** triggers start it: a push to the tier's branch,
-**or** a push of a tag matching the tier's pattern. Either one is sufficient. `main` is not a
-trigger for anything.
+Each tier has its own CodePipeline, and **exactly one thing starts it: a tag.** A branch push
+does not deploy. `main` is not a trigger for anything.
 
 ```
-push origin dev    OR  push tag dev-v*    → engagecicd-pipeline-dev   → engagedev   (auto)
-push origin test   OR  push tag test-v*   → engagecicd-pipeline-test  → engagetest  (auto)
-push origin prod   OR  push tag prod-v*   → engagecicd-pipeline-prod  → engageprod  (MANUAL APPROVAL)
+push tag dev-v*    → engagecicd-pipeline-dev   → engagedev   (auto)
+push tag test-v*   → engagecicd-pipeline-test  → engagetest  (auto)
+push tag prod-v*   → engagecicd-pipeline-prod  → engageprod  (MANUAL APPROVAL)
 ```
+
+**This changed on 2026-08-10.** Each `Triggers` block also carried a `- Branches:` entry, so
+`git push origin dev` deployed on its own. Three things were wrong with that:
+
+- Pushing and deploying were the same act, so there was no way to share work, back it up or open
+  it for review without shipping it. Branches got held back for days to avoid deploying, which
+  then blocked every unrelated fix sitting on them.
+- Pushing a branch *and* its tag fired **two executions of the same commit**, racing into the
+  same stack.
+- A deploy now has a name. `dev-v1.3.0` is something you can point at in the execution history;
+  "whatever was on `dev` at 14:02" is not.
+
+So pushing a branch is now just pushing. **Nothing reaches an environment without a tag.**
+
+> `BranchName` in each pipeline's Source action is **not** a trigger. It is the revision a
+> manually-started execution ("Release change" in the console) pulls; a tag-started execution
+> carries its own commit.
 
 Source access is via the `engage-github-connection` CodeStar connection and its managed webhook.
 There are no GitHub Actions workflows and no `AWS::CodePipeline::Webhook` resources in this repo.
@@ -81,16 +97,14 @@ There are no GitHub Actions workflows and no `AWS::CodePipeline::Webhook` resour
 The older wording here ("deployments are performed by the maintainer, never automatically") was
 misleading. Precisely:
 
-- **Automatic, no human gate:** dev and test. The instant `dev`/`test` is pushed, or a `dev-v*` /
-  `test-v*` tag is pushed, CodeBuild runs `sam deploy` against `engagedev` / `engagetest`. Nobody
-  approves anything.
-- **Automatic start, human gate before deploy:** prod. A `prod` branch push or a `prod-v*` tag
-  starts `engagecicd-pipeline-prod`, which halts at the `ApprovalForProd` stage. Nothing reaches
-  `engageprod` until a human clicks Approve in the CodePipeline console. Tags do **not** bypass
-  this.
+- **Automatic, no human gate:** dev and test. The instant a `dev-v*` / `test-v*` tag is pushed,
+  CodeBuild runs `sam deploy` against `engagedev` / `engagetest`. Nobody approves anything.
+- **Automatic start, human gate before deploy:** prod. A `prod-v*` tag starts
+  `engagecicd-pipeline-prod`, which halts at the `ApprovalForProd` stage. Nothing reaches
+  `engageprod` until a human clicks Approve in the CodePipeline console.
 
-The maintainer-only policy is about **which refs get pushed**, not about the pipeline. Pushing
-`test`/`prod` or a `*-v*` tag *is* the deploy. Treat those pushes as production actions.
+The maintainer-only policy is about **which tags get pushed**, not about the pipeline. Pushing a
+`*-v*` tag *is* the deploy. Treat it as a production action. Pushing a branch is not.
 
 ### Tag-based releases
 

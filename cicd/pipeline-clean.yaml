@@ -298,24 +298,40 @@ Resources:
     Properties:
       Name: !Sub '${ProjectName}cicd-pipeline-dev'
       RoleArn: !GetAtt CodePipelineServiceRole.Arn
-      # V2 is required for Triggers (Git tag filtering). See the note below on
-      # why the branch filter has to be restated once Triggers is present.
+      # V2 is required for Triggers (Git tag filtering).
       PipelineType: V2
       Triggers:
+        # ─────────────────────────────────────────────────────────────────
+        # TAGS ONLY. A BRANCH PUSH IS NOT A DEPLOY.
+        #
+        # This block used to carry a `- Branches: [dev]` entry beside the tag
+        # one, which meant `git push origin dev` deployed on its own. That is
+        # the behaviour being removed, deliberately, for three reasons:
+        #
+        #   1. Pushing and deploying were the same act, so there was no way to
+        #      share work, back it up, or open it for review without shipping
+        #      it. Branches were held back for days to avoid deploying, which
+        #      then blocked every unrelated fix sitting on them.
+        #   2. Pushing a branch and its tag together fired TWO executions of
+        #      the same commit, racing each other into the same stack.
+        #   3. A deploy now has a name. `dev-v1.3.0` is a thing you can point
+        #      at in the execution history; "whatever was on dev at 14:02" is
+        #      not.
+        #
+        # "When a trigger configuration is specified, default change detection
+        # for repository and branch commits is disabled."
+        # (AWS::CodePipeline::Pipeline Triggers docs.) So this block is the
+        # ONLY thing that starts this pipeline — with no Branches entry,
+        # nothing about a plain push reaches it.
+        #
+        # `BranchName` in the Source action below is NOT a trigger. It is the
+        # revision a manually-started execution pulls; a tag-started one
+        # carries its own commit.
+        # ─────────────────────────────────────────────────────────────────
         - ProviderType: CodeStarSourceConnection
           GitConfiguration:
             SourceActionName: SourceAction
             Push:
-              # IMPORTANT: "When a trigger configuration is specified, default
-              # change detection for repository and branch commits is disabled."
-              # (AWS::CodePipeline::Pipeline Triggers docs.) The branch filter
-              # below is what keeps `git push origin dev` deploying.
-              - Branches:
-                  Includes:
-                    - dev
-              # Tags must be a SEPARATE Push entry. Tags and Branches inside one
-              # entry are ANDed, which would require a tag push that also lands
-              # on the branch. Two entries are ORed, which is what we want.
               - Tags:
                   Includes:
                     - dev-v*
@@ -366,10 +382,8 @@ Resources:
           GitConfiguration:
             SourceActionName: SourceAction
             Push:
-              # Restates the default branch trigger, which Triggers disables.
-              - Branches:
-                  Includes:
-                    - test
+              # TAGS ONLY — see the DevPipeline block for the full reasoning.
+              # `git push origin test` does not deploy; `test-v*` does.
               - Tags:
                   Includes:
                     - test-v*
@@ -420,12 +434,13 @@ Resources:
           GitConfiguration:
             SourceActionName: SourceAction
             Push:
-              # Restates the default branch trigger, which Triggers disables.
-              - Branches:
-                  Includes:
-                    - prod
+              # TAGS ONLY — see the DevPipeline block for the full reasoning.
+              # `git push origin prod` does not deploy; `prod-v*` does.
+              #
               # A prod-v* tag starts the pipeline but still lands on the
-              # ApprovalForProd stage below - it does not bypass approval.
+              # ApprovalForProd stage below - it does not bypass approval. Tags
+              # only makes that gate stronger, not weaker: nothing reaches the
+              # approval stage now except a commit somebody deliberately named.
               - Tags:
                   Includes:
                     - prod-v*

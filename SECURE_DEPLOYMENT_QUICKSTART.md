@@ -35,20 +35,24 @@ git add buildspec.yml && git commit -m "Use secure buildspec" && git push
 
 ## 🚀 Daily Operations
 
+> **A branch push does NOT deploy** (changed 2026-08-10 — the pipelines are tag-triggered only).
+> Pushing the branch shares the code; pushing the tag ships it. See `DEPLOYMENT.md`.
+
 ### Deploy to Test
 ```bash
 git checkout test
 git merge main
-git push origin test
-# Pipeline runs automatically with secure token retrieval
+git push origin test                              # shares it — deploys nothing
+git tag test-v1.3.0 && git push origin test-v1.3.0  # this is the deploy
 ```
 
 ### Deploy to Prod
 ```bash
 git checkout prod  
 git merge test
-git push origin prod
-# Pipeline runs automatically with secure token retrieval
+git push origin prod                              # shares it — deploys nothing
+git tag prod-v1.3.0 && git push origin prod-v1.3.0  # starts the pipeline
+# then approve at the ApprovalForProd stage in the CodePipeline console
 ```
 
 ### Verify Deployment

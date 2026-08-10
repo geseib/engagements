@@ -108,13 +108,17 @@ git push origin main
 
 Once configured, deployments are automatic:
 
+> **A branch push does NOT deploy** (changed 2026-08-10 — the pipelines are tag-triggered only).
+> The tag is the deploy. See `DEPLOYMENT.md`.
+
 1. **Test Environment:**
    ```bash
    git checkout test
    git merge main
    git push origin test
+   git tag test-v1.3.0 && git push origin test-v1.3.0
    ```
-   - Pipeline triggers automatically
+   - The **tag** triggers the pipeline; the branch push does not
    - CodeBuild retrieves token from Secrets Manager
    - Deploys to test environment
 
@@ -123,10 +127,11 @@ Once configured, deployments are automatic:
    git checkout prod
    git merge test
    git push origin prod
+   git tag prod-v1.3.0 && git push origin prod-v1.3.0
    ```
-   - Pipeline triggers automatically
+   - The **tag** starts the pipeline, which halts at `ApprovalForProd`
    - CodeBuild retrieves token from Secrets Manager
-   - Deploys to production environment
+   - Nothing reaches production until a human approves in the console
 
 ### Manual Testing
 
