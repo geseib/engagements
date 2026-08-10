@@ -1,76 +1,87 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
+import { passwordMeetsPolicy } from './passwordPolicy';
+import PasswordField from './PasswordField';
+import { AlertIcon, CheckIcon } from './AuthChrome';
 import './auth.css';
-import Icon from '../components/Icon';
 
-// Two-step self-service password reset:
-//   1. "request" — enter email, Cognito emails a 6-digit code
-//   2. "reset"   — enter code + new password, Cognito sets the new password
+/**
+ * Password reset. Built from docs/design/entry-redesign/14-forgot.html, which
+ * draws four moments. THE THIRD ONE DID NOT EXIST: this form used to call
+ * `onToggleMode('login')` on success, so the user landed on the sign-in form
+ * with no confirmation that anything had happened. It is a state now.
+ *
+ * THE COPY IN STEP 2 IS A SECURITY FIX, NOT A TONE CHANGE. AuthContext used to
+ * map `UserNotFoundException` to "No account found with this email address." at
+ * an unauthenticated endpoint -- an account-enumeration oracle: type an address,
+ * learn whether it has an account here. The mapping is gone (see AuthContext),
+ * and this screen now answers the same way whichever it was:
+ *
+ *     "If there is an account for <address>, a code is on its way."
+ *
+ * That sentence is only honest if the form ALSO advances to step 2 when Cognito
+ * says the user does not exist, which is why `handleRequest` treats that one
+ * code as success. Advancing on every error would be wrong -- a rate-limit or a
+ * Google-only account are real failures with real remedies, and both still stop
+ * here and say so. (RATIONALE.md §8.4.)
+ */
 const ForgotPasswordForm = ({ onToggleMode, initialEmail = '' }) => {
-  const [step, setStep] = useState('request');
-  const [formData, setFormData] = useState({
-    email: initialEmail,
-    code: '',
-    newPassword: '',
-    confirmNewPassword: '',
-  });
+  const [step, setStep] = useState('request'); // request | reset | done
+  const [form, setForm] = useState({ email: initialEmail, code: '', password: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationErrors, setValidationErrors] = useState({});
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const { forgotPassword, confirmPassword, error, setError } = useAuth();
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    const nextValue = name === 'code' ? value.replace(/\D/g, '').slice(0, 6) : value;
-    setFormData((prev) => ({ ...prev, [name]: nextValue }));
-    if (validationErrors[name]) {
-      setValidationErrors((prev) => ({ ...prev, [name]: '' }));
-    }
+  const change = (key) => (event) => {
+    const raw = event.target.value;
+    const value = key === 'code' ? raw.replace(/\D/g, '').slice(0, 6) : raw;
+    setForm((prev) => ({ ...prev, [key]: value }));
+    if (fieldErrors[key]) setFieldErrors((prev) => ({ ...prev, [key]: '' }));
     if (error) setError(null);
   };
 
-  const passwordIsStrong = (pw) =>
-    pw.length >= 8 && /[A-Z]/.test(pw) && /[a-z]/.test(pw) && /\d/.test(pw) && /[^A-Za-z0-9]/.test(pw);
-
-  const handleRequest = async (e) => {
-    e.preventDefault();
+  const handleRequest = async (event) => {
+    event.preventDefault();
     const errors = {};
-    if (!formData.email.trim()) errors.email = 'Email is required';
-    else if (!/\S+@\S+\.\S+/.test(formData.email)) errors.email = 'Please enter a valid email address';
-    setValidationErrors(errors);
+    if (!form.email.trim()) errors.email = 'We need an email address.';
+    else if (!/\S+@\S+\.\S+/.test(form.email)) errors.email = 'That does not look like an email address.';
+    setFieldErrors(errors);
     if (Object.keys(errors).length) return;
 
     setIsSubmitting(true);
     try {
-      await forgotPassword(formData.email.trim());
+      await forgotPassword(form.email.trim());
       setStep('reset');
     } catch (err) {
-      // error surfaced via AuthContext
+      // "No such user" must be indistinguishable from "code sent", or the
+      // screen is the oracle the AuthContext mapping used to be.
+      if (err && err.code === 'UserNotFoundException') {
+        setError(null);
+        setStep('reset');
+      }
+      /* every other failure stays here and is shown */
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleReset = async (e) => {
-    e.preventDefault();
+  const handleReset = async (event) => {
+    event.preventDefault();
     const errors = {};
-    if (formData.code.length !== 6) errors.code = 'Enter the 6-digit code from your email';
-    if (!passwordIsStrong(formData.newPassword)) {
-      errors.newPassword = 'At least 8 chars with uppercase, lowercase, number, and symbol';
+    if (form.code.length !== 6) errors.code = 'The code from the email is 6 digits.';
+    if (!passwordMeetsPolicy(form.password)) {
+      errors.password = 'Your password does not meet all five rules yet.';
     }
-    if (formData.newPassword !== formData.confirmNewPassword) {
-      errors.confirmNewPassword = 'Passwords do not match';
-    }
-    setValidationErrors(errors);
+    setFieldErrors(errors);
     if (Object.keys(errors).length) return;
 
     setIsSubmitting(true);
     try {
-      await confirmPassword(formData.email.trim(), formData.code, formData.newPassword);
-      // Send them back to login with a fresh slate
-      onToggleMode('login');
-    } catch (err) {
-      // error surfaced via AuthContext
+      await confirmPassword(form.email.trim(), form.code, form.password);
+      setStep('done');
+    } catch (_) {
+      /* surfaced through AuthContext's `error` */
     } finally {
       setIsSubmitting(false);
     }
@@ -81,154 +92,175 @@ const ForgotPasswordForm = ({ onToggleMode, initialEmail = '' }) => {
     setIsSubmitting(true);
     setError(null);
     try {
-      await forgotPassword(formData.email.trim());
-    } catch (err) {
-      // error surfaced via AuthContext
+      await forgotPassword(form.email.trim());
+    } catch (_) {
+      /* surfaced through AuthContext's `error` */
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const errorNotice = error && (
+    <div className="au-notice is-attn" role="alert">
+      <AlertIcon />
+      <div className="au-notice-body">
+        <h3 className="au-wrapany">{error}</h3>
+      </div>
+    </div>
+  );
+
+  const backToSignIn = (
+    <button
+      type="button"
+      className="au-btn au-btn-quiet"
+      onClick={() => onToggleMode('login')}
+      disabled={isSubmitting}
+    >
+      Back to sign in
+    </button>
+  );
+
+  if (step === 'done') {
+    return (
+      <div className="au-col au-stack au-s24" style={{ paddingBlock: '8px 40px' }}>
+        <div>
+          <h1>Password changed</h1>
+          <p className="au-muted" style={{ marginTop: '10px' }}>
+            Use the new one to sign in. Anywhere you were already signed in stays signed in.
+          </p>
+        </div>
+
+        <div className="au-notice is-good">
+          <CheckIcon />
+          <div className="au-notice-body">
+            <h3>Saved</h3>
+            <p>
+              Changed just now for <span className="au-wrapany">{form.email.trim()}</span>.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="au-btn au-btn-primary"
+          onClick={() => onToggleMode('login')}
+        >
+          Sign in
+        </button>
+      </div>
+    );
+  }
+
+  if (step === 'reset') {
+    return (
+      <div className="au-col au-stack au-s24" style={{ paddingBlock: '8px 40px' }}>
+        <div>
+          <h1>Reset your password</h1>
+          <p className="au-muted" style={{ marginTop: '10px' }}>
+            If there is an account for{' '}
+            <strong className="au-wrapany" style={{ color: 'var(--text)' }}>
+              {form.email.trim()}
+            </strong>
+            , a code is on its way.
+          </p>
+        </div>
+
+        {errorNotice}
+
+        <form className="au-stack au-s20" onSubmit={handleReset} noValidate>
+          <div className="au-field">
+            <label className="au-label" htmlFor="reset-code">Code from the email</label>
+            <input
+              id="reset-code"
+              name="code"
+              className={`au-input${fieldErrors.code ? ' is-bad' : ''}`}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              autoComplete="one-time-code"
+              spellCheck="false"
+              value={form.code}
+              onChange={change('code')}
+              disabled={isSubmitting}
+              style={{ fontSize: '22px', letterSpacing: '.4em' }}
+              aria-describedby={fieldErrors.code ? 'reset-code-err' : undefined}
+              aria-invalid={fieldErrors.code ? true : undefined}
+            />
+            {fieldErrors.code && <p className="au-hint is-bad" id="reset-code-err">{fieldErrors.code}</p>}
+          </div>
+
+          <PasswordField
+            id="reset-pw"
+            name="password"
+            label="New password"
+            value={form.password}
+            onChange={change('password')}
+            autoComplete="new-password"
+            showRules
+            invalid={Boolean(fieldErrors.password)}
+            disabled={isSubmitting}
+            hint={fieldErrors.password}
+            hintId="reset-pw-err"
+          />
+
+          <button type="submit" className="au-btn au-btn-primary" disabled={isSubmitting}>
+            {isSubmitting ? 'Saving…' : 'Set the new password'}
+          </button>
+
+          <button
+            type="button"
+            className="au-btn au-btn-quiet"
+            onClick={handleResend}
+            disabled={isSubmitting}
+          >
+            Send another code
+          </button>
+        </form>
+
+        {backToSignIn}
+      </div>
+    );
+  }
+
   return (
-    <div className="auth-form-container">
-      <div className="auth-header">
-        <h2>Reset Your Password</h2>
-        <p>
-          {step === 'request'
-            ? "Enter your email and we'll send you a reset code."
-            : 'Enter the code we emailed you and choose a new password.'}
+    <div className="au-col au-stack au-s24" style={{ paddingBlock: '8px 40px' }}>
+      <div>
+        <h1>Reset your password</h1>
+        <p className="au-muted" style={{ marginTop: '10px' }}>
+          We will email you a 6&#8209;digit code.
         </p>
       </div>
 
-      {step === 'request' ? (
-        <form onSubmit={handleRequest} className="auth-form">
-          {error && (
-            <div className="auth-error" role="alert">
-              <i className="error-icon"><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /></i>
-              <span>{error}</span>
-            </div>
-          )}
+      {errorNotice}
 
-          <div className="form-group">
-            <label htmlFor="email">Email Address</label>
-            <input
-              id="email"
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleInputChange}
-              className={`form-input ${validationErrors.email ? 'error' : ''}`}
-              placeholder="Enter your email"
-              disabled={isSubmitting}
-              required
-              autoComplete="email"
-            />
-            {validationErrors.email && <span className="field-error">{validationErrors.email}</span>}
-          </div>
+      <form className="au-stack au-s20" onSubmit={handleRequest} noValidate>
+        <div className="au-field">
+          <label className="au-label" htmlFor="forgot-email">Email</label>
+          <input
+            id="forgot-email"
+            name="email"
+            className={`au-input${fieldErrors.email ? ' is-bad' : ''}`}
+            type="email"
+            autoComplete="email"
+            autoCapitalize="none"
+            spellCheck="false"
+            placeholder="you@work.com"
+            value={form.email}
+            onChange={change('email')}
+            disabled={isSubmitting}
+            aria-describedby={fieldErrors.email ? 'forgot-email-err' : undefined}
+            aria-invalid={fieldErrors.email ? true : undefined}
+          />
+          {fieldErrors.email && <p className="au-hint is-bad" id="forgot-email-err">{fieldErrors.email}</p>}
+        </div>
 
-          <button type="submit" className={`auth-button primary ${isSubmitting ? 'loading' : ''}`} disabled={isSubmitting}>
-            {isSubmitting ? (
-              <>
-                <span className="loading-spinner"></span>
-                Sending code...
-              </>
-            ) : (
-              'Send reset code'
-            )}
-          </button>
+        <button type="submit" className="au-btn au-btn-primary" disabled={isSubmitting}>
+          {isSubmitting ? 'Sending…' : 'Send the code'}
+        </button>
+      </form>
 
-          <div className="auth-links">
-            <button type="button" onClick={() => onToggleMode('login')} className="link-button" disabled={isSubmitting}>
-              Back to <strong>Sign in</strong>
-            </button>
-          </div>
-        </form>
-      ) : (
-        <form onSubmit={handleReset} className="auth-form">
-          {error && (
-            <div className="auth-error" role="alert">
-              <i className="error-icon"><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /></i>
-              <span>{error}</span>
-            </div>
-          )}
-
-          <div className="form-group">
-            <label htmlFor="code">Reset Code</label>
-            <input
-              id="code"
-              type="text"
-              name="code"
-              value={formData.code}
-              onChange={handleInputChange}
-              className={`form-input verification-code ${validationErrors.code ? 'error' : ''}`}
-              placeholder="Enter 6-digit code"
-              disabled={isSubmitting}
-              required
-              maxLength="6"
-              autoComplete="one-time-code"
-              inputMode="numeric"
-            />
-            {validationErrors.code && <span className="field-error">{validationErrors.code}</span>}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="newPassword">New Password</label>
-            <input
-              id="newPassword"
-              type="password"
-              name="newPassword"
-              value={formData.newPassword}
-              onChange={handleInputChange}
-              className={`form-input ${validationErrors.newPassword ? 'error' : ''}`}
-              placeholder="Choose a new password"
-              disabled={isSubmitting}
-              required
-              autoComplete="new-password"
-            />
-            {validationErrors.newPassword && <span className="field-error">{validationErrors.newPassword}</span>}
-            <div className="input-hint">At least 8 characters, with uppercase, lowercase, a number, and a symbol.</div>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="confirmNewPassword">Confirm New Password</label>
-            <input
-              id="confirmNewPassword"
-              type="password"
-              name="confirmNewPassword"
-              value={formData.confirmNewPassword}
-              onChange={handleInputChange}
-              className={`form-input ${validationErrors.confirmNewPassword ? 'error' : ''}`}
-              placeholder="Re-enter your new password"
-              disabled={isSubmitting}
-              required
-              autoComplete="new-password"
-            />
-            {validationErrors.confirmNewPassword && (
-              <span className="field-error">{validationErrors.confirmNewPassword}</span>
-            )}
-          </div>
-
-          <button type="submit" className={`auth-button primary ${isSubmitting ? 'loading' : ''}`} disabled={isSubmitting}>
-            {isSubmitting ? (
-              <>
-                <span className="loading-spinner"></span>
-                Resetting...
-              </>
-            ) : (
-              'Reset password'
-            )}
-          </button>
-
-          <div className="verification-actions">
-            <button type="button" onClick={handleResend} className="link-button" disabled={isSubmitting}>
-              Resend code
-            </button>
-            <button type="button" onClick={() => onToggleMode('login')} className="link-button" disabled={isSubmitting}>
-              Back to Sign in
-            </button>
-          </div>
-        </form>
-      )}
+      {backToSignIn}
     </div>
   );
 };

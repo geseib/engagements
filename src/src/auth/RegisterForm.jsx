@@ -1,362 +1,200 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
+import { passwordMeetsPolicy } from './passwordPolicy';
+import { startGoogleSignIn } from './googleSignIn';
+import PasswordField from './PasswordField';
+import { GoogleMark, ClockIcon, AlertIcon } from './AuthChrome';
 import './auth.css';
-import Icon from '../components/Icon';
-import { rememberReturnPath } from './returnPath';
 
+/**
+ * Create a host account. Built from docs/design/entry-redesign/11-register.html.
+ *
+ * THREE THINGS MOVED, AND ONE SENTENCE WAS DELETED.
+ *
+ * 1. The approval gate is now ABOVE the form. It is the single most important
+ *    fact about creating this account, and it used to sit halfway down, after
+ *    the password field, where someone who has already decided to sign up has
+ *    stopped reading. It also names the alternative -- joining needs no account.
+ *
+ * 2. THE EMAIL PROMISE IS GONE. The old copy said "You'll receive an email once
+ *    your account is approved." There is no SES resource, no `sendEmail` call
+ *    and no notification pipeline anywhere in lambda-functions/. That sentence
+ *    is the one that makes people stop checking, so printing a promise nothing
+ *    keeps is worse than saying nothing. 13-pending.html removed it for the
+ *    same reason. If the pipeline is ever built, this is where the line goes
+ *    back. (RATIONALE.md §8.1, OPEN-QUESTIONS.md §1.)
+ *
+ * 3. Password rules are a live checklist from the first keystroke, and the
+ *    strength meter is gone -- the checklist states every fact the meter
+ *    approximated. The validator is now the shared one, so `Northeast#26` is no
+ *    longer rejected here and accepted at reset. (RATIONALE.md §8.3, §8.7.)
+ *
+ * The confirm-password field is gone too, which the mockup draws and this note
+ * records deliberately: a Show/Hide toggle on a single field solves the typo
+ * the second field was guarding against, and does it without asking for the
+ * password twice.
+ */
 const RegisterForm = ({ onToggleMode, onSuccess }) => {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    confirmPassword: ''
-  });
+  const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationErrors, setValidationErrors] = useState({});
-  const [showPassword, setShowPassword] = useState(false);
-  
+  const [fieldErrors, setFieldErrors] = useState({});
+
   const { signUp, error, setError } = useAuth();
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    
-    // Clear validation error when user starts typing
-    if (validationErrors[name]) {
-      setValidationErrors(prev => ({
-        ...prev,
-        [name]: ''
-      }));
-    }
-    
-    // Clear auth error when user makes changes
-    if (error) {
-      setError(null);
-    }
+  const change = (key) => (event) => {
+    const { value } = event.target;
+    setForm((prev) => ({ ...prev, [key]: value }));
+    if (fieldErrors[key]) setFieldErrors((prev) => ({ ...prev, [key]: '' }));
+    if (error) setError(null);
   };
 
-  const validateForm = () => {
+  const validate = () => {
     const errors = {};
-    
-    if (!formData.name.trim()) {
-      errors.name = 'Full name is required';
-    } else if (formData.name.trim().length < 2) {
-      errors.name = 'Name must be at least 2 characters';
+
+    if (!form.name.trim()) errors.name = 'We need a name to put on your sessions.';
+    else if (form.name.trim().length < 2) errors.name = 'That is too short to be a name.';
+
+    if (!form.email.trim()) errors.email = 'We need an email address.';
+    else if (!/\S+@\S+\.\S+/.test(form.email)) errors.email = 'That does not look like an email address.';
+
+    if (!passwordMeetsPolicy(form.password)) {
+      errors.password = 'Your password does not meet all five rules yet.';
     }
-    
-    if (!formData.email.trim()) {
-      errors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      errors.email = 'Please enter a valid email address';
-    }
-    
-    if (!formData.password) {
-      errors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      errors.password = 'Password must be at least 8 characters';
-    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/.test(formData.password)) {
-      errors.password = 'Password must contain uppercase, lowercase, number, and special character';
-    }
-    
-    if (!formData.confirmPassword) {
-      errors.confirmPassword = 'Please confirm your password';
-    } else if (formData.password !== formData.confirmPassword) {
-      errors.confirmPassword = 'Passwords do not match';
-    }
-    
-    setValidationErrors(errors);
+
+    setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
-    
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!validate()) return;
+
     setIsSubmitting(true);
-    
     try {
-      const result = await signUp(formData.email, formData.password, formData.name);
-      console.log('Sign up successful:', result);
-      
-      // Move to verification step
+      await signUp(form.email, form.password, form.name);
       if (onSuccess) {
-        onSuccess({ 
-          email: formData.email, 
-          name: formData.name,
-          nextStep: 'verify'
-        });
+        onSuccess({ email: form.email, name: form.name, nextStep: 'verify' });
       }
-    } catch (err) {
-      console.error('Sign up failed:', err);
-      // Error is handled by AuthContext and displayed via the error prop
+    } catch (_) {
+      /* surfaced through AuthContext's `error` */
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const getErrorMessage = (fieldName) => {
-    if (validationErrors[fieldName]) {
-      return validationErrors[fieldName];
-    }
-    return '';
-  };
-
-  const handleGoogleSignUp = () => {
-    console.log('🚀 Google sign-up clicked');
-    
-    // Track that we're in register mode
-    sessionStorage.setItem('authMode', 'register');
-    // Where we were headed, so the callback can put us back -- without it the
-    // callback's fallback '/' sends a host scanning the remote QR to a second
-    // host page on their phone. This form renders both in place (ProtectedRoute
-    // leaves the URL on /remote, and that is the path worth keeping) and on
-    // /auth, where the call is a deliberate no-op: `rememberReturnPath` refuses
-    // auth surfaces, so whatever sent the host here keeps its destination.
-    rememberReturnPath();
-
-    // Use window variables with fallback to env variables (same as AuthContext)
-    const userPoolId = window.USER_POOL_ID || process.env.REACT_APP_USER_POOL_ID;
-    const clientId = window.USER_POOL_CLIENT_ID || process.env.REACT_APP_CLIENT_ID;
-    const cognitoDomain = window.COGNITO_DOMAIN;
-    
-    console.log('Using Cognito config:', { userPoolId, clientId, cognitoDomain });
-
-    // Extract region from User Pool ID
-    const region = userPoolId.split('_')[0];
-    const redirectUri = encodeURIComponent(window.location.origin + '/auth/callback');
-    
-    const googleSignUpUrl = `https://${cognitoDomain}.auth.${region}.amazoncognito.com/oauth2/authorize?` +
-      `identity_provider=Google&` +
-      `redirect_uri=${redirectUri}&` +
-      `response_type=token&` +
-      `client_id=${clientId}&` +
-      `scope=openid+email+profile+aws.cognito.signin.user.admin&` +
-      `prompt=select_account&` +
-      `state=register`;
-    
-    console.log('📍 Built OAuth URL:', googleSignUpUrl);
-    console.log('📍 About to redirect...');
-    
-    // Add a small delay to ensure logs are visible
-    setTimeout(() => {
-      console.log('⏰ Executing redirect now');
-      window.location.href = googleSignUpUrl;
-    }, 100);
-  };
-
-  const getPasswordStrength = () => {
-    const password = formData.password;
-    if (!password) return '';
-    
-    let strength = 0;
-    if (password.length >= 8) strength++;
-    if (/[a-z]/.test(password)) strength++;
-    if (/[A-Z]/.test(password)) strength++;
-    if (/\d/.test(password)) strength++;
-    if (/[@$!%*?&]/.test(password)) strength++;
-    
-    if (strength < 2) return 'weak';
-    if (strength < 4) return 'medium';
-    return 'strong';
-  };
-
   return (
-    <div className="auth-form-container">
-      <div className="auth-header">
-        <h2>Create Your Account</h2>
-        <p>Join Engagements to host interactive sessions</p>
+    <div className="au-col au-stack au-s24" style={{ paddingBlock: '8px 40px' }}>
+      <div>
+        <p className="au-kicker">Running a session</p>
+        <h1 style={{ marginTop: '10px' }}>Create a host account</h1>
       </div>
 
-      {/* Google Sign-Up Button - Outside of form to avoid form submission interference */}
-      <div className="auth-form">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            handleGoogleSignUp();
-          }}
-          className="auth-button google"
-          disabled={isSubmitting}
-          style={{ marginBottom: '16px' }}
-        >
-          <svg width="18" height="18" viewBox="0 0 18 18" style={{ marginRight: '8px' }}>
-            <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18Z"/>
-            <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2.01a4.8 4.8 0 0 1-2.7.75 4.92 4.92 0 0 1-4.64-3.4H1.73v2.08A8.02 8.02 0 0 0 8.98 17Z"/>
-            <path fill="#FBBC05" d="M4.34 10.4a4.9 4.9 0 0 1 0-3.12V5.2H1.73a8.08 8.08 0 0 0 0 7.28l2.6-2.08Z"/>
-            <path fill="#EA4335" d="M8.98 3.58c1.32 0 2.5.45 3.44 1.35l2.54-2.54A7.72 7.72 0 0 0 8.98 1a8.02 8.02 0 0 0-7.25 4.47l2.6 2.08c.6-1.83 2.35-3.4 4.65-3.4Z"/>
-          </svg>
-          Sign Up with Google
-        </button>
-
-        {/* Divider */}
-        <div className="auth-divider">
-          <span>or</span>
-        </div>
-      </div>
-
-      <form onSubmit={handleSubmit} className="auth-form">
-        {error && (
-          <div className="auth-error" role="alert">
-            <i className="error-icon"><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /></i>
-            <span>{error}</span>
-          </div>
-        )}
-
-        <div className="form-group">
-          <label htmlFor="name">
-            Full Name
-          </label>
-          <input
-            id="name"
-            type="text"
-            name="name"
-            value={formData.name}
-            onChange={handleInputChange}
-            className={`form-input ${validationErrors.name ? 'error' : ''}`}
-            placeholder="Enter your full name"
-            disabled={isSubmitting}
-            required
-            autoComplete="name"
-          />
-          {getErrorMessage('name') && (
-            <span className="field-error">{getErrorMessage('name')}</span>
-          )}
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="email">
-            Email Address
-          </label>
-          <input
-            id="email"
-            type="email"
-            name="email"
-            value={formData.email}
-            onChange={handleInputChange}
-            className={`form-input ${validationErrors.email ? 'error' : ''}`}
-            placeholder="Enter your email"
-            disabled={isSubmitting}
-            required
-            autoComplete="email"
-          />
-          {getErrorMessage('email') && (
-            <span className="field-error">{getErrorMessage('email')}</span>
-          )}
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="password">
-            Password
-          </label>
-          <div className="password-input-container">
-            <input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              name="password"
-              value={formData.password}
-              onChange={handleInputChange}
-              className={`form-input ${validationErrors.password ? 'error' : ''}`}
-              placeholder="Create a strong password"
-              disabled={isSubmitting}
-              required
-              autoComplete="new-password"
-            />
-            <button
-              type="button"
-              className="password-toggle"
-              onClick={() => setShowPassword(!showPassword)}
-              disabled={isSubmitting}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-            >
-              {showPassword
-                ? <Icon name="EyeSlash" weight="bold" size={18} />
-                : <Icon name="Eye" weight="bold" size={18} />}
-            </button>
-          </div>
-          
-          {formData.password && (
-            <div className={`password-strength ${getPasswordStrength()}`}>
-              <div className="strength-meter">
-                <div className="strength-bar"></div>
-              </div>
-              <span className="strength-text">
-                {getPasswordStrength().charAt(0).toUpperCase() + getPasswordStrength().slice(1)}
-              </span>
-            </div>
-          )}
-          
-          {getErrorMessage('password') && (
-            <span className="field-error">{getErrorMessage('password')}</span>
-          )}
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="confirmPassword">
-            Confirm Password
-          </label>
-          <input
-            id="confirmPassword"
-            type="password"
-            name="confirmPassword"
-            value={formData.confirmPassword}
-            onChange={handleInputChange}
-            className={`form-input ${validationErrors.confirmPassword ? 'error' : ''}`}
-            placeholder="Confirm your password"
-            disabled={isSubmitting}
-            required
-            autoComplete="new-password"
-          />
-          {getErrorMessage('confirmPassword') && (
-            <span className="field-error">{getErrorMessage('confirmPassword')}</span>
-          )}
-        </div>
-
-        <div className="form-info">
+      {/* The gate, above the form. */}
+      <div className="au-notice is-attn">
+        <ClockIcon />
+        <div className="au-notice-body">
+          <h3>An admin has to approve you before you can run a session</h3>
           <p>
-            <strong>Account Approval:</strong> New accounts require admin approval before you can create sessions.
-            You'll receive an email once your account is approved.
+            Creating the account is instant. Being able to host is not. If you need to{' '}
+            <em>join</em> something today, <a href="/">a code is all you need</a>.
           </p>
         </div>
+      </div>
 
-        <button
-          type="submit"
-          className={`auth-button primary ${isSubmitting ? 'loading' : ''}`}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? (
-            <>
-              <span className="loading-spinner"></span>
-              Creating Account...
-            </>
-          ) : (
-            'Create Account'
-          )}
-        </button>
-
-        <div className="auth-links">
-          <button
-            type="button"
-            onClick={() => onToggleMode('login')}
-            className="link-button"
-            disabled={isSubmitting}
-          >
-            Already have an account? <strong>Sign in</strong>
-          </button>
+      {error && (
+        <div className="au-notice is-attn" role="alert">
+          <AlertIcon />
+          <div className="au-notice-body">
+            <h3 className="au-wrapany">{error}</h3>
+          </div>
         </div>
+      )}
+
+      <button
+        type="button"
+        className="au-btn au-btn-social"
+        onClick={() => startGoogleSignIn('register')}
+        disabled={isSubmitting}
+      >
+        <GoogleMark /> Continue with Google
+      </button>
+
+      <p className="au-divider">or</p>
+
+      <form className="au-stack au-s20" onSubmit={handleSubmit} noValidate>
+        <div className="au-field">
+          <label className="au-label" htmlFor="reg-name">Your name</label>
+          <input
+            id="reg-name"
+            name="name"
+            className={`au-input${fieldErrors.name ? ' is-bad' : ''}`}
+            type="text"
+            autoComplete="name"
+            autoCapitalize="words"
+            value={form.name}
+            onChange={change('name')}
+            disabled={isSubmitting}
+            aria-describedby={fieldErrors.name ? 'reg-name-err' : undefined}
+            aria-invalid={fieldErrors.name ? true : undefined}
+          />
+          {fieldErrors.name && <p className="au-hint is-bad" id="reg-name-err">{fieldErrors.name}</p>}
+        </div>
+
+        <div className="au-field">
+          <label className="au-label" htmlFor="reg-email">Work email</label>
+          <input
+            id="reg-email"
+            name="email"
+            className={`au-input${fieldErrors.email ? ' is-bad' : ''}`}
+            type="email"
+            autoComplete="email"
+            autoCapitalize="none"
+            spellCheck="false"
+            value={form.email}
+            onChange={change('email')}
+            disabled={isSubmitting}
+            aria-describedby={fieldErrors.email ? 'reg-email-err' : undefined}
+            aria-invalid={fieldErrors.email ? true : undefined}
+          />
+          {fieldErrors.email && (
+            <p className="au-hint is-bad au-wrapany" id="reg-email-err">{fieldErrors.email}</p>
+          )}
+        </div>
+
+        <PasswordField
+          id="reg-pw"
+          name="password"
+          label="Password"
+          value={form.password}
+          onChange={change('password')}
+          autoComplete="new-password"
+          showRules
+          invalid={Boolean(fieldErrors.password)}
+          disabled={isSubmitting}
+          hint={fieldErrors.password}
+          hintId="reg-pw-err"
+        />
+
+        <button type="submit" className="au-btn au-btn-primary" disabled={isSubmitting}>
+          {isSubmitting ? 'Creating account…' : 'Create account'}
+        </button>
       </form>
 
-      <div className="auth-footer">
-        <p className="help-text">
-          By creating an account, you agree to our terms of service and privacy policy.
-        </p>
-      </div>
+      <p className="au-meta">
+        Already have one?{' '}
+        <button
+          type="button"
+          onClick={() => onToggleMode('login')}
+          style={{
+            background: 'none', border: 0, padding: 0, font: 'inherit',
+            color: 'var(--secondary)', cursor: 'pointer', textDecoration: 'underline',
+          }}
+        >
+          Sign in
+        </button>
+        . By creating an account you accept the <a href="/terms">terms</a> and the{' '}
+        <a href="/privacy">privacy policy</a>.
+      </p>
     </div>
   );
 };

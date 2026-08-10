@@ -787,3 +787,522 @@
   text-align: center;
   line-height: 1.4;
 }
+/* ============================================================================
+   THE AUTHENTICATION SURFACES — the `au-` system
+   ============================================================================
+
+   Built from docs/design/entry-redesign/10-signin, 11-register, 12-verify,
+   13-pending, 14-forgot, 16-blocked and 17-password-change. Those mockups are
+   the design; this is a port of them, not a reinterpretation.
+
+   WHY A SECOND SYSTEM IN THE SAME FILE. Everything above this line still
+   dresses three surfaces that are out of scope here — OAuthCallback.jsx,
+   PrivacyPolicyPage.jsx and TermsOfServicePage.jsx all import this stylesheet
+   and use `.auth-page`, `.auth-container`, `.auth-form-container`,
+   `.auth-header`, `.auth-error`, `.auth-button` and `.loading-spinner`.
+   Deleting the old block would restyle three screens nobody asked to change.
+   The seven surfaces that WERE asked for use only the `au-` names below.
+
+   Every selector is namespaced `au-` and scoped under `.au-page`, because
+   global styles.css already owns `.card`, `.btn-primary`, `.input` and friends
+   and this page must neither inherit from them nor disturb them.
+
+   COLOUR COMES FROM TOKENS ONLY. `--primary #F6A94C` is the ONE hero accent in
+   Warm Summit; exactly one filled amber block per view (the submit button), and
+   everything else that needs the attention colour gets a 3px stroke or a glyph.
+   A surface that floods amber has nothing left to point with.
+
+   NO RED. `--danger` means *destructive* in this system, and a rejected
+   password is not destructive. Every error here is a glyph, plus a sentence in
+   --text, plus a 2px --primary stroke on the field it belongs to. Never colour
+   alone. (RATIONALE.md §4.2.)
+
+   TYPE. One ladder for phone and laptop, re-derived in RATIONALE.md §3 for a
+   phone at 14in / 144ppi and a laptop at 20in / 129ppi. 17px is the smallest
+   size clearing the ~12 arcminute critical print size on BOTH, and is also the
+   smallest size that does not trigger iOS Safari's zoom-on-focus. Two
+   independent constraints landing on one number. 13px is a floor for labels,
+   never for a sentence.
+
+   MEASURED CONTRAST (sRGB, computed not eyeballed; translucent fills are
+   measured COMPOSITED, as seen, rather than as declared):
+     text        #F4EDE4 on bg          #0F1A2E   14.97:1
+     text        #F4EDE4 on surface     #1B2942   12.53:1
+     text        #F4EDE4 on surface-2   #25375A   10.20:1
+     muted       #B6C2D4 on bg          #0F1A2E    9.65:1
+     muted       #B6C2D4 on surface     #1B2942    8.08:1
+     muted       #B6C2D4 on surface-2   #25375A    6.58:1
+     primary     #F6A94C on bg          #0F1A2E    8.86:1
+     primary     #F6A94C on surface     #1B2942    7.42:1
+     secondary   #7CA7E6 on bg          #0F1A2E    7.06:1   (links)
+     secondary   #7CA7E6 on surface     #1B2942    5.91:1   (links; the floor)
+     bg          #0F1A2E on primary     #F6A94C    8.86:1   (button label)
+     bg          #0F1A2E on hover       #FFBB63   10.39:1
+     success-txt #6FD0A4 on bg          #0F1A2E    9.30:1
+     text        #F4EDE4 on attn fill   #212530   13.18:1   (8% amber over bg)
+     muted       #B6C2D4 on attn fill   #212530    8.50:1
+     primary     #F6A94C on attn fill   #212530    7.80:1   (the glyph)
+     success-txt #6FD0A4 on good fill   #152836    8.09:1   (9% green over bg)
+   Lowest pairing on the page is 5.91:1. AA needs 4.5:1.
+   ========================================================================== */
+
+.au-page {
+  --au-radius: 16px;
+  --au-radius-sm: 10px;
+  /* TWO TOKENS DEFINED LOCALLY, and the reason is worth recording.
+
+     `data-theme="dark"` on the root resolves --bg / --surface / --surface-2 /
+     --text from styles.css:56 (the app runs on the paper theme, so the dusk set
+     has to be opted back into). It does NOT give the right --muted: the global
+     dusk --muted is #9BA8BE, and the entry set -- RootPage.css:23, every one of
+     the seventeen entry mockups -- uses #B6C2D4. RATIONALE.md §4.1 argues that
+     choice: #9BA8BE is a perfectly legal 7.2:1 here and the lightening is NOT a
+     contrast necessity, but a component lifted from this page onto the
+     projector stage should not need a fresh audit to move. RootPage is the page
+     that links directly here, so matching it matters more than matching a
+     global name.
+
+     --success-text does not exist in styles.css at all. It is the text-weight
+     green from the host spec's §4.3; --success #4FB286 is a fill colour and is
+     only 5.6:1, so the checklist ticks and the "Saved" heading use the lighter
+     one at 9.3:1.
+
+     Both are `--au-` names rather than overrides of --muted / --success-text,
+     so nothing outside .au-page can be surprised by them. */
+  --au-muted: #B6C2D4;         /* 9.65:1 on --bg, 8.08:1 on --surface */
+  --au-success-text: #6FD0A4;  /* 9.30:1 on --bg */
+
+  --au-rule: rgba(182, 194, 212, .20);
+  --au-rule-strong: rgba(182, 194, 212, .34);
+
+  --au-t-display: clamp(26px, 6.4vw, 34px);
+  --au-t-title: 20px;
+  --au-t-body: 17px;   /* prose AND every input. Never smaller. */
+  --au-t-label: 14px;
+  --au-t-meta: 13px;   /* floor. Labels only, never a sentence. */
+  --au-t-code: clamp(24px, 7vw, 30px);
+
+  /* 44px is the WCAG 2.5.5 number; 48px is Material's and is what a cold thumb
+     on a moving train actually needs. 48 wins. */
+  --au-tap: 48px;
+  --au-gutter: 20px;
+
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 var(--au-t-body)/1.5 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+@media (min-width: 768px) { .au-page { --au-gutter: 32px; } }
+
+.au-page *,
+.au-page *::before,
+.au-page *::after { box-sizing: border-box; }
+
+.au-page :focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ------------------------------------------------------------- layout ----- */
+.au-pad { padding-inline: var(--au-gutter); }
+.au-grow { flex: 1 1 auto; }
+/* 26rem = 416px = ~46ch at 17px. A measure, not a guess. */
+.au-col { width: 100%; max-width: 26rem; margin-inline: auto; }
+.au-stack > * + * { margin-top: var(--au-s, 16px); }
+.au-s8 { --au-s: 8px; } .au-s12 { --au-s: 12px; }
+.au-s20 { --au-s: 20px; } .au-s24 { --au-s: 24px; }
+
+/* ---------------------------------------------------------- top strip ----- */
+.au-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+  padding-block: 18px;
+  min-height: 60px;
+}
+
+/* `.au-page a` below sets the link colour, and at (0,1,1) it outranks a bare
+   `.au-brand` at (0,1,0) -- the wordmark rendered periwinkle. Matching the
+   specificity rather than reaching for !important. */
+.au-page .au-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.au-brand .au-env {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: var(--au-t-meta);
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: var(--au-muted);
+}
+
+/* The participant escape hatch. It was one dead sentence in the footer; here it
+   is a real route, at top left where a back affordance belongs, on the screen
+   most likely to be reached by mistake. */
+.au-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--au-tap);
+  padding: 8px 4px;
+  color: var(--secondary);
+  font-size: var(--au-t-label);
+  font-weight: 600;
+  text-decoration: none;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.au-back:hover { color: var(--primary); }
+
+/* --------------------------------------------------------- typography ----- */
+.au-kicker {
+  font-size: var(--au-t-meta);
+  font-weight: 700;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--au-muted);
+  margin: 0;
+}
+
+.au-page h1 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--au-t-display);
+  line-height: 1.12;
+  letter-spacing: -.015em;
+  margin: 0;
+}
+
+.au-page h2 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--au-t-title);
+  line-height: 1.2;
+  margin: 0;
+}
+
+.au-page h3 { font-size: var(--au-t-body); font-weight: 700; margin: 0; }
+.au-page p { margin: 0; }
+.au-muted { color: var(--au-muted); }
+.au-meta { font-size: var(--au-t-meta); color: var(--au-muted); }
+.au-page a { color: var(--secondary); }
+.au-page a:hover { color: var(--primary); }
+
+.au-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: var(--au-t-label);
+  font-weight: 600;
+  color: var(--au-muted);
+}
+/* The label row that also carries "Forgotten it?". The trailing control is a
+   SIBLING of the label, never a child -- a label may not contain another
+   focusable element, and when it did the label's activation behaviour swallowed
+   the click and forwarded it to the password input instead. */
+.au-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.au-label-row .au-label { margin-bottom: 0; }
+
+/* Long machine strings — emails, pasted URLs — must wrap rather than push a
+   375px viewport sideways. */
+.au-wrapany { overflow-wrap: anywhere; word-break: break-word; }
+
+/* ------------------------------------------------------------ surface ----- */
+.au-card {
+  background: var(--surface);
+  border: 1px solid var(--au-rule);
+  border-radius: var(--au-radius);
+  padding: 20px;
+}
+.au-card .au-card { padding: 14px 16px; }
+.au-hr { height: 1px; background: var(--au-rule); border: 0; margin: 0; }
+
+/* ------------------------------------------------------------ fields ------ */
+.au-field { display: block; }
+
+.au-input {
+  width: 100%;
+  min-height: var(--au-tap);
+  padding: 13px 14px;
+  background: var(--surface);
+  color: var(--text);
+  border: 2px solid var(--au-rule-strong);
+  border-radius: var(--au-radius-sm);
+  font: 400 var(--au-t-body)/1.4 var(--font-ui);
+}
+.au-input::placeholder { color: var(--au-muted); opacity: .75; }
+.au-input:focus { border-color: var(--primary); outline: none; }
+/* The error stroke. Amber, not red — see the header. */
+.au-input.is-bad { border-color: var(--primary); }
+
+.au-hint { margin-top: 6px; font-size: var(--au-t-label); color: var(--au-muted); }
+/* An error sentence is --text, not --muted and not --danger: it is the most
+   important run on the screen at the moment it appears. */
+.au-hint.is-bad { color: var(--text); }
+
+.au-pwwrap { position: relative; display: block; }
+.au-pwwrap .au-input { padding-right: 62px; }
+.au-pwtoggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: var(--au-tap);
+  min-height: var(--au-tap);
+  background: none;
+  border: 0;
+  color: var(--au-muted);
+  font: 600 var(--au-t-label)/1 var(--font-ui);
+  cursor: pointer;
+}
+.au-pwtoggle:hover { color: var(--text); }
+
+/* ---------------------------------------------------------- controls ------ */
+.au-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 14px 20px;
+  border-radius: var(--au-radius-sm);
+  font: 700 var(--au-t-body)/1.2 var(--font-ui);
+  cursor: pointer;
+  border: 2px solid transparent;
+  background: transparent;
+  color: var(--text);
+  text-decoration: none;
+  text-align: center;
+}
+
+/* THE ONE FILLED AMBER BLOCK PER VIEW. */
+.au-btn-primary {
+  background: var(--primary);
+  color: var(--bg);
+  border-color: var(--primary);
+}
+.au-btn-primary:hover { background: #FFBB63; border-color: #FFBB63; }
+/* A disabled primary must not be mistakable for the secondary sitting under it.
+   Muted text alone was not enough — the border weight has to drop too. */
+.au-btn-primary[disabled] {
+  background: transparent;
+  color: var(--au-muted);
+  border-color: var(--au-rule);
+  cursor: not-allowed;
+  font-weight: 600;
+}
+
+.au-btn-ghost { border-color: var(--au-rule-strong); }
+.au-btn-ghost:hover { border-color: var(--au-muted); }
+
+.au-btn-quiet {
+  color: var(--au-muted);
+  font-weight: 600;
+  min-height: var(--au-tap);
+}
+.au-btn-quiet:hover { color: var(--text); }
+
+.au-btn-social {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--au-rule-strong);
+  font-weight: 600;
+}
+.au-btn-social:hover { border-color: var(--au-muted); }
+
+.au-btn.au-sm {
+  min-height: var(--au-tap);
+  font-size: var(--au-t-label);
+  padding: 10px 16px;
+  width: auto;
+}
+.au-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.au-row > .au-btn { width: auto; flex: 1 1 auto; }
+
+/* An inline SVG with no intrinsic size fills its container. Sizing the glyph
+   only inside .au-notice once let a Google mark render 300px tall — a defect no
+   audit check can see, because a 300px logo breaks no rule any of them assert. */
+.au-ico { flex: none; width: 22px; height: 22px; }
+.au-btn .au-ico { width: 20px; height: 20px; }
+.au-pill .au-ico { width: 16px; height: 16px; }
+
+.au-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--au-muted);
+  font-size: var(--au-t-meta);
+  font-weight: 700;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+.au-divider::before,
+.au-divider::after { content: ""; flex: 1; height: 1px; background: var(--au-rule); }
+
+/* ----------------------------------------------------------- notices ------ */
+.au-notice {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--au-radius-sm);
+  border: 1px solid var(--au-rule);
+  background: var(--surface);
+  border-left: 3px solid var(--au-muted);
+}
+.au-notice .au-ico { margin-top: 1px; }
+.au-notice .au-notice-body { min-width: 0; }
+.au-notice h3 { margin-bottom: 3px; }
+.au-notice p { font-size: var(--au-t-label); color: var(--au-muted); }
+
+.au-notice.is-attn { border-left-color: var(--primary); background: rgba(246, 169, 76, .08); }
+.au-notice.is-attn .au-ico { color: var(--primary); }
+.au-notice.is-good { border-left-color: var(--success); background: rgba(79, 178, 134, .09); }
+.au-notice.is-good .au-ico { color: var(--au-success-text); }
+.au-notice.is-good h3 { color: var(--au-success-text); }
+
+.au-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--au-rule-strong);
+  font-size: var(--au-t-meta);
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--au-muted);
+}
+.au-pill.is-attn { border-color: var(--primary); color: var(--primary); }
+
+/* -------------------------------------------------- password checklist ---- */
+/* Live from the first keystroke, not an error after submitting. There is no
+   strength meter beside it: the checklist states every fact the meter
+   approximates, and two statements of one thing is redundancy. */
+.au-rules { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.au-rules li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: var(--au-t-label);
+  color: var(--au-muted);
+  line-height: 1.4;
+}
+.au-rules .au-bx {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  margin-top: 1px;
+  border: 2px solid var(--au-rule-strong);
+  display: grid;
+  place-items: center;
+}
+/* Met/unmet is carried by data-met on the li, so the state is available to a
+   test and to assistive tech rather than living in colour alone. */
+.au-rules li[data-met="true"] { color: var(--au-success-text); }
+.au-rules li[data-met="true"] .au-bx { border-color: var(--success); background: var(--success); }
+.au-rules li[data-met="true"] .au-bx::after {
+  content: "";
+  width: 9px;
+  height: 5px;
+  margin-top: -2px;
+  border-left: 2px solid #0F1A2E;
+  border-bottom: 2px solid #0F1A2E;
+  transform: rotate(-45deg);
+}
+
+/* --------------------------------------------------------- code cells ----- */
+/* ONE input behind painted cells. Four real inputs break paste, break
+   backspace, and read as four unlabelled fields to a screen reader. */
+.au-codewrap { position: relative; }
+.au-codewrap input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;                      /* still focusable, still pasteable */
+  font-size: var(--au-t-code);     /* >=16px so iOS does not zoom on focus */
+  border: 0;
+  background: transparent;
+  color: transparent;
+  letter-spacing: 1em;
+  padding: 0;
+}
+.au-cells { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; pointer-events: none; }
+.au-cells.au-cells6 { grid-template-columns: repeat(6, 1fr); gap: 7px; }
+.au-cell {
+  height: 62px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--au-radius-sm);
+  background: var(--surface);
+  border: 2px solid var(--au-rule-strong);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--au-t-code);
+  line-height: 1;
+  color: var(--text);
+}
+/* "Typing goes here" is true before the field has focus, so the marker is not
+   conditional on focus. */
+.au-cell.is-next { border-color: var(--primary); }
+
+/* ------------------------------------------------------- definition list -- */
+.au-dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  font-size: var(--au-t-label);
+  margin: 0;
+}
+.au-dl dt { color: var(--au-muted); }
+.au-dl dd { margin: 0; color: var(--text); }
+
+/* --------------------------------------------------------------- foot ----- */
+.au-foot { padding-block: 26px 34px; border-top: 1px solid var(--au-rule); margin-top: 34px; }
+.au-footlinks { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: var(--au-t-meta); }
+/* WCAG 2.5.8 (AA) wants a 24x24 CSS px target. These links were 20px tall --
+   the shortest controls on any of these screens and the only ones that missed
+   it. The padding buys the height without moving the text: the row's own
+   padding-block absorbs it. The wordmark above is 27px and already clears it.
+   (44px is the AAA / 2.5.5 number and is what every real control here uses;
+   a footer link to a legal page is not one of those.) */
+.au-footlinks a {
+  color: var(--au-muted);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
+.au-footlinks a:hover { color: var(--text); text-decoration: underline; }
+
+/* -------------------------------------------------------- the spinner ----- */
+.au-spin { color: var(--primary); display: grid; place-items: center; }

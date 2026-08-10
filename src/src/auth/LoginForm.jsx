@@ -1,260 +1,181 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
+import { startGoogleSignIn } from './googleSignIn';
+import PasswordField from './PasswordField';
+import { GoogleMark, AlertIcon } from './AuthChrome';
 import './auth.css';
-import Icon from '../components/Icon';
-import { rememberReturnPath } from './returnPath';
 
+/**
+ * Host sign in. Built from docs/design/entry-redesign/10-signin.html.
+ *
+ * ONLY GOOGLE EXISTS. The brief says four providers are configured in Cognito;
+ * the app contains exactly one button, and `10-signin.html` draws one plus a
+ * separate panel showing what the block becomes at four. Drawing four buttons
+ * here would be drawing a feature. If the other three are ever wired up, the
+ * one full-width button becomes a two-up grid and nothing else moves.
+ * (RATIONALE.md §8.2, OPEN-QUESTIONS.md §8.)
+ *
+ * THE ERROR COPY IS THE POINT. Cognito's `signIn` failures were unmapped, so a
+ * product that never asks for a username told people "Incorrect username or
+ * password." The mapping now lives in AuthContext (which owns the Cognito
+ * codes); this form echoes the address back, because that is the thing worth
+ * checking, and names the one cause the message cannot otherwise explain --
+ * an account created with Google has no password to be wrong.
+ *
+ * `initialError` carries a message in from the URL, which is how OAuthCallback
+ * reports a failure it could not handle itself.
+ */
 const LoginForm = ({ onToggleMode, onSuccess, initialError }) => {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
+  const [form, setForm] = useState({ email: '', password: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationErrors, setValidationErrors] = useState({});
-  
+  const [fieldErrors, setFieldErrors] = useState({});
+
   const { signIn, error, setError } = useAuth();
-  
-  // Use initial error if provided and no current error
   const displayError = error || initialError;
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    
-    // Clear validation error when user starts typing
-    if (validationErrors[name]) {
-      setValidationErrors(prev => ({
-        ...prev,
-        [name]: ''
-      }));
-    }
-    
-    // Clear auth error when user makes changes
-    if (error) {
-      setError(null);
-    }
+  const change = (key) => (event) => {
+    const { value } = event.target;
+    setForm((prev) => ({ ...prev, [key]: value }));
+    if (fieldErrors[key]) setFieldErrors((prev) => ({ ...prev, [key]: '' }));
+    if (error) setError(null);
   };
 
-  const validateForm = () => {
+  const validate = () => {
     const errors = {};
-    
-    if (!formData.email.trim()) {
-      errors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      errors.email = 'Please enter a valid email address';
-    }
-    
-    if (!formData.password) {
-      errors.password = 'Password is required';
-    }
-    
-    setValidationErrors(errors);
+    if (!form.email.trim()) errors.email = 'We need an email address.';
+    else if (!/\S+@\S+\.\S+/.test(form.email)) errors.email = 'That does not look like an email address.';
+    if (!form.password) errors.password = 'Enter your password.';
+    setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
-    
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!validate()) return;
+
     setIsSubmitting(true);
-    
     try {
-      const user = await signIn(formData.email, formData.password);
-      console.log('Sign in successful:', user);
-      if (onSuccess) {
-        onSuccess(user);
-      }
-    } catch (err) {
-      console.error('Sign in failed:', err);
-      // Error is handled by AuthContext and displayed via the error prop
+      const user = await signIn(form.email, form.password);
+      if (onSuccess) onSuccess(user);
+    } catch (_) {
+      /* surfaced through AuthContext's `error` */
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleGoogleSignIn = () => {
-    console.log('🚀 Google sign-in clicked');
-    
-    // Track that we're in login mode
-    sessionStorage.setItem('authMode', 'login');
-    // Where we were headed, so the callback can put us back -- without it the
-    // callback's fallback '/' sends a host scanning the remote QR to a second
-    // host page on their phone. This form renders both in place (ProtectedRoute
-    // leaves the URL on /remote, and that is the path worth keeping) and on
-    // /auth, where the call is a deliberate no-op: `rememberReturnPath` refuses
-    // auth surfaces, so whatever sent the host here keeps its destination.
-    rememberReturnPath();
-
-    // Use window variables with fallback to env variables (same as AuthContext)
-    const userPoolId = window.USER_POOL_ID || process.env.REACT_APP_USER_POOL_ID;
-    const clientId = window.USER_POOL_CLIENT_ID || process.env.REACT_APP_CLIENT_ID;
-    const cognitoDomain = window.COGNITO_DOMAIN;
-    
-    console.log('Using Cognito config:', { userPoolId, clientId, cognitoDomain });
-
-    // Extract region from User Pool ID
-    const region = userPoolId.split('_')[0];
-    
-    // When using identity_provider=Google, Cognito handles the redirect internally
-    // The redirect_uri here is where Cognito will redirect AFTER Google auth
-    const appCallbackUrl = encodeURIComponent(window.location.origin + '/auth/callback');
-    
-    const googleSignInUrl = `https://${cognitoDomain}.auth.${region}.amazoncognito.com/oauth2/authorize?` +
-      `identity_provider=Google&` +
-      `redirect_uri=${appCallbackUrl}&` +
-      `response_type=token&` +
-      `client_id=${clientId}&` +
-      `scope=openid+email+profile+aws.cognito.signin.user.admin&` +
-      `prompt=select_account&` +
-      `state=login`;
-    
-    console.log('📍 Built OAuth URL:', googleSignInUrl);
-    console.log('📍 About to redirect...');
-    
-    // Add a small delay to ensure logs are visible
-    setTimeout(() => {
-      console.log('⏰ Executing redirect now');
-      window.location.href = googleSignInUrl;
-    }, 100);
-  };
-
-  const getErrorMessage = (fieldName) => {
-    if (validationErrors[fieldName]) {
-      return validationErrors[fieldName];
-    }
-    return '';
-  };
+  // The address is echoed into the headline rather than left implicit: when a
+  // sign-in fails, "which address did I just type" is the question, and a
+  // second account at a different domain is the commonest answer.
+  //
+  // ONLY FOR `error`, NEVER FOR `initialError`. AuthContext's mapped messages
+  // are written to be completed by an address ("That password does not match",
+  // "...for"). `initialError` is an opaque string off the URL that OAuthCallback
+  // put there; appending an address to a sentence not written for one produces
+  // "Something went wrong dana@example.com".
+  const rejected = Boolean(error) && form.email.trim();
 
   return (
-    <div className="auth-form-container">
-      <div className="auth-header">
-        <h2>Sign In to Engagements</h2>
-        <p>Host engaging sessions with your team</p>
+    <div className="au-col au-stack au-s24" style={{ paddingBlock: '8px 40px' }}>
+      <div>
+        <p className="au-kicker">Running a session</p>
+        <h1 style={{ marginTop: '10px' }}>Host sign in</h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="auth-form">
-        {displayError && (
-          <div className="auth-error" role="alert">
-            <i className="error-icon"><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /></i>
-            <span>{displayError}</span>
+      {displayError && (
+        <div className="au-notice is-attn" role="alert">
+          <AlertIcon />
+          <div className="au-notice-body">
+            <h3 className="au-wrapany">
+              {rejected ? `${displayError} ${form.email.trim()}` : displayError}
+            </h3>
+            <p>
+              Signed up with Google? Use the Google button — there is no password on that
+              account.
+            </p>
           </div>
-        )}
+        </div>
+      )}
 
-        <div className="form-group">
-          <label htmlFor="email">
-            Email Address
-          </label>
+      <button
+        type="button"
+        className="au-btn au-btn-social"
+        onClick={() => startGoogleSignIn('login')}
+        disabled={isSubmitting}
+      >
+        <GoogleMark /> Continue with Google
+      </button>
+
+      <p className="au-divider">or</p>
+
+      <form className="au-stack au-s20" onSubmit={handleSubmit} noValidate>
+        <div className="au-field">
+          <label className="au-label" htmlFor="login-email">Email</label>
           <input
-            id="email"
-            type="email"
+            id="login-email"
             name="email"
-            value={formData.email}
-            onChange={handleInputChange}
-            className={`form-input ${validationErrors.email ? 'error' : ''}`}
-            placeholder="Enter your email"
-            disabled={isSubmitting}
-            required
+            className={`au-input${fieldErrors.email || displayError ? ' is-bad' : ''}`}
+            type="email"
             autoComplete="email"
+            autoCapitalize="none"
+            spellCheck="false"
+            placeholder="you@work.com"
+            value={form.email}
+            onChange={change('email')}
+            disabled={isSubmitting}
+            aria-describedby={fieldErrors.email ? 'login-email-err' : undefined}
+            aria-invalid={fieldErrors.email ? true : undefined}
           />
-          {getErrorMessage('email') && (
-            <span className="field-error">{getErrorMessage('email')}</span>
-          )}
+          {fieldErrors.email && <p className="au-hint is-bad" id="login-email-err">{fieldErrors.email}</p>}
         </div>
 
-        <div className="form-group">
-          <label htmlFor="password">
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            name="password"
-            value={formData.password}
-            onChange={handleInputChange}
-            className={`form-input ${validationErrors.password ? 'error' : ''}`}
-            placeholder="Enter your password"
-            disabled={isSubmitting}
-            required
-            autoComplete="current-password"
-          />
-          {getErrorMessage('password') && (
-            <span className="field-error">{getErrorMessage('password')}</span>
-          )}
-        </div>
-
-        <button
-          type="submit"
-          className={`auth-button primary ${isSubmitting ? 'loading' : ''}`}
+        <PasswordField
+          id="login-pw"
+          name="password"
+          label="Password"
+          value={form.password}
+          onChange={change('password')}
+          autoComplete="current-password"
+          invalid={Boolean(fieldErrors.password || displayError)}
           disabled={isSubmitting}
-        >
-          {isSubmitting ? (
-            <>
-              <span className="loading-spinner"></span>
-              Signing In...
-            </>
-          ) : (
-            'Sign In'
-          )}
+          hint={fieldErrors.password}
+          hintId="login-pw-err"
+          trailing={
+            <button
+              type="button"
+              onClick={() => onToggleMode('forgot')}
+              disabled={isSubmitting}
+              style={{
+                background: 'none', border: 0, padding: 0, font: 'inherit',
+                fontWeight: 600, color: 'var(--secondary)', cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
+            >
+              Forgotten it?
+            </button>
+          }
+        />
+
+        <button type="submit" className="au-btn au-btn-primary" disabled={isSubmitting}>
+          {isSubmitting ? 'Signing in…' : 'Sign in'}
         </button>
-
-        {/* Divider */}
-        <div className="auth-divider">
-          <span>or</span>
-        </div>
-
-        {/* Google Sign-In Button */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            handleGoogleSignIn();
-          }}
-          className="auth-button google"
-          disabled={isSubmitting}
-        >
-          <svg width="18" height="18" viewBox="0 0 18 18" style={{ marginRight: '8px' }}>
-            <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18Z"/>
-            <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2.01a4.8 4.8 0 0 1-2.7.75 4.92 4.92 0 0 1-4.64-3.4H1.73v2.08A8.02 8.02 0 0 0 8.98 17Z"/>
-            <path fill="#FBBC05" d="M4.34 10.4a4.9 4.9 0 0 1 0-3.12V5.2H1.73a8.08 8.08 0 0 0 0 7.28l2.6-2.08Z"/>
-            <path fill="#EA4335" d="M8.98 3.58c1.32 0 2.5.45 3.44 1.35l2.54-2.54A7.72 7.72 0 0 0 8.98 1a8.02 8.02 0 0 0-7.25 4.47l2.6 2.08c.6-1.83 2.35-3.4 4.65-3.4Z"/>
-          </svg>
-          Continue with Google
-        </button>
-
-        <div className="auth-links">
-          <button
-            type="button"
-            onClick={() => onToggleMode('register')}
-            className="link-button"
-            disabled={isSubmitting}
-          >
-            Don't have an account? <strong>Sign up</strong>
-          </button>
-          
-          <button
-            type="button"
-            onClick={() => onToggleMode('forgot')}
-            className="link-button"
-            disabled={isSubmitting}
-          >
-            Forgot your password?
-          </button>
-        </div>
       </form>
 
-      <div className="auth-footer">
-        <p className="help-text">
-          <strong>Players:</strong> No account needed to join sessions! 
-          Just use the game code provided by your host.
-        </p>
-      </div>
+      <p className="au-meta">
+        New here?{' '}
+        <button
+          type="button"
+          onClick={() => onToggleMode('register')}
+          disabled={isSubmitting}
+          style={{
+            background: 'none', border: 0, padding: 0, font: 'inherit',
+            color: 'var(--secondary)', cursor: 'pointer', textDecoration: 'underline',
+          }}
+        >
+          Create a host account
+        </button>
+        . It has to be approved by an admin before you can run a session.
+      </p>
     </div>
   );
 };

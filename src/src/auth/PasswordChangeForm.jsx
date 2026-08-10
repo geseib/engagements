@@ -1,160 +1,109 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
+import { passwordMeetsPolicy } from './passwordPolicy';
+import PasswordField from './PasswordField';
+import AuthChrome, { AlertIcon } from './AuthChrome';
 import './auth.css';
-import Icon from '../components/Icon';
 
+/**
+ * The forced password change, for an account an admin created.
+ * Built from docs/design/entry-redesign/17-password-change.html.
+ *
+ * This surface renders its own chrome because AuthPage returns it BEFORE the
+ * page shell -- it is a Cognito challenge mid-sign-in, not one of the modes.
+ *
+ * Its validator was the third of the three that disagreed
+ * (`[!@#$%^&*(),.?":{}|<>]`, which rejects a hyphen), and it is now the shared
+ * one. The old copy explained the rules in a prose paragraph AFTER the fields;
+ * they are a live checklist beside the field now, and there is no confirm field
+ * -- the Show toggle does that job without asking for the password twice.
+ *
+ * The hidden username input is not decoration: without it a password manager
+ * offering to save the new password has no account to file it under.
+ */
 const PasswordChangeForm = () => {
   const { completeNewPassword, error, loading, newPasswordRequired } = useAuth();
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [validationError, setValidationError] = useState('');
+  const [password, setPassword] = useState('');
+  const [showError, setShowError] = useState('');
 
-  const validatePassword = (password) => {
-    const errors = [];
-    
-    if (password.length < 8) {
-      errors.push('At least 8 characters');
-    }
-    if (!/[A-Z]/.test(password)) {
-      errors.push('One uppercase letter');
-    }
-    if (!/[a-z]/.test(password)) {
-      errors.push('One lowercase letter');
-    }
-    if (!/\d/.test(password)) {
-      errors.push('One number');
-    }
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
-      errors.push('One special character');
-    }
-    
-    return errors;
-  };
+  const email = newPasswordRequired?.userAttributes?.email || '';
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setValidationError('');
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setShowError('');
 
-    // Validate passwords match
-    if (newPassword !== confirmPassword) {
-      setValidationError('Passwords do not match');
-      return;
-    }
-
-    // Validate password strength
-    const passwordErrors = validatePassword(newPassword);
-    if (passwordErrors.length > 0) {
-      setValidationError(`Password must have: ${passwordErrors.join(', ')}`);
+    if (!passwordMeetsPolicy(password)) {
+      setShowError('Your password does not meet all five rules yet.');
       return;
     }
 
     try {
-      // Complete the password challenge
-      await completeNewPassword(newPassword);
-    } catch (err) {
-      console.error('Password change failed:', err);
+      await completeNewPassword(password);
+    } catch (_) {
+      /* surfaced through AuthContext's `error` */
     }
   };
 
-  if (!newPasswordRequired) {
-    return null;
-  }
+  if (!newPasswordRequired) return null;
 
   return (
-    <div className="auth-page">
-      <div className="auth-background">
-        <div className="auth-pattern"></div>
-      </div>
-      
-      <div className="auth-container">
-        <div className="auth-nav">
-          <div className="auth-logo">
-            <h1>Engagements</h1>
-            <span className="tagline">
-              Interactive Team Sessions
-              {(() => {
-                const hostname = window.location.hostname;
-                if (hostname.includes('.dev.')) return ' • dev';
-                if (hostname.includes('.test.')) return ' • test';
-                return '';
-              })()}
-            </span>
-          </div>
+    <AuthChrome>
+      <div className="au-col au-stack au-s24" style={{ paddingBlock: '8px 40px' }}>
+        <div>
+          <p className="au-kicker">One thing first</p>
+          <h1 style={{ marginTop: '10px' }}>Choose your own password</h1>
+          <p className="au-muted" style={{ marginTop: '12px' }}>
+            Your account was set up for you, so the password you just used was temporary.
+            It stops working once you pick one.
+          </p>
         </div>
 
-        <div className="auth-form-container">
-          <div className="auth-header">
-            <h2>Set New Password</h2>
-            <p>You must set a new password to continue</p>
+        {error && (
+          <div className="au-notice is-attn" role="alert">
+            <AlertIcon />
+            <div className="au-notice-body">
+              <h3 className="au-wrapany">{error}</h3>
+            </div>
           </div>
+        )}
 
-          <form onSubmit={handleSubmit} className="auth-form">
-            {(error || validationError) && (
-              <div className="auth-error" role="alert">
-                <i className="error-icon"><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /></i>
-                <span>{validationError || error}</span>
-              </div>
-            )}
+        <form className="au-stack au-s20" onSubmit={handleSubmit} noValidate>
+          <input
+            type="email"
+            name="email"
+            autoComplete="username"
+            value={email}
+            readOnly
+            hidden
+            aria-hidden="true"
+          />
 
-            <div className="form-group">
-              <label htmlFor="newPassword">
-                New Password
-              </label>
-              <input
-                id="newPassword"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="form-input"
-                placeholder="Enter your new password"
-                required
-                disabled={loading}
-              />
-            </div>
+          <PasswordField
+            id="set-pw"
+            name="password"
+            label="New password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="new-password"
+            showRules
+            invalid={Boolean(showError)}
+            disabled={loading}
+            hint={showError}
+            hintId="set-pw-err"
+          />
 
-            <div className="form-group">
-              <label htmlFor="confirmPassword">
-                Confirm Password
-              </label>
-              <input
-                id="confirmPassword"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="form-input"
-                placeholder="Confirm your new password"
-                required
-                disabled={loading}
-              />
-            </div>
+          <button type="submit" className="au-btn au-btn-primary" disabled={loading}>
+            {loading ? 'Saving…' : 'Save and continue'}
+          </button>
+        </form>
 
-            <div className="input-hint">
-              Password requirements:
-              <ul style={{ margin: '8px 0 0 16px', listStyle: 'disc' }}>
-                <li>At least 8 characters</li>
-                <li>One uppercase and one lowercase letter</li>
-                <li>One number and one special character</li>
-              </ul>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading || !newPassword || !confirmPassword}
-              className={`auth-button primary ${loading ? 'loading' : ''}`}
-            >
-              {loading ? (
-                <>
-                  <span className="loading-spinner"></span>
-                  Updating...
-                </>
-              ) : (
-                'Set New Password'
-              )}
-            </button>
-          </form>
-        </div>
+        {email && (
+          <p className="au-meta">
+            Signed in as <span className="au-wrapany">{email}</span>.
+          </p>
+        )}
       </div>
-    </div>
+    </AuthChrome>
   );
 };
 

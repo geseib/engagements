@@ -208,7 +208,24 @@ export const AuthProvider = ({ children }) => {
           },
           onFailure: (err) => {
             console.error('Sign in error:', err);
-            setError(err.message);
+            // Cognito's own strings leak its vocabulary into a product that
+            // never asks for a username: "Incorrect username or password."
+            // LoginForm appends the address the user just typed, so these read
+            // as a sentence about a specific account.
+            let errorMessage = err.message;
+            if (err.code === 'NotAuthorizedException') {
+              errorMessage = 'That password does not match';
+            } else if (err.code === 'UserNotFoundException') {
+              // Deliberately the SAME sentence as a wrong password. Saying "no
+              // account for this address" here would be the enumeration oracle
+              // that `forgotPassword` below used to be.
+              errorMessage = 'That password does not match';
+            } else if (err.code === 'UserNotConfirmedException') {
+              errorMessage = 'This address has not been confirmed yet — check your email for the code sent to';
+            } else if (err.code === 'PasswordResetRequiredException') {
+              errorMessage = 'This account needs a new password. Use "Forgotten it?" below for';
+            }
+            setError(errorMessage);
             reject(err);
           },
           newPasswordRequired: (userAttributes, requiredAttributes) => {
@@ -318,9 +335,15 @@ export const AuthProvider = ({ children }) => {
           onFailure: (err) => {
             console.error('Forgot password error:', err);
             let errorMessage = err.message;
-            if (err.code === 'UserNotFoundException') {
-              errorMessage = 'No account found with this email address.';
-            } else if (err.code === 'LimitExceededException') {
+            // THERE IS DELIBERATELY NO `UserNotFoundException` BRANCH HERE.
+            // It used to map to "No account found with this email address." at
+            // an unauthenticated endpoint, which is an account-enumeration
+            // oracle: type an address, learn whether it has an account. The
+            // caller (ForgotPasswordForm) advances to the code step on that
+            // code without showing anything, so the screen says "if there is an
+            // account for <address>, a code is on its way" either way. Adding a
+            // branch back here re-opens the oracle. (RATIONALE.md §8.4.)
+            if (err.code === 'LimitExceededException') {
               errorMessage = 'Too many attempts. Please wait a while before trying again.';
             } else if (err.code === 'InvalidParameterException') {
               errorMessage = 'This account can’t be reset by email. If you signed up with Google, use "Continue with Google" instead.';

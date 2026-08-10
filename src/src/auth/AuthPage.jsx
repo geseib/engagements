@@ -6,70 +6,95 @@ import VerificationForm from './VerificationForm';
 import ForgotPasswordForm from './ForgotPasswordForm';
 import PendingApproval from './PendingApproval';
 import PasswordChangeForm from './PasswordChangeForm';
+import AuthChrome, { Spinner } from './AuthChrome';
 import './auth.css';
-import Icon from '../components/Icon';
 
+/**
+ * The authentication surface, and the argument about its shape.
+ *
+ * THE OWNER ASKED WHETHER THIS SHOULD BE A PANEL ON THE RIGHT. It should not,
+ * and the reason is three lines of App.jsx rather than a matter of taste.
+ *
+ *     function ProtectedRoute({ children }) {
+ *       if (!currentUser) return <AuthPage ... />;   // App.jsx:53-55
+ *       ...
+ *       return children;
+ *     }
+ *
+ * That is an EARLY RETURN. `children` -- the host page, the admin page, the
+ * remote -- is never rendered when this component is on screen. A right-hand
+ * panel is a thing you slide over something; here there is nothing behind it to
+ * slide over, so the panel would be a card floating on an empty field, which is
+ * precisely the shape the welcome screen rejected for the same reason.
+ *
+ * THE SUBTLETY WORTH NAMING. It is true that the URL stays put -- ProtectedRoute
+ * renders in place rather than redirecting, so someone bounced off /admin is
+ * still at /admin while they sign in. So there IS something behind this screen,
+ * but it is a DESTINATION, not a picture. A panel implies you can see past it to
+ * where you are going; you cannot, because React returned a different tree. The
+ * honest way to honour that intuition is in copy -- name the destination -- not
+ * in geometry. That is what `16-blocked.html` specifies and what
+ * `returnPath.js` already makes true.
+ *
+ * Three more things that would break:
+ *   - App.jsx has no client-side navigation; it is a `window.location.pathname`
+ *     switch. A dismissible panel needs a "behind" to return to, and dismissing
+ *     would have to be a full page load anyway.
+ *   - `onCancel` -- the close button this component already has -- is passed by
+ *     nobody (App.jsx:54, 59 and 230 all omit it). The affordance a panel needs
+ *     is dead code today, which is the same finding from the other direction.
+ *   - RATIONALE.md §9 rejected a modal or drawer for sign-in explicitly: it
+ *     hides the destination behind an interaction on the one screen where a
+ *     host's muscle memory is worth most, and it makes the back button lie.
+ *
+ * So: one full-width column, max 26rem, centred -- the mockups' shape. On a
+ * laptop that column sits in a quiet field; on a phone it is the page. What
+ * changes between the two is composition, not size.
+ *
+ * `mode` exists so the root page's "Create a host account" can land on the form
+ * it names. `status=pending` still wins -- an account already waiting for
+ * approval must not be shown a fresh signup form.
+ */
 const AuthPage = ({ onAuthSuccess, onCancel }) => {
-  // Check URL parameters for initial mode and error messages
   const urlParams = new URLSearchParams(window.location.search);
   const statusParam = urlParams.get('status');
   const errorParam = urlParams.get('error');
-  // `mode` exists so the root page's "Create a host account" can land on the
-  // form it names. Without it the link is a lie: it drops someone who has just
-  // decided to sign up onto a password field they have no password for.
-  // `status=pending` still wins -- an account already waiting for approval must
-  // not be shown a fresh signup form.
   const modeParam = urlParams.get('mode');
-  const initialMode = statusParam === 'pending'
-    ? 'pending'
-    : (modeParam === 'register' ? 'register' : 'login');
-  console.log('🔍 AuthPage: URL params:', { statusParam, errorParam, initialMode });
-  
+  const initialMode =
+    statusParam === 'pending' ? 'pending' : modeParam === 'register' ? 'register' : 'login';
+
   const [currentMode, setCurrentMode] = useState(initialMode);
   const [registrationData, setRegistrationData] = useState(null);
-  const [urlError, setUrlError] = useState(errorParam);
+  const [urlError] = useState(errorParam);
   const { currentUser, loading, newPasswordRequired } = useAuth();
-  
-  // Clear URL error after displaying it
+
+  // Clear the error parameter once it has been handed to the form.
   useEffect(() => {
     if (errorParam) {
-      // Clean up the URL to remove the error parameter
-      const newUrl = window.location.pathname + window.location.search.replace(/[?&]error=[^&]+/, '');
+      const newUrl =
+        window.location.pathname + window.location.search.replace(/[?&]error=[^&]+/, '');
       window.history.replaceState({}, document.title, newUrl);
     }
   }, [errorParam]);
 
-  // Check if user is already authenticated
   useEffect(() => {
-    console.log('🔍 AuthPage: useEffect triggered:', { loading, currentUser: !!currentUser, groups: currentUser?.groups, status: currentUser?.status });
     if (!loading && currentUser) {
-      const isPending = currentUser.groups?.includes('pending') || currentUser.status === 'pending';
-      console.log('🔍 AuthPage: User status check:', { isPending, groups: currentUser.groups, status: currentUser.status });
-      
+      const isPending =
+        currentUser.groups?.includes('pending') || currentUser.status === 'pending';
       if (isPending) {
-        console.log('🔍 AuthPage: Setting mode to pending...');
         setCurrentMode('pending');
-      } else {
-        // User is approved, redirect to main app
-        console.log('🔍 AuthPage: User approved, redirecting to main app...');
-        if (onAuthSuccess) {
-          onAuthSuccess(currentUser);
-        }
+      } else if (onAuthSuccess) {
+        onAuthSuccess(currentUser);
       }
     }
   }, [currentUser, loading, onAuthSuccess]);
 
-  const handleToggleMode = (mode) => {
-    setCurrentMode(mode);
-  };
+  const handleToggleMode = (mode) => setCurrentMode(mode);
 
   const handleRegistrationSuccess = (data) => {
     setRegistrationData(data);
-    if (data.nextStep === 'verify') {
-      setCurrentMode('verify');
-    } else if (data.nextStep === 'pending') {
-      setCurrentMode('pending');
-    }
+    if (data.nextStep === 'verify') setCurrentMode('verify');
+    else if (data.nextStep === 'pending') setCurrentMode('pending');
   };
 
   const handleVerificationSuccess = (data) => {
@@ -80,11 +105,8 @@ const AuthPage = ({ onAuthSuccess, onCancel }) => {
   const handleLoginSuccess = (user) => {
     if (user.groups.includes('pending') || user.status === 'pending') {
       setCurrentMode('pending');
-    } else {
-      // User is approved, redirect to main app
-      if (onAuthSuccess) {
-        onAuthSuccess(user);
-      }
+    } else if (onAuthSuccess) {
+      onAuthSuccess(user);
     }
   };
 
@@ -93,126 +115,68 @@ const AuthPage = ({ onAuthSuccess, onCancel }) => {
     setRegistrationData(null);
   };
 
-  // Show password change form if required
+  // A Cognito challenge mid-sign-in, not one of the modes. It brings its own
+  // chrome, so it returns before the shell.
   if (newPasswordRequired) {
     return <PasswordChangeForm />;
   }
 
-  // Show loading spinner while checking authentication
   if (loading) {
     return (
-      <div className="auth-page">
-        <div className="auth-container">
-          <div className="auth-loading">
-            <div className="loading-spinner large"></div>
-            <p>Loading...</p>
-          </div>
+      <AuthChrome>
+        <div className="au-col au-stack au-s24" style={{ paddingBlock: '40px', textAlign: 'center' }}>
+          <Spinner />
+          <p className="au-muted">Checking your sign-in…</p>
         </div>
-      </div>
+      </AuthChrome>
     );
   }
 
+  // The participant escape hatch. It was one dead sentence in the footer of the
+  // sign-in form; here it is a real route, at top left, on the screen most
+  // likely to be reached by mistake. It is offered only where it is true --
+  // someone mid-verification or already waiting on approval is not here by
+  // accident, and `onCancel` (when a caller ever passes one) means there is a
+  // real "back" that is not the root page.
+  const back = onCancel
+    ? { label: 'Back', href: '#', onClick: (e) => { e.preventDefault(); onCancel(); } }
+    : currentMode === 'login' || currentMode === 'register'
+      ? { label: 'Join a session instead', href: '/' }
+      : null;
+
   return (
-    <div className="auth-page">
-      <div className="auth-background">
-        {/* Background pattern or branding */}
-        <div className="auth-pattern"></div>
-      </div>
-      
-      <div className="auth-container">
-        {/* Header with logo and navigation */}
-        <div className="auth-nav">
-          <div className="auth-logo">
-            <h1>Engagements</h1>
-            <span className="tagline">
-              Interactive Team Sessions
-              {(() => {
-                const hostname = window.location.hostname;
-                if (hostname.includes('.dev.')) return ' • dev';
-                if (hostname.includes('.test.')) return ' • test';
-                return '';
-              })()}
-            </span>
-          </div>
-          
-          {onCancel && (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="auth-close"
-              aria-label="Close authentication"
-            >
-              <Icon name="X" weight="bold" size={16} color="currentColor" />
-            </button>
-          )}
-        </div>
+    <AuthChrome back={back}>
+      {currentMode === 'login' && (
+        <LoginForm
+          onToggleMode={handleToggleMode}
+          onSuccess={handleLoginSuccess}
+          initialError={urlError}
+        />
+      )}
 
-        {/* Main authentication content */}
-        <div className="auth-content">
-          {currentMode === 'login' && (
-            <LoginForm 
-              onToggleMode={handleToggleMode}
-              onSuccess={handleLoginSuccess}
-              initialError={urlError}
-            />
-          )}
-          
-          {currentMode === 'register' && (
-            <RegisterForm 
-              onToggleMode={handleToggleMode}
-              onSuccess={handleRegistrationSuccess}
-            />
-          )}
-          
-          {currentMode === 'verify' && registrationData && (
-            <VerificationForm
-              email={registrationData.email}
-              name={registrationData.name}
-              onToggleMode={handleToggleMode}
-              onSuccess={handleVerificationSuccess}
-            />
-          )}
+      {currentMode === 'register' && (
+        <RegisterForm onToggleMode={handleToggleMode} onSuccess={handleRegistrationSuccess} />
+      )}
 
-          {currentMode === 'forgot' && (
-            <ForgotPasswordForm
-              onToggleMode={handleToggleMode}
-            />
-          )}
-          
-          {currentMode === 'pending' && (
-            <PendingApproval 
-              email={registrationData?.email || currentUser?.attributes?.email}
-              name={registrationData?.name || currentUser?.attributes?.name}
-              onSignOut={handleSignOut}
-            />
-          )}
-        </div>
+      {currentMode === 'verify' && registrationData && (
+        <VerificationForm
+          email={registrationData.email}
+          name={registrationData.name}
+          onToggleMode={handleToggleMode}
+          onSuccess={handleVerificationSuccess}
+        />
+      )}
 
-        {/* Footer */}
-        <div className="auth-page-footer">
-          <div className="feature-highlights">
-            <div className="feature-item">
-              <div className="feature-icon"><Icon name="Target" weight="duotone" size={16} color="var(--primary)" /></div>
-              <span>Interactive Trivia & Polls</span>
-            </div>
-            <div className="feature-item">
-              <div className="feature-icon"><Icon name="ChartBar" weight="duotone" size={16} color="var(--primary)" /></div>
-              <span>Real-time Results</span>
-            </div>
-            <div className="feature-item">
-              <div className="feature-icon"><Icon name="Handshake" weight="duotone" size={16} color="var(--primary)" /></div>
-              <span>Team Collaboration</span>
-            </div>
-          </div>
-          
-          <div className="auth-legal-links">
-            <a href="/privacy" className="legal-link">Privacy Policy</a>
-            <span className="legal-separator">•</span>
-            <a href="/terms" className="legal-link">Terms of Service</a>
-          </div>
-        </div>
-      </div>
-    </div>
+      {currentMode === 'forgot' && <ForgotPasswordForm onToggleMode={handleToggleMode} />}
+
+      {currentMode === 'pending' && (
+        <PendingApproval
+          email={registrationData?.email || currentUser?.attributes?.email}
+          name={registrationData?.name || currentUser?.attributes?.name}
+          onSignOut={handleSignOut}
+        />
+      )}
+    </AuthChrome>
   );
 };
 
