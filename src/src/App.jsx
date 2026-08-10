@@ -10,32 +10,43 @@ import AdminPage from './AdminPage';
 import BuilderPage from './BuilderPage';
 import HostRemote from './HostRemote';
 import WordCloudTest from './WordCloudTest';
+import RootPage from './components/RootPage';
+
+// The one spinner. RootGate has to decide before ProtectedRoute runs (that is
+// the whole point of it), so both need this and neither should own it.
+function AuthLoading() {
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '100vh',
+      flexDirection: 'column',
+      gap: '16px'
+    }}>
+      <div style={{
+        width: '32px',
+        height: '32px',
+        border: '3px solid #e2e8f0',
+        borderTop: '3px solid var(--primary)',
+        borderRadius: '50%',
+        animation: 'spin 1s linear infinite'
+      }}></div>
+      <p>Loading...</p>
+    </div>
+  );
+}
 
 // Protected route component that requires authentication
 function ProtectedRoute({ children, requireAdmin = false }) {
-  const { currentUser, loading } = useAuth();
+  // `signOut` is read here, in the component body, and NOT inside the Access
+  // Pending branch's onClick below. A hook called from an event handler has no
+  // dispatcher and throws -- that Sign Out button was dead for as long as the
+  // branch existed, and it is the only way off that screen.
+  const { currentUser, loading, signOut } = useAuth();
 
   if (loading) {
-    return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh',
-        flexDirection: 'column',
-        gap: '16px'
-      }}>
-        <div style={{
-          width: '32px',
-          height: '32px',
-          border: '3px solid #e2e8f0',
-          borderTop: '3px solid var(--primary)',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite'
-        }}></div>
-        <p>Loading...</p>
-      </div>
-    );
+    return <AuthLoading />;
   }
 
   // Check if user is authenticated
@@ -114,7 +125,6 @@ function ProtectedRoute({ children, requireAdmin = false }) {
           </button>
           <button 
             onClick={() => {
-              const { signOut } = useAuth();
               signOut();
               window.location.reload();
             }}
@@ -135,6 +145,38 @@ function ProtectedRoute({ children, requireAdmin = false }) {
   }
 
   return children;
+}
+
+/**
+ * What `/` renders, which until now was a sign-in wall.
+ *
+ * | loading    | the same inline spinner ProtectedRoute shows |
+ * | signed in  | the host page, exactly as before             |
+ * | signed out | the join/host landing page                   |
+ *
+ * The signed-in case is deliberate: making the only repeat users click through
+ * a landing page on every visit would be a real cost paid for a hypothetical.
+ *
+ * The loading case matters as much as the other two -- gating on `!currentUser`
+ * alone would flash the participant landing page at a signed-in host on every
+ * reload, before the token resolves.
+ */
+function RootGate() {
+  const { currentUser, loading } = useAuth();
+
+  if (loading) {
+    return <AuthLoading />;
+  }
+
+  if (!currentUser) {
+    return <RootPage />;
+  }
+
+  return (
+    <ProtectedRoute>
+      <GameHostPage />
+    </ProtectedRoute>
+  );
 }
 
 // Main app router component
@@ -213,6 +255,13 @@ function AppRouter() {
         <HostRemote />
       </ProtectedRoute>
     );
+  }
+
+  // The root, and ONLY the root -- an exact match, not a prefix. Every
+  // unrecognised path keeps falling through to the host page exactly as before;
+  // a 404 route is a separate question.
+  if (path === '/') {
+    return <RootGate />;
   }
 
   // Home/host page (require host authentication)

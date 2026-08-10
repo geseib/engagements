@@ -14,7 +14,15 @@ const AuthPage = ({ onAuthSuccess, onCancel }) => {
   const urlParams = new URLSearchParams(window.location.search);
   const statusParam = urlParams.get('status');
   const errorParam = urlParams.get('error');
-  const initialMode = statusParam === 'pending' ? 'pending' : 'login';
+  // `mode` exists so the root page's "Create a host account" can land on the
+  // form it names. Without it the link is a lie: it drops someone who has just
+  // decided to sign up onto a password field they have no password for.
+  // `status=pending` still wins -- an account already waiting for approval must
+  // not be shown a fresh signup form.
+  const modeParam = urlParams.get('mode');
+  const initialMode = statusParam === 'pending'
+    ? 'pending'
+    : (modeParam === 'register' ? 'register' : 'login');
   console.log('🔍 AuthPage: URL params:', { statusParam, errorParam, initialMode });
   
   const [currentMode, setCurrentMode] = useState(initialMode);

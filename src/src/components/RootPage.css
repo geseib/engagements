@@ -1,0 +1,236 @@
+/* ============================================================
+   ROOT PAGE — the signed-out door at `/`
+   Built from docs/design/entry-redesign/01-root.html and
+   03-join-unknown-code.html. See RATIONALE.md §2–§5 for the derivations.
+
+   Every selector is namespaced `entry-` and scoped under `.entry-page`,
+   because the global styles.css already owns `.btn-primary`, `.card` and
+   friends and this page must not inherit or disturb them.
+   ============================================================ */
+
+.entry-page {
+  /* Warm Summit tokens, but with the entry set's own ladder. The stage's four
+     ladders are derived for a projected image at 25 feet; this surface is a
+     phone at 14in and a laptop at 20in, which land within half an arcminute of
+     each other, so it gets one ladder. RATIONALE.md §3. */
+  --entry-bg: #0F1A2E;
+  --entry-surface: #1B2942;
+  --entry-text: #F4EDE4;
+  --entry-primary: #F6A94C;
+  /* Lighter than styles.css's --muted #9BA8BE. Not a contrast necessity here
+     (#9BA8BE measures 7.2:1 unlifted) -- adopted so a component lifted from
+     this page onto the projector stage does not need a fresh audit. */
+  --entry-muted: #B6C2D4;
+  --entry-rule: rgba(182, 194, 212, .20);
+  --entry-rule-strong: rgba(182, 194, 212, .34);
+
+  --entry-radius: 16px;
+  --entry-radius-sm: 10px;
+
+  --entry-t-code: clamp(38px, 10.5vw, 46px);
+  --entry-t-display: clamp(26px, 6.4vw, 34px);
+  --entry-t-title: 20px;
+  --entry-t-body: 17px;   /* prose AND every input. Never smaller: below 16px
+                             iOS Safari zooms the page on focus. */
+  --entry-t-label: 14px;
+  --entry-t-meta: 13px;   /* floor. Labels only, never a sentence. */
+
+  /* 48 rather than the WCAG/iOS 44: what a cold thumb on a moving train needs. */
+  --entry-tap: 48px;
+  --entry-gutter: 20px;
+
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  background: var(--entry-bg);
+  color: var(--entry-text);
+  font: 400 var(--entry-t-body)/1.5 var(--font-ui, "Inter", system-ui, sans-serif);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+@media (min-width: 900px) {
+  .entry-page { --entry-gutter: 32px; }
+}
+
+.entry-page *,
+.entry-page *::before,
+.entry-page *::after { box-sizing: border-box; }
+
+.entry-page :focus-visible {
+  outline: 3px solid var(--entry-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.entry-pad { padding-inline: var(--entry-gutter); }
+.entry-shell { width: 100%; max-width: 62rem; margin-inline: auto; }
+.entry-grow { flex: 1 1 auto; }
+
+/* ------------------------------------------------------------- top strip -- */
+.entry-top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding-block: 18px; min-height: 60px;
+}
+.entry-brand {
+  display: flex; align-items: baseline; gap: 9px;
+  font-family: var(--font-display, "Archivo Expanded", system-ui, sans-serif);
+  font-weight: 800; font-size: 18px; letter-spacing: -.01em;
+  color: var(--entry-text); text-decoration: none;
+}
+.entry-brand .entry-env {
+  font-family: var(--font-ui, "Inter", system-ui, sans-serif);
+  font-weight: 600; font-size: var(--entry-t-meta); letter-spacing: .10em;
+  text-transform: uppercase; color: var(--entry-muted);
+}
+
+/* ------------------------------------------------------------ typography -- */
+.entry-kicker {
+  font-size: var(--entry-t-meta); font-weight: 700; letter-spacing: .13em;
+  text-transform: uppercase; color: var(--entry-muted); margin: 0;
+}
+.entry-page h1 {
+  font-family: var(--font-display, "Archivo Expanded", system-ui, sans-serif);
+  font-weight: 800; font-size: var(--entry-t-display); line-height: 1.12;
+  letter-spacing: -.015em; margin: 10px 0 0;
+}
+.entry-page h2 {
+  font-family: var(--font-display, "Archivo Expanded", system-ui, sans-serif);
+  font-weight: 800; font-size: var(--entry-t-title); line-height: 1.2;
+  margin: 10px 0 0;
+}
+.entry-page h3 { font-size: var(--entry-t-body); font-weight: 700; margin: 0 0 3px; }
+.entry-page p { margin: 0; }
+.entry-muted { color: var(--entry-muted); }
+.entry-meta { font-size: var(--entry-t-meta); color: var(--entry-muted); }
+.entry-label { font-size: var(--entry-t-label); color: var(--entry-muted); font-weight: 600; }
+
+/* ------------------------------------------------------- the split layout -- */
+/* Mobile first, and mobile is not a fallback here: it is the case. The join
+   column is the whole page; the host column follows it and never precedes it
+   in the DOM, so tab order and screen-reader order match the priority order
+   without any extra work. */
+.entry-split { display: grid; gap: 0; }
+.entry-join { padding-block: 8px 30px; }
+.entry-host { padding-block: 26px 8px; border-top: 1px solid var(--entry-rule); }
+.entry-codeblock { max-width: 23rem; }
+
+/* 900px, NOT 768. At 768 the host column squeezes the four code cells below
+   their derived size, and the code cells are the one element on this page that
+   may not shrink. RATIONALE.md §2. */
+@media (min-width: 900px) {
+  .entry-main { display: flex; align-items: center; }
+  .entry-split {
+    grid-template-columns: minmax(0, 1.5fr) minmax(15rem, 1fr);
+    gap: 0 clamp(40px, 6vw, 84px);
+    align-items: stretch;
+    padding-block: 26px;
+  }
+  .entry-join { padding-block: 0; }
+  .entry-host {
+    padding-block: 0; border-top: 0;
+    border-left: 1px solid var(--entry-rule);
+    padding-left: clamp(36px, 5vw, 64px);
+  }
+  /* QR advice is phone advice. A laptop cannot scan the screen it is looking
+     at, and telling it to is noise. */
+  .entry-phoneonly { display: none; }
+}
+
+/* ---------------------------------------------------------- code entry ---- */
+/* ONE input behind four painted cells. Four real inputs break paste, break
+   backspace, and read as four unlabelled fields to a screen reader. */
+.entry-codewrap { position: relative; }
+.entry-codewrap input {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0;                       /* still focusable, still pasteable */
+  font-size: var(--entry-t-code);   /* >=16px so iOS does not zoom on focus */
+  border: 0; background: transparent; color: transparent;
+  letter-spacing: 1em; padding: 0;
+}
+.entry-cells {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+  pointer-events: none;
+}
+.entry-cell {
+  height: 76px; display: grid; place-items: center;
+  border-radius: var(--entry-radius-sm);
+  background: var(--entry-surface);
+  border: 2px solid var(--entry-rule-strong);
+  font-family: var(--font-display, "Archivo Expanded", system-ui, sans-serif);
+  font-weight: 800; font-size: var(--entry-t-code); line-height: 1;
+  color: var(--entry-text);
+}
+/* The insertion point is marked whether or not the field has focus -- the
+   affordance is "typing goes here", which is true before you tap. The caret
+   only blinks once focus is real, because a caret in an unfocused field is a
+   lie about where the keystrokes are going. */
+.entry-cell.is-next { border-color: var(--entry-primary); }
+.entry-codewrap.is-focused .entry-cell.is-next::after {
+  content: ""; width: 2px; height: 38px; background: var(--entry-primary);
+  animation: entry-caret 1.06s steps(1, end) infinite;
+}
+@keyframes entry-caret { 0%,50% { opacity: 1 } 50.01%,100% { opacity: 0 } }
+.entry-codewrap.is-bad .entry-cell { border-color: var(--entry-primary); }
+
+.entry-hint { margin-top: 6px; font-size: var(--entry-t-label); color: var(--entry-muted); }
+
+/* ------------------------------------------------------------- controls --- */
+.entry-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; min-height: 52px; padding: 14px 20px;
+  border-radius: var(--entry-radius-sm);
+  font: 700 var(--entry-t-body)/1.2 var(--font-ui, "Inter", system-ui, sans-serif);
+  cursor: pointer; border: 2px solid transparent;
+  text-decoration: none; text-align: center;
+}
+.entry-btn-primary {
+  background: var(--entry-primary); color: #0F1A2E; border-color: var(--entry-primary);
+}
+.entry-btn-primary:hover { background: #FFBB63; border-color: #FFBB63; }
+/* A disabled primary must not be mistakable for the secondary sitting under
+   it. Muted text alone was not enough -- the border weight has to drop too. */
+.entry-btn-primary[disabled] {
+  background: transparent; color: var(--entry-muted);
+  border-color: var(--entry-rule); cursor: not-allowed; font-weight: 600;
+}
+.entry-btn-ghost {
+  background: transparent; color: var(--entry-text);
+  border-color: var(--entry-rule-strong);
+}
+.entry-btn-ghost:hover { border-color: var(--entry-muted); }
+.entry-btn-quiet {
+  background: transparent; color: var(--entry-muted); border-color: transparent;
+  min-height: var(--entry-tap); font-weight: 600;
+}
+.entry-btn-quiet:hover { color: var(--entry-text); }
+
+.entry-stack > * + * { margin-top: 12px; }
+
+/* -------------------------------------------------------------- notices --- */
+/* No red. --danger means DESTRUCTIVE in this system and a mistyped code is not
+   destructive. Errors carry a glyph, a sentence and a 3px amber stroke, never
+   colour alone. RATIONALE.md §4.2. */
+.entry-notice {
+  display: flex; gap: 12px; padding: 14px 16px;
+  border-radius: var(--entry-radius-sm);
+  border: 1px solid var(--entry-rule);
+  background: rgba(246, 169, 76, .08);
+  border-left: 3px solid var(--entry-primary);
+}
+.entry-notice .entry-ico { flex: none; width: 22px; height: 22px; margin-top: 1px; color: var(--entry-primary); }
+.entry-notice .entry-notice-body { min-width: 0; }
+.entry-notice p { font-size: var(--entry-t-label); color: var(--entry-muted); }
+
+/* ----------------------------------------------------------------- foot --- */
+.entry-foot {
+  padding-block: 26px 34px; border-top: 1px solid var(--entry-rule); margin-top: 34px;
+}
+.entry-footlinks {
+  display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: var(--entry-t-meta);
+}
+.entry-footlinks a { color: var(--entry-muted); text-decoration: none; }
+.entry-footlinks a:hover { color: var(--entry-text); text-decoration: underline; }
