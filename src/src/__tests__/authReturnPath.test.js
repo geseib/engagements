@@ -1,6 +1,38 @@
 import { rememberReturnPath, takeReturnPath, RETURN_KEY } from '../auth/returnPath';
 
-beforeEach(() => sessionStorage.clear());
+/**
+ * `window.history.pushState` is NOT the lever here, however much it looks like
+ * it should be. setupTests.js replaces `window.location` with a plain object,
+ * and that assignment succeeds -- so pushState moves `document.location` while
+ * `window.location.pathname`, the thing `rememberReturnPath()` actually reads,
+ * stays put. A test written with pushState passes or fails for reasons that
+ * have nothing to do with the code under test. Move the stand-in instead.
+ */
+/**
+ * Move the browser, for real.
+ *
+ * This assigned to `window.location.pathname` and `.search` directly, and under
+ * jsdom 26 that is a SILENT NO-OP: `setupTests.js` tries to replace `location`
+ * with a plain object, `delete window.location` returns false, the real
+ * `Location` survives, and every assignment is treated as an ignored
+ * navigation. So the three tests below ran against `/` no matter what they
+ * asked for — they were not wrong about the behaviour, they were never
+ * reaching it.
+ *
+ * `pushState` is the one thing that actually moves `location` here. It matters
+ * that these tests keep calling `rememberReturnPath()` with NO argument: the
+ * function takes an optional location, and passing one would sidestep exactly
+ * the code path LoginForm and RegisterForm use. The no-argument call reading
+ * `window.location` IS the defect under test.
+ */
+const browserSitsAt = (pathname, search = '') => {
+  window.history.pushState({}, '', `${pathname}${search}`);
+};
+
+beforeEach(() => {
+  sessionStorage.clear();
+  browserSitsAt('/');
+});
 
 describe('the OAuth return path', () => {
   test('remembers path and query, so ?gameId survives the round trip', () => {
@@ -40,6 +72,47 @@ describe('the OAuth return path', () => {
   test('the auth pages themselves are refused, so sign-in cannot loop', () => {
     sessionStorage.setItem(RETURN_KEY, '/auth?status=pending');
     expect(takeReturnPath()).toBeNull();
+  });
+
+  test('a stored destination survives a later remember() made from an auth page', () => {
+    // rejects: an unguarded `rememberReturnPath()` in LoginForm/RegisterForm.
+    // Those run from the Google buttons, by which point the browser is already
+    // sitting on /auth -- so the no-argument call read '/auth' out of
+    // window.location and clobbered whatever the page that sent the host here
+    // had stored. takeReturnPath() then refuses '/auth' and returns null, and
+    // the callback falls back to '/'. The destination is not just wrong, it is
+    // gone: a host who scanned the remote QR lands on a second host page.
+    rememberReturnPath({ pathname: '/remote', search: '?gameId=4821' });
+
+    browserSitsAt('/auth');
+    rememberReturnPath();
+
+    expect(sessionStorage.getItem(RETURN_KEY)).toBe('/remote?gameId=4821');
+    expect(takeReturnPath()).toBe('/remote?gameId=4821');
+  });
+
+  test('an auth page is never stored, even with nothing to protect', () => {
+    // rejects: a guard implemented as "only write when storage is empty".
+    // That shape would let '/auth' in whenever the slot happened to be free,
+    // and takeReturnPath() would hand back null for it -- storing a value that
+    // is guaranteed to be discarded, which reads like a working return path.
+    browserSitsAt('/auth');
+    rememberReturnPath();
+
+    expect(sessionStorage.getItem(RETURN_KEY)).toBeNull();
+  });
+
+  test('a fresh non-auth page still overwrites a stale destination', () => {
+    // rejects: a guard implemented as "only write when storage is empty".
+    // Nothing consumes the key until an OAuth callback runs, so an abandoned
+    // flow leaves its path behind indefinitely; the page the host is actually
+    // on must win over that leftover.
+    rememberReturnPath({ pathname: '/remote', search: '?gameId=1111' });
+
+    browserSitsAt('/host/setup');
+    rememberReturnPath();
+
+    expect(takeReturnPath()).toBe('/host/setup');
   });
 });
 

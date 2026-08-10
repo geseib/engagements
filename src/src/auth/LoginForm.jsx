@@ -83,9 +83,12 @@ const LoginForm = ({ onToggleMode, onSuccess, initialError }) => {
     
     // Track that we're in login mode
     sessionStorage.setItem('authMode', 'login');
-    // Where we were headed, so the callback can put us back. Without this the
-    // callback's hardcoded '/' sends a host scanning the remote QR to a second
-    // host page on their phone.
+    // Where we were headed, so the callback can put us back -- without it the
+    // callback's fallback '/' sends a host scanning the remote QR to a second
+    // host page on their phone. This form renders both in place (ProtectedRoute
+    // leaves the URL on /remote, and that is the path worth keeping) and on
+    // /auth, where the call is a deliberate no-op: `rememberReturnPath` refuses
+    // auth surfaces, so whatever sent the host here keeps its destination.
     rememberReturnPath();
 
     // Use window variables with fallback to env variables (same as AuthContext)

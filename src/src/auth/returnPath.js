@@ -17,9 +17,29 @@ export const RETURN_KEY = 'authReturnTo';
 /** Auth surfaces are never a destination; returning to one loops the sign-in. */
 const NEVER_RETURN_TO = ['/auth', '/login', '/register'];
 
+const isAuthSurface = (pathname) =>
+  NEVER_RETURN_TO.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+
 export function rememberReturnPath(location = window.location) {
   try {
-    const path = `${location.pathname || ''}${location.search || ''}`;
+    const pathname = location.pathname || '';
+
+    // An auth surface is not a destination, so recording one is never merely a
+    // wrong answer -- it is a delete. The Google buttons live on /auth, and
+    // their no-argument calls read window.location, which by then says /auth.
+    // Left unguarded that overwrites the path the page which sent the host to
+    // /auth had already stored, and `takeReturnPath` then refuses the /auth it
+    // finds and reports "nowhere to go". The destination does not survive to
+    // be rejected; it is gone before the callback ever looks. Declining to
+    // write is what keeps the earlier, real destination intact.
+    //
+    // Note this is deliberately NOT "write only when the slot is empty":
+    // nothing consumes the key until an OAuth callback runs, so an abandoned
+    // flow leaves a stale path behind indefinitely, and the page the host is
+    // genuinely on has to be able to win over it.
+    if (isAuthSurface(pathname)) return;
+
+    const path = `${pathname}${location.search || ''}`;
     if (path) sessionStorage.setItem(RETURN_KEY, path);
   } catch (_) {
     /* private mode, quota — the flow still works, it just lands on the default */
@@ -51,8 +71,7 @@ export function takeReturnPath(storage = sessionStorage) {
   }
   if (url.origin !== window.location.origin) return null;
 
-  const path = url.pathname;
-  if (NEVER_RETURN_TO.some((p) => path === p || path.startsWith(`${p}/`))) return null;
+  if (isAuthSurface(url.pathname)) return null;
 
   // Reconstructed from the parsed URL, not the raw stored string -- the raw
   // string can still carry the backslash/control-character tricks above even
