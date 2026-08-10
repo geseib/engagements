@@ -56,6 +56,14 @@ export default function HostActionBar({
     const onKeyDown = (event) => {
       if (event.key !== ' ' && event.key !== 'Spacebar' && event.key !== 'ArrowRight') return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      // A held key — or a presenter clicker's auto-repeat — arrives at the OS
+      // repeat rate, and THE PRIMARY'S MEANING CHANGES BETWEEN REPEATS. On
+      // RESULTS the first press opens "What We Heard" and the next one is
+      // already "Next Round", so a key held a beat too long walks the room
+      // past the AI summary and into the following round, discarding both.
+      // Every advance here is a deliberate act in front of people; none of
+      // them is something you do twice by holding a button down.
+      if (event.repeat) return;
       if (isTypingTarget(event.target)) return;
       // Also stops the browser page-scrolling on space, and stops a *focused*
       // primary button from firing its own click on top of this handler.

@@ -2365,10 +2365,37 @@ Focus on actionable business strategy insights.`;
       // Reload category counts after showing results (categories may have been decremented)
       await loadCategoryCounts();
       
-      
-      // Make sure currentQuestionId is set to the question number
-      setCurrentQuestionId(questionNumber);
-      
+
+      // ─────────────────────────────────────────────────────────────────────
+      // DO NOT reinstate `setCurrentQuestionId(questionNumber)` here.
+      //
+      // It stood on this line and it cost the host the "What We Heard" beat.
+      // `currentQuestionId` holds the QUESTION'S OWN ID everywhere else — it
+      // is looked up as `q.id` (config/instructions.js:110, reached via
+      // `currentQuestionOf`), and every other writer honours that (:1247,
+      // :1258, :2064). A ROUND NUMBER never matches, so from the moment
+      // results opened the host instruction resolver fell through to its
+      // generic default.
+      //
+      // Worse, it made the round's identity change without the round
+      // changing. The sequence: this wrote `1`; `close-round` broadcast
+      // `gameStateChanged`; `restoreGameState` rewrote `currentQuestionId` to
+      // the real id (:1247); `gameState` was unchanged but that dep was not,
+      // so the reset effect at :313 re-ran and forced `resultsBeat` back to
+      // 'results'. A host who pressed "What We Heard" inside that socket
+      // round-trip watched the beat get discarded and the button do nothing.
+      //
+      // It was invisible until the $connect fix (dev-v1.2.0) stopped the
+      // host's CONNECTION# row being deleted out from under its open socket:
+      // before that the host received no broadcasts, so nothing rewrote the
+      // value and the beat stuck. Fixing the connection exposed this.
+      //
+      // Path-dependent, which is why it looked intermittent: it fires only
+      // when the round is closed FROM THE HOST PAGE. Closed from the remote,
+      // or arriving through any re-sync, `currentQuestionId` is already the
+      // question id and the later restore writes the same value.
+      // ─────────────────────────────────────────────────────────────────────
+
       // Fetch AI summary for this question if available (non-blocking)
       // This can happen in the background while results are shown
       fetchAISummary(questionNumber).catch(err => 

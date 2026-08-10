@@ -63,6 +63,26 @@ describe('HostActionBar', () => {
     expect(onAction).not.toHaveBeenCalled();
   });
 
+  // A held key, or a presenter clicker's auto-repeat, arrives at the OS repeat
+  // rate — and the primary's MEANING changes between repeats. On RESULTS the
+  // first press opens "What We Heard" and the next is already "Next Round", so
+  // without this guard a key held one beat too long walks the room past the AI
+  // summary and into the following round, discarding both.
+  //
+  // Rejects: deleting the `event.repeat` check from HostActionBar's keydown
+  // handler. Nothing else in the suite fires a repeated key.
+  it('ignores auto-repeat, so a held key advances exactly one beat', () => {
+    const onAction = jest.fn();
+    render(<HostActionBar controls={controlsFor()} onAction={onAction} />);
+
+    fireEvent.keyDown(window, { key: ' ', repeat: false });
+    fireEvent.keyDown(window, { key: ' ', repeat: true });
+    fireEvent.keyDown(window, { key: ' ', repeat: true });
+    fireEvent.keyDown(window, { key: 'ArrowRight', repeat: true });
+
+    expect(onAction).toHaveBeenCalledTimes(1);
+  });
+
   it('ignores modified key presses so browser shortcuts still work', () => {
     const onAction = jest.fn();
     render(<HostActionBar controls={controlsFor()} onAction={onAction} />);
