@@ -8,7 +8,15 @@ Read `docs/handoff/RESUME.md` in full before doing anything else. It is the whol
 
 ## Where things stand
 
-`dev` is at **`c147ca70`**, **22 commits ahead of `origin/dev`**, nothing pushed and nothing deployed. The working tree is clean.
+`dev` is at **`b6929cac`** and **deployed to `engagedev`** — pipeline execution `ca53ab56` succeeded 2026-08-10. Verified live: `POST /games/{id}/stage-beat` returns 401 (route exists, behind Cognito) where a nonexistent route returns 404, and `GET /games/{id}` still returns the clean `{"error":"Game not found"}` the root page's code check depends on.
+
+**One commit is NOT applied: `b6929cac`, the tag-only pipeline change.** The template is committed; the running pipelines still carry their branch triggers until someone runs
+
+```bash
+aws cloudformation deploy --template-file cicd/pipeline-clean.yaml --stack-name engagecicd --capabilities CAPABILITY_NAMED_IAM
+```
+
+Check before trusting either rule: `aws codepipeline get-pipeline --name engagecicd-pipeline-dev --query 'pipeline.triggers'`.
 
 The last session shipped a five-stream program plus two defect fixes. The design that governs all of it is
 `docs/superpowers/specs/2026-08-09-entry-console-scoreboard-design.md` — read its **§0.0 first**, because it records the rule the owner gave mid-session and it governs every UI change from here on:
@@ -39,33 +47,28 @@ Highlights worth carrying forward:
 
 ---
 
-## THE ONE THING BLOCKED ON THE OWNER
+## Deployment — a tag is the deploy
 
-**Stream E is not real until the pipeline runs.** It is the only change with a `template-clean.yaml` edit — `POST /games/{gameId}/stage-beat`. Until it deploys, the phone's *What We Heard* tap 404s and the stage keeps its client-side beat. It degrades safely; nothing crashes.
+**`b6929cac` made the pipelines tag-triggered only.** All three `Triggers` blocks used to carry a `- Branches:` entry beside the tag one, so `git push origin dev` deployed on its own — which is why `origin/dev` had spent a week 22 commits behind a local branch whose code was already live via tags, and why pushing a branch *and* its tag fired two executions of the same commit.
 
-Everything else in the 22 commits is frontend-only except `create-report.js`'s sort and `get-game-state.js` returning `stageBeat`.
+```
+push tag dev-v*    → engagecicd-pipeline-dev   → engagedev   (auto)
+push tag test-v*   → engagecicd-pipeline-test  → engagetest  (auto)
+push tag prod-v*   → engagecicd-pipeline-prod  → engageprod  (halts at ApprovalForProd)
+```
 
----
-
-## Deployment — corrected, and the correction matters
-
-**The owner believes tagging is what deploys to dev and test. It is not — a branch push deploys too.** Verified against `cicd/pipeline-clean.yaml`: all three `Triggers` blocks (`:304-321`, `:364-375`, `:418-431`) carry a `- Branches:` entry **and** a `- Tags:` entry as separate `Push` entries, which are ORed. The config says so itself:
-
-> *"The branch filter below is what keeps `git push origin dev` deploying."*
-
-So **`git push origin dev` IS a deploy.** That is also why `origin/dev` sits 22 commits behind.
-
-- Prod has one extra guard: a `prod-v*` tag starts the pipeline but still lands on `ApprovalForProd`. Dev and test have no such stage.
-- **Pushing a branch and its tag together fires two executions of the same commit.** Push one or the other.
-- Never run `./deployall`, `./scripts/deploy-clean.sh` or any deploy script.
-- **Committing locally is authorised** (owner, 2026-08-09). Pushing is not. Prod requires checking first.
+- **Confirm it is applied before relying on it** — see "Where things stand". Until the CFN update runs, a branch push still deploys.
+- `BranchName` in each Source action is **not** a trigger; it is the revision a manually-started "Release change" pulls.
+- `engagecicd` is **not** deployed by any pipeline — applied by hand, which is why tag-only survives its own bootstrap.
+- Never run `./deployall`, `./scripts/deploy-clean.sh` or `./scripts/deploy-frontend-eng.sh`. They target the off-pipeline `engdev` stack.
+- **Committing locally is authorised** (owner). **Pushing a `*-v*` tag is the deploy** and needs the owner; prod requires checking first.
 - The pipeline execution history is the only reliable record of what is deployed:
 
 ```bash
 AWS_PROFILE=adminaccess aws codepipeline list-pipeline-executions --pipeline-name engagecicd-pipeline-dev --max-items 5 --query "pipelineExecutionSummaries[].{status:status,rev:sourceRevisions[0].revisionId}" --output table
 ```
 
-**Still proposed, agreed in principle, not implemented: go tag-only.** Delete the three `- Branches:` entries, keep `- Tags:`. That would make the owner's mental model true. Open question first: how does the `engagecicd` stack itself get deployed?
+**Beware `--output text` on a scalar query** — it appends a pagination `None` on a second line, so `[ "$s" != "InProgress" ]` is true while the run is still going. That produced one false "finished" reading. Use `--output table`, or query `stageStates[?stageName=='DeployDev'].latestExecution.status | [0]`.
 
 ---
 
