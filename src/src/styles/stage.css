@@ -338,9 +338,10 @@ body{
    second clamp keyed on a different attribute would be a second place for a
    line clamp to live, which is how one got back into base CSS the first time.
 
-   NOT ported because nothing renders them yet: .hero, .flag, .pager, .podium,
-   .pod, .split, .artwork. Their surfaces (ENDED, the podium) are plan 5. Dead
-   CSS is what Task 4's .chip note was about; it is not repeated here.
+   NOT ported because nothing renders them yet: .flag, .pager, .split,
+   .artwork. Dead CSS is what Task 4's .chip note was about; it is not
+   repeated here. (.hero and .podium/.pod have since been ported, each beside
+   the state that renders it — ENDED's hero, and the podium below it.)
 
    The per-state TREATMENT — which of these each phase uses, and the content
    deletions in spec §6 — is plan 4. This block is types and boxes only.
@@ -369,6 +370,41 @@ body{
    in the fitter's CONTENT list, so it may shrink but may never be abbreviated. */
 .hero{font-family:var(--font-display);font-weight:800;font-size:var(--t-hero);
   line-height:.98;margin:0;letter-spacing:-.01em;max-width:var(--measure);color:var(--text)}
+
+/* ------------------------------------------------------------------ podium
+   Ported from 10-ended.html:391-403, with ONE change: three columns, not two.
+   The mockup drew one champion beside a `Rounds captured · 100%` statistic —
+   a figure that can only ever read 100%, because you only count rounds that
+   happened. The owner asked for a top three, so the stat's slot is card 3's.
+
+   THREE CARDS NEEDED A WIDER BLOCK. The mockup's `width:min(70%,900px)` was
+   sized for two; at three it gives 285px columns and pushes ordinary names to
+   three lines. Measured at 1280x720 across the four profiles at
+   `min(92%,1240px)`: 352px cards, no clipping, and even a 28-character
+   surname wraps rather than truncates. That re-measure is the point — the
+   `.nm` wrap below was a truncation fix made against TWO cards.
+
+   NO `[data-drop]` HOOK ANYWHERE HERE, deliberately. The mockup marks its
+   podium as the first thing sacrificed; this is room-facing content, and
+   fitPolicy.js sacrifices chrome before content. It earns its space through
+   the scale search like everything else. */
+.podium{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:calc(1.2vw + 8px);width:min(92%,1240px);margin:0 auto}
+.pod{background:rgba(27,41,66,.74);border:var(--hair) solid var(--rule);
+  border-radius:var(--radius);padding:calc(1.1vh + 8px) calc(1vw + 8px);text-align:center;min-width:0}
+.pod .pl{font-family:var(--font-display);font-weight:800;font-size:var(--t-meta);
+  letter-spacing:.13em;color:var(--muted)}
+/* Wraps. It ellipsed "Aleksandra Wiśniewska" to "Aleksandra …" with roughly
+   40% of the screen empty, in all four profiles — a name is content. */
+.pod .nm{font-size:var(--t-secondary);font-weight:600;margin:.2em 0 .08em;
+  line-height:1.12;overflow-wrap:anywhere}
+/* NEUTRAL, and the absence of `--primary` here is the rule. Section 4.3
+   allocated ENDED's single amber to the champion; the conclusion holds the
+   hero slot now, and an accented podium beside it would give the screen two
+   accents and send the eye to the leaderboard — the exact outcome §6.12
+   exists to prevent. */
+.pod .sc{font-family:var(--font-display);font-weight:800;
+  font-size:max(var(--floor),calc(var(--t-primary)*.66))}
 
 /* THE FITTER'S OWN VOICE — "Full prompt · How to answer — in the session
    report". It had no rule at all, so the one sentence whose entire job is to

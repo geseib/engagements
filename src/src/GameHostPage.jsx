@@ -14,6 +14,7 @@ import HostActionBar from './components/HostActionBar';
 import Stage from './components/stage/Stage';
 import Rail from './components/stage/Rail';
 import RoomMeter from './components/stage/RoomMeter';
+import Podium from './components/stage/Podium';
 import Dock from './components/stage/Dock';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
 import { loadProfile, saveProfile } from './config/displayProfile';
@@ -23,6 +24,7 @@ import {
   resolveInstruction, currentQuestionOf, resolveRoundNoun, pluralRoundNoun,
 } from './config/instructions';
 import { resetGameSession } from './config/gameSession';
+import { calculatePlayerRankings } from './config/podium';
 import { createGameBody } from './config/createGame';
 import { gameTypeMeta, gameTypeLabel } from './config/gameTypes';
 import {
@@ -38,33 +40,6 @@ import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
 
 const API_BASE = window.API_BASE;
-
-// Utility function to calculate proper rankings with tie handling
-const calculatePlayerRankings = (players) => {
-  // Sort players by score (descending)
-  const sortedPlayers = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
-  
-  let currentRank = 1;
-  const rankedPlayers = [];
-  
-  for (let i = 0; i < sortedPlayers.length; i++) {
-    const player = sortedPlayers[i];
-    const playerScore = player.score || 0;
-    
-    // If this isn't the first player and score is different from previous, 
-    // update rank to current position + 1
-    if (i > 0 && playerScore !== (sortedPlayers[i - 1].score || 0)) {
-      currentRank = i + 1;
-    }
-    
-    rankedPlayers.push({
-      ...player,
-      rank: currentRank
-    });
-  }
-  
-  return rankedPlayers;
-};
 
 /**
  * How far above its ladder each state may grow, from the mockups' own
@@ -4013,6 +3988,31 @@ Ready to engage? See you there!`;
                     })}
                   </div>
                 )}
+
+                {/* THE PODIUM IS CONTENT, AND IT LIVES HERE — inside .content,
+                    not in the meter and not in the setup panel.
+
+                    The meter cannot hold it: it returns null on RESULTS,
+                    FIELD_NOTES and ENDED, so the podium exists exactly where
+                    the meter does not. And even if it could, fitPolicy.js
+                    enters the meter into the sacrifice list at priority -1,
+                    ahead of every data-drop group — a podium there would be
+                    the FIRST thing thrown away on the densest results screen,
+                    which is worse than no podium because the host has already
+                    told the room it is coming.
+
+                    `authorsRevealed` is the STAGE TOGGLE here, not the server
+                    flag: by RESULTS every row already carries its author, and
+                    the toggle is what decides whether the projector prints
+                    them. Hiding the names has to take the arithmetic with it —
+                    a score that jumps names its author as surely as a label. */}
+                <Podium
+                  phase="RESULTS"
+                  gameType={currentGameType}
+                  anonymousUntilReveal={anonymousUntilReveal}
+                  authorsRevealed={!authorsHiddenOnStage}
+                  players={players}
+                />
               </>
             )}
 
@@ -4122,9 +4122,43 @@ Ready to engage? See you there!`;
                 <h1 className="hero">
                   {`${lessonNumber} ${pluralRoundNoun(getHostRoundNoun(), lessonNumber).toLowerCase()} played`}
                 </h1>
+                {/* IN THE CONTENT FLOW, ABOVE THE PODIUM, UNDROPPABLE.
+                    10-ended.html puts its people figure INSIDE the podium's
+                    data-drop group, so under pressure the screen loses the one
+                    number the owner asked for and keeps the sentence. This
+                    line stays out here where nothing can sacrifice it.
+
+                    It is a room count, not yet a participation rate. The
+                    honest sentence — "34 of 40 people took part" — needs a
+                    count of distinct people who answered at least once, which
+                    only the server can compute (the names are in the sort key
+                    and must not cross the wire). That count does not exist
+                    yet, so this states what it can rather than a figure that
+                    would be 100% by construction. */}
                 <p className="qdetail">
                   {`${players.length} in the room · the full write-up is in the session report`}
                 </p>
+
+                {/* The mockup's second stat card — `Rounds captured · All
+                    eight · 100%` — is deliberately NOT here. You only count
+                    rounds that happened, so it can only ever read 100%: the
+                    same structural lie as get-ai-summary.js:1599, drawn into
+                    the design layer. The slot is the podium's, and the podium
+                    is three cards.
+
+                    `authorsRevealed` is the SERVER flag here, not the stage
+                    toggle: the toggle is scoped to a round's own results view
+                    and the session is over. Gating on the reveal having
+                    happened is the point — a podium is a score table for the
+                    whole session, and a session with an unrevealed round would
+                    attribute it retroactively. */}
+                <Podium
+                  phase="ENDED"
+                  gameType={currentGameType}
+                  anonymousUntilReveal={anonymousUntilReveal}
+                  authorsRevealed={authorsRevealed}
+                  players={players}
+                />
               </>
             )}
 
