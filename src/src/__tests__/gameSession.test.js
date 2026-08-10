@@ -79,8 +79,24 @@ describe('initialGameSession', () => {
     expect(s.showExpandedQR).toBe(false);
     expect(s.qrMode).toBeNull();
     expect(s.lessonExpanded).toBe(false);
-    expect(s.instructionsVisible).toBe(false);
-    expect(s.showQuestionBrowser).toBe(false);
+    // The setup panel replaced both side panels and the question-browser modal.
+    // It joins the reset for the same reason qrMode did: every one of its three
+    // tabs is about the game that just ended — the roster, the per-category
+    // remaining counts and the browser's already-asked marks — so a panel left
+    // open over a new lobby is showing the previous session's facts.
+    expect(s.setupPanelOpen).toBe(false);
+    expect(s.browsingQuestions).toEqual([]);
+  });
+
+  it('no longer carries the state the deleted panels owned', () => {
+    // rejects: leaving dead keys behind in the reset map. questionSetTabVisible
+    // was declared, set, cleared by closeAllSidePanels and read by NOTHING —
+    // the exact shape of state that survives a deletion.
+    const s = initialGameSession();
+    for (const dead of ['instructionsVisible', 'questionSetTabVisible',
+      'showQuestionBrowser', 'selectedCategory']) {
+      expect(Object.prototype.hasOwnProperty.call(s, dead)).toBe(false);
+    }
   });
 
   it('clears questions and currentQuestionId together', () => {

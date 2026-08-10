@@ -561,7 +561,15 @@ describe('the side panels and the dock', () => {
    * rule and the browser pass asserts the geometry. It fails against the file
    * as it stood.
    */
-  for (const selector of ['.instructions-sidebar', '.qr-sidebar']) {
+  /*
+   * `.instructions-sidebar` and `.qr-sidebar` were the two panels this was
+   * written against. Both are deleted; `.setup-panel` replaced them, along
+   * with the full-screen question browser that used to cover the dock at
+   * `z-index: 999999`. The RULE is unchanged and now has one subject plus its
+   * scrim — the scrim matters as much as the panel, because a scrim over the
+   * dock swallows the click even where nothing is drawn.
+   */
+  for (const selector of ['.setup-panel', '.setup-panel-scrim']) {
     test(`${selector} stops short of the dock rather than covering it`, () => {
       const at = css.indexOf(`\n${selector} {`);
       expect(at).toBeGreaterThan(-1);
@@ -569,10 +577,17 @@ describe('the side panels and the dock', () => {
       // --dock-measured, not --dock-h: the token is the dock's MIN-height and
       // the dock outgrows it on a short viewport, which left the panel lapping
       // over the primary button by 2px at 1280x720 in Table.
-      expect(rule).toMatch(/height:\s*calc\(100dvh - var\(--dock-measured, var\(--dock-h/);
-      expect(rule).not.toMatch(/height:\s*100vh/);
+      expect(rule).toMatch(/bottom:\s*var\(--dock-measured, var\(--dock-h/);
+      expect(rule).toMatch(/position:\s*fixed/);
+      expect(rule).not.toMatch(/bottom:\s*0/);
     });
   }
+
+  test('nothing on the host page carries the browser modal\'s old z-index', () => {
+    // rejects: reintroducing `z-index: 999999`, which was the highest in the
+    // codebase by three orders of magnitude and drew over the dock — audit A6.
+    expect(css).not.toMatch(/z-index:\s*999999/);
+  });
 
   test('the dock publishes its measured height for the panels to subtract, and clears it on unmount', () => {
     // jsdom reports every box as zero-sized (scrollHeight/clientHeight are

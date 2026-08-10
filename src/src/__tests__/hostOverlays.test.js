@@ -40,7 +40,7 @@ describe('shortcutsSuppressed — which overlays take SPACE away', () => {
     // rejects: a refactor that keeps the qrMode rule but loses one of the
     // modal terms — each of these covers something the host is reading or
     // filling in, and SPACE firing underneath it advances a live room.
-    for (const flag of ['showConfirmModal', 'showQuestionBrowser', 'showExpandedQR',
+    for (const flag of ['showConfirmModal', 'showExpandedQR',
       'showReportsModal', 'lessonExpanded', 'isLoadingData']) {
       expect(shortcutsSuppressed({ [flag]: true })).toBe(true);
     }
@@ -49,16 +49,63 @@ describe('shortcutsSuppressed — which overlays take SPACE away', () => {
   test('preview does not cancel a suppression something else asked for', () => {
     // rejects: an implementation that returns `qrMode === 'pinned'` alone, or
     // otherwise lets the QR state override the modals.
-    expect(shortcutsSuppressed({ qrMode: 'preview', showQuestionBrowser: true })).toBe(true);
+    expect(shortcutsSuppressed({ qrMode: 'preview', showConfirmModal: true })).toBe(true);
   });
+
+  /**
+   * THE QUESTION BROWSER IS NO LONGER A FULL-SCREEN MODAL.
+   *
+   * It was one — a fixed scrim at `z-index: 999999` covering the dock — and
+   * while it was, suppressing SPACE beneath it was right. It is now a section
+   * of the setup panel, which stops at the top of the dock with the primary
+   * button and its SPACE chip visibly live underneath. The chip renders exactly
+   * when nothing is suppressing, so keeping the term would make the host watch
+   * the affordance blink out while looking at a button that still works.
+   *
+   * What replaces it is scoped to where the key landed, not to what is on
+   * screen: HostActionBar ignores SPACE whose target is inside `.setup-panel`.
+   */
+  test('the question browser no longer takes SPACE away', () => {
+    // rejects: re-adding a showQuestionBrowser term to this function.
+    expect(shortcutsSuppressed({ showQuestionBrowser: true })).toBe(false);
+  });
+});
+
+describe('the host page passes the right ARGUMENTS, not just the right call', () => {
+  const source = fs.readFileSync(HOST_PAGE, 'utf8');
+  // The argument object as written at the call site.
+  const callArgs = (source.match(/const anyOverlayOpen = shortcutsSuppressed\(\{([\s\S]*?)\}\);/) || [])[1];
 
   test('the host page actually calls it, rather than keeping a private copy', () => {
     // rejects: leaving the inline Boolean(...) in GameHostPage and exporting
     // an unused helper — which is how qrOverlayClassName could stop being
     // called without a single test noticing.
-    const source = fs.readFileSync(HOST_PAGE, 'utf8');
     expect(source).toMatch(/const anyOverlayOpen = shortcutsSuppressed\(/);
     expect(source).not.toMatch(/anyOverlayOpen = Boolean\(/);
+    expect(callArgs).toBeDefined();
+  });
+
+  /**
+   * THE RECORDED LANDMINE. `shortcutsSuppressed` is extracted and tested, but
+   * deleting an argument from its CALL SITE reinstates the defect with the
+   * whole suite green — the function keeps returning the right answer for the
+   * inputs it is given, and nobody is giving it the input. So these assert the
+   * argument, not the call.
+   */
+  test('every term the rule still needs is actually passed to it', () => {
+    // rejects: dropping `qrMode` (a pinned full-screen QR advanced straight
+    // through), or any of the modal terms, from the call site.
+    for (const term of ['showConfirmModal', 'showExpandedQR', 'showReportsModal',
+      'lessonExpanded', 'isLoadingData', 'qrMode']) {
+      expect(callArgs).toMatch(new RegExp(`\\b${term}\\b`));
+    }
+  });
+
+  test('neither the browser nor the setup panel is passed', () => {
+    // rejects: re-adding blanket suppression at the call site — the exact
+    // shape of the bug the SPACE chip advertises and the panel would hide.
+    expect(callArgs).not.toMatch(/\bshowQuestionBrowser\b/);
+    expect(callArgs).not.toMatch(/\bsetupPanelOpen\b/);
   });
 });
 

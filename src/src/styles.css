@@ -187,19 +187,19 @@ body {
 /* ---------------------------------------------------------------------------
    Fixed rails, and the strip the action bar occupies.
 
-   The Game Info and How-to-Play panels are `position: fixed`. The previous
-   scheme reserved room for them with `margin-right: 320px` on a container that
-   also had `width: 100%` — which over-constrains the box, so the auto margin
+   HISTORICAL, and kept because the variables below are still read. The Game
+   Info and How-to-Play panels were `position: fixed`, and an earlier scheme
+   reserved room for them with `margin-right: 320px` on a container that also
+   had `width: 100%` — which over-constrains the box, so the auto margin
    collapses and the declared gutter is simply ignored. On top of that the Game
-   Info panel becomes 600px wide (`.qr-sidebar.two-column`) the moment a
-   question set is chosen, i.e. for the whole of a live game. Measured at
-   1280×800 the panel covered 480px of the 1160px content column; even at
-   1920×1080 it covered 280px. `closeAllSidePanels()` on every advance was
-   papering over that.
+   Info panel widened to 600px the moment a question set was chosen, i.e. for
+   the whole of a live game: measured at 1280×800 it covered 480px of the
+   1160px content column.
 
-   Now the rail width is one variable, the layout reserves it as PADDING on the
-   layout root (so the content column still centres in what is left), and the
-   action bar uses the same variable to stop short of the panel.
+   Both panels are gone. `.setup-panel` replaced them and reserves nothing —
+   it overlays, and advancing closes it. `--rail-right` / `--rail-left` stay at
+   0px because `.host-action-bar` still reads them in standard (non-stage)
+   mode.
    --------------------------------------------------------------------------- */
 .main-layout {
   position: relative;
@@ -212,18 +212,12 @@ body {
   transition: padding 0.3s ease;
 }
 
-.main-layout.rail-right-narrow { --rail-right: 300px; }  /* join-only panel */
-.main-layout.rail-right-wide   { --rail-right: 600px; }  /* + question-set column */
-.main-layout.rail-left         { --rail-left: 300px; }   /* How to Play */
-
-/* Below this width, reserving a rail would crush the content column past
-   readability, so the panels go back to overlaying — a deliberate, temporary
-   inspection state the host opened. */
-@media (max-width: 1024px) {
-  .main-layout.rail-right-narrow,
-  .main-layout.rail-right-wide { --rail-right: 0px; }
-  .main-layout.rail-left { --rail-left: 0px; }
-}
+/* `.rail-right-narrow`, `.rail-right-wide` and `.rail-left` used to live here
+   with a `@media (max-width:1024px)` companion. Nothing has applied those
+   classes since the stage landed — the panels became fixed overlays and the
+   reserved gutter went with them — so they were dead rules carrying a long and
+   by then misleading rationale. The two variables above stay at 0px because
+   `.host-action-bar` still reads them in standard (non-stage) mode. */
 
 @media (prefers-reduced-motion: reduce) {
   .main-layout { transition: none; }
@@ -443,104 +437,368 @@ body {
    panel subtracting the token still lapped 17px over the dock and 2px over
    the primary button. `--dock-h` remains the fallback for the first paint,
    and the 0px behind it is for any surface that mounts these panels without a
-   stage at all. */
-/* Instructions Sidebar */
-.instructions-sidebar {
+   stage at all.
+
+   The two side panels this was written for are gone; `.setup-panel` below
+   inherits the rule verbatim, and it is the only panel left. */
+
+/* ---------------------------------------------------------------------------
+   THE SESSION SETUP PANEL — one surface, three tabs, and it stops at the dock.
+
+   Geometry ported from docs/design/host-redesign/11-console.html: a right-hand
+   drawer, `min(560px, 44vw)` wide, with a primary-coloured left edge. It is a
+   SIBLING of `.stage`, never a child — anything inside the measured subtree
+   enters useStageFit's world, and a tab list of unknown length would drive the
+   scale search to its floor.
+
+   `bottom: var(--dock-measured, ...)` on both the scrim and the panel is the
+   rule above, and it is audit check A6: the dock is a no-overlay zone. The
+   mockup's own comment records the revision where the drawer was bottom:0 and
+   sat on top of the primary action while the shortcut was simultaneously
+   disabled — with the panel open there was no way to advance the session at
+   all.
+   --------------------------------------------------------------------------- */
+.setup-panel-scrim {
   position: fixed;
   top: 0;
-  left: -300px;
-  width: 300px;
-  height: calc(100dvh - var(--dock-measured, var(--dock-h, 0px)));
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
-  transition: left 0.3s ease;
-  overflow-y: auto;
-}
-
-.instructions-sidebar.visible {
   left: 0;
+  right: 0;
+  bottom: var(--dock-measured, var(--dock-h, 0px));
+  z-index: 999;
+  background: rgba(6, 11, 21, 0.74);
+  backdrop-filter: blur(3px);
 }
 
-.instructions-content {
-  padding: 30px 25px;
-}
-
-.instructions-content h3 {
-  font-family: var(--font-display);
-  font-size: 1.8rem;
-  font-weight: 800;
-  color: var(--primary);
-  margin-bottom: 20px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.instructions-content h4 {
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: #333;
-  margin: 20px 0 10px;
-}
-
-.instructions-content ol,
-.instructions-content ul {
-  margin-bottom: 20px;
-  padding-left: 20px;
-}
-
-.instructions-content li {
-  margin-bottom: 8px;
-  line-height: 1.5;
-  color: #444;
-}
-
-.instructions-tab {
-  position: fixed;
-  top: 50%;
-  left: 0;
-  transform: translateY(-50%);
-  background: rgba(255, 255, 255, 0.95);
-  padding: 15px 8px;
-  border-radius: 0 12px 12px 0;
-  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.15);
-  cursor: pointer;
-  z-index: 1001;
-  transition: all 0.3s ease;
-  writing-mode: vertical-rl;
-  font-weight: 600;
-  color: var(--primary);
-}
-
-/* Move instructions tab when sidebar is open - attach to right edge of panel */
-.main-layout .instructions-sidebar.visible ~ .instructions-tab {
-  left: 300px; /* Width of instructions sidebar (300px) */
-}
-
-.instructions-tab:hover {
-  background: var(--primary);
-  color: white;
-}
-
-/* QR Code Sidebar */
-/* Stops at the top of the dock. See the note above .instructions-sidebar. */
-.qr-sidebar {
+.setup-panel {
   position: fixed;
   top: 0;
-  right: -300px;
-  width: 300px;
-  height: calc(100dvh - var(--dock-measured, var(--dock-h, 0px)));
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.15);
+  right: 0;
+  bottom: var(--dock-measured, var(--dock-h, 0px));
+  width: min(560px, 44vw);
+  min-width: 320px;
   z-index: 1000;
+  background: #111D33;
+  border-left: 2px solid var(--primary);
+  color: #F4EDE4;
   display: flex;
   flex-direction: column;
-  transition: right 0.3s ease;
-  overflow: hidden;
+  font-size: 15px;
 }
 
-.qr-sidebar.visible {
-  right: 0;
+.setup-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid rgba(155, 168, 190, 0.22);
+}
+
+.setup-panel__title {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-weight: 800;
+  font-size: 19px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+/* The first thing a host looks at when the room stops updating, so it is in
+   the header rather than behind a tab. */
+.setup-panel__ws {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #B6C2D4;
+  white-space: nowrap;
+}
+.setup-panel__ws.connected { color: #6FD0A4; }
+
+.setup-panel__close {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 17px;
+  background: #25375A;
+  border: 1px solid rgba(155, 168, 190, 0.22);
+  color: #F4EDE4;
+  cursor: pointer;
+}
+
+.setup-panel__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 20px 0;
+  border-bottom: 1px solid rgba(155, 168, 190, 0.22);
+}
+
+.setup-panel__tab {
+  font: inherit;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 9px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #B6C2D4;
+  cursor: pointer;
+}
+.setup-panel__tab.is-active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+/* THE ONE SURFACE PERMITTED TO SCROLL, and only here — audit A1 says nothing
+   else on the host screen may. Cold content below the fold costs nothing;
+   the dock beneath it stays reachable because the panel stops short of it. */
+.setup-panel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.setup-h {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #B6C2D4;
+  font-weight: 700;
+}
+.setup-h:first-child { margin-top: 0; }
+
+.setup-note,
+.setup-empty {
+  color: #B6C2D4;
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.setup-url {
+  margin: 0;
+  font-size: 13px;
+  word-break: break-all;
+  color: #F4EDE4;
+}
+
+.setup-row {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip) {
+  font: inherit;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #25375A;
+  border: 1px solid rgba(155, 168, 190, 0.22);
+  color: #F4EDE4;
+  cursor: pointer;
+}
+.setup-panel button:disabled { opacity: 0.5; cursor: default; }
+
+.setup-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #B6C2D4;
+}
+.setup-field select {
+  font: inherit;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: #25375A;
+  border: 1px solid rgba(155, 168, 190, 0.22);
+  color: #F4EDE4;
+}
+
+/* --- Players ------------------------------------------------------------- */
+.setup-roster { list-style: none; margin: 0; padding: 0; }
+.setup-roster__row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(155, 168, 190, 0.22);
+  font-size: 14px;
+}
+.setup-roster__row:last-child { border-bottom: 0; }
+.setup-roster__rank { color: #B6C2D4; font-weight: 700; }
+.setup-roster__name { min-width: 0; overflow-wrap: anywhere; }
+.setup-roster__score { color: #B6C2D4; font-weight: 600; white-space: nowrap; }
+
+/* --- Categories ---------------------------------------------------------- */
+.setup-cats { display: flex; flex-wrap: wrap; gap: 7px; }
+.setup-cat {
+  display: inline-flex;
+  gap: 7px;
+  align-items: baseline;
+}
+.setup-cat.selected {
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+  background: rgba(246, 169, 76, 0.12) !important;
+}
+.setup-cat__count { font-size: 12px; opacity: 0.8; }
+/* A category at zero cannot yield a question. Saying so is what stops a host
+   turning it on and watching nothing happen. */
+.setup-cat.exhausted { opacity: 0.45; text-decoration: line-through; }
+
+/* --- The browser --------------------------------------------------------- */
+.setup-qb__tools {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.setup-qb__searchlbl { flex: 1 1 200px; min-width: 0; display: block; }
+.setup-qb__search {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  background: #1B2942;
+  border: 1px solid rgba(155, 168, 190, 0.22);
+  color: #F4EDE4;
+}
+.setup-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.setup-chip {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: #25375A;
+  border: 1px solid rgba(155, 168, 190, 0.22);
+  color: #B6C2D4;
+  cursor: pointer;
+}
+.setup-chip.on {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(246, 169, 76, 0.1);
+}
+
+.setup-qb__privacy {
+  margin: 0;
+  padding-left: 9px;
+  border-left: 3px solid var(--primary);
+  font-size: 13px;
+  line-height: 1.45;
+  color: #B6C2D4;
+}
+.setup-qb__privacy b { color: #F4EDE4; }
+
+.setup-qb__count {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #B6C2D4;
+}
+
+.setup-qb__list { display: flex; flex-direction: column; }
+.setup-qb__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(155, 168, 190, 0.22);
+}
+.setup-qb__row:last-child { border-bottom: 0; }
+/* Used rows STAY, dimmed. "Did I already use this?" is the question a host
+   asks most, and hiding the row hides the answer to it. */
+.setup-qb__row.is-used { opacity: 0.55; }
+.setup-qb__main { min-width: 0; }
+.setup-qb__title { font-size: 15px; font-weight: 700; line-height: 1.3; }
+.setup-qb__detail {
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #B6C2D4;
+}
+.setup-qb__meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 5px;
+  font-size: 12px;
+}
+.setup-qb__cat {
+  color: var(--secondary, #7CA7E6);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.setup-qb__diff,
+.setup-qb__kind,
+.setup-qb__used { color: #B6C2D4; font-weight: 600; }
+
+.setup-qb__use { white-space: nowrap; }
+
+.setup-loading { color: #B6C2D4; font-size: 13px; }
+
+/* --- The remote ---------------------------------------------------------- */
+/* The word "join" must never appear in here: this QR is behind the host
+   sign-in, and it shipped once under a "Join In" heading — so a host who told
+   a latecomer to scan "the QR in the panel" sent that player to a login for an
+   account they will never have. */
+.setup-remote {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 12px;
+  border: 1px solid rgba(155, 168, 190, 0.22);
+  border-radius: 12px;
+  background: #1B2942;
+}
+.setup-remote svg { background: #fff; padding: 8px; border-radius: 8px; }
+
+.setup-keys {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  color: #B6C2D4;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.setup-keys kbd {
+  font: inherit;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: #25375A;
+  border: 1px solid rgba(155, 168, 190, 0.22);
+  color: #F4EDE4;
 }
 
 .qr-content {
@@ -941,38 +1199,8 @@ body {
   width: 100%;
 }
 
-.qr-tab {
-  position: fixed;
-  top: 50%;
-  right: 0;
-  transform: translateY(-50%);
-  background: rgba(255, 255, 255, 0.95);
-  padding: 15px 8px;
-  border-radius: 12px 0 0 12px;
-  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.15);
-  cursor: pointer;
-  z-index: 1001;
-  transition: all 0.3s ease;
-  writing-mode: vertical-rl;
-  font-weight: 600;
-  color: var(--primary);
-}
-
 /* Move QR tab when sidebar is open - attach to left edge of panel */
-.main-layout .qr-sidebar.visible ~ .qr-tab {
-  right: 300px; /* Width of QR sidebar (300px) */
-}
-
 /* Move QR tab when two-column sidebar is open */
-.main-layout .qr-sidebar.visible.two-column ~ .qr-tab {
-  right: 600px; /* Width of two-column QR sidebar (600px) */
-}
-
-.qr-tab:hover {
-  background: var(--primary);
-  color: white;
-}
-
 .game-host-container {
   background: white;
   border-radius: 20px;
@@ -1977,12 +2205,6 @@ body {
 .player-info-external .websocket-indicator:hover {
   background: rgba(0, 0, 0, 0.1);
   transform: scale(1.05);
-}
-
-.qr-sidebar .game-id {
-  font-weight: 800;
-  color: #333;
-  margin-bottom: 15px;
 }
 
 .waiting-screen, .question-screen, .voting-screen, .results-screen {
@@ -4234,21 +4456,6 @@ body {
 }
 
 /* Two-column QR Sidebar Styles */
-.qr-sidebar.two-column {
-  width: 600px;
-  right: -600px;
-}
-
-.qr-sidebar.two-column.visible {
-  right: 0;
-}
-
-.qr-sidebar-columns {
-  display: flex;
-  height: 100%;
-  width: 100%;
-}
-
 .qr-column-left {
   width: 300px;
   display: flex;

@@ -34,10 +34,12 @@
  *     `triviaTimer` was on the old list and is deleted outright — the backend
  *     never read it.)
  *   - libraries that are refetched anyway (questionSets, personas).
- *   - the display profile and qrSidebarVisible — room-display preferences. A
- *     host running a projector wants it to stay a projector across games; the
- *     profile is persisted to localStorage for the same reason, and a reset
- *     here would undo a reload's whole point.
+ *   - the display profile — a room-display preference. A host running a
+ *     projector wants it to stay a projector across games; the profile is
+ *     persisted to localStorage for the same reason, and a reset here would
+ *     undo a reload's whole point. `qrSidebarVisible` was named here on the
+ *     same grounds and no longer exists: `setupPanelOpen` replaced it and IS
+ *     reset, because the panel's contents are per-game rather than per-room.
  *   - wsConnected — owned by the WebSocket client's own callback.
  */
 
@@ -110,17 +112,20 @@ export function initialGameSession() {
     // --- panels and transient banners tied to the current game ----------
     eventTitle: '',
     lessonExpanded: false,
-    instructionsVisible: false,
     showExpandedQR: false,
     // The rail's QR: null | 'preview' | 'pinned'. Session-scoped like every
     // other overlay flag here — a QR left pinned when the host Quick Starts a
     // new game would otherwise stay full-screen over the new lobby, still
     // suppressing SPACE, rendering a join code for a game that no longer runs.
     qrMode: null,
-    questionSetTabVisible: false,
-    showQuestionBrowser: false,
+    // The session setup panel, which replaced both side panels, both edge tabs
+    // and the full-screen question browser. Unlike the display profile it is
+    // NOT a room-display preference: all three of its tabs are about the game
+    // in play — the roster, the live per-category remaining counts, and the
+    // browser's already-asked marks — so leaving it open across a Quick Start
+    // shows the next room the last game's facts.
+    setupPanelOpen: false,
     browsingQuestions: [],
-    selectedCategory: '',
     inviteCopied: false,
     isLoadingData: false,
     isRestoringState: false,

@@ -1,51 +1,60 @@
 import fs from 'fs';
 import path from 'path';
 
-const HOST_PAGE = path.join(__dirname, '..', 'GameHostPage.jsx');
-const source = fs.readFileSync(HOST_PAGE, 'utf8');
+const src = (...p) => path.join(__dirname, '..', ...p);
+const source = fs.readFileSync(src('GameHostPage.jsx'), 'utf8');
 
 /**
- * TWO QR CODES, ONE PANEL, DIFFERENT AUDIENCES.
+ * TWO QR CODES, TWO AUDIENCES, AND THEY MUST NEVER SWAP.
  *
- * The side panel's QR points at `/remote`, which is behind the host sign-in.
- * It shipped inside the block headed "Join In", one paragraph below "Players
- * can join at:" — so a host who told a latecomer "scan the QR in the Join In
- * panel" sent that player to a login for an account they will never have. The
- * caption under the QR was already right; the heading above it was not.
+ * | Surface     | Encodes    | Audience     | Where              |
+ * |-------------|------------|--------------|--------------------|
+ * | player join | `playUrl`  | the room     | the stage's rail   |
+ * | host remote | `remoteUrl`| one operator | the setup panel    |
  *
- * Asserted against the source because GameHostPage cannot be rendered in jsdom
- * (AuthProvider plus a live socket). Same technique gameSession.test.js already
- * uses on this file.
+ * The remote QR is behind the host sign-in, and it shipped once inside a block
+ * headed "Join In", one paragraph below "Players can join at:" — so a host who
+ * told a latecomer "scan the QR in the panel" sent that player to a login for
+ * an account they will never have.
+ *
+ * The panel that carried it has been replaced by `<SessionSetupPanel>`, and the
+ * copy-level guarantees moved with it: `sessionSetupPanel.test.jsx` renders the
+ * panel and asserts that its QR value matches `/\/remote\?gameId=/` and that
+ * the word "join" appears nowhere in the remote section. What CANNOT be
+ * asserted there, and is asserted here, is the division of labour at the call
+ * site — which url the page hands to which surface.
  */
-describe('the side panel keeps the remote QR clear of the join block', () => {
-  const remoteQrIndex = source.indexOf('<QRCodeSVG value={remoteUrl}');
-  const joinHeadingIndex = source.indexOf('<h3>Join In</h3>');
-
-  test('the panel still has both a Join In heading and a remote QR', () => {
-    // Guards the two assertions below from passing because the markup moved.
-    expect(joinHeadingIndex).toBeGreaterThan(-1);
-    expect(remoteQrIndex).toBeGreaterThan(joinHeadingIndex);
+describe('the host page hands each QR surface the right url', () => {
+  test('the setup panel gets the REMOTE url', () => {
+    // rejects: passing playUrl to the panel, which walks the host's own phone
+    // into the player flow.
+    expect(source).toMatch(/<SessionSetupPanel[\s\S]{0,2000}remoteUrl=\{remoteUrl\}/);
   });
 
-  test('a heading of its own separates the remote QR from the join block', () => {
-    // rejects: the shipped markup, where the only heading between "Join In"
-    // and the remote QR was nothing at all.
-    const between = source.slice(joinHeadingIndex, remoteQrIndex);
-    expect(between).toMatch(/<h4[^>]*>[^<]*[Rr]emote/);
+  test('the same call also hands it the player link, separately labelled', () => {
+    // rejects: collapsing the two into one prop. The panel prints the player
+    // link under its own heading and the remote url under another; one prop
+    // for both is how they become ambiguous again.
+    expect(source).toMatch(/<SessionSetupPanel[\s\S]{0,2000}playUrl=\{playUrl\}/);
   });
 
-  test('the QR still says what it is, and what it is not', () => {
-    // rejects: relying on the heading alone. The caption is the last thing a
-    // host reads before pointing a phone at it.
-    const caption = source.slice(remoteQrIndex, remoteQrIndex + 400);
-    expect(caption).toMatch(/Scan to open the remote on your phone/);
-    expect(caption).toMatch(/Not the player link/);
+  test('remoteUrl is the /remote route, carrying the game', () => {
+    // rejects: a QR that lands the host on a remote with no session — which is
+    // a QR that has failed.
+    expect(source).toMatch(/const remoteUrl = `\$\{window\.location\.origin\}\/remote\?gameId=\$\{gameId\}`/);
   });
 
-  test('the room-facing QR is still the rail\'s, not this panel\'s', () => {
-    // rejects: re-adding a click-to-expand here. The expanded overlay renders
-    // playUrl, so a magnified PLAYER QR would open on top of a REMOTE one.
-    const qrSection = source.slice(joinHeadingIndex, remoteQrIndex);
-    expect(qrSection).not.toMatch(/qr-code-clickable/);
+  test('the room-facing QRs are still playUrl, and still on the stage', () => {
+    // rejects: pointing the lobby or the expanded overlay at the remote, which
+    // would project a host-only sign-in at a room trying to join.
+    expect(source).toMatch(/<QRCodeSVG value=\{playUrl\} size=\{512\}/);   // the lobby
+    expect(source).toMatch(/<QRCodeSVG value=\{playUrl\} size=\{300\}/);   // the rail's overlay
+  });
+
+  test('the panel is the only other QR on the page', () => {
+    // rejects: a third QR appearing without anyone deciding what it encodes.
+    // Three: lobby, expanded overlay, and the panel's own import-site render.
+    const rendered = source.match(/<QRCodeSVG/g) || [];
+    expect(rendered).toHaveLength(2);
   });
 });

@@ -15,6 +15,7 @@ import Stage from './components/stage/Stage';
 import Rail from './components/stage/Rail';
 import RoomMeter from './components/stage/RoomMeter';
 import Dock from './components/stage/Dock';
+import SessionSetupPanel from './components/stage/SessionSetupPanel';
 import { loadProfile, saveProfile } from './config/displayProfile';
 import { qrOverlayClassName } from './utils/qrOverlayClassName';
 import { shortcutsSuppressed, qrOverlayInstructions } from './utils/hostOverlays';
@@ -168,11 +169,12 @@ function GameHostPage() {
   const [currentQuestionVotes, setCurrentQuestionVotes] = useState([]);
   const [manualStateChange, setManualStateChange] = useState(false);
   const [lessonExpanded, setLessonExpanded] = useState(false);
-  // Closed by default. It is a fixed 300–600px panel over a fixed-height
-  // stage; opening it is a deliberate inspection, and the dock's SETUP button
-  // is its permanent, discoverable entry point.
-  const [qrSidebarVisible, setQrSidebarVisible] = useState(false);
-  const [instructionsVisible, setInstructionsVisible] = useState(false);
+  // THE ONE HOST PANEL. It replaced both edge tabs, both side panels and the
+  // full-screen question browser — four surfaces, one dock button. Closed by
+  // default: it is a fixed overlay over a fixed-height stage, so opening it is
+  // a deliberate inspection, and the dock's SETUP button is its permanent,
+  // discoverable entry point (`\` is an accelerator only).
+  const [setupPanelOpen, setSetupPanelOpen] = useState(false);
   const [showExpandedQR, setShowExpandedQR] = useState(false);
   /**
    * null | 'preview' | 'pinned'.
@@ -191,7 +193,6 @@ function GameHostPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [qrMode]);
-  const [questionSetTabVisible, setQuestionSetTabVisible] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [reportData, setReportData] = useState(null);
   const [lessonNumber, setLessonNumber] = useState(0);
@@ -227,11 +228,24 @@ function GameHostPage() {
   // Flag to prevent auto-selection during game state restoration
   const [isRestoringState, setIsRestoringState] = useState(false);
 
-  // Question Browser State
-  const [showQuestionBrowser, setShowQuestionBrowser] = useState(false);
+  // The question browser is a SECTION of the setup panel now, not a modal, so
+  // there is no separate "is it open" flag to keep in step with the panel's own
+  // — `showQuestionBrowser` was that flag, and it was also the term that took
+  // SPACE away while the browser covered the dock. What is left is the data.
   const [browsingQuestions, setBrowsingQuestions] = useState([]);
-  const [selectedCategory, setSelectedCategory] = useState('');
   const [loadingQuestions, setLoadingQuestions] = useState(false);
+  /**
+   * Which questions this host has already asked, so the browser can dim them
+   * and offer `Ask again` rather than making the host remember.
+   *
+   * SESSION-LOCAL, AND THAT IS A LIMITATION WORTH KNOWING. The server tracks
+   * "used" by round number (`QUESTION#<n>#RESULTS`) and by decrementing the
+   * category counters — never as a list of set-question ids. `GET /games/{id}`
+   * does return a `usedQuestions` array, but nothing ever writes it, so reading
+   * it would report every question as unasked. This accumulates what the client
+   * can actually see: the questions it has watched go by. It resets on reload.
+   */
+  const [usedQuestionIds, setUsedQuestionIds] = useState([]);
 
   // Sign-out handler
   const handleSignOut = () => {
@@ -535,13 +549,10 @@ function GameHostPage() {
     reportData: setReportData,
     eventTitle: setEventTitle,
     lessonExpanded: setLessonExpanded,
-    instructionsVisible: setInstructionsVisible,
     showExpandedQR: setShowExpandedQR,
     qrMode: setQrMode,
-    questionSetTabVisible: setQuestionSetTabVisible,
-    showQuestionBrowser: setShowQuestionBrowser,
+    setupPanelOpen: setSetupPanelOpen,
     browsingQuestions: setBrowsingQuestions,
-    selectedCategory: setSelectedCategory,
     inviteCopied: setInviteCopied,
     isLoadingData: setIsLoadingData,
     isRestoringState: setIsRestoringState,
@@ -1871,83 +1882,82 @@ Focus on actionable business strategy insights.`;
     }
   };
 
-  // Fetch questions for browsing by category
-  const fetchQuestionsForBrowsing = async (category = '') => {
+  /**
+   * Fetch the WHOLE set for the browser.
+   *
+   * It used to take a category and pass it to the API, because the only way in
+   * was a per-category magnifier — so the host could never see the whole set at
+   * once, which was this surface's worst structural defect. The chips in the
+   * panel filter what is already here, client-side, so one fetch serves every
+   * chip and switching between them costs nothing.
+   */
+  const fetchQuestionsForBrowsing = async () => {
     // Try to get setId from current questions first, then fall back to selectedSetId
     const setId = questions[0]?.setId || selectedSetId;
-    
+
     if (!setId) {
       console.error('No question set available for browsing - neither selectedSetId nor current game questions found');
-      console.log('Current state:', { selectedSetId, questionsCount: questions?.length, firstQuestion: questions?.[0] });
       return;
     }
 
-    console.log(`📚 Using question set ID for browsing: "${setId}" (source: ${questions[0]?.setId ? 'current game' : 'selectedSetId'})`);
-    
     setLoadingQuestions(true);
     try {
-      const url = category 
-        ? `${API_BASE}question-sets/${setId}/questions?category=${encodeURIComponent(category)}`
-        : `${API_BASE}question-sets/${setId}/questions`;
-      
-      console.log(`🔍 Browsing questions: ${url}`);
-      const response = await fetch(url);
-      
+      const response = await fetch(`${API_BASE}question-sets/${setId}/questions`);
+
       if (!response.ok) {
         console.error(`❌ Failed to fetch questions: ${response.status}`);
         setBrowsingQuestions([]);
-        setSelectedCategory(category);
         return;
       }
-      
+
       const data = await response.json();
-      console.log(`📚 API Response:`, data);
-      console.log(`🔍 Sample question fields:`, data.questions?.[0] ? Object.keys(data.questions[0]) : 'No questions');
-      console.log(`🔍 Sample question data:`, data.questions?.[0]);
       setBrowsingQuestions(data.questions || []);
-      setSelectedCategory(category);
-      console.log(`✅ Loaded ${data.questions?.length || 0} questions for browsing`);
     } catch (error) {
       console.error('❌ Failed to fetch questions for browsing:', error);
       setBrowsingQuestions([]);
-      setSelectedCategory(category);
     } finally {
       setLoadingQuestions(false);
     }
   };
 
-  // Open question browser
-  const openQuestionBrowser = (category = '') => {
-    console.log(`🔍 Opening question browser for category: "${category}"`);
-    console.log(`📚 Selected set ID: "${selectedSetId}"`);
-    console.log(`🎮 Current game questions:`, questions?.length || 0);
-    
-    console.log(`🔄 About to set showQuestionBrowser to true...`);
-    setShowQuestionBrowser(true);
-    console.log(`✅ Set showQuestionBrowser to true`);
-    
-    // Force a re-render check
-    setTimeout(() => {
-      console.log(`⏱️ State check after timeout - showQuestionBrowser should be true`);
-    }, 100);
-    fetchQuestionsForBrowsing(category);
+  /**
+   * Drop the browser's data.
+   *
+   * This function existed and was ORPHANED: the modal's Close button called
+   * `setShowQuestionBrowser(false)` directly and left `browsingQuestions` and
+   * `selectedCategory` populated, so the next open rendered the previous set's
+   * rows until the fetch landed. It is wired now — `closeAllSidePanels` calls
+   * it — which is also what makes it correct across a Quick Start.
+   */
+  const closeQuestionBrowser = () => {
+    setBrowsingQuestions([]);
   };
 
-  // Close question browser  
-  const closeQuestionBrowser = () => {
-    setShowQuestionBrowser(false);
-    setBrowsingQuestions([]);
-    setSelectedCategory('');
-  };
+  /**
+   * Opening the panel loads the set.
+   *
+   * The browser is a SECTION of the panel now, not a modal with its own entry
+   * point — and the per-category magnifier that used to be its only caller was
+   * deleted along with the category rows it sat in. Without this the Questions
+   * tab renders its empty state forever, which is exactly how it shipped for
+   * one commit before `setupPanelCallSite.test.js` grew an assertion for it.
+   *
+   * An effect rather than a call inside the `setSetupPanelOpen` updater: an
+   * updater must be pure, and React invokes it twice under StrictMode.
+   */
+  useEffect(() => {
+    if (setupPanelOpen) fetchQuestionsForBrowsing();
+  }, [setupPanelOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Select a specific question to trigger as the next question
   const selectQuestion = async (selectedQuestion) => {
     try {
       console.log(`🎯 HOST: Selecting specific question:`, selectedQuestion);
-      
-      // Close the question browser first so confirmation modal appears on top
-      setShowQuestionBrowser(false);
-      
+
+      // Close the panel first, so the confirmation is the only thing on screen
+      // and the host is answering about the round rather than about the list.
+      closeAllSidePanels();
+
       // Show confirmation when skipping to next question during Ask/Vote phase (same as handleNextQuestion)
       if (gameState.startsWith('ASK#') || gameState.startsWith('VOTE#')) {
         const proceed = await showConfirmation(
@@ -2036,34 +2046,17 @@ Focus on actionable business strategy insights.`;
     }
   };
 
-  // DEBUG: Track all modal state changes
+  /**
+   * Remember the questions this host has watched go by, so the browser can dim
+   * them. See `usedQuestionIds` — this is the only signal the client has.
+   */
+  // Reads `questions[0]` rather than `currentQuestion`, which is derived from
+  // it 1,400 lines below and would be in its temporal dead zone here.
+  const askedQuestionId = questions[0]?.questionId;
   useEffect(() => {
-    console.log('🔍 MODAL STATE CHANGE - All modal states:', {
-      showQuestionBrowser,
-      showExpandedQR,
-      showNewGameDialog,
-      showConfirmModal,
-      gameState,
-      isConnected: webSocketClient?.isConnected?.() || false
-    });
-  }, [showQuestionBrowser, showExpandedQR, showNewGameDialog, showConfirmModal]);
-
-  // DEBUG: Track component mounting/updating
-  useEffect(() => {
-    console.log('🔄 GameHostPage component mounted/updated');
-    console.log('📊 showQuestionBrowser on mount:', showQuestionBrowser);
-  }, []);
-
-  // DEBUG: Specific tracking of showQuestionBrowser changes
-  useEffect(() => {
-    console.log('🎯 showQuestionBrowser changed to:', showQuestionBrowser);
-    if (showQuestionBrowser) {
-      console.log('👀 Modal should be VISIBLE now!');
-    } else {
-      console.log('👻 Modal should be HIDDEN now');
-    }
-  }, [showQuestionBrowser]);
-
+    if (!askedQuestionId) return;
+    setUsedQuestionIds((ids) => (ids.includes(askedQuestionId) ? ids : [...ids, askedQuestionId]));
+  }, [askedQuestionId]);
 
   const checkAnswerStatus = async () => {
     try {
@@ -3067,11 +3060,17 @@ Ready to engage? See you there!`;
   const [sidebarCopyMessage, setSidebarCopyMessage] = useState(false);
   const [expandedCopyMessage, setExpandedCopyMessage] = useState(false);
 
-  // Function to close all side panels
+  /**
+   * Close the setup panel and drop what it was showing.
+   *
+   * `runHostAction` calls this first, and the reason is not tidiness: half the
+   * panel is round-scoped — this round's actions, the remaining counts, the
+   * browser's already-asked marks — and a phase change invalidates it in place.
+   * Nothing is lost by closing, because every control in it commits on click.
+   */
   const closeAllSidePanels = () => {
-    setQrSidebarVisible(false);
-    setInstructionsVisible(false);
-    setQuestionSetTabVisible(false);
+    setSetupPanelOpen(false);
+    closeQuestionBrowser();
   };
 
   // Function to show custom confirmation modal
@@ -3484,8 +3483,17 @@ Ready to engage? See you there!`;
   // reading or filling in.
   // The rule itself lives in utils/hostOverlays.js, where a test can reach it:
   // a PREVIEW must leave SPACE live, only a PINNED QR gates it.
+  //
+  // THE SETUP PANEL AND ITS QUESTION BROWSER ARE ABSENT ON PURPOSE. Both used
+  // to belong here, when the browser was a full-screen scrim over the dock.
+  // The panel stops at the top of the dock, so the primary button and its
+  // SPACE chip stay visible and live underneath it — and the chip renders
+  // exactly when this value is false, so suppressing here would make the host
+  // watch the affordance blink out while looking at a working button. The
+  // hazard that IS real is narrower: SPACE landing on a focused button inside
+  // the panel. HostActionBar handles that by event target, not by geometry.
   const anyOverlayOpen = shortcutsSuppressed({
-    showConfirmModal, showQuestionBrowser, showExpandedQR,
+    showConfirmModal, showExpandedQR,
     showReportsModal, lessonExpanded, isLoadingData, qrMode,
   });
 
@@ -3633,425 +3641,16 @@ Ready to engage? See you there!`;
         ? 'Ready when you are'
         : hostControls.status.text;
 
-  // DEBUG: Track every render with modal state
-  console.log(`🎨 RENDER: showQuestionBrowser=${showQuestionBrowser}, showExpandedQR=${showExpandedQR}`);
 
   return (
     <>
     {/* No `rail-right-*` / `rail-left` classes any more: those reserved a
         300–600px gutter for whichever panel was open, and the stage is a
         fixed-height grid — shrinking it every time the host opened Game Info
-        is the fastest possible way to make a state stop fitting. The panels
-        are fixed and overlay; advancing closes them. */}
+        is the fastest possible way to make a state stop fitting. The one
+        remaining panel is fixed and overlays; advancing closes it. */}
     <div className="main-layout">
-      {/* Instructions Sidebar */}
-      <div className={`instructions-sidebar ${instructionsVisible ? 'visible' : ''}`}>
-        <div className="instructions-content">
-          <h3>Engagements</h3>
-          <h4>How to Play</h4>
-          
-          {currentGameType === 'call-and-answer' && (
-            <>
-              <ol>
-                <li><strong>Read the Content:</strong> Each round presents a scenario, lesson, or strategic question.</li>
-                <li><strong>Provide Your Response:</strong> Players write thoughtful responses based on their experience and perspective.</li>
-                <li><strong>Vote for Best Responses:</strong> Everyone votes on which responses are most insightful or valuable.</li>
-                <li><strong>Collaborative Learning:</strong> Share insights and learn from each other's diverse perspectives.</li>
-              </ol>
-              <h4>Tips</h4>
-              <ul>
-                <li>Be specific about your context and situation</li>
-                <li>Think about practical implementation steps</li>
-                <li>Consider potential challenges and solutions</li>
-                <li>Vote for responses that inspire your own work</li>
-              </ul>
-            </>
-          )}
-          
-          {currentGameType === 'trivia' && (
-            <>
-              <ol>
-                <li><strong>Read the Question:</strong> Each round presents a multiple-choice trivia question.</li>
-                <li><strong>Select Your Answer:</strong> Choose the best answer from the available options (A, B, C, D).</li>
-                <li><strong>See Results:</strong> Discover the correct answer and see how everyone performed.</li>
-                <li><strong>Learn Together:</strong> Discuss interesting facts and expand your knowledge as a team.</li>
-              </ol>
-              <h4>Tips</h4>
-              <ul>
-                <li>Read all options carefully before selecting</li>
-                <li>Trust your first instinct if unsure</li>
-                <li>Learn from incorrect answers - they often contain valuable information</li>
-                <li>Discuss interesting questions afterward to reinforce learning</li>
-              </ul>
-            </>
-          )}
-          
-          {currentGameType === 'poll' && (
-            <>
-              <ol>
-                <li><strong>Read the Poll Question:</strong> Each round presents a topic for group input and discussion.</li>
-                <li><strong>Select Your Choice:</strong> Choose from the available options that best represents your view.</li>
-                <li><strong>See Group Results:</strong> View how the group collectively responded to the question.</li>
-                <li><strong>Facilitate Discussion:</strong> Use results as a starting point for meaningful group conversations.</li>
-              </ol>
-              <h4>Tips</h4>
-              <ul>
-                <li>Consider all perspectives before choosing</li>
-                <li>Some polls may allow multiple selections</li>
-                <li>Use results to understand group dynamics and preferences</li>
-                <li>Follow up with discussion to dive deeper into the topic</li>
-              </ul>
-            </>
-          )}
-          
-          {/* User Info and Sign Out */}
-          <div style={{ 
-            marginTop: 'auto', 
-            paddingTop: '20px', 
-            borderTop: '1px solid #e5e5e5',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '10px'
-          }}>
-            {currentUser && (
-              <div style={{ fontSize: '14px', color: '#666' }}>
-                <strong>{currentUser.attributes?.name || 'User'}</strong>
-                <div>{currentUser.attributes?.email}</div>
-                {currentUser.groups?.includes('admins') && (
-                  <div style={{ color: '#007bff', fontWeight: '500' }}>Administrator</div>
-                )}
-              </div>
-            )}
-            <button 
-              onClick={handleSignOut}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#f8f9fa',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                color: '#666',
-                fontSize: '14px',
-                cursor: 'pointer',
-                width: '100%'
-              }}
-            >
-              Sign Out
-            </button>
-          </div>
-          
-        </div>
-      </div>
-      <div className="instructions-tab" onClick={() => setInstructionsVisible(!instructionsVisible)}>
-        <span>
-          {instructionsVisible
-            ? <><Icon name="CaretLeft" weight="bold" size={14} /> Close</>
-            : <><Icon name="CaretRight" weight="bold" size={14} /> How to Play</>}
-        </span>
-      </div>
 
-      {/* QR Code Sidebar */}
-      <div className={`qr-sidebar ${qrSidebarVisible ? 'visible' : ''} ${selectedSetId ? 'two-column' : ''}`}>
-        <div className="qr-sidebar-columns">
-          {/* Left Column - Join Info */}
-          <div className="qr-column-left">
-            <div className="qr-content">
-              <h3>Join In</h3>
-              <div className="join-url">
-                <p>Players can join at:</p>
-                {sidebarCopyMessage && (
-                  <div className="copy-message">
-                    <Icon name="Check" weight="bold" size={14} color="var(--success)" /> Link copied!
-                  </div>
-                )}
-                <div 
-                  className="url-display clickable-url" 
-                  onClick={() => copyUrlToClipboard(playUrl, 'sidebar')}
-                  title="Click to copy link"
-                >
-                  {playUrl}
-                </div>
-              </div>
-              <div className="game-id">Game ID: <strong>{gameId}</strong></div>
-              <div className="connection-status">
-                {useWebSocket ? (
-                  <span className={`status-indicator websocket ${wsConnected ? 'connected' : 'connecting'}`}>
-                    <Icon
-                      name={wsConnected ? 'Broadcast' : 'WifiSlash'}
-                      weight="bold"
-                      size={15}
-                      color={wsConnected ? 'var(--success)' : 'var(--muted)'}
-                    />{' '}
-                    WebSocket {wsConnected ? 'Connected' : 'Connecting...'}
-                  </span>
-                ) : (
-                  <span className="status-indicator polling">
-                    <Icon name="ArrowsClockwise" weight="bold" size={15} color="var(--muted)" /> HTTP Polling Mode
-                  </span>
-                )}
-              </div>
-              {/* NOT PART OF "JOIN IN", and the separator says so.
-                  This QR points at /remote, which is behind the host sign-in.
-                  Sitting under the Join In heading, one paragraph below "Players
-                  can join at:", it read as the player QR — so a host pointing a
-                  latecomer at "the QR in the Join In panel" sent that player to
-                  a login for an account they do not have. The caption was always
-                  right; the framing was not. */}
-              <div className="qr-section qr-section--remote">
-                <h4 className="qr-section-heading">Your remote &mdash; host only</h4>
-                {/* The host's own phone, scanned from arm's length, so 180px is
-                    plenty and there is nothing to magnify. The click-to-expand
-                    is deliberately gone: the expanded overlay renders `playUrl`,
-                    so leaving it here would open a magnified PLAYER QR on top of
-                    a REMOTE one. The room-facing QR is the rail's now (Task 2). */}
-                <div className="qr-code-static">
-                  <QRCodeSVG value={remoteUrl} size={180} />
-                  <p>Scan to open the remote on your phone. Not the player link.</p>
-                </div>
-              </div>
-
-              {/* THE ROSTER, off the stage.
-                  A count is a nudge; a list of names is an attendance record,
-                  and the room is the wrong audience for one — so this is not
-                  in the stage's meter. It is not deleted either: the anonymity
-                  work depends on the host being able to see cumulative
-                  standings in every phase (no points exist for an unrevealed
-                  round, so a running total leaks nothing), and before this
-                  there was nowhere else to see them. This panel is host-only
-                  and closed by default. */}
-              {players.length > 0 && (
-                <div className="host-roster">
-                  <h4>{`Standings · ${players.length} player${players.length === 1 ? '' : 's'}`}</h4>
-                  <ul>
-                    {calculatePlayerRankings(players).map((player) => {
-                      const name = player.name || player.playerName || 'Unknown Player';
-                      const done = gameState.startsWith('ASK#')
-                        ? playersWhoAnswered.includes(player.name)
-                        : gameState.startsWith('VOTE#')
-                          ? playersWhoVoted.includes(player.name)
-                          : null;
-                      return (
-                        <li key={name}>
-                          <span className="host-roster-name">{name}</span>
-                          <span className="host-roster-score">{`${player.score || 0} pts`}</span>
-                          {done !== null && (
-                            <Icon
-                              name={done ? 'CheckCircle' : 'Timer'}
-                              weight={done ? 'fill' : 'bold'}
-                              size={16}
-                              color={done ? 'var(--success)' : 'var(--muted)'}
-                            />
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
-            </div>
-            <div className="qr-controls">
-              <button 
-                className={`btn-${inviteCopied ? 'success' : 'primary'}`}
-                onClick={createInvite}
-                title="Copy meeting invitation to clipboard"
-              >
-                <Icon name={inviteCopied ? 'Check' : 'ClipboardText'} weight="bold" size={16} /> {inviteCopied ? 'Copied!' : 'Copy Invite'}
-              </button>
-              {/* WHICH DISPLAY, not whether. This replaces the Big Screen ON/OFF
-                  toggle: there is one layout now, and this chooses the type
-                  ladder it is drawn at. Room and Table are inferred from the
-                  viewport on first load; TV and Call cannot be detected in
-                  principle — nothing reports a panel's physical size, and
-                  nothing reports that the surface is being re-encoded into a
-                  video call — so they are chosen here. The choice is persisted,
-                  because a projector browser that reloads must come back
-                  exactly as it was. The Console (spec §5.4) owns this
-                  permanently; this is its interim home. */}
-              <label className="display-profile-picker">
-                <span>Display</span>
-                <select
-                  value={profile}
-                  onChange={(e) => setProfile(e.target.value)}
-                  title="The type ladder the stage is drawn at"
-                >
-                  <option value="room">Room — projector</option>
-                  <option value="tv">TV — large panel</option>
-                  <option value="call">Call — screen share</option>
-                  <option value="table">Table — laptop</option>
-                </select>
-              </label>
-              <button className="btn-secondary" onClick={handleViewReports}>
-                View Reports
-              </button>
-              
-              {/* GitHub Issue Reporting in Sidebar */}
-              <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center' }}>
-                <IssueFab context="host" gameId={gameId} />
-              </div>
-              <button className="btn-danger" onClick={handleSwitchGame}>
-                Switch Game
-              </button>
-              
-              {/* User Info and Sign Out */}
-              {currentUser && (
-                <div style={{ 
-                  marginTop: '16px',
-                  padding: '12px',
-                  backgroundColor: '#f8f9fa',
-                  borderRadius: '4px',
-                  fontSize: '12px'
-                }}>
-                  <div style={{ marginBottom: '8px', color: '#666' }}>
-                    <strong>{currentUser.attributes?.name || 'User'}</strong>
-                    {currentUser.groups?.includes('admins') && (
-                      <div style={{ color: '#007bff', fontWeight: '500' }}>Admin</div>
-                    )}
-                  </div>
-                  <button 
-                    onClick={handleSignOut}
-                    style={{
-                      padding: '6px 12px',
-                      backgroundColor: '#fff',
-                      border: '1px solid #ddd',
-                      borderRadius: '3px',
-                      color: '#666',
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      width: '100%'
-                    }}
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Right Column - Question Set Info */}
-          {selectedSetId && (
-            <div className="qr-column-right">
-              <div className="question-set-panel">
-                <div className="question-set-header">
-                  <h3>
-                <Icon name="Books" weight="duotone" size={20} color="var(--primary)" />
-                {questionSets.find(set => set.id === selectedSetId)?.name || 'Unknown Set'}
-                <SetImageBadge hasImages={questionSets.find(set => set.id === selectedSetId)?.hasImages} />
-              </h3>
-                  <div className="set-details">
-                    {categoryCounts ? (
-                      // Show dynamic total for active games
-                      categories.reduce((total, category, index) => {
-                        const position = index + 1;
-                        let enabled = false;
-                        let remaining = 0;
-                        
-                        // Check if category is enabled from bitmasks
-                        if (position <= 8) {
-                          enabled = categoryBitmasks['HostMask1-8']?.charAt(position - 1) === '1';
-                          remaining = categoryCounts['1-8']?.[position - 1] || 0;
-                        } else if (position <= 16) {
-                          enabled = categoryBitmasks['HostMask9-16']?.charAt(position - 9) === '1';
-                          remaining = categoryCounts['9-16']?.[position - 9] || 0;
-                        } else if (position <= 24) {
-                          enabled = categoryBitmasks['HostMask17-24']?.charAt(position - 17) === '1';
-                          remaining = categoryCounts['17-24']?.[position - 17] || 0;
-                        }
-                        
-                        // Only count questions from enabled categories
-                        return enabled ? total + remaining : total;
-                      }, 0)
-                    ) : (
-                      // Show static total for game setup
-                      questionSets.find(set => set.id === selectedSetId)?.totalQuestions || 0
-                    )} questions remaining
-                  </div>
-                </div>
-                
-                {categories.length > 0 && (
-                  <div className="categories-section">
-                    <h4>Categories</h4>
-                    <div className="category-items-list">
-                      {categories.map((category, index) => {
-                        const position = index + 1;
-                        let enabled = false;
-                        let questionCount = category.questionCount;
-                        let isClickable = false;
-
-                        // For active games with dynamic counts, get live data
-                        if (categoryCounts && categoryBitmasks) {
-                          // Determine enabled state from bitmasks
-                          if (position <= 8) {
-                            enabled = categoryBitmasks['HostMask1-8']?.charAt(position - 1) === '1';
-                            questionCount = categoryCounts['1-8']?.[position - 1] || 0;
-                          } else if (position <= 16) {
-                            enabled = categoryBitmasks['HostMask9-16']?.charAt(position - 9) === '1';
-                            questionCount = categoryCounts['9-16']?.[position - 9] || 0;
-                          } else if (position <= 24) {
-                            enabled = categoryBitmasks['HostMask17-24']?.charAt(position - 17) === '1';
-                            questionCount = categoryCounts['17-24']?.[position - 17] || 0;
-                          }
-                          isClickable = true;
-                        } else {
-                          // For game setup, use static selection
-                          enabled = activeCategoryIds.has(category.name);
-                        }
-
-                        return (
-                          <div key={category.name} className="category-item">
-                            <button
-                              type="button"
-                              className={`category-button ${enabled ? 'selected' : ''} ${questionCount === 0 ? 'exhausted' : ''}`}
-                              onClick={() => {
-                                if (isClickable) {
-                                  console.log(`🔘 Category toggle clicked: position=${position}, name=${category.name}, enabled=${enabled}, remaining=${questionCount}`);
-                                  toggleCategoryDuringGame(position.toString(), category.name, !enabled);
-                                } else {
-                                  toggleCategoryActive(category.name);
-                                }
-                              }}
-                              disabled={isTogglingCategory}
-                            >
-                              <span className="category-name">{category.name}</span>
-                              <span className="category-count">({questionCount})</span>
-                            </button>
-                            <button
-                              type="button"
-                              className="category-browse-btn"
-                              onClick={(e) => {
-                                console.log(`🖱️ Browse button clicked for category: ${category.name}`);
-                                e.stopPropagation();
-                                openQuestionBrowser(category.name);
-                              }}
-                              title={`Browse questions in ${category.name} category`}
-                            >
-                              <Icon name="MagnifyingGlass" weight="bold" size={16} />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {!categoryCounts && (
-                      <small>
-                        {activeCategoryIds.size === 0 
-                          ? 'No categories selected - all categories will be included'
-                          : `${activeCategoryIds.size} category(ies) selected`
-                        }
-                      </small>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="qr-tab" onClick={() => setQrSidebarVisible(!qrSidebarVisible)}>
-        <span>
-          {qrSidebarVisible
-            ? <>Hide <Icon name="CaretRight" weight="bold" size={14} /></>
-            : <><Icon name="CaretLeft" weight="bold" size={14} /> Game Info</>}
-        </span>
-      </div>
-      
       {/* ------------------------------------------------------------------
           THE STAGE — one layout, four profiles, fixed height, never scrolls.
 
@@ -4112,7 +3711,7 @@ Ready to engage? See you there!`;
             status={dockStatus}
             hint={dockHint}
             kbd={dockKbd}
-            onSetup={() => setQrSidebarVisible((open) => !open)}
+            onSetup={() => setSetupPanelOpen((open) => !open)}
             complete={everybodyIn}
           >
             {/* Not reimplemented here. HostActionBar keeps its keyboard
@@ -4535,6 +4134,55 @@ Ready to engage? See you there!`;
         </div>
       </Stage>
 
+      {/* A SIBLING OF <Stage>, NOT A CHILD, and that is load-bearing. `.stage`
+          is `height:100dvh` and this is a fixed overlay, so nothing about the
+          grid changes when it opens and `useStageFit` is not re-entered.
+          Mounted INSIDE the measured subtree, a tab list of unknown length
+          would enter fitPolicy's world and drive the scale search to its
+          floor. Its own geometry stops it at `--dock-measured`, because the
+          dock is a no-overlay zone (audit A6). */}
+      {setupPanelOpen && (
+        <SessionSetupPanel
+          onClose={closeAllSidePanels}
+          wsConnected={wsConnected}
+          players={players}
+          gameState={gameState}
+          playersWhoAnswered={playersWhoAnswered}
+          playersWhoVoted={playersWhoVoted}
+          categories={categories}
+          categoryCounts={categoryCounts}
+          categoryBitmasks={categoryBitmasks}
+          activeCategoryIds={activeCategoryIds}
+          isTogglingCategory={isTogglingCategory}
+          onToggleCategory={(row) => {
+            if (row.live) {
+              toggleCategoryDuringGame(String(row.position), row.name, !row.enabled);
+            } else {
+              toggleCategoryActive(row.name);
+            }
+          }}
+          questions={browsingQuestions}
+          loadingQuestions={loadingQuestions}
+          usedQuestionIds={usedQuestionIds}
+          onSelectQuestion={selectQuestion}
+          gameId={gameId}
+          playUrl={playUrl}
+          remoteUrl={remoteUrl}
+          joinLinkCopied={sidebarCopyMessage}
+          inviteCopied={inviteCopied}
+          onCopyJoinLink={() => copyUrlToClipboard(playUrl, 'sidebar')}
+          onCopyInvite={createInvite}
+          onShowJoinCode={() => setQrMode('pinned')}
+          profile={profile}
+          onProfileChange={setProfile}
+          onViewReports={handleViewReports}
+          onShowHowToPlay={() => setLessonExpanded(true)}
+          onSwitchGame={handleSwitchGame}
+          onSignOut={handleSignOut}
+          issueControl={<IssueFab context="host" gameId={gameId} />}
+        />
+      )}
+
       {/* Expanded QR Code Modal -- also the rail's pinned/previewed QR. Same
           overlay, same dismissal: the room only ever needs one way in.
           The preview modifier keeps the backdrop pointer-transparent -- see
@@ -4673,94 +4321,6 @@ Ready to engage? See you there!`;
 
     </div>
     
-    {/* MODAL PORTAL - OUTSIDE ALL PARALLAX CONTAINERS */}
-    {showQuestionBrowser && (
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100vw',
-        height: '100vh',
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        zIndex: 999999,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}>
-        <div className="question-browser-modal">
-          <div className="question-browser-header">
-            <h2><Icon name="MagnifyingGlass" weight="duotone" size={22} color="var(--primary)" />Browse Questions — {selectedCategory}</h2>
-            <p className="question-count">{browsingQuestions?.length || 0} questions found</p>
-          </div>
-          
-          {loadingQuestions ? (
-            <div className="loading-indicator">
-              <div className="spinner"></div>
-              <span>Loading questions...</span>
-            </div>
-          ) : browsingQuestions?.length > 0 ? (
-            <div className="questions-table-container">
-              <table className="questions-table">
-                <thead>
-                  <tr>
-                    <th>Question</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {browsingQuestions.map((question, index) => (
-                    <tr key={question.id || index} className="question-row">
-                      <td className="question-cell">
-                        <div className="question-title">{question.title || question.Title}</div>
-                        {(question.questionDetail || question.QuestionDetail || question.detail || question.Detail || question.customInstructions || question.CustomInstructions) && (
-                          <div className="question-detail">
-                            {question.questionDetail || question.QuestionDetail || question.detail || question.Detail || question.customInstructions || question.CustomInstructions}
-                          </div>
-                        )}
-                        {(question.optionA || question.OptionA) && (
-                          <div className="question-options">
-                            <div>A) {question.optionA || question.OptionA}</div>
-                            <div>B) {question.optionB || question.OptionB}</div>
-                            <div>C) {question.optionC || question.OptionC}</div>
-                            <div>D) {question.optionD || question.OptionD}</div>
-                            {(question.correctAnswer || question.CorrectAnswer) && (
-                              <div className="correct-answer"><Icon name="CheckCircle" weight="fill" size={14} color="var(--success)" /> Correct: {question.correctAnswer || question.CorrectAnswer}</div>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      <td className="action-cell">
-                        <button 
-                          className="btn-primary select-question-btn"
-                          onClick={() => selectQuestion(question)}
-                          title="Select this question as the next question"
-                        >
-                          Select
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="no-questions">
-              <p>No questions found for the "{selectedCategory}" category.</p>
-              <p>Try browsing a different category or check your question sets.</p>
-            </div>
-          )}
-          
-          <div className="question-browser-footer">
-            <button 
-              className="btn-secondary"
-              onClick={() => setShowQuestionBrowser(false)}
-            >
-              Close Browser
-            </button>
-          </div>
-        </div>
-      </div>
-    )}
     </>
   );
 }

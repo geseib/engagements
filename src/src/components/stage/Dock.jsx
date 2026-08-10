@@ -43,7 +43,9 @@ export default function Dock({ status, hint, kbd, onSetup, complete = false, chi
         aria-label="Session setup"
         title="Session setup"
       >
-        <span aria-hidden="true">⋯</span>
+        {/* No `⋯` beside the word. The glyph and the label said the same
+            thing inside one 48px target, and the whole argument for adding
+            the label was that the glyph alone was unhittable. */}
         <span className="dock-more-lbl">SETUP</span>
       </button>
       {status && <span className={`status${complete ? ' go' : ''}`} aria-live="polite">{status}</span>}

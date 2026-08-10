@@ -23,10 +23,17 @@
  * The obvious "simplification" -- folding qrMode into a boolean, or dropping
  * the `=== 'pinned'` -- is exactly the regression this function exists to
  * make visible. See __tests__/hostOverlays.test.js.
+ *
+ * WHAT IS NOT HERE, AND WHY. `showQuestionBrowser` was a term until the browser
+ * stopped being a full-screen scrim over the dock and became a section of the
+ * setup panel, which stops at the top of the dock. With the primary button and
+ * its SPACE chip visibly live beneath the panel, suppressing here would make
+ * the affordance lie. The narrower hazard the panel really does introduce --
+ * SPACE landing on a focused button inside it -- is handled where it belongs,
+ * by event target, in components/HostActionBar.jsx.
  */
 export function shortcutsSuppressed({
   showConfirmModal = false,
-  showQuestionBrowser = false,
   showExpandedQR = false,
   showReportsModal = false,
   lessonExpanded = false,
@@ -34,7 +41,7 @@ export function shortcutsSuppressed({
   qrMode = null,
 } = {}) {
   return Boolean(
-    showConfirmModal || showQuestionBrowser || showExpandedQR ||
+    showConfirmModal || showExpandedQR ||
     showReportsModal || lessonExpanded || isLoadingData || qrMode === 'pinned'
   );
 }

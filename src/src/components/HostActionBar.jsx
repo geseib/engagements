@@ -65,6 +65,18 @@ export default function HostActionBar({
       // them is something you do twice by holding a button down.
       if (event.repeat) return;
       if (isTypingTarget(event.target)) return;
+      // THE SETUP PANEL IS NOT A TYPING TARGET, AND THAT IS THE PROBLEM.
+      // `preventDefault()` below suppresses the browser's own space-activation
+      // of any FOCUSED BUTTON, so a host who tabs to `Ask next` inside the
+      // panel and presses Space does not press it — the round advances and the
+      // question they were choosing is gone. The panel deliberately does not
+      // join `anyOverlayOpen` (a blanket suppression is what produced the
+      // unadvanceable state this handler was written to fix, and it would make
+      // the dock's SPACE chip blink out while a live button sat under the
+      // host's eye), so the rule is scoped to where the key actually landed.
+      // Mouse-driven use keeps its accelerator; the keyboard gets the button
+      // it is pointing at.
+      if (event.target?.closest?.('.setup-panel')) return;
       // Also stops the browser page-scrolling on space, and stops a *focused*
       // primary button from firing its own click on top of this handler.
       event.preventDefault();
