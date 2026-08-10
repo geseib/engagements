@@ -2614,94 +2614,11 @@ body {
   min-width: 120px;
 }
 
-/* Welcome Screen Styles */
-.welcome-screen {
-  min-height: 100vh;
-  background: var(--primary);
-}
-
-.welcome-content {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 100%;
-  max-width: 500px;
-  padding: 20px;
-  z-index: 10;
-}
-
-.welcome-card {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 20px;
-  padding: 40px 30px;
-  text-align: center;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(10px);
-}
-
-.welcome-card h3 {
-  font-family: var(--font-display);
-  font-size: 2rem;
-  font-weight: 800;
-  color: var(--primary);
-  margin-bottom: 15px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.welcome-card p {
-  color: #666;
-  margin-bottom: 30px;
-  line-height: 1.6;
-}
-
-.welcome-options {
-  display: flex;
-  flex-direction: column;
-  gap: 25px;
-}
-
-.welcome-btn {
-  width: 100%;
-  padding: 18px 24px;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.continue-game-section {
-  background: #f8f9fa;
-  border-radius: 12px;
-  padding: 20px;
-  border: 2px solid #e1e1e1;
-}
-
-.continue-game-section h4 {
-  margin: 0 0 15px 0;
-  color: #333;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.continue-game-form {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.game-id-input {
-  flex: 1;
-  text-align: center;
-  font-family: monospace;
-  font-size: 18px;
-  font-weight: bold;
-  letter-spacing: 2px;
-}
-
-.continue-game-form .btn-secondary {
-  min-width: 120px;
-  white-space: nowrap;
-}
+/* The welcome screen's stylesheet moved to components/WelcomeScreen.css with
+   its markup. What is gone rather than moved: `background: var(--primary)` on
+   the whole page. --primary is the ONE hero accent in Warm Summit, and a
+   screen that floods it has nothing left to accent with — which is why all
+   four of that screen's actions ended up the same weight. */
 
 /* Reports Modal Styles */
 .reports-modal {
@@ -5003,59 +4920,110 @@ body {
   transform: translateY(-2px);
 }
 
-/* Quickstart Menu Styles */
+/* ===========================================================
+   QUICK START — components/QuickstartMenu.jsx
+
+   No mockup exists for this surface either. It opens FROM the welcome screen
+   and covers it, so it is dressed in that screen's world rather than the old
+   white modal, which crossed from dusk to paper for one press and back.
+
+   STILL AN OVERLAY, NOT A `.setup-panel`. A right-side panel is right for the
+   session panel because the stage behind it has to stay visible. Nothing here
+   needs to stay visible, and the content is a multi-column grid of set cards —
+   a 420px column would force it to one-up and multiply the paging it already
+   has. So: a sheet on the same field, centred, with room for the grid.
+
+   COLOUR FROM TOKENS. The overlay carries data-theme="dark" (styles.css:57),
+   so --bg / --surface / --surface-2 / --text / --muted resolve dusk under the
+   app's paper <html>. Measured: text #F4EDE4 on surface #1B2942 = 12.53:1;
+   muted #9BA8BE on #1B2942 = 6.06:1 and on hover #25375A = 4.93:1;
+   amber #F6A94C on #1B2942 = 7.42:1.
+   =========================================================== */
 .quickstart-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  inset: 0;
+  /* The dusk field at high alpha rather than black: the welcome screen is what
+     is behind this, and black over navy reads as a smear. */
+  background: rgba(15, 26, 46, 0.86);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1000;
   padding: 20px;
+  font-family: var(--font-ui);
+}
+
+.quickstart-overlay *,
+.quickstart-overlay *::before,
+.quickstart-overlay *::after { box-sizing: border-box; }
+
+.quickstart-overlay :focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 .quickstart-modal {
-  background: white;
-  borderRadius: 16px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-  max-width: 900px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid rgba(155, 168, 190, 0.20);
+  border-radius: 16px;   /* was `borderRadius`, which is not a CSS property —
+                            the modal has had square corners the whole time */
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+  /* Four cards across plus the reserved nav gutters need the room; below this
+     the media queries drop the grid to two tracks and then one. */
+  max-width: 1040px;
   width: 100%;
-  max-height: 80vh;
+  max-height: 84vh;
   overflow-y: auto;
   position: relative;
 }
 
 .quickstart-header {
-  padding: 24px 32px;
-  border-bottom: 1px solid #e1e1e1;
-  text-align: center;
-  position: relative;
+  padding: 24px 28px 20px;
+  border-bottom: 1px solid rgba(155, 168, 190, 0.20);
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.quickstart-title { flex: 1; min-width: 0; }
+
+.quickstart-kicker {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .quickstart-header h2 {
-  margin: 0 0 8px 0;
-  color: #333;
-  font-size: 1.8rem;
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 24px;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  display: flex;
+  align-items: center;
 }
 
 .quickstart-header p {
   margin: 0;
-  color: #666;
-  font-size: 1rem;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 48ch;
 }
 
 .quickstart-close {
-  position: absolute;
-  top: 20px;
-  right: 24px;
-  background: none;
-  border: none;
-  font-size: 2rem;
-  color: #999;
+  flex: none;
+  background: transparent;
+  border: 1px solid rgba(155, 168, 190, 0.34);
+  font-size: 22px;
+  line-height: 1;
+  color: var(--muted);
   cursor: pointer;
   width: 40px;
   height: 40px;
@@ -5063,27 +5031,23 @@ body {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  transition: all 0.2s ease;
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
 
-.quickstart-close:hover {
-  background: #f5f5f5;
-  color: #333;
-}
+.quickstart-close:hover { color: var(--text); border-color: var(--muted); }
 
-.quickstart-content {
-  padding: 24px 32px;
-}
+.quickstart-content { padding: 22px 28px 28px; }
 
 .quickstart-loading {
   text-align: center;
   padding: 40px;
+  color: var(--muted);
 }
 
 .quickstart-loading .loading-spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid #f3f3f3;
+  border: 4px solid rgba(155, 168, 190, 0.20);
   border-top: 4px solid var(--primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -5092,160 +5056,164 @@ body {
 
 .no-quickstart-sets {
   text-align: center;
-  padding: 40px;
-  color: #666;
+  padding: 40px 20px;
+  color: var(--muted);
 }
 
 .no-quickstart-sets h3 {
-  color: #333;
-  margin-bottom: 16px;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 800;
+  margin-bottom: 12px;
 }
 
-.quickstart-section {
-  margin-bottom: 32px;
-}
+.quickstart-section { margin-bottom: 28px; }
+.quickstart-section:last-child { margin-bottom: 0; }
+.quickstart-section-header { margin-bottom: 12px; }
 
-.quickstart-section:last-child {
-  margin-bottom: 0;
-}
-
-.quickstart-section-header {
-  margin-bottom: 16px;
-}
-
+/* The format's name is a section label, not a headline. The cards under it
+   are the things being chosen, and they were losing the size contest. */
 .quickstart-section-header h3 {
   margin: 0;
-  color: #333;
-  font-size: 1.4rem;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .set-count {
-  font-size: 0.9rem;
-  color: #666;
-  font-weight: 400;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
 }
 
 .quickstart-sets-container {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
+/* Paging is chrome, so it is a quiet outline rather than a second amber
+   control competing with the cards it pages through. */
 .quickstart-nav-btn {
-  background: var(--primary);
-  color: white;
-  border: none;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid rgba(155, 168, 190, 0.34);
   width: 40px;
   height: 40px;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 1.2rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  transition: color 0.15s ease, border-color 0.15s ease;
   flex-shrink: 0;
 }
 
-.quickstart-nav-btn:hover {
-  background: var(--primary-deep);
-  transform: scale(1.1);
-}
+.quickstart-nav-btn:hover { color: var(--text); border-color: var(--muted); }
 
-.quickstart-nav-btn:active {
-  transform: scale(0.95);
-}
-
+/* FOUR FIXED TRACKS, matching SETS_PER_PAGE — not auto-fit or auto-fill.
+   auto-fit collapsed the empty tracks, so a format with two sets drew them at
+   double width beside a format with four at normal width; auto-fill fixed that
+   and broke it the other way, packing more tracks into the wider rows. A page
+   holds four, so the grid is four. */
 .quickstart-sets-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
   flex: 1;
-  min-height: 140px;
+  min-width: 0;
+}
+
+/* The reserved nav gutter — same footprint as .quickstart-nav-btn, so every
+   row's grid starts and ends on the same two lines. */
+.quickstart-nav-gap {
+  flex: none;
+  width: 40px;
+  height: 40px;
 }
 
 .quickstart-set-card {
-  background: #f8f9fa;
-  border: 2px solid #e1e1e1;
+  background: transparent;
+  border: 1px solid rgba(155, 168, 190, 0.34);
   border-radius: 12px;
-  padding: 20px;
+  padding: 16px 18px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color 0.15s ease, background 0.15s ease;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   position: relative;
-  min-height: 120px;
+  min-height: 124px;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  width: 100%;
 }
 
-.quickstart-set-card:hover {
+.quickstart-set-card:hover:not(:disabled) {
   border-color: var(--primary);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(27, 41, 66, 0.2);
+  background: var(--surface-2);
 }
 
-.quickstart-set-card.disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.quickstart-set-card.disabled:hover {
-  transform: none;
-  border-color: #e1e1e1;
-  box-shadow: none;
-}
+.quickstart-set-card:disabled { opacity: 0.5; cursor: default; }
 
 .quickstart-set-info h4 {
-  margin: 0 0 8px 0;
-  color: #333;
-  font-size: 1.1rem;
-  line-height: 1.3;
+  margin: 0 0 6px 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 16px;
+  line-height: 1.25;
+  padding-right: 28px;   /* clear of the play glyph in the corner */
 }
 
 .quickstart-set-description {
-  margin: 0 0 12px 0;
-  color: #666;
-  font-size: 0.9rem;
-  line-height: 1.4;
+  margin: 0 0 10px 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .quickstart-set-stats {
   display: flex;
   gap: 12px;
-  font-size: 0.8rem;
-  color: #888;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--muted);
 }
 
 .quickstart-play-icon {
   position: absolute;
-  top: 16px;
-  right: 16px;
-  font-size: 1.5rem;
-  opacity: 0.7;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  opacity: 0.75;
+  transition: opacity 0.15s ease;
 }
 
-.quickstart-set-card:hover .quickstart-play-icon {
-  opacity: 1;
-}
+.quickstart-set-card:hover .quickstart-play-icon { opacity: 1; }
 
 .quickstart-pagination {
   text-align: center;
-  margin-top: 12px;
-  font-size: 0.9rem;
-  color: #666;
+  margin-top: 10px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
 }
 
 .quickstart-creating-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.9);
+  inset: 0;
+  background: rgba(15, 26, 46, 0.88);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -5254,13 +5222,13 @@ body {
 
 .creating-message {
   text-align: center;
-  color: #333;
+  color: var(--text);
 }
 
 .creating-message .loading-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid #f3f3f3;
+  border: 3px solid rgba(155, 168, 190, 0.20);
   border-top: 3px solid var(--primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -5272,30 +5240,27 @@ body {
   100% { transform: rotate(360deg); }
 }
 
-/* Mobile responsive */
+@media (max-width: 1000px) {
+  .quickstart-sets-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 @media (max-width: 768px) {
-  .quickstart-modal {
-    margin: 10px;
-    max-height: 90vh;
-  }
-  
-  .quickstart-header,
-  .quickstart-content {
-    padding: 20px;
-  }
-  
+  .quickstart-overlay { padding: 12px; }
+
+  .quickstart-modal { max-height: 92vh; }
+
+  .quickstart-header { padding: 20px; }
+  .quickstart-content { padding: 18px 20px 22px; }
+
   .quickstart-sets-container {
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
   }
-  
-  .quickstart-nav-btn {
-    align-self: center;
-  }
-  
-  .quickstart-sets-grid {
-    grid-template-columns: 1fr;
-  }
+
+  .quickstart-nav-btn { align-self: center; }
+  .quickstart-nav-gap { display: none; }
+
+  .quickstart-sets-grid { grid-template-columns: 1fr; }
 }
 
 /* AI Review Banner */

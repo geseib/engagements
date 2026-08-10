@@ -165,10 +165,21 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
     return sets.slice(startIdx, startIdx + SETS_PER_PAGE);
   };
 
+  // Clicking the scrim already closed this; Escape did not, so a keyboard user
+  // who opened it had no way back out at all. Not gated on `creating` — the
+  // create call is already in flight by then and the overlay closes itself on
+  // success, so blocking the key would only trap someone whose request failed.
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') onClose?.();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
 
   if (loading) {
     return (
-      <div className="quickstart-overlay">
+      <div className="quickstart-overlay" data-theme="dark">
         <div className="quickstart-modal">
           <div className="quickstart-loading">
             <div className="loading-spinner"></div>
@@ -182,16 +193,33 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
   const totalQuickstartSets = Object.values(quickstartSets).reduce((sum, sets) => sum + sets.length, 0);
 
   return (
-    <div className="quickstart-overlay" onClick={onClose}>
-      <div className="quickstart-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="quickstart-overlay" data-theme="dark" onClick={onClose}>
+      <div
+        className="quickstart-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quickstart-heading"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="quickstart-header">
           <div className="quickstart-title">
-            <h2><Icon name="Lightning" weight="fill" size={16} color="var(--primary)" /> Quickstart Menu</h2>
-            <p>Create and start a game instantly with pre-configured question sets</p>
+            <p className="quickstart-kicker">Quick start</p>
+            <h2 id="quickstart-heading">
+              <Icon name="Lightning" weight="fill" size={18} color="var(--primary)" /> Pick a set and go
+            </h2>
+            <p>Creates the session and starts it in one press. Nothing else to fill in.</p>
           </div>
-          
-          
-          <button className="quickstart-close" onClick={onClose}>×</button>
+
+          {/* The glyph is decorative; the name is on the button. Without it a
+              screen reader announced this control as "multiplication sign". */}
+          <button
+            type="button"
+            className="quickstart-close"
+            onClick={onClose}
+            aria-label="Close quick start"
+          >
+            <span aria-hidden="true">×</span>
+          </button>
         </div>
 
         <div className="quickstart-content">
@@ -223,22 +251,34 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
                     </h3>
                   </div>
 
+                  {/* The nav gutter is RESERVED whether or not this format
+                      pages. Without it a five-set format's cards sat inside a
+                      grid 104px narrower than a two-set format's, so the same
+                      sheet drew two different card widths. */}
                   <div className="quickstart-sets-container">
-                    {showNavigation && (
-                      <button 
-                        className="quickstart-nav-btn prev" 
+                    {showNavigation ? (
+                      <button
+                        type="button"
+                        className="quickstart-nav-btn prev"
                         onClick={() => prevPage(type)}
-                        title="Previous sets"
+                        aria-label={`Previous ${gameTypeMeta(type).label} sets`}
                       >
                         <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" />
                       </button>
+                    ) : (
+                      <span className="quickstart-nav-gap" aria-hidden="true" />
                     )}
 
                     <div className="quickstart-sets-grid">
+                      {/* A BUTTON, NOT A DIV. Every one of these was a <div>
+                          with an onClick: no tab stop, no Enter, no role, so
+                          the entire quick-start path was mouse-only. */}
                       {visibleSets.map(set => (
-                        <div 
-                          key={set.id} 
-                          className={`quickstart-set-card ${creating ? 'disabled' : ''}`}
+                        <button
+                          type="button"
+                          key={set.id}
+                          className="quickstart-set-card"
+                          disabled={creating}
                           onClick={() => !creating && createQuickGame(set)}
                         >
                           <div className="quickstart-set-info">
@@ -251,23 +291,26 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
                               <span>{set.categoryCount} categories</span>
                             </div>
                           </div>
-                          <div className="quickstart-play-icon">
+                          <span className="quickstart-play-icon">
                             {creating
                               ? <Icon name="Timer" weight="bold" size={20} color="var(--muted)" />
                               : <Icon name="PlayCircle" weight="fill" size={20} color="var(--primary)" />}
-                          </div>
-                        </div>
+                          </span>
+                        </button>
                       ))}
                     </div>
 
-                    {showNavigation && (
-                      <button 
-                        className="quickstart-nav-btn next" 
+                    {showNavigation ? (
+                      <button
+                        type="button"
+                        className="quickstart-nav-btn next"
                         onClick={() => nextPage(type)}
-                        title="Next sets"
+                        aria-label={`More ${gameTypeMeta(type).label} sets`}
                       >
                         <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" />
                       </button>
+                    ) : (
+                      <span className="quickstart-nav-gap" aria-hidden="true" />
                     )}
                   </div>
 

@@ -1,0 +1,374 @@
+/* ============================================================
+   THE WELCOME SCREEN — components/WelcomeScreen.jsx
+
+   No mockup exists for this surface. It is derived from the two shipped
+   neighbours it has to sit beside: RootPage (docs/design/entry-redesign/
+   01-root.html) for the shape of a door, and the stage for the field it
+   stands on. See the header comment in WelcomeScreen.jsx for the argument.
+
+   Every selector is namespaced `wel-` and scoped under `.wel-page`, because
+   global styles.css already owns `.btn-primary`, `.card`, `.welcome-*` and
+   friends, and this page must neither inherit from them nor disturb them.
+
+   COLOUR COMES FROM TOKENS ONLY. The root div carries data-theme="dark", so
+   --bg / --surface / --surface-2 / --text / --muted resolve to the dusk set
+   (styles.css:57) under the app's paper <html>. --primary is theme-invariant.
+   Rule hairlines are rgba() on the muted hue at two strengths, which is how
+   --hairline itself is derived (styles.css:36).
+
+   MEASURED CONTRAST (sRGB, computed not eyeballed):
+     text   #F4EDE4 on bg      #0F1A2E   14.97:1
+     text   #F4EDE4 on surface #1B2942   12.53:1
+     muted  #9BA8BE on bg      #0F1A2E    7.24:1
+     muted  #9BA8BE on surface #1B2942    6.06:1
+     amber  #F6A94C on bg      #0F1A2E    8.86:1
+     bg     #0F1A2E on amber   #F6A94C    8.86:1  (primary button label)
+     bg     #0F1A2E on hover   #FFBB63   10.39:1
+   ============================================================ */
+
+.wel-page {
+  /* One ladder. This is a laptop at ~20in, like the setup dialog it leads
+     into — not the projector the stage is derived for, so none of the four
+     display-profile ladders apply. */
+  --wel-radius: 16px;
+  --wel-radius-sm: 10px;
+  --wel-rule: rgba(155, 168, 190, .20);
+  --wel-rule-strong: rgba(155, 168, 190, .34);
+
+  --wel-t-display: clamp(28px, 5.2vw, 38px);
+  --wel-t-title: 20px;
+  --wel-t-body: 16px;
+  --wel-t-label: 14px;
+  --wel-t-meta: 13px;
+  --wel-t-code: clamp(30px, 7vw, 38px);
+
+  --wel-gutter: 20px;
+
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 var(--wel-t-body)/1.5 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+@media (min-width: 900px) {
+  .wel-page { --wel-gutter: 32px; }
+}
+
+.wel-page *,
+.wel-page *::before,
+.wel-page *::after { box-sizing: border-box; }
+
+.wel-page :focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.wel-pad { padding-inline: var(--wel-gutter); }
+.wel-shell { width: 100%; max-width: 62rem; margin-inline: auto; }
+.wel-grow { flex: 1 1 auto; }
+
+/* ------------------------------------------------------------ top strip -- */
+.wel-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding-block: 18px;
+  min-height: 60px;
+}
+
+.wel-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -.01em;
+  color: var(--text);
+}
+
+.wel-brand .wel-env {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: var(--wel-t-meta);
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* THE ONE IDENTITY BLOCK LEFT IN THE PRODUCT. A row in the account corner,
+   not a grey box wedged under the buttons. No address — see the component. */
+.wel-who {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px 12px;
+  min-width: 0;
+  margin-left: auto;   /* holds the account corner when the row wraps */
+}
+
+/* `flex: none`, deliberately. Left shrinkable, the name is the FIRST thing to
+   give at 375 — "Dana Whitfi…" beside a full-width ADMINISTRATOR badge, which
+   is precisely the wrong order of importance. Unshrinkable, the row wraps and
+   the badge or the button drops to a second line instead. The ellipsis stays
+   for the pathological name that is wider than the strip. */
+.wel-who-name {
+  flex: none;
+  max-width: 100%;
+  font-size: var(--wel-t-label);
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Periwinkle, not amber. --secondary is the system's non-reward accent, and
+   an administrator badge is a fact about the account rather than the thing
+   on the page to press. */
+.wel-badge {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: var(--secondary);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+/* ------------------------------------------------------------ typography -- */
+.wel-kicker {
+  font-size: var(--wel-t-meta);
+  font-weight: 700;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0;
+}
+
+.wel-page h1 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--wel-t-display);
+  line-height: 1.12;
+  letter-spacing: -.015em;
+  margin: 10px 0 0;
+}
+
+.wel-page h2 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--wel-t-title);
+  line-height: 1.2;
+  margin: 10px 0 0;
+}
+
+.wel-page p { margin: 0; }
+.wel-muted { color: var(--muted); }
+.wel-lede { margin-top: 12px; max-width: 42ch; }
+.wel-meta { font-size: var(--wel-t-meta); color: var(--muted); }
+.wel-label {
+  display: block;
+  margin-bottom: 9px;
+  font-size: var(--wel-t-label);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------- the split layout -- */
+/* Mobile first, and the DOM order is the priority order at both widths: start
+   a session, then resume one. The wide layout is a media query, not a
+   reordering, so tab order and screen-reader order come out right for free. */
+.wel-split { display: grid; gap: 0; }
+.wel-start { padding-block: 8px 30px; }
+.wel-resume {
+  padding-block: 26px 8px;
+  border-top: 1px solid var(--wel-rule);
+}
+.wel-codeblock { max-width: 23rem; }
+
+@media (min-width: 900px) {
+  .wel-main { display: flex; align-items: center; }
+  .wel-split {
+    grid-template-columns: minmax(0, 1.4fr) minmax(16rem, 1fr);
+    gap: 0 clamp(40px, 6vw, 84px);
+    align-items: stretch;
+    padding-block: 26px;
+  }
+  .wel-start { padding-block: 0; }
+  .wel-resume {
+    padding-block: 0;
+    border-top: 0;
+    border-left: 1px solid var(--wel-rule);
+    padding-left: clamp(36px, 5vw, 64px);
+  }
+}
+
+/* ------------------------------------------------------- the two actions -- */
+/* Not four equal full-width buttons. The old card gave Quick Start, Create,
+   Continue and History the same weight and the same shape, so a host read all
+   four every time. These two are the ones that start something; each carries
+   the sentence that says what it does, which the old screen never said. */
+.wel-stack { margin-top: 26px; display: grid; gap: 12px; max-width: 34rem; }
+
+.wel-action {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 16px 18px;
+  border-radius: var(--wel-radius);
+  border: 1px solid var(--wel-rule-strong);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+
+.wel-action:hover { border-color: var(--muted); background: var(--surface-2); }
+
+.wel-action-name {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 19px;
+  letter-spacing: -.01em;
+}
+
+.wel-action-note {
+  display: block;
+  margin-top: 5px;
+  font-size: var(--wel-t-label);
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* THE ONE AMBER THING ON THE PAGE. --primary is the single hero accent in
+   Warm Summit; the screen this replaces spent it on the entire background,
+   which left nothing to point with. */
+.wel-action.is-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--bg);
+}
+.wel-action.is-primary:hover { background: #FFBB63; border-color: #FFBB63; }
+.wel-action.is-primary .wel-action-note { color: rgba(15, 26, 46, .78); }
+
+/* ---------------------------------------------------------- code entry ---- */
+/* The participant's four-cell field from RootPage, because a host continuing a
+   session types exactly the same four digits the room typed. ONE input behind
+   four painted cells: four real inputs break paste, break backspace, and read
+   as four unlabelled fields to a screen reader. */
+.wel-codeblock { margin-top: 20px; }
+.wel-codewrap { position: relative; }
+
+.wel-codewrap input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;                     /* still focusable, still pasteable */
+  font-size: var(--wel-t-code);   /* >=16px so iOS does not zoom on focus */
+  border: 0;
+  background: transparent;
+  color: transparent;
+  letter-spacing: 1em;
+  padding: 0;
+}
+
+.wel-cells {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  pointer-events: none;
+}
+
+.wel-cell {
+  height: 62px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--wel-radius-sm);
+  background: var(--surface);
+  border: 2px solid var(--wel-rule-strong);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--wel-t-code);
+  line-height: 1;
+  color: var(--text);
+}
+
+/* "Typing goes here" is true before the field has focus, so the marker is not
+   conditional on focus. No blinking caret: unlike RootPage this field is not
+   the reason the page exists, and a caret in the quiet column would pull the
+   eye off the column that is. */
+.wel-cell.is-next { border-color: var(--primary); }
+
+.wel-codewrap.is-complete .wel-cell { border-color: var(--wel-rule); }
+
+/* ------------------------------------------------------------- controls --- */
+.wel-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 20px;
+  border-radius: var(--wel-radius-sm);
+  font: 700 var(--wel-t-body)/1.2 var(--font-ui);
+  cursor: pointer;
+  border: 2px solid transparent;
+  background: transparent;
+  color: var(--text);
+  /* At 375 the identity row wraps to its own line and "Sign out" broke across
+     two, which then squeezed the name to "Dana Whitfi…". The label is two
+     words; it never needs to wrap. */
+  white-space: nowrap;
+}
+
+.wel-btn-ghost {
+  margin-top: 14px;
+  border-color: var(--wel-rule-strong);
+}
+.wel-btn-ghost:hover { border-color: var(--muted); }
+
+/* A disabled Continue must not read as a second, quieter action. Dropping the
+   weight as well as the colour is what separates it from the ghost above. */
+.wel-btn-ghost[disabled] {
+  color: var(--muted);
+  border-color: var(--wel-rule);
+  cursor: not-allowed;
+  font-weight: 600;
+}
+
+.wel-btn-quiet {
+  width: auto;
+  min-height: 40px;
+  padding: 8px 12px;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: var(--wel-t-label);
+}
+.wel-btn-quiet:hover { color: var(--text); }
+
+.wel-aside-more {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--wel-rule);
+  max-width: 23rem;
+}
+.wel-aside-more .wel-btn-quiet { margin-left: -12px; }
+.wel-aside-more .wel-meta { margin-top: 4px; max-width: 34ch; }

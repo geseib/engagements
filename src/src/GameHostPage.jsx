@@ -6,6 +6,7 @@ import MarkdownRenderer from './components/MarkdownRenderer';
 import IssueFab from './components/IssueFab';
 import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
+import WelcomeScreen from './components/WelcomeScreen';
 import WavelengthWordCloud from './components/WavelengthWordCloud';
 import Icon from './components/Icon';
 import RankIcon from './components/RankIcon';
@@ -3120,91 +3121,28 @@ Ready to engage? See you there!`;
     );
   }
 
-  // Render the welcome screen if no game is selected
+  // Render the welcome screen if no game is selected.
+  //
+  // The surface itself is <WelcomeScreen> — extracted, like GameSetupDialog
+  // and SessionSetupPanel before it, because this file cannot be mounted in
+  // jsdom at all and an inline surface here is an untestable one.
+  //
+  // The heading used to read `currentGameType === 'trivia' ? 'Trivia' : ...`.
+  // It was always the second branch: nothing ever sets showWelcomeScreen back
+  // to true, so currentGameType is still its initial 'call-and-answer' every
+  // time this renders. The dead ternary went with the markup.
   if (showWelcomeScreen) {
     return (
-      <div className="welcome-screen">
-        {/* The decorative parallax hero is gone. It was 250px+ of CDN-hosted
-            stock photography above every screen it appeared on, and its own
-            stylesheet already collapsed it during a live round because it was
-            spending the fold on a word the host already knew. */}
-        <h2 className="welcome-title">{currentGameType === 'trivia' ? 'Trivia' : 'Engagements'}</h2>
-
-        <div className="welcome-content">
-          <div className="welcome-card">
-            <h3>Get Started</h3>
-            <p>Choose how you'd like to begin your collaborative learning session:</p>
-            
-            <div className="welcome-options">
-              <button className="btn-secondary btn-large welcome-btn" onClick={() => setShowQuickstartMenu(true)}>
-                <Icon name="Lightning" weight="duotone" size={20} color="var(--primary)" /> Quick Start
-              </button>
-
-              <button className="btn-primary btn-large welcome-btn" onClick={handleWelcomeNewGame}>
-                <Icon name="Target" weight="duotone" size={20} /> Create Engagement
-              </button>
-              
-              <div className="continue-game-section">
-                <h4>Continue Existing Game</h4>
-                <div className="continue-game-form">
-                  <input
-                    type="text"
-                    value={continueGameId}
-                    onChange={(e) => setContinueGameId(e.target.value)}
-                    placeholder="Enter 4-digit Game ID"
-                    className="input-field game-id-input"
-                    maxLength="4"
-                  />
-                  <button 
-                    className="btn-secondary" 
-                    onClick={handleContinueGame}
-                    disabled={!continueGameId.trim()}
-                  >
-                    Continue Game
-                  </button>
-                </div>
-              </div>
-              
-              <button className="btn-secondary btn-large welcome-btn" onClick={handleViewGameHistory}>
-                <Icon name="ClipboardText" weight="bold" size={20} /> View Game History
-              </button>
-              
-              {/* User Info and Sign Out */}
-              {currentUser && (
-                <div className="welcome-user-info" style={{
-                  marginTop: '20px',
-                  padding: '12px',
-                  backgroundColor: '#f8f9fa',
-                  border: '1px solid #dee2e6',
-                  borderRadius: '6px',
-                  textAlign: 'center',
-                  fontSize: '14px'
-                }}>
-                  <div style={{ marginBottom: '6px' }}>
-                    <strong>{currentUser.attributes?.name || 'User'}</strong>
-                  </div>
-                  {currentUser.groups?.includes('admins') && (
-                    <div style={{ color: '#007bff', fontWeight: '500', fontSize: '12px', marginBottom: '8px' }}>
-                      Administrator
-                    </div>
-                  )}
-                  <button 
-                    onClick={handleSignOut}
-                    className="btn-secondary"
-                    style={{
-                      padding: '6px 12px',
-                      fontSize: '12px',
-                      minHeight: 'auto'
-                    }}
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      <WelcomeScreen
+        currentUser={currentUser}
+        continueGameId={continueGameId}
+        onContinueGameIdChange={setContinueGameId}
+        onContinue={handleContinueGame}
+        onQuickStart={() => setShowQuickstartMenu(true)}
+        onCreateEngagement={handleWelcomeNewGame}
+        onViewHistory={handleViewGameHistory}
+        onSignOut={handleSignOut}
+      />
     );
   }
 

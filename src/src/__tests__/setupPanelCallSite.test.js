@@ -26,6 +26,7 @@ function stripComments(text) {
 const host = stripComments(fs.readFileSync(src('GameHostPage.jsx'), 'utf8'));
 const dock = stripComments(fs.readFileSync(src('components', 'stage', 'Dock.jsx'), 'utf8'));
 const bar = stripComments(fs.readFileSync(src('components', 'HostActionBar.jsx'), 'utf8'));
+const welcome = stripComments(fs.readFileSync(src('components', 'WelcomeScreen.jsx'), 'utf8'));
 
 describe('the page actually mounts the panel', () => {
   test('it imports and renders <SessionSetupPanel>', () => {
@@ -88,11 +89,19 @@ describe('the four surfaces it replaced are gone, not hidden', () => {
     // the room can watch. THE EMAIL IS THE BINDING PART: a third block
     // survives on the pre-game welcome screen, which is not a room-facing
     // surface and prints a name and an admin badge but no address.
+    //
+    // That block now lives in components/WelcomeScreen.jsx rather than inline
+    // in this file, so the count is taken across BOTH — otherwise the
+    // extraction alone would satisfy an assertion that meant to say "exactly
+    // one, and it is the pre-game one".
     expect(host).not.toMatch(/attributes\?\.email/);
-    // ...and the one that remains is on the welcome screen, not in the panel.
-    const adminBadges = host.match(/Administrator/g) || [];
+    expect(welcome).not.toMatch(/attributes\?\.email/);
+    const adminBadges = (host + welcome).match(/Administrator/g) || [];
     expect(adminBadges).toHaveLength(1);
-    expect(host.indexOf('Administrator')).toBeLessThan(host.indexOf('<Stage'));
+    // ...and the screen carrying it is mounted before the stage, i.e. it is
+    // the pre-game door and not a panel a room can watch.
+    expect(host.indexOf('<WelcomeScreen')).toBeGreaterThan(-1);
+    expect(host.indexOf('<WelcomeScreen')).toBeLessThan(host.indexOf('<Stage'));
   });
 
   test('the z-index: 999999 scrim is gone', () => {
