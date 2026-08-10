@@ -305,12 +305,31 @@ describe('the dock', () => {
     expect(rule).not.toMatch(/position:\s*fixed/);
   });
 
-  test('the setup control is discoverable and wired, not just present', () => {
+  test('the session control is discoverable and wired, not just present', () => {
     const onSetup = jest.fn();
     render(<Dock status="" hint="" onSetup={onSetup}><button type="button">Go</button></Dock>);
-    const setup = screen.getByRole('button', { name: /setup/i });
+    const setup = screen.getByRole('button', { name: /session/i });
     fireEvent.click(setup);
     expect(onSetup).toHaveBeenCalledTimes(1);
+  });
+
+  test('the session control sits at the end of the dock, beside the panel it opens', () => {
+    // The panel is `right: 0`. The control used to be FIRST in the dock, so a
+    // host clicked bottom-left and a surface appeared on the far side of a
+    // projected screen with nothing connecting the two.
+    //
+    // rejects: moving it back ahead of the status line or the primary. Asserted
+    // on DOM order rather than geometry, because jsdom has no layout engine and
+    // any position assertion here would pass unconditionally.
+    const { container } = render(
+      <Dock status="Some are still answering" onSetup={() => {}}>
+        <button type="button">Start Voting</button>
+      </Dock>
+    );
+    const dock = container.querySelector('.dock');
+    const kids = Array.from(dock.children);
+    expect(kids[kids.length - 1]).toHaveClass('dock-more');
+    expect(kids[0]).toHaveClass('status');
   });
 
   test('status and hint are optional room-safe text, omitted rather than rendered empty', () => {

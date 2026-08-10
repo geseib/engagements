@@ -93,6 +93,11 @@ export default function SessionSetupPanel({
   onShowHowToPlay = () => {},
   onSwitchGame = () => {},
   onSignOut = () => {},
+  // Whether to offer the Admin link at all. Derived by the page from the
+  // signed-in user's Cognito groups, not read here, so the panel stays a
+  // presentational component with no auth dependency — GameHostPage is the
+  // only thing that can reach `useAuth`.
+  isAdmin = false,
   issueControl = null,
 }) {
   const [tab, setTab] = useState('players');
@@ -175,8 +180,15 @@ export default function SessionSetupPanel({
   return (
     <>
       <div className="setup-panel-scrim" onClick={onClose} aria-hidden="true" />
+      {/* Wide only on Questions. `18-question-browser.html` renders the panel
+          as `console console--wide` for exactly this screen: a question's text
+          wraps rather than truncating, so at the default 44vw a long prompt
+          became a five-line row and comparing two of them meant scrolling.
+          The other two tabs are short rows that would sit in an empty column,
+          and every pixel of panel is a pixel of projected stage the room
+          loses. */}
       <aside
-        className="setup-panel"
+        className={`setup-panel${tab === 'questions' ? ' setup-panel--wide' : ''}`}
         ref={panelRef}
         role="dialog"
         aria-modal="true"
@@ -309,6 +321,12 @@ export default function SessionSetupPanel({
                   >
                     <span className="setup-cat__name">{row.name}</span>
                     <span className="setup-cat__count">{`${row.remaining} left`}</span>
+                    {/* The state in words, not only in colour. Amber-vs-hollow
+                        reads instantly for most people and not at all for a
+                        colour-blind host — and this row gets scanned under
+                        pressure with a room waiting. `11-console.html` prints
+                        it the same way: "Pricing Power · 7 left · on". */}
+                    <span className="setup-cat__state">{row.enabled ? 'on' : 'off'}</span>
                   </button>
                 ))}
               </div>
@@ -463,6 +481,33 @@ export default function SessionSetupPanel({
               <div className="setup-row">
                 <button type="button" onClick={onShowHowToPlay}>Show how this works on the stage →</button>
                 <button type="button" onClick={onSwitchGame}>Switch game</button>
+                {/*
+                  ADMIN OPENS IN A NEW TAB, AND THAT IS THE WHOLE POINT.
+
+                  `App.jsx` is a `window.location.pathname` switch with no
+                  client-side navigation, so navigating here in-place would be
+                  a full page load — which tears down the host's WebSocket and
+                  the entire in-memory session, mid-round, in front of a room.
+                  `target="_blank"` is the only safe shape for this link.
+
+                  `rel="noopener"` because the new tab must not get a handle on
+                  this one: `window.opener.location` from an admin tab pointed
+                  at the live projector is a foot-gun with no upside.
+
+                  Admins only — `admins` is the group AdminPage's own
+                  ProtectedRoute requires, so showing it to a host would be
+                  offering a door that opens onto Access Denied.
+                */}
+                {isAdmin && (
+                  <a
+                    className="setup-link"
+                    href="/admin"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Admin ↗
+                  </a>
+                )}
                 {issueControl}
                 <button type="button" onClick={onSignOut}>Sign out</button>
               </div>

@@ -172,18 +172,32 @@ describe('the SPACE guard is wired at both ends', () => {
     // rejects: renaming one end. The guard is a string match against a class
     // name — split them and it fails open, silently, with both files' own
     // tests still green.
+    //
+    // The className is a template now (the Questions tab adds
+    // `setup-panel--wide`), so this matches the BASE class at the head of the
+    // expression. It must stay the head: `setup-panel--wide` alone would not
+    // satisfy `.closest('.setup-panel')`, and losing the base class is exactly
+    // the silent failure this test exists to catch. The rendered counterpart
+    // is in sessionSetupPanel.test.jsx, which asserts the element is really
+    // reachable by that selector on every tab.
     const panel = fs.readFileSync(src('components', 'stage', 'SessionSetupPanel.jsx'), 'utf8');
-    expect(panel).toMatch(/className="setup-panel"/);
+    expect(panel).toMatch(/className=(?:"setup-panel"|\{`setup-panel[^`]*`\})/);
   });
 });
 
-describe('the dock says the word and drops the glyph', () => {
-  test('SETUP is the label, and there is no ⋯ beside it', () => {
-    // rejects: re-adding the ellipsis. The word and the glyph said the same
-    // thing inside one 48px target, and hittability was the whole argument
-    // for adding the label.
-    expect(dock).toMatch(/SETUP/);
+describe('the dock control names the panel it opens', () => {
+  test('it reads SESSION, sits last, and is not called Console', () => {
+    // rejects: reverting to SETUP (a one-time, pre-session act — this panel is
+    // where the host looks mid-round), re-adding the ellipsis, moving the
+    // control back to the head of the dock away from the panel's edge, and
+    // printing the proper noun user testing killed.
+    expect(dock).toMatch(/SESSION/);
+    expect(dock).not.toMatch(/>SETUP</);
     expect(dock).not.toContain('⋯');
+    expect(dock).not.toMatch(/Console/i);
+
+    const body = dock.slice(dock.indexOf('<footer'));
+    expect(body.indexOf('dock-more')).toBeGreaterThan(body.indexOf('{children}'));
   });
 });
 

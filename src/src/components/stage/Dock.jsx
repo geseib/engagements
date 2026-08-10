@@ -36,23 +36,40 @@ import React from 'react';
 export default function Dock({ status, hint, kbd, onSetup, complete = false, children }) {
   return (
     <footer className="dock">
-      <button
-        type="button"
-        className="dock-more"
-        onClick={onSetup}
-        aria-label="Session setup"
-        title="Session setup"
-      >
-        {/* No `⋯` beside the word. The glyph and the label said the same
-            thing inside one 48px target, and the whole argument for adding
-            the label was that the glyph alone was unhittable. */}
-        <span className="dock-more-lbl">SETUP</span>
-      </button>
       {status && <span className={`status${complete ? ' go' : ''}`} aria-live="polite">{status}</span>}
       <span className="spacer" />
       {children}
       {kbd && <span className="kbd" aria-hidden="true">{kbd}</span>}
       {hint && <span className="hint">{hint}</span>}
+      {/*
+        LAST IN THE DOCK, AND ON PURPOSE.
+
+        The mockup put this first, at the far left, while the panel it opens is
+        `right: 0`. So the host clicked bottom-left and a surface appeared on
+        the far side of a projected screen — a long way to travel with a room
+        watching, and no cue that the two were the same thing. The control now
+        sits at the edge it opens from.
+
+        It reads SESSION, not SETUP. Setup is something you do once, before
+        anybody arrives; this panel is where the host sees who is in the room,
+        which question comes next, and how the session is running, all of it
+        mid-round. The panel's own heading stays "Session setup" because that
+        is what the Settings tab does — the button names the whole thing.
+        Still not "Console": user testing killed the proper noun.
+
+        No `⋯` beside the word. The glyph and the label said the same thing
+        inside one 48px target, and the whole argument for adding the label
+        was that the glyph alone was unhittable.
+      */}
+      <button
+        type="button"
+        className="dock-more"
+        onClick={onSetup}
+        aria-label="Session panel"
+        title="Session panel — backslash key"
+      >
+        <span className="dock-more-lbl">SESSION</span>
+      </button>
     </footer>
   );
 }

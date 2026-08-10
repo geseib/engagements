@@ -941,23 +941,59 @@ function AdminPage() {
                             Administrator
                           </div>
                         )}
-                        <button 
-                          onClick={handleSignOut}
-                          style={{
-                            padding: '4px 8px',
-                            backgroundColor: 'rgba(255,255,255,0.2)',
-                            border: '1px solid rgba(255,255,255,0.3)',
-                            borderRadius: '4px',
-                            color: 'white',
-                            fontSize: '12px',
-                            cursor: 'pointer',
-                            transition: 'background-color 0.2s'
-                          }}
-                          onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.3)'}
-                          onMouseOut={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.2)'}
-                        >
-                          Sign Out
-                        </button>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                          {/*
+                            THE WAY BACK, AND IT OPENS A NEW TAB ON PURPOSE.
+
+                            The mirror of the Admin link in the host's session
+                            panel. `App.jsx` is a pathname switch with no
+                            client-side navigation, so an in-place link is a
+                            full page load — and if the host page is live in
+                            another tab with a room in front of it, a second
+                            copy of it is a second host WebSocket connection.
+                            A new tab keeps whatever is already running intact.
+
+                            rel="noopener" so the opened tab gets no handle on
+                            this one.
+                          */}
+                          <a
+                            href="/"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              padding: '4px 8px',
+                              backgroundColor: 'rgba(255,255,255,0.2)',
+                              border: '1px solid rgba(255,255,255,0.3)',
+                              borderRadius: '4px',
+                              color: 'white',
+                              fontSize: '12px',
+                              textDecoration: 'none',
+                              cursor: 'pointer',
+                              transition: 'background-color 0.2s'
+                            }}
+                            onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.3)'}
+                            onMouseOut={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+                          >
+                            Host ↗
+                          </a>
+                          <button
+                            onClick={handleSignOut}
+                            style={{
+                              padding: '4px 8px',
+                              backgroundColor: 'rgba(255,255,255,0.2)',
+                              border: '1px solid rgba(255,255,255,0.3)',
+                              borderRadius: '4px',
+                              color: 'white',
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                              transition: 'background-color 0.2s'
+                            }}
+                            onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.3)'}
+                            onMouseOut={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+                          >
+                            Sign Out
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

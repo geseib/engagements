@@ -122,6 +122,39 @@ describe('the panel as a surface', () => {
       expect(container.textContent).not.toContain('@example.com');
     }
   });
+
+  test('.setup-panel resolves on every tab, including the wide one', () => {
+    // THE SPACE GUARD DEPENDS ON THIS SELECTOR. HostActionBar ignores a
+    // spacebar whose `event.target.closest('.setup-panel')` matches — so if
+    // the Questions tab's width modifier ever REPLACED the base class instead
+    // of joining it, the guard would silently fail open on the one tab with a
+    // search box and an Ask-next button on it, and pressing Space there would
+    // advance the round.
+    //
+    // rejects: `className={tab === 'questions' ? 'setup-panel--wide' : 'setup-panel'}`,
+    // which looks equivalent and is not. setupPanelCallSite.test.js asserts the
+    // source; this asserts the rendered element is really reachable.
+    const { container } = renderPanel();
+    for (const tab of ['Players', 'Questions', 'Settings']) {
+      openTab(tab);
+      expect(container.querySelector('.setup-panel')).not.toBeNull();
+    }
+  });
+
+  test('only the Questions tab widens the panel', () => {
+    // rejects: widening unconditionally. Every pixel of panel is a pixel of
+    // projected stage the room loses, and Players and Settings are short rows
+    // that would just sit in an empty column.
+    const { container } = renderPanel();
+
+    openTab('Questions');
+    expect(container.querySelector('.setup-panel')).toHaveClass('setup-panel--wide');
+
+    for (const tab of ['Players', 'Settings']) {
+      openTab(tab);
+      expect(container.querySelector('.setup-panel')).not.toHaveClass('setup-panel--wide');
+    }
+  });
 });
 
 describe('closing', () => {
