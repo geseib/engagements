@@ -1,0 +1,202 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Description: >
+  Account-level monitoring and alerting for the Engagements platform.
+  First customer: a soft daily cap on SES send volume.
+
+# ============================================================================
+# WHY THIS IS A SEPARATE STACK
+#
+# template-clean.yaml is deployed three times — engagedev, engagetest,
+# engageprod. The SES sending quota is a property of the ACCOUNT, not of a
+# tier. Putting this monitor there would create three Lambdas on three
+# schedules, all reading the same account-wide metric and all racing to flip
+# the same account-wide breaker: three alerts per event, and a release from one
+# tier undoing a trip from another.
+#
+# So it is applied ONCE, by hand, exactly like engagecicd:
+#
+#   sam deploy --template-file template-monitoring.yaml \
+#     --stack-name engagemonitoring \
+#     --capabilities CAPABILITY_IAM \
+#     --resolve-s3 \
+#     --parameter-overrides AlertEmail=you@example.com AlertPhoneNumber=+15551234567
+#
+# It is NOT on any pipeline and no tag deploys it. Per CLAUDE.md, the owner
+# runs that command; nothing in this repo runs it for them.
+# ============================================================================
+
+Parameters:
+  AlertEmail:
+    Type: String
+    Default: ''
+    Description: >
+      Email address for alerts. Leave blank to skip. AWS sends a confirmation
+      link that MUST be clicked before any alert is delivered.
+
+  AlertPhoneNumber:
+    Type: String
+    Default: ''
+    Description: >
+      E.164 phone number for SMS alerts, e.g. +15551234567. Leave blank to
+      skip. NOTE: SNS has its own SMS sandbox, separate from the SES one. Until
+      the account leaves it, only phone numbers verified in the SNS console
+      receive messages, and US destinations may additionally require a
+      registered origination number (10DLC). If SMS is silently not arriving,
+      that is almost always why - check the email subscription still works.
+
+  ScheduleExpression:
+    Type: String
+    Default: rate(5 minutes)
+    Description: >
+      How often to evaluate. This sets the overshoot: the cap can be exceeded
+      by whatever volume can be sent between two evaluations. Five minutes is
+      the balance chosen for a 25/day cap where a 30-40 landing is acceptable.
+
+  StatePrefix:
+    Type: String
+    Default: /engage/monitors
+    Description: SSM Parameter Store prefix for monitor state and enable flags.
+
+  GamesTableName:
+    Type: String
+    Default: ''
+    Description: >
+      Optional. A DynamoDB table for business-metric monitors such as
+      games-created-per-day. Leave blank if only the SES monitor is wanted -
+      the DynamoDB read permission is not granted at all when this is empty.
+
+Conditions:
+  HasEmail: !Not [!Equals [!Ref AlertEmail, '']]
+  HasPhone: !Not [!Equals [!Ref AlertPhoneNumber, '']]
+  HasGamesTable: !Not [!Equals [!Ref GamesTableName, '']]
+
+Resources:
+
+  # ---- Where alerts go ------------------------------------------------------
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: engage-monitoring-alerts
+      DisplayName: EngageAlert     # SMS sender label; SNS caps this at 11 chars
+
+  AlertEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasEmail
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+
+  AlertSmsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasPhone
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: sms
+      Endpoint: !Ref AlertPhoneNumber
+
+  # ---- The evaluator --------------------------------------------------------
+  MonitorEvaluatorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: engage-monitor-evaluator
+      CodeUri: lambda-functions/monitoring/
+      Handler: evaluate-monitors.handler
+      Runtime: nodejs22.x
+      Timeout: 120        # a full DynamoDB partition scan can page for a while
+      MemorySize: 256
+      Environment:
+        Variables:
+          ALERT_TOPIC_ARN: !Ref AlertTopic
+          STATE_PREFIX: !Ref StatePrefix
+          GAMES_TABLE_NAME: !Ref GamesTableName
+      Policies:
+        - Statement:
+            # Reading metrics is account-wide by nature; GetMetricStatistics
+            # takes no resource ARN.
+            - Effect: Allow
+              Action:
+                - cloudwatch:GetMetricStatistics
+              Resource: '*'
+
+            # The breaker itself. Scoped to exactly the two calls the enforcer
+            # makes - this role can turn account sending on and off and can do
+            # nothing else to SES. It notably CANNOT send email.
+            - Effect: Allow
+              Action:
+                - ses:PutAccountSendingAttributes
+                - ses:GetAccount
+              Resource: '*'
+
+            - Effect: Allow
+              Action:
+                - sns:Publish
+              Resource: !Ref AlertTopic
+
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+                - ssm:PutParameter
+              Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${StatePrefix}/*'
+
+        - !If
+          - HasGamesTable
+          - Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:Query
+                Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${GamesTableName}'
+          - !Ref AWS::NoValue
+
+      Events:
+        Tick:
+          Type: Schedule
+          Properties:
+            Schedule: !Ref ScheduleExpression
+            Description: Evaluate all enabled monitors
+            Enabled: true
+
+  # ---- Watch the watcher ----------------------------------------------------
+  # A breaker that has stopped running looks exactly like a quiet week. This
+  # alarm fires if the evaluator itself starts erroring.
+  EvaluatorFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: engage-monitor-evaluator-failing
+      AlarmDescription: >
+        The monitoring evaluator is erroring. While this is in ALARM, the SES
+        cap is NOT being enforced.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref MonitorEvaluatorFunction
+      Statistic: Sum
+      Period: 900
+      EvaluationPeriods: 1
+      Threshold: 2
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+      OKActions:
+        - !Ref AlertTopic
+
+Outputs:
+  AlertTopicArn:
+    Description: SNS topic carrying every monitor alert
+    Value: !Ref AlertTopic
+
+  EvaluatorFunction:
+    Description: The scheduled evaluator
+    Value: !Ref MonitorEvaluatorFunction
+
+  DisableSesCapCommand:
+    Description: Turn the SES cap off at runtime, without a redeploy
+    Value: !Sub 'aws ssm put-parameter --name "${StatePrefix}/ses-daily-send-cap/enabled" --value "false" --type String --overwrite'
+
+  CheckSesSendingCommand:
+    Description: Ask SES whether account sending is currently enabled
+    Value: 'aws sesv2 get-account --query SendingEnabled'
