@@ -1065,6 +1065,11 @@
 /* An error sentence is --text, not --muted and not --danger: it is the most
    important run on the screen at the moment it appears. */
 .au-hint.is-bad { color: var(--text); }
+/* The confirm-password hint is a permanently-mounted live region (see
+   PasswordField.jsx), so it is in the DOM with no text most of the time. Take
+   it out of the flow when it is empty, or every register form carries 6px of
+   margin under a paragraph that says nothing. */
+.au-hint:empty { display: none; }
 
 .au-pwwrap { position: relative; display: block; }
 .au-pwwrap .au-input { padding-right: 62px; }

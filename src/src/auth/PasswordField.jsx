@@ -19,6 +19,20 @@ import './auth.css';
  *
  * `data-met` on each rule carries the met/unmet state, so it is legible to a
  * test and to assistive technology rather than living in colour alone.
+ *
+ * THE SHOW TOGGLE IS PER FIELD, AND THAT MATTERS NOW THAT REGISTRATION HAS TWO
+ * OF THEM. `visible` is local state, so a screen that renders two of these gets
+ * two independent toggles. That is the choice, not an accident of where the
+ * state happened to live:
+ *
+ *   - You only ever need to see the field you are correcting. Unmasking both at
+ *     once doubles what is on a shared or projected screen and buys nothing.
+ *   - A linked toggle would have to be lifted into each caller and threaded back
+ *     down, so the other four surfaces would carry a prop only registration uses.
+ *
+ * The three optional props below (`onBlur`, `inputRef`, `liveHint`) exist for
+ * registration's confirm field and default to the previous behaviour, so the
+ * other four call sites are unchanged.
  */
 export default function PasswordField({
   id,
@@ -26,12 +40,15 @@ export default function PasswordField({
   label,
   value,
   onChange,
+  onBlur,
+  inputRef,
   autoComplete = 'new-password',
   showRules = false,
   invalid = false,
   disabled = false,
   hint = null,
   hintId,
+  liveHint = false,
   trailing = null,
 }) {
   const [visible, setVisible] = useState(false);
@@ -59,13 +76,15 @@ export default function PasswordField({
         <input
           id={id}
           name={name}
+          ref={inputRef}
           className={`au-input${invalid ? ' is-bad' : ''}`}
           type={visible ? 'text' : 'password'}
           value={value}
           onChange={onChange}
+          onBlur={onBlur}
           autoComplete={autoComplete}
           disabled={disabled}
-          aria-describedby={hint ? hintId : undefined}
+          aria-describedby={hint || liveHint ? hintId : undefined}
           aria-invalid={invalid || undefined}
         />
         <button
@@ -79,10 +98,23 @@ export default function PasswordField({
         </button>
       </span>
 
-      {hint && (
-        <p className="au-hint is-bad" id={hintId}>
-          {hint}
+      {/* A LIVE REGION HAS TO EXIST BEFORE ITS CONTENT CHANGES. Screen readers
+          watch regions that were already in the accessibility tree; one that is
+          inserted together with its first text is announced unreliably or not
+          at all. So with `liveHint` the paragraph is always rendered and only
+          its text comes and goes -- `.au-hint:empty` hides the empty one, which
+          is why it costs no space. Without `liveHint` this is exactly the old
+          markup: mount-on-error, described-by, no live region. */}
+      {liveHint ? (
+        <p className="au-hint is-bad" id={hintId} aria-live="polite">
+          {hint || ''}
         </p>
+      ) : (
+        hint && (
+          <p className="au-hint is-bad" id={hintId}>
+            {hint}
+          </p>
+        )
       )}
 
       {rules && (

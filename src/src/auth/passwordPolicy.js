@@ -39,6 +39,29 @@ export const PASSWORD_RULES = [
   { id: 'low', label: 'A lower-case letter', test: (pw) => /[a-z]/.test(pw) },
   { id: 'num', label: 'A number', test: (pw) => /\d/.test(pw) },
   {
+    /**
+     * KNOWN, DELIBERATELY UNFIXED: this is slightly wider than Cognito's symbol
+     * set, and the difference is non-ASCII.
+     *
+     * `[^A-Za-z0-9]` counts `é`, `Ω` and emoji as symbols. Cognito's
+     * `RequireSymbols` list is printable ASCII only, so a password whose ONLY
+     * non-alphanumeric character is non-ASCII -- `Northeasté26` -- ticks the
+     * fifth rule here and can still come back from `signUp` as
+     * `InvalidPasswordException`. The user sees a server error under a checklist
+     * showing five ticks, which is a confusing thing to be shown.
+     *
+     * NOT FIXED ON PURPOSE. It fails in the safe direction: the server refuses
+     * the account, nothing is created wrong, and the case needs a password with
+     * no ASCII symbol anywhere in it. The fix would be to narrow this to
+     * `/[!-\/:-@\[-`{-~ ]/`, and narrowing is the direction that can do real
+     * harm -- if Cognito does accept some non-ASCII as a symbol (its behaviour
+     * with unicode is not documented, only its ASCII list is), that regex locks
+     * people out of the browser for passwords the pool would have taken, which
+     * is worse than the mismatch it removes. **Do not narrow it from the docs
+     * alone.** Verify against the real user pool first -- attempt a sign-up with
+     * `Northeasté26` against `engagedev` and read what Cognito says -- then
+     * either narrow this and say so here, or delete this note.
+     */
     id: 'sym',
     label: 'A symbol — ! ? # $ % or any other',
     test: (pw) => /[^A-Za-z0-9]/.test(pw),

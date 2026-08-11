@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { passwordMeetsPolicy } from './passwordPolicy';
 import { startGoogleSignIn } from './googleSignIn';
@@ -6,10 +6,13 @@ import PasswordField from './PasswordField';
 import { GoogleMark, ClockIcon, AlertIcon } from './AuthChrome';
 import './auth.css';
 
+/** One sentence, one place: the blur path and the submit path must not differ. */
+const MISMATCH = 'These two do not match yet.';
+
 /**
  * Create a host account. Built from docs/design/entry-redesign/11-register.html.
  *
- * THREE THINGS MOVED, AND ONE SENTENCE WAS DELETED.
+ * THREE THINGS MOVED, ONE SENTENCE WAS DELETED, AND ONE FIELD CAME BACK.
  *
  * 1. The approval gate is now ABOVE the form. It is the single most important
  *    fact about creating this account, and it used to sit halfway down, after
@@ -29,15 +32,42 @@ import './auth.css';
  *    approximated. The validator is now the shared one, so `Northeast#26` is no
  *    longer rejected here and accepted at reset. (RATIONALE.md §8.3, §8.7.)
  *
- * The confirm-password field is gone too, which the mockup draws and this note
- * records deliberately: a Show/Hide toggle on a single field solves the typo
- * the second field was guarding against, and does it without asking for the
- * password twice.
+ * ------------------------------------------------------------------------
+ * 4. THE CONFIRM-PASSWORD FIELD IS BACK, ON THIS FORM ONLY. THIS DIVERGES
+ *    FROM THE MOCKUP ON PURPOSE. DO NOT "FIX" IT.
+ * ------------------------------------------------------------------------
+ *
+ * `docs/design/entry-redesign/11-register.html` draws ONE password field with a
+ * Show toggle, and so do 14-forgot and 17-password-change. `bbadaa59` built all
+ * three that way. An agent reading the mockup later will see this second field,
+ * conclude it is drift, and delete it. It is not drift. **The owner ruled on
+ * 2026-08-11 that registration keeps a confirm field and reset and change do
+ * not** (`docs/handoff/RESUME.md` §6 states the trade-off this decided).
+ *
+ * The reason the ruling splits the three forms:
+ *
+ *   - A typo HERE creates an account with a password nobody can reproduce. The
+ *     person does not find out at the point of the mistake; they find out later,
+ *     when they cannot sign in, with no reason to suspect the password they are
+ *     sure they typed. The Show toggle is the only guard, and on a shared or
+ *     projected screen people will not use it.
+ *   - A typo at reset or at forced change is recoverable by running the same
+ *     flow again, immediately, from the same screen. The consequence is a minute.
+ *
+ * Confirm fields measurably increase abandonment, which is a real cost and the
+ * mockup's reason for cutting them. So it is bought exactly where the
+ * consequence is permanent and nowhere else. **Adding one to
+ * `ForgotPasswordForm.jsx` or `PasswordChangeForm.jsx` is also against this
+ * decision** -- the ruling is a split, not a preference for two fields.
  */
 const RegisterForm = ({ onToggleMode, onSuccess }) => {
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
+  // False until the user has LEFT a password field, which is the signal that
+  // they have finished typing rather than paused. See `leftPasswordField`.
+  const [matchChecked, setMatchChecked] = useState(false);
+  const confirmRef = useRef(null);
 
   const { signUp, error, setError } = useAuth();
 
@@ -45,8 +75,34 @@ const RegisterForm = ({ onToggleMode, onSuccess }) => {
     const { value } = event.target;
     setForm((prev) => ({ ...prev, [key]: value }));
     if (fieldErrors[key]) setFieldErrors((prev) => ({ ...prev, [key]: '' }));
+    // Typing in EITHER password field retracts the mismatch message. Without
+    // this the message stays up character by character while someone corrects
+    // the very thing it is complaining about, and each keystroke of the first
+    // field would re-raise it against a half-typed second one.
+    if (key === 'password' || key === 'confirm') setMatchChecked(false);
     if (error) setError(null);
   };
+
+  /**
+   * Blur on either password field means "finished typing" -- with one exception.
+   * Clicking this field's own Show toggle blurs the input, and someone who is
+   * three characters into the confirm field and reaches for Show to check their
+   * work is the LAST person who should be told the passwords do not match. The
+   * toggle is a sibling inside `.au-pwwrap`, so a blur whose relatedTarget is
+   * inside the same wrapper is focus moving within the control, not away from it.
+   */
+  const leftPasswordField = (event) => {
+    const next = event.relatedTarget;
+    if (next && event.currentTarget.parentElement && event.currentTarget.parentElement.contains(next)) {
+      return;
+    }
+    setMatchChecked(true);
+  };
+
+  const mismatch = form.confirm.length > 0 && form.confirm !== form.password;
+  // Shown once they have left a field, or once a submit has been refused --
+  // never mid-keystroke. `fieldErrors.confirm` is what carries the second case.
+  const confirmHint = fieldErrors.confirm || (mismatch && matchChecked ? MISMATCH : '');
 
   const validate = () => {
     const errors = {};
@@ -61,13 +117,26 @@ const RegisterForm = ({ onToggleMode, onSuccess }) => {
       errors.password = 'Your password does not meet all five rules yet.';
     }
 
+    if (!form.confirm) errors.confirm = 'Type the password a second time so a typo cannot lock you out.';
+    else if (form.confirm !== form.password) errors.confirm = MISMATCH;
+
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (!validate()) return;
+    if (!validate()) {
+      // The submit button is never disabled -- a dead button states no reason
+      // and cannot be focused to find one. Submission is refused HERE, and when
+      // the refusal is about the two passwords, focus goes to the field that
+      // has to change so the message under it is read out and the fix is one
+      // keystroke away.
+      if (!form.confirm || form.confirm !== form.password) {
+        if (confirmRef.current) confirmRef.current.focus();
+      }
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -167,12 +236,32 @@ const RegisterForm = ({ onToggleMode, onSuccess }) => {
           label="Password"
           value={form.password}
           onChange={change('password')}
+          onBlur={leftPasswordField}
           autoComplete="new-password"
           showRules
           invalid={Boolean(fieldErrors.password)}
           disabled={isSubmitting}
           hint={fieldErrors.password}
           hintId="reg-pw-err"
+        />
+
+        {/* The second field. See note 4 in the header before removing it.
+            No checklist here: the rules are stated once, above, and this field
+            has exactly one requirement, which is the sentence under it. */}
+        <PasswordField
+          id="reg-pw2"
+          name="confirmPassword"
+          label="Confirm password"
+          value={form.confirm}
+          onChange={change('confirm')}
+          onBlur={leftPasswordField}
+          inputRef={confirmRef}
+          autoComplete="new-password"
+          invalid={Boolean(confirmHint)}
+          disabled={isSubmitting}
+          hint={confirmHint}
+          hintId="reg-pw2-err"
+          liveHint
         />
 
         <button type="submit" className="au-btn au-btn-primary" disabled={isSubmitting}>

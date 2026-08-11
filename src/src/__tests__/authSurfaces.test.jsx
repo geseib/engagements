@@ -310,9 +310,13 @@ describe('the audit findings that had no test', () => {
   // this over all six would have been the trap it is meant to catch: `verify`
   // and `pending` have no password input, so the forEach body would never run
   // and those two cases would pass with the labelling deleted.
+  //
+  // Register expects TWO. The confirm field is back on this form only (owner
+  // ruling, 2026-08-11 — see the header of RegisterForm.jsx), and it goes
+  // through the same shared control, so it has to carry the same label wiring.
   const withPasswords = [
     ['sign in', <LoginForm onToggleMode={jest.fn()} onSuccess={jest.fn()} />, 1],
-    ['register', <RegisterForm onToggleMode={jest.fn()} onSuccess={jest.fn()} />, 1],
+    ['register', <RegisterForm onToggleMode={jest.fn()} onSuccess={jest.fn()} />, 2],
     ['forced change', <PasswordChangeForm />, 1],
   ];
 

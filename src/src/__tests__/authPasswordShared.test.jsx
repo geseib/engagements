@@ -60,6 +60,8 @@ describe.each([
     type(screen.getByLabelText(/your name/i), 'Alexandra Vasquez-Kowalski');
     type(screen.getByLabelText(/email/i), 'alexandra@example.com');
     type(screen.getByLabelText(/^password$/i), password);
+    // The confirm field is registration-only; see confirmPasswordOnRegister.test.jsx.
+    type(screen.getByLabelText(/confirm password/i), password);
     fireEvent.click(screen.getByRole('button', { name: /create account/i }));
 
     await waitFor(() => {
@@ -111,6 +113,10 @@ describe('the forms still refuse a password the pool would refuse', () => {
     type(screen.getByLabelText(/your name/i), 'Alexandra Vasquez-Kowalski');
     type(screen.getByLabelText(/email/i), 'alexandra@example.com');
     type(screen.getByLabelText(/^password$/i), 'Northeast26');
+    // Filled and MATCHING on purpose. Leaving it blank would block the submit
+    // on the confirm rule instead, and this test would pass with the symbol
+    // rule deleted -- coverage that asserts nothing.
+    type(screen.getByLabelText(/confirm password/i), 'Northeast26');
     fireEvent.click(screen.getByRole('button', { name: /create account/i }));
 
     await waitFor(() => expect(mockAuth.signUp).not.toHaveBeenCalled());
