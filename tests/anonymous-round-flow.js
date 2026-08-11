@@ -662,18 +662,19 @@ for (const varName of ['totalScores', 'cumulativeScores', 'topPerformers', 'play
 console.log('\n13. Wavelength: both the stored-results cache path and the live-calculation path redact without dropping participants');
 
 // CRITICAL 1 + IMPORTANT 2: generateAISummary is called directly here
-// (exported above), not through exports.handler. Reaching the wavelength
-// branch through the real handler currently throws on an unrelated,
-// pre-existing bug — exports.handler's OWN wavelength vote-tally pass
-// (get-ai-summary.js, the `else if (gameType === 'wavelength')` block inside
-// the vote-processing section) references a bare `commonWords`, which is
-// never declared anywhere in that function's scope; it is only ever declared
-// inside generateAISummary, a completely separate function with no closure
-// over it. That bug predates this task, is not one of the four review
-// findings, and touches wavelength summary generation generally rather than
-// anonymity — left alone here (see the fix report). Calling generateAISummary
-// directly is the only way to give the wavelength redaction fixed in this
-// task real coverage without also fixing that unrelated crash.
+// (exported above), not through exports.handler.
+//
+// When these checks were written that was forced: exports.handler's OWN
+// wavelength vote-tally pass referenced a bare `commonWords` declared nowhere
+// in its scope, so the real handler threw a ReferenceError before ever
+// reaching generateAISummary. That crash has since been fixed, and
+// tests/session-report-honesty.js section 2 covers the wavelength path
+// through exports.handler.
+//
+// These checks stay on the direct call deliberately: they are about the
+// REDACTION inside generateAISummary, and calling it directly is what lets
+// them feed a stored-results fixture and a live-calculation fixture to the
+// same function and compare, without a full seeded game for each.
 put({
   PK: 'AIPROMPTS', SK: 'AIPROMPT#lessons-learned', s3Key: 'fake-key',
   template: 'WORDS: {wavelengthWords}\n=== SUMMARY ===\nx\n=== DISCUSSION QUESTIONS ===\nQ1: x\n=== NEXT STEPS ===\nSTEP1: x',

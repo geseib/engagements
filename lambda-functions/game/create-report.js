@@ -110,9 +110,41 @@ exports.handler = async (event) => {
     const votes = allQuestionItems.filter(item => item.SK.includes('#VOTE#'));
     const aiSummaries = allQuestionItems.filter(item => item.SK.includes('#AISummary'));
 
+    // Who actually played.
+    //
+    // Hoisted above gameStats deliberately. `players` is the raw result of a
+    // begins_with(SK, 'PLAYER#') query, and each participant writes THREE rows
+    // under that prefix — PLAYER#{name}, PLAYER#{name}#SCORE and
+    // PLAYER#{name}#STATE — so `players.length` reported roughly three times
+    // the room. A four-person session claimed twelve players on the front page
+    // of the report.
+    //
+    // This is the same filter-then-dedupe that playerPerformance below already
+    // ran; it just ran too late to be the number anybody read. One computation,
+    // used by both.
+    const mainPlayerRecords = players.filter(player =>
+      !player.SK.includes('#SCORE') &&
+      !player.SK.includes('#STATE') &&
+      player.SK.startsWith('PLAYER#')
+    );
+
+    // Deduplicate players by name, keeping the most recent record
+    const playerMap = new Map();
+    mainPlayerRecords.forEach(player => {
+      const playerName = player.PlayerName || player.playerName;
+      const existing = playerMap.get(playerName);
+
+      if (!existing || (player.JoinedAt && (!existing.JoinedAt || player.JoinedAt > existing.JoinedAt))) {
+        playerMap.set(playerName, player);
+      }
+    });
+
+    const uniquePlayers = Array.from(playerMap.values());
+    console.log(`📊 Filtered and deduplicated players: ${players.length} → ${mainPlayerRecords.length} → ${uniquePlayers.length}`);
+
     // Calculate statistics
     const gameStats = {
-      totalPlayers: players.length,
+      totalPlayers: uniquePlayers.length,
       totalQuestions: results.length,
       totalAnswers: answers.length,
       totalVotes: votes.length,
@@ -491,26 +523,8 @@ exports.handler = async (event) => {
       }, {})
     }));
 
-    // Filter to get only main player records (not score records)
-    const mainPlayerRecords = players.filter(player => 
-      !player.SK.includes('#SCORE') && 
-      !player.SK.includes('#STATE') && 
-      player.SK.startsWith('PLAYER#')
-    );
-
-    // Deduplicate players by name, keeping the most recent record
-    const playerMap = new Map();
-    mainPlayerRecords.forEach(player => {
-      const playerName = player.PlayerName || player.playerName;
-      const existing = playerMap.get(playerName);
-      
-      if (!existing || (player.JoinedAt && (!existing.JoinedAt || player.JoinedAt > existing.JoinedAt))) {
-        playerMap.set(playerName, player);
-      }
-    });
-    
-    const uniquePlayers = Array.from(playerMap.values());
-    console.log(`📊 Filtered and deduplicated players: ${players.length} → ${mainPlayerRecords.length} → ${uniquePlayers.length}`);
+    // (mainPlayerRecords / playerMap / uniquePlayers are built near the top of
+    // this handler now, so gameStats.totalPlayers can use the same count.)
 
     // Calculate player performance
     const playerPerformance = uniquePlayers.map(player => {

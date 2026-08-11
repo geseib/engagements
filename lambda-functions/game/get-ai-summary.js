@@ -280,7 +280,6 @@ COMPLETE RESPONSE RANKING ({responseCount} total responses):
 {responsesText}
 
 VOTING INSIGHTS:
-- Participation: {votingParticipation} 
 - Pattern: {votingPattern}
 - Consensus Level: {consensusLevel}
 - Vote Distribution: {votingBreakdown}
@@ -863,9 +862,35 @@ exports.handler = async (event) => {
         console.log(`🔍 AI TRIVIA DEBUG - Player ${voteTallies[index].playerName}: points=${pointsEarned}, correct=${isCorrect}, base=${voteTallies[index].basePoints}, bonus=${voteTallies[index].speedBonus}`);
       });
     } else if (gameType === 'wavelength') {
-      // For wavelength games, everyone gets the same team score (number of common words found)
-      const teamScore = (commonWords && Array.isArray(commonWords)) ? commonWords.length : 0;
-      
+      // For wavelength games, everyone gets the same team score (number of
+      // common words found).
+      //
+      // This line used to read a bare `commonWords`, which is declared nowhere
+      // in this handler — only inside generateAISummary, a separate function
+      // with no closure over it. Reading an undeclared identifier is a
+      // ReferenceError, so EVERY wavelength round that reached this branch
+      // crashed the summary (500 on the HTTP path, a rethrow-and-retry loop in
+      // worker mode). Nothing here ever computed the word analysis, so the
+      // only place the count can honestly come from is the stored
+      // QUESTION#nnn#RESULTS record fetched above.
+      //
+      // When that record is absent or carries no word analysis the count is
+      // genuinely unknown at this point: the team score falls back to 0 (the
+      // same value the original expression's own `: 0` branch produced) and
+      // says so in the log rather than inventing a figure. The prompt's
+      // wavelength variables are unaffected — generateAISummary recomputes the
+      // word analysis from the answers for itself further down.
+      const storedCommonWords = storedResults && storedResults.wordAnalysis
+        ? storedResults.wordAnalysis.commonWords
+        : null;
+      const teamScore = Array.isArray(storedCommonWords) ? storedCommonWords.length : 0;
+      if (!Array.isArray(storedCommonWords)) {
+        console.warn(
+          `⚠️ WAVELENGTH: no stored word analysis at QUESTION#${paddedQuestionNumber}#RESULTS — ` +
+          `team score reported as 0 rather than guessed`
+        );
+      }
+
       answers.forEach((answer, index) => {
         voteTallies[index].totalScore = teamScore;
         voteTallies[index].teamScore = teamScore;
@@ -1202,13 +1227,15 @@ exports.buildFallbackSummary = buildFallbackSummary;
 
 // Exported for the same reason as buildFallbackSummary: it lets the anonymity
 // redaction inside this function (below) be exercised directly, without a full
-// exports.handler round trip. That matters specifically for the wavelength
-// branch — reaching it via exports.handler currently throws on an unrelated,
-// pre-existing bug (the outer handler's own vote-tally pass for wavelength
-// games references `commonWords`, which is never declared in that scope; see
-// the fix report for task 7). That bug is out of scope here and left alone,
-// but it means the wavelength redaction fixed in this task could only be
-// given real test coverage by calling this function directly.
+// exports.handler round trip.
+//
+// It used to be the ONLY way to reach the wavelength branch at all: the outer
+// handler's own vote-tally pass referenced a `commonWords` that was declared
+// nowhere in its scope, so every wavelength round died there with a
+// ReferenceError before generateAISummary was ever called. That is fixed (see
+// the `gameType === 'wavelength'` branch above, and section 2 of
+// tests/session-report-honesty.js, which drives it through exports.handler),
+// so the direct call is now a convenience rather than a workaround.
 exports.generateAISummary = generateAISummary;
 
 async function generateAISummary({ eventTitle, gameType, gameAiContext, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults }) {
@@ -1509,8 +1536,30 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
   const voteData = (votes && votes.length > 0) ? 
     votes.map(v => `${v.PlayerName || 'Player'} voted`).join(', ') : 
     'No voting for trivia questions';
-  const votingParticipation = totalParticipants > 0 ? Math.round((activeParticipants / totalParticipants) * 100) : 0;
-  
+
+  // NO PARTICIPATION PERCENTAGE IS COMPUTED HERE ANY MORE — deliberately.
+  //
+  // `votingParticipation` used to be activeParticipants / totalParticipants,
+  // and `participationRate` (further down) used to be
+  // `${answers.length / totalParticipants}% answered, ${activeParticipants /
+  // totalParticipants}% voted`. But `totalParticipants` is `answers.length`
+  // (:1250) and `activeParticipants` collapses to `answers.length` whenever a
+  // round has no votes (:1505) — so the "answered" half was 100% by
+  // construction on every round ever summarised, and the "voted" half was
+  // 100% too for trivia and wavelength. Neither figure had the room's size
+  // anywhere in its denominator; there was no rate of people in either one.
+  //
+  // These are not internal diagnostics. They were interpolated straight into
+  // the Bedrock prompt, so the model was told the room's participation was
+  // total, every time — and hosts read the resulting summary out loud.
+  //
+  // Both template variables stay declared (below) and resolve to an empty
+  // string, matching every other absent-data path in this function. They
+  // cannot simply be deleted: template-variables.js advertises them to prompt
+  // authors, and a token with no key renders as literal `{participationRate}`
+  // on a projector. Restoring a real figure means finding a real denominator
+  // — the session roster, not this round's answer count.
+
   // Determine voting pattern
   let votingPattern = 'Diverse opinions';
   if (gameType === 'trivia') {
@@ -1596,9 +1645,8 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
       'No votes recorded';
   }
   
-  // Participation rate
-  const participationRate = `${Math.round((answers.length / totalParticipants) * 100)}% answered, ${Math.round((activeParticipants / totalParticipants) * 100)}% voted`;
-  
+  // (participationRate was computed here. See the note above `votingPattern`.)
+
   // Get unique answers
   const uniqueAnswers = [...new Set(answers.map(a => a.Answer || a.answer))];
   const uniqueAnswersText = uniqueAnswers.slice(0, 5).join(', ');
@@ -2044,7 +2092,10 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     // VOTES
     voteData: voteData,
     voteCount: votes ? votes.length : 0,
-    votingParticipation: `${votingParticipation}%`,
+    // Empty on purpose — the percentage this used to carry was 100% by
+    // construction and went straight to the model. See the note above
+    // `votingPattern`.
+    votingParticipation: '',
     votingPattern: votingPattern,
     
     // VOTE TALLY / RESULTS
@@ -2057,7 +2108,8 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     finalResults: finalResults,
     winnerInfo: winnerInfo,
     resultsSummary: resultsSummary,
-    participationRate: participationRate,
+    // Empty on purpose — same reason as votingParticipation above.
+    participationRate: '',
     triviaCorrectness: triviaCorrectness,
     
     // SCORES
