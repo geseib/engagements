@@ -283,6 +283,15 @@ describe('MarkdownRenderer — lists and the Lead idiom', () => {
 
 describe('the fallback render paths on the host page', () => {
   const host = stripComments(fs.readFileSync(src('GameHostPage.jsx'), 'utf8'));
+  /*
+   * The Field Notes fallback moved out of GameHostPage into
+   * components/AISummaryStatus.jsx when that surface grew a fourth state (a
+   * failed summary, which used to be indistinguishable from an empty one). The
+   * assertion follows it — the branch is the same branch, and reverting it to a
+   * bare <p> would be the same regression wherever it lives. The report's
+   * fallback stayed put.
+   */
+  const status = stripComments(fs.readFileSync(src('components/AISummaryStatus.jsx'), 'utf8'));
 
   /*
    * Asserted on source rather than rendered. Reaching these two branches in
@@ -294,9 +303,9 @@ describe('the fallback render paths on the host page', () => {
   // Rejects: reverting either fallback to a bare <p>, which is how '**bold**'
   // came to show as literal asterisks on a projector.
   test('both fallbacks route their text through MarkdownRenderer', () => {
-    expect(host).toMatch(/content=\{currentAIInsights\.summary\}/);
+    expect(status).toMatch(/content=\{insights\.summary\}/);
     expect(host).toMatch(/content=\{aiSummary\.summaryText\}/);
-    expect(host).not.toMatch(/<p[^>]*>\{currentAIInsights\.summary\}/);
+    expect(status).not.toMatch(/<p[^>]*>\{insights\.summary\}/);
     expect(host).not.toMatch(/<p[^>]*>\{aiSummary\.summaryText\}/);
   });
 });

@@ -12,6 +12,7 @@ import Icon from './components/Icon';
 import RankIcon from './components/RankIcon';
 import SetImageBadge from './components/SetImageBadge';
 import HostActionBar from './components/HostActionBar';
+import AISummaryStatus from './components/AISummaryStatus';
 import Stage from './components/stage/Stage';
 import Rail from './components/stage/Rail';
 import RoomMeter from './components/stage/RoomMeter';
@@ -25,6 +26,10 @@ import {
   resolveInstruction, currentQuestionOf, resolveRoundNoun, pluralRoundNoun,
 } from './config/instructions';
 import { resetGameSession } from './config/gameSession';
+import {
+  classifyAISummaryFailure, shouldAutoRetry, autoRetryDelayMs, isOnline,
+  AI_NOTIFICATION_TIMEOUT_MS, AI_POLL_ATTEMPTS, AI_POLL_INTERVAL_MS,
+} from './utils/aiSummaryRecovery';
 import { calculatePlayerRankings } from './config/podium';
 import { createGameBody } from './config/createGame';
 import { gameTypeMeta, gameTypeLabel } from './config/gameTypes';
@@ -468,8 +473,41 @@ function GameHostPage() {
   const [currentAIInsights, setCurrentAIInsights] = useState(null);
   const [loadingAIInsights, setLoadingAIInsights] = useState(false);
   // Watchdog for async AI-summary generation: if the aiSummaryReady WS push is
-  // missed (e.g. host WS reconnect), clear the spinner and re-fetch the now-persisted item.
+  // missed (e.g. host WS reconnect), poll for the now-persisted item.
   const aiWatchdogRef = useRef(null);
+
+  /**
+   * WHAT THE HOST IS TOLD WHEN THE SUMMARY DOES NOT COME.
+   *
+   * `null` when nothing has gone wrong. Otherwise the classified failure from
+   * utils/aiSummaryRecovery — headline, detail, and whether we may retry it
+   * ourselves. Rendered by AISummaryStatus, which puts it ON THE STAGE: the old
+   * code logged to the console and left the placeholder ("Nothing to read back
+   * yet") on screen, which reads as "still working" to the one person in the
+   * room who cannot afford to guess.
+   *
+   * NOT in config/gameSession.js's key list, so it is cleared by hand in
+   * leaveCurrentGame() — exactly like aiWatchdogRef beside it. If someone opens
+   * that file, both belong on the list.
+   */
+  const [aiSummaryFailure, setAiSummaryFailure] = useState(null);
+  const [aiRetrying, setAiRetrying] = useState(false);
+  // Which question the recovery machinery is working on, so the manual Try
+  // again knows what to re-request without re-deriving it from a game state
+  // that may have moved on.
+  const aiQuestionRef = useRef(null);
+  const aiRetryTimerRef = useRef(null);
+  const aiPollTimerRef = useRef(null);
+
+  /** Every AI timer, off. Called before starting anything and on leaving a game. */
+  const clearAITimers = () => {
+    if (aiWatchdogRef.current) clearTimeout(aiWatchdogRef.current);
+    if (aiRetryTimerRef.current) clearTimeout(aiRetryTimerRef.current);
+    if (aiPollTimerRef.current) clearTimeout(aiPollTimerRef.current);
+    aiWatchdogRef.current = null;
+    aiRetryTimerRef.current = null;
+    aiPollTimerRef.current = null;
+  };
   
   // The three celebratory flash alerts are gone — see the render. They were
   // full-screen overlays that covered the stage, including the advance
@@ -550,7 +588,12 @@ function GameHostPage() {
    */
   const leaveCurrentGame = (overrides = {}) => {
     activeGameIdRef.current = '';
-    if (aiWatchdogRef.current) clearTimeout(aiWatchdogRef.current);
+    clearAITimers();
+    // Per-game, but not on gameSession.js's list — see the state declaration.
+    // A failure banner carried into the next game would be a lie about it.
+    setAiSummaryFailure(null);
+    setAiRetrying(false);
+    aiQuestionRef.current = null;
     resetGameSession(gameSessionSetters, overrides);
   };
 
@@ -725,28 +768,138 @@ function GameHostPage() {
     }
   };
 
+  /**
+   * Put a fetched summary on the stage. Returns whether there was one.
+   *
+   * This shape was written out three times — the load effect, the watchdog and
+   * the aiSummaryReady handler — and the three had already drifted on what
+   * counts as "a summary" (one accepted `markdownResponse` alone, one did not).
+   */
+  const applyAISummary = (summary) => {
+    if (!summary || !(summary.summary || summary.markdownResponse)) return false;
+    setCurrentAIInsights({
+      summary: summary.summary,
+      discussionTopics: summary.discussionQuestions || [],
+      nextSteps: summary.nextSteps || [],
+      markdownResponse: summary.markdownResponse || null,
+      prompt: gameDebugMode ? summary.debugPrompt : undefined,
+      debugPrompt: gameDebugMode ? summary.debugPrompt : undefined
+    });
+    return true;
+  };
+
+  /**
+   * The push never came. Go and look for the summary anyway.
+   *
+   * The worker WRITES THE ITEM BEFORE IT BROADCASTS, so a lost `aiSummaryReady`
+   * (a host WS reconnect, a connection the stale-connection sweep had already
+   * dropped) usually means a finished summary sitting in DynamoDB with nobody
+   * fetching it. Poll before declaring anything.
+   */
+  const pollForAISummary = async (questionId, attempt = 0) => {
+    const summary = await fetchAISummary(questionId);
+    if (applyAISummary(summary)) {
+      setAiSummaryFailure(null);
+      setLoadingAIInsights(false);
+      return;
+    }
+    if (attempt + 1 < AI_POLL_ATTEMPTS) {
+      aiPollTimerRef.current = setTimeout(
+        () => pollForAISummary(questionId, attempt + 1), AI_POLL_INTERVAL_MS
+      );
+      return;
+    }
+    // Polled and found nothing. Say so — waiting forever is never correct.
+    console.warn(`⏰ AI summary for ${questionId}: no notification and nothing persisted`);
+    setLoadingAIInsights(false);
+    setAiSummaryFailure(classifyAISummaryFailure({ phase: 'notification', online: isOnline() }));
+  };
+
   // Start/refresh the async-generation watchdog. If aiSummaryReady never arrives
-  // (missed WS push), clear the spinner after ~45s and re-fetch the persisted item.
+  // (missed WS push), go looking for the persisted item, then report failure.
   const startAIWatchdog = (questionId) => {
     if (aiWatchdogRef.current) clearTimeout(aiWatchdogRef.current);
     aiWatchdogRef.current = setTimeout(() => {
-      console.warn('⏰ AI summary watchdog fired — re-fetching persisted summary');
-      fetchAISummary(questionId).then(summary => {
-        if (summary && (summary.summary || summary.markdownResponse)) {
-          setCurrentAIInsights({
-            summary: summary.summary,
-            discussionTopics: summary.discussionQuestions || [],
-            nextSteps: summary.nextSteps || [],
-            markdownResponse: summary.markdownResponse || null,
-            prompt: gameDebugMode ? summary.debugPrompt : undefined,
-            debugPrompt: gameDebugMode ? summary.debugPrompt : undefined
-          });
-        }
-      }).finally(() => setLoadingAIInsights(false));
-    }, 45000);
+      console.warn('⏰ AI summary watchdog fired — polling for the persisted summary');
+      pollForAISummary(questionId, 0);
+    }, AI_NOTIFICATION_TIMEOUT_MS);
   };
 
-  // Regenerate AI Summary with new generation. The server now returns 202
+  /**
+   * Fire the generate trigger once and report what happened. No state, no
+   * retrying, no rendering — just "did the request reach the API and get a yes".
+   */
+  const triggerAISummary = async (questionId) => {
+    const debugParam = gameDebugMode ? '&debug=true' : '';
+    try {
+      // Fire-and-forget: response is 202 {status:'generating'}; result comes via WS.
+      const response = await fetch(
+        `${API_BASE}games/${gameId}/ai-summary?questionId=${questionId}&generateNew=true${debugParam}`,
+        { method: 'GET', headers: { 'Content-Type': 'application/json' } }
+      );
+      if (!response.ok && response.status !== 202) {
+        return {
+          ok: false,
+          failure: classifyAISummaryFailure({ status: response.status, online: isOnline() }),
+        };
+      }
+      return { ok: true };
+    } catch (error) {
+      // THE REPORTED DEFECT LIVES HERE. `ERR_INTERNET_DISCONNECTED` lands in
+      // this branch: the request never left the browser, so the server will
+      // never generate anything and `aiSummaryReady` will never fire. The old
+      // code logged and returned, and the host waited out the rest of the
+      // session in front of a screen that looked like it was still thinking.
+      return { ok: false, failure: classifyAISummaryFailure({ error, online: isOnline() }) };
+    }
+  };
+
+  /**
+   * THE one entry point for "make a summary for this question".
+   *
+   * Success hands the wait to the watchdog. Failure lands on the stage as a
+   * sentence the host can act on, and — for a failure that could plausibly
+   * succeed next time — schedules a bounded, backed-off retry. A 4xx is never
+   * retried automatically: the server has answered, and asking again is noise.
+   */
+  const startAISummaryGeneration = async (questionId, attempt = 0) => {
+    if (!questionId) return;
+    aiQuestionRef.current = questionId;
+    clearAITimers();
+    setAiSummaryFailure(null);
+    setAiRetrying(false);
+    setLoadingAIInsights(true);
+
+    console.log(`🤖 Triggering AI generation for ${questionId} (attempt ${attempt + 1})`);
+    const result = await triggerAISummary(questionId);
+
+    if (result.ok) {
+      console.log('✅ AI generation triggered (awaiting WebSocket completion)');
+      startAIWatchdog(questionId);
+      return;
+    }
+
+    console.error(`❌ Failed to trigger AI generation (${result.failure.kind}):`, result.failure.headline);
+    setLoadingAIInsights(false);
+    setAiSummaryFailure(result.failure);
+
+    if (shouldAutoRetry(result.failure, attempt)) {
+      setAiRetrying(true);
+      aiRetryTimerRef.current = setTimeout(
+        () => startAISummaryGeneration(questionId, attempt + 1), autoRetryDelayMs(attempt)
+      );
+    }
+  };
+
+  /** The host pressing "Try again" on the failure. Attempts start over. */
+  const handleRetryAISummary = () => {
+    const questionId = aiQuestionRef.current || gameState.match(/#(\d+)/)?.[1];
+    if (!questionId) return;
+    setCurrentAIInsights(null);
+    startAISummaryGeneration(questionId, 0);
+  };
+
+  // Regenerate AI Summary with new generation. The server returns 202
   // (generation runs async) and the completed summary arrives via the
   // aiSummaryReady WebSocket event, which renders it. We only kick it off here.
   const handleRegenerateAISummary = async () => {
@@ -758,25 +911,7 @@ function GameHostPage() {
 
     console.log('🔄 Regenerating AI Summary for question:', currentQuestionNum);
     setCurrentAIInsights(null); // Clear current insights to show loading
-    setLoadingAIInsights(true);
-    startAIWatchdog(currentQuestionNum);
-
-    try {
-      const debugParam = gameDebugMode ? '&debug=true' : '';
-      // Fire-and-forget: response is 202 {status:'generating'}; result comes via WS.
-      const response = await fetch(`${API_BASE}games/${gameId}/ai-summary?questionId=${currentQuestionNum}&generateNew=true${debugParam}`);
-      if (!response.ok && response.status !== 202) {
-        console.error('❌ Failed to trigger AI Summary regeneration. Status:', response.status);
-        setLoadingAIInsights(false);
-        if (aiWatchdogRef.current) clearTimeout(aiWatchdogRef.current);
-      } else {
-        console.log('✅ AI Summary regeneration triggered (awaiting WebSocket completion)');
-      }
-    } catch (error) {
-      console.error('❌ Error triggering AI Summary regeneration:', error);
-      setLoadingAIInsights(false);
-      if (aiWatchdogRef.current) clearTimeout(aiWatchdogRef.current);
-    }
+    await startAISummaryGeneration(currentQuestionNum, 0);
   };
 
   // Generate AI prompt from template
@@ -831,7 +966,9 @@ Focus on actionable business strategy insights.`;
       console.log(`🤖 Starting AI insights load for question ${questionId} with ${answers.length} answers`);
       setLoadingAIInsights(true);
       setCurrentAIInsights(null);
-      
+      setAiSummaryFailure(null);
+      aiQuestionRef.current = questionId;
+
       // Reload category counts to reflect decremented values after question completion
       if (categoryCounts) {
         console.log('📊 Reloading category counts after question completion');
@@ -842,32 +979,18 @@ Focus on actionable business strategy insights.`;
       if (useWebSocket) {
         console.log('🔌 WebSocket mode: Triggering AI generation and waiting for WebSocket notification');
         
-        // Check if AI summary already exists first
+        // Check if AI summary already exists first. A failed *read* is not
+        // reported on its own — it returns null, we fall through to the
+        // trigger, and the trigger's own failure is the one the host sees.
+        // (Offline, both fail; one message about it is the right number.)
         fetchAISummary(questionId).then(existingSummary => {
-          if (existingSummary && existingSummary.summary) {
+          if (applyAISummary(existingSummary)) {
             console.log('✅ Found existing AI summary');
-            setCurrentAIInsights({
-              summary: existingSummary.summary,
-              discussionTopics: existingSummary.discussionQuestions || [],
-              nextSteps: existingSummary.nextSteps || [],
-              markdownResponse: existingSummary.markdownResponse || null,
-              prompt: gameDebugMode ? existingSummary.debugPrompt : undefined,
-              debugPrompt: gameDebugMode ? existingSummary.debugPrompt : undefined
-            });
             setLoadingAIInsights(false);
-          } else {
-            // Trigger AI generation - WebSocket will notify us when done (server returns 202)
-            console.log('🤖 Triggering AI generation, will wait for WebSocket notification...');
-            startAIWatchdog(questionId);
-            fetch(`${API_BASE}games/${gameId}/ai-summary?questionId=${questionId}&generateNew=true`, {
-              method: 'GET',
-              headers: { 'Content-Type': 'application/json' }
-            }).catch(error => {
-              console.error('❌ Failed to trigger AI generation:', error);
-              setLoadingAIInsights(false);
-              if (aiWatchdogRef.current) clearTimeout(aiWatchdogRef.current);
-            });
+            return;
           }
+          // Trigger AI generation - WebSocket will notify us when done (202).
+          startAISummaryGeneration(questionId, 0);
         });
         return;
       }
@@ -1138,38 +1261,40 @@ Focus on actionable business strategy insights.`;
 
     webSocketClient.onMessage('aiSummaryReady', (data) => {
       console.log('🔌 AI Summary ready notification:', data);
-      if (aiWatchdogRef.current) clearTimeout(aiWatchdogRef.current);
+      clearAITimers();
+      setAiRetrying(false);
       // Fetch the AI summary from API
       if (data.questionId) {
         console.log(`🔌 Fetching AI summary for question ${data.questionId}`);
         fetchAISummary(data.questionId).then(summary => {
-          if (summary) {
-            console.log('🔌 AI Summary fetched successfully:', summary);
-            setCurrentAIInsights({
-              summary: summary.summary,
-              discussionTopics: summary.discussionQuestions || [],
-              nextSteps: summary.nextSteps || [],
-              markdownResponse: summary.markdownResponse || null,
-              prompt: gameDebugMode ? summary.debugPrompt : undefined,
-              debugPrompt: gameDebugMode ? summary.debugPrompt : undefined
-            });
-            setLoadingAIInsights(false);
+          if (applyAISummary(summary)) {
             console.log('🔌 AI Summary state updated');
+            setAiSummaryFailure(null);
+            setLoadingAIInsights(false);
           } else {
+            // The push said it was ready and the read came back empty. That is
+            // a failure, not a shrug — the old code logged and left the spinner
+            // running, which is the same forever-wait by another route.
             console.log('🔌 AI Summary fetch returned null/empty');
+            setLoadingAIInsights(false);
+            setAiSummaryFailure(
+              classifyAISummaryFailure({ phase: 'notification', online: isOnline() })
+            );
           }
-        }).catch(error => {
-          console.error('🔌 Error fetching AI summary:', error);
-          setLoadingAIInsights(false);
         });
       }
     });
 
-    // Async generation failed on the worker — clear the spinner so it can't hang.
+    // Async generation failed on the worker — say so, rather than leaving the
+    // stage on a placeholder that reads as "still writing".
     webSocketClient.onMessage('aiSummaryError', (data) => {
       console.error('🔌 AI Summary generation failed:', data);
-      if (aiWatchdogRef.current) clearTimeout(aiWatchdogRef.current);
+      clearAITimers();
+      setAiRetrying(false);
       setLoadingAIInsights(false);
+      // The server reached its own conclusion; this is not a network event, and
+      // a blind auto-retry of a failing generation helps nobody.
+      setAiSummaryFailure(classifyAISummaryFailure({ phase: 'generation' }));
     });
 
     webSocketClient.onMessage('gameEnded', (data) => {
@@ -1211,6 +1336,37 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('gameEnded');
     };
   }, [gameId, useWebSocket]);
+
+  /**
+   * COMING BACK FROM A DROPPED CONNECTION.
+   *
+   * The host page already resyncs on `online`/`focus`/`visibilitychange` (the
+   * effect below), but that resync runs `restoreGameState()`, and
+   * `restoreGameState()` DOES NOT TOUCH THE SUMMARY on a live round — read its
+   * RESULTS branch: it loads questions, answers and progress, and only ever
+   * clears AI state on the no-round-in-play branch. The `aiSummaryReady`
+   * handler is no help either, because when the trigger never left the browser
+   * the server has nothing to announce.
+   *
+   * So the failure this listener recovers from is precisely the reported one:
+   * host's wifi drops, the trigger throws, the room waits. Reconnecting is a
+   * real event rather than a blind loop, so the attempt counter starts over.
+   */
+  useEffect(() => {
+    if (!aiSummaryFailure || !aiSummaryFailure.autoRetryable) return undefined;
+    const questionId = aiQuestionRef.current;
+    if (!questionId) return undefined;
+
+    const retryWhenBack = () => {
+      console.log('🌐 HOST: back online — restarting the AI summary that never got out');
+      startAISummaryGeneration(questionId, 0);
+    };
+    window.addEventListener('online', retryWhenBack);
+    return () => window.removeEventListener('online', retryWhenBack);
+  }, [aiSummaryFailure]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Timers outlive a render but must never outlive the page.
+  useEffect(() => clearAITimers, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A4: resume handler for the host — same visibility/online/focus/pageshow
   // resync as the player. A stuck host strands every player.
@@ -3969,44 +4125,19 @@ Ready to engage? See you there!`;
             {hostPhase === 'FIELD_NOTES' && (
               <>
                 <div className="kicker">What we heard</div>
-                {loadingAIInsights ? (
-                  <p className="qdetail">Workie is reading the responses…</p>
-                ) : currentAIInsights ? (
-                  // `two` is the mockup's own two-column Field Notes grid
-                  // (09-field-notes): width is the cheapest lever on the
-                  // stage, and this state needs it most. It only applies to
-                  // the structured path, which has two children to split. The
-                  // markdown path is ONE child, so a two-column grid would
-                  // squeeze it into half the stage; stage.css splits that one
-                  // with CSS columns instead.
-                  <div className={`notes${currentAIInsights.markdownResponse ? '' : ' two'}`}>
-                    {currentAIInsights.markdownResponse ? (
-                      <MarkdownRenderer
-                        content={currentAIInsights.markdownResponse}
-                        className="notes-md"
-                      />
-                    ) : (
-                      <>
-                        {/* Markdown, not a bare string: the structured path
-                            still carries the model's **bold** in its summary
-                            text, and a <p> printed the asterisks on the wall. */}
-                        <MarkdownRenderer content={currentAIInsights.summary} className="lead" />
-                        <ol>
-                          {(currentAIInsights.discussionTopics || []).map((topic, idx) => (
-                            <li key={idx}><b>{idx + 1}</b><span>{topic}</span></li>
-                          ))}
-                          {(currentAIInsights.nextSteps || []).map((step, idx) => (
-                            <li key={`n${idx}`}><b>→</b><span>{step}</span></li>
-                          ))}
-                        </ol>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <p className="qdetail">
-                    Nothing to read back yet — this fills in once responses are in.
-                  </p>
-                )}
+                {/* Four states, one component (components/AISummaryStatus.jsx):
+                    writing, written, FAILED, and nothing yet. The fourth used
+                    to stand in for the third — a trigger that never reached the
+                    API left the nothing-yet placeholder on the wall, which is
+                    indistinguishable from "still thinking" and stayed that way
+                    for the rest of the session. */}
+                <AISummaryStatus
+                  loading={loadingAIInsights}
+                  insights={currentAIInsights}
+                  failure={aiSummaryFailure}
+                  retrying={aiRetrying}
+                  onRetry={handleRetryAISummary}
+                />
 
                 {/* Host controls, so they are chrome and they are droppable —
                     but with NO data-drop-note. The note is the room-facing
