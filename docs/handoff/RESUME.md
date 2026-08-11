@@ -1,5 +1,15 @@
 # Resume
 
+> ## ⚠️ SUPERSEDED IN PART — read `docs/handoff/2026-08-11-session-handoff.md` FIRST.
+>
+> `dev` is now at **`91bf76c9`**, deployed. §2 (games list), §3's poll CSV bug, §5 (dead AI
+> prompts), §10 (name collision + rejoin), §12's Tier 0 and §13 (the remote) are **DONE**, plus
+> the `?role=host` access-code leak and the two player-state bugs reported after this file was
+> written. The **Landmines** and **Deployment** sections below are still current and still the
+> best part of this document. **One correction: the backend aggregation recipe in Baselines is
+> wrong** — `grep -E '^[0-9]+ failed'` matches nothing, because the count is never line-initial.
+> The replacement is in the newer handoff.
+
 After `/clear`, paste the block below.
 
 ---
