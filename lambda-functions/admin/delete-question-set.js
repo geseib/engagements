@@ -140,7 +140,7 @@ exports.handler = async (event) => {
       statusCode: 500,
       body: JSON.stringify({
         error: `Failed to delete question set: ${error.message}`,
-        partial: true,
+        partial,
         itemsDeleted: partial ? error.deleted : undefined,
         remaining: partial ? error.remaining.length : undefined,
         hint: `Question set "${setId}" was not fully deleted and is still listed. Retry the delete.`

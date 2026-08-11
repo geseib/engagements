@@ -378,6 +378,63 @@ function check(label, fn) {
     });
   }
 
+  // 10. The 500 body must tell the truth about WHETHER anything was deleted ----
+  //
+  // `partial` is the operator's whole signal for "is the data half-gone?".
+  // batchDeleteKeys attaches `deleted`/`remaining` to the error ONLY when it
+  // gave up mid-flight; a failure before any row was accepted carries neither.
+  // The handler computed that distinction and then discarded it, hardcoding
+  // `partial: true`, so a clean no-op failure reported a half-deleted set.
+  // delete-set-version.js:201-207 is the sibling that always had this right.
+  //
+  // rejects: re-hardcoding `partial: true` (or `partial: false`) in
+  //          delete-question-set.js's catch block, in either direction.
+  resetDb();
+  seedSet('nothingdeleted', { questions: 8, categories: 1 });
+  failWriteWhen = () => true;             // the very first batch throws, plainly
+  {
+    const res = await invoke('nothingdeleted');
+    const body = JSON.parse(res.body);
+    check('a failure before any row is deleted is a 500', () =>
+      assert.strictEqual(res.statusCode, 500, res.body));
+    check('...and does NOT claim to be partial', () =>
+      assert.strictEqual(body.partial, false,
+        `partial=${body.partial} — the set is fully intact, nothing was deleted`));
+    check('...and reports no counts it does not have', () => {
+      assert.strictEqual(body.itemsDeleted, undefined, `itemsDeleted=${body.itemsDeleted}`);
+      assert.strictEqual(body.remaining, undefined, `remaining=${body.remaining}`);
+    });
+    check('...and the set really is still whole', () =>
+      assert(rowsIn('SET#nothingdeleted').length === 9 && indexRow('nothingdeleted') !== undefined,
+        `left ${rowsIn('SET#nothingdeleted').length} content rows`));
+  }
+
+  // The other half of the same branch: a genuine mid-flight give-up MUST still
+  // report partial:true with its real counts, or the fix above would have just
+  // moved the lie. deferAlways starves one key past the retry budget, which is
+  // the only path that attaches `deleted`/`remaining`.
+  //
+  // rejects: a "fix" that hardcodes partial:false, or drops the counts.
+  resetDb();
+  seedSet('halfgone', { questions: 8, categories: 1 });
+  {
+    const victim = rowsIn('SET#halfgone')[0];
+    deferAlways = new Set([k(victim.PK, victim.SK)]);
+    const res = await invoke('halfgone');
+    const body = JSON.parse(res.body);
+    check('a mid-flight give-up is a 500', () =>
+      assert.strictEqual(res.statusCode, 500, res.body));
+    check('...and DOES report itself partial', () =>
+      assert.strictEqual(body.partial, true, `partial=${body.partial}`));
+    check('...and carries the real counts', () => {
+      assert.strictEqual(typeof body.itemsDeleted, 'number', `itemsDeleted=${body.itemsDeleted}`);
+      assert(body.remaining >= 1, `remaining=${body.remaining}`);
+    });
+    check('...and never removes the index row on a partial delete', () =>
+      assert(indexRow('halfgone') !== undefined,
+        'index row was dropped while content rows survived — the set is now unbrowsable'));
+  }
+
   say(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { process.stdout.write(`harness error: ${e && e.stack}\n`); process.exit(1); });
