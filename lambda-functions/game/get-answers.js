@@ -9,8 +9,10 @@ exports.handler = async (event) => {
   try {
     const { gameId } = event.pathParameters || {};
     const queryParams = event.queryStringParameters || {};
-    const { role, questionId } = queryParams; // 'host' or 'player'
-    
+    // `role` is 'host' or 'player'. `question` is an accepted spelling of
+    // `questionId` because that is what the player client has always sent.
+    const { role, questionId, question, player, clientId } = queryParams;
+
     if (!gameId) {
       return {
         statusCode: 400,
@@ -19,10 +21,10 @@ exports.handler = async (event) => {
       };
     }
 
-    console.log(`📋 Getting answers for game ${gameId}, role: ${role || 'unspecified'}, questionId: ${questionId || 'current'}`);
+    console.log(`📋 Getting answers for game ${gameId}, role: ${role || 'unspecified'}, questionId: ${questionId || question || 'current'}`);
 
-    let targetQuestionId = questionId;
-    
+    let targetQuestionId = questionId || question;
+
     // If no specific question ID provided, get current question from game state
     if (!targetQuestionId) {
       const gameState = await db.send(new GetCommand({
@@ -58,7 +60,38 @@ exports.handler = async (event) => {
       }
     }
 
+    // Round numbers are stored zero-padded to 3 digits, everywhere: the ANSWER
+    // rows (message.js handlePlayerAnswer pads before writing), the ROUND#
+    // record (stage-beat.js, reveal-authors.js) and the STATE machine
+    // (`ASK#001`). The `questionId` above is caller-supplied, so a client that
+    // sends `?question=1` used to query the prefix `QUESTION#1#ANSWER#` and get
+    // an empty list back — no error, no answers, and an anonymity lookup on
+    // `ROUND#1` that also missed. Pad it here, once, before either read.
+    //
+    // Only digits are padded. `''` would pass a bare presence check and become
+    // '000', and any other junk would become a key nothing ever wrote — the
+    // same guard, for the same reason, as stage-beat.js and reveal-authors.js.
+    if (/^\d+$/.test(String(targetQuestionId).trim())) {
+      targetQuestionId = String(targetQuestionId).trim().padStart(3, '0');
+    }
+
     console.log(`🎯 Getting answers for question: ${targetQuestionId}`);
+
+    // A returning player asking for their OWN answer back.
+    //
+    // WHY THIS EXISTS. A player answers, backgrounds the tab, and comes back —
+    // or reloads outright. The client re-runs its state check, and the only
+    // question it needs answered is "did I already submit?". It has always
+    // asked here, with `?player=&question=`, and read `hasAnswer` off the
+    // response; nothing in this file has ever produced that field, so the
+    // answer was permanently `undefined` and the phone reverted to the
+    // un-answered form with the player's submission gone from the screen.
+    //
+    // Server-side is the only place this can be fixed durably: client-side
+    // state preservation cannot survive a page reload, and this can.
+    if (player) {
+      return await getOwnAnswer(gameId, targetQuestionId, player, clientId);
+    }
 
     // Get all answers for this question
     const answersQuery = await db.send(new QueryCommand({
@@ -173,3 +206,73 @@ exports.handler = async (event) => {
     };
   }
 };
+
+/**
+ * One player's own answer, for recovering their place in the round.
+ *
+ * TWO FIELDS, TWO DIFFERENT DISCLOSURE RULES, and the split is the whole design:
+ *
+ *   `hasAnswer` — whether a named player has submitted. Discloses nothing new.
+ *     GET /games/{id}/state already returns `answerProgress.answererIds`, the
+ *     full list of who has answered, to any caller with no identity at all.
+ *     This is the "who has not acted" half of the anonymity split that
+ *     anonymity.js draws, and it is deliberately public: the host needs it to
+ *     know whether the room can move on.
+ *
+ *   `answer` — the text, bound to a name. This is the "who wrote which answer"
+ *     half, and handing it out on a client-supplied `?player=` would be a
+ *     de-anonymisation oracle: the roster is readable, so anyone could walk the
+ *     names and rebuild the attributed board that get-answers.js redacts three
+ *     lines further down. So the text is returned ONLY to a caller that proves
+ *     it is that player, by presenting the `clientId` join-game.js stamped on
+ *     the PLAYER# row. Same secret, same check, as the rejoin path.
+ *
+ * An unowned PLAYER# row — one joined by a bundle older than client ids, which
+ * join-game.js has not yet claimed — cannot prove anything, so it gets
+ * `hasAnswer` and `answerWithheld: true`. That still restores the answered/
+ * un-answered state, which is the part the player can see is wrong.
+ *
+ * Never 404s on a missing answer: "you have not answered" is a fact about a
+ * round that exists, not a missing resource, and the caller is a phone
+ * re-checking on every tab focus.
+ */
+async function getOwnAnswer(gameId, questionId, playerName, clientId) {
+  const [answerRes, playerRes] = await Promise.all([
+    db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionId}#ANSWER#${playerName}` }
+    })),
+    db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` }
+    }))
+  ]);
+
+  const answerItem = answerRes.Item;
+  const storedClientId = (playerRes.Item && playerRes.Item.ClientId) || null;
+  const identityProven = !!(clientId && storedClientId && storedClientId === clientId);
+
+  const result = {
+    gameId,
+    questionId,
+    playerName,
+    hasAnswer: !!answerItem,
+    timestamp: new Date().toISOString()
+  };
+
+  if (answerItem && identityProven) {
+    result.answer = answerItem.Answer;
+    result.answerType = answerItem.AnswerType || 'text';
+    result.submittedAt = answerItem.SubmittedAt;
+  } else if (answerItem) {
+    result.answerWithheld = true;
+  }
+
+  console.log(`✅ Own-answer lookup for ${playerName} on ${questionId}: hasAnswer=${result.hasAnswer}, identityProven=${identityProven}`);
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify(result),
+    headers: { 'Access-Control-Allow-Origin': '*' }
+  };
+}

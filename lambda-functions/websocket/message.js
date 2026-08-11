@@ -79,12 +79,22 @@ function isHostMessage(messageType) {
 
 /**
  * Check if message is from player to host
+ *
+ * `VOTE#` is deliberately NOT here. It is a HOST message — GameHostPage sends
+ * its new state verbatim (`sendCleanMessage(newState, ...)`), and `VOTE#001` is
+ * a state — so isHostMessage claims it first at the routing fork below and this
+ * predicate never sees it. Listing it here as well was not a second opinion,
+ * it was dead weight that made an unreachable player-vote path look live.
+ *
+ * Player votes do not travel over this socket at all: they are an HTTP POST to
+ * submit-vote.js, which pads the round number into the SK and notifies the host
+ * itself. `VOTED#` (past tense) is the player-side spelling and is still routed
+ * here, for a client that wants to announce a vote it already submitted.
  */
 function isPlayerMessage(messageType) {
-  return messageType.startsWith('ANSWERED#') || 
-         messageType.startsWith('VOTED#') || 
+  return messageType.startsWith('ANSWERED#') ||
+         messageType.startsWith('VOTED#') ||
          messageType.startsWith('ANSWER#') ||
-         messageType.startsWith('VOTE#') ||
          messageType === 'QUIT';
 }
 
@@ -482,67 +492,24 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
   }
 }
 
-/**
- * Handle player vote submission - store in DynamoDB
+/*
+ * REMOVED: handlePlayerVote.
+ *
+ * It was unreachable — the routing fork at the top of this file hands every
+ * `VOTE#…` to handleHostMessage (it is the host's own state broadcast), so
+ * nothing ever called it — and it was a live landmine while it sat here. It
+ * built its SK as `QUESTION#${questionId}#VOTE#${playerName}` from a RAW
+ * `messageType.replace('VOTE#', '')`, with no padding, while every other path
+ * in the system writes and reads `QUESTION#001#VOTE#…`. Anyone who later
+ * "fixed" the routing would have started writing votes to keys that
+ * get-votes.js, get-results.js and get-game-state.js all query past — a vote
+ * that vanishes with no error anywhere, which reads to a player as the system
+ * forgetting they voted.
+ *
+ * The live vote path is HTTP: lambda-functions/game/submit-vote.js. It pads
+ * (`String(questionNumber).padStart(3, '0')`), validates the state against the
+ * padded form, and notifies every host connection itself.
  */
-async function handlePlayerVote(gameId, playerName, messageType, messageData) {
-  console.log(`🗳️ Storing vote from ${playerName} in game ${gameId}`);
-  
-  try {
-    // Extract question ID from messageType (VOTE#QUESTION#categoryId#001)
-    const questionId = messageType.replace('VOTE#', '');
-    const { votedFor, voteType = 'answer' } = messageData;
-    
-    if (!votedFor) {
-      console.log(`⚠️ No vote target provided in message data`);
-      return;
-    }
-    
-    // Get current game state to validate we're in the right voting state
-    const gameState = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: 'STATE' }
-    }));
-    
-    if (!gameState.Item) {
-      console.log(`❌ Game ${gameId} not found`);
-      return;
-    }
-    
-    const currentState = gameState.Item.State;
-    const expectedState = `VOTE#${questionId}`;
-    
-    if (currentState !== expectedState) {
-      console.log(`⚠️ Invalid state for vote submission. Expected: ${expectedState}, Got: ${currentState}`);
-      return;
-    }
-    
-    // Store the vote in DynamoDB
-    const now = new Date().toISOString();
-    const voteRecord = {
-      PK: `GAME#${gameId}`,
-      SK: `QUESTION#${questionId}#VOTE#${playerName}`,
-      PlayerName: playerName,
-      QuestionId: questionId,
-      VotedFor: votedFor, // This could be another player's name or answer ID
-      VoteType: voteType,
-      SubmittedAt: now,
-      GameId: gameId,
-      ttl: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // 7 days TTL
-    };
-    
-    await db.send(new PutCommand({
-      TableName: process.env.TABLE_NAME,
-      Item: voteRecord
-    }));
-    
-    console.log(`✅ Vote stored for ${playerName} on question ${questionId}: voted for ${votedFor}`);
-    
-  } catch (error) {
-    console.error(`❌ Error storing player vote:`, error);
-    throw error;
-  }
-}
 
 /**
  * Handle player messages - process and send to host
@@ -555,12 +522,7 @@ async function handlePlayerMessage(gameId, playerName, messageType, messageData)
     if (messageType.startsWith('ANSWER#')) {
       await handlePlayerAnswer(gameId, playerName, messageType, messageData);
     }
-    
-    // Handle VOTE# messages by storing the vote in DynamoDB
-    if (messageType.startsWith('VOTE#')) {
-      await handlePlayerVote(gameId, playerName, messageType, messageData);
-    }
-    
+
     // Every host screen attached to this game
     const hostConnections = await getHostConnections(gameId);
 
@@ -618,13 +580,11 @@ async function handlePlayerMessage(gameId, playerName, messageType, messageData)
         }
 
         console.log(`🔔 Preparing playerAnswered notification: questionNumber=${questionNumber}, playerName=${playerName}`);
-      } else if (messageType.startsWith('VOTE#')) {
-        notificationType = 'playerVoted';
-        const questionNumber = messageType.replace('VOTE#', '');
-        notificationData.questionNumber = questionNumber;
-        notificationData.questionId = questionNumber; // For backward compatibility
       }
-      
+      // No `VOTE#` branch: isPlayerMessage does not claim that prefix, so this
+      // function is never reached with one. The host's `playerVoted` frame is
+      // emitted by submit-vote.js, on the HTTP path the vote actually takes.
+
       const notificationMessage = {
         type: notificationType,
         ...notificationData
