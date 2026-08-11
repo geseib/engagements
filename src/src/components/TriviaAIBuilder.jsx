@@ -3,6 +3,7 @@ import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
 import { tagsToCsvCell, normalizeTags } from '../utils/tags';
+import { csvRow, buildCsv } from '../utils/csv';
 
 const API_BASE = window.API_BASE;
 
@@ -127,9 +128,25 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
     const rows = generatedTrivia.map((trivia, index) => {
       const correctAnswer = Array.isArray(trivia.correctAnswer) ? trivia.correctAnswer.join(',') : trivia.correctAnswer;
 
-      return `"${trivia.category}","${index + 1}","${trivia.title}","${trivia.questionDetail}","${trivia.answerDetails}","${trivia.school || 'General'}","${trivia.optionA || ''}","${trivia.optionB || ''}","${trivia.optionC || ''}","${trivia.optionD || ''}","${trivia.optionE || ''}","${trivia.optionF || ''}","${correctAnswer}","${trivia.difficulty}","${tagsToCsvCell(trivia.tags)}"`;
+      return csvRow([
+        trivia.category,
+        index + 1,
+        trivia.title,
+        trivia.questionDetail,
+        trivia.answerDetails,
+        trivia.school || 'General',
+        trivia.optionA || '',
+        trivia.optionB || '',
+        trivia.optionC || '',
+        trivia.optionD || '',
+        trivia.optionE || '',
+        trivia.optionF || '',
+        correctAnswer,
+        trivia.difficulty,
+        tagsToCsvCell(trivia.tags)
+      ]);
     });
-    return headers + '\n' + rows.join('\n');
+    return buildCsv(headers, rows);
   };
 
   const handleLoadIntoSystem = () => {

@@ -3,6 +3,7 @@ import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
 import { normalizeTags, tagsToCsvCell } from '../utils/tags';
+import { csvRow, buildCsv, optionsToCsvCell, allowMultipleToCsvCell } from '../utils/csv';
 
 const API_BASE = window.API_BASE;
 
@@ -133,16 +134,23 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
   };
 
   const generatePollCSV = () => {
-    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Option1,Option2,Option3,Option4,Option5,AllowMultiple,Tags';
-    const rows = generatedPolls.map((poll, index) => {
-      const options = [...poll.options];
-      while (options.length < 5) {
-        options.push('');
-      }
-
-      return `"${poll.category}","${index + 1}","${poll.title}","${poll.detail}","${poll.school || 'General'}","${poll.customInstructions || ''}","${options[0]}","${options[1]}","${options[2]}","${options[3]}","${options[4]}","${poll.allowMultiple ? 'true' : 'false'}","${tagsToCsvCell(poll.tags)}"`;
-    });
-    return headers + '\n' + rows.join('\n');
+    // ONE `Options` column, pipe-separated — see optionsToCsvCell(). This used
+    // to emit Option1..Option5, which upload-questions.js does not read and has
+    // no fallback for, so every exported poll set re-imported with zero
+    // options. Do not "restore" the numbered columns.
+    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple,Tags';
+    const rows = generatedPolls.map((poll, index) => csvRow([
+      poll.category,
+      index + 1,
+      poll.title,
+      poll.detail,
+      poll.school || 'General',
+      poll.customInstructions || '',
+      optionsToCsvCell(poll.options),
+      allowMultipleToCsvCell(poll.allowMultiple),
+      tagsToCsvCell(poll.tags)
+    ]));
+    return buildCsv(headers, rows);
   };
 
   const handleLoadIntoSystem = () => {

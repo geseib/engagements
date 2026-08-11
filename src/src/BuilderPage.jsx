@@ -8,6 +8,7 @@ import './BuilderPage.css';
 import { authFetch } from './auth/authFetch';
 import Icon from './components/Icon';
 import { tagsToCsvCell } from './utils/tags';
+import { csvRow, buildCsv, optionsToCsvCell, allowMultipleToCsvCell } from './utils/csv';
 
 const API_BASE = window.API_BASE;
 
@@ -156,29 +157,62 @@ function BuilderPage() {
 
     if (engagementType === 'trivia') {
       headers = 'Category,Question#,Title,QuestionDetail,School,CustomInstruction,OptionA,OptionB,OptionC,OptionD,CorrectAnswer,AnswerDetails,Difficulty,Tags';
-      rows = questionSet.questions.map((q, index) => {
-        return `"${q.category}","${index + 1}","${q.title}","${q.questionDetail || q.detail}","${q.school}","${q.customInstructions}","${q.optionA}","${q.optionB}","${q.optionC}","${q.optionD}","${q.correctAnswer}","${q.answerDetails}","${q.difficulty}","${tagsToCsvCell(q.tags)}"`;
-      });
+      rows = questionSet.questions.map((q, index) => csvRow([
+        q.category,
+        index + 1,
+        q.title,
+        q.questionDetail || q.detail,
+        q.school,
+        q.customInstructions,
+        q.optionA,
+        q.optionB,
+        q.optionC,
+        q.optionD,
+        q.correctAnswer,
+        q.answerDetails,
+        q.difficulty,
+        tagsToCsvCell(q.tags)
+      ]));
     } else if (engagementType === 'poll') {
       headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple,Tags';
-      rows = questionSet.questions.map((q, index) => {
-        const options = q.options.join('|');
-        return `"${q.category}","${index + 1}","${q.title}","${q.detail}","${q.school}","${q.customInstructions}","${options}","${q.allowMultiple}","${tagsToCsvCell(q.tags)}"`;
-      });
+      rows = questionSet.questions.map((q, index) => csvRow([
+        q.category,
+        index + 1,
+        q.title,
+        q.detail,
+        q.school,
+        q.customInstructions,
+        optionsToCsvCell(q.options),
+        allowMultipleToCsvCell(q.allowMultiple),
+        tagsToCsvCell(q.tags)
+      ]));
     } else if (engagementType === 'wavelength') {
       headers = 'Category,Question#,Title,Topic,Instructions,School,CustomInstruction,Tags';
-      rows = questionSet.questions.map((q, index) => {
-        return `"${q.category}","${index + 1}","${q.title}","${q.topic || q.detail}","${q.instructions}","${q.school}","${q.customInstructions}","${tagsToCsvCell(q.tags)}"`;
-      });
+      rows = questionSet.questions.map((q, index) => csvRow([
+        q.category,
+        index + 1,
+        q.title,
+        q.topic || q.detail,
+        q.instructions,
+        q.school,
+        q.customInstructions,
+        tagsToCsvCell(q.tags)
+      ]));
     } else {
       // call-and-answer
       headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags';
-      rows = questionSet.questions.map((q, index) => {
-        return `"${q.category}","${index + 1}","${q.title}","${q.detail}","${q.school}","${q.customInstructions}","${tagsToCsvCell(q.tags)}"`;
-      });
+      rows = questionSet.questions.map((q, index) => csvRow([
+        q.category,
+        index + 1,
+        q.title,
+        q.detail,
+        q.school,
+        q.customInstructions,
+        tagsToCsvCell(q.tags)
+      ]));
     }
 
-    return headers + '\n' + rows.join('\n');
+    return buildCsv(headers, rows);
   };
 
   // Render the appropriate builder component

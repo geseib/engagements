@@ -3,6 +3,7 @@ import FileUploadPrompt from './FileUploadPrompt';
 import { authFetch } from '../auth/authFetch';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { normalizeTags, tagsToCsvCell } from '../utils/tags';
+import { csvRow, buildCsv } from '../utils/csv';
 import Icon from './Icon';
 
 const API_BASE = window.API_BASE;
@@ -518,11 +519,19 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     Object.keys(scenariosByCategory).forEach(category => {
       scenariosByCategory[category].forEach((scenario, index) => {
         const questionNumber = index + 1; // Category-relative numbering
-        rows.push(`"${category}","${questionNumber}","${scenario.title}","${scenario.detail}","${scenario.school || 'Professional Development'}","${scenario.customInstructions || ''}","${tagsToCsvCell(scenario.tags)}"`);
+        rows.push(csvRow([
+          category,
+          questionNumber,
+          scenario.title,
+          scenario.detail,
+          scenario.school || 'Professional Development',
+          scenario.customInstructions || '',
+          tagsToCsvCell(scenario.tags)
+        ]));
       });
     });
-    
-    return headers + '\n' + rows.join('\n');
+
+    return buildCsv(headers, rows);
   };
 
   const handleLoadIntoSystem = () => {

@@ -23,6 +23,7 @@ import { describeEnvironment } from './utils/adminEnvironment';
 import { gameTypeLabel } from './config/gameTypes';
 import { truncate } from './utils/questionSetEditing';
 import { tagsToCsvCell } from './utils/tags';
+import { csvRow, buildCsv, optionsToCsvCell, allowMultipleToCsvCell } from './utils/csv';
 
 const API_BASE = window.API_BASE;
 
@@ -711,11 +712,19 @@ function AdminPage() {
     Object.keys(scenariosByCategory).forEach(category => {
       scenariosByCategory[category].forEach((scenario, index) => {
         const questionNumber = index + 1; // Category-relative numbering (1, 2, 3 for each category)
-        rows.push(`"${category}","${questionNumber}","${scenario.title}","${scenario.detail}","${scenario.school || 'Professional Development'}","${scenario.customInstructions || ''}","${tagsToCsvCell(scenario.tags)}"`);
+        rows.push(csvRow([
+          category,
+          questionNumber,
+          scenario.title,
+          scenario.detail,
+          scenario.school || 'Professional Development',
+          scenario.customInstructions || '',
+          tagsToCsvCell(scenario.tags)
+        ]));
       });
     });
-    
-    return headers + '\n' + rows.join('\n');
+
+    return buildCsv(headers, rows);
   };
 
   // Handle AI-generated trivia
@@ -787,11 +796,27 @@ function AdminPage() {
         const correctAnswer = Array.isArray(trivia.correctAnswer) ? trivia.correctAnswer.join(',') : trivia.correctAnswer;
         
         // Build the row with new format that matches what upload-questions.js expects
-        rows.push(`"${category}","${questionNumber}","${trivia.title}","${trivia.questionDetail || trivia.detail || ''}","${trivia.answerDetails || ''}","${trivia.school || 'General'}","${trivia.optionA || ''}","${trivia.optionB || ''}","${trivia.optionC || ''}","${trivia.optionD || ''}","${trivia.optionE || ''}","${trivia.optionF || ''}","${correctAnswer}","${trivia.difficulty}","${tagsToCsvCell(trivia.tags)}"`);
+        rows.push(csvRow([
+          category,
+          questionNumber,
+          trivia.title,
+          trivia.questionDetail || trivia.detail || '',
+          trivia.answerDetails || '',
+          trivia.school || 'General',
+          trivia.optionA || '',
+          trivia.optionB || '',
+          trivia.optionC || '',
+          trivia.optionD || '',
+          trivia.optionE || '',
+          trivia.optionF || '',
+          correctAnswer,
+          trivia.difficulty,
+          tagsToCsvCell(trivia.tags)
+        ]));
       });
     });
-    
-    return headers + '\n' + rows.join('\n');
+
+    return buildCsv(headers, rows);
   };
 
   // Handle AI-generated polls
@@ -840,8 +865,12 @@ function AdminPage() {
   };
 
   const generatePollCSV = (questions) => {
-    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Option1,Option2,Option3,Option4,Option5,AllowMultiple,Tags';
-    
+    // ONE `Options` column, pipe-separated — see optionsToCsvCell(). This used
+    // to emit Option1..Option5, which upload-questions.js does not read and has
+    // no fallback for, so every AI-generated poll set imported with zero
+    // options. Do not "restore" the numbered columns.
+    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple,Tags';
+
     // First, group questions by category
     const questionsByCategory = {};
     questions.forEach(poll => {
@@ -857,17 +886,22 @@ function AdminPage() {
     Object.keys(questionsByCategory).forEach(category => {
       questionsByCategory[category].forEach((poll, index) => {
         const questionNumber = index + 1; // Category-relative numbering (1, 2, 3 for each category)
-        
-        const options = [...poll.options];
-        while (options.length < 5) {
-          options.push('');
-        }
 
-        rows.push(`"${category}","${questionNumber}","${poll.title}","${poll.detail || ''}","${poll.school || 'General'}","${poll.customInstructions || ''}","${options[0]}","${options[1]}","${options[2]}","${options[3]}","${options[4]}","${poll.allowMultiple ? 'true' : 'false'}","${tagsToCsvCell(poll.tags)}"`);
+        rows.push(csvRow([
+          category,
+          questionNumber,
+          poll.title,
+          poll.detail || '',
+          poll.school || 'General',
+          poll.customInstructions || '',
+          optionsToCsvCell(poll.options),
+          allowMultipleToCsvCell(poll.allowMultiple),
+          tagsToCsvCell(poll.tags)
+        ]));
       });
     });
-    
-    return headers + '\n' + rows.join('\n');
+
+    return buildCsv(headers, rows);
   };
 
   // Handle AI-generated surveys
@@ -913,8 +947,18 @@ function AdminPage() {
     setShowQuestionSetDeleteConfirm(true);
   };
 
+  /*
+    The modal stays OPEN until the delete actually succeeds.
+
+    It used to close on the first line, before the request was even sent, and
+    questionSetDeleteStatus — set on all four outcomes below — was rendered
+    nowhere at all. A failed delete was therefore pixel-for-pixel identical to a
+    successful one: the dialog vanished, the set stayed in the list, and the
+    only account of what went wrong was in the console. Closing is now the
+    success signal, and every outcome is rendered (in the modal while it is
+    open, and in the list once it is gone).
+  */
   const confirmDeleteQuestionSet = async () => {
-    setShowQuestionSetDeleteConfirm(false);
     setIsDeletingQuestionSet(true);
     setQuestionSetDeleteStatus('Deleting...');
 
@@ -933,6 +977,7 @@ function AdminPage() {
 
       if (response.ok) {
         setQuestionSetDeleteStatus(`${result.message}`);
+        setShowQuestionSetDeleteConfirm(false); // only a success closes the dialog
         setSelectedQuestionSet('');
         fetchQuestionSets(); // Refresh the list
       } else {
@@ -1113,6 +1158,16 @@ function AdminPage() {
                 message={saveStatus}
                 tone={saveOk === true ? 'success' : saveOk === false ? 'error' : 'pending'}
               />
+            )}
+
+            {/*
+              Delete outcome. Rendered here for the cases with no dialog on
+              screen — the "please select a set" guard, and the success message
+              that outlives the dialog it closed. While the dialog IS open it
+              renders its own copy, next to the button that caused it.
+            */}
+            {questionSetDeleteStatus && !showQuestionSetDeleteConfirm && (
+              <StatusMessage message={questionSetDeleteStatus} />
             )}
 
             {/* Horizontal Filtering Controls */}
@@ -1650,21 +1705,41 @@ function AdminPage() {
 
       {/* Question Set Delete Confirmation Modal */}
       {showQuestionSetDeleteConfirm && (
-        <div className="modal-overlay" onClick={() => setShowQuestionSetDeleteConfirm(false)}>
+        <div
+          className="modal-overlay"
+          onClick={() => { if (!isDeletingQuestionSet) setShowQuestionSetDeleteConfirm(false); }}
+        >
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> Confirm Question Set Deletion</h3>
             <p>
-              Are you sure you want to delete the question set "<strong>{questionSets.find(set => set.id === selectedQuestionSet)?.name || selectedQuestionSet}</strong>"? 
+              Are you sure you want to delete the question set "<strong>{questionSets.find(set => set.id === selectedQuestionSet)?.name || selectedQuestionSet}</strong>"?
             </p>
             <p>
               This will permanently remove all questions and categories in this set. This action cannot be undone!
             </p>
+
+            {/*
+              The outcome, in the dialog that is still open because of it. A
+              delete that fails leaves this banner and the buttons on screen so
+              the operator can read the reason and retry — previously the dialog
+              closed first and the failure was invisible.
+            */}
+            {questionSetDeleteStatus && <StatusMessage message={questionSetDeleteStatus} />}
+
             <div className="modal-actions">
-              <button className="btn-secondary" onClick={() => setShowQuestionSetDeleteConfirm(false)}>
+              <button
+                className="btn-secondary"
+                onClick={() => setShowQuestionSetDeleteConfirm(false)}
+                disabled={isDeletingQuestionSet}
+              >
                 Cancel
               </button>
-              <button className="btn-danger" onClick={confirmDeleteQuestionSet}>
-                Yes, Delete Question Set
+              <button
+                className="btn-danger"
+                onClick={confirmDeleteQuestionSet}
+                disabled={isDeletingQuestionSet}
+              >
+                {isDeletingQuestionSet ? 'Deleting…' : 'Yes, Delete Question Set'}
               </button>
             </div>
           </div>
