@@ -14,14 +14,12 @@ import { useAuth } from './auth/AuthContext';
 import './BuilderPage.css';
 import { authFetch } from './auth/authFetch';
 import Icon from './components/Icon';
-import StatusMessage from './components/StatusMessage';
-import SetImageBadge from './components/SetImageBadge';
-import PromptShapePreview from './components/PromptShapePreview';
 import QuestionSetEditor from './components/QuestionSetEditor';
+import QuestionSetsPanel from './components/QuestionSetsPanel';
+import QuestionSetDeleteDialog from './components/QuestionSetDeleteDialog';
+import QuestionSetUploadPanel from './components/QuestionSetUploadPanel';
 import AdminShell from './components/AdminShell';
 import { describeEnvironment } from './utils/adminEnvironment';
-import { gameTypeLabel } from './config/gameTypes';
-import { truncate } from './utils/questionSetEditing';
 import { tagsToCsvCell } from './utils/tags';
 import { csvRow, buildCsv, optionsToCsvCell, allowMultipleToCsvCell } from './utils/csv';
 
@@ -46,6 +44,11 @@ const ADMIN_SECTIONS = [
     icon: 'Books',
     title: 'Question sets',
     subtitle: 'The thing every session is built from.',
+    // Converted to dusk in the same change that converted its markup. A panel
+    // moved onto the dark work field while still carrying the paper theme's
+    // #333 body copy measures 1.4:1 against #0F1A2E — see the header of
+    // components/QuestionSetsPanel.css and __tests__/questionSetsPalette.test.js.
+    contentTheme: 'dark',
   },
   {
     id: 'games',
@@ -98,37 +101,37 @@ function AdminPage() {
 
   const { currentUser, signOut } = useAuth();
   const [questionSets, setQuestionSets] = useState([]);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [uploadStatus, setUploadStatus] = useState('');
-  const [isUploading, setIsUploading] = useState(false);
+  const [questionSetsLoading, setQuestionSetsLoading] = useState(true);
   /*
     The session-delete state that used to live here — deleteGameId,
     deleteStatus, isDeleting, showDeleteConfirm, deleteMode — moved into
     components/SessionsPanel.jsx along with the screen it drove. Deleting a
     session is now something you do from the row that names it.
-  */
 
-  // Question Set filtering states
-  const [filteredQuestionSets, setFilteredQuestionSets] = useState([]);
-  const [questionSetSearchQuery, setQuestionSetSearchQuery] = useState('');
-  const [selectedQuestionSetType, setSelectedQuestionSetType] = useState('all');
-  const [selectedQuestionSetStatus, setSelectedQuestionSetStatus] = useState('all');
-  const [questionSetSortBy, setQuestionSetSortBy] = useState('newest');
-  
-  // Upload form fields
-  const [customTitle, setCustomTitle] = useState('');
-  const [customDescription, setCustomDescription] = useState('');
-  const [customInstructions, setCustomInstructions] = useState('');
-  const [aiContextInstructions, setAiContextInstructions] = useState('');
-  const [selectedPromptId, setSelectedPromptId] = useState(''); // AI prompt selection for upload
-  const [showDefaultInstructions, setShowDefaultInstructions] = useState(false);
-  const [engagementType, setEngagementType] = useState('call-and-answer'); // 'call-and-answer', 'trivia', 'poll', or 'wavelength'
-  
-  // Question set deletion
-  const [selectedQuestionSet, setSelectedQuestionSet] = useState('');
-  const [questionSetDeleteStatus, setQuestionSetDeleteStatus] = useState('');
-  const [isDeletingQuestionSet, setIsDeletingQuestionSet] = useState(false);
-  const [showQuestionSetDeleteConfirm, setShowQuestionSetDeleteConfirm] = useState(false);
+    The same has now happened to the question-set screen, and for the same
+    reason: this file cannot be mounted in jsdom (useAuth hard-throws), so
+    anything that stays here is untestable. Gone with it:
+
+      - the four filter states and filterQuestionSets(), into
+        components/QuestionSetsPanel.jsx, which owns the list, the filters and
+        both empty states;
+      - every upload-form field, handleFileSelect and handleUploadQuestionSet,
+        into components/QuestionSetUploadPanel.jsx;
+      - questionSetDeleteStatus / isDeletingQuestionSet /
+        showQuestionSetDeleteConfirm, into
+        components/QuestionSetDeleteDialog.jsx, which owns its own busy and
+        outcome state and stays open until the server answers.
+
+    `engagementType` stays here because the AI builder modals below read it —
+    but it is now RENDERED as exactly one <select>, inside the upload panel.
+    Two controls over one state was Q6.
+  */
+  const [engagementType, setEngagementType] = useState('call-and-answer');
+
+  // The set whose delete dialog is open, or null.
+  const [deletingSet, setDeletingSet] = useState(null);
+  // Whether the creation panel under the list is open.
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   // Debug mode
   const [debugMode, setDebugMode] = useState(() => {
@@ -156,10 +159,14 @@ function AdminPage() {
   // components/QuestionSetEditor.jsx — this page only decides which set is open
   // and shows the confirmation after the editor closes.
   const [editingSetId, setEditingSetId] = useState('');
-  const [saveStatus, setSaveStatus] = useState('');
-  // Success/failure is explicit state. It used to be inferred by sniffing the
-  // status string for a ✅, which silently broke the moment the copy changed.
-  const [saveOk, setSaveOk] = useState(null); // true | false | null (in progress)
+  /*
+    ONE BANNER for everything this page does on the question-set screen's
+    behalf: a save that landed, a toggle that failed, an AI-generated set that
+    uploaded, a delete that finished. Tone is explicit state — it used to be
+    inferred by sniffing the status string for a ✅, which silently broke the
+    moment the copy changed.
+  */
+  const [notice, setNotice] = useState(null); // { text, tone } | null
 
   // Available prompts for selection
   const [availablePrompts, setAvailablePrompts] = useState([]);
@@ -259,8 +266,7 @@ function AdminPage() {
   const handleEditQuestionSet = (questionSet) => {
     setEditMode(true);
     setEditingSetId(questionSet.id);
-    setSaveStatus('');
-    setSaveOk(null);
+    setNotice(null);
     setActiveTab('questionsets');
   };
 
@@ -279,8 +285,7 @@ function AdminPage() {
   const handleCancelEdit = () => {
     setEditMode(false);
     setEditingSetId('');
-    setSaveStatus('');
-    setSaveOk(null);
+    setNotice(null);
   };
 
   /**
@@ -289,8 +294,7 @@ function AdminPage() {
    * backend actually wrote.
    */
   const handleEditorSaved = async (message) => {
-    setSaveOk(true);
-    setSaveStatus(message);
+    setNotice({ text: message, tone: 'success' });
     setEditMode(false);
     setEditingSetId('');
     await fetchQuestionSets();
@@ -364,13 +368,11 @@ function AdminPage() {
         // banner above the list is where every other outcome on this screen
         // already reports itself.
         console.error('Failed to toggle active status:', result.error);
-        setSaveOk(false);
-        setSaveStatus(`Failed to toggle active status: ${result.error}`);
+        setNotice({ text: `Failed to toggle active status: ${result.error}`, tone: 'error' });
       }
     } catch (error) {
       console.error('Toggle active error:', error);
-      setSaveOk(false);
-      setSaveStatus(`Failed to toggle active status: ${error.message}`);
+      setNotice({ text: `Failed to toggle active status: ${error.message}`, tone: 'error' });
     }
   };
 
@@ -396,32 +398,17 @@ function AdminPage() {
         console.log(`Question set ${setId} quickstart ${quickstartEnabled ? 'enabled' : 'disabled'}`);
       } else {
         console.error('Failed to toggle quickstart status:', result.error);
-        setSaveOk(false);
-        setSaveStatus(`Failed to toggle quickstart status: ${result.error}`);
+        setNotice({ text: `Failed to toggle quickstart status: ${result.error}`, tone: 'error' });
       }
     } catch (error) {
       console.error('Toggle quickstart error:', error);
-      setSaveOk(false);
-      setSaveStatus(`Failed to toggle quickstart status: ${error.message}`);
+      setNotice({ text: `Failed to toggle quickstart status: ${error.message}`, tone: 'error' });
     }
-  };
-
-  const handleDeleteQuestionSetFromList = (setId, setName) => {
-    console.log('🗑️ Delete button clicked for:', setId, setName);
-    setSelectedQuestionSet(setId);
-    setQuestionSetDeleteStatus('');
-    setShowQuestionSetDeleteConfirm(true);
-    console.log('🗑️ Should show confirmation modal now');
   };
 
   useEffect(() => {
     fetchQuestionSets();
   }, []);
-  
-  // Filter question sets when filters change
-  useEffect(() => {
-    filterQuestionSets();
-  }, [questionSets, questionSetSearchQuery, selectedQuestionSetType, selectedQuestionSetStatus, questionSetSortBy]);
 
   const fetchQuestionSets = async () => {
     try {
@@ -431,223 +418,34 @@ function AdminPage() {
       setQuestionSets(json.questionSets || []);
     } catch (error) {
       console.error('Error fetching question sets:', error);
-    }
-  };
-  
-  const filterQuestionSets = () => {
-    let filtered = [...questionSets];
-    
-    // Apply search filter
-    if (questionSetSearchQuery) {
-      const query = questionSetSearchQuery.toLowerCase();
-      filtered = filtered.filter(set => 
-        set.name?.toLowerCase().includes(query) ||
-        set.description?.toLowerCase().includes(query) ||
-        set.customInstruction?.toLowerCase().includes(query)
-      );
-    }
-    
-    // Apply type filter
-    if (selectedQuestionSetType !== 'all') {
-      filtered = filtered.filter(set => {
-        const setType = set.engagementType || 'call-and-answer';
-        return setType === selectedQuestionSetType;
-      });
-    }
-    
-    // Apply status filter
-    if (selectedQuestionSetStatus !== 'all') {
-      const isActive = selectedQuestionSetStatus === 'active';
-      filtered = filtered.filter(set => set.active === isActive);
-    }
-    
-    // Apply sorting
-    filtered.sort((a, b) => {
-      switch (questionSetSortBy) {
-        case 'newest':
-          return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-        case 'oldest':
-          return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
-        case 'name':
-          return (a.name || '').localeCompare(b.name || '');
-        case 'questions':
-          return (b.totalQuestions || 0) - (a.totalQuestions || 0);
-        default:
-          return 0;
-      }
-    });
-    
-    setFilteredQuestionSets(filtered);
-  };
-
-  const handleDownloadTemplate = async (templateType = 'call-and-answer') => {
-    try {
-      setUploadStatus('Downloading template...');
-      const response = await authFetch(`${API_BASE}admin/download-template?type=${templateType}`);
-      const result = await response.json();
-
-      if (response.ok) {
-        // Create and download the file with appropriate MIME type
-        const mimeType = result.filename.endsWith('.json') ? 'application/json' : 'text/csv';
-        const blob = new Blob([result.content], { type: mimeType });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = result.filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        setUploadStatus(`${result.filename} downloaded successfully`);
-      } else {
-        setUploadStatus(`Failed to download template: ${result.error}`);
-      }
-    } catch (error) {
-      setUploadStatus(`Failed to download template: ${error.message}`);
-    }
-  };
-
-  const handleFileSelect = (event) => {
-    const file = event.target.files[0];
-    const isCsvFile = file && /\.csv$/i.test(file.name);
-    const isJsonFile = file && /\.json$/i.test(file.name);
-    if (isCsvFile || (isJsonFile && engagementType === 'survey')) {
-      setSelectedFile(file);
-      setUploadStatus('');
-
-      // Auto-populate title from filename if not already set
-      if (!customTitle) {
-        setCustomTitle(file.name.replace(/\.(csv|json)$/i, ''));
-      }
-
-      // JSON survey files: no CSV auto-populate, just confirm selection
-      if (isJsonFile) {
-        if (!customDescription) {
-          setCustomDescription(`Imported from ${file.name}`);
-        }
-        setUploadStatus(`File loaded: ${file.name}. Note: survey JSON upload is not yet supported by the server.`);
-        return;
-      }
-
-      // Read CSV content to auto-populate other fields
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const content = e.target.result;
-          const lines = content.split('\n').filter(line => line.trim());
-          
-          if (lines.length >= 2) {
-            // Parse header and first data row to extract info
-            const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
-            const firstRow = lines[1].split(',').map(v => v.replace(/"/g, '').trim());
-            
-            // Look for school/category info to auto-populate description
-            const schoolIndex = headers.findIndex(h => h.toLowerCase().includes('school'));
-            const categoryIndex = headers.findIndex(h => h.toLowerCase().includes('category'));
-            
-            let autoDescription = '';
-            if (schoolIndex >= 0 && firstRow[schoolIndex]) {
-              autoDescription = `Questions from ${firstRow[schoolIndex]}`;
-            } else if (categoryIndex >= 0 && firstRow[categoryIndex]) {
-              autoDescription = `${firstRow[categoryIndex]} questions and more`;
-            } else {
-              autoDescription = `Imported from ${file.name}`;
-            }
-            
-            // Auto-populate description if not already set
-            if (!customDescription) {
-              setCustomDescription(autoDescription);
-            }
-            
-            // Look for custom instruction column to auto-populate
-            const customInstructionIndex = headers.findIndex(h => h.toLowerCase().includes('custominstruction'));
-            if (customInstructionIndex >= 0 && firstRow[customInstructionIndex] && !customInstructions) {
-              setCustomInstructions(firstRow[customInstructionIndex]);
-            }
-            
-            setUploadStatus(`File loaded: ${lines.length - 1} questions detected. Fields auto-populated from CSV.`);
-          }
-        } catch (error) {
-          console.log('Could not auto-populate from CSV:', error);
-          setUploadStatus('File selected. Please fill out the form fields.');
-        }
-      };
-      reader.readAsText(file);
-    } else {
-      setUploadStatus(engagementType === 'survey'
-        ? 'Please select a valid CSV or JSON file'
-        : 'Please select a valid CSV file');
-      setSelectedFile(null);
-    }
-  };
-
-  const handleUploadQuestionSet = async () => {
-    if (!selectedFile) {
-      setUploadStatus('Please select a file first');
-      return;
-    }
-
-    if (!customTitle.trim()) {
-      setUploadStatus('Please enter a title for the question set');
-      return;
-    }
-
-    setIsUploading(true);
-    setUploadStatus('Reading file...');
-
-    try {
-      // Read the file content
-      const fileContent = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
-        reader.onerror = reject;
-        reader.readAsText(selectedFile);
-      });
-
-      setUploadStatus('Processing question set...');
-
-      // Send to Lambda for processing
-      const response = await authFetch(`${API_BASE}admin/upload-questions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fileName: selectedFile.name,
-          fileContent: fileContent,
-          customTitle: customTitle.trim(),
-          customDescription: customDescription.trim(),
-          customInstructions: customInstructions.trim(),
-          aiContextInstructions: aiContextInstructions.trim(),
-          promptId: selectedPromptId.trim(),
-          engagementType: engagementType
-        })
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        setUploadStatus(`${result.message}`);
-        fetchQuestionSets(); // Refresh the list
-        setSelectedFile(null);
-        setCustomTitle('');
-        setCustomDescription('');
-        setCustomInstructions('');
-        setAiContextInstructions('');
-        setSelectedPromptId('');
-        // Reset file input
-        const fileInput = document.getElementById('file-upload');
-        if (fileInput) fileInput.value = '';
-      } else {
-        setUploadStatus(`Upload failed: ${result.error || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error('Upload error:', error);
-      setUploadStatus(`Upload failed: ${error.message}`);
     } finally {
-      setIsUploading(false);
+      // So the list can tell "still loading" from "there are none" — the two
+      // states the shipped screen printed the same sentence for.
+      setQuestionSetsLoading(false);
     }
   };
+
+  /*
+    Filtering, sorting and both empty states moved into QuestionSetsPanel. What
+    was here was a second useEffect writing a second copy of the list into
+    `filteredQuestionSets`, plus a hand-written type filter listing four of the
+    five engagement types — the drift config/gameTypes.js exists to prevent.
+  */
+
+  /*
+    handleDownloadTemplate, handleFileSelect and handleUploadQuestionSet moved
+    into components/QuestionSetUploadPanel.jsx with the form they drove.
+
+    handleFileSelect is the one worth naming. It read the file and then did
+
+        const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+
+    — a naive split that mis-parses any quoted comma, i.e. most real files — and
+    used the result only to guess a description. Everything else about the file
+    was discovered by the server, after the write. The panel runs
+    utils/csvPreflight.js over the same quote-aware parser the replace preview
+    already used, and reports what will happen BEFORE anything is sent.
+  */
 
   // Handle AI-generated scenarios
   const handleScenariosGenerated = async (scenarioData) => {
@@ -661,7 +459,7 @@ function AdminPage() {
     const timestamp = Date.now();
 
     try {
-      setUploadStatus('Processing AI-generated scenarios...');
+      setNotice({ text: 'Processing AI-generated scenarios…', tone: 'pending' });
 
       const response = await authFetch(`${API_BASE}admin/upload-questions`, {
         method: 'POST',
@@ -683,14 +481,14 @@ function AdminPage() {
       const result = await response.json();
 
       if (response.ok) {
-        setUploadStatus(`${result.message} - Question set created successfully! You can edit it in the Question Sets list below.`);
+        setNotice({ text: `${result.message} — question set created. Open it from the list to review it.`, tone: 'success' });
         await fetchQuestionSets(); // Refresh the list
       } else {
-        setUploadStatus(`Upload failed: ${result.error || 'Unknown error'}`);
+        setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
       }
     } catch (error) {
       console.error('Upload error:', error);
-      setUploadStatus(`Upload failed: ${error.message}`);
+      setNotice({ text: `Upload failed: ${error.message}`, tone: 'error' });
     }
   };
 
@@ -739,7 +537,7 @@ function AdminPage() {
     const timestamp = Date.now();
 
     try {
-      setUploadStatus('Processing AI-generated trivia questions...');
+      setNotice({ text: 'Processing AI-generated trivia questions…', tone: 'pending' });
 
       const response = await authFetch(`${API_BASE}admin/upload-questions`, {
         method: 'POST',
@@ -761,14 +559,14 @@ function AdminPage() {
       const result = await response.json();
 
       if (response.ok) {
-        setUploadStatus(`${result.message} - Trivia question set created successfully! You can edit it in the Question Sets list below.`);
+        setNotice({ text: `${result.message} — trivia set created. Open it from the list to review it.`, tone: 'success' });
         await fetchQuestionSets(); // Refresh the list
       } else {
-        setUploadStatus(`Upload failed: ${result.error || 'Unknown error'}`);
+        setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
       }
     } catch (error) {
       console.error('Upload error:', error);
-      setUploadStatus(`Upload failed: ${error.message}`);
+      setNotice({ text: `Upload failed: ${error.message}`, tone: 'error' });
     }
   };
 
@@ -831,7 +629,7 @@ function AdminPage() {
     const timestamp = Date.now();
 
     try {
-      setUploadStatus('Processing AI-generated poll questions...');
+      setNotice({ text: 'Processing AI-generated poll questions…', tone: 'pending' });
 
       const response = await authFetch(`${API_BASE}admin/upload-questions`, {
         method: 'POST',
@@ -853,14 +651,14 @@ function AdminPage() {
       const result = await response.json();
 
       if (response.ok) {
-        setUploadStatus(`${result.message} - Poll question set created successfully! You can edit it in the Question Sets list below.`);
+        setNotice({ text: `${result.message} — poll set created. Open it from the list to review it.`, tone: 'success' });
         await fetchQuestionSets(); // Refresh the list
       } else {
-        setUploadStatus(`Upload failed: ${result.error || 'Unknown error'}`);
+        setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
       }
     } catch (error) {
       console.error('Upload error:', error);
-      setUploadStatus(`Upload failed: ${error.message}`);
+      setNotice({ text: `Upload failed: ${error.message}`, tone: 'error' });
     }
   };
 
@@ -917,7 +715,7 @@ function AdminPage() {
     const fileName = `survey-${survey.title.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.json`;
 
     try {
-      setUploadStatus('Processing AI-generated survey...');
+      setNotice({ text: 'Exporting AI-generated survey…', tone: 'pending' });
 
       // Create download link for JSON
       const blob = new Blob([jsonContent], { type: 'application/json' });
@@ -930,65 +728,58 @@ function AdminPage() {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
 
-      setUploadStatus(`Survey "${survey.title}" exported as JSON file with ${survey.questions.length} questions`);
+      setNotice({ text: `Survey "${survey.title}" exported as a JSON file with ${survey.questions.length} questions. It is NOT a question set: the importer rejects survey uploads and no session plays one.`, tone: 'success' });
 
     } catch (error) {
       console.error('Survey export error:', error);
-      setUploadStatus(`Survey export failed: ${error.message}`);
+      setNotice({ text: `Survey export failed: ${error.message}`, tone: 'error' });
     }
   };
 
-
-  const handleDeleteQuestionSet = () => {
-    if (!selectedQuestionSet) {
-      setQuestionSetDeleteStatus('Please select a question set to delete');
-      return;
-    }
-    setShowQuestionSetDeleteConfirm(true);
-  };
 
   /*
-    The modal stays OPEN until the delete actually succeeds.
+    DELETING A SET now lives in components/QuestionSetDeleteDialog.jsx, which
+    owns its own busy and outcome state, sends the request BEFORE closing
+    anything, and closes only on acknowledgement.
 
-    It used to close on the first line, before the request was even sent, and
-    questionSetDeleteStatus — set on all four outcomes below — was rendered
-    nowhere at all. A failed delete was therefore pixel-for-pixel identical to a
-    successful one: the dialog vanished, the set stayed in the list, and the
-    only account of what went wrong was in the console. Closing is now the
-    success signal, and every outcome is rendered (in the modal while it is
-    open, and in the list once it is gone).
+    Two things were here and are gone. `handleDeleteQuestionSet` was DEAD — the
+    only wired path was the row button, and its 'Please select a question set to
+    delete' branch belonged to a selector this screen has not had for months, so
+    it is deleted rather than wired. And `confirmDeleteQuestionSet` wrote
+    `questionSetDeleteStatus` on all four outcomes into a variable rendered
+    nowhere, while `isDeletingQuestionSet` was never read at all.
   */
-  const confirmDeleteQuestionSet = async () => {
-    setIsDeletingQuestionSet(true);
-    setQuestionSetDeleteStatus('Deleting...');
 
-    try {
-      // Extract setId from the selected question set value
-      const setId = selectedQuestionSet;
-      
-      const response = await authFetch(`${API_BASE}admin/question-sets/${setId}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
+  /** The dialog reports the outcome; the page re-reads the list and keeps it. */
+  const handleSetDeleted = async (message) => {
+    setDeletingSet(null);
+    setNotice({ text: message, tone: 'success' });
+    await fetchQuestionSets();
+  };
 
-      const result = await response.json();
+  /** The reversible neighbour offered inside the delete dialog. */
+  const handleDeactivateInstead = async (set) => {
+    setDeletingSet(null);
+    await handleToggleActive(set.id, set.active);
+    setNotice({
+      text: `“${set.name || set.id}” is deactivated. It no longer appears in the host's picker, and nothing was deleted.`,
+      tone: 'success',
+    });
+  };
 
-      if (response.ok) {
-        setQuestionSetDeleteStatus(`${result.message}`);
-        setShowQuestionSetDeleteConfirm(false); // only a success closes the dialog
-        setSelectedQuestionSet('');
-        fetchQuestionSets(); // Refresh the list
-      } else {
-        setQuestionSetDeleteStatus(`Delete failed: ${result.error || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error('Delete question set error:', error);
-      setQuestionSetDeleteStatus(`Delete failed: ${error.message}`);
-    } finally {
-      setIsDeletingQuestionSet(false);
-    }
+  /** One place decides which builder a type opens. It used to be inline in a
+   *  button that sat beside a second copy of the engagement-type select. */
+  const handleOpenBuilder = (type) => {
+    if (type === 'poll') setShowPollAIBuilder(true);
+    else if (type === 'trivia') setShowTriviaAIBuilder(true);
+    else if (type === 'survey') setShowSurveyAIBuilder(true);
+    else setShowAIScenarioBuilder(true);
+  };
+
+  /** The three ranked paths from mockup 02, and the header's New set button. */
+  const handleCreatePath = (path) => {
+    setIsCreateOpen((open) => (path === 'new' ? !open : true));
+    if (path === 'ai') handleOpenBuilder(engagementType);
   };
 
   /*
@@ -1139,450 +930,41 @@ function AdminPage() {
           )}
 
           {activeTab === 'questionsets' && (
-            <div className="tab-content">
+            /*
+              THE LIST AND THE CREATION PANEL. No `.tab-content` wrapper: that
+              class carries a 500px min-height and a fade-in written for the
+              paper tabs, and this screen owns its own frame now (same reason
+              the Users tab dropped it in Wave D part one).
 
-          {/* Current Question Sets - Moved to top */}
-          <div className="admin-section">
-            <div className="section-title-with-help">
-              <h2><Icon name="Books" weight="duotone" size={16} color="var(--primary)" /> Current Question Sets</h2>
-              <HelpButton section="question-sets" variant="inline" size="small" tooltip="Help: Managing Question Sets" />
-            </div>
-
-            {/*
-              The save confirmation lives here, not only inside the edit form:
-              a successful save closes that form, which used to unmount the
-              banner in the same tick and leave no evidence the save happened.
-            */}
-            {saveStatus && !editMode && (
-              <StatusMessage
-                message={saveStatus}
-                tone={saveOk === true ? 'success' : saveOk === false ? 'error' : 'pending'}
-              />
-            )}
-
-            {/*
-              Delete outcome. Rendered here for the cases with no dialog on
-              screen — the "please select a set" guard, and the success message
-              that outlives the dialog it closed. While the dialog IS open it
-              renders its own copy, next to the button that caused it.
-            */}
-            {questionSetDeleteStatus && !showQuestionSetDeleteConfirm && (
-              <StatusMessage message={questionSetDeleteStatus} />
-            )}
-
-            {/* Horizontal Filtering Controls */}
-            <div className="filters-section">
-              <div className="filter-row">
-                <label>
-                  Search:
-                  <input
-                    type="text"
-                    placeholder="Search by name or description..."
-                    value={questionSetSearchQuery}
-                    onChange={(e) => setQuestionSetSearchQuery(e.target.value)}
-                  />
-                </label>
-                
-                <label>
-                  Type:
-                  <select 
-                    value={selectedQuestionSetType} 
-                    onChange={(e) => setSelectedQuestionSetType(e.target.value)}
-                  >
-                    <option value="all">All Types</option>
-                    <option value="call-and-answer">Call and Answer</option>
-                    <option value="trivia">Trivia</option>
-                    <option value="poll">Poll</option>
-                    <option value="wavelength">Wavelength</option>
-                  </select>
-                </label>
-                  
-                <label>
-                  Status:
-                  <select 
-                    value={selectedQuestionSetStatus} 
-                    onChange={(e) => setSelectedQuestionSetStatus(e.target.value)}
-                  >
-                    <option value="all">All Status</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                </label>
-                
-                <label>
-                  Sort by:
-                  <select 
-                    value={questionSetSortBy} 
-                    onChange={(e) => setQuestionSetSortBy(e.target.value)}
-                  >
-                    <option value="newest">Newest First</option>
-                    <option value="oldest">Oldest First</option>
-                    <option value="name">Name (A-Z)</option>
-                    <option value="questions">Most Questions</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-            
-            <div className="question-sets-list-container">
-              <div className="question-sets-list">
-                {filteredQuestionSets.length === 0 ? (
-                  <div className="no-sets-message">
-                    <p>{questionSets.length === 0 
-                      ? 'No question sets found. Upload your first question set above to get started.'
-                      : 'No question sets found matching your filters.'}</p>
-                  </div>
-                ) : (
-                  filteredQuestionSets.map(set => (
-                  <div key={set.id} className="question-set-item">
-                    <div className="set-info">
-                      <h3>{set.name}<SetImageBadge hasImages={set.hasImages} withLabel /></h3>
-                      <p>{set.description}</p>
-                      {set.customInstruction && (
-                        <p className="custom-instructions">
-                          <strong>Custom Instructions:</strong> {truncate(set.customInstruction, 140)}
-                        </p>
-                      )}
-                      {/*
-                        The row used to show customInstruction and nothing else,
-                        so changing a set's prompt, AI context, round label or
-                        persona looked exactly the same whether it saved or was
-                        silently discarded. Show the effective values.
-                      */}
-                      {set.aiContextInstruction && (
-                        <p className="custom-instructions">
-                          <strong>AI Context:</strong> {truncate(set.aiContextInstruction)}
-                        </p>
-                      )}
-                      <p className="custom-instructions">
-                        <strong>AI Prompt:</strong>{' '}
-                        {set.promptId || <em>default for {gameTypeLabel(set.engagementType)}</em>}
-                        {set.roundNoun && <> · <strong>Round label:</strong> {set.roundNoun}</>}
-                        {/* Resolve the id to a name, and say so when it resolves
-                            to nothing — a dangling personaId silently degrades
-                            to the adaptive voice at runtime, which looks
-                            identical to "no persona set". */}
-                        {set.personaId && <> · <strong>Voice:</strong> {personaLabel(set.personaId)}</>}
-                      </p>
-                      {set.createdAt && (
-                        <p className="creation-date">
-                          <small>
-                            Created: {new Date(set.createdAt).toLocaleDateString()}
-                            {set.updatedAt && ` · Updated: ${new Date(set.updatedAt).toLocaleString()}`}
-                          </small>
-                        </p>
-                      )}
-                    </div>
-                    <div className="set-stats">
-                      <div className="stats-row-1">
-                        <span className="stat-badge">{set.totalQuestions} questions</span>
-                        <span className="stat-badge">{set.categoryCount} categories</span>
-                        <span className="stat-badge">{gameTypeLabel(set.engagementType)}</span>
-                      </div>
-                      <div className="stats-row-2">
-                        <button
-                          className={`status-badge clickable ${set.active ? 'active' : 'inactive'}`}
-                          onClick={() => handleToggleActive(set.id, set.active)}
-                          title={`Click to ${set.active ? 'deactivate' : 'activate'} this question set`}
-                        >
-                          {set.active ? 'Active' : 'Inactive'}
-                        </button>
-                        <label className="quickstart-checkbox" title="Enable for quickstart menu">
-                          <input
-                            type="checkbox"
-                            checked={set.quickstart || false}
-                            onChange={(e) => handleToggleQuickstart(set.id, e.target.checked)}
-                          />
-                          <span className="quickstart-label"><Icon name="Lightning" weight="fill" size={16} color="var(--primary)" /> Quickstart</span>
-                        </label>
-                        {set.isAIGenerated && (
-                          <span className="stat-badge ai-generated" title="AI-generated content">
-                            <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="set-actions">
-                      <button
-                        className="btn-secondary btn-small"
-                        onClick={() => handleEditQuestionSet(set)}
-                        title="Edit this question set"
-                      >
-                        <Icon name="PencilSimple" weight="bold" size={16} color="currentColor" /> Edit
-                      </button>
-                      <button
-                        className="btn-danger btn-small"
-                        onClick={() => handleDeleteQuestionSetFromList(set.id, set.name)}
-                        title="Delete this question set"
-                      >
-                        <Icon name="Trash" weight="bold" size={16} color="currentColor" /> Delete
-                      </button>
-                    </div>
-                  </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/*
-            The set editor USED to render here, immediately after the list and
-            inside the same scroll — which is what the 100ms scroll-jump and the
-            three-second yellow flash existed to paper over. It is now a place
-            of its own: see the `editingSet ?` branch at the top of this render.
-          */}
-
-          {/* Upload Question Set Section */}
-          <div className="admin-section">
-            <div 
-              className="section-header expandable-header"
-              onClick={() => setIsUploadSectionExpanded(!isUploadSectionExpanded)}
+              The creation panel is passed as a CHILD so it renders inside the
+              same `.qs` scope and below the list — which is where it has always
+              been. What changed is that the empty state no longer tells you to
+              upload "above": clicking a creation path opens this panel, and
+              when the list is empty there are no rows between the two.
+            */
+            <QuestionSetsPanel
+              questionSets={questionSets}
+              loading={questionSetsLoading}
+              notice={notice}
+              onDismissNotice={() => setNotice(null)}
+              onEdit={handleEditQuestionSet}
+              onDelete={(set) => setDeletingSet(set)}
+              onToggleActive={(set) => handleToggleActive(set.id, set.active)}
+              onToggleQuickstart={(set, next) => handleToggleQuickstart(set.id, next)}
+              onCreate={handleCreatePath}
+              createOpen={isCreateOpen}
             >
-              <div className="expandable-title-with-help">
-                <h2><Icon name="UploadSimple" weight="bold" size={16} color="currentColor" /> Upload Question Set</h2>
-                <HelpButton section="upload-csv" variant="inline" size="small" tooltip="Help: Uploading CSV Files" 
-                  onClick={(e) => e.stopPropagation()} />
-              </div>
-              <button className={`expand-arrow ${isUploadSectionExpanded ? 'expanded' : ''}`}>
-                <Icon name="CaretDown" weight="bold" size={16} color="currentColor" />
-              </button>
-            </div>
-            {isUploadSectionExpanded && (
-              <>
-                <p className="section-description">Upload a CSV file containing questions to create a new question set with custom title and instructions. Surveys use JSON templates (survey upload is not yet supported in game sessions).</p>
-            
-                <div className="upload-form">
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="custom-title">Question Set Title *</label>
-                      <input
-                        type="text"
-                        id="custom-title"
-                        value={customTitle}
-                        onChange={(e) => setCustomTitle(e.target.value)}
-                        placeholder="Enter a descriptive title"
-                        className="input-field"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="custom-description">Description</label>
-                      <input
-                        type="text"
-                        id="custom-description"
-                        value={customDescription}
-                        onChange={(e) => setCustomDescription(e.target.value)}
-                        placeholder="Brief description of this question set"
-                        className="input-field"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="engagement-type">Engagement Type *</label>
-                      <select
-                        id="engagement-type"
-                        value={engagementType}
-                        onChange={(e) => setEngagementType(e.target.value)}
-                        className="input-field"
-                      >
-                        <option value="call-and-answer">Call and Answer</option>
-                        <option value="trivia">Trivia</option>
-                        <option value="poll">Poll</option>
-                        <option value="wavelength">Wavelength</option>
-                        <option value="survey">Survey</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="custom-instructions">
-                        Custom Instructions 
-                        <button 
-                          type="button" 
-                          className="btn-link"
-                          onClick={() => setShowDefaultInstructions(!showDefaultInstructions)}
-                        >
-                          (show default)
-                        </button>
-                      </label>
-                      {showDefaultInstructions && (
-                        <div className="default-instructions">
-                          <strong>Default instructions:</strong> {defaultInstructions}
-                        </div>
-                      )}
-                      <textarea
-                        id="custom-instructions"
-                        value={customInstructions}
-                        onChange={(e) => setCustomInstructions(e.target.value)}
-                        placeholder={defaultInstructions}
-                        className="input-field textarea-field"
-                        rows="3"
-                      />
-                    </div>
-                    
-                    <div className="form-group">
-                      <label htmlFor="ai-context-instructions">AI Context Instructions</label>
-                      <div className="help-text-container">
-                        <small className="help-text">
-                          Provide background context about your project, team, or meeting for AI analysis.
-                          Examples: "Building a new application to support engineering learning" or 
-                          "Supporting engineering teams through developer advocacy in the healthcare sector"
-                        </small>
-                      </div>
-                      <textarea
-                        id="ai-context-instructions"
-                        value={aiContextInstructions}
-                        onChange={(e) => setAiContextInstructions(e.target.value)}
-                        placeholder="Describe your project, team context, industry, or specific goals to help AI provide more relevant analysis..."
-                        className="input-field textarea-field"
-                        rows="4"
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="selected-prompt">AI Summary Prompt (Optional)</label>
-                      <div className="help-text-container">
-                        <small className="help-text">
-                          Select a custom AI prompt for analysis summaries. Leave blank to use the default prompt for this engagement type.
-                        </small>
-                      </div>
-                      <select
-                        id="selected-prompt"
-                        value={selectedPromptId}
-                        onChange={(e) => setSelectedPromptId(e.target.value)}
-                        className="input-field select-field"
-                      >
-                        <option value="">Use default prompt for {engagementType === 'call-and-answer' ? 'call & answer' : engagementType}</option>
-                        {availablePrompts
-                          .filter(prompt => prompt.gameType === (engagementType === 'call-and-answer' ? 'callandanswer' : engagementType))
-                          .map(prompt => (
-                            <option key={prompt.promptId} value={prompt.promptId}>
-                              {prompt.name} {prompt.isDefault ? '(Default)' : ''}
-                            </option>
-                          ))}
-                      </select>
-                      <PromptShapePreview promptId={selectedPromptId} prompts={availablePrompts} />
-                    </div>
-                  </div>
-
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="file-upload">{engagementType === 'survey' ? 'CSV or JSON File *' : 'CSV File *'}</label>
-                      <div className="file-input-wrapper">
-                        <input
-                          type="file"
-                          id="file-upload"
-                          accept={engagementType === 'survey' ? '.csv,.json' : '.csv'}
-                          onChange={handleFileSelect}
-                          className="file-input"
-                        />
-                        <label htmlFor="file-upload" className="file-input-label">
-                          {selectedFile ? selectedFile.name : (engagementType === 'survey' ? 'Choose CSV or JSON file...' : 'Choose CSV file...')}
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="form-row">
-                    <button
-                      className="btn-primary btn-large"
-                      onClick={handleUploadQuestionSet}
-                      disabled={!selectedFile || !customTitle.trim() || isUploading}
-                    >
-                      {isUploading ? 'Uploading...' : 'Upload Question Set'}
-                    </button>
-                  </div>
-                </div>
-                
-                {uploadStatus && <StatusMessage message={uploadStatus} />}
-              </>
-            )}
-          </div>
-
-          {/* Add New Set Section */}
-          <div className="admin-section">
-            <div className="section-title-with-help">
-              <h2><Icon name="Plus" weight="bold" size={16} color="currentColor" /> Add New Question Set</h2>
-              <HelpButton section="ai-builders" variant="inline" size="small" tooltip="Help: AI Builders & Question Creation" />
-            </div>
-            <p className="section-description">Create new question sets using different methods based on your engagement type.</p>
-
-            <div className="add-set-controls">
-              <div className="engagement-type-selector">
-                <label htmlFor="new-set-engagement-type">Engagement Type:</label>
-                <select
-                  id="new-set-engagement-type"
-                  value={engagementType}
-                  onChange={(e) => setEngagementType(e.target.value)}
-                  className="input-field"
-                >
-                  <option value="call-and-answer">Call and Answer</option>
-                  <option value="trivia">Trivia</option>
-                  <option value="poll">Poll</option>
-                  <option value="wavelength">Wavelength</option>
-                  <option value="survey">Survey</option>
-                </select>
-              </div>
-
-              <div className="add-set-buttons">
-                <button
-                  className="btn-primary"
-                  onClick={() => {
-                    console.log('🤖 AI Builder button clicked for', engagementType);
-                    if (engagementType === 'poll') {
-                      setShowPollAIBuilder(true);
-                    } else if (engagementType === 'trivia') {
-                      setShowTriviaAIBuilder(true);
-                    } else if (engagementType === 'survey') {
-                      setShowSurveyAIBuilder(true);
-                    } else {
-                      setShowAIScenarioBuilder(true);
-                    }
-                  }}
-                >
-                  <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI {engagementType === 'trivia' ? 'Trivia' : 
-                           engagementType === 'poll' ? 'Poll' : 
-                           engagementType === 'survey' ? 'Survey' :
-                           engagementType === 'wavelength' ? 'Wavelength' : 'Scenario'} Builder
-                </button>
-                <button
-                  className="btn-secondary"
-                  onClick={() => window.open('/builder', '_blank')}
-                >
-                  <Icon name="Palette" weight="duotone" size={16} color="var(--primary)" /> Manual Builder Interface
-                </button>
-                <button
-                  className="btn-secondary"
-                  onClick={() => handleDownloadTemplate(engagementType)}
-                >
-                  <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Download {engagementType === 'call-and-answer' ? 'Call & Answer' :
-                              engagementType === 'trivia' ? 'Trivia' :
-                              engagementType === 'poll' ? 'Poll' :
-                              engagementType === 'wavelength' ? 'Wavelength' :
-                              engagementType === 'survey' ? 'Survey' : 'Template'} Template
-                </button>
-                {/* Art Title is a Call and Answer set with an extra Image column, not its own
-                    engagement type -- the host filters sets by engagementType, so the upload
-                    must stay 'call-and-answer' for the set to appear in the game picker. */}
-                {engagementType === 'call-and-answer' && (
-                  <button
-                    className="btn-secondary"
-                    onClick={() => handleDownloadTemplate('art-title')}
-                    title="Call and Answer template with an Image column: players title a famous artwork, then vote"
-                  >
-                    <Icon name="Image" weight="bold" size={16} /> Download Art Title Template
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-            </div>
+              {(isCreateOpen || questionSets.length === 0) && (
+                <QuestionSetUploadPanel
+                  engagementType={engagementType}
+                  onEngagementTypeChange={setEngagementType}
+                  availablePrompts={availablePrompts}
+                  defaultInstructions={defaultInstructions}
+                  onOpenBuilder={handleOpenBuilder}
+                  onUploaded={fetchQuestionSets}
+                />
+              )}
+            </QuestionSetsPanel>
           )}
 
           {activeTab === 'games' && (
@@ -1703,47 +1085,18 @@ function AdminPage() {
         RATIONALE.md §8.
       */}
 
-      {/* Question Set Delete Confirmation Modal */}
-      {showQuestionSetDeleteConfirm && (
-        <div
-          className="modal-overlay"
-          onClick={() => { if (!isDeletingQuestionSet) setShowQuestionSetDeleteConfirm(false); }}
-        >
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> Confirm Question Set Deletion</h3>
-            <p>
-              Are you sure you want to delete the question set "<strong>{questionSets.find(set => set.id === selectedQuestionSet)?.name || selectedQuestionSet}</strong>"?
-            </p>
-            <p>
-              This will permanently remove all questions and categories in this set. This action cannot be undone!
-            </p>
-
-            {/*
-              The outcome, in the dialog that is still open because of it. A
-              delete that fails leaves this banner and the buttons on screen so
-              the operator can read the reason and retry — previously the dialog
-              closed first and the failure was invisible.
-            */}
-            {questionSetDeleteStatus && <StatusMessage message={questionSetDeleteStatus} />}
-
-            <div className="modal-actions">
-              <button
-                className="btn-secondary"
-                onClick={() => setShowQuestionSetDeleteConfirm(false)}
-                disabled={isDeletingQuestionSet}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn-danger"
-                onClick={confirmDeleteQuestionSet}
-                disabled={isDeletingQuestionSet}
-              >
-                {isDeletingQuestionSet ? 'Deleting…' : 'Yes, Delete Question Set'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/*
+        THE SET-DELETE DIALOG. See components/QuestionSetDeleteDialog.jsx: it
+        stays open until the server answers, renders the outcome, offers the
+        reversible neighbour, and closes only on acknowledgement.
+      */}
+      {deletingSet && (
+        <QuestionSetDeleteDialog
+          questionSet={deletingSet}
+          onCancel={() => setDeletingSet(null)}
+          onDeleted={handleSetDeleted}
+          onDeactivate={handleDeactivateInstead}
+        />
       )}
 
       {/* AI Scenario Builder Modal */}

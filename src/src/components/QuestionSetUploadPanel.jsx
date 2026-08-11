@@ -1,0 +1,478 @@
+import React, { useState } from 'react';
+import Icon from './Icon';
+import PromptShapePreview from './PromptShapePreview';
+import { authFetch } from '../auth/authFetch';
+import { adminApiUrl } from '../utils/adminApi';
+import {
+  GAME_TYPE_LIST,
+  gameTypeLabel,
+  isPlayableGameType,
+  NOT_PLAYABLE_LABEL,
+  notPlayableReason,
+} from '../config/gameTypes';
+import { selectableSummaryPrompts } from '../utils/questionSetEditing';
+import { preflight, describePreflight } from '../utils/csvPreflight';
+import './QuestionSetsPanel.css';
+
+/**
+ * MAKING A NEW QUESTION SET — every path, and the engagement type asked ONCE.
+ *
+ * Grounded in docs/design/admin-redesign/06-csv-errors.html and 07-new-set.html
+ * (RATIONALE.md §9). Wave D part two, Q3, Q5 and Q6 — option (a).
+ *
+ * Q6, AND WHAT IS DELIBERATELY NOT BUILT. `engagementType` is ONE React state
+ * that used to be rendered as TWO `<select>` elements in two sections of the
+ * same tab — "Upload Question Set" and "Add New Question Set". Changing either
+ * silently changed the other, and it also decided which AI builder opened and
+ * which template downloaded. Mockup 07 resolves this with a five-path ranked
+ * chooser that asks for the type inside the path you pick; the plan's Part 5
+ * names that as exceeding the owner's constraint, and the owner chose option
+ * (a). So: the type is asked once, here, in the panel that uses it, and every
+ * creation path lives beside it. There is no `NewQuestionSetChooser`.
+ *
+ * Q3. The summary-prompt picker was `prompt.gameType === (engagementType ===
+ * 'call-and-answer' ? 'callandanswer' : engagementType)` — a raw string compare
+ * with one hand-patched case, which meant a `polls` prompt never appeared, a
+ * GENERATION prompt was selectable (and does nothing, because
+ * `get-ai-summary.js` rejects it and falls back to the default), and a record
+ * with no `promptId` rendered `<option value={undefined}>`, which makes the
+ * browser submit the option's LABEL as the value. `selectableSummaryPrompts()`
+ * has existed and been tested since `d3d88322`; the set editor has used it since
+ * the day it landed and this form did not. This is a one-site change and it is
+ * NOT extended into a status filter — see the header of
+ * utils/questionSetEditing.js: status annotates, structure excludes.
+ *
+ * Q5. The file is parsed in the browser before it is sent. What used to be here
+ * was `lines[0].split(',')` with `replace(/"/g, '')`, feeding an auto-filled
+ * description box and nothing else. See utils/csvPreflight.js.
+ *
+ * SURVEY. Kept visible and marked Not playable (the owner's decision on
+ * OPEN-QUESTIONS #3), rather than removed. The importer rejects every survey
+ * upload, so the preflight blocks the Upload button and says so — instead of
+ * the shipped behaviour, which offered the type, enabled the button, and
+ * admitted the problem only in a sentence beside the file picker.
+ */
+export default function QuestionSetUploadPanel({
+  engagementType,
+  onEngagementTypeChange,
+  availablePrompts = [],
+  defaultInstructions = '',
+  /** Opens the AI builder for the current type. The builders themselves live in
+   *  AdminPage, which owns the modals. */
+  onOpenBuilder,
+  /** A set landed. The page re-reads the list. */
+  onUploaded,
+}) {
+  const [file, setFile] = useState(null);
+  const [report, setReport] = useState(null);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [customInstructions, setCustomInstructions] = useState('');
+  const [aiContextInstructions, setAiContextInstructions] = useState('');
+  const [promptId, setPromptId] = useState('');
+  const [showDefaultInstructions, setShowDefaultInstructions] = useState(false);
+  const [status, setStatus] = useState(null); // { text, tone }
+  const [isUploading, setIsUploading] = useState(false);
+
+  const playable = isPlayableGameType(engagementType);
+  const promptChoices = selectableSummaryPrompts(availablePrompts, engagementType);
+  const hiddenPromptCount = availablePrompts.length - promptChoices.length;
+
+  const resetFile = () => {
+    setFile(null);
+    setReport(null);
+    const input = document.getElementById('qsets-file-upload');
+    if (input) input.value = '';
+  };
+
+  const handleFileSelect = (event) => {
+    const chosen = event.target.files && event.target.files[0];
+    if (!chosen) {
+      resetFile();
+      return;
+    }
+    setStatus(null);
+    setFile(chosen);
+    if (!title) setTitle(chosen.name.replace(/\.(csv|json)$/i, ''));
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = String(e.target.result ?? '');
+      const next = preflight(text, engagementType, { fileName: chosen.name });
+      setReport(next);
+      // Auto-fill from the QUOTE-AWARE parse. The old code split the header on
+      // commas and stripped every `"`, so a file with a quoted comma — most real
+      // files — filled the description from the wrong column.
+      if (!description && next.suggestedDescription) setDescription(next.suggestedDescription);
+      if (!customInstructions && next.suggestedCustomInstruction) {
+        setCustomInstructions(next.suggestedCustomInstruction);
+      }
+    };
+    reader.onerror = () => {
+      setReport(null);
+      setStatus({ text: 'That file could not be read.', tone: 'error' });
+    };
+    reader.readAsText(chosen);
+  };
+
+  const downloadTemplate = async (templateType) => {
+    setStatus({ text: 'Downloading template…', tone: 'pending' });
+    try {
+      const response = await authFetch(adminApiUrl(`admin/download-template?type=${templateType}`));
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setStatus({ text: `Failed to download template: ${result.error || response.status}`, tone: 'error' });
+        return;
+      }
+      const mimeType = String(result.filename || '').endsWith('.json') ? 'application/json' : 'text/csv';
+      const blob = new Blob([result.content], { type: mimeType });
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = result.filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      window.URL.revokeObjectURL(url);
+      setStatus({ text: `${result.filename} downloaded.`, tone: 'success' });
+    } catch (error) {
+      setStatus({ text: `Failed to download template: ${error.message}`, tone: 'error' });
+    }
+  };
+
+  const upload = async () => {
+    if (!file || !title.trim()) return;
+    setIsUploading(true);
+    setStatus({ text: 'Uploading…', tone: 'pending' });
+    try {
+      const fileContent = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsText(file);
+      });
+
+      const response = await authFetch(adminApiUrl('admin/upload-questions'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileContent,
+          customTitle: title.trim(),
+          customDescription: description.trim(),
+          customInstructions: customInstructions.trim(),
+          aiContextInstructions: aiContextInstructions.trim(),
+          promptId: promptId.trim(),
+          engagementType,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setStatus({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
+        return;
+      }
+      setStatus({ text: result.message || 'Question set created.', tone: 'success' });
+      setTitle('');
+      setDescription('');
+      setCustomInstructions('');
+      setAiContextInstructions('');
+      setPromptId('');
+      resetFile();
+      if (onUploaded) onUploaded(result.message || 'Question set created.');
+    } catch (error) {
+      setStatus({ text: `Upload failed: ${error.message}`, tone: 'error' });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const blocked = !!(report && report.blocking.length);
+  const canUpload = !!file && !!title.trim() && !isUploading && !blocked;
+
+  return (
+    <div className="qsets qsets-panel">
+      <h3>New question set</h3>
+      <p>
+        The engagement type is asked once, here, because it decides everything below it: which
+        builder opens, which template you get, which summary prompts apply, and how the
+        importer reads your columns.
+      </p>
+
+      <div className="qsets-field" style={{ maxWidth: '340px' }}>
+        <label htmlFor="engagement-type">Engagement type</label>
+        <select
+          id="engagement-type"
+          className="qsets-input qsets-select"
+          value={engagementType}
+          onChange={(event) => {
+            onEngagementTypeChange(event.target.value);
+            // The verdict is type-dependent (poll options, trivia answers, the
+            // survey block), so a stale report would be a confident wrong answer.
+            setReport(null);
+            resetFile();
+          }}
+        >
+          {GAME_TYPE_LIST.map((meta) => (
+            <option key={meta.id} value={meta.id}>
+              {meta.label}
+              {isPlayableGameType(meta.id) ? '' : ` — ${NOT_PLAYABLE_LABEL.toLowerCase()}`}
+            </option>
+          ))}
+        </select>
+        {!playable && <small>{notPlayableReason(engagementType)}</small>}
+      </div>
+
+      <div className="qsets-section">
+        <h4>Create</h4>
+        <div className="qsets-actions">
+          <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onOpenBuilder && onOpenBuilder(engagementType)}>
+            <Icon name="Sparkle" weight="duotone" size={14} color="currentColor" />
+            {/* The survey builder does not upload: handleSurveyGenerated builds a
+                Blob and clicks an anchor. Say so on the button rather than after
+                the fact (OPEN-QUESTIONS #3, option (c)'s copy). */}
+            AI {gameTypeLabel(engagementType)} builder{playable ? '' : ' (exports JSON)'}
+          </button>
+          <button type="button" className="qsets-btn" onClick={() => downloadTemplate(engagementType)}>
+            <Icon name="FileText" weight="bold" size={14} color="currentColor" />
+            Download {gameTypeLabel(engagementType)} template
+          </button>
+          {engagementType === 'call-and-answer' && (
+            <button
+              type="button"
+              className="qsets-btn"
+              onClick={() => downloadTemplate('art-title')}
+              title="Call and Answer template with an Image column: players title a famous artwork, then vote"
+            >
+              <Icon name="Image" weight="bold" size={14} color="currentColor" />
+              Download Art Title template
+            </button>
+          )}
+          <button type="button" className="qsets-btn" onClick={() => window.open('/builder', '_blank')}>
+            <Icon name="Palette" weight="duotone" size={14} color="currentColor" />
+            Manual builder
+          </button>
+        </div>
+      </div>
+
+      <div className="qsets-section">
+        <h4>Upload a CSV</h4>
+
+        <div className="qsets-file">
+          <input
+            type="file"
+            id="qsets-file-upload"
+            aria-label="CSV file"
+            accept=".csv,.json"
+            onChange={handleFileSelect}
+          />
+          {file && (
+            <span className="qsets-dim">
+              {file.name}
+              {report ? ` · ${describePreflight(report)}` : ''}
+            </span>
+          )}
+        </div>
+
+        {report && <PreflightReport report={report} />}
+
+        <div className="qsets-grid" style={{ marginTop: '14px' }}>
+          <div className="qsets-field">
+            <label htmlFor="qsets-title">Question set title *</label>
+            <input
+              id="qsets-title"
+              type="text"
+              className="qsets-input"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="A descriptive title"
+            />
+          </div>
+
+          <div className="qsets-field">
+            <label htmlFor="qsets-description">Description</label>
+            <input
+              id="qsets-description"
+              type="text"
+              className="qsets-input"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Brief description of this question set"
+            />
+          </div>
+
+          <div className="qsets-field">
+            <label htmlFor="qsets-custom-instructions">
+              Custom instructions{' '}
+              <button
+                type="button"
+                className="qsets-btn qsets-btn--link"
+                onClick={() => setShowDefaultInstructions(!showDefaultInstructions)}
+              >
+                {showDefaultInstructions ? '(hide default)' : '(show default)'}
+              </button>
+            </label>
+            {showDefaultInstructions && <small>Default: {defaultInstructions}</small>}
+            <textarea
+              id="qsets-custom-instructions"
+              className="qsets-input"
+              rows="3"
+              value={customInstructions}
+              onChange={(event) => setCustomInstructions(event.target.value)}
+              placeholder={defaultInstructions}
+            />
+          </div>
+
+          <div className="qsets-field">
+            <label htmlFor="qsets-ai-context">AI context instructions</label>
+            <small>
+              Background about your project, team or meeting, for the analysis pass. E.g.
+              "Supporting engineering teams through developer advocacy in healthcare".
+            </small>
+            <textarea
+              id="qsets-ai-context"
+              className="qsets-input"
+              rows="3"
+              value={aiContextInstructions}
+              onChange={(event) => setAiContextInstructions(event.target.value)}
+              placeholder="Describe your project, team context, industry or goals…"
+            />
+          </div>
+
+          <div className="qsets-field qsets-field--wide">
+            <label htmlFor="qsets-prompt-id">AI summary prompt (optional)</label>
+            <select
+              id="qsets-prompt-id"
+              className="qsets-input qsets-select"
+              value={promptId}
+              onChange={(event) => setPromptId(event.target.value)}
+            >
+              <option value="">Use the default prompt for {gameTypeLabel(engagementType)}</option>
+              {promptChoices.map((prompt) => (
+                <option key={prompt.promptId} value={prompt.promptId}>
+                  {prompt.name}
+                  {prompt.isDefault ? ' (default)' : ''}
+                  {prompt.summaryPromptStatus === 'unusable' ? ' — not a summary prompt' : ''}
+                </option>
+              ))}
+            </select>
+            <small>
+              Prompts for <strong>{gameTypeLabel(engagementType)}</strong> sets only.
+              {hiddenPromptCount > 0
+                ? ` ${hiddenPromptCount} prompt${hiddenPromptCount === 1 ? '' : 's'} for other game types, and generation prompts, are not offered.`
+                : ''}
+            </small>
+            <PromptShapePreview promptId={promptId} prompts={promptChoices} />
+          </div>
+        </div>
+
+        <div className="qsets-actions">
+          <button type="button" className="qsets-btn qsets-btn--lg qsets-btn--primary" disabled={!canUpload} onClick={upload}>
+            {isUploading ? 'Uploading…' : 'Upload question set'}
+          </button>
+          {blocked && <span className="qsets-dim">Fix what stops the import first — nothing has been sent.</span>}
+        </div>
+
+        {status && status.text && (
+          <div
+            className={`qsets-alert${status.tone === 'error' ? ' qsets-alert--error' : ''}${
+              status.tone === 'success' ? ' qsets-alert--success' : ''
+            }`}
+            style={{ marginTop: '12px' }}
+            role={status.tone === 'error' ? 'alert' : 'status'}
+          >
+            <Icon
+              name={status.tone === 'error' ? 'Warning' : 'Check'}
+              weight="fill"
+              size={16}
+              color="currentColor"
+            />
+            <span>{status.text}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The three tiers, drawn as three different things because they are three
+ * different things: one stops the write, one loses rows inside a write that
+ * reports success, one loses fields inside rows that all import.
+ */
+export function PreflightReport({ report }) {
+  if (!report) return null;
+  const clean = !report.blocking.length && !report.skipped.length && !report.gaps.length;
+
+  return (
+    <div className="qsets-pf">
+      {report.blocking.length > 0 && (
+        <section className="qsets-pf-tier qsets-pf--stop">
+          <h5>1. Stops the import</h5>
+          {report.blocking.map((item) => (
+            <div key={item.code}>
+              <p>
+                <strong>{item.title}</strong> {item.detail}
+              </p>
+            </div>
+          ))}
+          <p className="qsets-dim">Nothing has been sent to the server.</p>
+        </section>
+      )}
+
+      {report.skipped.length > 0 && (
+        <section className="qsets-pf-tier qsets-pf--skip">
+          <h5>
+            2. Would be skipped without telling you{' '}
+            <span className="qsets-dim">
+              {report.skippedRowCount} of {report.dataRowCount} data rows
+            </span>
+          </h5>
+          <table className="qsets-pf-tbl">
+            <thead>
+              <tr>
+                <th>Row</th>
+                <th>Problem</th>
+                <th>In the file</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.skipped.slice(0, 50).map((row) => (
+                <tr key={`${row.row}-${row.problem}`}>
+                  <td>{row.row}</td>
+                  <td>{row.problem}</td>
+                  <td className="qsets-mono">{row.excerpt}</td>
+                  <td>{row.result}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {report.gaps.length > 0 && (
+        <section className="qsets-pf-tier qsets-pf--gap">
+          <h5>3. Known importer gaps this file will hit</h5>
+          <ul>
+            {report.gaps.map((gap) => (
+              <li key={gap.code}>
+                <strong>{gap.title}</strong> {gap.detail}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {clean && (
+        <section className="qsets-pf-tier qsets-pf--ok">
+          <h5>Nothing to fix</h5>
+          <p>
+            {report.importedCount} question{report.importedCount === 1 ? '' : 's'} in{' '}
+            {report.categories.length} categor{report.categories.length === 1 ? 'y' : 'ies'}, read
+            in your browser. No row would be dropped.
+          </p>
+        </section>
+      )}
+    </div>
+  );
+}

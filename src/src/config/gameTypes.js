@@ -165,3 +165,34 @@ export const UNPLAYABLE_GAME_TYPES = ['survey'];
 export const PICKER_GAME_TYPES = GAME_TYPE_LIST.filter(
   (type) => !UNPLAYABLE_GAME_TYPES.includes(type.id)
 );
+
+/**
+ * Can a host actually play a set of this type?
+ *
+ * The ADMIN pickers are not the host's create dialog and do not use
+ * PICKER_GAME_TYPES. The owner's decision on OPEN-QUESTIONS #3 is **label it,
+ * not hide it** — mockup 01 row 13 draws a Survey set carrying a `Not playable`
+ * state chip — so admin renders every type in GAME_TYPE_LIST and annotates the
+ * ones this predicate rejects. Hiding it would make an existing survey set
+ * unreachable in the one console that can delete it.
+ *
+ * The console's type filter used to be four hand-written <option> elements that
+ * omitted Survey while two other selects on the same tab offered it. That drift
+ * is the bug; every list is derived from this file now.
+ */
+export function isPlayableGameType(type) {
+  return !UNPLAYABLE_GAME_TYPES.includes(normalizeGameType(type));
+}
+
+/** The words on the chip and on the annotated <option>. One spelling, one place. */
+export const NOT_PLAYABLE_LABEL = 'Not playable';
+
+/**
+ * Why a type is not playable, in the operator's terms rather than the table's.
+ * Returns '' for a playable type, so a caller can render it unconditionally.
+ */
+export function notPlayableReason(type) {
+  if (isPlayableGameType(type)) return '';
+  return 'The importer rejects survey uploads and no game session plays a survey, '
+    + 'so a survey set can be authored here but never run.';
+}

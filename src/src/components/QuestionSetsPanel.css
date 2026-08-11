@@ -1,0 +1,502 @@
+/* ============================================================================
+   THE QUESTION SETS SCREEN — QuestionSetsPanel / QuestionSetUploadPanel /
+   QuestionSetDeleteDialog.
+
+   Derived from docs/design/admin-redesign/01-sets.html, 02-sets-empty.html,
+   03-sets-no-match.html, 06-csv-errors.html and 14-confirm-delete-set.html.
+   Scoped under `.qsets`, like `.um`, `.sp` and `.adm-shell`, because the mockups'
+   `.tbl` / `.chip` / `.btn` / `.modal` names belong to styles.css and the host
+   stage.
+
+   IT IS `.qsets` AND NOT `.qs` FOR A MEASURED REASON. The first cut used `.qs`,
+   and styles.css ALREADY declares `.qs-editor`, `.qs-panel`, `.qs-empty` and
+   sixteen more for the (still paper-theme) set editor. `.qs-empty` there is
+   `color: #5E6167; font-style: italic` — so the new dark empty state rendered
+   as grey italic on the dusk field, and `.qs-panel` picked up a paper
+   background. Nothing in a component test caught it, because a component test
+   loads one stylesheet. The prefix collision assertion at the end of
+   __tests__/questionSetsPalette.test.js is what catches it now.
+
+   ONE STYLESHEET FOR THREE COMPONENTS, on purpose. They are one screen: the
+   list, the creation panel under it and the dialog over it share a token block,
+   a row height and a button set, and splitting them into three files would mean
+   three copies of the token block that can drift apart — which is exactly the
+   defect Q4 fixes on the JavaScript side. Each component's root element carries
+   `.qsets`.
+
+   THE LADDER (RATIONALE §3): 12 floor / 13 label / 15 body / 19 head at ~120
+   CSS ppi read at 24in. Rows are 36px. Cards were rejected — 41 of them is a
+   wall (RATIONALE §4) — so the list is a table.
+
+   COLOUR. This tab used to be `contentTheme: 'light'`, i.e. paper markup
+   (#333 body copy) that AdminShell painted onto its own field. Converting the
+   markup without converting the theme, or the theme without the markup, gives
+   #333 on #0F1A2E — 1.4:1. Both happen here, in one change. MEASURED, unlifted:
+
+     --text        #F4EDE4 on --bg #0F1A2E        14.97:1  set names, row values
+     --muted       #9BA8BE on --bg                 7.24:1  descriptions, dates
+     --text        #F4EDE4 on --surface #1B2942   12.53:1  dialog + panel copy
+     --muted       #9BA8BE on --surface            6.06:1
+     --primary     #F6A94C on --bg                 9.14:1  counts, chips, links
+     --qsets-success-text #6FD0A4 on --bg             9.35:1  Active
+     --danger-text #EF8C86 on --bg                 7.26:1  Delete, blocking tier
+     --bg          #0F1A2E on --primary            8.86:1  the filled primary
+     --text        #F4EDE4 on --danger-deep        5.16:1  the filled destructive
+
+   `--danger` is never text here: 4.38:1 on --surface, under AA. It keeps
+   borders and tints only. Every pairing above, and every tinted composite, is
+   asserted in __tests__/questionSetsPalette.test.js using the compositing
+   functions lifted from docs/design/admin-redesign/audit.html.
+   ========================================================================== */
+
+.qsets {
+  --qsets-t-floor: 12px;
+  --qsets-t-label: 13px;
+  --qsets-t-body: 15px;
+  --qsets-t-head: 19px;
+  --qsets-row-h: 36px;
+
+  /* Not global tokens. See UserManagement.css: an undefined custom property
+     invalidates the whole declaration, so a colour borrowed from a stylesheet
+     that only happens to be in the bundle disappears the day that import moves. */
+  --qsets-success-text: #6FD0A4;
+  --qsets-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --qsets-rule: rgba(155, 168, 190, .20);
+  --qsets-rule-strong: rgba(155, 168, 190, .34);
+  --qsets-row-hover: rgba(155, 168, 190, .055);
+  --qsets-tint-danger: rgba(229, 100, 94, .09);
+  --qsets-tint-warn: rgba(246, 169, 76, .09);
+  --qsets-tint-ok: rgba(79, 178, 134, .10);
+
+  color: var(--text);
+  font: 400 var(--qsets-t-body)/1.45 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.qsets *,
+.qsets *::before,
+.qsets *::after { box-sizing: border-box; }
+
+.qsets :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+
+/* Legacy paper-theme classes reach inside this scope through two shared
+   components (PromptShapePreview, SetImageBadge). They are re-coloured here
+   rather than edited at source, because both are used by the still-paper set
+   editor as well. */
+.qsets .help-text,
+.qsets .prompt-shape-preview { color: var(--muted); font-size: var(--qsets-t-label); }
+.qsets .set-image-badge { color: var(--muted); }
+
+/* --------------------------------------------------------------- messages -- */
+
+.qsets-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 12px;
+  margin: 0 0 14px;
+  border: 1px solid var(--qsets-rule-strong);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--qsets-row-hover);
+  color: var(--text);
+}
+.qsets-alert > span { flex: 1 1 auto; min-width: 0; }
+.qsets-alert--error {
+  border-color: rgba(229, 100, 94, .5);
+  background: var(--qsets-tint-danger);
+  color: var(--danger-text);
+}
+.qsets-alert--success {
+  border-color: rgba(79, 178, 134, .5);
+  background: var(--qsets-tint-ok);
+  color: var(--qsets-success-text);
+}
+.qsets-alert-close {
+  flex: none;
+  border: 1px solid transparent;
+  background: none;
+  color: inherit;
+  font: 600 var(--qsets-t-label)/1 var(--font-ui);
+  padding: 5px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.qsets-alert-close:hover { border-color: currentColor; }
+
+.qsets-loading { color: var(--muted); }
+.qsets-dim { color: var(--muted); }
+.qsets-mono { font-family: var(--qsets-font-mono); font-size: 14px; }
+
+/* -------------------------------------------------------------- controls -- */
+
+.qsets-filters {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 0 0 12px;
+}
+.qsets-search { position: relative; flex: 0 1 300px; min-width: 170px; display: flex; align-items: center; }
+.qsets-search > svg { position: absolute; left: 9px; pointer-events: none; }
+.qsets-input {
+  font: 400 var(--qsets-t-body)/1.4 var(--font-ui);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--qsets-rule-strong);
+  border-radius: 6px;
+  padding: 6px 9px 6px 29px;
+  min-height: 32px;
+  width: 100%;
+}
+.qsets-select { padding-left: 9px; width: auto; min-width: 140px; }
+.qsets-input::placeholder { color: var(--muted); opacity: .62; }
+.qsets-input:focus { outline: 2px solid var(--primary); outline-offset: 1px; border-color: var(--primary); }
+.qsets-count { font-size: var(--qsets-t-label); color: var(--muted); white-space: nowrap; margin-left: auto; }
+
+.qsets-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--qsets-rule-strong);
+  background: transparent;
+  color: var(--text);
+  font: 600 var(--qsets-t-label)/1 var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.qsets-btn:hover:not(:disabled) { background: var(--qsets-row-hover); border-color: var(--muted); }
+.qsets-btn:disabled { opacity: .42; cursor: not-allowed; }
+.qsets-btn--sm { min-height: 26px; padding: 0 9px; font-size: var(--qsets-t-floor); }
+.qsets-btn--lg { min-height: 38px; padding: 0 16px; font-size: var(--qsets-t-body); }
+.qsets-btn--primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--bg);
+}
+.qsets-btn--primary:hover:not(:disabled) { background: #FFBB66; border-color: #FFBB66; }
+.qsets-btn--danger { border-color: rgba(229, 100, 94, .55); color: var(--danger-text); }
+.qsets-btn--danger:hover:not(:disabled) {
+  background: rgba(229, 100, 94, .12);
+  border-color: var(--danger-text);
+}
+.qsets-btn--ghostdanger { border-color: transparent; color: var(--danger-text); }
+.qsets-btn--ghostdanger:hover:not(:disabled) {
+  background: rgba(229, 100, 94, .12);
+  border-color: var(--danger-text);
+}
+.qsets-btn--dangersolid {
+  background: var(--danger-deep);
+  border-color: var(--danger-deep);
+  color: var(--text);
+}
+.qsets-btn--dangersolid:disabled { opacity: .42; }
+.qsets-btn--link {
+  border: 0;
+  background: none;
+  color: var(--primary);
+  padding: 0;
+  min-height: 0;
+  text-decoration: underline;
+  cursor: pointer;
+  font: 600 var(--qsets-t-label)/1.4 var(--font-ui);
+}
+
+.qsets-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 0 0 12px;
+}
+.qsets-head-grow { flex: 1 1 auto; }
+
+/* ------------------------------------------------------------------ table -- */
+
+.qsets-tbl {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--qsets-t-body);
+}
+.qsets-tbl th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
+  text-align: left;
+  font-size: var(--qsets-t-floor);
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 10px 7px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--qsets-rule-strong);
+}
+.qsets-tbl td {
+  padding: 4px 10px;
+  height: var(--qsets-row-h);
+  border-bottom: 1px solid var(--qsets-rule);
+  vertical-align: middle;
+  overflow: hidden;
+}
+.qsets-tbl tbody tr:hover td { background: var(--qsets-row-hover); }
+
+.qsets-col-set   { width: 34%; }
+.qsets-col-type  { width: 12%; }
+.qsets-col-qs    { width: 6%; text-align: right; }
+.qsets-col-state { width: 26%; }
+.qsets-col-when  { width: 12%; }
+.qsets-col-acts  { width: 10%; }
+
+/* A SINGLE TEXT NODE with min-width:0, never a flex container with span
+   children — host spec §5.1, audit A2: `text-overflow` is inert on a flex box,
+   so a name that "truncates" there is silently cut instead. */
+.qsets-nm {
+  display: block;
+  font-weight: 600;
+  max-width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qsets-sub {
+  display: block;
+  font-size: var(--qsets-t-label);
+  color: var(--muted);
+  max-width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qsets-num { text-align: right; font-variant-numeric: tabular-nums; }
+.qsets-when { font-size: var(--qsets-t-label); color: var(--muted); white-space: nowrap; }
+.qsets-dimrow td { color: var(--muted); font-style: italic; font-size: var(--qsets-t-label); }
+
+.qsets-states { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.qsets-rowact { display: flex; gap: 5px; justify-content: flex-end; }
+
+.qsets-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--qsets-t-floor);
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--qsets-rule-strong);
+  background: transparent;
+  color: var(--muted);
+  white-space: nowrap;
+  line-height: 1.5;
+}
+.qsets-chip--type { color: var(--text); }
+.qsets-chip--on { color: var(--qsets-success-text); border-color: rgba(79, 178, 134, .5); }
+.qsets-chip--off { color: var(--muted); border-style: dashed; }
+.qsets-chip--warn { color: var(--primary); border-color: rgba(246, 169, 76, .5); }
+.qsets-chip--bad { color: var(--danger-text); border-color: rgba(229, 100, 94, .55); }
+/* Buttons that look like chips: Active and Quickstart are toggles, not labels. */
+button.qsets-chip { cursor: pointer; min-height: 24px; }
+button.qsets-chip:hover { background: var(--qsets-row-hover); }
+
+/* ------------------------------------------------------------------ empty -- */
+
+.qsets-empty {
+  max-width: 68ch;
+  margin: 48px auto;
+  text-align: center;
+}
+.qsets-empty h3 {
+  font-family: var(--font-display);
+  font-size: var(--qsets-t-head);
+  font-weight: 700;
+  margin: 14px 0 7px;
+}
+.qsets-empty p { color: var(--muted); margin: 0 0 16px; line-height: 1.55; }
+.qsets-paths { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+/* "Nothing matches" is a DIFFERENT empty state with different exits, and it is
+   left-aligned because it is a list of actions rather than a poster. */
+.qsets-nomatch { padding: 8px 0 0; }
+.qsets-nomatch h3 {
+  font-family: var(--font-display);
+  font-size: var(--qsets-t-head);
+  font-weight: 700;
+  margin: 0 0 7px;
+}
+.qsets-nomatch > p { color: var(--muted); margin: 0 0 14px; }
+.qsets-drops { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 0 0 14px; }
+.qsets-drop {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--qsets-rule-strong);
+  background: transparent;
+  color: var(--text);
+  font: 600 var(--qsets-t-label)/1 var(--font-ui);
+  cursor: pointer;
+}
+.qsets-drop:hover { background: var(--qsets-row-hover); border-color: var(--muted); }
+.qsets-drop em { color: var(--muted); font-style: normal; font-weight: 400; }
+
+/* --------------------------------------------------------- creation panel -- */
+
+.qsets-panel {
+  margin: 22px 0 0;
+  border: 1px solid var(--qsets-rule);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 16px 18px 18px;
+}
+.qsets-panel h3 {
+  font-family: var(--font-display);
+  font-size: var(--qsets-t-head);
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+.qsets-panel > p { color: var(--muted); margin: 0 0 14px; }
+.qsets-section {
+  border-top: 1px solid var(--qsets-rule);
+  margin: 16px 0 0;
+  padding: 14px 0 0;
+}
+.qsets-section h4 {
+  font-size: var(--qsets-t-label);
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+.qsets-actions { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; }
+
+.qsets-field { display: flex; flex-direction: column; gap: 5px; margin: 0 0 12px; }
+.qsets-field > label { font-size: var(--qsets-t-label); font-weight: 600; color: var(--muted); }
+.qsets-field .qsets-input { padding-left: 9px; }
+.qsets-field textarea.qsets-input { min-height: 68px; resize: vertical; }
+.qsets-field small { color: var(--muted); font-size: var(--qsets-t-label); line-height: 1.45; }
+/* TWO COLUMNS, never four. `auto-fit` with a 320px floor gives four columns on
+   a 1440 console, which scatters five related fields across the width and puts
+   a one-line input beside a four-row textarea. */
+.qsets-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+@media (max-width: 760px) { .qsets-grid { grid-template-columns: 1fr; } }
+/* The prompt picker carries a help line and the output-shape preview, so it is
+   a row of its own rather than a short column beside three empty ones. */
+.qsets-field--wide { grid-column: 1 / -1; }
+
+.qsets-file { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.qsets-file input[type="file"] {
+  color: var(--muted);
+  font-size: var(--qsets-t-label);
+  max-width: 100%;
+  border: 1px dashed var(--qsets-rule-strong);
+  border-radius: 6px;
+  padding: 9px 11px;
+  background: var(--bg);
+}
+
+/* -------------------------------------------------------------- preflight -- */
+
+.qsets-pf { margin: 12px 0 0; display: grid; gap: 12px; }
+.qsets-pf-tier {
+  border: 1px solid var(--qsets-rule);
+  border-left-width: 3px;
+  border-radius: 8px;
+  padding: 11px 13px;
+  background: var(--bg);
+}
+.qsets-pf-tier h5 {
+  margin: 0 0 6px;
+  font-size: var(--qsets-t-body);
+  font-weight: 700;
+}
+.qsets-pf-tier p { margin: 0 0 6px; color: var(--muted); line-height: 1.5; }
+.qsets-pf-tier li { line-height: 1.5; margin: 0 0 6px; }
+.qsets-pf-tier ul { margin: 0; padding-left: 18px; }
+.qsets-pf--stop { border-color: rgba(229, 100, 94, .55); background: var(--qsets-tint-danger); }
+.qsets-pf--stop h5 { color: var(--danger-text); }
+.qsets-pf--skip { border-color: rgba(246, 169, 76, .5); background: var(--qsets-tint-warn); }
+.qsets-pf--skip h5 { color: var(--primary); }
+.qsets-pf--gap { border-color: var(--qsets-rule-strong); }
+.qsets-pf--ok { border-color: rgba(79, 178, 134, .5); background: var(--qsets-tint-ok); }
+.qsets-pf--ok h5 { color: var(--qsets-success-text); }
+
+.qsets-pf-tbl { width: 100%; border-collapse: collapse; font-size: var(--qsets-t-label); margin: 6px 0 0; }
+.qsets-pf-tbl th {
+  text-align: left;
+  font-size: var(--qsets-t-floor);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 8px 5px;
+  border-bottom: 1px solid var(--qsets-rule);
+  font-weight: 700;
+}
+.qsets-pf-tbl td { padding: 5px 8px; border-bottom: 1px solid var(--qsets-rule); vertical-align: top; }
+.qsets-pf-tbl td.qsets-mono { color: var(--muted); }
+
+/* ------------------------------------------------------------------ modal -- */
+
+.qsets-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 11, 22, .72);
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.qsets-modal {
+  /* A 98-character set title is a real value in this product. Nothing inside
+     this dialog may push it wider than the viewport it is centred in. */
+  overflow-wrap: anywhere;
+  background: var(--surface);
+  border: 1px solid var(--qsets-rule-strong);
+  border-radius: 12px;
+  width: min(560px, 100%);
+  max-height: 86vh;
+  overflow: auto;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .5);
+  color: var(--text);
+  font: 400 var(--qsets-t-body)/1.45 var(--font-ui);
+}
+.qsets-modal > header { padding: 16px 18px 10px; display: flex; gap: 10px; align-items: flex-start; }
+.qsets-modal > header h2 {
+  margin: 0;
+  font-size: var(--qsets-t-head);
+  font-family: var(--font-display);
+  font-weight: 800;
+}
+.qsets-modal > header .qsets-dim { margin: 4px 0 0; font-size: var(--qsets-t-label); }
+.qsets-modal-body { padding: 0 18px 4px; }
+.qsets-modal-body p { line-height: 1.55; margin: 0 0 12px; }
+.qsets-modal footer {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--qsets-rule);
+  margin-top: 12px;
+}
+.qsets-grow { flex: 1 1 auto; }
+.qsets-alt {
+  border: 1px solid rgba(79, 178, 134, .5);
+  background: var(--qsets-tint-ok);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+.qsets-alt b { color: var(--qsets-success-text); }
