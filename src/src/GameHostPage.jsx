@@ -2901,9 +2901,21 @@ Ready to engage? See you there!`;
     }
   };
 
+  // authFetch, not fetch: GET /games now carries the Cognito authorizer and
+  // requires the hosts or admins group, like /close-round and /reveal-authors.
+  // This page sits behind ProtectedRoute so a token normally exists here, but
+  // authFetch sends the request unauthenticated when the session has expired
+  // (authFetch.js) — which is why the 401/403 is handled rather than falling
+  // into the catch as an opaque "failed to load".
   const fetchGamesList = async () => {
     try {
-      const res = await fetch(`${API_BASE}games`);
+      const res = await authFetch(`${API_BASE}games`);
+      if (res.status === 401 || res.status === 403) {
+        console.warn('GET /games refused — session expired or not a host/admin');
+        setGamesList([]);
+        alert('Your session has expired. Please sign in again to see your sessions.');
+        return;
+      }
       const data = await res.json();
       setGamesList(data.games || []);
     } catch (error) {
