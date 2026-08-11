@@ -1056,7 +1056,15 @@ exports.handler = async (event) => {
       results: {
         voteTallies: results.voteTallies,
         winners: results.winners,
-        totalVotes: results.totalVotes
+        totalVotes: results.totalVotes,
+        // maxScore is NOT optional. This literal is the only thing
+        // generateAISummary ever sees as `results`, and consensusLabel reads
+        // maxScore off it to decide whether anybody voted at all. Omitting it
+        // made every round — including a round where one answer took 21 of 48
+        // points — report "No votes cast - nothing was ranked" into the live
+        // prompt. Before that it silently killed the 'Strong consensus' branch,
+        // because `score > (undefined * 0.8)` is `score > NaN`, which is false.
+        maxScore: results.maxScore
       },
       votes: votes || [],
       gameId: gameId,

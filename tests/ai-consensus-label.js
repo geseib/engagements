@@ -113,19 +113,47 @@ check('wavelength reports its own measure', () =>
   assert(/word connection rate/i.test(
     consensusLabel({ gameType: 'wavelength', connectionScore: 42, sortedAnswers: [], maxScore: 0 }))));
 
-// ---- The call site actually uses it ----------------------------------------
+// ---- The call site actually uses it, AND is fed real data ------------------
+//
+// The first version of this file asserted only that `consensusLabel(` appeared
+// in get-ai-summary.js. It passed against a call site that fed the function
+// `maxScore: undefined`, so every round in a full simulated session reported
+// "No votes cast - nothing was ranked" — including a round where one answer
+// took 21 of 48 points. A test that proves the wiring exists but not that the
+// wiring carries anything is the exact failure mode this repo keeps re-learning.
+const readSource = (rel) => require('fs')
+  .readFileSync(path.join(__dirname, '..', rel), 'utf8')
+  .split('\n')
+  .filter((l) => !l.trim().startsWith('*') && !l.trim().startsWith('//') && !l.trim().startsWith('/*'))
+  .join('\n');
+
 // rejects: leaving the old inline expression in place beside the new module.
 check('get-ai-summary.js calls the module and no longer compares maxScore to itself', () => {
-  const fs = require('fs');
-  const src = fs.readFileSync(
-    path.join(__dirname, '..', 'lambda-functions', 'game', 'get-ai-summary.js'), 'utf8')
-    .split('\n')
-    .filter((l) => !l.trim().startsWith('*') && !l.trim().startsWith('//'))
-    .join('\n');
+  const src = readSource('lambda-functions/game/get-ai-summary.js');
   assert(/consensusLabel\(/.test(src), 'get-ai-summary.js does not call consensusLabel');
   assert(!/winners\[0\]\.score\s*>\s*\(?\s*results\.maxScore/.test(src),
     'the original tautology is still present in get-ai-summary.js');
 });
+
+// rejects: dropping maxScore from the `results` literal handed to
+//          generateAISummary — which is the ONLY results object it ever sees.
+check('the results object passed to generateAISummary carries maxScore', () => {
+  const src = readSource('lambda-functions/game/get-ai-summary.js');
+  const literal = src.match(/results:\s*\{[^}]*\}/);
+  assert(literal, 'could not find the results literal passed into generateAISummary');
+  assert(/maxScore/.test(literal[0]),
+    `maxScore is missing from the results handed to generateAISummary, so consensusLabel ` +
+    `sees undefined and reports "no votes" on every round. Literal was: ${literal[0]}`);
+});
+
+// rejects: removing the zero-guard, which is what makes a missing maxScore
+//          visible as a wrong label rather than a crash. Documents the trap.
+check('a missing maxScore degrades to the no-votes label (the trap, named)', () =>
+  assert(/no votes cast/i.test(consensusLabel({
+    gameType: 'call-and-answer',
+    sortedAnswers: answers(9, 4, 2),
+    maxScore: undefined,
+  })), 'a missing maxScore should fall to the no-votes label, loudly and wrongly'));
 
 say(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

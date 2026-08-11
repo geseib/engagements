@@ -408,6 +408,69 @@ await check('the rest of gameStats is unchanged', () => {
   assert.strictEqual(rejoined.gameStats.totalVotes, 0);
 });
 
+// ---------------------------------------------------------------------------
+// 4. DEFECT 4 — votesGiven was 0 for everybody, in every report ever produced
+// ---------------------------------------------------------------------------
+//
+// BOTH writers of a VOTE# row stamp the voter as `VoterName`
+// (game/submit-vote.js:61, websocket/submit-votes.js:28). Neither writes
+// PlayerName. create-report.js filtered `v.PlayerName || v.playerName`, which
+// matched nothing, so the per-player `votesGiven` column was structurally zero
+// — not "nobody voted", but "this number cannot be anything else".
+// get-votes.js:79 already read `VoterName || PlayerName`; the report was the
+// one place that did not.
+say('\n4. votesGiven reflects votes actually cast');
+
+const VGAME = '5150';
+
+function seedVotes() {
+  store.clear();
+  put({
+    PK: `GAME#${VGAME}`, SK: 'METADATA', GameId: VGAME, Title: 'Ballot Night',
+    GameType: 'call-and-answer', QuestionSetId: 'retro', HostName: 'Ada',
+    CreatedAt: '2026-08-01T00:00:00.000Z',
+  });
+  put({ PK: `GAME#${VGAME}`, SK: 'STATE', State: 'RESULTS#001', LessonNumber: 1 });
+  for (const name of ['Ada', 'Grace', 'Kay']) {
+    put({ PK: `GAME#${VGAME}`, SK: `PLAYER#${name}`, PlayerName: name, JoinedAt: '2026-08-01T00:01:00.000Z' });
+    put({ PK: `GAME#${VGAME}`, SK: `PLAYER#${name}#SCORE`, PlayerName: name, score: 3 });
+  }
+  put({ PK: `GAME#${VGAME}`, SK: 'QUESTION#001#RESULTS', QuestionNumber: '001' });
+  put({ PK: `GAME#${VGAME}`, SK: 'QUESTION#001#ANSWER#Ada', PlayerName: 'Ada', Answer: 'a' });
+  put({ PK: `GAME#${VGAME}`, SK: 'QUESTION#001#ANSWER#Grace', PlayerName: 'Grace', Answer: 'b' });
+  // Exactly the row shape submit-vote.js writes: VoterName, no PlayerName.
+  put({
+    PK: `GAME#${VGAME}`, SK: 'QUESTION#001#VOTE#Ada',
+    VoterName: 'Ada', QuestionNumber: '001', Votes: ['b'],
+  });
+  put({
+    PK: `GAME#${VGAME}`, SK: 'QUESTION#001#VOTE#Grace',
+    VoterName: 'Grace', QuestionNumber: '001', Votes: ['a'],
+  });
+  // Kay never voted, so the column has to distinguish 1 from 0 to be worth anything.
+}
+
+seedVotes();
+const voteReport = JSON.parse((await createReport({ pathParameters: { gameId: VGAME } })).body).report;
+const byName = (n) => voteReport.playerPerformance.find(
+  (p) => (p.playerName || p.PlayerName) === n);
+
+// rejects: filtering vote rows on PlayerName, which no writer ever sets.
+await check('a player who voted has votesGiven 1, not 0', () =>
+  assert.strictEqual(byName('Ada').votesGiven, 1,
+    'VOTE# rows carry VoterName; filtering on PlayerName matches nothing'));
+
+// rejects: "fixing" it by counting all vote rows for everyone.
+await check('a player who did not vote still has votesGiven 0', () =>
+  assert.strictEqual(byName('Kay').votesGiven, 0,
+    'Kay cast no ballot; a fix that counts every row would give her 2'));
+
+await check('the column distinguishes voters from non-voters at all', () => {
+  const values = voteReport.playerPerformance.map((p) => p.votesGiven);
+  assert(new Set(values).size > 1,
+    `every player has the same votesGiven (${values.join(', ')}), so the column carries no information`);
+});
+
 say(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
 
