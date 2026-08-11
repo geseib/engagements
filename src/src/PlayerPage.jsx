@@ -140,7 +140,10 @@ function PlayerPage() {
   // made the setup field's own help text ("shown to participants when they
   // join") false for the whole life of the field.
   const [engagementInfo, setEngagementInfo] = useState('');
-  const [lastProcessedQuestionId, setLastProcessedQuestionId] = useState(null);
+  // Which question the on-screen draft belongs to. A ref, not state: it is
+  // read and claimed inside async fetches that would otherwise close over a
+  // stale value, and changing it must never itself cause a render.
+  const draftQuestionKeyRef = useRef(null);
   const [results, setResults] = useState(null);
 
   // Game end modal state
@@ -665,18 +668,42 @@ function PlayerPage() {
     }
   };
 
-  // Check if player has already answered this question
-  const checkPlayerAnswer = async (gameId, playerName, questionNumber) => {
+  /**
+   * Has this player already answered the question that is currently open?
+   *
+   * Ask the endpoint that actually knows. This used to call
+   * `/answers?player=…&question=…` and read `answerData.hasAnswer` — but
+   * get-answers.js accepts only `role` and `questionId` (get-answers.js:12),
+   * and no handler anywhere has ever emitted `hasAnswer`. The expression was
+   * `undefined || false`, so this reported "you have not answered" to every
+   * player on every call, forever. During ASK# that endpoint cannot answer the
+   * question in principle: the player branch returns a bare count and
+   * deliberately no names.
+   *
+   * `/state` does carry it, as `answerProgress.answererIds`
+   * (get-game-state.js:398-402) — the exact counterpart of the
+   * `votingProgress.votersIds` list checkPlayerVote reads below.
+   *
+   * Returns `null`, not `false`, when the roster is unavailable (off-phase
+   * payload, bad response, network error). "I could not find out" and "you
+   * did not answer" are different facts, and collapsing them is what lets a
+   * single flaky refresh throw away a submitted answer.
+   */
+  const checkPlayerAnswer = async (gameId, playerName) => {
     try {
-      const answerRes = await fetch(`${API_BASE}games/${gameId}/answers?player=${encodeURIComponent(playerName)}&question=${questionNumber}`);
-      if (answerRes.ok) {
-        const answerData = await answerRes.json();
-        return answerData.hasAnswer || false;
-      }
-      return false;
+      const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
+      if (!stateRes.ok) return null;
+
+      const stateData = await stateRes.json();
+      const answerers = stateData.answerProgress?.answererIds;
+      if (!Array.isArray(answerers)) return null;
+
+      const answered = answerers.includes(playerName);
+      console.log(`📝 PLAYER: Answer check for ${playerName}: ${answered ? 'already answered' : 'not answered yet'}`);
+      return answered;
     } catch (error) {
       console.error('Error checking player answer:', error);
-      return false;
+      return null;
     }
   };
 
@@ -706,18 +733,42 @@ function PlayerPage() {
         // Set the question data - question data is at top level, not nested
         setCurrentQuestion(questionData);
         console.log('✅ PLAYER: currentQuestion state updated with:', questionData);
-        
-        // Check if player has already answered this question
-        const hasAnswered = await checkPlayerAnswer(gameId, playerName, questionNumber);
-        setHasAnswered(hasAnswered);
-        
-        // Reset answer input for new question
-        if (!hasAnswered) {
+
+        // Is this a different question, or the same one being re-read?
+        //
+        // This function runs far more often than the game advances: every
+        // visibilitychange, focus, online and pageshow goes through the resync
+        // effect, and so does every WS reconnect, gameStateChanged and
+        // initialStateSync. Treating each of those as "a question arrived"
+        // is what erased a tapped trivia option — and any typed text — between
+        // the tap and Submit.
+        //
+        // Claimed before the await so a second refresh racing this one sees
+        // the question as already processed and leaves the draft alone.
+        const questionKey = String(
+          questionData.questionNumber ?? questionData.id ?? questionNumber ?? ''
+        );
+        const isNewQuestion = questionKey !== draftQuestionKeyRef.current;
+        draftQuestionKeyRef.current = questionKey;
+
+        const hasAnswered = await checkPlayerAnswer(gameId, playerName);
+
+        // The server is the authority when it has an opinion. When it does
+        // not, only a genuinely new question may lower the flag — a refresh
+        // that learned nothing must not un-answer someone.
+        if (hasAnswered !== null) {
+          setHasAnswered(hasAnswered);
+        } else if (isNewQuestion) {
+          setHasAnswered(false);
+        }
+
+        // Reset the draft for a new question only.
+        if (isNewQuestion && hasAnswered !== true) {
           setAnswerInput('');
           setSelectedTriviaAnswer('');
           setMySubmittedAnswer('');
         }
-        
+
         // Fetch question set instructions. The payload only started carrying
         // `setId` for players in this change; before that this guard could
         // never fire and per-set instructions were host-only.
