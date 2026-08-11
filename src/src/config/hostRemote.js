@@ -266,6 +266,116 @@ export function requestFor(actionId, { gameId, round } = {}) {
   }
 }
 
+/* ------------------------------------------------------ choosing a question */
+
+const OPTION_KEYS = [
+  ['optionA', 'OptionA'], ['optionB', 'OptionB'], ['optionC', 'OptionC'],
+  ['optionD', 'OptionD'], ['optionE', 'OptionE'], ['optionF', 'OptionF'],
+];
+const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+function firstOf(source, ...names) {
+  for (const name of names) {
+    const value = source[name];
+    if (value !== undefined && value !== null && value !== '') return value;
+  }
+  return undefined;
+}
+
+/**
+ * Which option the set says is right, as a 0-based index — or null.
+ *
+ * THREE SPELLINGS, because sets in the wild carry all three. CLAUDE.md mandates
+ * `"OptionB"`; the builders have also written a bare letter, and
+ * config/setupPanel.js records that sets record the option's own TEXT "as often
+ * as they record it as OptionB" — that observation is the entire reason the
+ * STAGE browser refuses to carry options at all.
+ *
+ * NULL, not a guess, when none of the three match. A wrong CORRECT flag on the
+ * host's own phone is worse than no flag: the host reads it out.
+ */
+export function correctOptionIndex(question = {}) {
+  const raw = firstOf(question, 'correctAnswer', 'CorrectAnswer');
+  if (typeof raw !== 'string') return null;
+  const answer = raw.trim();
+  if (!answer) return null;
+
+  const named = answer.match(/^option\s*([A-F])$/i);
+  if (named) return LETTERS.indexOf(named[1].toUpperCase());
+
+  if (/^[A-F]$/i.test(answer)) return LETTERS.indexOf(answer.toUpperCase());
+
+  const needle = answer.toLowerCase();
+  const byText = OPTION_KEYS.findIndex((names) => {
+    const text = firstOf(question, ...names);
+    return typeof text === 'string' && text.trim().toLowerCase() === needle;
+  });
+  return byText === -1 ? null : byText;
+}
+
+/**
+ * One row of the PHONE's question browser.
+ *
+ * DELIBERATELY UNLIKE `browserRow` in config/setupPanel.js, which strips the
+ * options. That asymmetry is the point of this surface: the stage browser is on
+ * a screen the room can read over the host's shoulder, so it may only say what a
+ * question is ABOUT. The phone is in the host's hand, so it says what the
+ * question SAYS — the four options and which one is right. `17-remote.html`
+ * prints the argument next to the list and this module prints it too.
+ */
+export function remoteQuestionRow(question = {}) {
+  const correct = correctOptionIndex(question);
+
+  const options = OPTION_KEYS
+    .map((names, index) => {
+      const text = firstOf(question, ...names);
+      return typeof text === 'string' && text.trim()
+        ? { letter: LETTERS[index], text: text.trim(), correct: index === correct }
+        : null;
+    })
+    .filter(Boolean);
+
+  return {
+    id: firstOf(question, 'id', 'Id', 'questionId'),
+    title: firstOf(question, 'title', 'Title') || '',
+    detail: firstOf(
+      question,
+      'questionDetail', 'QuestionDetail', 'detail', 'Detail',
+      'customInstructions', 'CustomInstructions',
+    ) || '',
+    category: firstOf(question, 'category', 'Category') || '',
+    difficulty: firstOf(question, 'difficulty', 'Difficulty') || '',
+    options,
+    // The set claims an answer this row could not place. Said out loud rather
+    // than silently dropped, because the host is about to read the options to a
+    // room and needs to know the phone cannot help with this one.
+    answerUnresolved: options.length > 0 && correct === null,
+  };
+}
+
+/** Title search, the one filter `17-remote.html` draws. */
+export function filterRemoteRows(rows = [], search = '') {
+  const needle = String(search || '').trim().toLowerCase();
+  if (!needle) return rows;
+  return rows.filter((row) => (row.title || '').toLowerCase().includes(needle));
+}
+
+/**
+ * "Ask this next" — the same two-action dance `GameHostPage.selectQuestion`
+ * does, and for its reason: `next-question.js:473` refuses to advance out of
+ * ASK#, so choosing a question mid-round has to say `skip_to_specific` or the
+ * tap returns 200 and nothing moves.
+ */
+export function askNextRequest({ gameId, questionId, state } = {}) {
+  if (!gameId || !questionId) return null;
+  const { phase } = parseGamePhase(state);
+  const mid = phase === 'ASK' || phase === 'VOTE';
+  return {
+    path: `games/${gameId}/next-question`,
+    body: { questionId, action: mid ? 'skip_to_specific' : 'select_specific' },
+  };
+}
+
 /* ---------------------------------------------------------------- progress */
 
 /**

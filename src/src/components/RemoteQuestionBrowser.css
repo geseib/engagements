@@ -1,0 +1,128 @@
+/*
+ * The phone's question browser — `17-remote.html`, right phone.
+ *
+ * Rides on `.hr`'s frame (bar, body, dock, buttons) from HostRemote.css, which
+ * is always loaded because this view only ever renders inside the remote. Only
+ * the list itself is new, so only the list is here. Nothing leaks outside
+ * `.hrq`.
+ *
+ * Measured at 390x844.
+ */
+
+.hrq-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  min-height: 48px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--muted) 35%, transparent);
+  border-radius: var(--radius-sm, 8px);
+}
+
+.hrq-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem; /* < 16px and iOS Safari zooms the whole page on focus */
+  padding: 12px 0;
+}
+
+.hrq-search input::placeholder { color: var(--muted); }
+.hrq-search input:focus { outline: none; }
+.hrq-search:focus-within { outline: 3px solid var(--secondary); outline-offset: 2px; }
+
+.hrq-card {
+  background: var(--surface);
+  border: var(--hairline, 1px solid rgba(155, 168, 190, .18));
+  border-radius: var(--radius, 16px);
+  padding: 14px;
+}
+
+.hrq-title {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.hrq-meta {
+  margin: 8px 0 0;
+  font-size: .6875rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--secondary);
+}
+
+.hrq-detail {
+  margin: 8px 0 0;
+  font-size: .875rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.hrq-opts {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hrq-opts li {
+  display: flex;
+  gap: .6em;
+  font-size: .9375rem;
+  line-height: 1.35;
+}
+
+.hrq-opts li b {
+  flex: none;
+  width: 1.1em;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.hrq-opts li span { min-width: 0; }
+
+.hrq-opts li.is-right b { color: var(--success-text, var(--success)); }
+.hrq-opts li.is-right span { font-weight: 600; }
+
+/* The flag reads as a word, not only as a colour: green-on-dark is the one cue
+   a red/green-blind host does not get, and this is the fact the whole surface
+   exists to carry. */
+.hrq-correct {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 99px;
+  border: 1px solid color-mix(in srgb, var(--success) 55%, transparent);
+  color: var(--success-text, var(--success));
+  font-size: .625rem;
+  font-weight: 800;
+  font-style: normal;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.hrq-unresolved {
+  margin: 10px 0 0;
+  font-size: .75rem;
+  line-height: 1.4;
+  color: var(--danger);
+}
+
+.hrq-ask {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.hrq-private { margin: 4px 0 0; }

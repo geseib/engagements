@@ -1,0 +1,54 @@
+/*
+ * Category rows on the host's phone. Rides on `.hr`'s tokens from
+ * HostRemote.css — this view only renders inside the remote. Nothing leaks
+ * outside `.hrc`. Measured at 390x844.
+ */
+
+.hrc-hint { margin-bottom: 10px; }
+
+.hrc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hrc-row {
+  width: 100%;
+  min-height: 48px; /* the thumb floor, same as .hr-btn */
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid color-mix(in srgb, var(--muted) 30%, transparent);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: .9375rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hrc-row.is-on {
+  border-color: color-mix(in srgb, var(--success) 45%, transparent);
+  background: color-mix(in srgb, var(--success) 10%, var(--surface));
+}
+
+.hrc-row:disabled { opacity: .5; cursor: not-allowed; }
+
+.hrc-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.hrc-count {
+  flex: none;
+  font-size: .75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}

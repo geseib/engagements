@@ -2,11 +2,15 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
 import './HostRemote.css';
 import Icon from './components/Icon';
+import RemoteQuestionBrowser from './components/RemoteQuestionBrowser';
+import RemoteCategoryList from './components/RemoteCategoryList';
 import { authFetch } from './auth/authFetch';
+import { categoryRows } from './config/setupPanel';
 import {
   primaryAction,
   skipAction,
   requestFor,
+  askNextRequest,
   roundProgress,
   needsConfirmation,
   phaseSummary,
@@ -106,9 +110,15 @@ function HostRemote() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  const [moreOpen, setMoreOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
+  const [screenOpen, setScreenOpen] = useState(false);
   const [hostWindow, setHostWindow] = useState(null);
+
+  // 17-remote.html's second phone, and the Categories disclosure under Session.
+  const [browsing, setBrowsing] = useState(false);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [togglingCategory, setTogglingCategory] = useState(false);
 
   // A poll must never stack on a slow reply, and a reply for a game the host has
   // since left must never repaint the new one.
@@ -205,6 +215,25 @@ function HostRemote() {
   const skip = useMemo(() => skipAction(snapshot?.state), [snapshot]);
   const round = snapshot?.currentQuestion || null;
   const title = snapshot?.gameMetadata?.title || '';
+  const setId = snapshot?.gameMetadata?.questionSetId || '';
+
+  // How many questions the game can still reach, straight from the server's own
+  // per-category tally. The client has no other honest source: `usedQuestionIds`
+  // on the host page is a list of the rounds THAT TAB watched go by, so a phone
+  // that joined at round four would report the first three as unasked.
+  const unaskedCount = typeof snapshot?.categoryCounts?.totalRemaining === 'number'
+    ? snapshot.categoryCounts.totalRemaining
+    : null;
+
+  // categoryRows() from config/setupPanel.js — the one decode of the bitmask,
+  // shared with the stage panel rather than written a second time here.
+  const catRows = useMemo(() => categoryRows({
+    categories,
+    categoryCounts: snapshot?.categoryCounts || null,
+    categoryBitmasks: snapshot?.categoryState || null,
+    activeCategoryIds: new Set(snapshot?.gameMetadata?.selectedCategories || []),
+  }), [categories, snapshot]);
+  const categoriesLive = catRows.length > 0 && catRows[0].live;
 
   // The count the status card shows outside ASK/VOTE. Same number as before —
   // it is now derived from the roster rather than being the only thing kept.
@@ -244,6 +273,30 @@ function HostRemote() {
     const timer = setInterval(load, AI_POLL_MS);
     return () => { cancelled = true; clearInterval(timer); };
   }, [gameId, onFieldNotes, notes.ready]);
+
+  /* ------------------------------------------------------------ categories */
+
+  // The NAMES only. Enablement and remaining counts come from the state poll
+  // that is already running, so this is one request per session and not a third
+  // timer. Ordered as the set stores them, which is what makes the row index a
+  // bitmask position — see categoryRows().
+  useEffect(() => {
+    if (!setId) { setCategories([]); return undefined; }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase()}question-sets/${setId}/categories`);
+        if (cancelled || !res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setCategories(Array.isArray(data.categories) ? data.categories : []);
+      } catch {
+        /* the Categories disclosure says "no categories" rather than throwing */
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [setId]);
 
   const confirmNeeded = needsConfirmation(action, progress);
   const primaryArmed = armedAction === 'primary';
@@ -332,6 +385,93 @@ function HostRemote() {
     fire('skip');
   }, [skip, blocked, armedAction, arm, fire]);
 
+  /**
+   * "Ask this next" from the phone's browser.
+   *
+   * Goes through the same POST-then-repoll-then-cool path every other advance
+   * uses, because it IS an advance — mid-round it skips the round on screen —
+   * and the cooldown is what stops a double-tap consuming two questions.
+   *
+   * Plain fetch, not authFetch: `next-question` is a public route and
+   * GameHostPage.selectQuestion calls it the same way. Only /close-round,
+   * /stage-beat and /reveal-authors carry the authorizer.
+   */
+  const askSpecific = useCallback(async (row) => {
+    const request = askNextRequest({ gameId, questionId: row?.id, state: snapshot?.state });
+    if (!request) {
+      setError('Still reading the session — try again in a second.');
+      return;
+    }
+
+    setError('');
+    setNotice('');
+    setBusyAction('ask');
+
+    try {
+      const res = await fetch(`${apiBase()}${request.path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request.body),
+      });
+      const payload = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setError(payload.error || payload.message || `That did not go through (${res.status}).`);
+        return;
+      }
+
+      await pollState(gameId);
+      // Back to the round, the way the stage panel closes itself before the
+      // question lands: the host chose, and the next thing they need is the
+      // progress meter, not the list they just left.
+      setBrowsing(false);
+      setNotice(row.title ? `Now asking: ${row.title}` : 'Question selected.');
+
+      setCooling(true);
+      clearTimeout(coolTimerRef.current);
+      coolTimerRef.current = setTimeout(() => setCooling(false), COOLDOWN_MS);
+    } catch {
+      setError('No connection. Check signal and try again.');
+    } finally {
+      setBusyAction(null);
+    }
+  }, [gameId, snapshot, pollState]);
+
+  /**
+   * Turn a category on or off mid-session — the same endpoint and the same
+   * argument order `GameHostPage.toggleCategoryDuringGame` uses. `position` is
+   * 1-based and sent as a string because that is what toggle-category.js reads;
+   * getting that seam wrong toggles the neighbouring category.
+   */
+  const toggleCategory = useCallback(async (row) => {
+    if (!gameId || togglingCategory || !row?.live) return;
+    setTogglingCategory(true);
+    try {
+      const res = await fetch(`${apiBase()}games/${gameId}/toggle-category`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categoryId: String(row.position),
+          categoryName: row.name,
+          enabled: !row.enabled,
+        }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        setError(payload.error || `Could not change ${row.name}.`);
+        return;
+      }
+      // The masks live on the state payload the remote already polls, so the
+      // row repaints from the server rather than from an optimistic local edit
+      // that a failed write would leave lying.
+      await pollState(gameId);
+    } catch {
+      setError('No connection. Check signal and try again.');
+    } finally {
+      setTogglingCategory(false);
+    }
+  }, [gameId, togglingCategory, pollState]);
+
   /* -------------------------------------------- display-only, needs page */
 
   const sendToHostPage = (command) => {
@@ -381,6 +521,24 @@ function HostRemote() {
           </form>
         </div>
       </div>
+    );
+  }
+
+  // The second phone in 17-remote.html — a whole screen, not a sheet over the
+  // round. Choosing is a task with its own dock ("Back to the round"), and the
+  // status card behind it is exactly what the host is NOT looking at while they
+  // read four options.
+  if (browsing) {
+    return (
+      <RemoteQuestionBrowser
+        gameId={gameId}
+        setId={setId}
+        unaskedCount={unaskedCount}
+        connected={connected}
+        busy={!!busyAction || cooling}
+        onAsk={askSpecific}
+        onClose={() => setBrowsing(false)}
+      />
     );
   }
 
@@ -506,37 +664,143 @@ function HostRemote() {
           </p>
         )}
 
-        <section className="hr-more">
-          <button
-            className="hr-more-toggle"
-            type="button"
-            aria-expanded={moreOpen}
-            onClick={() => setMoreOpen((open) => !open)}
-          >
-            <Icon name={moreOpen ? 'CaretUp' : 'CaretDown'} weight="bold" size={16} color="currentColor" />
-            More controls
-          </button>
+        {/* THIS ROUND — 17-remote.html's first card of controls.
+            Two things the mockup draws are not here, and both absences are
+            deliberate:
 
-          {moreOpen && (
-            <div className="hr-more-panel">
-              {/* Skip lives here, behind a disclosure and behind its own
-                  confirmation, because it is the only control that can lose a
-                  round outright — and unlike an ordinary advance it is NOT
-                  idempotent server-side: `action: 'skip'` bypasses the
-                  "already asking a question" guard in next-question.js. */}
-              {skip && (
-                <button
-                  className={`hr-btn hr-btn--danger ${armedAction === 'skip' ? 'is-armed' : ''}`}
-                  type="button"
-                  disabled={blocked}
-                  onClick={onSkip}
-                >
-                  <Icon name="SkipForward" weight="bold" size={18} color="currentColor" />
-                  {armedAction === 'skip' ? 'Tap again to skip this round' : skip.label}
-                </button>
-              )}
+            `Timer 2:00`. There is no timer anywhere in this product — no
+            countdown in any handler, no duration on any round record, nothing
+            for a phone button to start or stop. Drawing one is a feature
+            request, not a control to wire, and a button that does nothing is
+            worse on this surface than on any other.
 
-              <h2 className="hr-more-heading">Big screen</h2>
+            `Expand on stage` is the host page's `setLessonExpanded(true)`,
+            which is pure client state on the projector with no server
+            representation and no REMOTE_COMMAND case to reach it. It needs one
+            line in GameHostPage.jsx, which this change may not touch. */}
+        <section className="hr-card" aria-label="This round">
+          <h2 className="hr-card-heading">This round</h2>
+          <div className="hr-grid">
+            <button
+              className="hr-btn hr-btn--ghost"
+              type="button"
+              disabled={!setId}
+              onClick={() => setBrowsing(true)}
+            >
+              <Icon name="MagnifyingGlass" weight="bold" size={18} color="currentColor" />
+              Choose next question
+            </button>
+
+            {/* Skip keeps its own confirmation. It is the only control here
+                that can lose a round outright — and unlike an ordinary advance
+                it is NOT idempotent server-side: `action: 'skip'` bypasses the
+                "already asking a question" guard in next-question.js.
+
+                Rendered only while there IS a round to abandon (ASK / VOTE);
+                skipAction() returns null everywhere else, and a permanently
+                greyed button on the results screen would be a control that
+                never means anything. */}
+            {skip && (
+              <button
+                className={`hr-btn hr-btn--danger ${armedAction === 'skip' ? 'is-armed' : ''}`}
+                type="button"
+                disabled={blocked}
+                onClick={onSkip}
+              >
+                <Icon name="SkipForward" weight="bold" size={18} color="currentColor" />
+                {armedAction === 'skip' ? 'Tap again to skip' : 'Skip round'}
+              </button>
+            )}
+          </div>
+        </section>
+
+        {/* SESSION — 17-remote.html's second card.
+
+            `Session report` is absent, and for a different reason than the
+            timer: the report DOES exist. `POST games/{id}/report` returns it and
+            the stage's ENDED primary opens it — but the thing that renders it,
+            `GameReport`, is declared inside GameHostPage.jsx and not exported,
+            so there is nothing here to reuse. Reaching it needs a change to a
+            file outside this one.
+
+            `Big screen` is not in the mockup and stays anyway. The scroll and
+            full-screen controls are shipped and working, and a mockup that did
+            not draw them is not an instruction to delete them. */}
+        <section className="hr-card" aria-label="Session">
+          <h2 className="hr-card-heading">Session</h2>
+          <div className="hr-grid">
+            <button
+              className="hr-btn hr-btn--ghost"
+              type="button"
+              aria-expanded={categoriesOpen}
+              disabled={!setId}
+              onClick={() => setCategoriesOpen((open) => !open)}
+            >
+              <Icon name="Folder" weight="bold" size={18} color="currentColor" />
+              Categories
+            </button>
+
+            <button
+              className="hr-btn hr-btn--ghost"
+              type="button"
+              aria-expanded={joinOpen}
+              onClick={() => setJoinOpen((open) => !open)}
+            >
+              <Icon name="UsersThree" weight="bold" size={18} color="currentColor" />
+              Join code
+            </button>
+
+            <button
+              className="hr-btn hr-btn--ghost"
+              type="button"
+              aria-expanded={screenOpen}
+              onClick={() => setScreenOpen((open) => !open)}
+            >
+              <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
+              Big screen
+            </button>
+
+            <button
+              className="hr-btn hr-btn--ghost"
+              type="button"
+              onClick={() => { setGameId(''); setGameIdDraft(''); setSnapshot(null); }}
+            >
+              <Icon name="ArrowsClockwise" weight="bold" size={18} color="currentColor" />
+              Switch game
+            </button>
+          </div>
+
+          {categoriesOpen && (
+            <div className="hr-card-panel">
+              <RemoteCategoryList
+                rows={catRows}
+                live={categoriesLive}
+                busy={togglingCategory}
+                onToggle={toggleCategory}
+              />
+            </div>
+          )}
+
+          {joinOpen && (
+            <div className="hr-join">
+              <div className="hr-qr"><QRCode value={playerJoinUrl} size={168} level="M" includeMargin /></div>
+              <code className="hr-join-url">{playerJoinUrl}</code>
+              <button
+                className="hr-btn hr-btn--ghost"
+                type="button"
+                onClick={() => {
+                  navigator.clipboard?.writeText(playerJoinUrl)
+                    .then(() => setNotice('Join link copied.'))
+                    .catch(() => setError('Could not copy the link.'));
+                }}
+              >
+                <Icon name="ClipboardText" weight="bold" size={18} color="currentColor" />Copy link
+              </button>
+            </div>
+          )}
+
+          {screenOpen && (
+            <div className="hr-card-panel">
               {displayLinked ? (
                 <div className="hr-grid">
                   <button className="hr-btn hr-btn--ghost" type="button" onClick={() => sendToHostPage('SCROLL_TO_TOP')}>
@@ -569,43 +833,6 @@ function HostRemote() {
                   </p>
                 </>
               )}
-
-              <h2 className="hr-more-heading">Invite</h2>
-              <button
-                className="hr-btn hr-btn--ghost"
-                type="button"
-                aria-expanded={joinOpen}
-                onClick={() => setJoinOpen((open) => !open)}
-              >
-                <Icon name="UsersThree" weight="bold" size={18} color="currentColor" />
-                {joinOpen ? 'Hide join code' : 'Show join code'}
-              </button>
-              {joinOpen && (
-                <div className="hr-join">
-                  <div className="hr-qr"><QRCode value={playerJoinUrl} size={168} level="M" includeMargin /></div>
-                  <code className="hr-join-url">{playerJoinUrl}</code>
-                  <button
-                    className="hr-btn hr-btn--ghost"
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard?.writeText(playerJoinUrl)
-                        .then(() => setNotice('Join link copied.'))
-                        .catch(() => setError('Could not copy the link.'));
-                    }}
-                  >
-                    <Icon name="ClipboardText" weight="bold" size={18} color="currentColor" />Copy link
-                  </button>
-                </div>
-              )}
-
-              <button
-                className="hr-btn hr-btn--ghost"
-                type="button"
-                onClick={() => { setGameId(''); setGameIdDraft(''); setSnapshot(null); }}
-              >
-                <Icon name="ArrowsClockwise" weight="bold" size={18} color="currentColor" />
-                Switch session
-              </button>
             </div>
           )}
         </section>

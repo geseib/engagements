@@ -319,40 +319,42 @@
   border: 1px solid color-mix(in srgb, var(--secondary) 35%, transparent);
 }
 
-/* ------------------------------------------------------ more controls */
+/* ---------------------------------------------------- control blocks
 
-.hr-more-toggle {
-  width: 100%;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background: none;
-  border: 0;
-  color: var(--muted);
-  font: inherit;
-  font-size: .875rem;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 10px;
+   17-remote.html's `This round` and `Session` cards. They replaced a single
+   `More controls` disclosure that hid every one of these behind a tap: the
+   mockup draws them open, in two named groups, and the grouping is the thing
+   that makes eight buttons readable at a glance in a dim room. The disclosure
+   survives only where a control needs a whole panel of its own (the QR, the
+   category list, the big-screen pad) — those are inside a card, not instead of
+   one. */
+
+.hr-card {
+  background: var(--surface);
+  border: var(--hairline, 1px solid rgba(155, 168, 190, .18));
+  border-radius: var(--radius, 16px);
+  padding: 14px;
 }
 
-.hr-more-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding-top: 8px;
-}
-
-.hr-more-heading {
-  margin: 10px 0 0;
-  font-size: .6875rem;
+.hr-card-heading {
+  margin: 0 0 10px;
+  font-size: .75rem;
   font-weight: 700;
-  letter-spacing: .1em;
+  letter-spacing: .13em;
   text-transform: uppercase;
   color: var(--muted);
 }
+
+.hr-card-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: var(--hairline, 1px solid rgba(155, 168, 190, .18));
+}
+
+.hr-card .hr-join { margin-top: 12px; }
 
 .hr-hint {
   margin: 0;
