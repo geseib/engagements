@@ -115,7 +115,7 @@ Also: a failed set delete is visually identical to a success (`questionSetDelete
 
 The owner's gate: *"when you are ready and have good feedback from design critics and a tester, deploy the Admin screen changes."* Waves A–C and half of D are committed and undeployed; §3 completes D.
 
-`docs/design/admin-redesign/audit.js` is 6 assertions × 22 mockups × 2 viewports, and **every check was demonstrated failing before it was trusted**. Reuse it against the built screens.
+`docs/design/admin-redesign/audit.html` is 6 assertions × 22 mockups × 2 viewports, and **every check was demonstrated failing before it was trusted**. Reuse it against the built screens. **It is `audit.html`, not `audit.js`** — this is the only one of the four design sets with no separate `audit.js`, and the checks are inline in a `<script>` block. Two plans cited the non-existent path and sent an agent looking for it.
 
 ### 5. Poll's AI prompt is still dead
 

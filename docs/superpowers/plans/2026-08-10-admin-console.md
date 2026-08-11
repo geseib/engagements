@@ -116,6 +116,6 @@ Extracted one at a time, each carrying its own defects.
 
 ## Verification
 
-Each wave: unit tests naming what they reject, a **design critic** pass against the mockups, and a **tester** pass driving the real console. `docs/design/admin-redesign/audit.js` is 6 assertions × 22 mockups × 2 viewports and every check was demonstrated failing before it was trusted — reuse it against the built screens.
+Each wave: unit tests naming what they reject, a **design critic** pass against the mockups, and a **tester** pass driving the real console. `docs/design/admin-redesign/audit.html` is 6 assertions × 22 mockups × 2 viewports and every check was demonstrated failing before it was trusted — reuse it against the built screens. (Filename is deliberate: unlike the other three design sets, this one has **no** separate `audit.js`; its checks are inline in `audit.html`.)
 
 Baselines to hold: backend **29 suites / 983 / 0**; frontend **5 failed suites / 30 failed / 768 passed**.
