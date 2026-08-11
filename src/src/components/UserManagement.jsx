@@ -1,599 +1,560 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../auth/AuthContext';
-import './UserManagement.css';
+import { authFetch } from '../auth/authFetch';
+import { adminApiUrl } from '../utils/adminApi';
 import Icon from './Icon';
+import './UserManagement.css';
+
+/**
+ * THE USERS SCREEN.
+ *
+ * Grounded in docs/design/admin-redesign/16-users.html and 17-users-clear.html
+ * (RATIONALE.md §7). Wave D of docs/superpowers/plans/2026-08-10-admin-console.md.
+ *
+ * WHAT THE BACKEND ACTUALLY OFFERS, because every decision here follows from it.
+ * template-clean.yaml declares exactly two user routes:
+ *
+ *   POST /admin/users/list                → manage-users.js listUsers
+ *   PUT  /admin/users/{username}/state    → manage-users.js changeUserState
+ *
+ * and manage-users.js:209 answers 404 for everything else. The shipped screen
+ * carried three more functions — `updateUserStatus` (PUT .../status),
+ * `approveUser` (POST .../approve) and `deleteUser` (DELETE .../{id}) — calling
+ * routes that do not exist. None of the three was wired to a control, so they
+ * were never observed failing. They are deleted rather than backed by new
+ * endpoints: `changeUserState` already does all three jobs, and new endpoints
+ * are backend scope this wave excludes.
+ *
+ * THE DEFECT THIS SCREEN EXISTED WITH. The Enabled tab always rendered empty
+ * under a non-zero badge. The badge counted `u.enabled && u.status !== 'pending'`
+ * while the filter tested `user.status === 'enabled'` — and `status` is a
+ * Cognito GROUP NAME (manage-users.js:47,60-61), one of
+ * pending|hosts|admins|disabled, so 'enabled' could never match anything.
+ * Disabled had the same shape. Both the counts and the filter now come from one
+ * function, `roleOf`, which is the only thing on this screen that decides what
+ * a person is.
+ *
+ * SEARCH IS LOCAL, AND SAYS SO. `listUsers` reads no request body at all —
+ * limit, nextToken, search and status are discarded — hardcodes Cognito's
+ * `Limit: 60` and returns no `nextToken`. So "Load More Users" could never
+ * render, and the search form's round trip re-requested the identical page and
+ * then filtered it client-side anyway. The round trip is gone, the button is
+ * gone, and the 60-account cap is stated under the table instead of hidden
+ * behind a control that cannot fire. OPEN-QUESTIONS #10 asks when 60 becomes
+ * real; until that is answered, the limit belongs on screen.
+ *
+ * NOT FIXED HERE, AND IT IS NOT SMALL: manage-users.js:13 reads
+ * `// Skip authorization for now`. There is no in-lambda admin check. The only
+ * gates are the route's Cognito authorizer — which any signed-in user passes —
+ * and the `isAdmin()` below, which is client-side and therefore not a gate at
+ * all. That is backend scope; it is reported, not patched.
+ */
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The role a person is in. ONE predicate, used by the counts, the filter, the
+ * chip and the queue alike — see the header note on why that matters.
+ *
+ * `enabled` is Cognito's account flag; `disabled` is a group this product moves
+ * people into. Either one means somebody has already decided about this person,
+ * which is why disabled outranks pending: an account that has been switched off
+ * is not waiting for a decision.
+ */
+export function roleOf(user) {
+  const groups = Array.isArray(user.groups) ? user.groups : [];
+  if (user.enabled === false || groups.includes('disabled')) return 'disabled';
+  if (groups.includes('admins')) return 'admins';
+  if (groups.includes('hosts')) return 'hosts';
+  return 'pending';
+}
+
+const ROLE_META = {
+  admins: { label: 'Admin', chip: 'warn' },
+  hosts: { label: 'Host', chip: 'on' },
+  disabled: { label: 'Disabled', chip: 'off' },
+  pending: { label: 'Pending', chip: 'warn' },
+};
+
+/** The three roles a member row can be moved between, in the order they rank. */
+const MEMBER_ROLES = ['admins', 'hosts', 'disabled'];
+
+/** "Make admin" / "Make host" / "Disable" — the verb, named. */
+const MOVE_VERB = { admins: 'Make admin', hosts: 'Make host', disabled: 'Disable' };
+
+/**
+ * How this person signed in.
+ *
+ * The shipped column read `user.provider || 'cognito'` against a payload that
+ * has never carried `provider`, so it printed the same word on every row. The
+ * list endpoint returns no identity data either — but Cognito names a federated
+ * account `<ProviderName>_<sub>`, and that prefix is a real signal rather than a
+ * guess. Anything without a recognised prefix is a native pool account, which
+ * is what "Cognito" means here.
+ *
+ * The honest alternative is a backend change: pass Cognito's `identities`
+ * attribute through `listUsers`. That is one line in a lambda this wave does not
+ * own, and it is noted in the report rather than taken.
+ */
+const IDP_PREFIX = {
+  google: 'Google',
+  facebook: 'Facebook',
+  loginwithamazon: 'Amazon',
+  amazon: 'Amazon',
+  signinwithapple: 'Apple',
+  apple: 'Apple',
+};
+
+export function providerOf(user) {
+  const username = String(user?.username || '');
+  const cut = username.indexOf('_');
+  if (cut > 0 && cut < username.length - 1) {
+    const named = IDP_PREFIX[username.slice(0, cut).toLowerCase()];
+    if (named) return named;
+  }
+  return 'Cognito';
+}
+
+/**
+ * The account's creation date.
+ *
+ * The lambda returns it as `created` (manage-users.js:64); the shipped table
+ * read `createdAt`, so the Joined column was `N/A` for every account and the
+ * wait age below was underivable. One word.
+ */
+export function formatJoined(user) {
+  const value = user?.created;
+  if (!value) return '—';
+  const when = new Date(value);
+  if (Number.isNaN(when.getTime())) return '—';
+  return when.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+/** Whole days since the account was created, or null when there is no date. */
+export function daysSince(value, now = Date.now()) {
+  if (!value) return null;
+  const then = new Date(value).getTime();
+  if (Number.isNaN(then)) return null;
+  return Math.max(0, Math.floor((now - then) / DAY_MS));
+}
+
+/** "today" / "1 day ago" / "6 days ago" — the number that makes someone act. */
+function ageWords(days) {
+  if (days == null) return 'at an unknown date';
+  if (days === 0) return 'today';
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+/** Initials for the avatar; an account with no name gets an em dash, not "UN". */
+function initialsOf(user) {
+  const source = user.name || user.email || '';
+  const parts = String(source).split(/[\s@.]+/).filter(Boolean).slice(0, 2);
+  if (!parts.length) return '—';
+  return parts.map((part) => part[0]).join('').toUpperCase();
+}
+
+/** The label a person is findable by. Never an empty cell. */
+function displayName(user) {
+  if (user.name) return user.name;
+  if (user.email) return user.email;
+  return null; // caller renders "No name provided" + the username beneath
+}
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedUsers, setSelectedUsers] = useState(new Set());
+  const [roleFilter, setRoleFilter] = useState('all');
   const [actionInProgress, setActionInProgress] = useState(new Set());
-  const [nextToken, setNextToken] = useState(null);
-  const [hasMore, setHasMore] = useState(false);
-  
-  const { getAuthToken, isAdmin } = useAuth();
 
-  // Get API endpoint from window config or fallback to dev
-  const getApiEndpoint = () => {
-    return window.API_BASE?.replace(/\/$/, '') || 'https://h1jcmja0w1.execute-api.us-east-1.amazonaws.com/dev';
-  };
+  const { isAdmin } = useAuth();
+  const canAdminister = isAdmin();
 
-  // Fetch users from API
-  const fetchUsers = useCallback(async (resetList = true, searchQuery = searchTerm, statusQuery = statusFilter) => {
-    if (!isAdmin()) {
-      setError('You do not have permission to access user management.');
-      setLoading(false);
-      return;
-    }
-
+  const fetchUsers = useCallback(async () => {
+    setLoading(true);
     try {
-      if (resetList) {
-        setLoading(true);
-      }
-
-      const token = await getAuthToken();
-      if (!token) {
-        throw new Error('No authentication token available');
-      }
-
-      const requestBody = {
-        limit: 50,
-        nextToken: resetList ? null : nextToken
-      };
-
-      if (searchQuery.trim()) {
-        requestBody.search = searchQuery.trim();
-      }
-
-      if (statusQuery !== 'all') {
-        requestBody.status = statusQuery;
-      }
-
-      const response = await fetch(`${getApiEndpoint()}/admin/users/list`, {
+      // No request body is sent because the lambda reads none. Sending
+      // {limit, search, status} that are silently discarded is how the screen
+      // came to have a search form that looked like it worked.
+      const response = await authFetch(adminApiUrl('admin/users/list'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(requestBody)
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
       });
-
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        throw new Error(data.error || `Could not load users (HTTP ${response.status})`);
       }
-
-      const data = await response.json();
-      
-      if (resetList) {
-        setUsers(data.users || []);
-      } else {
-        setUsers(prev => [...prev, ...(data.users || [])]);
-      }
-      
-      setNextToken(data.nextToken);
-      setHasMore(!!data.nextToken);
+      setUsers(Array.isArray(data.users) ? data.users : []);
       setError(null);
-
     } catch (err) {
       console.error('Error fetching users:', err);
       setError(err.message || 'Failed to fetch users');
     } finally {
       setLoading(false);
     }
-  }, [getAuthToken, isAdmin, nextToken, searchTerm, statusFilter]);
-
-  // Initial load
-  useEffect(() => {
-    fetchUsers(true);
   }, []);
 
-  // Update user status (enable/disable)
-  const updateUserStatus = async (userId, enabled) => {
-    if (!isAdmin()) {
-      setError('You do not have permission to modify users.');
+  useEffect(() => {
+    if (!canAdminister) {
+      setLoading(false);
       return;
     }
+    fetchUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    setActionInProgress(prev => new Set([...prev, userId]));
-
-    try {
-      const token = await getAuthToken();
-      if (!token) {
-        throw new Error('No authentication token available');
-      }
-
-      const response = await fetch(`${getApiEndpoint()}/admin/users/${userId}/status`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          enabled,
-          status: enabled ? 'enabled' : 'disabled'
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-
-      // Update user in local state
-      setUsers(prev => prev.map(user => 
-        user.userId === userId || user.username === userId
-          ? { ...user, enabled, status: enabled ? 'enabled' : 'disabled' }
-          : user
-      ));
-
-      setError(null);
-      
-    } catch (err) {
-      console.error('Error updating user status:', err);
-      setError(err.message || 'Failed to update user status');
-    } finally {
-      setActionInProgress(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(userId);
-        return newSet;
-      });
-    }
-  };
-
-  // Approve pending user
-  const approveUser = async (userId) => {
-    if (!isAdmin()) {
-      setError('You do not have permission to approve users.');
-      return;
-    }
-
-    setActionInProgress(prev => new Set([...prev, userId]));
-
-    try {
-      const token = await getAuthToken();
-      if (!token) {
-        throw new Error('No authentication token available');
-      }
-
-      const response = await fetch(`${getApiEndpoint()}/admin/users/${userId}/approve`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-
-      // Update user in local state
-      setUsers(prev => prev.map(user => 
-        user.userId === userId || user.username === userId
-          ? { ...user, status: 'enabled', groups: user.groups.filter(g => g !== 'pending').concat('hosts') }
-          : user
-      ));
-
-      setError(null);
-      
-    } catch (err) {
-      console.error('Error approving user:', err);
-      setError(err.message || 'Failed to approve user');
-    } finally {
-      setActionInProgress(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(userId);
-        return newSet;
-      });
-    }
-  };
-
-  // Delete user
-  const deleteUser = async (userId) => {
-    if (!isAdmin()) {
-      setError('You do not have permission to delete users.');
-      return;
-    }
-
-    if (!window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-      return;
-    }
-
-    setActionInProgress(prev => new Set([...prev, userId]));
-
-    try {
-      const token = await getAuthToken();
-      if (!token) {
-        throw new Error('No authentication token available');
-      }
-
-      const response = await fetch(`${getApiEndpoint()}/admin/users/${userId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-
-      // Remove user from local state
-      setUsers(prev => prev.filter(user => user.userId !== userId && user.username !== userId));
-      setError(null);
-      
-    } catch (err) {
-      console.error('Error deleting user:', err);
-      setError(err.message || 'Failed to delete user');
-    } finally {
-      setActionInProgress(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(userId);
-        return newSet;
-      });
-    }
-  };
-
-  // Change user state (move between groups)
+  /**
+   * The one write this screen has. `newState` is a Cognito group name, or
+   * 'delete' — manage-users.js:105 validates exactly that set.
+   *
+   * Local state is updated AFTER the response, never before: an optimistic
+   * rewrite makes a 500 look identical to a success until the next reload,
+   * which is the failure the old `updateUserStatus` shipped with.
+   */
   const changeUserState = async (username, newState) => {
-    if (!isAdmin()) {
-      setError('You do not have permission to modify user groups.');
-      return;
-    }
-
-    setActionInProgress(prev => new Set([...prev, username]));
-
+    setActionInProgress((prev) => new Set([...prev, username]));
     try {
-      const token = await getAuthToken();
-      if (!token) {
-        throw new Error('No authentication token available');
-      }
-
-      const response = await fetch(`${getApiEndpoint()}/admin/users/${username}/state`, {
+      const response = await authFetch(adminApiUrl(`admin/users/${encodeURIComponent(username)}/state`), {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ newState })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newState }),
       });
-
+      const result = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        throw new Error(result.error || `Could not change this account (HTTP ${response.status})`);
       }
 
-      // Update user in local state
-      if (newState === 'delete') {
-        // Remove user from list
-        setUsers(prev => prev.filter(user => user.username !== username));
-      } else {
-        // Update user's group
-        setUsers(prev => prev.map(user => 
-          user.username === username
-            ? { ...user, groups: [newState], state: newState, status: newState }
-            : user
-        ));
-      }
-
+      setUsers((prev) =>
+        newState === 'delete'
+          ? prev.filter((user) => user.username !== username)
+          : prev.map((user) =>
+              user.username === username
+                ? { ...user, groups: [newState], state: newState, status: newState, enabled: true }
+                : user
+            )
+      );
       setError(null);
-      
     } catch (err) {
       console.error('Error changing user state:', err);
       setError(err.message || 'Failed to change user state');
     } finally {
-      setActionInProgress(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(username);
-        return newSet;
+      setActionInProgress((prev) => {
+        const next = new Set(prev);
+        next.delete(username);
+        return next;
       });
     }
   };
 
-  // Handle search
-  const handleSearch = (e) => {
-    const value = e.target.value;
-    setSearchTerm(value);
-  };
+  /* ------------------------------------------------------------- selection */
 
-  // Handle search submit
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    fetchUsers(true, searchTerm, statusFilter);
-  };
+  const matchesSearch = useCallback(
+    (user) => {
+      const needle = searchTerm.trim().toLowerCase();
+      if (!needle) return true;
+      return [user.email, user.name, user.username]
+        .filter(Boolean)
+        .some((field) => String(field).toLowerCase().includes(needle));
+    },
+    [searchTerm]
+  );
 
-  // Handle filter change
-  const handleFilterChange = (status) => {
-    setStatusFilter(status);
-    fetchUsers(true, searchTerm, status);
-  };
+  const found = useMemo(() => users.filter(matchesSearch), [users, matchesSearch]);
+  const waiting = useMemo(
+    () =>
+      found
+        .filter((user) => roleOf(user) === 'pending')
+        .sort((a, b) => new Date(a.created || 0) - new Date(b.created || 0)),
+    [found]
+  );
+  const members = useMemo(() => found.filter((user) => roleOf(user) !== 'pending'), [found]);
 
-  // Handle load more
-  const handleLoadMore = () => {
-    if (hasMore && !loading) {
-      fetchUsers(false);
-    }
-  };
+  /** Counts and filter share `roleOf`. That is the whole fix for the badge. */
+  const memberCounts = useMemo(() => {
+    const counts = { all: members.length, admins: 0, hosts: 0, disabled: 0 };
+    for (const user of members) counts[roleOf(user)] += 1;
+    return counts;
+  }, [members]);
 
-  // Filter and search users
-  const getDisplayedUsers = () => {
-    return users.filter(user => {
-      const matchesSearch = !searchTerm || 
-        user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.username?.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesStatus = statusFilter === 'all' || user.status === statusFilter;
-      
-      return matchesSearch && matchesStatus;
-    });
-  };
+  const shownMembers = useMemo(
+    () => (roleFilter === 'all' ? members : members.filter((user) => roleOf(user) === roleFilter)),
+    [members, roleFilter]
+  );
 
-  // Get user identifier for actions (prefer username, fallback to userId)
-  const getUserId = (user) => user.username || user.userId;
+  const oldestWait = waiting.length ? daysSince(waiting[0].created) : null;
+  const anyPending = users.some((user) => roleOf(user) === 'pending');
 
-  // Format user status for display
-  const formatUserStatus = (user) => {
-    if (user.groups?.includes('pending') || user.status === 'pending') {
-      return { text: 'Pending', class: 'pending' };
-    }
-    if (!user.enabled || user.status === 'disabled') {
-      return { text: 'Disabled', class: 'disabled' };
-    }
-    if (user.groups?.includes('admins')) {
-      return { text: 'Admin', class: 'admin' };
-    }
-    if (user.groups?.includes('hosts')) {
-      return { text: 'Host', class: 'host' };
-    }
-    return { text: 'Enabled', class: 'enabled' };
-  };
-
-  // Format date
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch {
-      return 'Invalid date';
-    }
-  };
-
-  if (!isAdmin()) {
+  if (!canAdminister) {
     return (
-      <div className="user-management">
-        <div className="error-state">
-          <h2>Access Denied</h2>
+      <div className="um">
+        <div className="um-denied">
+          <h2>Access denied</h2>
           <p>You do not have permission to access user management.</p>
         </div>
       </div>
     );
   }
 
-  const displayedUsers = getDisplayedUsers();
-
   return (
-    <div className="user-management">
-      <div className="user-management-header">
-        <h2>User Management</h2>
-        <p>Manage user accounts, approvals, and permissions</p>
-      </div>
-
+    <div className="um">
       {error && (
-        <div className="alert alert-error">
-          <span className="alert-icon"><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /></span>
-          {error}
-          <button className="alert-close" onClick={() => setError(null)}>×</button>
+        <div className="um-alert" role="alert">
+          <Icon name="Warning" weight="fill" size={16} color="var(--danger-text)" />
+          <span className="um-alert-text">{error}</span>
+          <button type="button" className="um-alert-close" onClick={() => setError(null)}>
+            Dismiss
+          </button>
         </div>
       )}
 
-      {/* Search and Filter Controls */}
-      <div className="controls-section">
-        <form className="search-form" onSubmit={handleSearchSubmit}>
-          <div className="search-input-group">
-            <input
-              type="text"
-              placeholder="Search by name, email, or username..."
-              value={searchTerm}
-              onChange={handleSearch}
-              className="search-input"
-            />
-            <button type="submit" className="search-button" disabled={loading}>
-              <Icon name="MagnifyingGlass" weight="bold" size={16} color="currentColor" />
-            </button>
-          </div>
-        </form>
+      {/*
+        THE QUEUE, and it keeps its frame when it is empty (17-users-clear.html).
+        A section that disappears when it has nothing in it is a section you stop
+        looking for, which is the one property an approval queue must not have.
+        Today this is the second of four filter tabs, labelled "Pending (3)".
+      */}
+      <section className={`um-queue${waiting.length ? '' : ' um-queue--clear'}`} aria-label="Waiting for approval">
+        <header className="um-queue-head">
+          <h2>Waiting for approval</h2>
+          <p className="um-note">Registration puts people here. Nothing else does.</p>
+          <span className="um-grow" />
+          {oldestWait != null && (
+            <span className="um-wait" data-testid="um-oldest-wait">
+              Oldest has waited <b>{oldestWait} day{oldestWait === 1 ? '' : 's'}</b>
+            </span>
+          )}
+        </header>
 
-        <div className="filter-tabs">
-          <button 
-            className={`filter-tab ${statusFilter === 'all' ? 'active' : ''}`}
-            onClick={() => handleFilterChange('all')}
-            disabled={loading}
-          >
-            All Users ({users.length})
-          </button>
-          <button 
-            className={`filter-tab ${statusFilter === 'pending' ? 'active' : ''}`}
-            onClick={() => handleFilterChange('pending')}
-            disabled={loading}
-          >
-            Pending ({users.filter(u => u.groups?.includes('pending') || u.status === 'pending').length})
-          </button>
-          <button 
-            className={`filter-tab ${statusFilter === 'enabled' ? 'active' : ''}`}
-            onClick={() => handleFilterChange('enabled')}
-            disabled={loading}
-          >
-            Enabled ({users.filter(u => u.enabled && u.status !== 'pending').length})
-          </button>
-          <button 
-            className={`filter-tab ${statusFilter === 'disabled' ? 'active' : ''}`}
-            onClick={() => handleFilterChange('disabled')}
-            disabled={loading}
-          >
-            Disabled ({users.filter(u => !u.enabled || u.status === 'disabled').length})
-          </button>
-        </div>
-      </div>
-
-      {/* Users Table */}
-      <div className="users-table-container">
-        {loading && users.length === 0 ? (
-          <div className="loading-state">
-            <div className="loading-spinner"></div>
-            <p>Loading users...</p>
-          </div>
-        ) : (
-          <table className="users-table">
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Status</th>
-                <th>Groups</th>
-                <th>Provider</th>
-                <th>Created</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayedUsers.map((user) => {
-                const userId = getUserId(user);
-                const status = formatUserStatus(user);
-                const isActionInProgress = actionInProgress.has(userId);
-
-                return (
-                  <tr key={userId} className={isActionInProgress ? 'action-in-progress' : ''}>
-                    <td className="user-info">
-                      <div className="user-details">
-                        <strong>{user.name || user.username}</strong>
-                        <div className="user-email">{user.email}</div>
-                        {user.username && user.name && (
-                          <div className="user-username">@{user.username}</div>
-                        )}
-                      </div>
-                    </td>
-                    
-                    <td>
-                      <span className={`status-badge ${status.class}`}>
-                        {status.text}
-                      </span>
-                    </td>
-                    
-                    <td className="groups-cell">
-                      <div className="user-groups">
-                        <button
-                          className={`group-button ${user.groups?.includes('pending') || user.state === 'pending' ? 'active' : ''}`}
-                          onClick={() => changeUserState(user.username, 'pending')}
-                          disabled={isActionInProgress || (user.groups?.includes('pending') || user.state === 'pending')}
-                          title="Move to Pending"
-                        >
-                          Pending
-                        </button>
-                        <button
-                          className={`group-button ${user.groups?.includes('hosts') || user.state === 'hosts' ? 'active' : ''}`}
-                          onClick={() => changeUserState(user.username, 'hosts')}
-                          disabled={isActionInProgress || (user.groups?.includes('hosts') || user.state === 'hosts')}
-                          title="Move to Hosts"
-                        >
-                          Host
-                        </button>
-                        <button
-                          className={`group-button ${user.groups?.includes('admins') || user.state === 'admins' ? 'active' : ''}`}
-                          onClick={() => changeUserState(user.username, 'admins')}
-                          disabled={isActionInProgress || (user.groups?.includes('admins') || user.state === 'admins')}
-                          title="Move to Admins"
-                        >
-                          Admin
-                        </button>
-                        <button
-                          className={`group-button ${user.groups?.includes('disabled') || user.state === 'disabled' ? 'active disabled-state' : ''}`}
-                          onClick={() => changeUserState(user.username, 'disabled')}
-                          disabled={isActionInProgress || (user.groups?.includes('disabled') || user.state === 'disabled')}
-                          title="Move to Disabled"
-                        >
-                          Disabled
-                        </button>
-                      </div>
-                    </td>
-                    
-                    <td>
-                      <span className={`provider-badge ${user.provider || 'cognito'}`}>
-                        {user.provider || 'cognito'}
-                      </span>
-                    </td>
-                    
-                    <td className="date-cell">
-                      {formatDate(user.createdAt)}
-                    </td>
-                    
-                    <td className="actions-cell">
-                      <div className="action-buttons">
-                        <button
-                          className="action-button delete"
-                          onClick={() => {
-                            if (window.confirm(`Are you sure you want to delete ${user.name || user.username}? This action cannot be undone.`)) {
-                              changeUserState(user.username, 'delete');
-                            }
-                          }}
-                          disabled={isActionInProgress}
-                          title="Delete user permanently"
-                        >
-                          {isActionInProgress
-                            ? <Icon name="Timer" weight="bold" size={16} color="var(--muted)" />
-                            : <Icon name="Trash" weight="bold" size={16} />}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-
-        {displayedUsers.length === 0 && !loading && (
-          <div className="empty-state">
-            <h3>No users found</h3>
-            <p>
-              {searchTerm || statusFilter !== 'all' 
-                ? 'Try adjusting your search or filter criteria.'
-                : 'No users have been registered yet.'
-              }
+        {waiting.length === 0 ? (
+          <div className="um-queue-body">
+            <p className="um-clearline">
+              <Icon name="CheckCircle" weight="bold" size={16} color="var(--um-success-text)" />
+              <span>
+                {anyPending ? (
+                  <>
+                    <b>No one waiting matches this search.</b> Clear the search box to see the
+                    whole queue.
+                  </>
+                ) : (
+                  <>
+                    <b>Nobody is waiting.</b> New registrations land here.
+                  </>
+                )}
+              </span>
             </p>
           </div>
+        ) : (
+          <ul className="um-pendlist">
+            {waiting.map((user) => {
+              const busy = actionInProgress.has(user.username);
+              const name = displayName(user);
+              const confirmed = String(user.userStatus || '').toUpperCase() === 'CONFIRMED';
+              return (
+                <li className="um-pend" key={user.username}>
+                  <span className="um-avatar" aria-hidden="true">{initialsOf(user)}</span>
+                  <span className="um-pinfo">
+                    <span className="um-pname">
+                      {name || <span className="um-noname">No name provided</span>}
+                    </span>
+                    <span className="um-pmail">{user.email || user.username}</span>
+                  </span>
+                  <span className="um-pmeta">
+                    Signed up {ageWords(daysSince(user.created))} &middot; {providerOf(user)}{' '}
+                    &middot;{' '}
+                    {confirmed ? (
+                      'email confirmed'
+                    ) : (
+                      <span className="um-unconfirmed">email not confirmed</span>
+                    )}
+                  </span>
+                  <span className="um-pacts">
+                    {/*
+                      ONE VERB, NAMED. Today a pending person shows the same four
+                      group buttons as everyone else with the one they are in
+                      disabled, and nothing says which is the approval.
+                    */}
+                    <button
+                      type="button"
+                      className="um-btn um-btn--primary"
+                      disabled={busy}
+                      onClick={() => changeUserState(user.username, 'hosts')}
+                    >
+                      <Icon name="Check" weight="bold" size={14} color="currentColor" />
+                      Approve as host
+                    </button>
+                    <button
+                      type="button"
+                      className="um-btn"
+                      disabled={busy}
+                      onClick={() => changeUserState(user.username, 'admins')}
+                    >
+                      Admin
+                    </button>
+                    {/*
+                      REJECT IS THE REVERSIBLE NEIGHBOUR (RATIONALE §8). It moves
+                      the account to `disabled` rather than deleting it, and the
+                      confirmation says which — a rejection that silently
+                      destroys a Cognito account is a different action wearing
+                      this one's label. Permanent removal lives on member rows.
+                    */}
+                    <button
+                      type="button"
+                      className="um-btn um-btn--danger"
+                      disabled={busy}
+                      onClick={() => {
+                        const who = name || user.username;
+                        if (
+                          window.confirm(
+                            `Reject ${who}?\n\nThey move to Disabled and cannot sign in. The account is kept, so this can be undone from the members list. Nothing is deleted.`
+                          )
+                        ) {
+                          changeUserState(user.username, 'disabled');
+                        }
+                      }}
+                    >
+                      Reject
+                    </button>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
         )}
+      </section>
 
-        {hasMore && (
-          <div className="load-more-section">
+      <h3 className="um-secttl">Members &middot; {members.length}</h3>
+
+      <div className="um-filters">
+        <div className="um-search">
+          <Icon name="MagnifyingGlass" weight="bold" size={14} color="var(--muted)" />
+          <input
+            type="search"
+            className="um-input"
+            aria-label="Search name, email, username"
+            placeholder="Search name, email, username"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+          />
+        </div>
+
+        <div className="um-seg" role="group" aria-label="Filter members by role">
+          {[
+            ['all', 'All'],
+            ['admins', 'Admins'],
+            ['hosts', 'Hosts'],
+            ['disabled', 'Disabled'],
+          ].map(([id, label]) => (
             <button
-              className="load-more-button"
-              onClick={handleLoadMore}
-              disabled={loading}
+              key={id}
+              type="button"
+              aria-pressed={roleFilter === id}
+              onClick={() => setRoleFilter(id)}
             >
-              {loading ? 'Loading...' : 'Load More Users'}
+              {label} {memberCounts[id]}
             </button>
-          </div>
-        )}
-      </div>
-
-      <div className="management-footer">
-        <div className="stats">
-          <span>Showing {displayedUsers.length} of {users.length} users</span>
-          {hasMore && <span> • More available</span>}
+          ))}
         </div>
       </div>
+
+      <table className="um-tbl">
+        <thead>
+          <tr>
+            <th className="um-col-person">Person</th>
+            <th className="um-col-role">Role</th>
+            <th className="um-col-idp">Signed in with</th>
+            <th className="um-col-when">Joined</th>
+            <th className="um-col-acts" />
+          </tr>
+        </thead>
+        <tbody>
+          {loading && users.length === 0 && (
+            <tr className="um-dimrow">
+              <td colSpan={5}>Loading accounts…</td>
+            </tr>
+          )}
+          {!loading && shownMembers.length === 0 && (
+            <tr className="um-dimrow">
+              <td colSpan={5}>
+                {searchTerm.trim() || roleFilter !== 'all'
+                  ? 'No member matches this search and filter.'
+                  : 'No accounts have been approved yet.'}
+              </td>
+            </tr>
+          )}
+          {shownMembers.map((user) => {
+            const role = roleOf(user);
+            const meta = ROLE_META[role];
+            const busy = actionInProgress.has(user.username);
+            const name = displayName(user);
+            const who = name || user.username;
+            return (
+              <tr key={user.username} className={busy ? 'um-busy' : undefined}>
+                <td>
+                  <span className="um-nm">
+                    {name || <span className="um-noname">No name provided</span>}
+                  </span>
+                  <span className="um-sub">{user.email || user.username}</span>
+                </td>
+                <td>
+                  <span className={`um-chip um-chip--${meta.chip}`}>{meta.label}</span>
+                </td>
+                <td>{providerOf(user)}</td>
+                <td className="um-when">{formatJoined(user)}</td>
+                <td>
+                  <div className="um-rowact">
+                    {/*
+                      Only the roles this person is NOT in. The shipped screen
+                      rendered all four with the current one disabled — four
+                      controls to express three choices, none of them a verb.
+                    */}
+                    {MEMBER_ROLES.filter((target) => target !== role).map((target) => (
+                      <button
+                        key={target}
+                        type="button"
+                        className="um-btn um-btn--sm"
+                        disabled={busy}
+                        onClick={() => changeUserState(user.username, target)}
+                      >
+                        {MOVE_VERB[target]}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className="um-btn um-btn--sm um-btn--ghostdanger"
+                      aria-label={`Remove ${who}`}
+                      title={`Remove ${who}`}
+                      disabled={busy}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Delete ${who}'s account?\n\nThey lose access immediately and would have to register again from scratch. Sessions they hosted and any question sets they uploaded are not affected.`
+                          )
+                        ) {
+                          changeUserState(user.username, 'delete');
+                        }
+                      }}
+                    >
+                      <Icon name="Trash" weight="bold" size={14} color="currentColor" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      {/*
+        THE CAP, STATED. `listUsers` hardcodes Cognito's Limit: 60 and returns no
+        nextToken, so there is no second page to fetch and never was a button
+        that could fetch it. OPEN-QUESTIONS #10.
+      */}
+      <p className="um-cap">
+        Cognito returns at most 60 accounts in one page and there is no second page.
+        Search and role filters apply to what is loaded.
+      </p>
     </div>
   );
 };

@@ -10,7 +10,10 @@ const {
 const cognito = new CognitoIdentityProviderClient({ region: 'us-east-1' });
 const USER_POOL_ID = process.env.USER_POOL_ID;
 
-// Skip authorization for now - just focus on getting user list working
+// Authorisation lives in shared/require-admin.js and is applied in the handler
+// below, before any route runs. It used to say "Skip authorization for now"
+// and never stopped skipping — see that file for what that allowed.
+const { requireAdmin } = require('./shared/require-admin');
 
 // Simple function to list all users
 async function listUsers(event) {
@@ -196,11 +199,30 @@ exports.handler = async (event) => {
     return handlePreflight();
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // AUTHORISATION. Not authentication — the authorizer already did that, and
+  // that was the whole problem: `CognitoAuthorizer` admits ANY account in the
+  // pool, including one still sitting in `pending` waiting to be approved.
+  //
+  // With no check here, any registered user could
+  //     PUT /admin/users/<their-own-username>/state  {"state":"admins"}
+  // and promote themselves — `validStates` below includes 'admins' and
+  // 'delete', and the requested group is passed straight to
+  // AdminAddUserToGroupCommand. They could also enumerate every account in the
+  // pool via /admin/users/list.
+  //
+  // It goes AFTER the OPTIONS preflight (a preflight carries no credentials
+  // and must not 403) and BEFORE the route table, so a new route added below
+  // cannot forget it.
+  // ─────────────────────────────────────────────────────────────────────────
+  const denied = requireAdmin(event);
+  if (denied) return denied;
+
   // Route to appropriate function
   if (method === 'POST' && path.endsWith('/admin/users/list')) {
     return await listUsers(event);
   }
-  
+
   // Change user state: PUT /admin/users/{username}/state
   if (method === 'PUT' && path.includes('/admin/users/') && path.endsWith('/state')) {
     return await changeUserState(event);

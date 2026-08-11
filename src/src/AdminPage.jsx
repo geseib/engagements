@@ -7,6 +7,7 @@ import AIPromptManager from './components/AIPromptManager';
 import AIGenerationPromptEditor from './components/AIGenerationPromptEditor';
 import ArchivePanel from './components/ArchivePanel';
 import UserManagement from './components/UserManagement';
+import SessionsPanel from './components/SessionsPanel';
 import HelpButton from './components/HelpButton';
 import IssueFab from './components/IssueFab';
 import { useAuth } from './auth/AuthContext';
@@ -50,7 +51,8 @@ const ADMIN_SECTIONS = [
     label: 'Sessions',
     icon: 'GameController',
     title: 'Sessions',
-    subtitle: 'Delete game data. There is no session list yet — removing one needs its id.',
+    subtitle: 'What hosts have run. Data here expires: 90 days from creation, 7 days after last play.',
+    contentTheme: 'dark',
   },
   {
     id: 'prompts',
@@ -72,6 +74,7 @@ const ADMIN_SECTIONS = [
     icon: 'UsersThree',
     title: 'Users',
     subtitle: 'Registration lands people in pending. Somebody has to move them.',
+    contentTheme: 'dark',
   },
 ];
 
@@ -97,12 +100,13 @@ function AdminPage() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadStatus, setUploadStatus] = useState('');
   const [isUploading, setIsUploading] = useState(false);
-  const [deleteGameId, setDeleteGameId] = useState('');
-  const [deleteStatus, setDeleteStatus] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleteMode, setDeleteMode] = useState('single'); // 'single' or 'all'
-  
+  /*
+    The session-delete state that used to live here — deleteGameId,
+    deleteStatus, isDeleting, showDeleteConfirm, deleteMode — moved into
+    components/SessionsPanel.jsx along with the screen it drove. Deleting a
+    session is now something you do from the row that names it.
+  */
+
   // Question Set filtering states
   const [filteredQuestionSets, setFilteredQuestionSets] = useState([]);
   const [questionSetSearchQuery, setQuestionSetSearchQuery] = useState('');
@@ -644,15 +648,6 @@ function AdminPage() {
     }
   };
 
-  const handleDeleteGames = async () => {
-    if (deleteMode === 'single' && !deleteGameId.trim()) {
-      setDeleteStatus('Please enter a game ID');
-      return;
-    }
-
-    setShowDeleteConfirm(true);
-  };
-
   // Handle AI-generated scenarios
   const handleScenariosGenerated = async (scenarioData) => {
     setShowAIScenarioBuilder(false);
@@ -910,43 +905,6 @@ function AdminPage() {
   };
 
 
-  const confirmDelete = async () => {
-    setShowDeleteConfirm(false);
-    setIsDeleting(true);
-    setDeleteStatus('Processing...');
-
-    try {
-      const endpoint = deleteMode === 'all' 
-        ? `${API_BASE}admin/clear-all-games`
-        : `${API_BASE}admin/clear-game/${deleteGameId}`;
-      
-      const response = await authFetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        setDeleteStatus(
-          deleteMode === 'all'
-            ? `Successfully cleared all games (${result.itemsDeleted || 0} items deleted)`
-            : `Successfully cleared game ${deleteGameId} (${result.itemsDeleted || 0} items deleted)`
-        );
-        setDeleteGameId('');
-      } else {
-        setDeleteStatus(`Delete failed: ${result.error || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error('Delete error:', error);
-      setDeleteStatus(`Delete failed: ${error.message}`);
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
   const handleDeleteQuestionSet = () => {
     if (!selectedQuestionSet) {
       setQuestionSetDeleteStatus('Please select a question set to delete');
@@ -1033,6 +991,14 @@ function AdminPage() {
         }
         title={editingSet ? editingSet.name || editingSet.id : section.title}
         subtitle={editingSet ? undefined : section.subtitle}
+        /*
+          Wave D converts the tabs one at a time, so the theme is per-section
+          rather than per-console. Users and Sessions are dusk now; the rest are
+          still the paper-theme markup AdminShell.css documents, and a section
+          that has not been converted must not be dropped onto the dark field —
+          #333 body copy on #0F1A2E is 1.4:1.
+        */
+        contentTheme={editingSet ? 'light' : section.contentTheme || 'light'}
         actions={<HelpButton section="admin" variant="header" size="medium" />}
       >
         {editingSet ? (
@@ -1565,61 +1531,28 @@ function AdminPage() {
           )}
 
           {activeTab === 'games' && (
-            <div className="tab-content">
-              {/* Delete Games Section */}
-              <div className="admin-section danger-section">
-                <div className="section-title-with-help">
-                  <h2><Icon name="GameController" weight="bold" size={16} color="currentColor" /> Remove Games</h2>
-                  <HelpButton section="game-management" variant="inline" size="small" tooltip="Help: Game Management & Cleanup" />
-                </div>
-                <p className="section-description">Delete game data from the database.</p>
-                
-                <div className="delete-controls">
-                  <div className="delete-mode-selector">
-                    <label className="radio-label">
-                      <input
-                        type="radio"
-                        name="deleteMode"
-                        value="single"
-                        checked={deleteMode === 'single'}
-                        onChange={(e) => setDeleteMode(e.target.value)}
-                      />
-                      <span>Single Game</span>
-                    </label>
-                    <label className="radio-label">
-                      <input
-                        type="radio"
-                        name="deleteMode"
-                        value="all"
-                        checked={deleteMode === 'all'}
-                        onChange={(e) => setDeleteMode(e.target.value)}
-                      />
-                      <span>All Games</span>
-                    </label>
-                  </div>
-                  
-                  {deleteMode === 'single' && (
-                    <input
-                      type="text"
-                      placeholder="Enter Game ID"
-                      value={deleteGameId}
-                      onChange={(e) => setDeleteGameId(e.target.value)}
-                      className="input-field"
-                    />
-                  )}
-                  
-                  <button
-                    className="btn-danger"
-                    onClick={handleDeleteGames}
-                    disabled={isDeleting}
-                  >
-                    {isDeleting ? 'Deleting...' : deleteMode === 'all' ? 'Delete All Games' : 'Delete Game'}
-                  </button>
-                </div>
-                
-                {deleteStatus && <StatusMessage message={deleteStatus} />}
-              </div>
-            </div>
+            /*
+              THE SESSIONS LIST. What used to be here: one red card with a
+              Single/All radio pair, a free-text "Enter Game ID" box and a
+              Delete button — no list at all, so removing one session required
+              an id this console never displayed. GET /games has been deployed
+              the whole time and admin had never called it. See
+              components/SessionsPanel.jsx and RATIONALE.md §9.
+
+              The set counts are passed so the empty state can say the likeliest
+              reason a host could not start anything, and so delete-all can name
+              what survives it. They are undefined until the list has loaded, on
+              purpose: SessionsPanel says nothing rather than printing a zero.
+            */
+            <SessionsPanel
+              environment={environment}
+              inactiveSetCount={
+                questionSets.length
+                  ? questionSets.filter((set) => !set.active).length
+                  : undefined
+              }
+              totalSetCount={questionSets.length || undefined}
+            />
           )}
 
           {activeTab === 'archive' && (
@@ -1628,11 +1561,10 @@ function AdminPage() {
             </div>
           )}
 
-          {activeTab === 'users' && (
-            <div className="tab-content">
-              <UserManagement />
-            </div>
-          )}
+          {/* No .tab-content wrapper: that class carries a 500px min-height and
+              a fade-in written for the paper tabs, and the converted screens
+              own their own frame. */}
+          {activeTab === 'users' && <UserManagement />}
 
           {activeTab === 'settings' && (
             <div className="tab-content">
@@ -1708,27 +1640,13 @@ function AdminPage() {
       </AdminShell>
 
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> Confirm Deletion</h3>
-            <p>
-              {deleteMode === 'all'
-                ? 'Are you sure you want to delete ALL games? This action cannot be undone!'
-                : `Are you sure you want to delete game ${deleteGameId}? This action cannot be undone!`}
-            </p>
-            <div className="modal-actions">
-              <button className="btn-secondary" onClick={() => setShowDeleteConfirm(false)}>
-                Cancel
-              </button>
-              <button className="btn-danger" onClick={confirmDelete}>
-                Yes, Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/*
+        The session-delete confirmation that used to sit here stated severity
+        ("This action cannot be undone!") and no consequence, and reported
+        itemsDeleted only afterwards. It now lives in SessionsPanel, states the
+        count before the press, names what survives, and names the environment.
+        RATIONALE.md §8.
+      */}
 
       {/* Question Set Delete Confirmation Modal */}
       {showQuestionSetDeleteConfirm && (
