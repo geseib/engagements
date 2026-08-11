@@ -1,33 +1,16 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+const { normalizeGameType, isKnownGameType, GAME_TYPE_IDS } = require('./shared/game-types');
+const { describeVariablesForPrompt } = require('./shared/template-variable-usage');
 
 const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 
-// Template variable definitions for AI generation context
-const TEMPLATE_VARIABLES = {
-  callandanswer: [
-    'questionTitle', 'questionDetail', 'questionCategory', 'eventTitle', 'sessionContext',
-    'totalParticipants', 'responseCount', 'responsesText', 'playerAnswers', 'voteCount',
-    'voteTally', 'topVotedAnswers', 'consensusLevel', 'winnerInfo', 'finalResults',
-    'leaderboard', 'cumulativeScores', 'participationRate', 'sessionDuration'
-  ],
-  trivia: [
-    'questionTitle', 'question', 'triviaChoices', 'correctAnswer', 'answerDetails',
-    'difficulty', 'questionCategory', 'eventTitle', 'totalParticipants', 'responseCount',
-    'triviaResponses', 'correctCount', 'triviaCorrectness', 'playerRankings',
-    'leaderboard', 'cumulativeScores', 'sessionDuration'
-  ],
-  wavelength: [
-    'questionTitle', 'questionDetail', 'questionCategory', 'eventTitle', 'sessionContext',
-    'totalParticipants', 'responseCount', 'playerResponses', 'responsesText', 'wordFrequency',
-    'commonWords', 'uniqueWords', 'wordStats', 'conceptualThemes', 'finalResults',
-    'participationRate', 'sessionDuration', 'customInstructions'
-  ],
-  polls: [
-    'questionTitle', 'questionDetail', 'pollOptions', 'questionCategory', 'eventTitle',
-    'totalParticipants', 'responseCount', 'playerAnswers', 'uniqueAnswers',
-    'answerCategories', 'finalResults', 'participationRate', 'sessionDuration'
-  ]
-};
+// The variable list used to live here, hardcoded and keyed `callandanswer` /
+// `polls`, while AIPromptManager sends the canonical dashed ids. So for
+// call-and-answer, poll and survey the lookup MISSED, `|| []` swallowed it, and
+// the model was handed an empty "AVAILABLE TEMPLATE VARIABLES:" heading
+// alongside an instruction to use the list — which is precisely why it invented
+// them. Where the table did hit, its wavelength row named five variables that
+// have never existed. It is gone; shared/template-variables.js is the list now.
 
 const CATEGORY_CONTEXTS = {
   'lessons-learned': 'analyzing team experiences and extracting strategic insights for future application',
@@ -70,32 +53,58 @@ exports.handler = async (event) => {
     } = JSON.parse(event.body);
 
     if (!gameType) {
-      throw new Error('Game type is required');
+      const err = new Error('Game type is required');
+      err.statusCode = 400;
+      throw err;
     }
 
-    console.log(`🪄 Generating AI prompt for ${gameType}/${category}`);
+    // Fail LOUDLY on a type we have no variables for. The old `|| []` turned an
+    // unrecognised type into an empty list and carried on, which is the failure
+    // that reached the owner: the model is told to use the available variables
+    // and there are none, so it makes some up.
+    if (!isKnownGameType(gameType)) {
+      const err = new Error(
+        `Invalid gameType "${gameType}". Must be one of: ${GAME_TYPE_IDS.join(', ')}`);
+      err.statusCode = 400;
+      throw err;
+    }
+    const canonicalGameType = normalizeGameType(gameType);
 
-    // Get relevant template variables for this game type
-    const availableVariables = TEMPLATE_VARIABLES[gameType] || [];
+    console.log(`🪄 Generating AI prompt for ${canonicalGameType}/${category}`);
+
+    // Get relevant template variables for this game type, described so the
+    // model knows what each one actually contains.
+    const availableVariables = describeVariablesForPrompt(canonicalGameType);
+    if (!availableVariables) {
+      const err = new Error(
+        `No template variables are catalogued for "${canonicalGameType}" — refusing to ask a ` +
+        'model to write a prompt it cannot fill');
+      err.statusCode = 500;
+      throw err;
+    }
     const categoryContext = CATEGORY_CONTEXTS[category] || 'providing comprehensive analysis and actionable insights';
 
     // Build the AI generation prompt
     const aiPrompt = `You are an expert AI prompt engineer specializing in enhancing and improving prompts for analyzing engagement activities and team interactions.
 
-TASK: Enhance and improve the existing AI prompt sections for ${gameType} activities in the ${category} category.
+TASK: Enhance and improve the existing AI prompt sections for ${canonicalGameType} activities in the ${category} category.
 
 ADMIN PROVIDED CONTEXT:
 - Prompt Name: ${promptName || 'Not provided'}
 - Description: ${description || 'Not provided'}
-- Game Type: ${gameType}
+- Game Type: ${canonicalGameType}
 - Category: ${category} (focused on ${categoryContext})
 
 EXISTING CONTENT TO ENHANCE:
 - Current Instructions: ${currentInstructions || 'None provided - please create from scratch'}
 - Current Output Format: ${currentOutputFormat || 'None provided - please create from scratch'}
 
-AVAILABLE TEMPLATE VARIABLES:
-${availableVariables.map(variable => `{${variable}}`).join(', ')}
+AVAILABLE TEMPLATE VARIABLES — this list is COMPLETE and EXHAUSTIVE for ${canonicalGameType}.
+A {token} that is not listed here is substituted by nothing and appears on a
+projector as literal braces, so the prompt will be REJECTED when it is saved.
+Never invent one, and never adapt a name from another game type:
+
+${availableVariables}
 
 ENHANCEMENT REQUIREMENTS:
 1. PRESERVE the admin's original intent and purpose - do not change the core direction
@@ -103,7 +112,7 @@ ENHANCEMENT REQUIREMENTS:
 3. If output format exists, improve structure and add relevant template variables
 4. If sections are missing, create them based on the description and category context
 5. Add specific expertise and domain knowledge relevant to ${category}
-6. Include appropriate template variables from the available list
+6. Include appropriate template variables, chosen ONLY from the exhaustive list above
 7. Maintain professional tone suitable for business contexts
 8. Focus on actionable insights and strategic thinking
 
@@ -227,7 +236,7 @@ RESPONSE FORMAT (return as JSON):
         success: true,
         instructions: generatedContent.instructions,
         outputFormat: generatedContent.outputFormat,
-        gameType,
+        gameType: canonicalGameType,
         category
       })
     };
@@ -235,7 +244,10 @@ RESPONSE FORMAT (return as JSON):
   } catch (error) {
     console.error('❌ Error generating AI prompt:', error);
     return {
-      statusCode: 500,
+      // A rejected game type is the caller's mistake, not ours. Returning 500
+      // for it is what let "no variables for this type" read as a transient
+      // Bedrock hiccup.
+      statusCode: error.statusCode || 500,
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type',

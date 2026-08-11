@@ -3975,7 +3975,10 @@ Ready to engage? See you there!`;
                       />
                     ) : (
                       <>
-                        <p className="lead">{currentAIInsights.summary}</p>
+                        {/* Markdown, not a bare string: the structured path
+                            still carries the model's **bold** in its summary
+                            text, and a <p> printed the asterisks on the wall. */}
+                        <MarkdownRenderer content={currentAIInsights.summary} className="lead" />
                         <ol>
                           {(currentAIInsights.discussionTopics || []).map((topic, idx) => (
                             <li key={idx}><b>{idx + 1}</b><span>{topic}</span></li>
@@ -4546,7 +4549,9 @@ function GameReport({ reportData, onClose }) {
                         {aiSummary.summaryText && (
                           <div className="report-ai-text">
                             <h5>Summary</h5>
-                            <p>{aiSummary.summaryText}</p>
+                            {/* Same reason as the stage fallback: this text is
+                                model output and carries markdown. */}
+                            <MarkdownRenderer content={aiSummary.summaryText} className="report-ai-markdown" />
                           </div>
                         )}
                         

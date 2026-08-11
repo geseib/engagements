@@ -8608,9 +8608,70 @@ body {
   font-weight: 600;
 }
 
+/* h5/h6 exist because the renderer supports #### to ###### now; before, those
+   fell through to the paragraph catch-all and printed their own hashes. */
+.markdown-h5 {
+  font-size: 1rem;
+  color: #34495e;
+  margin: 12px 0 6px 0;
+  font-weight: 700;
+}
+
+.markdown-h6 {
+  font-size: 0.95rem;
+  color: #4a5568;
+  margin: 10px 0 6px 0;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .markdown-p {
   margin: 8px 0 12px 0;
   color: #2c3e50;
+}
+
+/* Blockquote, rule, fenced code and links — the constructs the renderer used
+   to drop into a paragraph as raw source characters. */
+.markdown-quote {
+  margin: 12px 0;
+  padding: 4px 0 4px 14px;
+  border-left: 4px solid var(--primary, #1b2942);
+  color: #4a5568;
+  font-style: italic;
+}
+.markdown-quote .markdown-p {
+  margin: 4px 0;
+  color: inherit;
+}
+
+.markdown-hr {
+  border: 0;
+  border-top: 1px solid #e1e5e9;
+  margin: 16px 0;
+}
+
+.markdown-pre {
+  margin: 12px 0;
+  padding: 12px 14px;
+  background-color: #f8f9fa;
+  border: 1px solid #e1e5e9;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+.markdown-pre .markdown-code-block {
+  font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+  font-size: 0.9em;
+  color: #2c3e50;
+  background: none;
+  border: 0;
+  padding: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.markdown-link {
+  color: var(--primary, #1b2942);
+  text-decoration: underline;
 }
 
 .markdown-list {

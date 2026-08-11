@@ -2,7 +2,8 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { normalizeGameType } = require('./shared/game-types');
-const { normalizeOutputSections } = require('./shared/prompt-shape');
+const { normalizeOutputSections, inferPromptType } = require('./shared/prompt-shape');
+const { assertTemplateVariablesExist } = require('./shared/template-variable-usage');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -99,6 +100,22 @@ exports.handler = async (event) => {
       currentContent = JSON.parse(await s3Response.Body.transformToString());
     } catch (s3Error) {
       console.warn(`⚠️ Could not fetch current content from S3: ${s3Error.message}`);
+    }
+
+    // Same gate as create-ai-prompt.js, and for the same reason — the advisor's
+    // "apply improved prompt" lands here rather than there.
+    //
+    // Only the fields this request actually SUPPLIED are checked. Validating
+    // untouched ones would make a prompt authored before the gate existed
+    // permanently uneditable, including by the edit that would have fixed it.
+    const effectivePromptType = currentPrompt.promptType
+      || inferPromptType(currentContent || currentPrompt);
+    if (effectivePromptType === 'analysis') {
+      const supplied = {};
+      if (template !== undefined) supplied.template = template;
+      if (instructions !== undefined) supplied.instructions = instructions;
+      if (outputFormat !== undefined) supplied.outputFormat = outputFormat;
+      assertTemplateVariablesExist(supplied);
     }
 
     let newVersion = currentPrompt.version;

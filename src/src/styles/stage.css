@@ -564,12 +564,32 @@ body{
 /* MarkdownRenderer brings its own colours, tuned for the paper theme. On the
    dusk stage they came out as dark grey on navy. */
 .notes .notes-md,.notes .notes-md *{color:inherit}
-.notes .notes-md h1,.notes .notes-md h2,.notes .notes-md h3,
+/* h4-h6 join the list because the renderer emits them now — '#### x' used to
+   fall through to a paragraph and print its own hashes on the wall. */
+.notes .notes-md :is(h1,h2,h3,h4,h5,h6),
 .notes .notes-md strong,.notes .notes-md b{color:var(--primary)}
-.notes .notes-md h1,.notes .notes-md h2,.notes .notes-md h3{
+.notes .notes-md :is(h1,h2,h3,h4,h5,h6){
   font-family:var(--font-display);font-weight:800;
   font-size:max(var(--floor),calc(var(--t-primary) * .62));line-height:1.1;margin:.4em 0 .25em}
 .notes .notes-md p,.notes .notes-md li{margin:0 0 .4em}
+/* The other constructs the renderer gained. Sized off the profile ladder like
+   everything else on the stage; nothing here is a fixed px. */
+.notes .notes-md blockquote{margin:0 0 .4em;padding-left:.7em;
+  border-left:4px solid var(--primary);font-style:italic}
+.notes .notes-md hr{border:0;border-top:var(--hair) solid var(--rule);margin:.6em 0}
+.notes .notes-md pre{margin:0 0 .4em;white-space:pre-wrap;overflow-wrap:anywhere;
+  font-size:max(var(--floor),calc(var(--t-body) * .82))}
+.notes .notes-md a{color:inherit;text-decoration:underline}
+
+/* THE FALLBACK LEAD IS A MARKDOWN BLOCK NOW. When Workie's response could not
+   be parsed into markdown we fall back to the structured summary string — but
+   that string is still model output and still carries **bold**, which a bare
+   <p> printed as asterisks at projector size. It renders through
+   MarkdownRenderer, so .lead is a wrapper div and the type has to reach the
+   paragraphs inside it. */
+.notes .lead .markdown-p{font:inherit;color:inherit;margin:0 0 .3em;max-width:none}
+.notes .lead .markdown-p:last-child{margin-bottom:0}
+.notes .lead strong,.notes .lead em{color:inherit}
 .notes .notes-md ul,.notes .notes-md ol{margin:0 0 .4em;padding-left:1.2em}
 
 /* Host controls that happen to sit inside a room-facing state. They are chrome

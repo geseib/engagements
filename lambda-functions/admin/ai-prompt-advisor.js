@@ -2,6 +2,8 @@ const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-be
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { isKnownGameType, normalizeGameType } = require('./shared/game-types');
+const { describeVariablesForPrompt } = require('./shared/template-variable-usage');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -188,6 +190,29 @@ exports.handler = async (event) => {
       };
     }
 
+    // All three variants ask the model about template variables — "suggest
+    // relevant variables", "missing or incorrect variable usage", "ensure proper
+    // variable usage" — and until now none of them said which variables exist.
+    // A validator with no list can only agree with whatever it is shown.
+    //
+    // An unrecognised or absent type gets the FULL catalogue rather than
+    // nothing: the advisor is advisory, and half a list still beats none.
+    const effectiveGameType = gameType || currentContext.gameType;
+    const canonicalGameType = isKnownGameType(effectiveGameType)
+      ? normalizeGameType(effectiveGameType)
+      : null;
+    const variableReference = describeVariablesForPrompt(canonicalGameType);
+    const variableScope = canonicalGameType
+      ? `for ${canonicalGameType}`
+      : 'across all engagement types (no game type was supplied)';
+    const VARIABLES_BLOCK = `
+**Template Variables that exist ${variableScope}** — this list is COMPLETE. A {token}
+outside it is substituted by nothing and reaches the screen as literal braces, so
+treat any such token as an error and never suggest one:
+
+${variableReference}
+`;
+
     // Build analysis prompt based on type
     let analysisPrompt = '';
 
@@ -207,14 +232,14 @@ ${currentPromptText}
 - Scenario: ${scenario || currentContext.scenario || 'General engagement'}
 - Target Audience: ${targetAudience || 'Professional teams'}
 - Goals: ${goals || 'Effective engagement and meaningful insights'}
-
+${VARIABLES_BLOCK}
 **Enhancement Request:** Analyze and provide improvements that PRESERVE the admin's original purpose and direction:
 
 1. **Preserve Intent**: Identify and maintain the core purpose and direction
 2. **Enhance Clarity**: Make existing content clearer without changing meaning
 3. **Add Detail**: Expand on existing concepts with more specificity
 4. **Improve Structure**: Better organize existing content
-5. **Template Variables**: Suggest relevant variables for the game type
+5. **Template Variables**: Suggest variables from the list above, and flag any {token} in the prompt that is not on it
 6. **Professional Polish**: Enhance language and presentation
 
 **IMPORTANT**: Do not change the fundamental approach or purpose. Enhance what exists.
@@ -256,7 +281,7 @@ ${currentPromptText}
 - Description: ${currentContext.description || 'Not provided'}
 - Game Type: ${gameType || currentContext.gameType || 'Unknown'}
 - Scenario: ${scenario || currentContext.scenario || 'General engagement'}
-
+${VARIABLES_BLOCK}
 **Validation Request:** Check for potential issues while respecting the admin's vision:
 
 1. **Technical Issues**: Syntax, formatting, token limits that could cause failures
@@ -264,7 +289,7 @@ ${currentPromptText}
 3. **Bias & Fairness**: Potential biases that conflict with inclusive engagement
 4. **Safety Concerns**: Risks of inappropriate content generation
 5. **Performance Issues**: Elements that might confuse AI interpretation
-6. **Template Variables**: Missing or incorrect variable usage for the game type
+6. **Template Variables**: Any {token} not on the list above is an error — report it under category "variables"
 
 **Important:** Focus on technical and safety validation, not changing the admin's approach.
 
@@ -310,13 +335,13 @@ ${currentPromptText}
 - Game Type: ${gameType || currentContext.gameType || 'Unknown'}
 - Target Audience: ${targetAudience || 'Professional teams'}
 - Performance Goals: ${goals || 'High-quality, engaging content'}
-
+${VARIABLES_BLOCK}
 **Optimization Request:** Improve efficiency while preserving the admin's vision:
 
 1. **Token Efficiency**: Reduce unnecessary words without changing meaning or approach
 2. **Performance**: Optimize for consistent AI responses in the admin's intended style
 3. **Clarity**: Make instructions clearer without changing the fundamental approach
-4. **Template Variables**: Ensure proper variable usage for the game type
+4. **Template Variables**: Ensure every {token} used appears on the list above
 5. **Maintainability**: Organize content better while preserving all key elements
 
 **Critical:** Do not change the admin's fundamental approach, just make it more efficient.

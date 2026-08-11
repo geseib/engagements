@@ -354,6 +354,20 @@
   color: #666;
 }
 
+/* Author-time variable warning. Deliberately not styled as an error state on
+   the field itself — the save handler is the gate; this is a heads-up while
+   there is still a cursor in the box. */
+.unknown-variable-warning {
+  margin-top: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  border-radius: 6px;
+  border: 1px solid var(--danger, #b3261e);
+  background: rgba(179, 38, 30, 0.08);
+  color: var(--danger-text, #8c1d18);
+}
+
 .form-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

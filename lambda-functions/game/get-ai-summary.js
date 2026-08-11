@@ -7,6 +7,7 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 const { resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutputShape } = require('./personas');
 const { normalizeGameType } = require('./game-types');
 const { isUsableSummaryPrompt, summaryPromptDefect } = require('./prompt-shape');
+const { extractVariableTokens } = require('./template-variables');
 const { resolveSetPartition } = require('./set-version');
 const { isHidden } = require('./anonymity');
 
@@ -2161,6 +2162,20 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     prompt = prompt.replace(regex, value);
   }
 
+  // Anything still brace-wrapped after that loop is a variable nothing can
+  // fill; it goes to the model verbatim and lands on a projector as literal
+  // `{braces}`. That has always happened silently. It still happens — rewriting
+  // live prompts at runtime would be a behaviour change, and a prompt written
+  // years ago is not this code's to edit — but it is no longer invisible: it is
+  // logged, and it is in debugInfo where ?debug=true can show an operator
+  // exactly which token failed.
+  const unresolvedVariables = extractVariableTokens(prompt);
+  if (unresolvedVariables.length > 0) {
+    console.warn(
+      `⚠️ UNRESOLVED TEMPLATE VARIABLES (sent to the model, and shown, as literal text): ` +
+      unresolvedVariables.map((n) => `{${n}}`).join(', '));
+  }
+
   console.log('🤖 FULL AI PROMPT CONSTRUCTED:');
   console.log('=====================================');
   console.log(prompt);
@@ -2171,6 +2186,7 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     promptProvenance: promptProvenance,
     fullPrompt: prompt,
     templateVariables: templateVars,
+    unresolvedVariables,
     promptTemplate: promptData.template || (promptData.instructions + '\n\n' + promptData.outputFormat),
     promptInstructions: promptData.instructions,
     promptOutputFormat: promptData.outputFormat,

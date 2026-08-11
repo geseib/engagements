@@ -149,6 +149,53 @@ const loadPersona = async (id) => STORE[id] || null;
     assert(/not add a title/i.test(contract),
       'a leading H1 is what broke parsing on game 7971 — the contract must forbid it'));
 
+  /*
+   * THE FORMATTING BLOCK.
+   *
+   * The contract used to mandate headings and say nothing else, so a prompt
+   * author had no way to know what the projector could draw. Everything
+   * MarkdownRenderer does not understand falls into its paragraph catch-all
+   * and reaches the wall as raw source characters — '#### x', '![a](b.png)',
+   * an indented sub-list. These tests hold the two halves in step: what the
+   * renderer draws (src/src/components/MarkdownRenderer.jsx, tested in
+   * src/src/__tests__/markdownRenderer.test.jsx) and what the contract
+   * promises. Nothing enforces that automatically; this is the reminder.
+   */
+  check('the contract tells authors what the screen can draw', () => {
+    assert(/\*\*bold\*\*/.test(contract), 'bold is drawable and unnamed');
+    assert(/list/i.test(contract), 'lists are drawable and unnamed');
+    assert(/table/i.test(contract), 'tables are drawable and unnamed');
+  });
+
+  check('the contract names the pipe-fenced table shape the renderer requires', () =>
+    assert(/\|\s*---\s*\|/.test(contract),
+      'the renderer only draws a row fenced by pipes at both ends — an author ' +
+      'writing a GFM table without them gets four lines of prose on the wall'));
+
+  check('the contract names what will NOT render', () => {
+    assert(/image/i.test(contract), 'images render as raw characters and must be named');
+    assert(/HTML/.test(contract), 'HTML is escaped to literal text and must be named');
+    assert(/sub-list|nested/i.test(contract), 'an indented sub-list is flattened and must be named');
+  });
+
+  check('the contract documents the **Lead**: detail idiom', () =>
+    assert(/Lead phrase/i.test(contract) && /caption/i.test(contract),
+      'MarkdownRenderer splits `**Lead**: rest` into a headline over a caption ' +
+      'on the projector, and nothing anywhere told a prompt author it exists'));
+
+  check('the formatting block does not displace the headings mandate', () => {
+    const block = contract.indexOf('WHAT THE SCREEN CAN DRAW');
+    assert(block > -1, 'the formatting block is missing entirely');
+    assert(block < contract.indexOf('Reply using exactly these'),
+      'the section headings are what parseAIResponse keys on, so they must ' +
+      'stay the last word in the contract — formatting advice goes above them');
+  });
+
+  check('the formatting block smuggles in no heading of its own', () =>
+    assert.strictEqual((contract.match(/^## /gm) || []).length, 3,
+      'every "## " in the contract is a section parseAIResponse will look for; ' +
+      'an example heading inside the formatting block becomes a phantom section'));
+
   await run('the contract is present whichever level supplied the voice', async () => {
     const cases = [
       { hostPersonaId: 'comedian', loadPersona },

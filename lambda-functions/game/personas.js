@@ -226,6 +226,41 @@ const COUNT_WORD = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven
  * (or with a prompt that declares nothing) it emits the default triad, so every
  * prompt authored before this existed is unaffected.
  */
+/**
+ * What the projector can actually draw.
+ *
+ * This block is a CAPABILITY statement, not a house style — deliberately, so a
+ * prompt that wants a narrower palette (sets/prompt-trivia-vj.json asks for no
+ * links and no code fences) is narrowing a real capability rather than
+ * contradicting this. What it must never do is promise something the renderer
+ * drops, because an unsupported construct does not error: it falls into
+ * MarkdownRenderer's paragraph catch-all and reaches the wall as raw source
+ * characters. `**Lead phrase**: rest` is the one genuinely useful affordance
+ * and until now it was documented nowhere at all.
+ *
+ * It sits ABOVE the heading mandate on purpose. get-ai-summary.js appends this
+ * whole contract last precisely because a model weights the most recent
+ * formatting instruction most heavily, and the thing that must win that
+ * weighting is the heading list — parseAIResponse() and prompt-shape.js both
+ * key on it. Formatting advice is the cheaper of the two; it goes first.
+ *
+ * Kept in step with src/src/components/MarkdownRenderer.jsx by hand. The tests
+ * in tests/persona-resolution.js and src/src/__tests__/markdownRenderer.test.jsx
+ * are the two ends of that thread.
+ */
+const FORMATTING_BLOCK =
+  'WHAT THE SCREEN CAN DRAW. This is read off a projector at the front of a room and rendered by ' +
+  'a small Markdown renderer. It draws exactly this:\n' +
+  '- Paragraphs, and bullet or numbered lists — one level, never indented under each other.\n' +
+  '- **bold**, *italic*, `inline code`, and [links](https://example.com) to http, https or mailto addresses.\n' +
+  '- Tables, when every row opens and closes with a pipe: `| Answer | Votes |`, then `| --- | --- |`, then the rows.\n' +
+  '- Lines quoted with a leading >, a rule written as --- alone on its line, and fenced code blocks.\n' +
+  'Everything else arrives as raw characters and reads as a mistake, so do not use it: images, ' +
+  'HTML tags, footnotes, task lists, strikethrough, and indented sub-lists.\n\n' +
+  'THE CUE WORTH USING. Write a bullet as **Lead phrase**: the rest of the point. The lead is set ' +
+  'as a headline and the rest as its caption beneath it, which is what makes a point readable from ' +
+  'the back of the room. Keep what follows the colon to one sentence.';
+
 const buildOutputContract = (prompt) => {
   const sections = resolveOutputSections(prompt);
   const count = COUNT_WORD[sections.length] || String(sections.length);
@@ -236,7 +271,8 @@ const buildOutputContract = (prompt) => {
 
   return (
     'FORMAT (this part is not negotiable, and it supersedes any formatting or output-structure ' +
-    'instruction that appeared earlier in this prompt):\n' +
+    'instruction that appeared earlier in this prompt):\n\n' +
+    `${FORMATTING_BLOCK}\n\n` +
     `Reply using exactly these ${count} headings, in this order, spelled exactly as shown, and add no other headings:\n\n` +
     `${body}\n\n` +
     'The voice guidance above governs the words inside these sections. It does not govern the ' +

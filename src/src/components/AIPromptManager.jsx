@@ -2,9 +2,66 @@ import React, { useState, useEffect } from 'react';
 import './AIPromptManager.css';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType } from '../config/gameTypes';
+import {
+  TEMPLATE_VARIABLES,
+  variableCategories,
+  unknownVariableTokens,
+} from '../config/templateVariables';
 import Icon from './Icon';
 
 const API_BASE = window.API_BASE;
+
+// Canonical dashed ids — the same vocabulary as src/config/gameTypes.js and
+// AIGenerationPromptEditor. `survey` is included so survey sets can carry a
+// summary prompt at all; it previously matched nothing anywhere.
+const GAME_TYPE_OPTIONS = [
+  { value: 'call-and-answer', label: 'Call & Answer' },
+  { value: 'trivia', label: 'Trivia' },
+  { value: 'poll', label: 'Poll' },
+  { value: 'wavelength', label: 'Wavelength' },
+  { value: 'survey', label: 'Survey' }
+];
+
+// Lifted to module scope so the LIST FILTER can derive from it too. The filter
+// used to hardcode the call-and-answer categories, so filtering the library by
+// a trivia or wavelength category was impossible — you could author one and
+// never find it again.
+const PROMPT_CATEGORIES = {
+  'call-and-answer': [
+    'lessons-learned',
+    'problem-solving',
+    'amazon-principles',
+    'interview-prep',
+    'team-building',
+    'art-titles',
+    'custom',
+    'opinions'
+  ],
+  trivia: ['general', 'business', 'technology', 'history', 'science', 'custom'],
+  poll: ['opinion', 'preference', 'feedback', 'evaluation', 'custom'],
+  wavelength: ['word-association', 'brainstorming', 'creativity', 'team-building', 'general', 'custom'],
+  survey: ['general', 'feedback', 'evaluation', 'custom']
+};
+
+/** Every category any game type offers, de-duplicated, in game-type order. */
+const ALL_PROMPT_CATEGORIES = [...new Set(Object.values(PROMPT_CATEGORIES).flat())];
+
+/**
+ * The `{tokens}` in this text that nothing will ever substitute.
+ *
+ * Author-time gate. Deliberately a WARNING: the wall is create/update-ai-prompt,
+ * which is the gate both AI helpers pass through. Blocking here would only stop
+ * the one person who can already see the problem.
+ */
+const unknownTokensIn = (...texts) => {
+  const seen = [];
+  for (const text of texts) {
+    for (const name of unknownVariableTokens(text)) {
+      if (!seen.includes(name)) seen.push(name);
+    }
+  }
+  return seen;
+};
 
 // AI Prompt Editor Modal Component
 function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
@@ -37,371 +94,13 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
   const [savedInstructions, setSavedInstructions] = useState('');
   const [savedOutputFormat, setSavedOutputFormat] = useState('');
 
-  // Complete template variables definitions for AI Summary prompts
-  const templateVariables = [
-    // SET INFO - Available for all game types
-    { 
-      name: 'questionSetName', 
-      description: 'Name of the question set being used', 
-      category: 'Set Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Amazon Leadership Principles, Team Building Icebreakers'
-    },
-    { 
-      name: 'questionSetDescription', 
-      description: 'Description of the question set theme and purpose', 
-      category: 'Set Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'], 
-      example: 'Questions designed to explore leadership scenarios and decision-making'
-    },
-    { 
-      name: 'categoryCount', 
-      description: 'Number of different categories in the question set', 
-      category: 'Set Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '8 categories, 5 different themes'
-    },
-    { 
-      name: 'totalQuestions', 
-      description: 'Total number of questions in the question set', 
-      category: 'Set Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '25 questions, 120 total questions'
-    },
-    { 
-      name: 'sessionContext', 
-      description: 'Combined context about the session including set name and description', 
-      category: 'Set Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'a Team Building session using Amazon Leadership Principles'
-    },
-    
-    // GAME INFO - Available for all game types
-    { 
-      name: 'eventTitle', 
-      description: 'Title of the game/event as entered by the host', 
-      category: 'Game Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Q4 Leadership Workshop, Friday Team Building'
-    },
-    { 
-      name: 'gameType', 
-      description: 'Type of engagement game being played', 
-      category: 'Game Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'call-and-answer, trivia, polls, wavelength'
-    },
-    { 
-      name: 'gameId', 
-      description: 'Unique identifier for this game session', 
-      category: 'Game Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '1234, 5678'
-    },
-    { 
-      name: 'sessionDuration', 
-      description: 'How long the game session has been running', 
-      category: 'Game Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '15 minutes, 32 seconds, 1 hour, 45 minutes'
-    },
-    { 
-      name: 'currentRound', 
-      description: 'Current question number being analyzed', 
-      category: 'Game Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '1, 3, 15'
-    },
-    
-    // PLAYER INFO - Available for all game types
-    { 
-      name: 'totalParticipants', 
-      description: 'Total number of players who joined the game', 
-      category: 'Player Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '12 players, 8 participants'
-    },
-    { 
-      name: 'activeParticipants', 
-      description: 'Number of players who participated in voting (call-and-answer only)', 
-      category: 'Player Info',
-      gameTypes: ['callandanswer'],
-      example: '8 players voted, 6 active voters'
-    },
-    { 
-      name: 'playerNames', 
-      description: 'Comma-separated list of all player names', 
-      category: 'Player Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Alice, Bob, Charlie, Diana'
-    },
-    { 
-      name: 'playerRankings', 
-      description: 'Formatted leaderboard with player rankings and scores', 
-      category: 'Player Info',
-      gameTypes: ['callandanswer', 'trivia'],
-      example: '1st: Alice (15 pts), 2nd: Bob (12 pts), 3rd: Charlie (8 pts)'
-    },
-    { 
-      name: 'topPerformers', 
-      description: 'Top 3 players with highest scores', 
-      category: 'Player Info',
-      gameTypes: ['callandanswer', 'trivia'],
-      example: 'Alice (15 pts), Bob (12 pts), Charlie (8 pts)'
-    },
-    
-    // QUESTION INFO - Available for all game types
-    { 
-      name: 'question', 
-      description: 'The main question text (title or questionDetail)', 
-      category: 'Question Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Tell me about a time when you had to work with ambiguity'
-    },
-    { 
-      name: 'questionTitle', 
-      description: 'The question title or main prompt', 
-      category: 'Question Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Working with Ambiguity, Leadership Challenge'
-    },
-    { 
-      name: 'questionDetail', 
-      description: 'Additional context and details about the question', 
-      category: 'Question Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'In this scenario, consider times when you didn\'t have all the information...'
-    },
-    { 
-      name: 'questionCategory', 
-      description: 'Category or theme of the current question', 
-      category: 'Question Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: 'Leadership, Problem Solving, Team Dynamics'
-    },
-    { 
-      name: 'questionNumber', 
-      description: 'Current question number in the session', 
-      category: 'Question Info',
-      gameTypes: ['callandanswer', 'trivia', 'polls', 'wavelength'],
-      example: '1, 5, 12'
-    },
-    { 
-      name: 'correctAnswer', 
-      description: 'The correct answer for trivia questions', 
-      category: 'Question Info',
-      gameTypes: ['trivia'],
-      example: 'The correct answer is B: Machine Learning'
-    },
-    { 
-      name: 'triviaChoices', 
-      description: 'All multiple choice options for trivia questions', 
-      category: 'Question Info',
-      gameTypes: ['trivia'],
-      example: 'A: Artificial Intelligence, B: Machine Learning, C: Deep Learning, D: Neural Networks'
-    },
-    { 
-      name: 'answerDetails', 
-      description: 'Explanation of why the trivia answer is correct', 
-      category: 'Question Info',
-      gameTypes: ['trivia'],
-      example: 'Machine Learning is a subset of AI that focuses on learning from data...'
-    },
-    { 
-      name: 'difficulty', 
-      description: 'Difficulty level of the question', 
-      category: 'Question Info',
-      gameTypes: ['trivia'],
-      example: 'easy, medium, hard'
-    },
-    
-    // ANSWERS - Available for call-and-answer and trivia
-    { 
-      name: 'playerAnswers', 
-      description: 'All player responses to the question', 
-      category: 'Answers',
-      gameTypes: ['callandanswer', 'trivia'],
-      example: 'Alice: "I approached the customer concern by...", Bob: "In my experience..."'
-    },
-    { 
-      name: 'responseCount', 
-      description: 'Number of players who submitted responses', 
-      category: 'Answers',
-      gameTypes: ['callandanswer', 'trivia', 'polls'],
-      example: '8 responses, 12 participants answered'
-    },
-    { 
-      name: 'responsesText', 
-      description: 'Formatted list of all player responses with names', 
-      category: 'Answers',
-      gameTypes: ['callandanswer'],
-      example: '1. Alice: "I approached this by...", 2. Bob: "My strategy was..."'
-    },
-    { 
-      name: 'triviaResponses', 
-      description: 'Trivia answers showing which choice each player selected', 
-      category: 'Answers',
-      gameTypes: ['trivia'],
-      example: 'Alice: A (Incorrect), Bob: B (Correct), Charlie: C (Incorrect)'
-    },
-    { 
-      name: 'correctCount', 
-      description: 'Number of players who got the trivia question correct', 
-      category: 'Answers',
-      gameTypes: ['trivia'],
-      example: '5 out of 8 players answered correctly'
-    },
-    
-    // VOTES - Available for call-and-answer only
-    { 
-      name: 'voteCount', 
-      description: 'Total number of votes cast', 
-      category: 'Votes',
-      gameTypes: ['callandanswer'],
-      example: '24 total votes, 8 voting players'
-    },
-    { 
-      name: 'votingParticipation', 
-      description: 'Percentage of players who participated in voting', 
-      category: 'Votes',
-      gameTypes: ['callandanswer'],
-      example: '75% voting participation, 100% participated'
-    },
-    { 
-      name: 'consensusLevel', 
-      description: 'Level of agreement among voters', 
-      category: 'Votes',
-      gameTypes: ['callandanswer'],
-      example: 'Strong consensus, Moderate agreement, Diverse opinions'
-    },
-    
-    // VOTE TALLY - Available for call-and-answer only
-    { 
-      name: 'voteTally', 
-      description: 'Detailed breakdown of votes received by each response', 
-      category: 'Vote Tally',
-      gameTypes: ['callandanswer'],
-      example: 'Alice: 3 first-place, 2 second-place votes (13 points), Bob: 1 first-place, 3 third-place votes (6 points)'
-    },
-    { 
-      name: 'topVotedAnswers', 
-      description: 'Top 3 most voted responses with vote details', 
-      category: 'Vote Tally',
-      gameTypes: ['callandanswer'],
-      example: 'Alice\'s response (13 points), Bob\'s response (8 points), Charlie\'s response (5 points)'
-    },
-    
-    // RESULTS - Available for call-and-answer and trivia
-    { 
-      name: 'finalResults', 
-      description: 'Top 3 results with rankings and scores/correctness', 
-      category: 'Results',
-      gameTypes: ['callandanswer', 'trivia'],
-      example: 'Alice: Leadership approach (13 points), Bob: Process improvement (8 points)'
-    },
-    { 
-      name: 'winnerInfo', 
-      description: 'Information about the winner(s) of this round', 
-      category: 'Results',
-      gameTypes: ['callandanswer', 'trivia'],
-      example: 'Winner: Alice with "I approached the problem by..." (13 vote points)'
-    },
-    { 
-      name: 'resultsSummary', 
-      description: 'Summary of round results and participation', 
-      category: 'Results',
-      gameTypes: ['callandanswer', 'trivia', 'wavelength'],
-      example: 'Clear winner with 54% of possible vote points, 5 out of 8 players answered correctly'
-    },
-    { 
-      name: 'participationRate', 
-      description: 'Participation statistics for answering and voting', 
-      category: 'Results',
-      gameTypes: ['callandanswer', 'trivia'],
-      example: '100% answered, 75% voted'
-    },
-    { 
-      name: 'triviaCorrectness', 
-      description: 'Correctness summary for trivia questions', 
-      category: 'Results',
-      gameTypes: ['trivia'],
-      example: '5 correct answers, 3 incorrect answers (62% accuracy)'
-    },
-    
-    // SCORES - Available for call-and-answer and trivia
-    { 
-      name: 'cumulativeScores', 
-      description: 'All player scores accumulated across all rounds', 
-      category: 'Scores',
-      gameTypes: ['callandanswer', 'trivia'],
-      example: 'Alice: 28 points, Bob: 22 points, Charlie: 15 points'
-    },
-    { 
-      name: 'scoreChanges', 
-      description: 'Points earned by each player in this specific round', 
-      category: 'Scores',
-      gameTypes: ['callandanswer', 'trivia'],
-      example: 'Alice: +13 points, Bob: +8 points, Charlie: +5 points'
-    },
-    { 
-      name: 'leaderboard', 
-      description: 'Current top 5 players with rankings and total scores', 
-      category: 'Scores',
-      gameTypes: ['callandanswer', 'trivia'],
-      example: '1st: Alice (28 pts), 2nd: Bob (22 pts), 3rd: Charlie (15 pts)'
-    },
-    { 
-      name: 'averageScore', 
-      description: 'Average score across all players', 
-      category: 'Scores',
-      gameTypes: ['callandanswer', 'trivia'],
-      example: '18.5 points, 12.3 points'
-    },
-    
-    // WAVELENGTH SPECIFIC - Available for wavelength only
-    { 
-      name: 'wavelengthTopic', 
-      description: 'The topic or prompt players associated words with', 
-      category: 'Wavelength',
-      gameTypes: ['wavelength'],
-      example: 'Innovation, Leadership, Teamwork'
-    },
-    { 
-      name: 'wavelengthWords', 
-      description: 'All words submitted by players for the wavelength topic', 
-      category: 'Wavelength',
-      gameTypes: ['wavelength'],
-      example: 'Alice: creativity, solutions, breakthrough; Bob: change, ideas, progress'
-    },
-    { 
-      name: 'commonWords', 
-      description: 'Words that multiple players thought of (team alignment)', 
-      category: 'Wavelength',
-      gameTypes: ['wavelength'],
-      example: 'creativity, innovation, ideas, solutions'
-    },
-    { 
-      name: 'commonWordsCount', 
-      description: 'Number of words that showed team alignment', 
-      category: 'Wavelength',
-      gameTypes: ['wavelength'],
-      example: '4 common words, 7 shared concepts'
-    },
-    { 
-      name: 'connectionScore', 
-      description: 'Percentage showing how aligned the team\'s thinking was', 
-      category: 'Wavelength',
-      gameTypes: ['wavelength'],
-      example: '65% connection rate, 42% team alignment'
-    },
-    { 
-      name: 'teamScore', 
-      description: 'Team\'s collective score for the wavelength round', 
-      category: 'Wavelength',
-      gameTypes: ['wavelength'],
-      example: '4 points (one per common word), 7 team points'
-    }
-  ];
+  // The catalogue used to be redeclared here, 49 entries long. It was the only
+  // one of the three lists that was right, which is why config/templateVariables.js
+  // is a copy of its shape — but a fourth place to edit is how lists drift.
+  const templateVariables = TEMPLATE_VARIABLES;
+
+  // Author-time gate: name the tokens nothing can fill, as they are typed.
+  const unknownTokens = unknownTokensIn(formData.outputFormat, formData.instructions);
 
   const insertVariable = (variableName) => {
     if (outputFormatTextareaRef) {
@@ -423,33 +122,8 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
     }
   };
 
-  // Canonical dashed ids — the same vocabulary as src/config/gameTypes.js and
-  // AIGenerationPromptEditor. `survey` is included so survey sets can carry a
-  // summary prompt at all; it previously matched nothing anywhere.
-  const gameTypes = [
-    { value: 'call-and-answer', label: 'Call & Answer' },
-    { value: 'trivia', label: 'Trivia' },
-    { value: 'poll', label: 'Poll' },
-    { value: 'wavelength', label: 'Wavelength' },
-    { value: 'survey', label: 'Survey' }
-  ];
-
-  const categories = {
-    'call-and-answer': [
-      'lessons-learned',
-      'problem-solving',
-      'amazon-principles',
-      'interview-prep',
-      'team-building',
-      'art-titles',
-      'custom',
-      'opinions'
-    ],
-    trivia: ['general', 'business', 'technology', 'history', 'science', 'custom'],
-    poll: ['opinion', 'preference', 'feedback', 'evaluation', 'custom'],
-    wavelength: ['word-association', 'brainstorming', 'creativity', 'team-building', 'general', 'custom'],
-    survey: ['general', 'feedback', 'evaluation', 'custom']
-  };
+  const gameTypes = GAME_TYPE_OPTIONS;
+  const categories = PROMPT_CATEGORIES;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -525,7 +199,11 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate AI prompt');
+        // The handler now rejects an unrecognised game type by name rather than
+        // silently generating against an empty variable list. Discarding that
+        // message would put the loudness back where nobody can hear it.
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.message || detail?.error || 'Failed to generate AI prompt');
       }
 
       const result = await response.json();
@@ -702,7 +380,10 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
                   <br />
                   <small><strong><Icon name="Target" weight="duotone" size={16} color="var(--primary)" /> Game Type:</strong> {formData.gameType} - Variables marked with <Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> are not available for this game type</small>
                 </p>
-                {['Set Info', 'Game Info', 'Player Info', 'Question Info', 'Answers', 'Votes', 'Vote Tally', 'Results', 'Scores', 'Context'].map(category => {
+                {/* Derived, not hand-listed. The hardcoded list omitted 'Wavelength'
+                    (so all six wavelength variables were declared and never drawn)
+                    and included a 'Context' no variable declares. */}
+                {variableCategories().map(category => {
                   const categoryVariables = templateVariables.filter(v => v.category === category);
                   if (categoryVariables.length === 0) return null;
                   
@@ -783,6 +464,18 @@ Click variable buttons to insert them into your output format."
                 />
               </div>
             </div>
+            {unknownTokens.length > 0 && (
+              <div className="unknown-variable-warning" data-testid="unknown-variable-warning">
+                <Icon name="Warning" weight="fill" size={16} color="var(--danger)" />{' '}
+                <strong>
+                  {unknownTokens.length === 1 ? 'This variable does not exist' : 'These variables do not exist'}:
+                </strong>{' '}
+                {unknownTokens.map((name) => `{${name}}`).join(', ')}
+                {' — '}
+                nothing replaces them, so they appear on screen as literal braces and the
+                prompt will be rejected when you save. Use a variable from the panel.
+              </div>
+            )}
             <small className="form-help">
               Click the variable buttons to insert them into your output format. Variables will be replaced with actual content when the AI summary is generated. Supports full Markdown formatting including headers, bold, italic, code, and tables.
             </small>
@@ -1227,7 +920,13 @@ function AIPromptManager() {
         <div className="prompt-filters">
           <select 
             value={selectedGameType}
-            onChange={(e) => setSelectedGameType(e.target.value)}
+            onChange={(e) => {
+              setSelectedGameType(e.target.value);
+              // The category list below is derived from the game type, so a
+              // category that is no longer offered would otherwise stay
+              // selected and silently filter everything out.
+              setSelectedCategory('all');
+            }}
             className="filter-select"
           >
             {/* D20: wavelength was missing entirely, so wavelength prompts were
@@ -1246,14 +945,17 @@ function AIPromptManager() {
             onChange={(e) => setSelectedCategory(e.target.value)}
             className="filter-select"
           >
+            {/* Derived per game type, as the editor's own select already does.
+                This list was hardcoded to the call-and-answer categories, so a
+                trivia or wavelength prompt could be authored under a category
+                and then never filtered for again. */}
             <option value="all">All Categories</option>
-            <option value="lessons-learned">Lessons Learned</option>
-            <option value="problem-solving">Problem Solving</option>
-            <option value="amazon-principles">Amazon Principles</option>
-            <option value="interview-prep">Interview Prep</option>
-            <option value="team-building">Team Building</option>
-            <option value="art-titles">Art &amp; Creative Titles</option>
-            <option value="custom">Custom</option>
+            {(selectedGameType === 'all'
+              ? ALL_PROMPT_CATEGORIES
+              : (PROMPT_CATEGORIES[normalizeGameType(selectedGameType)] || [])
+            ).map(cat => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
           </select>
 
           <select 

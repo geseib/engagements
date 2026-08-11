@@ -3,6 +3,7 @@ const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, UpdateComm
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { normalizeGameType, isKnownGameType, GAME_TYPE_IDS } = require('./shared/game-types');
 const { inferPromptType, normalizeOutputSections } = require('./shared/prompt-shape');
+const { assertTemplateVariablesExist } = require('./shared/template-variable-usage');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -110,6 +111,15 @@ exports.handler = async (event) => {
       ? requestedPromptType
       : inferPromptType({ template, instructions, basePrompt });
     console.log(`🏷️ promptType: ${promptType}${requestedPromptType ? '' : ' (inferred — caller sent none)'}`);
+
+    // Reject invented {variables} before they are stored. The AI generator used
+    // to make these up wholesale (it was handed an empty list and told to use
+    // it), and nothing downstream noticed — the token simply reached a projector
+    // as literal braces. Analysis prompts only: generation prompts speak a
+    // different vocabulary entirely.
+    if (promptType === 'analysis') {
+      assertTemplateVariablesExist({ template, instructions, outputFormat });
+    }
 
     const promptId = generatePromptId();
     const timestamp = new Date().toISOString();
