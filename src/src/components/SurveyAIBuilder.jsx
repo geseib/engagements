@@ -1,10 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
 import { normalizeTags } from '../utils/tags';
+import GenerationJobPanel from './GenerationJobPanel';
+import GeneratedItemsTable from './GeneratedItemsTable';
+import StatusMessage from './StatusMessage';
+import {
+  interpretGenerationJob,
+  rememberGenerationJob,
+  recallGenerationJob,
+  forgetGenerationJob,
+  resumeIsGone,
+} from '../utils/generationJob';
 
 const API_BASE = window.API_BASE;
+const ENDPOINT = `${API_BASE}admin/ai-generate-survey`;
 
 function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
   const [step, setStep] = useState(1);
@@ -22,8 +33,16 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
   });
   const [generatedSurvey, setGeneratedSurvey] = useState(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  // The last poll response, in the shape jobToResponse() actually sends. Every
+  // render branch reads interpretGenerationJob(job).outcome, never
+  // `generatedSurvey` being truthy — which it is for a FAILED job with partials.
+  const [job, setJob] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [transportError, setTransportError] = useState(null);
   const [generationStatus, setGenerationStatus] = useState('');
+  const [excluded, setExcluded] = useState(() => new Set());
+  const [editingItem, setEditingItem] = useState(false);
+  const [reviewingPartial, setReviewingPartial] = useState(false);
   // Raw text of the tag field while it is being edited. null = not editing, so
   // the input falls back to the question's stored tags. Normalising on every
   // keystroke would eat the hyphen out of "remote-" as it is typed.
@@ -35,30 +54,85 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
     { id: 'text_entry', label: 'Text Entry', description: 'Open-ended questions requiring written responses' }
   ];
 
+  const jobIdRef = useRef(null);
+  const configRef = useRef(surveyConfig);
+  configRef.current = surveyConfig;
+
+  // The job stores a flat item list; the survey's own framing travels in
+  // `meta`. Prefer what the AI improved, fall back to what was typed.
+  const assemble = useCallback((items, meta) => {
+    const config = configRef.current;
+    return {
+      id: Date.now(),
+      title: meta?.title || config.title,
+      description: meta?.description || config.description,
+      topic: config.topic,
+      audience: config.audience,
+      purpose: config.purpose,
+      createdAt: new Date().toISOString(),
+      questions: items
+    };
+  }, []);
+
+  /** See TriviaAIBuilder.watchJob — same contract, same reasons. */
+  const watchJob = useCallback(async (jobId) => {
+    jobIdRef.current = jobId;
+    setIsGenerating(true);
+    setTransportError(null);
+    setStep(2);
+    try {
+      const terminal = await pollGenerationJob(ENDPOINT, jobId, {
+        label: 'Survey generation',
+        onStatus: setGenerationStatus,
+        onProgress: (update) => {
+          setJob(update);
+          if (Array.isArray(update.items) && update.items.length > 0) {
+            setGeneratedSurvey(assemble(update.items, update.meta));
+          }
+        }
+      });
+      setJob(terminal);
+      setGeneratedSurvey(assemble(Array.isArray(terminal.items) ? terminal.items : [], terminal.meta));
+      setCurrentQuestionIndex(0);
+    } catch (error) {
+      console.error('AI survey generation error:', error);
+      if (resumeIsGone(error)) {
+        forgetGenerationJob(ENDPOINT);
+        jobIdRef.current = null;
+        setJob(null);
+        setStep(1);
+        setGenerationStatus('That job has expired — generation jobs are readable for three days. Start a new one.');
+      } else {
+        // Keep the stored id: the worker may still be running.
+        setTransportError(error.message);
+      }
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [assemble]);
+
+  useEffect(() => {
+    const stored = recallGenerationJob(ENDPOINT);
+    if (!stored) return;
+    setGenerationStatus('Reconnecting to the job you left…');
+    watchJob(stored.jobId);
+  }, [watchJob]);
+
   const handleConfigSubmit = async () => {
     setIsGenerating(true);
     setGenerationStatus('Starting generation...');
+    setTransportError(null);
+    setJob(null);
+    setGeneratedSurvey(null);
+    setExcluded(new Set());
+    setEditingItem(false);
+    setReviewingPartial(false);
     setStep(2);
 
     // Surveys used to be a single un-chunked call for up to 50 questions
     // against API Gateway's 30s ceiling. Now a background job, chunked.
-    const endpoint = `${API_BASE}admin/ai-generate-survey`;
-
-    // The job stores a flat item list; the survey's own framing travels in
-    // `meta`. Prefer what the AI improved, fall back to what was typed.
-    const assemble = (items, meta) => ({
-      id: Date.now(),
-      title: meta?.title || surveyConfig.title,
-      description: meta?.description || surveyConfig.description,
-      topic: surveyConfig.topic,
-      audience: surveyConfig.audience,
-      purpose: surveyConfig.purpose,
-      createdAt: new Date().toISOString(),
-      questions: items
-    });
-
     try {
-      const { jobId } = await startGenerationJob(endpoint, {
+      const { jobId } = await startGenerationJob(ENDPOINT, {
         title: surveyConfig.title,
         description: surveyConfig.description,
         topic: surveyConfig.topic,
@@ -71,33 +145,46 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
         customPrompt: surveyConfig.customPrompt
       }, { label: 'Survey generation', onStatus: setGenerationStatus });
 
-      const job = await pollGenerationJob(endpoint, jobId, {
-        label: 'Survey generation',
-        onStatus: setGenerationStatus,
-        onProgress: (update) => {
-          if (Array.isArray(update.items) && update.items.length > 0) {
-            setGeneratedSurvey(assemble(update.items, update.meta));
-          }
-        }
-      });
-
-      setGeneratedSurvey(assemble(job.items, job.meta));
-      setCurrentQuestionIndex(0);
-      setGenerationStatus(
-        job.warnings?.length
-          ? `Generated survey with ${job.items.length} questions. ${job.warnings.join(' ')}`
-          : `Generated survey with ${job.items.length} questions successfully`
-      );
+      rememberGenerationJob(ENDPOINT, jobId, { title: surveyConfig.title });
+      await watchJob(jobId);
     } catch (error) {
       console.error('AI survey generation error:', error);
-      if (error.partialItems?.length) {
-        setGeneratedSurvey(assemble(error.partialItems, null));
-        setCurrentQuestionIndex(0);
-      }
-      setGenerationStatus(`Generation failed: ${error.message}`);
-    } finally {
       setIsGenerating(false);
+      setTransportError(error.message);
     }
+  };
+
+  const dismissJob = () => {
+    forgetGenerationJob(ENDPOINT);
+    jobIdRef.current = null;
+  };
+
+  const backToConfiguration = () => {
+    dismissJob();
+    setJob(null);
+    setTransportError(null);
+    setGenerationStatus('');
+    setGeneratedSurvey(null);
+    setExcluded(new Set());
+    setEditingItem(false);
+    setReviewingPartial(false);
+    setStep(1);
+  };
+
+  const retryRemaining = (remaining) => {
+    setSurveyConfig(prev => ({
+      ...prev,
+      questionCount: Math.max(5, Math.min(50, remaining || prev.questionCount))
+    }));
+    backToConfiguration();
+  };
+
+  const toggleExcluded = (index) => {
+    setExcluded(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index); else next.add(index);
+      return next;
+    });
   };
 
   const handleQuestionEdit = (index, field, value) => {
@@ -139,8 +226,13 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
     }
   };
 
+  const surveyQuestions = generatedSurvey?.questions || [];
+  const keptQuestions = surveyQuestions.filter((_, index) => !excluded.has(index));
+  /** What either export button writes: the survey minus the excluded rows. */
+  const keptSurvey = generatedSurvey ? { ...generatedSurvey, questions: keptQuestions } : null;
+
   const handleExportJSON = () => {
-    const jsonContent = JSON.stringify(generatedSurvey, null, 2);
+    const jsonContent = JSON.stringify(keptSurvey, null, 2);
     const blob = new Blob([jsonContent], { type: 'application/json' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -152,19 +244,52 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
     window.URL.revokeObjectURL(url);
   };
 
-  const handleLoadIntoSystem = () => {
+  /**
+   * O1 — "label it". THIS DOES NOT UPLOAD ANYTHING, and the button that calls
+   * it no longer claims to.
+   *
+   * `onSurveyGenerated` is AdminPage.handleSurveyGenerated, which builds a Blob,
+   * clicks an anchor and reports "exported as JSON file". There is no survey
+   * write path behind it: upload-questions.js rejects survey outright, and its
+   * gate is three-way — engagementType === 'survey', OR a .json filename, OR
+   * content starting with `[` or `{` — so a survey set cannot be created by any
+   * route. `config/gameTypes.js` already holds `survey` in UNPLAYABLE_GAME_TYPES
+   * for the same reason.
+   *
+   * So this is an export, and the label says Export. Calling it "Load into
+   * System" reported a success it never achieved.
+   */
+  const handleExportAndClose = () => {
+    dismissJob();
     onSurveyGenerated({
-      survey: generatedSurvey,
+      survey: keptSurvey,
       metadata: {
         title: surveyConfig.title,
         description: surveyConfig.description,
         type: 'survey',
-        questionCount: generatedSurvey.questions.length
+        questionCount: keptQuestions.length
       }
     });
   };
 
-  const currentQuestion = generatedSurvey?.questions[currentQuestionIndex];
+  const currentQuestion = surveyQuestions[currentQuestionIndex];
+
+  const interpreted = interpretGenerationJob(job);
+  const reviewing = !isGenerating && !transportError
+    && (interpreted.outcome === 'complete'
+      || (interpreted.outcome === 'partial' && reviewingPartial));
+
+  /** A multiple-choice question with nothing to choose between is unanswerable. */
+  const questionDefect = (question) => {
+    if (!String(question?.question || '').trim()) return 'No question text.';
+    if (question?.type === 'multiple_choice') {
+      const options = Array.isArray(question.options)
+        ? question.options.filter((option) => String(option ?? '').trim())
+        : [];
+      if (options.length < 2) return 'A multiple-choice question with fewer than two options cannot be answered.';
+    }
+    return null;
+  };
 
   const renderQuestionEditor = (question, index) => {
     switch (question.type) {
@@ -386,6 +511,9 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
           {step === 1 && (
             <div className="survey-configuration">
               <h3>Configure Your Survey</h3>
+              {/* Only ever set on step 1 by the resume path, when the stored
+                  job id has outlived the job record's three-day TTL. */}
+              <StatusMessage message={generationStatus} tone="pending" />
               <div className="config-form">
                 <div className="form-row">
                   <div className="form-group">
@@ -515,16 +643,71 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
 
           {step === 2 && (
             <div className="survey-generation">
-              {isGenerating ? (
-                <div className="generation-progress">
-                  <div className="spinner"></div>
-                  <p>{generationStatus}</p>
-                </div>
-              ) : generatedSurvey ? (
+              {!reviewing ? (
+                <GenerationJobPanel
+                  job={interpreted}
+                  noun="questions"
+                  jobId={jobIdRef.current}
+                  statusLine={generationStatus}
+                  transportError={transportError}
+                  onKeepRunning={onClose}
+                  onReconnect={() => jobIdRef.current && watchJob(jobIdRef.current)}
+                  onReview={() => setReviewingPartial(true)}
+                  onRetryRemaining={retryRemaining}
+                  onDiscard={backToConfiguration}
+                  onBackToConfig={backToConfiguration}
+                />
+              ) : !editingItem ? (
                 <div className="survey-review">
                   <div className="survey-header">
-                    <h3>{generatedSurvey.title}</h3>
-                    <p>{generatedSurvey.description}</p>
+                    <h3>{generatedSurvey?.title}</h3>
+                    <p>{generatedSurvey?.description}</p>
+                  </div>
+                  <GeneratedItemsTable
+                    items={surveyQuestions}
+                    requested={interpreted.requested}
+                    noun="questions"
+                    excluded={excluded}
+                    onToggleExclude={toggleExcluded}
+                    onEdit={(index) => { setCurrentQuestionIndex(index); setTagDraft(null); setEditingItem(true); }}
+                    primary={(question) => question.question}
+                    secondary={(question) => (Array.isArray(question.options) && question.options.length
+                      ? question.options.join(' · ')
+                      : question.placeholder || null)}
+                    flag={questionDefect}
+                    columns={[
+                      { header: 'Type', value: (question) => String(question.type || '').replace('_', ' '), width: '150px', filterable: true },
+                    ]}
+                    actions={(
+                      <>
+                        <button className="btn-secondary" onClick={handleExportJSON}>
+                          <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export JSON
+                        </button>
+                        <button className="btn-primary" onClick={handleExportAndClose} disabled={keptQuestions.length === 0}>
+                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Export JSON and close
+                        </button>
+                      </>
+                    )}
+                  />
+                  {/* O1. Say what the two buttons above actually do, because the
+                      form still offers Survey and the server has no survey
+                      import path at all. */}
+                  <p
+                    className="survey-export-note"
+                    /* #5b6b7c on the modal's white is 5.47:1 — the builders'
+                       usual #7f8c8d is 3.48:1 and fails AA. */
+                    style={{ marginTop: '12px', fontSize: '13px', color: '#5b6b7c' }}
+                  >
+                    Both buttons download a JSON file. A survey set <b>cannot</b> be added to the
+                    question-set library: <code>upload-questions</code> rejects survey uploads
+                    outright, and no game type plays one. Keep the file until that changes.
+                  </p>
+                </div>
+              ) : (
+                <div className="survey-review">
+                  <div className="survey-header">
+                    <h3>{generatedSurvey?.title}</h3>
+                    <p>{generatedSurvey?.description}</p>
                   </div>
 
                   <div className="question-navigation">
@@ -618,20 +801,16 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
                   )}
 
                   <div className="survey-actions">
-                    <button className="btn-secondary" onClick={handleExportJSON}>
-                      <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export JSON
+                    <button className="btn-secondary" onClick={() => { setTagDraft(null); setEditingItem(false); }}>
+                      <Icon name="ListChecks" weight="bold" size={16} color="currentColor" /> Back to all {surveyQuestions.length} questions
                     </button>
-                    <button className="btn-primary" onClick={handleLoadIntoSystem}>
-                      <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load into System
+                    <button
+                      className="btn-secondary"
+                      onClick={() => toggleExcluded(currentQuestionIndex)}
+                    >
+                      {excluded.has(currentQuestionIndex) ? 'Put this one back' : 'Leave this one out'}
                     </button>
                   </div>
-                </div>
-              ) : (
-                <div className="generation-error">
-                  <p>{generationStatus}</p>
-                  <button className="btn-secondary" onClick={() => setStep(1)}>
-                    <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
-                  </button>
                 </div>
               )}
             </div>
@@ -653,9 +832,9 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
               </button>
             </>
           )}
-          {step === 2 && !isGenerating && generatedSurvey && (
+          {step === 2 && reviewing && (
             <>
-              <button className="btn-secondary" onClick={() => setStep(1)}>
+              <button className="btn-secondary" onClick={backToConfiguration}>
                 <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
               </button>
               <button className="btn-secondary" onClick={onClose}>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
+import { interpretGenerationJob } from '../utils/generationJob';
 import Icon from './Icon';
 
 const API_BASE = window.API_BASE;
@@ -50,12 +51,29 @@ function AIAssistant({ engagementType, questionIndex, questionSet, onClose, onQu
         }
       });
 
+      // pollGenerationJob RESOLVES on a failed job now — it carries `items`,
+      // `warnings` and the error, and throwing that away is what made a partial
+      // failure look like a success everywhere else (see utils/generationJob.js).
+      // This surface has no review step to hand partials to, so it reports the
+      // failure and inserts nothing, which is exactly what it did before.
+      const interpreted = interpretGenerationJob(job);
+      if (interpreted.outcome !== 'complete') {
+        const detail = interpreted.error
+          || (interpreted.warnings.length ? interpreted.warnings.join(' ') : 'the job ended without producing anything');
+        setGenerationStatus(
+          interpreted.items.length
+            ? `Generation failed after ${interpreted.items.length} of ${interpreted.requested}: ${detail}`
+            : `Generation failed: ${detail}`
+        );
+        return;
+      }
+
       setGenerationStatus(
-        job.warnings?.length
-          ? `Generated ${job.items.length} question(s). ${job.warnings.join(' ')}`
-          : `Generated ${job.items.length} question(s) successfully`
+        interpreted.warnings.length
+          ? `Generated ${interpreted.items.length} question(s). ${interpreted.warnings.join(' ')}`
+          : `Generated ${interpreted.items.length} question(s) successfully`
       );
-      onQuestionsGenerated(job.items);
+      onQuestionsGenerated(interpreted.items);
     } catch (error) {
       console.error('AI generation error:', error);
       setGenerationStatus(`Generation failed: ${error.message}`);

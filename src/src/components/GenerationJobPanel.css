@@ -1,0 +1,257 @@
+/* ============================================================================
+   THE GENERATION JOB PANEL — components/GenerationJobPanel.jsx
+
+   Derived from docs/design/admin-redesign/09-ai-job-running.html and
+   10-ai-job-failed.html. Scoped under `.gjp` because the mockups' `.panel`,
+   `.note-box`, `.btn` and `.warnlist` names belong to the mockup shell, not to
+   this app.
+
+   ONE DELIBERATE DEPARTURE FROM THE MOCKUPS: they are drawn on the admin
+   console's dusk field (#0F1A2E), and this panel does not live there. It lives
+   inside the AI builder modal, which is `.modal-content { background: white }`
+   (styles.css:5431). Dropping the dusk palette into a white modal would put
+   #F4EDE4 on #ffffff — 1.1:1, invisible. So the same design is re-derived on
+   white, and the four text colours are measured against the surfaces they are
+   actually composited on (the audit's A4 check, docs/design/admin-redesign/
+   audit.js):
+
+     --gjp-text   #2c3e50 on #ffffff  10.98:1   on #f8f9fa  10.42:1
+     --gjp-muted  #5b6b7c on #ffffff   5.47:1   on #f8f9fa   5.19:1
+     --gjp-danger #b3261e on #ffffff   6.54:1   on #fdeceb   5.72:1
+     --gjp-warn   #8a5300 on #ffffff   6.33:1   on #fdf5e3   5.83:1
+     --gjp-ok     #1b6b4a on #ffffff   6.46:1
+
+   The builder modals' existing #7f8c8d muted text is 3.48:1 and fails AA. It is
+   not copied here.
+   ========================================================================== */
+
+.gjp {
+  --gjp-text: #2c3e50;
+  --gjp-muted: #5b6b7c;
+  --gjp-danger: #b3261e;
+  --gjp-danger-bg: #fdeceb;
+  --gjp-warn: #8a5300;
+  --gjp-warn-bg: #fdf5e3;
+  --gjp-ok: #1b6b4a;
+  --gjp-rule: #e3e8ee;
+  --gjp-quiet: #f8f9fa;
+  --gjp-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  color: var(--gjp-text);
+  font-size: 15px;
+  line-height: 1.5;
+  padding: 4px 2px 8px;
+}
+
+.gjp *, .gjp *::before, .gjp *::after { box-sizing: border-box; }
+
+.gjp-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 21px;
+  line-height: 1.25;
+  color: var(--gjp-text);
+}
+
+.gjp-h4 {
+  margin: 22px 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--gjp-muted);
+}
+
+/* ---------------------------------------------------------------- running -- */
+
+.gjp-head {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 20px;
+  border: 1px solid var(--gjp-rule);
+  border-radius: 8px;
+  background: var(--gjp-quiet);
+}
+
+.gjp-bignum {
+  flex: none;
+  font-size: 38px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.gjp-of {
+  font-size: 20px;
+  font-weight: 400;
+  color: var(--gjp-muted);
+}
+
+.gjp-headtext { min-width: 0; }
+.gjp-phase { margin: 0; font-weight: 600; }
+.gjp-sub { margin: 4px 0 0; font-size: 13px; color: var(--gjp-muted); }
+.gjp-mono { font-family: var(--gjp-mono); }
+
+/* The fill is the real fraction and jumps a pass at a time; the sweep is the
+   only continuous motion and carries no information on purpose. */
+.gjp-bar {
+  position: relative;
+  overflow: hidden;
+  height: 6px;
+  margin: 14px 0 0;
+  border-radius: 3px;
+  background: var(--gjp-rule);
+}
+
+.gjp-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--primary, #1B2942);
+  transition: width .35s ease;
+}
+
+.gjp-sweep {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 34%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, transparent, rgba(27, 41, 66, .28), transparent);
+  animation: gjp-sweep 1.9s linear infinite;
+}
+
+@keyframes gjp-sweep {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(400%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gjp-sweep { animation: none; opacity: .35; }
+}
+
+.gjp-note {
+  margin: 14px 0 0;
+  padding: 11px 14px;
+  border: 1px solid var(--gjp-rule);
+  border-left: 3px solid var(--gjp-muted);
+  border-radius: 6px;
+  background: var(--gjp-quiet);
+  font-size: 14px;
+  color: var(--gjp-text);
+}
+
+.gjp-landedlist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--gjp-rule);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.gjp-landedlist li {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 8px 14px;
+  border-top: 1px solid var(--gjp-rule);
+  font-size: 14px;
+}
+
+.gjp-landedlist li:first-child { border-top: none; }
+.gjp-landedlist .gjp-n {
+  flex: none;
+  width: 30px;
+  color: var(--gjp-muted);
+  font-variant-numeric: tabular-nums;
+}
+.gjp-landedlist .gjp-q { min-width: 0; }
+.gjp-landedlist .gjp-dim, .gjp-landedlist li.gjp-dim .gjp-q { color: var(--gjp-muted); }
+
+.gjp-leave {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gjp-leave li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-top: 1px solid var(--gjp-rule);
+  font-size: 14px;
+}
+
+.gjp-leave li:first-child { border-top: none; }
+.gjp-leave li > span { min-width: 0; }
+.gjp-leave .gjp-no { color: var(--gjp-text); }
+
+/* --------------------------------------------------------------- terminal -- */
+
+.gjp-badbox {
+  margin: 0 0 14px;
+  padding: 12px 15px;
+  border: 1px solid rgba(179, 38, 30, .35);
+  border-left: 3px solid var(--gjp-danger);
+  border-radius: 6px;
+  background: var(--gjp-danger-bg);
+  color: var(--gjp-text);
+}
+
+.gjp-errmsg {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: var(--gjp-danger-bg);
+  color: var(--gjp-danger);
+  font-family: var(--gjp-mono);
+  font-size: 13.5px;
+  word-break: break-word;
+}
+
+.gjp-fine {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--gjp-muted);
+}
+
+.gjp-warnlist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gjp-warnlist li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 9px 12px;
+  margin-bottom: 6px;
+  border: 1px solid rgba(138, 83, 0, .3);
+  border-radius: 6px;
+  background: var(--gjp-warn-bg);
+  font-size: 14px;
+}
+
+.gjp-warnlist li > span { min-width: 0; }
+
+/* ---------------------------------------------------------------- actions -- */
+
+.gjp-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.gjp-acts .btn-primary,
+.gjp-acts .btn-secondary,
+.gjp-acts .btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}

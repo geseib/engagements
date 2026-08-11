@@ -1,12 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { authFetch } from '../auth/authFetch';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { normalizeTags, tagsToCsvCell } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
 import Icon from './Icon';
+import GenerationJobPanel from './GenerationJobPanel';
+import GeneratedItemsTable from './GeneratedItemsTable';
+import StatusMessage from './StatusMessage';
+import {
+  interpretGenerationJob,
+  rememberGenerationJob,
+  recallGenerationJob,
+  forgetGenerationJob,
+  resumeIsGone,
+} from '../utils/generationJob';
 
 const API_BASE = window.API_BASE;
+const ENDPOINT = `${API_BASE}admin/ai-generate-scenarios`;
 
 // Shared framing for wavelength generation. Wavelength is a word-association
 // alignment game: the host shows a SUBJECT, every participant lists up to 10
@@ -29,12 +40,25 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   const [generatedScenarios, setGeneratedScenarios] = useState([]);
   const [generatedMetadata, setGeneratedMetadata] = useState(null);
   const [currentScenarioIndex, setCurrentScenarioIndex] = useState(0);
+  // The last poll response, in the shape jobToResponse() actually sends.
+  //
+  // This builder had the worst version of the bug: its catch touched
+  // `partialItems` not at all, and it still reached the review UI over a failed
+  // job — `onProgress` fires on the final poll, before the old throw, so
+  // `generatedScenarios` was already populated and `generatedScenarios.length >
+  // 0` was already true. Branching on the outcome is what fixes that.
+  const [job, setJob] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [transportError, setTransportError] = useState(null);
   const [generationStatus, setGenerationStatus] = useState('');
+  const [excluded, setExcluded] = useState(() => new Set());
+  const [editingItem, setEditingItem] = useState(false);
+  const [reviewingPartial, setReviewingPartial] = useState(false);
   // Raw text of the tag field while it is being edited. null = not editing, so
   // the input falls back to the scenario's stored tags. Normalising on every
   // keystroke would eat the hyphen out of "remote-" as it is typed.
   const [tagDraft, setTagDraft] = useState(null);
+  const jobIdRef = useRef(null);
   const [availablePrompts, setAvailablePrompts] = useState([]);
   const [loadingPrompts, setLoadingPrompts] = useState(true);
   const [promptsError, setPromptsError] = useState(null);
@@ -345,10 +369,92 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     setStep(2);
   };
 
+  /** See TriviaAIBuilder.watchJob — same contract, same reasons. */
+  const watchJob = useCallback(async (jobId) => {
+    jobIdRef.current = jobId;
+    setIsGenerating(true);
+    setTransportError(null);
+    setStep(3);
+    try {
+      const terminal = await pollGenerationJob(ENDPOINT, jobId, {
+        label: 'Generation',
+        onStatus: setGenerationStatus,
+        // Show partial results as they land rather than a spinner for minutes.
+        onProgress: (update) => {
+          setJob(update);
+          if (Array.isArray(update.items) && update.items.length > 0) {
+            setGeneratedScenarios(update.items);
+          }
+        }
+      });
+      setJob(terminal);
+      setGeneratedScenarios(Array.isArray(terminal.items) ? terminal.items : []);
+      setGeneratedMetadata(null); // Will be generated later
+      setCurrentScenarioIndex(0);
+    } catch (error) {
+      console.error('AI generation error:', error);
+      if (resumeIsGone(error)) {
+        forgetGenerationJob(ENDPOINT);
+        jobIdRef.current = null;
+        setJob(null);
+        setStep(2);
+        setGenerationStatus('That job has expired — generation jobs are readable for three days. Start a new one.');
+      } else {
+        // Keep the stored id: the worker may still be running.
+        setTransportError(error.message);
+      }
+    } finally {
+      setIsGenerating(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const stored = recallGenerationJob(ENDPOINT);
+    if (!stored) return;
+    setGenerationStatus('Reconnecting to the job you left…');
+    watchJob(stored.jobId);
+  }, [watchJob]);
+
+  const dismissJob = () => {
+    forgetGenerationJob(ENDPOINT);
+    jobIdRef.current = null;
+  };
+
+  const backToConfiguration = () => {
+    dismissJob();
+    setJob(null);
+    setTransportError(null);
+    setGenerationStatus('');
+    setGeneratedScenarios([]);
+    setExcluded(new Set());
+    setEditingItem(false);
+    setReviewingPartial(false);
+    setStep(2);
+  };
+
+  const retryRemaining = (remaining) => {
+    setScenarioConfig(prev => ({ ...prev, count: Math.max(1, remaining || prev.count) }));
+    backToConfiguration();
+  };
+
+  const toggleExcluded = (index) => {
+    setExcluded(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index); else next.add(index);
+      return next;
+    });
+  };
+
   const handleConfigSubmit = async () => {
     console.log('🤖 Starting AI scenario generation...', scenarioConfig);
     setIsGenerating(true);
     setGenerationStatus('Generating scenarios with AI...');
+    setTransportError(null);
+    setJob(null);
+    setGeneratedScenarios([]);
+    setExcluded(new Set());
+    setEditingItem(false);
+    setReviewingPartial(false);
     setStep(3);
 
     try {
@@ -432,12 +538,11 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
       // The endpoint now returns a jobId immediately and we poll. One call can
       // then write every scenario at once, which is also what stops the
       // duplicates: twenty parallel calls were each blind to the other nineteen.
-      const endpoint = `${API_BASE}admin/ai-generate-scenarios`;
       const backendScenarioType = selectedType?.source === 'database' && selectedType.dbPrompt
         ? selectedType.dbPrompt.scenarioType
         : scenarioConfig.type;
 
-      const { jobId } = await startGenerationJob(endpoint, {
+      const { jobId } = await startGenerationJob(ENDPOINT, {
         scenarioType: backendScenarioType,
         engagementType: engagementType,
         prompt: basePrompt,
@@ -451,29 +556,12 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         mustHaveCategories: scenarioConfig.mustHaveCategories
       }, { label: 'Generation', onStatus: setGenerationStatus });
 
-      const job = await pollGenerationJob(endpoint, jobId, {
-        label: 'Generation',
-        onStatus: setGenerationStatus,
-        // Show partial results as they land rather than a spinner for minutes.
-        onProgress: (update) => {
-          if (Array.isArray(update.items) && update.items.length > 0) {
-            setGeneratedScenarios(update.items);
-          }
-        }
-      });
-
-      setGeneratedScenarios(job.items);
-      setGeneratedMetadata(null); // Will be generated later
-      setGenerationStatus(
-        [`Generated ${job.items.length} scenarios successfully`, ...(job.warnings || [])].join(' ')
-      );
-      setCurrentScenarioIndex(0);
-      
+      rememberGenerationJob(ENDPOINT, jobId, { scenarioType: backendScenarioType });
+      await watchJob(jobId);
     } catch (error) {
       console.error('AI generation error:', error);
-      setGenerationStatus(`Generation failed: ${error.message}`);
-    } finally {
       setIsGenerating(false);
+      setTransportError(error.message);
     }
   };
 
@@ -504,9 +592,11 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   const generateCSVContent = () => {
     const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags';
 
-    // First, group scenarios by category
+    // First, group scenarios by category. Excluded rows are excluded
+    // everywhere — exporting one the operator just dropped would make the CSV
+    // and the set disagree.
     const scenariosByCategory = {};
-    generatedScenarios.forEach(scenario => {
+    keptScenarios.forEach(scenario => {
       const category = scenario.category || 'AI Generated';
       if (!scenariosByCategory[category]) {
         scenariosByCategory[category] = [];
@@ -543,8 +633,9 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
       aiContextInstructions: generateAIContextInstructions()
     };
 
+    dismissJob();
     onScenariosGenerated({
-      scenarios: generatedScenarios,
+      scenarios: keptScenarios,
       metadata: metadata
     });
   };
@@ -623,6 +714,19 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   };
 
   const currentScenario = generatedScenarios[currentScenarioIndex];
+  const keptScenarios = generatedScenarios.filter((_, index) => !excluded.has(index));
+
+  const interpreted = interpretGenerationJob(job);
+  const reviewing = !isGenerating && !transportError
+    && (interpreted.outcome === 'complete'
+      || (interpreted.outcome === 'partial' && reviewingPartial));
+
+  /** A scenario with no prompt text is nothing a room can respond to. */
+  const scenarioDefect = (scenario) => {
+    if (!String(scenario?.title || '').trim()) return 'No title.';
+    if (!String(scenario?.detail || '').trim()) return 'No scenario text — there is nothing for the room to respond to.';
+    return null;
+  };
 
   // Helper functions for context-aware placeholders
   const getContextPlaceholder = () => {
@@ -734,6 +838,9 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
           {step === 2 && (
             <div className="scenario-configuration">
               <h3>Configure Your {engagementType === 'trivia' ? 'Trivia Questions' : engagementType === 'poll' ? 'Poll Questions' : engagementType === 'wavelength' ? 'Wavelength Prompts' : 'Scenarios'}</h3>
+              {/* Only ever set on this step by the resume path, when the stored
+                  job id has outlived the job record's three-day TTL. */}
+              <StatusMessage message={generationStatus} tone="pending" />
               <div className="config-form">
                 <div className="form-group">
                   <label>Question Set Title</label>
@@ -873,12 +980,46 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
 
           {step === 3 && (
             <div className="scenario-generation">
-              {isGenerating ? (
-                <div className="generation-progress">
-                  <div className="spinner"></div>
-                  <p>{generationStatus}</p>
-                </div>
-              ) : generatedScenarios.length > 0 ? (
+              {!reviewing ? (
+                <GenerationJobPanel
+                  job={interpreted}
+                  noun="scenarios"
+                  jobId={jobIdRef.current}
+                  statusLine={generationStatus}
+                  transportError={transportError}
+                  onKeepRunning={onClose}
+                  onReconnect={() => jobIdRef.current && watchJob(jobIdRef.current)}
+                  onReview={() => setReviewingPartial(true)}
+                  onRetryRemaining={retryRemaining}
+                  onDiscard={backToConfiguration}
+                  onBackToConfig={backToConfiguration}
+                />
+              ) : !editingItem ? (
+                <GeneratedItemsTable
+                  items={generatedScenarios}
+                  requested={interpreted.requested}
+                  noun="scenarios"
+                  excluded={excluded}
+                  onToggleExclude={toggleExcluded}
+                  onEdit={(index) => { setCurrentScenarioIndex(index); setTagDraft(null); setEditingItem(true); }}
+                  primary={(scenario) => scenario.title}
+                  secondary={(scenario) => scenario.detail}
+                  flag={scenarioDefect}
+                  columns={[
+                    { header: 'Category', value: (scenario) => scenario.category, width: '160px', filterable: true },
+                  ]}
+                  actions={(
+                    <>
+                      <button className="btn-secondary" onClick={handleExportCSV}>
+                        <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export CSV
+                      </button>
+                      <button className="btn-primary" onClick={handleLoadIntoSystem} disabled={keptScenarios.length === 0}>
+                        <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load {keptScenarios.length} into System
+                      </button>
+                    </>
+                  )}
+                />
+              ) : (
                 <div className="scenario-review">
                   <div className="scenario-navigation">
                     <button
@@ -973,20 +1114,16 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                   </div>
 
                   <div className="scenario-actions">
-                    <button className="btn-secondary" onClick={handleExportCSV}>
-                      <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export CSV
+                    <button className="btn-secondary" onClick={() => { setTagDraft(null); setEditingItem(false); }}>
+                      <Icon name="ListChecks" weight="bold" size={16} color="currentColor" /> Back to all {generatedScenarios.length} scenarios
                     </button>
-                    <button className="btn-primary" onClick={handleLoadIntoSystem}>
-                      <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load into System
+                    <button
+                      className="btn-secondary"
+                      onClick={() => toggleExcluded(currentScenarioIndex)}
+                    >
+                      {excluded.has(currentScenarioIndex) ? 'Put this one back' : 'Leave this one out'}
                     </button>
                   </div>
-                </div>
-              ) : (
-                <div className="generation-error">
-                  <p>{generationStatus}</p>
-                  <button className="btn-secondary" onClick={() => setStep(2)}>
-                    <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
-                  </button>
                 </div>
               )}
             </div>
@@ -1011,9 +1148,9 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
               </button>
             </>
           )}
-          {step === 3 && !isGenerating && generatedScenarios.length > 0 && (
+          {step === 3 && reviewing && (
             <>
-              <button className="btn-secondary" onClick={() => setStep(2)}>
+              <button className="btn-secondary" onClick={backToConfiguration}>
                 <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
               </button>
               <button className="btn-secondary" onClick={onClose}>

@@ -1,0 +1,263 @@
+/* ============================================================================
+   THE GENERATED-ITEMS REVIEW TABLE — components/GeneratedItemsTable.jsx
+
+   Derived from docs/design/admin-redesign/11-ai-job-review.html. Scoped under
+   `.git` for the same reason GenerationJobPanel.css is scoped under `.gjp`: the
+   mockups' `.tbl`, `.chip`, `.btn`, `.seg` and `.filters` are the mockup
+   shell's names and collide with styles.css.
+
+   Re-derived on white rather than the console's dusk field, because this table
+   renders inside the AI builder modal (`.modal-content { background: white }`,
+   styles.css:5431). Measured against the surfaces it is actually composited on:
+
+     --git-text   #2c3e50 on #ffffff  10.98:1   on #f8f9fa  10.42:1
+     --git-muted  #5b6b7c on #ffffff   5.47:1   on #f8f9fa   5.19:1
+     --git-warn   #8a5300 on #ffffff   6.33:1   on #fdf5e3   5.83:1
+     --git-danger #b3261e on #ffffff   6.54:1
+     --git-chipfg #35506b on #eef2f7   7.44:1
+   ========================================================================== */
+
+.git {
+  --git-text: #2c3e50;
+  --git-muted: #5b6b7c;
+  --git-warn: #8a5300;
+  --git-warn-bg: #fdf5e3;
+  --git-danger: #b3261e;
+  --git-rule: #e3e8ee;
+  --git-quiet: #f8f9fa;
+  --git-chip-bg: #eef2f7;
+  --git-chip-fg: #35506b;
+
+  color: var(--git-text);
+  font-size: 15px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.git *, .git *::before, .git *::after { box-sizing: border-box; }
+
+.git-sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0);
+  white-space: nowrap; border: 0;
+}
+
+/* ------------------------------------------------------------------ head -- */
+
+.git-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.git-headtext { flex: 1 1 260px; min-width: 0; }
+.git-title { margin: 0; font-size: 21px; line-height: 1.25; }
+.git-sub { margin: 5px 0 0; font-size: 14px; color: var(--git-muted); }
+
+.git-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.git-actions .btn-primary,
+.git-actions .btn-secondary,
+.git-actions .btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.git-shortfall {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin: 0 0 14px;
+  padding: 11px 14px;
+  border: 1px solid rgba(138, 83, 0, .3);
+  border-left: 3px solid var(--git-warn);
+  border-radius: 6px;
+  background: var(--git-warn-bg);
+  font-size: 14px;
+}
+
+.git-shortfall > span { min-width: 0; }
+
+/* --------------------------------------------------------------- filters -- */
+
+.git-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--git-rule);
+}
+
+.git-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1 1 200px;
+  min-width: 160px;
+  padding: 6px 10px;
+  border: 1px solid var(--git-rule);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.git-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+}
+
+.git-facet {
+  padding: 7px 10px;
+  border: 1px solid var(--git-rule);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  color: inherit;
+}
+
+.git-seg {
+  display: inline-flex;
+  border: 1px solid var(--git-rule);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.git-seg button {
+  border: 0;
+  padding: 7px 12px;
+  background: #fff;
+  color: var(--git-muted);
+  font: 600 13px/1.2 inherit;
+  cursor: pointer;
+}
+
+.git-seg button + button { border-left: 1px solid var(--git-rule); }
+.git-seg button[aria-pressed="true"] { background: var(--git-quiet); color: var(--git-text); }
+
+.git-count {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--git-muted);
+}
+
+.git-nomatch {
+  margin: 18px 0;
+  color: var(--git-muted);
+}
+
+.git-linkbtn {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--primary, #1B2942);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ----------------------------------------------------------------- table -- */
+
+/* The modal is narrow and the table has five columns; it scrolls in its own
+   box rather than pushing the modal sideways. */
+.git-scroll {
+  overflow-x: auto;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.git-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.git-tbl th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--git-rule);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--git-muted);
+  white-space: nowrap;
+}
+
+.git-tbl td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--git-rule);
+  vertical-align: top;
+}
+
+.git-tbl tbody tr:hover { background: var(--git-quiet); }
+
+.git-num { width: 46px; color: var(--git-muted); }
+.git-actcol { width: 170px; }
+
+.git-nm { display: block; }
+.git-2nd { display: block; margin-top: 3px; font-size: 13px; color: var(--git-muted); }
+.git-flag { display: block; margin-top: 3px; font-size: 13px; color: var(--git-danger); }
+
+.git-chip {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 11px;
+  background: var(--git-chip-bg);
+  color: var(--git-chip-fg);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.git-none { color: var(--git-muted); }
+
+/* An excluded row stays legible — it is a choice you can reverse, not debris. */
+.git-out td { background: var(--git-quiet); }
+.git-out .git-nm { text-decoration: line-through; color: var(--git-muted); }
+
+.git-rowact { display: flex; gap: 6px; }
+
+.git-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid var(--git-rule);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--git-text);
+  font: 600 12.5px/1.2 inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.git-btn:hover { background: var(--git-quiet); }
+.git-ghost { color: var(--git-muted); }
+.git-ghost:hover { color: var(--git-danger); border-color: var(--git-danger); }
+
+.git :focus-visible { outline: 2px solid var(--primary, #1B2942); outline-offset: 2px; border-radius: 4px; }
+
+.git-fine {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--git-muted);
+}

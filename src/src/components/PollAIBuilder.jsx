@@ -1,11 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
 import { normalizeTags, tagsToCsvCell } from '../utils/tags';
 import { csvRow, buildCsv, optionsToCsvCell, allowMultipleToCsvCell } from '../utils/csv';
+import GenerationJobPanel from './GenerationJobPanel';
+import GeneratedItemsTable from './GeneratedItemsTable';
+import StatusMessage from './StatusMessage';
+import {
+  interpretGenerationJob,
+  rememberGenerationJob,
+  recallGenerationJob,
+  forgetGenerationJob,
+  resumeIsGone,
+} from '../utils/generationJob';
 
 const API_BASE = window.API_BASE;
+const ENDPOINT = `${API_BASE}admin/ai-generate-polls`;
 
 function PollAIBuilder({ onClose, onPollGenerated }) {
   const [step, setStep] = useState(1);
@@ -20,8 +31,16 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
   });
   const [generatedPolls, setGeneratedPolls] = useState([]);
   const [currentPollIndex, setCurrentPollIndex] = useState(0);
+  // The last poll response, in the shape jobToResponse() actually sends. Every
+  // render branch reads interpretGenerationJob(job).outcome, never
+  // generatedPolls.length — which is true for a FAILED job carrying partials.
+  const [job, setJob] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [transportError, setTransportError] = useState(null);
   const [generationStatus, setGenerationStatus] = useState('');
+  const [excluded, setExcluded] = useState(() => new Set());
+  const [editingItem, setEditingItem] = useState(false);
+  const [reviewingPartial, setReviewingPartial] = useState(false);
   // Raw text of the tag field while it is being edited. null = not editing, so
   // the input falls back to the poll's stored tags. Normalising on every
   // keystroke would eat the hyphen out of "remote-" as it is typed.
@@ -33,17 +52,69 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
     { value: 'hard', label: 'Hard', description: 'Complex topics requiring deeper consideration' }
   ];
 
+  const jobIdRef = useRef(null);
+
+  /** See TriviaAIBuilder.watchJob — same contract, same reasons. */
+  const watchJob = useCallback(async (jobId) => {
+    jobIdRef.current = jobId;
+    setIsGenerating(true);
+    setTransportError(null);
+    setStep(2);
+    try {
+      const terminal = await pollGenerationJob(ENDPOINT, jobId, {
+        label: 'Generation',
+        onStatus: setGenerationStatus,
+        // Show polls as they land rather than a spinner for minutes.
+        onProgress: (update) => {
+          setJob(update);
+          if (Array.isArray(update.items) && update.items.length > 0) {
+            setGeneratedPolls(update.items);
+          }
+        }
+      });
+      setJob(terminal);
+      setGeneratedPolls(Array.isArray(terminal.items) ? terminal.items : []);
+      setCurrentPollIndex(0);
+    } catch (error) {
+      console.error('AI poll generation error:', error);
+      if (resumeIsGone(error)) {
+        forgetGenerationJob(ENDPOINT);
+        jobIdRef.current = null;
+        setJob(null);
+        setStep(1);
+        setGenerationStatus('That job has expired — generation jobs are readable for three days. Start a new one.');
+      } else {
+        // Keep the stored id: the worker may still be running.
+        setTransportError(error.message);
+      }
+    } finally {
+      setIsGenerating(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const stored = recallGenerationJob(ENDPOINT);
+    if (!stored) return;
+    setGenerationStatus('Reconnecting to the job you left…');
+    watchJob(stored.jobId);
+  }, [watchJob]);
+
   const handleConfigSubmit = async () => {
     setIsGenerating(true);
     setGenerationStatus('Starting generation...');
+    setTransportError(null);
+    setJob(null);
+    setGeneratedPolls([]);
+    setExcluded(new Set());
+    setEditingItem(false);
+    setReviewingPartial(false);
     setStep(2);
 
     // Generation runs as a background job. It cannot run inside the request:
     // API Gateway's 30s integration timeout is a hard ceiling and a full set
     // takes minutes, which is what produced the "HTTP 503 - retrying" loop.
-    const endpoint = `${API_BASE}admin/ai-generate-polls`;
     try {
-      const { jobId } = await startGenerationJob(endpoint, {
+      const { jobId } = await startGenerationJob(ENDPOINT, {
         topic: pollConfig.topic,
         category: pollConfig.category,
         audience: pollConfig.audience,
@@ -53,36 +124,46 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
         customPrompt: pollConfig.customPrompt
       }, { label: 'Generation', onStatus: setGenerationStatus });
 
-      const job = await pollGenerationJob(endpoint, jobId, {
-        label: 'Generation',
-        onStatus: setGenerationStatus,
-        // Show polls as they land rather than a spinner for minutes.
-        onProgress: (update) => {
-          if (Array.isArray(update.items) && update.items.length > 0) {
-            setGeneratedPolls(update.items);
-          }
-        }
-      });
-
-      setGeneratedPolls(job.items);
-      setCurrentPollIndex(0);
-      setGenerationStatus(
-        job.warnings?.length
-          ? `Generated ${job.items.length} poll questions. ${job.warnings.join(' ')}`
-          : `Generated ${job.items.length} poll questions successfully`
-      );
+      rememberGenerationJob(ENDPOINT, jobId, { topic: pollConfig.topic });
+      await watchJob(jobId);
     } catch (error) {
       console.error('AI poll generation error:', error);
-      // A failed job still returns whatever it managed to generate.
-      if (error.partialItems?.length) {
-        setGeneratedPolls(error.partialItems);
-        setCurrentPollIndex(0);
-      }
-      setGenerationStatus(`Generation failed: ${error.message}`);
-    } finally {
       setIsGenerating(false);
+      setTransportError(error.message);
     }
   };
+
+  const dismissJob = () => {
+    forgetGenerationJob(ENDPOINT);
+    jobIdRef.current = null;
+  };
+
+  const backToConfiguration = () => {
+    dismissJob();
+    setJob(null);
+    setTransportError(null);
+    setGenerationStatus('');
+    setGeneratedPolls([]);
+    setExcluded(new Set());
+    setEditingItem(false);
+    setReviewingPartial(false);
+    setStep(1);
+  };
+
+  const retryRemaining = (remaining) => {
+    setPollConfig(prev => ({ ...prev, count: Math.max(1, Math.min(100, remaining || prev.count)) }));
+    backToConfiguration();
+  };
+
+  const toggleExcluded = (index) => {
+    setExcluded(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index); else next.add(index);
+      return next;
+    });
+  };
+
+  const keptPolls = generatedPolls.filter((_, index) => !excluded.has(index));
 
   const handlePollEdit = (index, field, value) => {
     const updatedPolls = [...generatedPolls];
@@ -139,7 +220,8 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
     // no fallback for, so every exported poll set re-imported with zero
     // options. Do not "restore" the numbered columns.
     const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple,Tags';
-    const rows = generatedPolls.map((poll, index) => csvRow([
+    // Excluded rows are excluded everywhere — see TriviaAIBuilder.
+    const rows = keptPolls.map((poll, index) => csvRow([
       poll.category,
       index + 1,
       poll.title,
@@ -156,18 +238,38 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
   const handleLoadIntoSystem = () => {
     const metadata = {
       title: `${pollConfig.topic} Polls${pollConfig.audience ? ` for ${pollConfig.audience}` : ''}`,
-      description: `${generatedPolls.length} AI-generated poll questions about ${pollConfig.topic}. Difficulty: ${pollConfig.difficulty}.`,
+      description: `${keptPolls.length} AI-generated poll questions about ${pollConfig.topic}. Difficulty: ${pollConfig.difficulty}.`,
       customInstructions: `Select your preferred option(s) for each poll question. ${pollConfig.allowMultiple ? 'Multiple selections may be allowed for some questions.' : ''}`,
       aiContextInstructions: `These are ${pollConfig.difficulty}-level poll questions about ${pollConfig.topic}. Encourage thoughtful consideration and diverse perspectives.`
     };
-    
+
+    dismissJob();
     onPollGenerated({
-      questions: generatedPolls,
+      questions: keptPolls,
       metadata: metadata
     });
   };
 
   const currentPoll = generatedPolls[currentPollIndex];
+
+  const interpreted = interpretGenerationJob(job);
+  const reviewing = !isGenerating && !transportError
+    && (interpreted.outcome === 'complete'
+      || (interpreted.outcome === 'partial' && reviewingPartial));
+
+  /**
+   * A poll with fewer than two options is unplayable — there is nothing to
+   * choose between. Real: the importer stores whatever it is given, and the
+   * emitter drops empty option slots rather than padding them.
+   */
+  const optionDefect = (poll) => {
+    const options = Array.isArray(poll?.options)
+      ? poll.options.filter((option) => String(option ?? '').trim())
+      : [];
+    if (options.length === 0) return 'No options — nobody can vote on this.';
+    if (options.length === 1) return 'Only one option — there is nothing to choose between.';
+    return null;
+  };
 
   return (
     <div className="poll-ai-builder-modal">
@@ -182,6 +284,9 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
           {step === 1 && (
             <div className="poll-configuration">
               <h3>Configure Your Poll Questions</h3>
+              {/* Only ever set on step 1 by the resume path, when the stored
+                  job id has outlived the job record's three-day TTL. */}
+              <StatusMessage message={generationStatus} tone="pending" />
               <div className="config-form">
                 <div className="form-row">
                   <div className="form-group">
@@ -296,12 +401,49 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
 
           {step === 2 && (
             <div className="poll-generation">
-              {isGenerating ? (
-                <div className="generation-progress">
-                  <div className="spinner"></div>
-                  <p>{generationStatus}</p>
-                </div>
-              ) : generatedPolls.length > 0 ? (
+              {!reviewing ? (
+                <GenerationJobPanel
+                  job={interpreted}
+                  noun="poll questions"
+                  jobId={jobIdRef.current}
+                  statusLine={generationStatus}
+                  transportError={transportError}
+                  onKeepRunning={onClose}
+                  onReconnect={() => jobIdRef.current && watchJob(jobIdRef.current)}
+                  onReview={() => setReviewingPartial(true)}
+                  onRetryRemaining={retryRemaining}
+                  onDiscard={backToConfiguration}
+                  onBackToConfig={backToConfiguration}
+                />
+              ) : !editingItem ? (
+                <GeneratedItemsTable
+                  items={generatedPolls}
+                  requested={interpreted.requested}
+                  noun="poll questions"
+                  excluded={excluded}
+                  onToggleExclude={toggleExcluded}
+                  onEdit={(index) => { setCurrentPollIndex(index); setTagDraft(null); setEditingItem(true); }}
+                  primary={(poll) => poll.title}
+                  secondary={(poll) => (Array.isArray(poll.options) && poll.options.length
+                    ? poll.options.join(' · ')
+                    : null)}
+                  flag={optionDefect}
+                  columns={[
+                    { header: 'Category', value: (poll) => poll.category, width: '150px', filterable: true },
+                    { header: 'Options', value: (poll) => (Array.isArray(poll.options) ? poll.options.length : 0), width: '90px' },
+                  ]}
+                  actions={(
+                    <>
+                      <button className="btn-secondary" onClick={handleExportCSV}>
+                        <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export CSV
+                      </button>
+                      <button className="btn-primary" onClick={handleLoadIntoSystem} disabled={keptPolls.length === 0}>
+                        <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load {keptPolls.length} into System
+                      </button>
+                    </>
+                  )}
+                />
+              ) : (
                 <div className="poll-review">
                   <div className="poll-navigation">
                     <button
@@ -311,12 +453,12 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                     >
                       <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Previous
                     </button>
-                    
+
                     <div className="poll-counter">
                       <span>Poll {currentPollIndex + 1} of {generatedPolls.length}</span>
                       <h3>{currentPoll?.title}</h3>
                     </div>
-                    
+
                     <button
                       className="nav-button next"
                       onClick={() => navigatePoll('next')}
@@ -442,20 +584,16 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                   )}
 
                   <div className="poll-actions">
-                    <button className="btn-secondary" onClick={handleExportCSV}>
-                      <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export CSV
+                    <button className="btn-secondary" onClick={() => { setTagDraft(null); setEditingItem(false); }}>
+                      <Icon name="ListChecks" weight="bold" size={16} color="currentColor" /> Back to all {generatedPolls.length} poll questions
                     </button>
-                    <button className="btn-primary" onClick={handleLoadIntoSystem}>
-                      <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load into System
+                    <button
+                      className="btn-secondary"
+                      onClick={() => toggleExcluded(currentPollIndex)}
+                    >
+                      {excluded.has(currentPollIndex) ? 'Put this one back' : 'Leave this one out'}
                     </button>
                   </div>
-                </div>
-              ) : (
-                <div className="generation-error">
-                  <p>{generationStatus}</p>
-                  <button className="btn-secondary" onClick={() => setStep(1)}>
-                    <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
-                  </button>
                 </div>
               )}
             </div>
@@ -468,8 +606,8 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
               <button className="btn-secondary" onClick={onClose}>
                 Cancel
               </button>
-              <button 
-                className="btn-primary" 
+              <button
+                className="btn-primary"
                 onClick={handleConfigSubmit}
                 disabled={!pollConfig.topic.trim()}
               >
@@ -477,9 +615,9 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
               </button>
             </>
           )}
-          {step === 2 && !isGenerating && generatedPolls.length > 0 && (
+          {step === 2 && reviewing && (
             <>
-              <button className="btn-secondary" onClick={() => setStep(1)}>
+              <button className="btn-secondary" onClick={backToConfiguration}>
                 <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
               </button>
               <button className="btn-secondary" onClick={onClose}>

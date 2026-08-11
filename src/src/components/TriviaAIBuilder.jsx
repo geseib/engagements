@@ -1,11 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
 import { tagsToCsvCell, normalizeTags } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
+import GenerationJobPanel from './GenerationJobPanel';
+import GeneratedItemsTable from './GeneratedItemsTable';
+import StatusMessage from './StatusMessage';
+import {
+  interpretGenerationJob,
+  rememberGenerationJob,
+  recallGenerationJob,
+  forgetGenerationJob,
+  resumeIsGone,
+} from '../utils/generationJob';
 
 const API_BASE = window.API_BASE;
+const ENDPOINT = `${API_BASE}admin/ai-generate-trivia`;
 
 function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
   const [step, setStep] = useState(1);
@@ -22,8 +33,20 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
   });
   const [generatedTrivia, setGeneratedTrivia] = useState([]);
   const [currentTriviaIndex, setCurrentTriviaIndex] = useState(0);
+  // The last poll response, in the shape jobToResponse() actually sends. EVERY
+  // render branch below reads interpretGenerationJob(job).outcome — never
+  // generatedTrivia.length, which is true for a FAILED job carrying partials
+  // and is exactly how a partial failure used to render as a success.
+  const [job, setJob] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [transportError, setTransportError] = useState(null);
   const [generationStatus, setGenerationStatus] = useState('');
+  // Per-item reject (G6). Indices into generatedTrivia.
+  const [excluded, setExcluded] = useState(() => new Set());
+  // The carousel is now a drill-in from the table, not the only way through.
+  const [editingItem, setEditingItem] = useState(false);
+  // A partial failure has to be acknowledged before its items are reviewable.
+  const [reviewingPartial, setReviewingPartial] = useState(false);
   // Raw text of the tag field while it is being edited. null = not editing, so
   // the input falls back to the question's stored tags. Normalising on every
   // keystroke would eat the hyphen out of "remote-" as it is typed.
@@ -35,17 +58,82 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
     { value: 'hard', label: 'Hard', description: 'Advanced knowledge, challenging questions' }
   ];
 
+  const jobIdRef = useRef(null);
+
+  /**
+   * Watch a job to its terminal state.
+   *
+   * pollGenerationJob RESOLVES on `status:'error'` now — a failed job is an
+   * answer and carries `items`, `completed`, `requested` and `warnings`. Only
+   * transport failures throw, and of those only a 404 means the job is gone.
+   */
+  const watchJob = useCallback(async (jobId) => {
+    jobIdRef.current = jobId;
+    setIsGenerating(true);
+    setTransportError(null);
+    setStep(2);
+    try {
+      const terminal = await pollGenerationJob(ENDPOINT, jobId, {
+        label: 'Generation',
+        onStatus: setGenerationStatus,
+        // Show questions as they land rather than a spinner for minutes.
+        onProgress: (update) => {
+          setJob(update);
+          if (Array.isArray(update.items) && update.items.length > 0) {
+            setGeneratedTrivia(update.items);
+          }
+        }
+      });
+      setJob(terminal);
+      setGeneratedTrivia(Array.isArray(terminal.items) ? terminal.items : []);
+      setCurrentTriviaIndex(0);
+    } catch (error) {
+      console.error('AI trivia generation error:', error);
+      if (resumeIsGone(error)) {
+        // The job row's 3-day TTL is stamped only at creation and never
+        // refreshed, so a stored id expiring is ordinary. Not an error screen.
+        forgetGenerationJob(ENDPOINT);
+        jobIdRef.current = null;
+        setJob(null);
+        setStep(1);
+        setGenerationStatus('That job has expired — generation jobs are readable for three days. Start a new one.');
+      } else {
+        // KEEP the stored id: a timeout or a lost connection says nothing about
+        // the worker, which has its own fifteen minutes. Reopening resumes it.
+        setTransportError(error.message);
+      }
+    } finally {
+      setIsGenerating(false);
+    }
+  }, []);
+
+  // Resume the job this browser was last watching. Without this the jobId lived
+  // in a local const inside handleConfigSubmit, so closing the modal lost it
+  // forever — while the client's own timeout message advised reopening the
+  // builder to check, which nothing made possible.
+  useEffect(() => {
+    const stored = recallGenerationJob(ENDPOINT);
+    if (!stored) return;
+    setGenerationStatus('Reconnecting to the job you left…');
+    watchJob(stored.jobId);
+  }, [watchJob]);
+
   const handleConfigSubmit = async () => {
     setIsGenerating(true);
     setGenerationStatus('Starting generation...');
+    setTransportError(null);
+    setJob(null);
+    setGeneratedTrivia([]);
+    setExcluded(new Set());
+    setEditingItem(false);
+    setReviewingPartial(false);
     setStep(2);
 
     // Generation runs as a background job. It cannot run inside the request:
     // API Gateway's 30s integration timeout is a hard ceiling and a full set
     // takes minutes, which is what produced the "HTTP 503 - retrying" loop.
-    const endpoint = `${API_BASE}admin/ai-generate-trivia`;
     try {
-      const { jobId } = await startGenerationJob(endpoint, {
+      const { jobId } = await startGenerationJob(ENDPOINT, {
         topic: triviaConfig.topic,
         audience: triviaConfig.audience,
         difficulty: triviaConfig.difficulty,
@@ -57,36 +145,47 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
         customPrompt: triviaConfig.customPrompt
       }, { label: 'Generation', onStatus: setGenerationStatus });
 
-      const job = await pollGenerationJob(endpoint, jobId, {
-        label: 'Generation',
-        onStatus: setGenerationStatus,
-        // Show questions as they land rather than a spinner for minutes.
-        onProgress: (update) => {
-          if (Array.isArray(update.items) && update.items.length > 0) {
-            setGeneratedTrivia(update.items);
-          }
-        }
-      });
-
-      setGeneratedTrivia(job.items);
-      setCurrentTriviaIndex(0);
-      setGenerationStatus(
-        job.warnings?.length
-          ? `Generated ${job.items.length} trivia questions. ${job.warnings.join(' ')}`
-          : `Generated ${job.items.length} trivia questions successfully`
-      );
+      rememberGenerationJob(ENDPOINT, jobId, { topic: triviaConfig.topic });
+      await watchJob(jobId);
     } catch (error) {
       console.error('AI trivia generation error:', error);
-      // A failed job still returns whatever it managed to generate.
-      if (error.partialItems?.length) {
-        setGeneratedTrivia(error.partialItems);
-        setCurrentTriviaIndex(0);
-      }
-      setGenerationStatus(`Generation failed: ${error.message}`);
-    } finally {
       setIsGenerating(false);
+      setTransportError(error.message);
     }
   };
+
+  /** Done with this job: stop offering to resume it. */
+  const dismissJob = () => {
+    forgetGenerationJob(ENDPOINT);
+    jobIdRef.current = null;
+  };
+
+  const backToConfiguration = () => {
+    dismissJob();
+    setJob(null);
+    setTransportError(null);
+    setGenerationStatus('');
+    setGeneratedTrivia([]);
+    setExcluded(new Set());
+    setEditingItem(false);
+    setReviewingPartial(false);
+    setStep(1);
+  };
+
+  const retryRemaining = (remaining) => {
+    setTriviaConfig(prev => ({ ...prev, count: Math.max(1, Math.min(100, remaining || prev.count)) }));
+    backToConfiguration();
+  };
+
+  const toggleExcluded = (index) => {
+    setExcluded(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index); else next.add(index);
+      return next;
+    });
+  };
+
+  const keptTrivia = generatedTrivia.filter((_, index) => !excluded.has(index));
 
   const handleTriviaEdit = (index, field, value) => {
     const updatedTrivia = [...generatedTrivia];
@@ -125,7 +224,9 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
 
   const generateTriviaCSV = () => {
     const headers = 'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty,Tags';
-    const rows = generatedTrivia.map((trivia, index) => {
+    // Excluded rows are excluded everywhere. Exporting what the operator just
+    // said to leave out would make the CSV and the set disagree.
+    const rows = keptTrivia.map((trivia, index) => {
       const correctAnswer = Array.isArray(trivia.correctAnswer) ? trivia.correctAnswer.join(',') : trivia.correctAnswer;
 
       return csvRow([
@@ -152,13 +253,14 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
   const handleLoadIntoSystem = () => {
     const metadata = {
       title: `${triviaConfig.topic} Trivia${triviaConfig.audience ? ` for ${triviaConfig.audience}` : ''}`,
-      description: `${generatedTrivia.length} AI-generated trivia questions about ${triviaConfig.topic}. Difficulty: ${triviaConfig.difficulty}. ${triviaConfig.numChoices} choices per question.`,
+      description: `${keptTrivia.length} AI-generated trivia questions about ${triviaConfig.topic}. Difficulty: ${triviaConfig.difficulty}. ${triviaConfig.numChoices} choices per question.`,
       customInstructions: `Select the best answer for each question. ${triviaConfig.numCorrect > 1 ? `Some questions may have ${triviaConfig.numCorrect} correct answers.` : ''}`,
       aiContextInstructions: `These are ${triviaConfig.difficulty}-level trivia questions about ${triviaConfig.topic}. Provide explanations for correct answers and encourage learning.`
     };
-    
+
+    dismissJob();
     onTriviaGenerated({
-      questions: generatedTrivia,
+      questions: keptTrivia,
       metadata: metadata
     });
   };
@@ -166,6 +268,44 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
   const currentTrivia = generatedTrivia[currentTriviaIndex];
   const optionKeys = ['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF'];
   const availableOptions = optionKeys.slice(0, triviaConfig.numChoices);
+
+  const interpreted = interpretGenerationJob(job);
+  // The ONE branch. 'complete' goes straight to review; a 'partial' has to be
+  // acknowledged on the failure screen first; everything else is the panel.
+  const reviewing = !isGenerating && !transportError
+    && (interpreted.outcome === 'complete'
+      || (interpreted.outcome === 'partial' && reviewingPartial));
+
+  /**
+   * A real defect the model produces, not a decoration: a correctAnswer that
+   * does not name one of the options this set actually has. upload-questions
+   * takes the string as given, so the question plays with an answer nobody can
+   * pick.
+   */
+  const answerDefect = (trivia) => {
+    const answers = Array.isArray(trivia?.correctAnswer) ? trivia.correctAnswer : [trivia?.correctAnswer];
+    const valid = availableOptions.map((_, i) => `Option${String.fromCharCode(65 + i)}`);
+    const named = answers.filter(Boolean);
+    if (named.length === 0) return 'No correct answer was set — this question cannot be scored.';
+    const unknown = named.filter((answer) => !valid.includes(answer));
+    if (unknown.length) return `Correct answer ${unknown.join(', ')} is not one of this set's ${valid.length} options.`;
+    const missing = named.filter((answer) => !String(trivia[`option${answer.slice(6)}`] || '').trim());
+    if (missing.length) return 'The correct answer points at an empty option.';
+    return null;
+  };
+
+  const correctAnswerLine = (trivia) => {
+    const answers = Array.isArray(trivia?.correctAnswer) ? trivia.correctAnswer : [trivia?.correctAnswer];
+    const named = answers.filter(Boolean);
+    if (!named.length) return null;
+    return named
+      .map((answer) => {
+        const letter = String(answer).replace(/^Option/, '');
+        const text = trivia[`option${letter}`];
+        return text ? `${letter} — ${text}` : letter;
+      })
+      .join('; ');
+  };
 
   return (
     <div className="trivia-ai-builder-modal">
@@ -180,6 +320,9 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
           {step === 1 && (
             <div className="trivia-configuration">
               <h3>Configure Your Trivia Questions</h3>
+              {/* Only ever set on step 1 by the resume path, when the stored
+                  job id has outlived the job record's three-day TTL. */}
+              <StatusMessage message={generationStatus} tone="pending" />
               <div className="config-form">
                 <div className="form-row">
                   <div className="form-group">
@@ -339,12 +482,50 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
 
           {step === 2 && (
             <div className="trivia-generation">
-              {isGenerating ? (
-                <div className="generation-progress">
-                  <div className="spinner"></div>
-                  <p>{generationStatus}</p>
-                </div>
-              ) : generatedTrivia.length > 0 ? (
+              {!reviewing ? (
+                <GenerationJobPanel
+                  job={interpreted}
+                  noun="questions"
+                  jobId={jobIdRef.current}
+                  statusLine={generationStatus}
+                  transportError={transportError}
+                  onKeepRunning={onClose}
+                  onReconnect={() => jobIdRef.current && watchJob(jobIdRef.current)}
+                  onReview={() => setReviewingPartial(true)}
+                  onRetryRemaining={retryRemaining}
+                  onDiscard={backToConfiguration}
+                  onBackToConfig={backToConfiguration}
+                />
+              ) : !editingItem ? (
+                <GeneratedItemsTable
+                  items={generatedTrivia}
+                  requested={interpreted.requested}
+                  noun="questions"
+                  excluded={excluded}
+                  onToggleExclude={toggleExcluded}
+                  onEdit={(index) => { setCurrentTriviaIndex(index); setTagDraft(null); setEditingItem(true); }}
+                  primary={(trivia) => trivia.title}
+                  secondary={(trivia) => {
+                    const line = correctAnswerLine(trivia);
+                    return line ? `Correct: ${line}` : null;
+                  }}
+                  flag={answerDefect}
+                  columns={[
+                    { header: 'Category', value: (trivia) => trivia.category, width: '150px', filterable: true },
+                    { header: 'Difficulty', value: (trivia) => trivia.difficulty, width: '110px' },
+                  ]}
+                  actions={(
+                    <>
+                      <button className="btn-secondary" onClick={handleExportCSV}>
+                        <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export CSV
+                      </button>
+                      <button className="btn-primary" onClick={handleLoadIntoSystem} disabled={keptTrivia.length === 0}>
+                        <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load {keptTrivia.length} into System
+                      </button>
+                    </>
+                  )}
+                />
+              ) : (
                 <div className="trivia-review">
                   <div className="trivia-navigation">
                     <button
@@ -354,12 +535,12 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                     >
                       <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Previous
                     </button>
-                    
+
                     <div className="trivia-counter">
                       <span>Question {currentTriviaIndex + 1} of {generatedTrivia.length}</span>
                       <h3>{currentTrivia?.title}</h3>
                     </div>
-                    
+
                     <button
                       className="nav-button next"
                       onClick={() => navigateTrivia('next')}
@@ -527,20 +708,16 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                   )}
 
                   <div className="trivia-actions">
-                    <button className="btn-secondary" onClick={handleExportCSV}>
-                      <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export CSV
+                    <button className="btn-secondary" onClick={() => { setTagDraft(null); setEditingItem(false); }}>
+                      <Icon name="ListChecks" weight="bold" size={16} color="currentColor" /> Back to all {generatedTrivia.length} questions
                     </button>
-                    <button className="btn-primary" onClick={handleLoadIntoSystem}>
-                      <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load into System
+                    <button
+                      className="btn-secondary"
+                      onClick={() => toggleExcluded(currentTriviaIndex)}
+                    >
+                      {excluded.has(currentTriviaIndex) ? 'Put this one back' : 'Leave this one out'}
                     </button>
                   </div>
-                </div>
-              ) : (
-                <div className="generation-error">
-                  <p>{generationStatus}</p>
-                  <button className="btn-secondary" onClick={() => setStep(1)}>
-                    <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
-                  </button>
                 </div>
               )}
             </div>
@@ -553,8 +730,8 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
               <button className="btn-secondary" onClick={onClose}>
                 Cancel
               </button>
-              <button 
-                className="btn-primary" 
+              <button
+                className="btn-primary"
                 onClick={handleConfigSubmit}
                 disabled={!triviaConfig.topic.trim()}
               >
@@ -562,9 +739,9 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
               </button>
             </>
           )}
-          {step === 2 && !isGenerating && generatedTrivia.length > 0 && (
+          {step === 2 && reviewing && (
             <>
-              <button className="btn-secondary" onClick={() => setStep(1)}>
+              <button className="btn-secondary" onClick={backToConfiguration}>
                 <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
               </button>
               <button className="btn-secondary" onClick={onClose}>

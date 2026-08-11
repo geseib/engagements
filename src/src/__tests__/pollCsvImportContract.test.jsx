@@ -236,8 +236,24 @@ describe('PollAIBuilder Export CSV → real importer', () => {
 
   /** Drive the real component to step 2, then capture the exported CSV text. */
   async function exportCsvFromBuilder() {
-    startGenerationJob.mockResolvedValue({ jobId: 'job-1' });
-    pollGenerationJob.mockResolvedValue({ items: POLLS, warnings: [] });
+    startGenerationJob.mockResolvedValue({ jobId: 'job-1', status: 'queued', requested: POLLS.length });
+    // The exact shape jobToResponse() sends — lambda-functions/admin/shared/
+    // generation-jobs.js:178-192. `status` is load-bearing: the builder branches
+    // on interpretGenerationJob(job).outcome, and a response with no status is
+    // read as still-running, which is correct and is not a shape this API can
+    // produce. A fixture missing it would be testing nothing real.
+    pollGenerationJob.mockResolvedValue({
+      jobId: 'job-1',
+      status: 'complete',
+      phase: `Generated ${POLLS.length} of ${POLLS.length}`,
+      requested: POLLS.length,
+      completed: POLLS.length,
+      items: POLLS,
+      warnings: [],
+      meta: null,
+      error: null,
+      updatedAt: '2026-08-11T00:00:00.000Z',
+    });
 
     // jsdom implements neither of these, so they are assigned rather than spied.
     window.URL.createObjectURL = () => 'blob:mock';
