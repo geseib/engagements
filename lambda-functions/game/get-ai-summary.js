@@ -10,6 +10,7 @@ const { isUsableSummaryPrompt, summaryPromptDefect } = require('./prompt-shape')
 const { extractVariableTokens } = require('./template-variables');
 const { resolveSetPartition } = require('./set-version');
 const { isHidden } = require('./anonymity');
+const { consensusLabel } = require('./consensus');
 
 /**
  * Voice attribution carried out of generateAISummary() and onto the stored
@@ -1597,18 +1598,20 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
   let connectionScore = 0;
   let totalUniqueWords = 0;
 
-  // Calculate consensus level
-  let consensusLevel = 'Mixed opinions';
-  if (gameType === 'trivia') {
-    consensusLevel = 'Trivia results - no consensus voting';
-  } else if (gameType === 'wavelength') {
-    consensusLevel = `Team collaboration - ${connectionScore}% word connection rate`;
-  } else if (winners.length === 1 && winners[0].score > (results.maxScore * 0.8)) {
-    consensusLevel = 'Strong consensus';
-  } else if (sortedAnswers.length > 1 && sortedAnswers[0][1].totalScore > (sortedAnswers[1][1].totalScore * 2)) {
-    consensusLevel = 'Moderate consensus';
-  }
-  
+  // Calculate consensus level. See lambda-functions/game/consensus.js — the
+  // previous inline version compared maxScore against itself and therefore
+  // reported "Strong consensus" on every voted round, however split the room.
+  // `let`, not `const`: the wavelength branch recomputes this at :2005, once
+  // connectionScore has actually been derived. Up here it is still 0 (declared
+  // at :1598, populated at :1904/:1985), so wavelength's value from this call is
+  // provisional and always overwritten. Every other game type takes it as final.
+  let consensusLevel = consensusLabel({
+    gameType,
+    sortedAnswers,
+    maxScore: results.maxScore,
+    connectionScore,
+  });
+
   // Format final results (different for trivia vs voting)
   const finalResults = gameType === 'trivia' ?
     sortedAnswers.slice(0, 3).map(([idx, data], rank) => {
