@@ -823,6 +823,32 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games
             Method: GET
+            # HOST/ADMIN ONLY, and it is the odd one out among the GET /games/*
+            # routes around it, so the reason is written here.
+            #
+            # Everything else a participant's client calls names ONE game — the
+            # one whose four-digit code they were given. This route names them
+            # ALL: every title, every host's name and every join code in the
+            # environment, in one request. Nothing on the player path calls it
+            # (PlayerPage.jsx and RootPage.jsx make no such request); the only
+            # callers are the host's switch-game/reports dialog
+            # (GameHostPage.jsx fetchGamesList) and the admin Sessions tab
+            # (SessionsPanel.jsx), and both have a signed-in user in hand.
+            #
+            # Public, it also cancelled the one protection four-digit codes had.
+            # Enumerability was accepted on the grounds that an attacker must
+            # guess 10,000 codes noisily; this handed over the answer key, with
+            # `started` and `visibility` to pick the live, code-free ones.
+            #
+            # The GROUP check is NOT here. An HTTP API authorizer proves you are
+            # someone, not that you are allowed to be here — attaching this
+            # alone would still admit any pool account, including one still in
+            # `pending`. See requiredGroupsForRoute in
+            # lambda-functions/auth/authorizer.js, which must name this route
+            # explicitly. The two halves only work shipped together, and
+            # tests/games-list-authorization.js pins both.
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName

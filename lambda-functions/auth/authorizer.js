@@ -103,6 +103,21 @@ function requiredGroupsForRoute(method, path) {
   if (path.startsWith('admin')) {
     return ['admins'];
   }
+  // The games LIST, not a game. `GET /games` returns every session's title,
+  // host name and four-digit join code in the environment, and the generic
+  // "GET + games is public" rule below would let ANY account in the pool read
+  // it — including one still sitting in `pending`, unapproved. That is the
+  // failure require-admin.js:19-24 documents for /admin/users/*: an authorizer
+  // proves you are someone, it does not prove you are allowed.
+  //
+  // MATCHED EXACTLY, and that is load-bearing. `path.startsWith('games')` or
+  // `path.includes('games')` here would also catch GET /games/{gameId} and
+  // every GET /games/{gameId}/* below it — the session brief the root page
+  // checks a code against, plus /state, /players, /answers, /question, /votes
+  // — and 401 every participant out of the join flow.
+  if (method === 'GET' && path === 'games') {
+    return ['hosts', 'admins'];
+  }
   // Game creation/management requires host or admin group
   if ((method === 'POST' || method === 'PUT' || method === 'DELETE') && path.includes('games')) {
     return ['hosts', 'admins'];
