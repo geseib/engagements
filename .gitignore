@@ -38,6 +38,32 @@ config/secrets.json
 config/production.json
 config/development.json
 
+# ...but those four patterns are unanchored and match ANY path segment, so they
+# also swallow ordinary source. A test named `adminShellTokens.test.js` was
+# written, run, passed locally and was invisible to git — it would never have
+# reached CI, and nothing would have said so. In a codebase with an auth system
+# `authToken.js`, `refreshToken.js` and `useCredentials.js` are all names
+# somebody will reach for.
+#
+# So: keep the broad catch for the data files it is actually aimed at (a stray
+# `token.json`, `github-token.txt`, `aws-credentials`), and exempt source. The
+# exemptions are by EXTENSION, not by directory, so a secret cannot sneak back
+# in by being dropped somewhere with the right name — a `.json` or `.txt` or
+# extensionless file called `token` is still ignored wherever it lands.
+!*token*.js
+!*token*.jsx
+!*token*.ts
+!*token*.tsx
+!*token*.css
+!*secret*.js
+!*secret*.jsx
+!*secret*.ts
+!*secret*.tsx
+!*credentials*.js
+!*credentials*.jsx
+!*credentials*.ts
+!*credentials*.tsx
+
 # IDE and Editor files
 .vscode/
 .idea/

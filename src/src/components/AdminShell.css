@@ -1,0 +1,416 @@
+/* ============================================================================
+   THE ADMIN CONSOLE SHELL — components/AdminShell.jsx
+
+   Derived from docs/design/admin-redesign/_src/shell.css (22 mockups,
+   RATIONALE.md). Every selector is namespaced `adm-` and scoped under
+   `.adm-shell`, because global styles.css already owns `.nav`, `.top`, `.work`,
+   `.btn`, `.chip` and friends — the mockups' unnamespaced class names cannot be
+   imported into this app without colliding with the host stage.
+
+   WHAT THIS SURFACE IS, because it decides every number below (RATIONALE §3):
+   one person, one laptop, arm's length. Nobody else ever sees it. That is the
+   exact opposite of the host stage, whose 20px angular floors are derived for a
+   projected image read at 25 feet by an audience, and they must NOT be imported
+   here.
+
+   THE LADDER. At ~120 CSS ppi read at 24in, one CSS pixel of cap height is
+   0.86 arcminutes, so:
+
+       px    arcmin   job
+       12     10.3    hard floor: counts, chip text. Glanced, never read in runs.
+       13     11.2    field labels, column heads, breadcrumb, secondary text
+       15     12.9    THE reading tier: nav items, rows, values, inputs
+       19     16.3    section headings
+       24     20.6    screen title
+       30     25.8    the one display numeral a panel is allowed
+
+   The 12px floor is angularly LARGER than the host spec's own 16px Table floor
+   (16px at 3ft = 9.2 arcmin; 12px at 24in = 10.3), so it is not a relaxation of
+   that rule — it is the same rule re-derived for a reader at two-thirds the
+   distance. The designers show the arithmetic in RATIONALE §3.1 and disagree
+   with the brief's 12px-is-too-small framing; they are right and this follows
+   them.
+
+   COLOUR comes from tokens only. The root carries data-theme="dark", so
+   --bg/--surface/--surface-2/--text/--muted resolve to the dusk set
+   (styles.css:56) under the app's paper <html>. --primary is theme-invariant.
+
+   MEASURED CONTRAST (sRGB, computed in __tests__/adminShellTokens.test.js,
+   not eyeballed):
+     --text  #F4EDE4 on --bg      #0F1A2E   14.97:1
+     --text  #F4EDE4 on --surface #1B2942   12.53:1
+     --muted #9BA8BE on --bg      #0F1A2E    7.24:1
+     --muted #9BA8BE on --surface #1B2942    6.06:1
+     --primary #F6A94C on --bg    #0F1A2E    8.86:1
+     --secondary #7CA7E6 on --surface        5.91:1   (dev chip)
+     --bg on --primary (badge label)         8.86:1
+
+   NOTE ON --muted. The mockups use #B6C2D4; this app ships #9BA8BE for dusk
+   (styles.css:62) and WelcomeScreen/RootPage are already on it. Both clear AA
+   comfortably (9.65 vs 7.24 on --bg). Matching the shipped neighbours is the
+   point — "aligned with the rest of the app" is the ask.
+   ========================================================================== */
+
+.adm-shell {
+  /* -- the ladder, scoped ------------------------------------------------ */
+  --adm-t-floor: 12px;
+  --adm-t-label: 13px;
+  --adm-t-body: 15px;
+  --adm-t-head: 19px;
+  --adm-t-title: 24px;
+  --adm-t-numeral: 30px;
+
+  --adm-rule: rgba(155, 168, 190, .20);
+  --adm-rule-strong: rgba(155, 168, 190, .34);
+  --adm-row-hover: rgba(155, 168, 190, .055);
+  --adm-row-sel: rgba(246, 169, 76, .10);
+
+  /* Density. 36px rows, 32px nav items: this surface is dense on purpose. */
+  --adm-nav-w: 212px;
+  --adm-top-h: 48px;
+
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 var(--adm-t-body)/1.45 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+
+  /* The SHELL never scrolls; .adm-work-body does. This is what keeps the nav
+     and the screen title on screen — the shipped console scrolled the whole
+     document, so the tab bar left the viewport as soon as you read a list. */
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: var(--adm-nav-w) minmax(0, 1fr);
+  grid-template-rows: var(--adm-top-h) 1fr;
+  grid-template-areas:
+    "brand top"
+    "nav   work";
+}
+
+.adm-shell *,
+.adm-shell *::before,
+.adm-shell *::after { box-sizing: border-box; }
+
+.adm-shell :focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* A 1180px laptop is the narrowest supported width; below it the nav collapses
+   to icons. Nothing here is designed for a phone — an admin console on a phone
+   is a different product, and pretending otherwise produces a worse desktop. */
+@media (max-width: 1180px) {
+  .adm-shell { --adm-nav-w: 60px; }
+  .adm-shell .adm-nav-label,
+  .adm-shell .adm-word { display: none; }
+  /* The count goes with the label; the BADGE does not. A size is worth a rail
+     of its own only when there is room for the word it counts, but a person
+     waiting for approval has to stay visible at every width. */
+  .adm-shell .adm-nav-count { display: none; }
+  .adm-shell .adm-nav-item { justify-content: center; gap: 4px; padding: 0 4px; }
+}
+
+/* ------------------------------------------------------------------ brand -- */
+.adm-brand {
+  grid-area: brand;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--adm-rule);
+  border-right: 1px solid var(--adm-rule);
+}
+
+.adm-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  flex: none;
+  background: linear-gradient(145deg, var(--primary), #C77B4A);
+}
+
+.adm-word {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--adm-t-label);
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* ----------------------------------------------------------------- topbar -- */
+.adm-top {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  min-width: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--adm-rule);
+}
+
+.adm-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: var(--adm-t-label);
+  color: var(--muted);
+}
+
+.adm-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  /* 26px target on a 13px label. WCAG 2.2 2.5.8 measures the target, not the
+     glyph, and negative margin keeps the padding from moving the row. */
+  padding: 6px 7px;
+  margin: -6px -7px;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  color: var(--muted);
+  font: 600 var(--adm-t-label)/1 var(--font-ui);
+  cursor: pointer;
+}
+.adm-back:hover { color: var(--text); background: var(--adm-row-hover); }
+.adm-back-ico { flex: none; }
+
+.adm-spacer { flex: 1 1 auto; min-width: 8px; }
+
+.adm-envchip {
+  flex: none;
+  font-size: var(--adm-t-floor);
+  font-weight: 700;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--adm-rule-strong);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.adm-envchip--dev  { border-color: rgba(124, 167, 230, .5); color: var(--secondary); }
+.adm-envchip--test { border-color: rgba(155, 168, 190, .5); color: var(--text); }
+.adm-envchip--prod { border-color: rgba(246, 169, 76, .6);  color: var(--primary); }
+/* An unidentifiable environment is shown as unidentifiable, in the colour that
+   means "read this carefully". It is never quietly rendered as dev. */
+.adm-envchip--unknown { border-color: rgba(229, 100, 94, .6); color: var(--danger-text); }
+
+.adm-who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-width: 0;
+  font-size: var(--adm-t-label);
+  color: var(--muted);
+}
+
+.adm-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  font-size: var(--adm-t-floor);
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Single text node, so text-overflow can actually render. The host spec's §5.1
+   trap: an ellipsis declared on a flex container with span children is inert. */
+.adm-name {
+  display: block;
+  max-width: 22ch;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.adm-linkbtn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 6px;
+  border: 1px solid var(--adm-rule-strong);
+  background: transparent;
+  color: var(--text);
+  font: 600 var(--adm-t-floor)/1 var(--font-ui);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.adm-linkbtn:hover { background: var(--adm-row-hover); border-color: var(--muted); }
+
+/* -------------------------------------------------------------------- nav -- */
+.adm-nav {
+  grid-area: nav;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 8px;
+  overflow: hidden;
+  background: var(--surface);
+  border-right: 1px solid var(--adm-rule);
+}
+
+.adm-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: 32px;
+  padding: 0 9px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: 400 var(--adm-t-body)/1 var(--font-ui);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.adm-nav-item:hover { background: var(--adm-row-hover); color: var(--text); }
+.adm-nav-item[aria-current] {
+  background: var(--adm-row-sel);
+  color: var(--text);
+  border-color: rgba(246, 169, 76, .34);
+  font-weight: 600;
+}
+.adm-nav-ico { flex: none; opacity: .9; }
+.adm-nav-item[aria-current] .adm-nav-ico { opacity: 1; }
+
+.adm-nav-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.adm-nav-count {
+  flex: none;
+  font-size: var(--adm-t-floor);
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* The one badge allowed to be loud. A person waiting for approval is the only
+   thing in this console that decays if nobody looks at it (RATIONALE §7).
+   #0F1A2E on #F6A94C is 8.86:1. */
+.adm-nav-badge {
+  flex: none;
+  min-width: 18px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #0F1A2E;
+  font-size: var(--adm-t-floor);
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+}
+
+.adm-nav-foot {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--adm-rule);
+}
+
+/* ------------------------------------------------------------------- work -- */
+.adm-work {
+  grid-area: work;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The hero seam. Empty by default and still a seam — see the component header
+   and docs/design/admin-redesign/OPEN-QUESTIONS.md. */
+.adm-hero { flex: none; }
+
+.adm-work-head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 20px 10px;
+  border-bottom: 1px solid var(--adm-rule);
+}
+
+.adm-work-heading { min-width: 0; }
+
+.adm-work-head h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--adm-t-title);
+  line-height: 1.15;
+  letter-spacing: -.005em;
+  color: var(--text);
+  /* A set title runs to sixty-odd characters. Single nowrap text node, because
+     text-overflow on a wrapping or flex box is inert (host spec §5.1, audit
+     A2). The component puts the full string on title= so the clip is a
+     reduction and not a deletion. */
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.adm-work-heading { flex: 1 1 auto; }
+
+.adm-sub {
+  margin: 4px 0 0;
+  max-width: 92ch;
+  color: var(--muted);
+  font-size: var(--adm-t-label);
+}
+
+.adm-grow { flex: 1 1 auto; min-width: 12px; }
+
+.adm-head-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: none;
+  padding-top: 2px;
+}
+
+/* THE one scrolling region. */
+.adm-work-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* TRANSITIONAL — DELETE WHEN WAVE D LANDS.
+   The tab internals are still the paper-theme markup they have always been:
+   white cards with #333 body copy (styles.css:4635-4646) and Bootstrap-blue
+   controls. #333 on the dusk #0F1A2E is 1.4:1, so the work body declares the
+   theme its content actually is rather than the theme we want it to be. When
+   the tabs are converted, AdminPage passes contentTheme="dark" and this block
+   goes. The seam is visible on purpose: a half-converted console that says so
+   is better than one that hides the boundary behind an unreadable panel. */
+.adm-work-body[data-theme="light"] {
+  background: #f5f7fa;
+  padding: 20px;
+}
+.adm-work-body[data-theme="dark"] {
+  padding: 14px 20px 40px;
+}

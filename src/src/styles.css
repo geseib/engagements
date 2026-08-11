@@ -19,7 +19,20 @@
   --secondary:     #7CA7E6;  /* dusk periwinkle — links, WS-connected, non-reward (6.8:1) */
 
   --success:       #4FB286;  /* correct answer, positive delta (5.6:1) */
-  --danger:        #E5645E;  /* errors, destructive only (5.0:1) */
+  --danger:        #E5645E;  /* errors, destructive only. Borders, rules, bar fills. */
+  /* TWO TEXT-ONLY DANGER TINTS, by the same argument that produced --muted's
+     lift. Measured against the DUSK set, unlifted (no projector here — the
+     admin console is one person at 24in), --danger is UNDER the 4.5:1 AA bar
+     for normal text: 4.38:1 on --surface and 3.56:1 on --surface-2. Destructive
+     copy is precisely the text a person must read carefully, and it lives in
+     modals, which sit on --surface. Found by the admin redesign's audit A4;
+     see docs/design/admin-redesign/RATIONALE.md §5.
+       --danger-text  7.26 / 6.08 / 4.94  on --bg / --surface / --surface-2
+       --danger-deep  carries --text at 5.16:1 (a filled #E5645E button carries
+                      white at only 3.32:1, which is why it cannot be --danger)
+     --danger itself is unchanged and keeps every non-text job. */
+  --danger-text:   #EF8C86;  /* destructive COPY on a dusk surface */
+  --danger-deep:   #B03A34;  /* filled destructive button */
   --gold:          #F6A94C;  /* rank #1 == --primary; silver #C0C6D0, bronze #B4794A */
   --silver:        #C0C6D0;
   --bronze:        #B4794A;

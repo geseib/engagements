@@ -17,11 +17,77 @@ import StatusMessage from './components/StatusMessage';
 import SetImageBadge from './components/SetImageBadge';
 import PromptShapePreview from './components/PromptShapePreview';
 import QuestionSetEditor from './components/QuestionSetEditor';
+import AdminShell from './components/AdminShell';
+import { describeEnvironment } from './utils/adminEnvironment';
 import { gameTypeLabel } from './config/gameTypes';
 import { truncate } from './utils/questionSetEditing';
 import { tagsToCsvCell } from './utils/tags';
 
 const API_BASE = window.API_BASE;
+
+/**
+ * THE SECTIONS, as places rather than tabs.
+ *
+ * Order and default both changed, for the reason RATIONALE.md §9 gives: every
+ * other screen in this console is downstream of a question set, and the console
+ * used to open on AI Prompts. "Game Management" is "Sessions" for the same
+ * reason the mockups call it that — a tab that can only delete, and only by an
+ * id it never shows you, is not management.
+ *
+ * A subtitle here must be true. Sessions says it has no list, because it has no
+ * list: GET /games is deployed and this console has never called it.
+ */
+const ADMIN_SECTIONS = [
+  {
+    id: 'questionsets',
+    label: 'Question sets',
+    icon: 'Books',
+    title: 'Question sets',
+    subtitle: 'The thing every session is built from.',
+  },
+  {
+    id: 'games',
+    label: 'Sessions',
+    icon: 'GameController',
+    title: 'Sessions',
+    subtitle: 'Delete game data. There is no session list yet — removing one needs its id.',
+  },
+  {
+    id: 'prompts',
+    label: 'Prompts',
+    icon: 'Sparkle',
+    title: 'Prompts',
+    subtitle: 'Generation prompts build questions; analysis prompts are what Workie says afterwards.',
+  },
+  {
+    id: 'archive',
+    label: 'Archive',
+    icon: 'Package',
+    title: 'Archive',
+    subtitle: 'A shared, public service. The same store backs all three environments.',
+  },
+  {
+    id: 'users',
+    label: 'Users',
+    icon: 'UsersThree',
+    title: 'Users',
+    subtitle: 'Registration lands people in pending. Somebody has to move them.',
+  },
+];
+
+const ADMIN_FOOT_SECTIONS = [
+  {
+    id: 'settings',
+    label: 'Settings',
+    icon: 'Gear',
+    title: 'Settings',
+    subtitle: 'Three switches, stored in this browser only.',
+  },
+];
+
+const ADMIN_SECTION_BY_ID = Object.fromEntries(
+  [...ADMIN_SECTIONS, ...ADMIN_FOOT_SECTIONS].map((section) => [section.id, section])
+);
 
 function AdminPage() {
   console.log('🔧 AdminPage component loading with AI builders...');
@@ -78,8 +144,9 @@ function AdminPage() {
   // Edit mode
   const [editMode, setEditMode] = useState(false);
   
-  // Tab management
-  const [activeTab, setActiveTab] = useState('prompts');
+  // Which place is open. Question sets, not AI Prompts: RATIONALE.md §9 —
+  // every other screen in this console is downstream of a question set.
+  const [activeTab, setActiveTab] = useState('questionsets');
   // The set being edited. Every field of the editor itself now lives in
   // components/QuestionSetEditor.jsx — this page only decides which set is open
   // and shows the confirmation after the editor closes.
@@ -172,26 +239,36 @@ function AdminPage() {
     fetchAvailablePersonas();
   }, []);
 
+  /**
+   * Open a set. It is a PLACE now, not a section further down the same scroll.
+   *
+   * What used to be here: `setActiveTab('questionsets')` then a 100ms timeout
+   * that queried `.edit-section`, scrolled it into view, painted
+   * `element.style.background = '#fff3cd'` with a `#ffc107` border — a
+   * light-theme yellow on a dark palette — and reverted both three seconds
+   * later. It existed because the form was rendered *after* a list of forty-one
+   * rows and nothing else identified which row was open. Once the detail
+   * replaces the list and carries the set's name as the screen title, there is
+   * nothing to scroll to and nothing to flash. See RATIONALE.md §2.
+   */
   const handleEditQuestionSet = (questionSet) => {
     setEditMode(true);
     setEditingSetId(questionSet.id);
     setSaveStatus('');
     setSaveOk(null);
-
-    // Switch to question sets tab and scroll to edit section
     setActiveTab('questionsets');
-    setTimeout(() => {
-      const editSection = document.querySelector('.edit-section');
-      if (editSection) {
-        editSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        editSection.style.background = '#fff3cd';
-        editSection.style.border = '2px solid #ffc107';
-        setTimeout(() => {
-          editSection.style.background = '';
-          editSection.style.border = '';
-        }, 3000);
-      }
-    }, 100);
+  };
+
+  /**
+   * Leaving for another section leaves the detail place too. A place you can
+   * still be inside while looking at Users is not a place.
+   */
+  const handleNavigate = (sectionId) => {
+    if (sectionId !== activeTab) {
+      setEditMode(false);
+      setEditingSetId('');
+    }
+    setActiveTab(sectionId);
   };
 
   const handleCancelEdit = () => {
@@ -276,12 +353,19 @@ function AdminPage() {
         );
         console.log(`Question set ${setId} ${newActive ? 'activated' : 'deactivated'}`);
       } else {
+        // Was `alert()`, in a console that has imported StatusMessage since it
+        // was written. A modal browser dialog on a failed toggle stops the
+        // world, cannot be styled, and leaves no trace once dismissed; the
+        // banner above the list is where every other outcome on this screen
+        // already reports itself.
         console.error('Failed to toggle active status:', result.error);
-        alert(`Failed to toggle active status: ${result.error}`);
+        setSaveOk(false);
+        setSaveStatus(`Failed to toggle active status: ${result.error}`);
       }
     } catch (error) {
       console.error('Toggle active error:', error);
-      alert(`Failed to toggle active status: ${error.message}`);
+      setSaveOk(false);
+      setSaveStatus(`Failed to toggle active status: ${error.message}`);
     }
   };
 
@@ -307,11 +391,13 @@ function AdminPage() {
         console.log(`Question set ${setId} quickstart ${quickstartEnabled ? 'enabled' : 'disabled'}`);
       } else {
         console.error('Failed to toggle quickstart status:', result.error);
-        alert(`Failed to toggle quickstart status: ${result.error}`);
+        setSaveOk(false);
+        setSaveStatus(`Failed to toggle quickstart status: ${result.error}`);
       }
     } catch (error) {
       console.error('Toggle quickstart error:', error);
-      alert(`Failed to toggle quickstart status: ${error.message}`);
+      setSaveOk(false);
+      setSaveStatus(`Failed to toggle quickstart status: ${error.message}`);
     }
   };
 
@@ -902,152 +988,71 @@ function AdminPage() {
     }
   };
 
+  /*
+    THE SHELL. What used to be here: a `.parallax` section loading three .webp
+    layers from cdn.prod.website-files.com — a third-party CDN dependency on an
+    authenticated operator console, occupying roughly 250px of the fold — with
+    the title, the user's name, a Host link and Sign Out absolutely positioned
+    on top of it in inline styles; then a horizontal strip of six tab buttons
+    that scrolled away with the document.
+
+    The hero images are NOT rendered. They are also not deleted: AdminShell
+    takes a `hero` node, so the owner's open question
+    (docs/design/admin-redesign/OPEN-QUESTIONS.md) can be answered either way by
+    passing one here. See the header comment in components/AdminShell.jsx.
+  */
+  const environment = describeEnvironment({ env: window.ENV, apiBase: API_BASE });
+
+  // The set open in the detail place, or null when the list is the place.
+  const editingSet =
+    editMode && editingSetId
+      ? questionSets.find((set) => set.id === editingSetId) || { id: editingSetId }
+      : null;
+
+  const section = ADMIN_SECTION_BY_ID[activeTab] || ADMIN_SECTION_BY_ID.questionsets;
+
   return (
-    <div className="admin-container">
-      <div className="game-host-container">
-        <div className="parallax">
-          <section className="parallax__header">
-            <div className="parallax__visuals">
-              <div className="parallax__black-line-overflow"></div>
-              <div data-parallax-layers className="parallax__layers">
-                <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795be09b462b2e8ebf71_osmo-parallax-layer-3.webp" loading="eager" width="800" data-parallax-layer="1" alt="" className="parallax__layer-img" />
-                <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" width="800" data-parallax-layer="2" alt="" className="parallax__layer-img" />
-                <div data-parallax-layer="3" className="parallax__layer-title">
-                  <div className="admin-title-row">
-                    <div className="admin-title-left">
-                      <h2 className="parallax__title">Admin Dashboard</h2>
-                      <HelpButton section="admin" variant="header" size="medium" />
-                    </div>
-                    
-                    {/* User Info and Sign Out */}
-                    {currentUser && (
-                      <div className="admin-user-info" style={{
-                        position: 'absolute',
-                        top: '10px',
-                        right: '20px',
-                        color: 'white',
-                        fontSize: '14px',
-                        textAlign: 'right',
-                        background: 'rgba(0,0,0,0.3)',
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        backdropFilter: 'blur(4px)'
-                      }}>
-                        <div style={{ marginBottom: '4px' }}>
-                          <strong>{currentUser.attributes?.name || 'User'}</strong>
-                        </div>
-                        {currentUser.groups?.includes('admins') && (
-                          <div style={{ color: '#ffd700', fontWeight: '500', fontSize: '12px', marginBottom: '6px' }}>
-                            Administrator
-                          </div>
-                        )}
-                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                          {/*
-                            THE WAY BACK, AND IT OPENS A NEW TAB ON PURPOSE.
-
-                            The mirror of the Admin link in the host's session
-                            panel. `App.jsx` is a pathname switch with no
-                            client-side navigation, so an in-place link is a
-                            full page load — and if the host page is live in
-                            another tab with a room in front of it, a second
-                            copy of it is a second host WebSocket connection.
-                            A new tab keeps whatever is already running intact.
-
-                            rel="noopener" so the opened tab gets no handle on
-                            this one.
-                          */}
-                          <a
-                            href="/"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                              padding: '4px 8px',
-                              backgroundColor: 'rgba(255,255,255,0.2)',
-                              border: '1px solid rgba(255,255,255,0.3)',
-                              borderRadius: '4px',
-                              color: 'white',
-                              fontSize: '12px',
-                              textDecoration: 'none',
-                              cursor: 'pointer',
-                              transition: 'background-color 0.2s'
-                            }}
-                            onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.3)'}
-                            onMouseOut={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.2)'}
-                          >
-                            Host ↗
-                          </a>
-                          <button
-                            onClick={handleSignOut}
-                            style={{
-                              padding: '4px 8px',
-                              backgroundColor: 'rgba(255,255,255,0.2)',
-                              border: '1px solid rgba(255,255,255,0.3)',
-                              borderRadius: '4px',
-                              color: 'white',
-                              fontSize: '12px',
-                              cursor: 'pointer',
-                              transition: 'background-color 0.2s'
-                            }}
-                            onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.3)'}
-                            onMouseOut={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.2)'}
-                          >
-                            Sign Out
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" width="800" data-parallax-layer="4" alt="" className="parallax__layer-img" />
-              </div>
-              <div className="parallax__fade"></div>
-            </div>
-          </section>
-        </div>
-
-        <div className="admin-content">
-          {/* Tab Navigation */}
-          <div className="admin-tabs">
-            <div className="tab-nav">
-              <button 
-                className={`tab-btn ${activeTab === 'prompts' ? 'active' : ''}`}
-                onClick={() => setActiveTab('prompts')}
-              >
-                <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI Prompts
-              </button>
-              <button 
-                className={`tab-btn ${activeTab === 'questionsets' ? 'active' : ''}`}
-                onClick={() => setActiveTab('questionsets')}
-              >
-                <Icon name="Books" weight="duotone" size={16} color="var(--primary)" /> Question Sets
-              </button>
-              <button 
-                className={`tab-btn ${activeTab === 'games' ? 'active' : ''}`}
-                onClick={() => setActiveTab('games')}
-              >
-                <Icon name="GameController" weight="bold" size={16} color="currentColor" /> Game Management
-              </button>
-              <button 
-                className={`tab-btn ${activeTab === 'archive' ? 'active' : ''}`}
-                onClick={() => setActiveTab('archive')}
-              >
-                <Icon name="Package" weight="bold" size={16} color="currentColor" /> Archive
-              </button>
-              <button 
-                className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`}
-                onClick={() => setActiveTab('users')}
-              >
-                <Icon name="UsersThree" weight="bold" size={16} color="currentColor" /> Users
-              </button>
-              <button 
-                className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
-                onClick={() => setActiveTab('settings')}
-              >
-                <Icon name="Gear" weight="bold" size={16} color="currentColor" /> Settings
-              </button>
-            </div>
-          </div>
-
+    <>
+      <AdminShell
+        navItems={ADMIN_SECTIONS.map((item) =>
+          item.id === 'questionsets'
+            ? // No count until there is one to state. A "0" beside Question
+              // sets while the list is still loading is an empty state that
+              // lies, and this console has three of those already.
+              { ...item, count: questionSets.length || undefined }
+            : item
+        )}
+        footNavItems={ADMIN_FOOT_SECTIONS}
+        activeId={activeTab}
+        onNavigate={handleNavigate}
+        environment={environment}
+        currentUser={currentUser}
+        onSignOut={handleSignOut}
+        breadcrumb={
+          editingSet ? { parentLabel: 'Question sets', onBack: handleCancelEdit } : null
+        }
+        title={editingSet ? editingSet.name || editingSet.id : section.title}
+        subtitle={editingSet ? undefined : section.subtitle}
+        actions={<HelpButton section="admin" variant="header" size="medium" />}
+      >
+        {editingSet ? (
+          /*
+            THE DETAIL PLACE. The editor replaces the work area rather than
+            being appended below the list it came from, which is the whole of
+            RATIONALE.md §2: no scroll-jump, no three-second yellow flash, and
+            the set's name is on screen for as long as you are editing it.
+          */
+          <QuestionSetEditor
+            questionSet={editingSet}
+            availablePrompts={availablePrompts}
+            availablePersonas={availablePersonas}
+            defaultInstructions={defaultInstructions}
+            onSaved={handleEditorSaved}
+            onChanged={fetchQuestionSets}
+            onCancel={handleCancelEdit}
+          />
+        ) : (
+          <>
           {/* Tab Content */}
           {activeTab === 'prompts' && (
             <div className="tab-content">
@@ -1300,22 +1305,11 @@ function AdminPage() {
           </div>
 
           {/*
-            The set editor. It used to be ~190 lines of form inline here; it now
-            owns every creation field plus CSV download/replace, the version list
-            and the media seam. Extracted, not rewritten — the save payload is
-            still the diff built in utils/questionSetEditing.
+            The set editor USED to render here, immediately after the list and
+            inside the same scroll — which is what the 100ms scroll-jump and the
+            three-second yellow flash existed to paper over. It is now a place
+            of its own: see the `editingSet ?` branch at the top of this render.
           */}
-          {editMode && editingSetId && (
-            <QuestionSetEditor
-              questionSet={questionSets.find(set => set.id === editingSetId) || { id: editingSetId }}
-              availablePrompts={availablePrompts}
-              availablePersonas={availablePersonas}
-              defaultInstructions={defaultInstructions}
-              onSaved={handleEditorSaved}
-              onChanged={fetchQuestionSets}
-              onCancel={handleCancelEdit}
-            />
-          )}
 
           {/* Upload Question Set Section */}
           <div className="admin-section">
@@ -1709,8 +1703,10 @@ function AdminPage() {
               </div>
             </div>
           )}
-        </div>
-      </div>
+          </>
+        )}
+      </AdminShell>
+
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
@@ -1799,7 +1795,7 @@ function AdminPage() {
 
       {/* GitHub Issue Reporting FAB */}
       <IssueFab context="admin" />
-    </div>
+    </>
   );
 }
 
