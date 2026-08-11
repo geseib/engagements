@@ -13,17 +13,31 @@
  *     } else if (winners.length === 1 && winners[0].score > (results.maxScore * 0.8)) {
  *       consensusLevel = 'Strong consensus';
  *
- * `winners` is built as exactly those answers whose score EQUALS `maxScore`
- * (get-ai-summary.js:905-916), and `results.maxScore` is that same number. So
- * the test reduces to `maxScore > 0.8 * maxScore` — true for every maxScore
- * above zero. Any round with a single top answer and one vote point reported
- * "Strong consensus", however evenly the room had split. A 4/3/3 round read as
- * strong agreement.
+ * That expression is a tautology on its face: `winners` holds exactly those
+ * answers whose score EQUALS `maxScore` (get-ai-summary.js:905-916), so it
+ * reduces to `maxScore > 0.8 * maxScore`, true for every positive score.
  *
- * It is the same shape as the participationRate defect removed in 78df15ca:
- * a comparison whose two sides are the same expression, interpolated into a
- * live prompt, always true, and silent. The fix in both cases is the same —
- * compare against something that can actually differ.
+ * BUT IT NEVER FIRED, and the first version of this comment claimed it did.
+ * Correcting that here because the wrong story is the more alarming one and
+ * would send the next reader hunting the wrong bug. `results.maxScore` was
+ * `undefined` inside generateAISummary — the object built at
+ * get-ai-summary.js:1056 carried voteTallies, winners and totalVotes and
+ * nothing else — so the comparison was `score > (undefined * 0.8)`, i.e.
+ * `score > NaN`, which is false. The branch was DEAD CODE and every voted round
+ * fell through to 'Moderate consensus' or 'Mixed opinions'.
+ *
+ * So there were two defects stacked, and fixing only the visible one made
+ * things worse: with the tautology replaced but maxScore still absent, the
+ * zero-guard below read "nobody voted" and every round reported that into the
+ * live prompt — including one where a single answer took 21 of 48 points. The
+ * missing field is fixed at the call site, and a test now asserts the `results`
+ * literal carries maxScore, because asserting only that this function is CALLED
+ * proves the wiring exists and not that it carries anything.
+ *
+ * The tautology is still the same shape as the participationRate defect removed
+ * in 78df15ca — a comparison whose two sides are the same expression, sitting
+ * in a live prompt. The lesson that generalises is the one above it: a value
+ * this function cannot see is as dangerous as an expression it can.
  *
  * So: consensus is measured against the RUNNER-UP. That is the only comparison
  * on this data that can distinguish a room that agreed from a room that did not.

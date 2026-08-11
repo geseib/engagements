@@ -1607,8 +1607,9 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
   let totalUniqueWords = 0;
 
   // Calculate consensus level. See lambda-functions/game/consensus.js — the
-  // previous inline version compared maxScore against itself and therefore
-  // reported "Strong consensus" on every voted round, however split the room.
+  // previous inline version compared maxScore against itself, a tautology that
+  // never actually fired because maxScore was not passed in at all (it is now,
+  // at :1056 — dropping it again turns tests/ai-consensus-label.js red).
   // `let`, not `const`: the wavelength branch recomputes this at :2005, once
   // connectionScore has actually been derived. Up here it is still 0 (declared
   // at :1598, populated at :1904/:1985), so wavelength's value from this call is
