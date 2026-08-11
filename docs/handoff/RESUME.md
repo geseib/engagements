@@ -333,7 +333,7 @@ None of this can be asserted in jsdom and none has been checked:
 
 | | |
 |---|---|
-| `scripts/install-question-set.js` | Installs a CSV set by invoking the **real** `upload-questions` handler in-process. Dry-run by default. `--persona` and `--quickstart` are applied after, because the importer writes neither. |
+| `scripts/install-question-set.js` | Installs a CSV set by invoking the **real** `upload-questions` handler in-process. Dry-run by default, and the dry run now **actually parses the file** — it invokes the handler with every DynamoDB call intercepted and reports `skippedRows`, **with no AWS credentials needed**. (Until 2026-08-11 the dry run returned before the handler was ever required, so it validated nothing and `--apply` was the first read of a CSV. Exit 1 means the importer refused the file.) `--persona` and `--quickstart` are applied after, because the importer writes neither. |
 | `scripts/install-ai-prompt.js` | Installs a prompt by invoking the **real** `create-ai-prompt` handler. Verifies **both** halves landed. |
 | `scripts/seed-personas.js` | Seeds `SEED_PERSONAS` from `lambda-functions/game/personas.js`. Never overwrites without `--overwrite`. |
 | `scripts/cull-ai-prompts.js` | Four passes; `--only=ttl` is the urgent one. |

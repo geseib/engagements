@@ -62,6 +62,83 @@ const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const fileContent = fs.readFileSync(file, 'utf8');
 const setId = customTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
 
+/**
+ * Run the REAL upload-questions handler with every DynamoDB call intercepted.
+ *
+ * The handler builds its own document client at module scope, so the only seam
+ * is the prototype — patch it BEFORE requiring the handler and every client,
+ * whoever constructed it, goes through the recorder. Reads answer as though the
+ * table were empty (which is the state a new install assumes); writes are
+ * recorded and dropped.
+ *
+ * This is the whole point of a dry run: the CSV parser, the column mapping, the
+ * skip rules and the key shapes are the application's, not a second
+ * implementation here that drifts from it.
+ */
+async function dryImport() {
+  const proto = DynamoDBDocumentClient.prototype;
+  const realSend = proto.send;
+  const writes = [];
+
+  proto.send = async function (cmd) {
+    const type = (cmd && cmd.constructor && cmd.constructor.name) || 'Unknown';
+    if (type === 'GetCommand') return {};                 // nothing exists yet
+    if (type === 'QueryCommand' || type === 'ScanCommand') return { Items: [], Count: 0 };
+    if (type === 'BatchWriteCommand') {
+      const reqs = Object.values(cmd.input.RequestItems || {})[0] || [];
+      reqs.forEach((r) => {
+        const item = r.PutRequest && r.PutRequest.Item;
+        if (item) writes.push(`${item.PK} | ${item.SK}`);
+      });
+      return { UnprocessedItems: {} };
+    }
+    const item = cmd.input && cmd.input.Item;
+    if (item) writes.push(`${item.PK} | ${item.SK}`);
+    else writes.push(`${type} ${JSON.stringify((cmd.input && cmd.input.Key) || {})}`);
+    return {};
+  };
+
+  try {
+    const { handler } = require(path.join(REPO, 'lambda-functions', 'admin', 'upload-questions.js'));
+    const res = await handler({
+      body: JSON.stringify({
+        fileName: path.basename(file),
+        fileContent,
+        customTitle,
+        customDescription,
+        engagementType,
+      }),
+    });
+    const payload = JSON.parse(res.body || '{}');
+    payload.__status = res.statusCode;
+    if (res.statusCode >= 300) payload.__failed = true;
+    return { payload, writes };
+  } finally {
+    proto.send = realSend;   // never leave the prototype patched
+  }
+}
+
+function reportImport(payload, writes) {
+  console.log('\n--- CSV verdict (real importer, nothing written) ---');
+  if (payload.__failed) {
+    console.error(`  REFUSED ${payload.__status}: ${payload.error || payload.message}`);
+    return;
+  }
+  console.log(`  questions : ${payload.questionCount ?? '?'}`);
+  console.log(`  categories: ${payload.categoryCount ?? '?'}`);
+  console.log(`  rows that would be written: ${writes.length}`);
+
+  const skipped = payload.skippedRows || [];
+  if (payload.skippedRowCount) {
+    // Silent row loss is the defect this whole report exists to surface.
+    console.log(`  SKIPPED ${payload.skippedRowCount} row(s):`);
+    skipped.slice(0, 20).forEach((r) => console.log(`    ${JSON.stringify(r)}`));
+    if (skipped.length > 20) console.log(`    ...and ${skipped.length - 20} more`);
+  } else {
+    console.log('  skipped   : 0');
+  }
+}
+
 (async () => {
   console.log(`${apply ? 'Installing' : 'DRY RUN — would install'} "${customTitle}"`);
   console.log(`  file      : ${file} (${fileContent.split('\n').length - 1} data rows)`);
@@ -71,9 +148,48 @@ const setId = customTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
   console.log(`  quickstart: ${quickstart}`);
   console.log(`  table     : ${tableName}\n`);
 
-  const existing = await db.send(new GetCommand({
-    TableName: tableName, Key: { PK: 'SETS', SK: `SET#${setId}` },
-  }));
+  // THE CSV IS VALIDATED FIRST, AND OFFLINE.
+  //
+  // This used to sit after every AWS pre-flight call and behind `if (!apply)
+  // return`, which meant the dry run never parsed the file at all — it checked
+  // that the set did not exist and that a prompt was present, then stopped. So
+  // `--apply` against a live table was the FIRST time a CSV was ever read, and
+  // a dry run that printed no complaint had in fact validated nothing. Worse,
+  // the pre-flight needs credentials, so without them the dry run died before
+  // reaching any of it.
+  //
+  // Now the parse runs first and needs no credentials, so a CSV can be checked
+  // on a laptop with no AWS access at all.
+  // Only on a dry run: the --apply path invokes the handler for real below and
+  // reports its own skippedRows, so doing both would parse twice and print the
+  // importer's log twice.
+  if (!apply) {
+    const dry = await dryImport();
+    reportImport(dry.payload, dry.writes);
+    if (dry.payload.__failed) {
+      console.error('\n  The importer REFUSED this file. Fix it before re-running.');
+      process.exit(1);
+    }
+  }
+
+  // The remaining checks genuinely need the table. In a dry run a credentials
+  // failure is a warning, not an exit — the CSV verdict above is already the
+  // useful half, and losing it to an expired SSO token is how this script
+  // stopped being run at all.
+  let existing;
+  try {
+    existing = await db.send(new GetCommand({
+      TableName: tableName, Key: { PK: 'SETS', SK: `SET#${setId}` },
+    }));
+  } catch (err) {
+    if (!apply) {
+      console.log(`\n  (skipping table checks: ${err.message || err.name})`);
+      console.log('  CSV verdict above is still valid. Re-run with credentials to check');
+      console.log(`  that "${setId}" is free and that a default ${engagementType} prompt exists.`);
+      return;
+    }
+    throw err;
+  }
   if (existing.Item) {
     console.error(`  A set with id "${setId}" already exists. upload-questions.js refuses to`);
     console.error('  overwrite; replace it through the editor, or choose a different --title.');
