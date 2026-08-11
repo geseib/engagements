@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 
 const client = new DynamoDBClient({});
@@ -8,11 +8,88 @@ const apigateway = new ApiGatewayManagementApiClient({
   endpoint: process.env.WEBSOCKET_API_ENDPOINT
 });
 
+/**
+ * Is the second Chris the first Chris coming back, or a different person?
+ *
+ * Players are keyed `PLAYER#{playerName}`, and until this existed, a join that
+ * found an existing key returned `isReconnection: true` unconditionally. In a
+ * room with two Chrises the second one inherited the first one's answers and
+ * score, and neither of them was told. The merge was silent by construction.
+ *
+ * The join request carried nothing that could tell those two cases apart —
+ * no session id, no token, and no connection id (the player's WebSocket is
+ * opened *after* the join succeeds, so at this point there is none). The name
+ * was the whole identity. So the client now mints a random `clientId`, keeps
+ * it in localStorage under the game, and sends it with every join; the server
+ * stamps it on the player row the first time and requires it to match
+ * thereafter.
+ *
+ * Four cases, and the two compatibility ones matter as much as the two new:
+ *
+ *   reconnect  stored id matches the one presented — the same browser. Today's
+ *              behaviour, now actually verified.
+ *   collision  the row is owned by a different id (or the caller presented
+ *              none against an owned row) — refuse, and say so.
+ *   legacy     neither side has an id. A player already in a live session when
+ *              this shipped is served by the old bundle and sends no clientId;
+ *              their row has none either. Refusing them would break the very
+ *              reconnection this is meant to protect, so this case keeps the
+ *              old behaviour exactly. It is no *worse* than today, and it
+ *              disappears as soon as the row is claimed.
+ *   unverified a claimed identity meeting an unowned row — a new bundle
+ *              rejoining a row created by the old one. Indistinguishable from a
+ *              genuine collision, so do not guess: refuse, and let the client
+ *              ASK ("are you rejoining, or a different Chris?"). An explicit
+ *              `claimExisting` turns it into an adoption.
+ *
+ * Exported for tests: this is the whole of the decision and it should be
+ * assertable without a DynamoDB fake.
+ */
+function classifyRejoin({ storedClientId, clientId, claimExisting }) {
+  if (storedClientId) {
+    return storedClientId === clientId ? 'reconnect' : 'collision';
+  }
+  if (!clientId) return 'legacy';
+  return claimExisting === true ? 'adopt' : 'unverified';
+}
+
+/**
+ * The refusal. `code` is the machine-readable half — the client switches UI on
+ * it — and `message` is the half a person reads.
+ *
+ * This discloses that one specific name is in use, to a caller who already
+ * holds the game id, has passed the started check, and has passed the access
+ * code check for a private game. That is the minimum a collision can be
+ * reported with. It is deliberately NOT a roster: one submitted name in, one
+ * yes/no out, no listing and no endpoint that answers without a join attempt.
+ */
+function nameConflictResponse(code, playerName) {
+  const message = code === 'NAME_UNVERIFIED'
+    ? `Someone in this session is already answering as "${playerName}". If that was you on another device, rejoin to pick your answers and score back up. If not, choose a name the host can tell apart.`
+    : `Someone in this session is already answering as "${playerName}". Add a last initial or pick another name so the host can tell you apart.`;
+
+  return {
+    statusCode: 409,
+    body: JSON.stringify({
+      error: 'Name already in use',
+      code,
+      playerName,
+      message
+    }),
+    headers: { 'Access-Control-Allow-Origin': '*' }
+  };
+}
+
 exports.handler = async (event) => {
   try {
     const { gameId } = event.pathParameters || {};
     const body = JSON.parse(event.body || '{}');
-    const { playerName, accessCode } = body;
+    const { playerName, accessCode, claimExisting } = body;
+    // Absent, empty, or non-string means "this caller has no identity" — never
+    // a value that could accidentally match a stored one.
+    const clientId = typeof body.clientId === 'string' && body.clientId.trim()
+      ? body.clientId.trim()
+      : null;
 
     if (!gameId || !playerName) {
       return {
@@ -104,6 +181,44 @@ exports.handler = async (event) => {
     }));
 
     if (existingPlayer.Item) {
+      const verdict = classifyRejoin({
+        storedClientId: existingPlayer.Item.ClientId || null,
+        clientId,
+        claimExisting
+      });
+
+      if (verdict === 'collision' || verdict === 'unverified') {
+        // No host notification and no write: nobody joined. The first Chris is
+        // still the only Chris, and still has their answers.
+        console.log(`⛔ Refusing join for ${playerName} in game ${gameId}: ${verdict}`);
+        return nameConflictResponse(
+          verdict === 'unverified' ? 'NAME_UNVERIFIED' : 'NAME_TAKEN',
+          playerName
+        );
+      }
+
+      if (verdict === 'adopt') {
+        // Stamp this browser onto a row that predates identities. The condition
+        // is what stops two simultaneous claimants both "adopting": the loser
+        // falls through to a collision rather than silently sharing the row.
+        try {
+          await db.send(new UpdateCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` },
+            UpdateExpression: 'SET ClientId = :cid',
+            ConditionExpression: 'attribute_not_exists(ClientId)',
+            ExpressionAttributeValues: { ':cid': clientId }
+          }));
+          console.log(`🔗 Claimed unowned player row ${playerName} for client ${clientId}`);
+        } catch (error) {
+          if (error.name === 'ConditionalCheckFailedException') {
+            console.log(`⛔ Lost the race to claim ${playerName} in game ${gameId}`);
+            return nameConflictResponse('NAME_TAKEN', playerName);
+          }
+          throw error;
+        }
+      }
+
       // Return existing player data
       // Notify host via WebSocket about player reconnection
       await notifyHostOfPlayerJoin(gameId, {
@@ -128,22 +243,36 @@ exports.handler = async (event) => {
       };
     }
 
-    // Create new player using playerName as both key and ID
-    await db.send(new PutCommand({
-      TableName: process.env.TABLE_NAME,
-      Item: {
-        PK: `GAME#${gameId}`,
-        SK: `PLAYER#${playerName}`,
-        playerId: playerName,
-        PlayerName: playerName,
-        playerName: playerName, // Support both formats
-        JoinedAt: new Date().toISOString(),
-        joinedAt: new Date().toISOString(),
-        isConnected: true,
-        ttl: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // 7 days TTL
-        // Note: totalScore removed - use PLAYER#{playerName}#SCORE record as single source of truth
+    // Create new player using playerName as both key and ID.
+    //
+    // The condition closes the window the Get above cannot: two Chrises whose
+    // joins overlap both read "no such player" and both used to write, the
+    // second overwriting the first. Now the loser is told.
+    try {
+      await db.send(new PutCommand({
+        TableName: process.env.TABLE_NAME,
+        Item: {
+          PK: `GAME#${gameId}`,
+          SK: `PLAYER#${playerName}`,
+          playerId: playerName,
+          PlayerName: playerName,
+          playerName: playerName, // Support both formats
+          ...(clientId ? { ClientId: clientId } : {}),
+          JoinedAt: new Date().toISOString(),
+          joinedAt: new Date().toISOString(),
+          isConnected: true,
+          ttl: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // 7 days TTL
+          // Note: totalScore removed - use PLAYER#{playerName}#SCORE record as single source of truth
+        },
+        ConditionExpression: 'attribute_not_exists(SK)'
+      }));
+    } catch (error) {
+      if (error.name === 'ConditionalCheckFailedException') {
+        console.log(`⛔ Concurrent join lost the name ${playerName} in game ${gameId}`);
+        return nameConflictResponse('NAME_TAKEN', playerName);
       }
-    }));
+      throw error;
+    }
 
     // Create initial consolidated score record using playerName (new players start with afterRound: "000")
     await db.send(new PutCommand({
@@ -308,3 +437,6 @@ async function sendToConnection(connectionId, message) {
     return { ok: false, error };
   }
 }
+
+// Exported for tests — the collision decision should be assertable on its own.
+exports.classifyRejoin = classifyRejoin;

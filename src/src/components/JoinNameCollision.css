@@ -1,0 +1,35 @@
+/*
+ * Sits inside `.join-screen`, which is centred and white; the refusal is the
+ * only thing on it, so it does not need a card of its own — just room to
+ * breathe and a warning edge so it reads as a stop, not a note.
+ */
+.join-name-collision {
+  text-align: left;
+  padding: 4px 0 8px;
+}
+
+.join-name-collision__heading {
+  font-family: var(--font-display, inherit);
+  font-weight: 800;
+  /* Matches .join-screen h1's clamp so the refusal does not overflow a phone. */
+  font-size: clamp(1.3rem, 6vw, 1.9rem);
+  line-height: 1.15;
+  margin: 0 0 12px;
+  color: var(--primary);
+}
+
+.join-name-collision__detail {
+  margin: 0 0 24px;
+  line-height: 1.5;
+  color: #444;
+  /* Amber, the palette's single accent — the mockups use it for exactly this:
+     a join that did not go through. Red is reserved for destructive. */
+  border-left: 3px solid var(--primary);
+  padding-left: 12px;
+}
+
+.join-name-collision__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}

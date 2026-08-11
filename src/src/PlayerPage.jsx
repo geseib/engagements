@@ -6,6 +6,8 @@ import RankIcon, { rankLabel, VOTE_POSITIONS } from './components/RankIcon';
 import { gameTypeMeta } from './config/gameTypes';
 import { resolveInstruction, resolveRoundNoun } from './config/instructions';
 import { displayLabelFor, ownAnswerIndex } from './config/anonymity';
+import JoinNameCollision from './components/JoinNameCollision';
+import { getClientId, classifyJoinFailure } from './components/joinResult';
 
 const API_BASE = window.API_BASE;
 
@@ -122,6 +124,9 @@ function PlayerPage() {
   const [isUserVoting, setIsUserVoting] = useState(false);
   const [rejoinedPlayer, setRejoinedPlayer] = useState(false);
   const [rejoinPrompt, setRejoinPrompt] = useState(null); // { gameId, name } | null
+  // A join the server refused because the name is already answering in this
+  // session: { kind: 'name-taken' | 'name-unverified', playerName, message }.
+  const [joinCollision, setJoinCollision] = useState(null);
   const [votingMode, setVotingMode] = useState('quick'); // 'quick' or 'detailed'
   const [playerScore, setPlayerScore] = useState(0);
   const [playerRanking, setPlayerRanking] = useState(null);
@@ -225,59 +230,133 @@ function PlayerPage() {
     }
   }, []);
 
-  // 🔄 Attempt to automatically join the game
-  const attemptAutoJoin = async (gameId, name, accessCode = null) => {
+  /**
+   * The one place a join is actually attempted.
+   *
+   * Every entry point — the form, the auto-join from a shared URL, the access
+   * code retry, and the rejoin prompt — goes through here. It used to be three
+   * near-copies plus, in the rejoin case, no request at all: `handleRejoinConfirm`
+   * set `joined = true` and stopped, so a player who tapped "Rejoin" believed
+   * they were back in a session the server had never heard them return to —
+   * no player row touched, no host notification, no state fetched. Every
+   * caller now shares one request and one interpretation of the answer.
+   *
+   * `clientId` is what lets the server tell a returning player from a namesake
+   * (see components/joinResult.js). `claimExisting` is only ever true when the
+   * person has said so out loud.
+   */
+  const performJoin = async (gid, name, { accessCode = null, claimExisting = false } = {}) => {
+    const trimmed = String(name || '').trim();
+    const clientId = getClientId(gid);
+
+    let response;
     try {
-      console.log(`🔄 PLAYER: Auto-joining game ${gameId} as ${name}`);
-      const joinRes = await fetch(`${API_BASE}games/${gameId}/players`, {
+      response = await fetch(`${API_BASE}games/${gid}/players`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          playerName: name.trim(),
-          accessCode: accessCode 
+        body: JSON.stringify({
+          playerName: trimmed,
+          accessCode,
+          clientId,
+          claimExisting
         }),
       });
-
-      if (joinRes.ok) {
-        const joinData = await joinRes.json();
-        console.log(`✅ PLAYER: Auto-join successful`, joinData);
-        
-        setPlayerName(name.trim());
-        setJoined(true);
-        localStorage.setItem(`playerName_${gameId}`, name.trim());
-        
-        // Check if auto-join was a rejoin (server sends isReconnection)
-        if (joinData.isReconnection || joinData.rejoined) {
-          setRejoinedPlayer(true);
-          console.log(`🔄 PLAYER: Auto-rejoined existing player`);
-          // Note: Vote restoration will happen automatically in checkGameState when entering voting phase
+    } catch (error) {
+      console.error('PLAYER: join request failed:', error);
+      return {
+        ok: false,
+        failure: {
+          kind: 'network',
+          message: 'Network error. Please check your connection and try again.'
         }
-        
-        // Immediately check game state to load current question/voting/results
-        setTimeout(() => checkGameState(gameId, name.trim()), 100);
-        
-        // Update URL to include name if not already there
-        const url = new URL(window.location);
-        url.searchParams.set('name', name.trim());
-        window.history.replaceState(null, '', url);
-      } else {
-        // Check if this is an access code error
-        try {
-          const errorData = await joinRes.json();
-          if (errorData.error === 'Access code required') {
-            console.log(`🔐 PLAYER: Game requires access code - showing access code input`);
-            setNeedsAccessCode(true);
-            setPlayerName(name.trim());
-            return;
-          }
-        } catch (parseError) {
-          // Ignore parse errors for non-JSON responses
-        }
-        console.log(`❌ PLAYER: Auto-join failed - will show join form`);
-      }
-    } catch (e) {
-      console.error('PLAYER: Auto-join error:', e);
+      };
     }
+
+    let data = null;
+    try {
+      data = await response.json();
+    } catch (parseError) {
+      // A non-JSON body (an HTML error page from the edge, say) is still a
+      // result — classify it on status alone rather than throwing.
+    }
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        failure: classifyJoinFailure(response.status, data)
+      };
+    }
+
+    return { ok: true, data: data || {} };
+  };
+
+  /** Everything that must be true once the server has actually let us in. */
+  const enterSession = (gid, name, data) => {
+    setPlayerName(name);
+    setJoined(true);
+    setJoinCollision(null);
+    setRejoinPrompt(null);
+    localStorage.setItem(`playerName_${gid}`, name);
+
+    if (data.isReconnection || data.rejoined) {
+      setRejoinedPlayer(true);
+      console.log(`🔄 PLAYER: Server confirmed this is a reconnection`);
+      // Vote/answer restoration happens in checkGameState below.
+    }
+
+    setTimeout(() => checkGameState(gid, name), 100);
+  };
+
+  /**
+   * Turn a refusal into the screen that explains it.
+   *
+   * `quiet` is for the unattended auto-join off a shared URL: a name collision
+   * still has to be shown (the player is about to be told they are in a
+   * session they are not in), but "the host hasn't started yet" must not
+   * ambush someone with a modal the instant the page loads — that case falls
+   * through to the join form, as it always has.
+   */
+  const applyJoinFailure = (failure, name, { quiet = false } = {}) => {
+    if (failure.kind === 'access-code') {
+      console.log(`🔐 PLAYER: Game requires access code - showing access code input`);
+      setNeedsAccessCode(true);
+      setPlayerName(name);
+      return;
+    }
+
+    if (failure.kind === 'name-taken' || failure.kind === 'name-unverified') {
+      setJoinCollision({
+        kind: failure.kind,
+        playerName: failure.playerName || name,
+        message: failure.message
+      });
+      return;
+    }
+
+    if (!quiet) alert(failure.message);
+  };
+
+  // 🔄 Attempt to automatically join the game
+  const attemptAutoJoin = async (gameId, name, accessCode = null) => {
+    console.log(`🔄 PLAYER: Auto-joining game ${gameId} as ${name}`);
+    const trimmed = String(name || '').trim();
+    const result = await performJoin(gameId, trimmed, { accessCode });
+
+    if (!result.ok) {
+      console.log(`❌ PLAYER: Auto-join refused (${result.failure.kind})`);
+      setNameInput(trimmed);
+      applyJoinFailure(result.failure, trimmed, { quiet: true });
+      return;
+    }
+
+    console.log(`✅ PLAYER: Auto-join successful`, result.data);
+    enterSession(gameId, trimmed, result.data);
+
+    // Update URL to include name if not already there
+    const url = new URL(window.location);
+    url.searchParams.set('name', trimmed);
+    window.history.replaceState(null, '', url);
   };
 
   // REMOVED: Partial vote system - not needed with simplified flow
@@ -310,8 +389,12 @@ function PlayerPage() {
   /**
    * The host's session brief, fetched once the participant is in.
    *
-   * `role=player` explicitly: the host view of the same endpoint returns the
-   * access code (get-game.js:79), which is not a participant's to see.
+   * `role=player` explicitly, though it no longer buys secrecy: the host view
+   * of this endpoint DID return the private-game access code, and no longer
+   * does — `role` is a query parameter on a public route, so it was never a
+   * check, and the field is deleted rather than gated (get-game.js:71-92,
+   * pinned by tests/get-game-access-code.js). The role is still sent because
+   * the host branch carries setup fields a participant has no use for.
    *
    * Every failure is swallowed. The brief is a nicety; being in the room is
    * not, and a 404 or a flaky network must never take the lobby down with it.
@@ -1032,85 +1115,26 @@ function PlayerPage() {
     e.preventDefault();
     if (!nameInput.trim() || !gameId) return;
 
-    try {
-      const apiUrl = `${API_BASE}games/${gameId}/players`;
-      console.log('🔍 DEBUGGING API Call:');
-      console.log('  - Game ID:', gameId);
-      console.log('  - API_BASE:', API_BASE);
-      console.log('  - Full URL:', apiUrl);
-      console.log('  - Current domain:', window.location.host);
-      console.log('  - Current pathname:', window.location.pathname);
-      
-      const joinRes = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          playerName: nameInput.trim(),
-          accessCode: accessCodeInput.trim() || null
-        }),
-      });
+    const trimmed = nameInput.trim();
+    const result = await performJoin(gameId, trimmed, {
+      accessCode: accessCodeInput.trim() || null
+    });
 
-      console.log('📡 RESPONSE DEBUGGING:');
-      console.log('  - Status:', joinRes.status);
-      console.log('  - OK:', joinRes.ok);
-      console.log('  - Headers:', Object.fromEntries(joinRes.headers.entries()));
-      
-      // Check content type to see if we're getting HTML instead of JSON
-      const contentType = joinRes.headers.get('content-type');
-      console.log('  - Content-Type:', contentType);
-
-      if (!joinRes.ok) {
-        try {
-          const errorData = await joinRes.json();
-          console.log('Join error response:', errorData);
-          
-          // Check if this is an access code error
-          if (errorData.error === 'Access code required') {
-            setNeedsAccessCode(true);
-            return;
-          }
-          
-          alert(errorData.message || errorData.error || 'Failed to join game. Please check the game ID and try again.');
-        } catch (parseError) {
-          console.error('Failed to parse error response:', parseError);
-          alert('Failed to join game. Please check the game ID and try again.');
-        }
-        return;
-      }
-
-      // Only set state if join was successful
-      const successData = await joinRes.json();
-      console.log('✅ PLAYER: Manual join success:', successData);
-      
-      setPlayerName(nameInput.trim());
-      setJoined(true);
-      localStorage.setItem(`playerName_${gameId}`, nameInput.trim());
-      
-      // Check if this was a rejoin (server sends isReconnection)
-      if (successData.isReconnection || successData.rejoined) {
-        setRejoinedPlayer(true);
-        console.log(`🔄 PLAYER: Rejoined successfully`);
-        // Note: Vote restoration will happen automatically in checkGameState when entering voting phase
-      }
-      
-      // Immediately check game state to load current question/voting/results
-      setTimeout(() => checkGameState(gameId, nameInput.trim()), 100);
-      
-      // Update URL to include both gameId and name for easy sharing/reconnection
-      const url = new URL(window.location);
-      url.searchParams.set('gameId', gameId);
-      url.searchParams.set('name', nameInput.trim());
-      window.history.replaceState(null, '', url);
-      console.log(`🔗 PLAYER: Updated URL for reconnection: ${url.search}`);
-    } catch (e) {
-      console.error('handleJoinGame fetch error:', e);
-      console.error('Error details:', {
-        message: e.message,
-        name: e.name,
-        stack: e.stack
-      });
-      alert('Network error. Please check your connection and try again.');
+    if (!result.ok) {
+      console.log(`❌ PLAYER: Join refused (${result.failure.kind})`);
+      applyJoinFailure(result.failure, trimmed);
+      return;
     }
+
+    console.log('✅ PLAYER: Manual join success:', result.data);
+    enterSession(gameId, trimmed, result.data);
+
+    // Update URL to include both gameId and name for easy sharing/reconnection
+    const url = new URL(window.location);
+    url.searchParams.set('gameId', gameId);
+    url.searchParams.set('name', trimmed);
+    window.history.replaceState(null, '', url);
+    console.log(`🔗 PLAYER: Updated URL for reconnection: ${url.search}`);
   };
 
   // Handle access code submission
@@ -1118,40 +1142,19 @@ function PlayerPage() {
     e.preventDefault();
     if (!accessCodeInput.trim()) return;
     
-    try {
-      const joinRes = await fetch(`${API_BASE}games/${gameId}/players`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          playerName: nameInput.trim(),
-          accessCode: accessCodeInput.trim()
-        }),
-      });
+    const trimmed = nameInput.trim();
+    const result = await performJoin(gameId, trimmed, {
+      accessCode: accessCodeInput.trim()
+    });
 
-      if (joinRes.ok) {
-        const successData = await joinRes.json();
-        console.log('✅ PLAYER: Access code join success:', successData);
-        
-        setPlayerName(nameInput.trim());
-        setJoined(true);
-        setNeedsAccessCode(false);
-        localStorage.setItem(`playerName_${gameId}`, nameInput.trim());
-        
-        // Check if this was a rejoin (server sends isReconnection)
-        if (successData.isReconnection || successData.rejoined) {
-          setRejoinedPlayer(true);
-        }
-        
-        // Immediately check game state to load current question/voting/results
-        setTimeout(() => checkGameState(gameId, nameInput.trim()), 100);
-      } else {
-        const errorData = await joinRes.json();
-        alert(errorData.message || errorData.error || 'Invalid access code. Please try again.');
-      }
-    } catch (error) {
-      console.error('Access code submission error:', error);
-      alert('Network error. Please check your connection and try again.');
+    if (!result.ok) {
+      applyJoinFailure(result.failure, trimmed);
+      return;
     }
+
+    console.log('✅ PLAYER: Access code join success:', result.data);
+    setNeedsAccessCode(false);
+    enterSession(gameId, trimmed, result.data);
   };
 
   const handleSubmitAnswer = async (e, triviaAnswer = null) => {
@@ -1381,18 +1384,66 @@ function PlayerPage() {
   };
 
   // B2: rejoin prompt handlers
-  const handleRejoinConfirm = () => {
+  //
+  // This used to flip `joined = true` and nothing else — no request, so the
+  // server never learned the player was back. The player saw a session; the
+  // session did not see the player. A rejoin is a join, and it can fail for
+  // all the ordinary reasons (the host ended it, the row expired, the name is
+  // now someone else's), so it goes through the same path and the same
+  // failure handling as any other join.
+  //
+  // `claimExisting: true` is the person's own answer to "is this you?". The
+  // prompt only appears when this browser's localStorage says it joined this
+  // session under this name, and it only matters for rows created before
+  // client ids existed — a row already stamped with a different id is refused
+  // regardless of what is claimed here.
+  const handleRejoinConfirm = async () => {
     if (!rejoinPrompt) return;
     const { gameId: gid, name } = rejoinPrompt;
     console.log(`✅ PLAYER: Rejoining game ${gid} as ${name}`);
-    setPlayerName(name);
-    setJoined(true);
-    localStorage.setItem(`playerName_${gid}`, name);
+
+    const result = await performJoin(gid, name, { claimExisting: true });
+
+    if (!result.ok) {
+      console.log(`❌ PLAYER: Rejoin refused (${result.failure.kind})`);
+      // Fall back to the join form with the name filled in, so whatever went
+      // wrong is something the player can act on.
+      setGameId(gid);
+      setNameInput(name);
+      setRejoinPrompt(null);
+      applyJoinFailure(result.failure, name);
+      return;
+    }
+
     lastRankRef.current = -1; // fresh phase tracking for this session
-    setRejoinPrompt(null);
     // Restore the player's place (checkPlayerAnswer/checkPlayerVote guards
     // prevent re-answering/re-voting).
-    setTimeout(() => checkGameState(gid, name), 100);
+    enterSession(gid, name, result.data);
+  };
+
+  /**
+   * "Yes, that Chris is me." Only reachable from the NAME_UNVERIFIED screen —
+   * a row the server cannot attribute, because it was created before client
+   * ids existed. A row that *is* attributed refuses this outright, server
+   * side, so the button cannot be used to take someone else's place.
+   */
+  const handleCollisionRejoin = async () => {
+    if (!joinCollision) return;
+    const name = joinCollision.playerName;
+    const result = await performJoin(gameId, name, { claimExisting: true });
+
+    if (!result.ok) {
+      applyJoinFailure(result.failure, name);
+      return;
+    }
+    enterSession(gameId, name, result.data);
+  };
+
+  /** "No, I'm a different Chris." Back to the form with the name cleared. */
+  const handleCollisionRename = () => {
+    setJoinCollision(null);
+    setNameInput('');
+    setPlayerName('');
   };
 
   const handleRejoinDecline = () => {
@@ -1482,6 +1533,28 @@ function PlayerPage() {
       </div>
     );
   };
+
+  // The name is already answering in this session. Shown ahead of everything
+  // else on the join side: it is the only screen that tells the second Chris
+  // they are the second Chris, and it used to not exist — the server merged
+  // them into the first Chris and said "Reconnected".
+  if (!joined && joinCollision) {
+    return (
+      <div className="player-outer-container-full">
+        <div className="player-container">
+          <div className="join-screen">
+            <JoinNameCollision
+              kind={joinCollision.kind}
+              playerName={joinCollision.playerName}
+              message={joinCollision.message}
+              onRejoinAnyway={handleCollisionRejoin}
+              onUseAnotherName={handleCollisionRename}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Rejoin prompt (B2) — shown before the join screen when a saved identity is
   // detected, replacing the previous silent auto-join.
