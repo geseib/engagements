@@ -68,7 +68,28 @@ exports.handler = async (event) => {
       lessonNumber: gameState.Item?.LessonNumber || 0
     };
 
-    // Role-specific information
+    // Role-specific information.
+    //
+    // `role` IS A QUERY PARAMETER. This route is public and must stay public —
+    // it is the session brief the root page checks a typed join code against,
+    // and every participant's phone calls it — so `?role=host` is a CLAIM that
+    // anyone can make, not a fact the API established. Nothing below this line
+    // may be a secret.
+    //
+    // `accessCode: gameMetadata.Item.AccessCode` used to be here, and it was
+    // the whole private-game control: `join-game.js:58-83` compares the code a
+    // player types against exactly that value and nothing else. So
+    // `GET /games/{id}?role=host` handed the password for a private session to
+    // any unauthenticated caller who knew — or walked — the four-digit id.
+    // DELETED, not gated: no caller ever read it. `attemptAutoJoin` and the
+    // access-code form in PlayerPage.jsx supply the code from what the player
+    // typed; GameHostPage's two `?role=host` reads take `started`,
+    // `anonymousUntilReveal` and `categoryState`; the host already holds the
+    // code because the create form chose it (`create-game.js:9`). Re-adding it
+    // behind an `Authorization` check would mean this handler verifying a JWT
+    // itself — the route carries no authorizer — to restore a field with no
+    // reader. If a surface ever genuinely needs to display a running session's
+    // own code, put it on a route that IS authorized.
     if (role === 'host') {
       // Host gets additional administrative information
       const result = {
@@ -76,7 +97,6 @@ exports.handler = async (event) => {
         questionSetId: gameMetadata.Item.QuestionSetId,
         aiContext: gameMetadata.Item.AIContext,
         details: gameMetadata.Item.Details,
-        accessCode: gameMetadata.Item.AccessCode,
         usedQuestions: gameState.Item?.UsedQuestions || [],
         playedQuestions: gameState.Item?.PlayedQuestions || [],
         categoryState: categoryState.Item ? {

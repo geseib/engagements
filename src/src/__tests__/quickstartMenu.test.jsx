@@ -31,12 +31,21 @@ const SETS = [
   },
 ];
 
+// Routed by URL rather than a single canned reply: the sheet now makes TWO
+// authFetch calls with different shapes (the set list, then the create), and a
+// blanket mockResolvedValue would hand the create an object with no `ok`,
+// sending it down the error branch while looking like a fixture detail.
 beforeEach(() => {
   jest.clearAllMocks();
-  authFetch.mockResolvedValue({ json: async () => ({ questionSets: SETS }) });
+  authFetch.mockImplementation(async (url) => {
+    if (String(url).endsWith('admin/question-sets')) {
+      return { ok: true, json: async () => ({ questionSets: SETS }) };
+    }
+    return { ok: true, json: async () => ({ gameId: '4821' }) };
+  });
   global.fetch = jest.fn().mockResolvedValue({
     ok: true,
-    json: async () => ({ gameId: '4821' }),
+    json: async () => ({}),
   });
 });
 
@@ -70,10 +79,35 @@ test('pressing a set still creates and starts the game', async () => {
     expect.objectContaining({ gameId: '4821', questionSetId: 'set-tech' })
   );
   // create, then start
-  const urls = global.fetch.mock.calls.map(([url]) => String(url));
-  expect(urls.some((u) => u.endsWith('games'))).toBe(true);
-  expect(urls.some((u) => u.endsWith('games/4821/start'))).toBe(true);
+  const authUrls = authFetch.mock.calls.map(([url]) => String(url));
+  expect(authUrls.some((u) => u.endsWith('games'))).toBe(true);
+  const bareUrls = global.fetch.mock.calls.map(([url]) => String(url));
+  expect(bareUrls.some((u) => u.endsWith('games/4821/start'))).toBe(true);
   expect(onClose).toHaveBeenCalled();
+});
+
+test('the create call carries a token', async () => {
+  // rejects: this call site reverting to a bare `fetch`. `POST /games` is
+  // public today and about to stop being — anyone can create unlimited
+  // sessions in the environment — and buildspec-dev.yml:49-58 deploys the API
+  // BEFORE the frontend, with cached bundles outliving the build. So the token
+  // has to be here first; a route that starts demanding one before its callers
+  // send one 401s quick start for everyone still holding the old JS, and the
+  // breakage surfaces as a dead button, not as a build error.
+  //
+  // A token is always available: QuickstartMenu renders only from GameHostPage
+  // (GameHostPage.jsx:3118), which sits behind ProtectedRoute (App.jsx:176).
+  renderMenu();
+  const card = await screen.findByRole('button', { name: /Tech Trends/ });
+  fireEvent.click(card);
+
+  await waitFor(() =>
+    expect(authFetch.mock.calls.some(([url]) => String(url).endsWith('games'))).toBe(true));
+
+  const barePost = global.fetch.mock.calls.find(
+    ([url, opts]) => String(url).endsWith('games') && opts?.method === 'POST'
+  );
+  expect(barePost).toBeUndefined();
 });
 
 test('the close control has a name a screen reader can read', async () => {

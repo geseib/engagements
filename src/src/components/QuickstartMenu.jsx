@@ -73,8 +73,21 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
                           questionSet.engagementType === 'wavelength' ? 'Wavelength' :
                           'Poll'}: ${questionSet.name}`;
       
-      // Create the game
-      const createResponse = await fetch(`${API_BASE}games`, {
+      // Create the game.
+      //
+      // authFetch, NOT fetch, and it is deliberately ahead of the backend.
+      // `POST /games` is still public today; this call site is being taught to
+      // send a token FIRST because buildspec-dev.yml:49-58 deploys the API
+      // before the frontend and cached bundles outlive the build — so a route
+      // that starts demanding a token before its callers send one 401s the
+      // quick-start path for everyone still holding the old JS. A token on a
+      // public route is ignored, so this is a no-op until the authorizer lands
+      // and correct the moment it does.
+      //
+      // The token always exists here: QuickstartMenu only ever renders from
+      // GameHostPage (GameHostPage.jsx:3118), which sits behind
+      // ProtectedRoute (App.jsx:176), which requires `hosts` or `admins`.
+      const createResponse = await authFetch(`${API_BASE}games`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
