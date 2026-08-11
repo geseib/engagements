@@ -1,14 +1,28 @@
 /**
- * Admin routes must check WHO is calling, not merely THAT someone is.
+ * Admin handlers check WHO is calling — a SECOND time, on purpose.
  *
- * `manage-users.js` sat behind `CognitoAuthorizer` with the comment
- * "Skip authorization for now" and no check. That authorizer admits any account
- * in the pool — including one still in `pending` — so any registered user could
- * PUT their own username's state to `admins` and become an administrator, or
- * list every account in the pool.
+ * A correction is recorded here because the first version of this file
+ * asserted the wrong thing. `manage-users.js` carries the comment "Skip
+ * authorization for now", which reads like an open door and is not one:
+ * `CognitoAuthorizer` is a custom Lambda authorizer, not a Cognito JWT one, and
+ * `lambda-functions/auth/authorizer.js:103-105` already gates every `/admin/*`
+ * route to the `admins` group. There was no privilege-escalation hole.
  *
- * These run the REAL handler against a stubbed Cognito client, so they exercise
- * the actual routing and the actual guard rather than a reimplementation.
+ * The guard is defence in depth. The upstream check routes by STRING PREFIX
+ * (`path.startsWith('admin')`), so a route mounted at a path that does not
+ * begin with `admin` — or a refactor of that one function — silently opens
+ * every handler behind it. A handler that knows its own requirement does not
+ * depend on how it was reached.
+ *
+ * THE EVENT SHAPE BELOW IS THE POINT. A simple-response Lambda authorizer puts
+ * its context at `event.requestContext.authorizer.lambda`, with groups
+ * COMMA-JOINED into a string. The first version of these tests built
+ * `.jwt.claims['cognito:groups']` events — a shape this API never produces — so
+ * they passed green against a guard that would have returned 403 to every real
+ * administrator and broken the Users tab outright. Tests that assert a fixture
+ * nothing generates prove nothing.
+ *
+ * These run the REAL handler against a stubbed Cognito client.
  */
 const path = require('path');
 const assert = require('assert');
@@ -59,8 +73,28 @@ function check(label, fn) {
   catch (e) { say(`  FAIL  ${label}\n        ${e.message}`); fail++; }
 }
 
-/** An HTTP-API v2 event with the given cognito:groups claim. */
+/**
+ * An event in THIS API'S REAL SHAPE: a simple-response Lambda authorizer's
+ * context at `.authorizer.lambda`, groups comma-joined, exactly as
+ * `auth/authorizer.js:156-166` returns them.
+ */
 const eventAs = (groups, { method = 'POST', path: p = '/admin/users/list', body } = {}) => ({
+  requestContext: {
+    http: { method, path: p },
+    authorizer: { lambda: {
+      username: 'mallory',
+      userId: 'sub-mallory',
+      status: 'enabled',
+      ...(groups === undefined ? {} : { groups }),
+    } },
+  },
+  rawPath: p,
+  body: body ? JSON.stringify(body) : undefined,
+  pathParameters: { username: 'mallory' },
+});
+
+/** The same request as a native JWT authorizer would deliver it. */
+const jwtEventAs = (groups, { method = 'POST', path: p = '/admin/users/list' } = {}) => ({
   requestContext: {
     http: { method, path: p },
     authorizer: { jwt: { claims: {
@@ -69,7 +103,6 @@ const eventAs = (groups, { method = 'POST', path: p = '/admin/users/list', body 
     } } },
   },
   rawPath: p,
-  body: body ? JSON.stringify(body) : undefined,
   pathParameters: { username: 'mallory' },
 });
 
@@ -131,14 +164,22 @@ const eventAs = (groups, { method = 'POST', path: p = '/admin/users/list', body 
   check('...and the ListUsers call really happened', () =>
     assert.strictEqual(sent.filter((c) => c.type === 'listUsers').length, 1));
 
-  say('\n4. The claim shapes, which is where this fails open if got wrong');
+  say('\n4. The shapes — reading the wrong one fails CLOSED and locks admins out');
 
-  // REJECTS: handling only one serialisation. cognito:groups arrives as a real
-  // array, a bracketed space-joined string, or a comma-joined string depending
-  // on the payload version and the path it took.
-  check('array claim',            () => assert.ok(isAdminCaller(eventAs(['admins']))));
-  check('bracketed space-joined', () => assert.ok(isAdminCaller(eventAs('[hosts admins]'))));
-  check('comma-joined',           () => assert.ok(isAdminCaller(eventAs('hosts,admins'))));
+  // REJECTS: reading .jwt.claims only. THAT IS THE BUG THIS FILE SHIPPED WITH:
+  // this API has no JWT authorizer, so every real admin would have got a 403
+  // and the Users tab would have stopped working entirely. This is the single
+  // most load-bearing assertion here.
+  check('the Lambda-authorizer context (this API) is read', () =>
+    assert.ok(isAdminCaller(eventAs('hosts,admins'))));
+  check('...and a non-admin in that same shape is refused', () =>
+    assert.ok(!isAdminCaller(eventAs('hosts,pending'))));
+
+  // REJECTS: dropping the JWT fallbacks, so a route later moved onto a native
+  // JWT authorizer silently locks out its admins.
+  check('a native JWT authorizer still works',  () => assert.ok(isAdminCaller(jwtEventAs('[hosts admins]'))));
+  check('...as an array claim',                 () => assert.ok(isAdminCaller(jwtEventAs(['admins']))));
+
   check('bare single group',      () => assert.ok(isAdminCaller(eventAs('admins'))));
 
   // REJECTS: a substring match. 'administrators' or 'not-admins' must not pass.

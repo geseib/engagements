@@ -1,30 +1,45 @@
 /**
- * Who is calling, and are they allowed to be here?
+ * Who is calling, and are they allowed to be here? DEFENCE IN DEPTH.
  *
- * WHY THIS EXISTS. `manage-users.js` carried the comment
- * `// Skip authorization for now - just focus on getting user list working`
- * and never grew the check. Both of its routes sit behind `CognitoAuthorizer`,
- * which authenticates ANY account in the pool — including one still sitting in
- * `pending`, waiting for an admin to approve it. The handler's `validStates`
- * includes `'admins'` and `'delete'`, and it passes the requested group
- * straight to `AdminAddUserToGroupCommand`.
+ * READ THIS BEFORE ASSUMING THE HANDLERS ARE UNGUARDED. `manage-users.js`
+ * carries the comment "Skip authorization for now", which reads like an open
+ * door and is not one. `CognitoAuthorizer` is NOT a Cognito JWT authorizer
+ * despite the name — it is a custom Lambda authorizer
+ * (`template-clean.yaml`: `FunctionArn: !GetAtt AuthorizerFunction.Arn`,
+ * payload 2.0, simple responses) and `lambda-functions/auth/authorizer.js`
+ * already does the group check:
  *
- * So the deployed state was: any registered user could
+ *     if (path.startsWith('admin')) return ['admins'];      // :103-105
  *
- *     PUT /admin/users/<their-own-username>/state   {"state": "admins"}
+ * with `path` stripped of its leading slash. So every `/admin/*` route is
+ * already gated to the `admins` group, and a disabled user is refused outright
+ * (`:141-144`). An earlier reading of this code called it a privilege-escalation
+ * hole; that was WRONG, and the correction is recorded here so the next reader
+ * does not re-raise it.
  *
- * and become an administrator, or `POST /admin/users/list` and enumerate every
- * account in the pool. Authentication was doing the work of authorisation.
+ * WHAT THIS MODULE IS FOR, THEN. A second, independent check inside the
+ * handler, because the first one lives in a different lambda and is routed by
+ * STRING PREFIX. `requiredGroupsForRoute` is one `startsWith('admin')` away
+ * from admitting anyone: a route mounted at a path that does not begin with
+ * `admin`, or a refactor of that function, silently opens every handler behind
+ * it. The handler knowing its own requirement costs one line and does not
+ * depend on how it was reached.
  *
- * THE DISTINCTION THIS MODULE DRAWS. An authorizer proves you are *someone*.
- * It does not prove you are someone *allowed to do this*. Every admin route
- * needs the second check, and it belongs in the handler — an API-Gateway
- * authorizer cannot express "is in the admins group" without a custom
- * authorizer, and the IAM policy on the function is about what the FUNCTION may
- * do, never about who asked it.
+ * THE SHAPE, WHICH IS THE PART THAT IS EASY TO GET WRONG AND WAS.
+ * A simple-response Lambda authorizer returns `{ isAuthorized, context }`, and
+ * that context reaches the handler at
  *
- * Kept pure and separate so it can be tested without invoking a handler,
- * because the shapes below are the part that is easy to get wrong.
+ *     event.requestContext.authorizer.lambda
+ *
+ * as `{ userId, username, email, groups: 'hosts,admins', status, role }` —
+ * groups COMMA-JOINED into a string (`authorizer.js:156-166`). It is NOT
+ * `.jwt.claims['cognito:groups']`; this API has no JWT authorizer. Reading the
+ * wrong shape here does not fail open, it fails CLOSED — every real admin gets
+ * a 403 and the Users tab stops working entirely. The JWT shapes are still
+ * accepted below so that a route later moved onto a native JWT authorizer does
+ * not silently lock out its admins.
+ *
+ * Kept pure and separate so the shapes can be tested without invoking a handler.
  */
 
 /** The group that may administer. One place, so it cannot drift. */
@@ -43,17 +58,21 @@ const ADMIN_GROUP = 'admins';
  * All three are handled. Anything unrecognised yields [], which denies.
  */
 function callerGroups(event) {
-  const claims = event?.requestContext?.authorizer?.jwt?.claims
-    // REST-authorizer shape, kept because this API has both kinds of route.
-    || event?.requestContext?.authorizer?.claims
-    || {};
+  const authorizer = event?.requestContext?.authorizer || {};
 
-  const raw = claims['cognito:groups'];
+  // THIS API'S ACTUAL SHAPE, and the one that matters: a simple-response
+  // Lambda authorizer's `context`, with groups comma-joined into a string.
+  const raw = authorizer.lambda?.groups
+    // Native JWT authorizer, if a route is ever moved onto one.
+    ?? authorizer.jwt?.claims?.['cognito:groups']
+    // REST-authorizer shape.
+    ?? authorizer.claims?.['cognito:groups'];
+
   if (!raw) return [];
   if (Array.isArray(raw)) return raw.map(String).map((s) => s.trim()).filter(Boolean);
   if (typeof raw !== 'string') return [];
 
-  // '[admins hosts]' or 'admins,hosts' or 'admins'
+  // 'admins,hosts' (this API) or '[admins hosts]' or 'admins'
   return raw
     .replace(/^\[/, '')
     .replace(/\]$/, '')
@@ -64,10 +83,13 @@ function callerGroups(event) {
 
 /** The signed-in username, for logging who tried what. */
 function callerUsername(event) {
-  const claims = event?.requestContext?.authorizer?.jwt?.claims
-    || event?.requestContext?.authorizer?.claims
-    || {};
-  return claims['cognito:username'] || claims.username || claims.sub || 'unknown';
+  const authorizer = event?.requestContext?.authorizer || {};
+  const claims = authorizer.jwt?.claims || authorizer.claims || {};
+  return authorizer.lambda?.username
+    || claims['cognito:username']
+    || claims.username
+    || claims.sub
+    || 'unknown';
 }
 
 /** Is the caller an administrator? */
