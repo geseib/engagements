@@ -173,6 +173,120 @@ export function standingsVisible({ gameType, anonymousUntilReveal, authorsReveal
 }
 
 /**
+ * THE SMALLEST ROUND THAT MAY HAVE ITS WAITING LIST NAMED ON THE STAGE.
+ *
+ * Counted in RESPONSES, not in people waiting. See waitingRoster below for why
+ * that is the only direction that measures anything.
+ *
+ * Any number here is a judgement, so here is the one being made. Naming the
+ * waiters hands the room the answerer set by subtraction, which drops every
+ * response on the stage from "one of N players" to "one of k". k = 1 is
+ * certain attribution. k = 2 is a coin flip. k = 3 is PODIUM_SIZE — the number
+ * this design already picked as "a list a room can hold in its head", which is
+ * exactly the wrong property here. 5 is the first k where the room's best
+ * guess is worse than one in four, and it is deliberately conservative because
+ * the cost of being wrong is asymmetric: a host who cannot see the list nudges
+ * nobody, and a room that guesses right un-anonymises a colleague.
+ *
+ * It is one named constant so the owner can move it in one place after a
+ * rehearsal, which is the only evidence that could actually settle it.
+ */
+export const MIN_ANONYMOUS_ANSWERS = 5;
+
+/**
+ * WHO IS STILL WAITING, and whether the stage may say so out loud.
+ *
+ * THE RULE THIS REPLACES. RoomMeter used to name nobody, ever, and
+ * stageShell.test.jsx asserted it. The owner has now decided the meter names
+ * WHO IS STILL WAITING — never who has answered — on demand, so a facilitator
+ * can nudge Dana without projecting an operator surface (host-redesign/
+ * CRITIQUE.md #3). This function is where that decision is enforced, because
+ * a rule spread across a 5,000-line component is a rule nobody can test.
+ *
+ * IT IS A PROJECTOR CONTROL, NEVER A SECURITY CONTROL — the same disclaimer
+ * stageLabelFor carries, and for the same reason: the server has already sent
+ * this host everything below. `answerProgress.answererIds` is the full list of
+ * who has answered and get-answers.js:216 documents it as deliberately public,
+ * because "who has not acted yet is a different fact from who wrote what".
+ * Nothing here un-sends anything. What it decides is what goes on the wall.
+ *
+ * DOES NAMING THE NON-ANSWERERS LEAK ANYTHING DURING AN ANONYMOUS ROUND? Yes,
+ * and the leak runs opposite to the intuition. Naming the waiters names the
+ * complement, so the room can subtract and obtain the answerer set exactly.
+ * Every response on the stage goes from "written by one of the 40 people here"
+ * to "written by one of these k". So:
+ *
+ *   - 39 of 40 answered, 1 waiting: naming that 1 tells the room nothing about
+ *     any response. The other 39 are still 39 candidates.
+ *   - 1 of 40 answered, 39 waiting: naming those 39 identifies the single
+ *     author of the single response on the ballot, by elimination. Complete
+ *     de-anonymisation, produced by a list that mentions that person's name
+ *     nowhere.
+ *
+ * SO THE GUARD COUNTS RESPONSES, NOT WAITERS. The obvious guard — "only when
+ * at least a few people are waiting, so no one is singled out" — is exactly
+ * backwards on both halves: it would block the harmless 1-waiter case and
+ * permit the catastrophic 39-waiter one. What is at risk is the anonymity set
+ * of the CONTENT, and that set is the number of responses in the round.
+ *
+ * Applied on ASK and on VOTE alike, with `answerCount` (responses in the
+ * round) as the quantity in both — on VOTE the waiting list is the non-VOTERS,
+ * which is not an authorship set at all, but the ballot with its k responses is
+ * on the stage at exactly that moment, and one rule that is always about the
+ * content on the wall is one rule to check. `17-remote.html`'s caption is
+ * right that "who has not acted" is a different fact from "who wrote what" —
+ * that argument survives per-person and dies on the complement, which is the
+ * whole of the difference between a list on the host's phone and a list on a
+ * projector.
+ *
+ * THE SECOND GUARD IS NOT ABOUT PRIVACY AT ALL, and it fires more often. On a
+ * hidden round `playersWhoAnswered` is only as fresh as the last /state
+ * resync — message.js strips the name from every `playerAnswered` frame and
+ * answeredNamesFrom() returns nothing to replace it (see fetchAnswersForQuestion,
+ * which leaves the list alone rather than overwriting it with blanks), while
+ * the row count keeps climbing. Subtracting a stale list would print
+ * "still waiting: Dana" at a room twenty seconds after Dana answered, and it
+ * would understate the answerer set, which misattributes rather than merely
+ * leaking. So the list is offered only when the names on hand account for
+ * every response counted.
+ *
+ * Returns `null` for "do not offer this at all" — distinct from `[]`, which
+ * means "offered, and nobody is waiting".
+ */
+export function waitingRoster({
+  players,
+  responded,
+  respondedCount,
+  answerCount,
+  gameType,
+  anonymousUntilReveal,
+  authorsRevealed,
+} = {}) {
+  // Deduplicated, because the roster is keyed by name everywhere else in this
+  // product (join-game.js writes PLAYER#{playerName}, which is why two people
+  // called Chris silently merge) and because a repeated name would print the
+  // same person twice on the wall.
+  const roster = Array.from(new Set(
+    (players || [])
+      .map((p) => (p && (p.name || p.playerName)) || '')
+      .filter((n) => typeof n === 'string' && n.length > 0)
+  ));
+  if (roster.length === 0) return null;
+
+  const acted = new Set(
+    (responded || []).filter((n) => typeof n === 'string' && n.length > 0)
+  );
+  // The meter's numerator can lead the names — never the other way round.
+  const counted = Math.max(Number(respondedCount) || 0, acted.size);
+  if (acted.size < counted) return null;
+
+  const hidden = anonymityActive({ gameType, anonymousUntilReveal }) && authorsRevealed !== true;
+  if (hidden && (Number(answerCount) || 0) < MIN_ANONYMOUS_ANSWERS) return null;
+
+  return roster.filter((name) => !acted.has(name));
+}
+
+/**
  * Which ballot row is this player's own.
  *
  * A player seeing their own answer marked is correct and not a leak (§5.6.7).

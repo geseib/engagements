@@ -40,7 +40,7 @@ import {
 import {
   anonymityApplies, anonymityActive, createPayloadFor, displayLabelFor,
   stageLabelFor, standingsVisible, playerAnsweredActions, answeredNamesFrom,
-  answeredCountFrom,
+  answeredCountFrom, waitingRoster,
 } from './config/anonymity';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
@@ -174,6 +174,23 @@ function GameHostPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [qrMode]);
+  /**
+   * null | 'preview' | 'pinned' — the meter's waiting-list reveal.
+   *
+   * Three values and an Escape handler, mirroring qrMode above, because it is
+   * the same interaction (RoomMeter.jsx's doc-block says which two details
+   * differ and why). It is NOT a term in shortcutsSuppressed: the list draws a
+   * few lines inside the meter's own column and covers nothing, least of all
+   * the dock, so suppressing the advance key for it would take SPACE away
+   * while the dock still advertised it.
+   */
+  const [rosterMode, setRosterMode] = useState(null);
+  useEffect(() => {
+    if (!rosterMode) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setRosterMode(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [rosterMode]);
   const [showReport, setShowReport] = useState(false);
   const [reportData, setReportData] = useState(null);
   const [lessonNumber, setLessonNumber] = useState(0);
@@ -3668,9 +3685,69 @@ Ready to engage? See you there!`;
       };
     }
     // RESULTS, FIELD_NOTES and ENDED run solo. The mockup's standings column
-    // is a roster of names, which RoomMeter refuses on purpose.
+    // is a list of names WITH A SCORE BESIDE EACH, which is the half of the
+    // old rule that did not get retired — see RoomMeter.jsx's doc-block and
+    // standingsVisible().
     return null;
   })();
+
+  /**
+   * WHO THE ROOM IS WAITING FOR, when the meter may say so.
+   *
+   * The gate is `waitingRoster` in config/anonymity.js — including the
+   * judgement about what naming the non-responders leaks during an anonymous
+   * round, which is the reason this is a function call and not four inline
+   * conditions. `null` means "do not offer the reveal at all".
+   *
+   * ASK and VOTE only. LOBBY deliberately keeps a bare count: nobody is late
+   * to a round that has not started, there is no invite list, and the only
+   * list the lobby could draw is who has JOINED — the polarity the owner
+   * rejected. RoomMeter's doc-block carries the same note.
+   *
+   * `authorsRevealed` is the SERVER flag, not `authorsHiddenOnStage`: the
+   * stage's display toggle only exists on RESULTS, where this meter is null.
+   */
+  const waitingNames = (hostPhase === 'ASK' || hostPhase === 'VOTE')
+    ? waitingRoster({
+      players,
+      responded: hostPhase === 'VOTE' ? playersWhoVoted : playersWhoAnswered,
+      respondedCount: hostPhase === 'VOTE' ? playersWhoVoted.length : answeredCount,
+      answerCount: answers.length,
+      gameType: currentGameType,
+      anonymousUntilReveal,
+      authorsRevealed,
+    })
+    : null;
+
+  /**
+   * The reveal's three handlers, Rail's QR trigger copied one for one — with
+   * the two documented differences (RoomMeter.jsx): a click TOGGLES, because
+   * there is no overlay to click away and a touchscreen has no Escape key;
+   * and nothing here feeds `shortcutsSuppressed`, because the list covers
+   * nothing.
+   *
+   * SCOPED TO THE ROUND IT WAS OPENED IN. `rosterMode` carries the phase and
+   * round it belongs to, so a pinned list cannot ride into the next beat and
+   * put names on the wall that nobody asked for — which would break the one
+   * property that makes naming the waiting acceptable at all.
+   */
+  const rosterKey = `${hostPhase}#${lessonNumber}`;
+  const rosterReveal = rosterMode && rosterMode.key === rosterKey ? rosterMode.mode : null;
+  const rosterHandlers = {
+    onPreview: () => setRosterMode((m) => (m && m.key === rosterKey && m.mode === 'pinned'
+      ? m : { key: rosterKey, mode: 'preview' })),
+    onPreviewEnd: () => setRosterMode((m) => (m && m.key === rosterKey && m.mode === 'pinned'
+      ? m : null)),
+    onPin: () => setRosterMode((m) => (m && m.key === rosterKey && m.mode === 'pinned'
+      ? null : { key: rosterKey, mode: 'pinned' })),
+  };
+  /* null, not an empty object: RoomMeter renders the plain, non-interactive
+     count unless it is handed both names and handlers, so a gated round — or
+     a round everybody is already in — offers no affordance at all rather than
+     a control that opens an empty list. */
+  const meterWaiting = waitingNames && waitingNames.length
+    ? { names: waitingNames, mode: rosterReveal, ...rosterHandlers }
+    : null;
 
   /**
    * Why the primary is greyed out, and the key that fires it when it is not.
@@ -3759,6 +3836,9 @@ Ready to engage? See you there!`;
           hostPhase, currentQuestionId, questions.length, answers.length,
           players.length, playersWhoAnswered.length, playersWhoVoted.length,
           authorsRevealed, authorsHiddenOnStage,
+          // The reveal changes the meter's height and the fitter measures the
+          // meter (`.rail, .meter`); without this it would never re-measure.
+          rosterReveal || '', waitingNames ? waitingNames.length : -1,
           loadingAIInsights, currentAIInsights ? 1 : 0,
         ].join('|')}
         rail={(
@@ -3785,7 +3865,12 @@ Ready to engage? See you there!`;
           />
         )}
         meter={meter
-          ? <RoomMeter phase={hostPhase} heading={meter.heading} body={meter.body} complete={everybodyIn} />
+          ? (
+            <RoomMeter
+              phase={hostPhase} heading={meter.heading} body={meter.body}
+              complete={everybodyIn} waiting={meterWaiting}
+            />
+          )
           : null}
         dock={(
           <Dock
@@ -4015,11 +4100,16 @@ Ready to engage? See you there!`;
                     answer, isCorrect, +points and running total) and
                     wavelength's `wavelength-player-list` are both gone, and
                     neither is coming back in this shape: each is a list of
-                    names with a score beside it, and the stage's binding
-                    constraint is that it never names a person. What replaces
-                    them is not decided here — 07-results-trivia's own answer is
-                    a Standings roster in the meter, which RoomMeter refuses by
-                    test for the same reason. That conflict is real and it is
+                    names WITH A SCORE BESIDE EACH, and a score beside a name
+                    is attribution by arithmetic (standingsVisible, §5.6.4).
+                    THE CONSTRAINT HAS NARROWED AND THIS HALF OF IT HAS NOT.
+                    The meter now names who is still waiting (RoomMeter.jsx's
+                    doc-block carries the owner's ruling) — a waiting list is
+                    who has not acted, which is not authorship; a standings
+                    roster is a scoreboard, which is. What replaces these is
+                    still not decided here — 07-results-trivia's own answer is
+                    a Standings roster in the meter, which RoomMeter still has
+                    no slot for. That conflict is real and it is
                     plan 4/5's to settle; until it does, trivia's room-facing
                     payoff is the correct row and its share of the vote below.
                     The old empty-state is not restored either: it printed

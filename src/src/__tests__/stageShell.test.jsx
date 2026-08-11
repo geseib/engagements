@@ -265,13 +265,95 @@ describe('the room meter', () => {
     expect(container.textContent).toContain('31 / 40');
   });
 
-  test('it never names anybody', () => {
-    // A count is a nudge; a list of names is an attendance record, and the room
-    // is the wrong audience for one. This binds Table too — Table is a stage.
-    const { container } = render(
+  /**
+   * THE RULE THAT USED TO BE HERE.
+   *
+   * This describe block carried `test('it never names anybody')`, holding
+   * RoomMeter's doc-blocked rule that a count is a nudge and a list of names
+   * is an attendance record. THE OWNER HAS RETIRED THAT RULE: the meter now
+   * names WHO IS STILL WAITING, on demand. The test is rewritten rather than
+   * deleted, because the replacement rule has sharper edges than the one it
+   * replaces and every one of them is a way to ship the wrong thing while
+   * looking finished.
+   *
+   * The three below are the edges. `roomMeterWaiting.test.jsx` holds the gate
+   * itself (config/anonymity.js's waitingRoster) and the interaction.
+   */
+  test('it names nobody unless the caller hands it names AND handlers', () => {
+    // rejects: a meter that reads a roster prop and prints it. The old rule's
+    // one durable half — the meter is not an attendance record it assembles
+    // itself — survives as this: it renders what it is given, and given
+    // nothing it is the plain fraction it always was, with no affordance
+    // hinting at one.
+    const { container, rerender } = render(
       <RoomMeter phase="ASK" heading="ANSWERED" body="31 / 40" players={[{ name: 'Dana' }, { name: 'Tomás' }]} />
     );
     expect(container.textContent).not.toMatch(/Dana|Tomás/);
+    expect(container.querySelector('[data-waiting-list]')).toBeNull();
+    expect(container.querySelector('.count').getAttribute('role')).toBeNull();
+    expect(container.querySelector('.count').getAttribute('tabindex')).toBeNull();
+
+    // Names with no handlers is the shape a gated round produces if somebody
+    // "simplifies" the null check away. Still inert, still silent.
+    rerender(
+      <RoomMeter phase="ASK" heading="ANSWERED" body="31 / 40" waiting={{ names: ['Dana'], mode: 'pinned' }} />
+    );
+    expect(container.textContent).not.toMatch(/Dana/);
+    expect(container.querySelector('.count').getAttribute('role')).toBeNull();
+  });
+
+  test('it names the waiting and never the answered', () => {
+    // THE POLARITY, which is the owner's actual decision and the one thing an
+    // implementation can get exactly backwards while passing every other test
+    // in this file — the list would still appear, still be gated, still be
+    // dismissible.
+    //
+    // rejects: passing the answered set into `names`, or a component that
+    // subtracts the wrong way round.
+    const waiting = {
+      names: ['Dana', 'Tomás'],
+      mode: 'pinned',
+      onPreview: jest.fn(), onPreviewEnd: jest.fn(), onPin: jest.fn(),
+    };
+    const { container } = render(
+      <RoomMeter phase="ASK" heading="ANSWERED" body="31 / 40" waiting={waiting} />
+    );
+    const list = container.querySelector('[data-waiting-list]');
+    expect(list).not.toBeNull();
+    expect(Array.from(list.querySelectorAll('li')).map((li) => li.textContent))
+      .toEqual(['Dana', 'Tomás']);
+    // The heading says which set this is, in the phase's own words. A list
+    // headed "Answered" would be the league table the polarity forbids.
+    expect(list.querySelector('h5').textContent).toBe('Still to answer');
+    // And on VOTE it is the other set, not a hardcoded word.
+    const { container: voting } = render(
+      <RoomMeter phase="VOTE" heading="VOTED" body="26 / 40" waiting={waiting} />
+    );
+    expect(voting.querySelector('[data-waiting-list] h5').textContent).toBe('Still to vote');
+  });
+
+  test('nothing is named until the host asks — mode is what puts names on the wall', () => {
+    // rejects: rendering the list whenever `names` is non-empty. The whole
+    // reason naming the waiting is acceptable is that it is a deliberate,
+    // momentary act by the host; a list that is simply always up is the
+    // permanent dock line USER-REVIEWS.md rejected, wearing a different hat.
+    const handlers = { onPreview: jest.fn(), onPreviewEnd: jest.fn(), onPin: jest.fn() };
+    const { container, rerender } = render(
+      <RoomMeter phase="ASK" heading="ANSWERED" body="31 / 40"
+        waiting={{ names: ['Dana', 'Tomás'], mode: null, ...handlers }} />
+    );
+    expect(container.querySelector('[data-waiting-list]')).toBeNull();
+    expect(container.textContent).not.toMatch(/Dana/);
+    // ...but the affordance exists, or the feature is undiscoverable.
+    expect(container.querySelector('.count').getAttribute('role')).toBe('button');
+    expect(container.querySelector('.count').getAttribute('aria-expanded')).toBe('false');
+
+    rerender(
+      <RoomMeter phase="ASK" heading="ANSWERED" body="31 / 40"
+        waiting={{ names: ['Dana', 'Tomás'], mode: 'preview', ...handlers }} />
+    );
+    expect(container.querySelector('[data-waiting-list]')).not.toBeNull();
+    expect(container.querySelector('.count').getAttribute('aria-expanded')).toBe('true');
   });
 
   test('it collapses where the spec says it collapses', () => {
@@ -449,9 +531,17 @@ describe('what the host page must now render', () => {
     // separately makes it survive a reformat.
     expect(source).toMatch(/import Stage from '\.\/components\/stage\/Stage'/);
 
+    // WIDENED FROM 2000, and worth saying why rather than leaving a number
+    // that looks arbitrary. The window was 2000 when the <Stage> element was
+    // 1,990 characters long — ten characters of headroom, which is luck, not
+    // a budget. Adding the meter's waiting-list wiring pushed <Dock past the
+    // end and failed this test for a reason that has nothing to do with what
+    // it rejects. Nothing is weakened: the conjunction below still has to be
+    // satisfied inside ONE element, and a page that rebuilt .rail/.dock
+    // markup inline would carry none of these components at any width.
     const windows = [];
     for (let i = source.indexOf('<Stage'); i !== -1; i = source.indexOf('<Stage', i + 1)) {
-      windows.push(source.slice(i, i + 2000));
+      windows.push(source.slice(i, i + 2600));
     }
     expect(windows.length).toBeGreaterThan(0);
 

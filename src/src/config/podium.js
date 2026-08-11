@@ -8,10 +8,17 @@
  * inside it is a rule nothing can test.
  *
  * WHY THIS IS NOT A ROSTER, AND WHY THAT DISTINCTION IS THE WHOLE POINT.
- * `RoomMeter` refuses to name anybody and keeps refusing. A roster is every
- * name, unordered, complete, and it says who is present and who is late. A
- * podium is three names, ordered, earned, and it says what the room just did.
- * The first is surveillance; the second is why people came.
+ * A roster is every name, unordered, complete, and it says who is present and
+ * who is late. A podium is three names, ordered, earned, and it says what the
+ * room just did. The first is surveillance; the second is why people came.
+ *
+ * This used to read "`RoomMeter` refuses to name anybody and keeps refusing".
+ * IT NO LONGER DOES: the owner has since decided the meter may name WHO IS
+ * STILL WAITING, on demand (see RoomMeter.jsx's doc-block and
+ * anonymity.js's `waitingRoster`). Nothing above depends on that — the
+ * podium's limits are its own — and the pair still brackets the same
+ * territory from both ends: the meter may name who has not acted, the podium
+ * may name three who did, and neither may put a full scoreboard on the wall.
  */
 import { standingsVisible } from './anonymity';
 import { hostRunsVotePhase } from './hostControls';

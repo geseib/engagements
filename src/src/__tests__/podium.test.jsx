@@ -4,11 +4,17 @@
  * Owner rulings this file exists to hold in place: top three and never a full
  * roster; RESULTS and ENDED and not every phase; and no podium for wavelength.
  *
- * `RoomMeter`'s "it never names anybody" test in stageShell.test.jsx stands
- * unmodified and is the reason this file exists at all — a roster is every
- * name, unordered and complete, and says who is present and who is late; a
- * podium is three names, ordered and earned, and says what the room just did.
- * The carve-out is tested here, where it lives.
+ * THE RULE THIS FILE WAS CARVED OUT OF NO LONGER EXISTS IN THAT FORM.
+ * `RoomMeter`'s "it never names anybody" test in stageShell.test.jsx is gone,
+ * retired by the owner and replaced there by tests for what the meter may now
+ * name: WHO IS STILL WAITING, on demand, never who has acted. That does not
+ * loosen anything here. The podium's own limits are the ones below — top
+ * three, ordered and earned, on RESULTS and ENDED only — and they were never
+ * consequences of the meter's rule; the meter simply happened to be where the
+ * distinction got written down first. A full roster with scores beside the
+ * names is still refused in both places, and for the same reason
+ * (`standingsVisible`: a score beside a response is attribution by
+ * arithmetic).
  */
 import React from 'react';
 import { render } from '@testing-library/react';
