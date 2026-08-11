@@ -106,10 +106,13 @@ Attributes:
 
 ### Question Set Catalog
 
+> **None of the entities in this section carry `ttl`, and none of them ever may.**
+> See "TTL Strategy" below — this is content, not session data.
+
 #### Question Set Metadata
 ```
-PK: SET#{setId}
-SK: METADATA
+PK: SETS
+SK: SET#{setId}
 Attributes:
   - SetId: string (unique identifier)
   - Name: string (display name)
@@ -150,6 +153,93 @@ Attributes:
   - CustomInstruction: string (optional)
   - CreatedAt: ISO timestamp
 ```
+
+#### Versioned set partitions
+
+A set replaced through the editor is written to a **new** partition and the
+metadata row is flipped atomically, so a live game never sees a half-written set:
+
+```
+PK: SET#{setId}#v{n}      SK: QUESTION#… / CATEGORY#…
+```
+
+The `SETS / SET#{setId}` row then carries `activeVersion` and `versions[]`. The
+resolver falls back to the unversioned `SET#{setId}` partition when a set has
+never been migrated, which is why `scripts/migrate-set-versions.js` **copies**
+rather than moves — legacy rows stay put and rollback needs no restore.
+
+### AI Prompts and Personas
+
+**One partition, `PK: AIPROMPTS`, holding three different things.** None of them
+carries `ttl` (see TTL Strategy).
+
+#### Prompt pointer — DynamoDB
+```
+PK: AIPROMPTS
+SK: AIPROMPT#{promptId}
+Attributes:
+  - name, description, gameType, category
+  - promptType: "analysis" | "generation"
+  - isDefault: boolean          (at most one per gameType)
+  - s3Key: string               → the BODY lives in S3, not here
+  - status, questionSetIds[], tags[], createdAt, updatedAt
+```
+
+#### Prompt body — S3, not DynamoDB
+```
+s3://{StackName}-ai-prompts/prompts/{gameType}/{promptId}/v{n}.json
+```
+
+The body is the prompt: `instructions`, `outputFormat` (or a legacy single
+`template`), plus a copy of the metadata. An update writes a **new** key and
+repoints `s3Key`; old versions are left behind.
+
+**The split is the failure mode, and it has bitten twice.** The pointer and the
+body can drift apart, and nothing reconciles them:
+
+- `get-ai-summary.js` reads the pointer for `s3Key`, then `GetObject`s the body,
+  then falls back to the pointer record itself.
+- A pointer whose S3 object is **missing** and which carries no inline
+  `template`/`instructions` fails `isUsableSummaryPrompt` (`prompt-shape.js`),
+  so `resolvePromptTemplate` returns `null` and the summary lambda takes
+  `buildFallback()` — **no Bedrock call at all**. The room gets canned text and
+  there is no error anywhere.
+- Found live on `engagedev`, 2026-08-10: the default trivia prompt
+  `AIPROMPT#mdnrm2awjobwax0vcdl` pointed at
+  `prompts/trivia/mdnrm2awjobwax0vcdl/v1.json`, which returned 404. The bucket
+  held bodies for call-and-answer and wavelength only, so **trivia and poll AI
+  commentary were silently dead.**
+
+**When auditing, check both halves.** A prompt that "exists" in DynamoDB proves
+nothing about whether it can run.
+
+#### Persona
+```
+PK: AIPROMPTS
+SK: PERSONA#{personaId}
+Attributes:
+  - personaId, name, tagline, icon
+  - voice: string               ← the persona IS this string
+  - gameTypes: ["all"] | ["trivia", …]
+  - status: "active" | "inactive"
+  - isDefault: boolean, sortOrder: number
+```
+
+**A persona is not a prompt.** It has no S3 body and cannot change output
+structure — it supplies only the `VOICE:` block prepended to the prompt, while
+the system appends the output contract last. Resolution is host pick → set
+persona → set/game free-text AI context → inferred → legacy template, and a
+dangling or inactive id falls through rather than dead-ending. Seeded from
+`SEED_PERSONAS` in `lambda-functions/game/personas.js` via
+`scripts/seed-personas.js`.
+
+#### Default lookup
+```
+PK: AIPROMPTS
+SK: GAMETYPE#{gameType}#CATEGORY#{category}
+```
+Written when a prompt is marked `isDefault`, so the game-time lookup is a get
+rather than a scan.
 
 ### WebSocket Connections
 
@@ -205,9 +295,36 @@ Attributes:
 ## Data Lifecycle
 
 ### TTL Strategy
+
+**The rule, stated once so it cannot be assumed:**
+
+> **`ttl` is for SESSION data only. Content and configuration must never carry it.**
+
+DynamoDB TTL is enabled on the table for the attribute `ttl`, and it applies to the
+*whole table* — it does not know or care which partition a row is in. So the
+attribute itself is the only thing standing between a record and deletion.
+
+| Carries `ttl` | Does **not**, ever |
+|---|---|
+| `GAME#{gameId}` — every SK | `SETS` / `SET#{setId}` / `SET#{setId}#v{n}` — sets, categories, questions |
+| `PLAYER#{name}` and its `#SCORE` / `#STATE` rows | `AIPROMPTS` — prompts, personas, default-lookup rows |
+| `CONNECTION#{connectionId}` | |
+
 - **Game Data**: 2 weeks after creation
 - **WebSocket Connections**: 2 hours after connection
 - **Temporary Data**: 1 hour (partial votes, etc.)
+
+**This has been violated in production, and it is why the rule is now written
+here.** Every AI-prompt writer used to stamp records with `now + 365d`. Because
+TTL is table-wide, DynamoDB was silently deleting prompts and personas a year
+after they were authored — no error, no log, just a game that one day stopped
+having a voice. `scripts/cull-ai-prompts.js --only=ttl` strips the attribute and
+is labelled "THE URGENT ONE" for this reason. Verified clear on `engagedev` and
+`engagetest` on 2026-08-10 (0 records in the `AIPROMPTS` partition carry `ttl`).
+
+**When adding any writer, ask which of the two columns above the record belongs
+in.** A content row that acquires a `ttl` looks perfectly healthy until the day
+it disappears.
 
 ### Cleanup Process
 - DynamoDB TTL handles automatic cleanup
