@@ -211,7 +211,17 @@ describe('the conversion actually happened, in both halves', () => {
     // every dusk token by name, and a previous test in this repo passed on a
     // comment — podium.test.jsx carries a stripComments() helper for exactly
     // this. Without the strip this assertion measures prose.
-    const declarations = QS_CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+    // THE LIGHT SCOPE IS EXCLUDED, and only the light scope. `.qsets--onlight`
+    // re-points --bg/--text/--muted/--primary and friends for the host's dialog,
+    // which sits inside `.new-game-dialog` — `background: white`. A token
+    // DEFINITION is the one place a hex literal is the point, and there is no
+    // paper-theme token set in styles.css to reference instead. Those values are
+    // not unmeasured: hostQuestionSetsPalette.test.js runs the same compositing
+    // walk over every one of them. Everything outside that block is still
+    // required to be a token or an rgba of one.
+    const declarations = QS_CSS
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\.qsets[^{]*--onlight[^{]*\{[^}]*\}/g, '');
     const literals = [...declarations.matchAll(/(?:^|[\s:])(#[0-9A-Fa-f]{3,8})\b/g)].map((m) => m[1]);
     // Two deliberate literals, both measured above: the primary hover, and the
     // locally-declared --qsets-success-text that styles.css does not have.

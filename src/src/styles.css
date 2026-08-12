@@ -10310,6 +10310,27 @@ body {
   background: rgba(246, 169, 76, 0.12);
 }
 
+/* THE WAY IN TO A HOST'S OWN QUESTION SETS, beside the picker that needs one.
+   A link rather than a button: it opens a side task, and a second filled button
+   next to "Create engagement" would compete with the one action this screen
+   exists for. --primary-deep rather than --primary, because #F6A94C carries
+   1.9:1 on the white dialog card. */
+.gsd-setlink {
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--primary-deep, #C77B4A);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.gsd-setlink:hover { color: #8A4B12; }
+
 /* `blurb` from config/gameTypes.js — it exists for every type and was rendered
    nowhere in the app. One line that answers "what is Wavelength?". */
 .gsd-blurb {

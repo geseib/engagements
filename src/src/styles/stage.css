@@ -622,9 +622,15 @@ body{
   background:rgba(155,168,190,.3);cursor:pointer;flex:none;
   position:relative;outline-offset:8px}
 /* The hit area, not the drawing. A .6em dot is about 12px at Room — a target
-   nobody hits with a trackpad while a room watches. inset:-16px puts ~44px of
-   pressable area around a dot that still LOOKS like a dot to the audience. */
-.pager .pip::after{content:"";position:absolute;inset:-16px}
+   nobody hits with a trackpad while a room watches. The outset makes it
+   pressable while it still LOOKS like a dot to the audience.
+   ASYMMETRIC ON PURPOSE: the pager is the LAST thing in .content, so its
+   downward outset is the axis most likely to run under the dock — which is
+   `z-index:12` against .main's 2 and would paint over it and take the clicks.
+   The horizontal axis has nothing above it, so that is where the target grows.
+   The visible dot is pressable at every profile either way; this only widens
+   the margin for error. */
+.pager .pip::after{content:"";position:absolute;inset:-8px -14px}
 .pager .pip.on{background:var(--primary)}
 .pgr-label{min-width:0}
 

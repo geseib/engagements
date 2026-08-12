@@ -22,17 +22,21 @@
  *
  * NOT included, deliberately:
  *   - navigation/modal flags (showWelcomeScreen, showQuickstartMenu,
- *     showNewGameDialog, showReportsModal) — the caller drives those, and
- *     resetting them here would fight the caller.
+ *     showNewGameDialog, showReportsModal, showSetsDialog) — the caller drives
+ *     those, and resetting them here would fight the caller.
  *   - the create dialog's own inputs — they are the form, not the game, and
  *     since the extraction they live inside components/GameSetupDialog.jsx,
  *     which unmounts when the dialog closes: engagementType, newGameSetId,
  *     randomizeQuestions, anonymousResponses, eventDetails, gameAiContext,
- *     newGamePersonaId. (This list named five and omitted three until the
+ *     newGamePersonaId, localSets. (This list named five and omitted three until the
  *     extraction. `__tests__/gameSession.test.js` now fails if the dialog owns
  *     a key this file is responsible for, or owns one this list does not name.
  *     `triviaTimer` was on the old list and is deleted outright — the backend
- *     never read it.)
+ *     never read it. `localSets` joined that list with the host's question-set
+ *     side task: it caches what `GET /admin/question-sets` returned while the
+ *     host was making or renaming a set, so the picker can offer a new set at
+ *     once rather than after a reload. That is library data, like `questionSets`
+ *     below, and it dies with the dialog regardless.)
  *   - libraries that are refetched anyway (questionSets, personas).
  *   - the display profile — a room-display preference. A host running a
  *     projector wants it to stay a projector across games; the profile is

@@ -3916,7 +3916,7 @@ Ready to engage? See you there!`;
    * (a measured size moves under the host's eye, and jsdom cannot test a
    * measurement) is in config/stagePaging.js beside the numbers.
    *
-   * `pageOffset` IS NOT A CONVENIENCE. Every anonymous response is labelled
+   * `answerPage.offset` IS NOT A CONVENIENCE. Every anonymous response is labelled
    * positionally — `displayLabelFor(answer, index)` renders
    * `Response ${index + 1}` and PlayerPage renders the same label from the same
    * index on every phone in the room. Mapping a page with a fresh counter would

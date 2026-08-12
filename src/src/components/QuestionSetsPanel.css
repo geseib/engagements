@@ -500,3 +500,82 @@ button.qsets-chip:hover { background: var(--qsets-row-hover); }
   line-height: 1.5;
 }
 .qsets-alt b { color: var(--qsets-success-text); }
+
+/* ==========================================================================
+   THE HOST'S DIALOG — components/HostQuestionSetsDialog.jsx
+   ==========================================================================
+   Two modifiers, and nothing else. The host surface is deliberately the SAME
+   visual system as the console rather than a second one: a host who is also an
+   admin should not have to learn two vocabularies for one object, and the
+   palette above is already contrast-asserted in questionSetsPalette.test.js.
+
+   `--over` exists because the create-engagement screen is `.new-game-overlay`
+   at z-index 10000 (styles.css), and `.qsets-scrim`'s 60 would have put this
+   dialog BEHIND the screen that opened it — visible only as a darkening of the
+   backdrop, with every control unreachable.
+
+   `--wide` because this modal carries a table AND the upload form; 560px is
+   sized for the confirm dialogs. The 98-character set title that `.qsets-modal`
+   guards against is still handled by its `overflow-wrap: anywhere`.
+   ========================================================================== */
+.qsets-scrim--over { z-index: 10001; }
+.qsets-modal--wide { width: min(760px, 100%); }
+.qsets-modal--wide > header { align-items: flex-start; }
+.qsets-modal--wide .qsets-panel { border: 0; padding: 0; margin-top: 4px; }
+
+/* --------------------------------------------------------------------------
+   THE SAME COMPONENTS, RE-TINTED FOR A LIGHT SURFACE.
+   --------------------------------------------------------------------------
+   The admin console's work body is `--bg` #0F1A2E and everything above was
+   measured against it. The create-engagement screen is `.new-game-dialog`,
+   which is `background: white` (styles.css). Rendering the dusk palette
+   unchanged inside that white card is the EXACT defect questionSetsPalette's
+   header records — the Question sets tab shipped light-on-dark at 1.4:1 — with
+   the polarity flipped, and it is also what "the admin console leaked" looks
+   like to a host.
+
+   So the host dialog re-points the tokens the shared components consume, and
+   nothing else changes: same markup, same component, same class names. Every
+   pairing below is asserted in __tests__/hostQuestionSetsPalette.test.js with
+   the compositing functions lifted from the admin audit, so these are measured
+   numbers rather than eyeballed ones.
+
+   --primary is the one that cannot simply be copied. #F6A94C is a text colour
+   at three places above (--link, --chip--warn, the skipped-tier heading) and
+   carries 1.9:1 on white. The light scope uses a deep amber-brown that is
+   readable BOTH ways round — as text on the card, and as the filled button's
+   background under a white label — which is what keeps one token doing both
+   jobs the way the dusk palette does.
+   -------------------------------------------------------------------------- */
+/* The second selector matters: QuestionSetUploadPanel and
+   QuestionSetDeleteDialog each render their OWN `.qsets` root inside this one,
+   and `.qsets` re-declares the --qsets-* locals on itself. Without re-tinting
+   descendants the shared children would pull the dusk rules and tints back in
+   under light text, which is the same 1.4:1 failure one level down. */
+.qsets.qsets--onlight,
+.qsets--onlight .qsets {
+  --bg: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface-2: #FAF7F2;
+  --text: #2C2E33;
+  --muted: #5E6167;
+  --primary: #9A5B18;
+  --danger: #C0392B;
+  --danger-text: #A32B25;
+  --danger-deep: #A32B25;
+
+  --qsets-success-text: #1C7350;
+  --qsets-rule: #E4DFD6;
+  --qsets-rule-strong: #D2CBBE;
+  --qsets-row-hover: rgba(30, 35, 45, .04);
+  --qsets-tint-danger: rgba(192, 57, 43, .07);
+  --qsets-tint-warn: rgba(154, 91, 24, .09);
+  --qsets-tint-ok: rgba(28, 115, 80, .09);
+}
+/* The tinted composites hardcode the DUSK rgb() triplets inline, so they have
+   to be restated here rather than inherited. Same alphas, light hues. */
+.qsets--onlight .qsets-btn--danger,
+.qsets--onlight .qsets-btn--ghostdanger:hover:not(:disabled),
+.qsets--onlight .qsets-chip--bad { border-color: rgba(163, 43, 37, .55); }
+.qsets--onlight .qsets-chip--warn { border-color: rgba(154, 91, 24, .5); }
+.qsets--onlight .qsets-modal { box-shadow: 0 20px 60px rgba(0, 0, 0, .3); }

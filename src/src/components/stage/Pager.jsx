@@ -1,5 +1,7 @@
 import React, { useEffect } from 'react';
-import { pageCount, clampPage, pagerLabel, pageIntentFor } from '../../config/stagePaging';
+import {
+  pageCount, clampPage, pagerLabel, pageIntentFor, DEFAULT_PAGE_SIZE,
+} from '../../config/stagePaging';
 
 /**
  * The way through a list that does not fit — ported from `05-vote.html`'s
@@ -53,7 +55,12 @@ import { pageCount, clampPage, pagerLabel, pageIntentFor } from '../../config/st
 export default function Pager({
   total, page = 0, pageSize, noun = 'Responses', onPage, enabled = true,
 }) {
-  const pages = pageCount(total, pageSize);
+  // Normalised ONCE, and never re-derived from `total / pages`. `Math.ceil(4/2)`
+  // is 2, not the 3 the slice actually took, so a re-derived size prints
+  // "Responses 1–2 of 4" over three cards on the last short page.
+  const per = Number.isFinite(Number(pageSize)) && Number(pageSize) > 0
+    ? Math.floor(Number(pageSize)) : DEFAULT_PAGE_SIZE;
+  const pages = pageCount(total, per);
   const current = clampPage(page, pages);
   const movable = pages > 1 && typeof onPage === 'function';
 
@@ -87,7 +94,6 @@ export default function Pager({
 
   if (pages <= 1) return null;
 
-  const per = Math.max(1, Math.ceil(total / pages));
   const from = current * per + 1;
   const to = Math.min(total, from + per - 1);
 

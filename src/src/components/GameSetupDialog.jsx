@@ -34,11 +34,29 @@
  * that never unmounts. Non-sticky is the right answer: ON is the safe state and
  * the guarantee is spelled out in full on the card, whereas a sticky OFF
  * carries one room's decision silently into the next one.
+ *
+ * WHERE A HOST MAKES A QUESTION SET, per the owner: *"the interface for entry to
+ * this is create engagements."* This screen is the only place in the product
+ * where a host has already discovered that a set is the thing a session needs —
+ * the picker below is where they find out they haven't got one. So the entry
+ * sits beside the picker, and the "no sets yet" help text stops pointing at an
+ * editor the host cannot reach. The surface itself is
+ * <HostQuestionSetsDialog>, which owns its own fetching for the reason this
+ * file's own header gives about routes: keeping the network out of here leaves
+ * this component pure-props and testable.
+ *
+ * `localSets` is why a set can be picked the moment it is made. The page owns
+ * `questionSets` and re-reads it on mount, not on demand, and this component
+ * cannot ask it to — so the sets dialog hands back the list it already fetched
+ * and they are merged by id for the picker. Merged, not replaced: the page's
+ * copy carries what the public picker endpoint returns, and losing it would be
+ * a regression for every set the host did not just touch.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { PICKER_GAME_TYPES, gameTypeMeta } from '../config/gameTypes';
 import { anonymityApplies } from '../config/anonymity';
 import { imageMarkerSuffix } from './SetImageBadge';
+import HostQuestionSetsDialog from './HostQuestionSetsDialog';
 
 export default function GameSetupDialog({
   isFirstEngagement = true,
@@ -61,9 +79,23 @@ export default function GameSetupDialog({
   const [newGamePersonaId, setNewGamePersonaId] = useState('');
   const [randomizeQuestions, setRandomizeQuestions] = useState(true);
   const [anonymousResponses, setAnonymousResponses] = useState(true);
+  const [showSetsDialog, setShowSetsDialog] = useState(false);
+  /** Sets seen by <HostQuestionSetsDialog>, including any just created. */
+  const [localSets, setLocalSets] = useState(null);
 
   const canCreate = Boolean(newGameSetId) && eventTitle.trim().length > 0;
-  const setsForType = questionSets.filter((set) => set.engagementType === engagementType);
+
+  // Merged by id, page copy first. A set the host just made exists only in
+  // `localSets` until the page next re-reads; a set the page already knows about
+  // keeps the page's richer record.
+  const allSets = useMemo(() => {
+    if (!localSets) return questionSets;
+    const byId = new Map(localSets.map((set) => [set.id, set]));
+    for (const set of questionSets) byId.set(set.id, set);
+    return Array.from(byId.values());
+  }, [questionSets, localSets]);
+
+  const setsForType = allSets.filter((set) => set.engagementType === engagementType);
 
   // The page reloads the voices that suit this format. On mount too, so the
   // default format's list is the one the picker below shows.
@@ -161,10 +193,26 @@ export default function GameSetupDialog({
                   </option>
                 ))}
               </select>
+              {/* THE ENTRY POINT. Always offered, not only when the list is
+                  empty: "I need to fix the title on the set I made last week"
+                  is as common as "I have none", and an affordance that appears
+                  only in the failure state is one nobody finds in the success
+                  state. */}
+              <button
+                type="button"
+                className="gsd-setlink"
+                onClick={() => setShowSetsDialog(true)}
+              >
+                {setsForType.length === 0 ? 'Make a question set' : 'Your question sets'}
+              </button>
               {setsForType.length === 0 && (
+                /* The old copy sent the host to "the question set editor" —
+                   which is the admin console, a screen most hosts cannot open.
+                   It named a dead end for the exact person most likely to read
+                   it. */
                 <small className="dialog-help-text">
-                  No {gameTypeMeta(engagementType).label} sets yet. Build one in the
-                  question set editor, then come back.
+                  No {gameTypeMeta(engagementType).label} sets yet. Make one now — it takes a
+                  template and a spreadsheet.
                 </small>
               )}
             </div>
@@ -351,6 +399,14 @@ export default function GameSetupDialog({
           </button>
         </div>
       </div>
+
+      {showSetsDialog && (
+        <HostQuestionSetsDialog
+          engagementType={engagementType}
+          onClose={() => setShowSetsDialog(false)}
+          onSetsChanged={setLocalSets}
+        />
+      )}
     </div>
   );
 }
