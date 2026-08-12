@@ -151,11 +151,42 @@ describe('gate 1 — the author is warned about an invented token', () => {
     expect(screen.queryByTestId('unknown-variable-warning')).toBeNull();
   });
 
-  test('the warning is a warning, not a wall — save stays enabled', async () => {
+  /*
+    THIS TEST USED TO ASSERT THE OPPOSITE, and the reversal is deliberate.
+
+    It read "the warning is a warning, not a wall — save stays enabled", on the
+    reasoning that the wall was the save handler and blocking here would only
+    stop the one person who can already see the problem. That reasoning stood
+    while this warning was the ONLY author-time check. It does not stand now:
+    `utils/promptPreflight.js` classifies an unresolvable token as `blocking`,
+    for the reason its own detail text gives — `assertTemplateVariablesExist`
+    refuses the write, so leaving the button live only buys a round trip that
+    is guaranteed to 400. The warning copy has always said so out loud: "the
+    prompt will be rejected when you save."
+
+    rejects: dropping `saveBlocked` out of the submit button's `disabled`, and
+    also dropping the `if (saveBlocked) return` guard in handleSubmit — a
+    disabled submit button does not stop Enter-in-a-text-input from submitting
+    the form, which is how a "blocked" save ships anyway.
+  */
+  test('an unresolvable token now blocks the save, and the block is stated', async () => {
     await openEditor();
     fireEvent.change(outputFormatField(), { target: { value: '{wordFrequency}' } });
     await screen.findByTestId('unknown-variable-warning');
+    expect(screen.getByText('Create Prompt')).toBeDisabled();
+    expect(await screen.findByTestId('save-blocked-note')).toBeInTheDocument();
+  });
+
+  test('a prompt with only resolvable tokens still saves', async () => {
+    // The other half, so the block above cannot quietly become "always
+    // blocked". rejects: disabling the button on any finding rather than on a
+    // blocking one — the silent tier must never stop a save.
+    await openEditor();
+    fireEvent.change(instructionsField(), { target: { value: 'You are an advisor.' } });
+    fireEvent.change(outputFormatField(), { target: { value: '## Summary\n{responsesText}' } });
+    await waitFor(() => expect(outputFormatField().value).toContain('responsesText'));
     expect(screen.getByText('Create Prompt')).not.toBeDisabled();
+    expect(screen.queryByTestId('save-blocked-note')).toBeNull();
   });
 });
 

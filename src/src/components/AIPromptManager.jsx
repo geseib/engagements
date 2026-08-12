@@ -1,15 +1,54 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import './AIPromptManager.css';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType } from '../config/gameTypes';
 import {
-  TEMPLATE_VARIABLES,
-  variableCategories,
   unknownVariableTokens,
+  extractVariableTokens,
 } from '../config/templateVariables';
 import Icon from './Icon';
+import PromptVariableInspector, { DEFAULT_ROOM_SIZE } from './PromptVariableInspector';
+import PromptAssembledPreview from './PromptAssembledPreview';
+import PromptPreflightPanel, { blocksSave } from './PromptPreflightPanel';
 
 const API_BASE = window.API_BASE;
+
+/**
+ * `utils/promptPreflight.js`, if this build has it.
+ *
+ * It is owned by another stream and may not be present. A literal
+ * `require('../utils/promptPreflight')` — even inside a try/catch — is a
+ * webpack build ERROR when the file is absent, not a catchable one, and `npm
+ * run build` must compile today. Composing the specifier makes it a runtime
+ * context lookup instead, so a missing module degrades to `null` and the panel
+ * says the checks did not run.
+ *
+ * Contract, fixed, and the panel is written against it:
+ *   preflightPrompt({ instructions, outputFormat, outputSections, template,
+ *                     gameType, isDefault, targetModel })
+ *     => { blocking, silent, advisory, stats }
+ */
+/**
+ * The model a summary prompt is actually read by, and it is not the model that
+ * helped write it. `get-ai-summary.js:2267` invokes
+ * `us.anthropic.claude-haiku-4-5-20251001-v1:0` with `max_tokens: 1024` and
+ * `temperature: 0.5`. The dry run's §D.1 is binding: a prompt that behaves on a
+ * large model may ramble or manufacture consensus here, so the preflight is
+ * told which model it is grading for rather than assuming.
+ */
+const SUMMARY_MODEL_ID = 'claude-haiku-4-5-20251001';
+
+const PREFLIGHT_MODULE = 'promptPreflight';
+function loadPreflight() {
+  try {
+    // eslint-disable-next-line import/no-dynamic-require, global-require
+    const mod = require(`../utils/${PREFLIGHT_MODULE}`);
+    const fn = mod && (mod.preflightPrompt || (mod.default && mod.default.preflightPrompt));
+    return typeof fn === 'function' ? fn : null;
+  } catch (err) {
+    return null;
+  }
+}
 
 // Canonical dashed ids — the same vocabulary as src/config/gameTypes.js and
 // AIGenerationPromptEditor. `survey` is included so survey sets can carry a
@@ -21,6 +60,11 @@ const GAME_TYPE_OPTIONS = [
   { value: 'wavelength', label: 'Wavelength' },
   { value: 'survey', label: 'Survey' }
 ];
+
+/** Derived, not a second list — the default warning names the type out loud. */
+const GAME_TYPE_LABELS = Object.fromEntries(
+  GAME_TYPE_OPTIONS.map((t) => [t.value, t.label])
+);
 
 // Lifted to module scope so the LIST FILTER can derive from it too. The filter
 // used to hardcode the call-and-answer categories, so filtering the library by
@@ -94,13 +138,65 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
   const [savedInstructions, setSavedInstructions] = useState('');
   const [savedOutputFormat, setSavedOutputFormat] = useState('');
 
-  // The catalogue used to be redeclared here, 49 entries long. It was the only
-  // one of the three lists that was right, which is why config/templateVariables.js
-  // is a copy of its shape — but a fourth place to edit is how lists drift.
-  const templateVariables = TEMPLATE_VARIABLES;
+  // The catalogue used to be redeclared here, 49 entries long, and then read
+  // straight out of config/templateVariables.js. It is now read by
+  // PromptVariableInspector, which does not trust the catalogue's descriptions
+  // — see the header of that file for why.
 
   // Author-time gate: name the tokens nothing can fill, as they are typed.
   const unknownTokens = unknownTokensIn(formData.outputFormat, formData.instructions);
+
+  /* ---- what this prompt will actually do, before it is saved ------------- */
+
+  // The sample room the preview and the inspector share, so the value shown
+  // beside a variable is the value substituted into the preview. Two different
+  // sample sets on one screen would be a worse lie than none.
+  const [roomSize, setRoomSize] = useState(DEFAULT_ROOM_SIZE);
+
+  const preflightPrompt = useMemo(() => loadPreflight(), []);
+  const report = useMemo(() => {
+    if (!preflightPrompt) return null;
+    try {
+      return preflightPrompt({
+        instructions: formData.instructions,
+        outputFormat: formData.outputFormat,
+        outputSections: prompt?.outputSections,
+        template: formData.template,
+        gameType: normalizeGameType(formData.gameType),
+        isDefault: formData.isDefault,
+        targetModel: SUMMARY_MODEL_ID,
+      });
+    } catch (err) {
+      // A preflight that throws must not take the editor down with it. The
+      // panel's absent state then says the checks did not run, which is true.
+      console.error('promptPreflight threw; treating the checks as not run', err);
+      return null;
+    }
+  }, [
+    preflightPrompt,
+    formData.instructions,
+    formData.outputFormat,
+    formData.template,
+    formData.gameType,
+    formData.isDefault,
+    prompt,
+  ]);
+
+  const saveBlocked = blocksSave(report);
+
+  // Every token the author has written, for the "In your prompt" mark in the
+  // inspector. Unknown ones are included deliberately — a token you invented is
+  // exactly the one you want to find in the list and fail to find.
+  const usedTokens = useMemo(
+    () => [
+      ...new Set([
+        ...extractVariableTokens(formData.instructions || ''),
+        ...extractVariableTokens(formData.outputFormat || ''),
+        ...extractVariableTokens(formData.template || ''),
+      ]),
+    ],
+    [formData.instructions, formData.outputFormat, formData.template]
+  );
 
   const insertVariable = (variableName) => {
     if (outputFormatTextareaRef) {
@@ -127,6 +223,10 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // The disabled button is not the gate. Pressing Enter in any text input
+    // submits a form whose submit button is disabled, which is how a "blocked"
+    // save ships anyway. This is the gate.
+    if (saveBlocked) return;
     setIsSaving(true);
 
     try {
@@ -372,61 +472,6 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
           <div className="form-group template-group">
             <label>2. Output Format (Markdown) *</label>
             <div className="template-editor-container">
-              <div className="template-variables-panel">
-                <h4><Icon name="NotePencil" weight="bold" size={16} color="currentColor" /> Available Variables</h4>
-                <p className="variables-help">
-                  Click to insert into output format:<br />
-                  <small><strong><Icon name="Lightbulb" weight="duotone" size={16} color="var(--primary)" /> Markdown Support:</strong> Use ## Headers, **bold**, *italic*, `code`, and | tables | for | formatting |</small>
-                  <br />
-                  <small><strong><Icon name="Target" weight="duotone" size={16} color="var(--primary)" /> Game Type:</strong> {formData.gameType} - Variables marked with <Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> are not available for this game type</small>
-                </p>
-                {/* Derived, not hand-listed. The hardcoded list omitted 'Wavelength'
-                    (so all six wavelength variables were declared and never drawn)
-                    and included a 'Context' no variable declares. */}
-                {variableCategories().map(category => {
-                  const categoryVariables = templateVariables.filter(v => v.category === category);
-                  if (categoryVariables.length === 0) return null;
-                  
-                  return (
-                    <div key={category} className="variable-category">
-                      <h5 className="category-header">{category}</h5>
-                      <div className="category-variables">
-                        {categoryVariables.map(variable => {
-                          // The templateVariables catalogue above still lists
-                          // legacy spellings (`callandanswer`, `polls`), so
-                          // compare NORMALIZED on both sides rather than
-                          // rewriting ~40 literal arrays. Without this, every
-                          // variable would read as unavailable the moment
-                          // formData.gameType became `call-and-answer`.
-                          const currentType = normalizeGameType(formData.gameType);
-                          const availableTypes = variable.gameTypes.map(normalizeGameType);
-                          const isAvailable = availableTypes.includes(currentType);
-                          const isTriviaMostly = availableTypes.length === 1 && availableTypes[0] === 'trivia';
-                          const isCallAnswerOnly = availableTypes.length === 1 && availableTypes[0] === 'call-and-answer';
-
-
-                          return (
-                            <button
-                              key={variable.name}
-                              type="button"
-                              className={`variable-btn ${!isAvailable ? 'variable-unavailable' : ''} ${isTriviaMostly ? 'variable-trivia-only' : ''} ${isCallAnswerOnly ? 'variable-callanswer-only' : ''}`}
-                              onClick={() => insertVariable(variable.name)}
-                              title={`${variable.description}\n\nAvailable for: ${variable.gameTypes.join(', ')}\n\nExample: ${variable.example}`}
-                              disabled={!isAvailable}
-                            >
-                              {!isAvailable && <Icon name="Warning" weight="fill" size={13} color="var(--primary)" />}
-                              {isTriviaMostly && currentType === 'trivia' && <Icon name="Brain" weight="bold" size={13} />}
-                              {isCallAnswerOnly && currentType === 'call-and-answer' && <Icon name="ChatCircleText" weight="bold" size={13} />}
-                              {' '}
-                              {'{' + variable.name + '}'}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
               <div className="template-textarea-container">
                 <textarea
                   ref={setOutputFormatTextareaRef}
@@ -463,6 +508,22 @@ Click variable buttons to insert them into your output format."
                   required
                 />
               </div>
+              {/*
+                THE PALETTE IS NOW AN INSPECTOR. The chips were a name and a
+                tooltip quoting `variable.description` — and the catalogue's
+                descriptions are not reliable: `voteTally`'s reads back
+                `votingBreakdown`'s shape and example (defect D11), and no entry
+                said anything at all about how large a value renders, which is
+                how one prompt ended up 40% tally. Every row's sample is now
+                built the way get-ai-summary.js builds the value, from the same
+                sample room the preview substitutes.
+              */}
+              <PromptVariableInspector
+                gameType={normalizeGameType(formData.gameType)}
+                roomSize={roomSize}
+                usedNames={usedTokens}
+                onInsert={insertVariable}
+              />
             </div>
             {unknownTokens.length > 0 && (
               <div className="unknown-variable-warning" data-testid="unknown-variable-warning">
@@ -479,6 +540,25 @@ Click variable buttons to insert them into your output format."
             <small className="form-help">
               Click the variable buttons to insert them into your output format. Variables will be replaced with actual content when the AI summary is generated. Supports full Markdown formatting including headers, bold, italic, code, and tables.
             </small>
+          </div>
+
+          {/*
+            3. WHAT THIS PROMPT WILL DO. Everything above is what you typed;
+            everything here is what the model gets. The two are not the same
+            string and the difference is where six shipped defects lived.
+          */}
+          <div className="form-group prompt-check-group">
+            <label>3. Before you save</label>
+            <PromptPreflightPanel report={report} unavailable={!preflightPrompt} />
+            <PromptAssembledPreview
+              instructions={formData.instructions}
+              outputFormat={formData.outputFormat}
+              template={formData.template}
+              outputSections={prompt?.outputSections}
+              gameType={normalizeGameType(formData.gameType)}
+              roomSize={roomSize}
+              onRoomSizeChange={setRoomSize}
+            />
           </div>
 
           <div className="form-group">
@@ -503,22 +583,61 @@ Click variable buttons to insert them into your output format."
             </div>
           </div>
 
-          <div className="form-group checkbox-group">
+          {/*
+            THE BLAST RADIUS, AT THE POINT OF THE DECISION.
+            The old label read "Set as default prompt for this category" and it
+            was wrong in the direction that matters. `create-ai-prompt.js:230`
+            and `update-ai-prompt.js:255` clear isDefault from every other prompt
+            of this GAME TYPE, not this category — deliberately, because
+            `findDefaultPromptId` (get-ai-summary.js:344-352) looks the default
+            up by game type alone, and per-category defaults once produced seven
+            simultaneous call-and-answer "defaults" and an arbitrary winner.
+            So ticking this box silently demotes whatever is default now, and
+            unticking it later does NOT put that prompt back
+            (update-ai-prompt.js:320-333 deletes the lookup and restores
+            nothing). The screen used to say none of this.
+          */}
+          <div className="form-group checkbox-group default-group">
             <label>
               <input
                 type="checkbox"
                 checked={formData.isDefault}
                 onChange={(e) => setFormData({ ...formData, isDefault: e.target.checked })}
               />
-              Set as default prompt for this category
+              Make this the default {GAME_TYPE_LABELS[normalizeGameType(formData.gameType)] || ''} summary prompt
             </label>
+            <p className="default-blast-note">
+              Not a per-category default. There is exactly one default per engagement type, and it
+              is what runs for <strong>every</strong> {GAME_TYPE_LABELS[normalizeGameType(formData.gameType)] || 'session'} set
+              in this environment that has no prompt of its own.
+            </p>
+            {formData.isDefault && (
+              <div className="default-blast-warning" data-testid="default-blast-warning" role="alert">
+                <Icon name="Warning" weight="fill" size={16} color="currentColor" />{' '}
+                <strong>
+                  Saving this replaces the default for every{' '}
+                  {GAME_TYPE_LABELS[normalizeGameType(formData.gameType)] || 'session'} set in this
+                  environment.
+                </strong>{' '}
+                The prompt that is default now is demoted in the same write, with no record of
+                which one it was, and un-ticking this box later does not put it back &mdash; it
+                leaves the engagement type with no default at all. Hosts will not be told the
+                summary changed.
+              </div>
+            )}
           </div>
 
           <div className="form-actions">
+            {saveBlocked && (
+              <p className="save-blocked-note" data-testid="save-blocked-note">
+                Save is blocked by {report.blocking.length}{' '}
+                {report.blocking.length === 1 ? 'finding' : 'findings'} above.
+              </p>
+            )}
             <button type="button" className="btn-secondary" onClick={onCancel}>
               Cancel
             </button>
-            <button type="submit" className="btn-primary" disabled={isSaving}>
+            <button type="submit" className="btn-primary" disabled={isSaving || saveBlocked}>
               {isSaving ? 'Saving...' : (isNew ? 'Create Prompt' : 'Save Changes')}
             </button>
           </div>

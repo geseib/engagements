@@ -1300,3 +1300,357 @@
     gap: 16px;
   }
 }
+/* ============================================================================
+   BEFORE YOU SAVE — the preflight panel, the assembled preview and the
+   variable inspector.
+
+   Derived from docs/design/admin-redesign/19-prompt-editor.html: a two-column
+   editor with the variables in a right-hand rail, unavailable variables greyed
+   rather than hidden, and a stated consequence above the fold.
+
+   THIS SURFACE IS STILL PAPER, ON PURPOSE. `AdminPage.jsx` gives the prompts
+   section no `contentTheme`, so AdminShell paints it light — the question sets
+   and users tabs each converted their theme and their markup in one change, and
+   this file cannot: AdminPage.jsx is owned elsewhere this pass. Painting dusk
+   markup onto the light field would be the exact 1.4:1 failure
+   __tests__/questionSetsPalette.test.js exists to prevent, so every colour below
+   is measured against white and #f8f9fa instead. When the section is converted,
+   these blocks convert with it. Measured, on white:
+
+     --pc-ink        #1a1a1a   16.1:1   body copy
+     --pc-muted      #5c6470    6.5:1    notes, labels
+     --pc-stop       #a3160f    7.1:1    blocking tier
+     --pc-silent     #7a3d00    7.7:1    the silent tier — the loud one
+     --pc-link       #0b5fb0    6.0:1    tokens
+   ========================================================================== */
+
+.prompt-editor-modal {
+  /* The editor now carries a preview of the assembled prompt beside the
+     fields it is assembled from. At 800px the preview is a column of two-word
+     lines, which is not a preview. */
+  max-width: 1080px;
+
+  --pc-ink: #1a1a1a;
+  --pc-muted: #5c6470;
+  --pc-rule: #dfe3e8;
+  --pc-stop: #a3160f;
+  --pc-silent: #7a3d00;
+  --pc-link: #0b5fb0;
+  --pc-paper: #f8f9fa;
+  --pc-tint-stop: rgba(163, 22, 15, .07);
+  --pc-tint-silent: rgba(122, 61, 0, .10);
+  --pc-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ---------------------------------------------------------- the inspector -- */
+
+.template-variables-panel.pvi {
+  /* Mockup 19 puts the variables in a RIGHT-hand rail beside the editor, and
+     the shipped palette was on the left. The JSX order was swapped rather than
+     `order:` applied, so reading order and tab order still match what is drawn
+     — a visual/DOM mismatch here would tab through 50 variables before
+     reaching the field they insert into. Hence the border moves side too. */
+  width: 360px;
+  max-height: 520px;
+  border-right: 0;
+  border-left: 1px solid #e0e0e0;
+}
+
+.pvi-head h4 { margin: 0 0 4px; font-size: 16px; color: var(--pc-ink); }
+.pvi-sub { margin: 0 0 14px; font-size: 12px; line-height: 1.5; color: var(--pc-muted); }
+.pvi-unsafe-count { color: var(--pc-silent); }
+
+.pvi-group { margin-bottom: 14px; }
+.pvi-group > .category-header {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--pc-muted);
+  font-weight: 700;
+}
+.pvi-rows { display: grid; gap: 5px; }
+
+.pvi-row {
+  border: 1px solid var(--pc-rule);
+  border-left-width: 3px;
+  border-radius: 5px;
+  padding: 5px 7px;
+  background: #fff;
+}
+.pvi-row--silent { border-left-color: var(--pc-silent); background: var(--pc-tint-silent); }
+.pvi-row--advisory { border-left-color: var(--pc-muted); }
+.pvi-row--na { background: var(--pc-paper); }
+.pvi-row--used { border-left-color: var(--pc-link); }
+
+.pvi-row-top { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+
+/* .variable-btn is `display:block; width:100%` for the old chip column. Inside
+   a row it has to sit beside its flags. */
+.pvi .variable-btn.pvi-token {
+  display: inline-block;
+  width: auto;
+  margin: 0;
+  font-family: var(--pc-mono);
+  font-size: 12px;
+  color: var(--pc-link);
+}
+.pvi .variable-btn.pvi-token:disabled { color: var(--pc-muted); border-style: dashed; opacity: .75; }
+
+.pvi-flag {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.pvi-flag--silent { color: var(--pc-silent); background: var(--pc-tint-silent); }
+.pvi-flag--advisory { color: var(--pc-muted); }
+.pvi-flag--na { color: var(--pc-muted); font-weight: 400; }
+.pvi-flag--used { color: var(--pc-link); font-weight: 400; }
+
+.pvi-more {
+  margin-left: auto;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 12px;
+  color: var(--pc-link);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.pvi-detail { margin-top: 6px; }
+.pvi-sample-label { font-size: 12px; color: var(--pc-muted); margin-bottom: 4px; }
+.pvi-sample {
+  margin: 0;
+  padding: 6px 8px;
+  background: var(--pc-paper);
+  border: 1px solid var(--pc-rule);
+  border-radius: 4px;
+  font-family: var(--pc-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--pc-ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 190px;
+  overflow: auto;
+}
+.pvi-why { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--pc-muted); }
+.pvi-why--silent { color: var(--pc-silent); }
+.pvi-nosample { margin: 0 0 6px; font-size: 12px; line-height: 1.5; color: var(--pc-muted); }
+
+/* ------------------------------------------------------------- preflight -- */
+
+.prompt-check-group .ppf { display: grid; gap: 10px; }
+
+.ppf-tier {
+  border: 1px solid var(--pc-rule);
+  border-left-width: 4px;
+  border-radius: 6px;
+  padding: 11px 13px;
+  background: #fff;
+}
+.ppf-tier h5 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--pc-ink);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ppf-tier p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--pc-muted); }
+.ppf-count {
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0 6px;
+}
+
+.ppf-tier--blocking { border-left-color: var(--pc-stop); background: var(--pc-tint-stop); }
+.ppf-tier--blocking h5 { color: var(--pc-stop); }
+
+/* THE LOUD ONE. A silent finding saves, runs, and is read aloud to a room
+   wrong. It is drawn heavier than the blocking tier on purpose — blocking
+   announces itself by stopping the save, and this one announces nothing. */
+.ppf-tier--silent {
+  border-left-width: 6px;
+  border-left-color: var(--pc-silent);
+  background: var(--pc-tint-silent);
+  box-shadow: inset 0 0 0 1px rgba(122, 61, 0, .18);
+}
+.ppf-tier--silent h5 { color: var(--pc-silent); font-size: 17px; }
+.ppf-tier--silent .ppf-lede { color: var(--pc-ink); font-weight: 600; }
+
+.ppf-tier--advisory { border-left-color: var(--pc-muted); }
+.ppf-tier--clean { border-left-color: #2e7d32; }
+.ppf-tier--absent { border-left-color: var(--pc-silent); background: var(--pc-tint-silent); }
+.ppf-tier--absent h5 { color: var(--pc-silent); }
+
+.ppf-findings { list-style: none; margin: 9px 0 0; padding: 0; display: grid; gap: 9px; }
+.ppf-finding { border-top: 1px solid var(--pc-rule); padding-top: 8px; }
+.ppf-finding:first-child { border-top: 0; padding-top: 0; }
+.ppf-finding-title { margin: 0; font-size: 14px; color: var(--pc-ink); }
+.ppf-finding-title strong { color: var(--pc-ink); }
+.ppf-code {
+  margin-left: 7px;
+  font-family: var(--pc-mono);
+  font-size: 12px;
+  color: var(--pc-muted);
+}
+.ppf-finding-detail { margin: 3px 0 0; font-size: 13px; line-height: 1.5; color: var(--pc-muted); }
+.ppf-evidence {
+  margin: 6px 0 0;
+  padding: 7px 9px;
+  background: #fff;
+  border: 1px solid var(--pc-rule);
+  border-radius: 4px;
+  font-family: var(--pc-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--pc-ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 220px;
+  overflow: auto;
+}
+.ppf-fix { margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: var(--pc-ink); }
+.ppf-fix-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--pc-silent);
+  margin-right: 5px;
+}
+
+/* --------------------------------------------------------------- preview -- */
+
+.pap { margin-top: 14px; }
+.pap-head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.pap-head h4 { margin: 0 0 2px; font-size: 16px; color: var(--pc-ink); }
+.pap-sub { margin: 0; font-size: 13px; color: var(--pc-muted); line-height: 1.5; }
+.pap-sub code { font-family: var(--pc-mono); font-size: 12px; }
+
+.pap-room { display: flex; gap: 5px; margin-left: auto; flex-wrap: wrap; }
+.pap-room-btn {
+  font-size: 12px;
+  padding: 4px 9px;
+  border: 1px solid var(--pc-rule);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--pc-muted);
+  cursor: pointer;
+}
+.pap-room-btn.is-on { border-color: var(--pc-link); color: var(--pc-link); font-weight: 700; }
+.pap-roomwhy { margin: 6px 0 0; font-size: 12px; color: var(--pc-muted); line-height: 1.5; }
+
+.pap-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 12px 0 0;
+}
+.pap-stat {
+  border: 1px solid var(--pc-rule);
+  border-radius: 6px;
+  padding: 9px 11px;
+  background: #fff;
+}
+.pap-stat--bad { border-color: var(--pc-silent); background: var(--pc-tint-silent); }
+.pap-stat-n {
+  display: block;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--pc-ink);
+  font-variant-numeric: tabular-nums;
+}
+.pap-stat--bad .pap-stat-n { color: var(--pc-silent); }
+.pap-stat-l { display: block; font-size: 12px; color: var(--pc-muted); line-height: 1.4; margin-top: 2px; }
+
+.pap-bar { margin-top: 10px; }
+.pap-bar-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--pc-rule);
+  overflow: hidden;
+}
+.pap-bar-inlined { height: 100%; background: var(--pc-silent); }
+.pap-bar-key { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 5px; font-size: 12px; }
+.pap-key--inlined { color: var(--pc-silent); font-weight: 700; }
+.pap-key--authored { color: var(--pc-muted); }
+
+.pap-dupe {
+  margin-top: 11px;
+  border: 1px solid var(--pc-silent);
+  border-left-width: 4px;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: var(--pc-tint-silent);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--pc-ink);
+}
+.pap-dupe ul { margin: 6px 0 0; padding-left: 18px; }
+.pap-dupe li { margin-bottom: 3px; }
+.pap-dupe code { font-family: var(--pc-mono); font-size: 12px; color: var(--pc-silent); }
+
+.pap-blocks { display: grid; gap: 10px; margin-top: 12px; }
+.pap-block {
+  border: 1px solid var(--pc-rule);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+.pap-block > header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 11px;
+  border-bottom: 1px solid var(--pc-rule);
+  background: var(--pc-paper);
+}
+.pap-block > header h5 { margin: 0; font-size: 13px; font-weight: 700; color: var(--pc-ink); }
+.pap-block-size { margin-left: auto; font-size: 12px; color: var(--pc-muted); font-variant-numeric: tabular-nums; }
+.pap-block-note { margin: 9px 11px 0; font-size: 12px; line-height: 1.5; color: var(--pc-muted); }
+.pap-block--yours { border-color: var(--pc-link); }
+
+.pap-text {
+  margin: 9px 11px 11px;
+  font-family: var(--pc-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--pc-ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 340px;
+  overflow: auto;
+}
+.pap-text--dim { color: var(--pc-muted); max-height: 150px; }
+
+/* ------------------------------------------------------- default + save --- */
+
+.default-blast-note { margin: 5px 0 0; font-size: 13px; line-height: 1.5; color: var(--pc-muted); }
+.default-blast-warning {
+  margin-top: 9px;
+  padding: 11px 13px;
+  border: 1px solid var(--pc-silent);
+  border-left-width: 6px;
+  border-radius: 6px;
+  background: var(--pc-tint-silent);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--pc-ink);
+}
+.default-blast-warning strong { color: var(--pc-silent); }
+
+.save-blocked-note {
+  margin: 0 auto 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pc-stop);
+}
