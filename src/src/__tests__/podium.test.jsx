@@ -256,10 +256,22 @@ describe('the page actually renders it, in the right place, from the right sourc
     }
   });
 
-  test('the ranking function has one definition on this page, and it is the shared one', () => {
+  test('the ranking function has one definition, and it is the shared one', () => {
     // rejects: a fourth copy of the tie-handling sort. GameHostPage held its
     // own; the podium needed the same arithmetic, and two copies drift.
-    expect(host).toMatch(/import\s*\{[^}]*calculatePlayerRankings[^}]*\}\s*from\s*'\.\/config\/podium'/);
+    //
+    // The only caller on the host side is now the session report, which was
+    // extracted out of GameHostPage into components/GameReport.jsx — so the
+    // import is asserted where the call actually is. Asserting it on
+    // GameHostPage after the move would pin an import that file no longer has
+    // any use for, which is how a "shared function" test starts demanding dead
+    // code. Neither file may redefine it.
+    const report = stripComments(
+      fs.readFileSync(path.join(__dirname, '..', 'components', 'GameReport.jsx'), 'utf8'),
+    );
+    expect(report).toMatch(/import\s*\{[^}]*calculatePlayerRankings[^}]*\}\s*from\s*'\.\.\/config\/podium'/);
+    expect(report).toMatch(/calculatePlayerRankings\(/);
+    expect(report).not.toMatch(/const calculatePlayerRankings\s*=/);
     expect(host).not.toMatch(/const calculatePlayerRankings\s*=/);
   });
 });

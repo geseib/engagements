@@ -1,0 +1,1092 @@
+/* ==========================================================================
+   THE SESSION REPORT — screen sheet and print sheet.
+
+   Two audiences, one document. On screen it is a page in the product; on paper
+   it is the thing a host hands a client. Before this file there was no
+   `@media print` rule anywhere in the codebase, so "print" meant "photograph
+   the app": the amber full-bleed field, the card shadows, the viewport-height
+   container and the auto-fit score grid all went to the printer verbatim,
+   which is exactly why the width was wrong and why paragraphs were cut in half
+   at the page foot.
+
+   SCOPING. Every rule is under `.report-paper`, the class the component adds
+   beside `.report-container`. The old report rules in styles.css are all
+   single-class (0,1,0); these are (0,2,0) and win without !important and
+   without editing a 10,000-line stylesheet another agent is working in. The
+   `@media print` block is scoped the same way for the same reason — print
+   media does not raise specificity, so an unscoped `.report-question` in there
+   would lose to styles.css.
+
+   THEME. The component sets data-theme="light" on the container, so `--bg`,
+   `--surface`, `--text` and `--muted` resolve to Warm Summit's PAPER set. No
+   colour below is hardcoded except the two print-only tints, which are noted
+   where they appear.
+   ========================================================================== */
+
+.report-container.report-paper {
+  --report-measure: 44rem;      /* ~78 characters at 16px — a reading column */
+  --report-rule: 1px solid rgba(27, 41, 66, 0.14);
+  --report-rule-soft: 1px solid rgba(27, 41, 66, 0.08);
+
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  /* No `overflow-y: auto` — the old rule made the report its own scroll
+     container inside a dusk-coloured <body>, which left a dark band under the
+     document whenever the two heights disagreed. The page scrolls; the
+     container's min-height keeps the paper ground under the whole viewport. */
+  min-height: 100vh;
+  padding: 0 0 96px;
+}
+
+/* --------------------------------------------------------------------------
+   TOOLBAR — screen furniture. Sticky, because a twelve-round report is long
+   and the way out should not require scrolling back to the top. The old
+   `.report-close` was `position: fixed` at top-left, floating over the title.
+   -------------------------------------------------------------------------- */
+.report-paper .report-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px max(20px, calc((100vw - var(--report-measure)) / 2 - 40px));
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: var(--report-rule);
+}
+
+.report-paper .report-tool-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.report-paper .report-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: var(--report-rule);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.report-paper .report-tool:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: rgba(27, 41, 66, 0.28);
+}
+
+.report-paper .report-tool:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.report-paper .report-tool--primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #2A1B08;
+}
+
+.report-paper .report-tool--primary:hover:not(:disabled) {
+  background: var(--primary-deep);
+  border-color: var(--primary-deep);
+  color: #FFF;
+}
+
+.report-paper .report-tool:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   THE WAIT, AND THE FAILURE. `create-report` rebuilds the document on every
+   open; these two are what the host looks at meanwhile, instead of the screen
+   they just left.
+   -------------------------------------------------------------------------- */
+.report-paper .report-state {
+  max-width: 34rem;
+  margin: 18vh auto 0;
+  padding: 0 24px;
+  text-align: center;
+}
+
+.report-paper .report-state h2 {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 20px 0 10px;
+  letter-spacing: -0.01em;
+}
+
+.report-paper .report-state p {
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 0 auto;
+  max-width: 30rem;
+}
+
+.report-paper .report-state-spinner {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 3px solid rgba(27, 41, 66, 0.12);
+  border-top-color: var(--primary);
+  animation: report-spin 900ms linear infinite;
+}
+
+@keyframes report-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .report-paper .report-state-spinner { animation-duration: 3s; }
+}
+
+.report-paper .report-state-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+/* --------------------------------------------------------------------------
+   THE SHEET. One box, not thirty — the whole document sits on a single page of
+   stock. Everything inside is separated by rules and space, which is what a
+   printed report does and what the nested white-cards-on-amber never did.
+   -------------------------------------------------------------------------- */
+.report-paper .report-doc {
+  max-width: var(--report-measure);
+  margin: 40px auto;
+  padding: 56px clamp(24px, 6vw, 64px) 64px;
+  background: var(--surface);
+  border: var(--report-rule-soft);
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(27, 41, 66, 0.05), 0 12px 40px rgba(27, 41, 66, 0.07);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+/* ---- TITLE BLOCK ---- */
+.report-paper .report-titleblock {
+  border-bottom: 2px solid var(--text);
+  padding-bottom: 28px;
+  margin-bottom: 44px;
+}
+
+.report-paper .report-eyebrow {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--primary-deep);
+  margin: 0 0 14px;
+}
+
+.report-paper .report-title {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 5vw, 2.9rem);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  margin: 0 0 12px;
+  text-transform: none;   /* the old rule shouted it in caps */
+}
+
+.report-paper .report-date {
+  font-size: 0.95rem;
+  color: var(--muted);
+  margin: 0 0 26px;
+  font-style: normal;
+}
+
+.report-paper .report-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin: 0;
+}
+
+.report-paper .report-meta-item {
+  padding-right: 28px;
+  margin-right: 28px;
+  border-right: var(--report-rule);
+}
+
+.report-paper .report-meta-item:last-child {
+  border-right: 0;
+  margin-right: 0;
+  padding-right: 0;
+}
+
+.report-paper .report-meta dt {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+
+.report-paper .report-meta dd {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ---- SECTIONS ----
+   `.report-content` in styles.css is `max-width:1000px; margin:0 auto;
+   padding:20px` — a page-level layout container from when the report WAS the
+   page. Inside the sheet it is just a wrapper, and its 20px inset was showing
+   up on paper as body copy that started a quarter-inch right of the title
+   block's rule. Zeroed on both media. */
+.report-paper .report-content {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.report-paper .report-content > * + * {
+  margin-top: 52px;
+}
+
+/* THE SECTION BREAK RIDES ON THE HEADING, not on the section box.
+   Same rule, same air, one difference that only shows on paper: when a section
+   starts a new page, a border on the SECTION prints as a hairline stranded at
+   the very top of the sheet with an inch of nothing under it. Hung on the
+   header — which is `break-inside: avoid` and `break-after: avoid` — the rule
+   can never be separated from the words it introduces. */
+.report-paper .report-content > *:not(:first-child) > .report-question-header {
+  border-top: var(--report-rule);
+  padding-top: 44px;
+}
+
+.report-paper .report-question,
+.report-paper .report-final-scores {
+  /* No card. No shadow. No radius. The rule above is the section break.
+     `padding: 0` in full — the old rules carry `padding: 40px`, and zeroing
+     only the sides left a 40px lid on top of every section. */
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.report-paper .report-question-header {
+  display: block;
+  margin-bottom: 20px;
+}
+
+.report-paper .report-section-index {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 8px;
+}
+
+.report-paper .report-section-number {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--primary-deep);
+}
+
+.report-paper .field-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: none;
+  border: var(--report-rule);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.report-paper .report-lesson-heading {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1.18;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin: 0;
+  text-transform: none;
+}
+
+/* The lead paragraph. Was a grey box with an amber bar; now it is simply
+   set larger than body copy, which is how a document says "read this first". */
+.report-paper .report-lesson-detail {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  margin: 0 0 32px;
+  font-size: 1.1rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.report-paper .report-block {
+  margin: 32px 0;
+}
+
+.report-paper .report-block-heading,
+.report-paper .report-answers > h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: var(--report-rule-soft);
+}
+
+/* ---- TRIVIA CHOICES ---- */
+.report-paper .trivia-options-report {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: block;
+}
+
+.report-paper .trivia-option-report {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 0;
+  background: none;
+  border: 0;
+  border-bottom: var(--report-rule-soft);
+  border-radius: 0;
+}
+
+.report-paper .trivia-option-report:last-child { border-bottom: 0; }
+
+.report-paper .trivia-option-report.correct-answer {
+  background: none;
+  border-bottom: var(--report-rule-soft);
+  box-shadow: inset 3px 0 0 var(--success);
+  padding-left: 14px;
+}
+
+.report-paper .trivia-option-report .option-letter {
+  flex: none;
+  width: 1.55em;
+  height: 1.55em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  border: var(--report-rule);
+  border-radius: 50%;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--muted);
+  margin: 0;
+  min-width: 0;
+}
+
+.report-paper .trivia-option-report.correct-answer .option-letter {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.report-paper .trivia-option-report .option-text {
+  flex: 1;
+  font-size: 1rem;
+}
+
+.report-paper .trivia-option-report .correct-indicator {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--success);
+  margin-left: auto;
+}
+
+/* ---- AI ANALYSIS ----
+   The one panel that keeps a fill, on screen and on paper both. It is a
+   different voice from the rest of the document — a machine's reading of the
+   room, not the host's — and merging it into the body copy would misattribute
+   it. Everything else in this report gave up its box. */
+.report-paper .report-ai-summary {
+  background: var(--surface-2);
+  border: 0;
+  border-left: 3px solid var(--primary);
+  border-radius: 0 4px 4px 0;
+  padding: 22px 26px;
+  margin: 32px 0;
+}
+
+.report-paper .report-ai-summary .report-block-heading {
+  border-bottom: 0;
+  padding-bottom: 0;
+  margin-bottom: 12px;
+  color: var(--primary-deep);
+}
+
+.report-paper .report-ai-content {
+  background: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: 0.97rem;
+  line-height: 1.65;
+}
+
+.report-paper .report-ai-content h4 {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 18px 0 6px;
+}
+
+.report-paper .report-ai-content > :first-child > h4:first-child { margin-top: 0; }
+
+.report-paper .report-ai-text { margin-bottom: 0; color: var(--text); }
+
+.report-paper .report-ai-discussion,
+.report-paper .report-ai-steps {
+  margin-top: 16px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.report-paper .report-ai-discussion ul,
+.report-paper .report-ai-steps ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+.report-paper .report-ai-discussion li,
+.report-paper .report-ai-steps li {
+  position: relative;
+  padding-left: 20px;
+  margin-bottom: 7px;
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.report-paper .report-ai-discussion li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.report-paper .report-ai-steps li::before {
+  content: "\2192";
+  position: absolute;
+  left: 0;
+  color: var(--primary-deep);
+  font-weight: 700;
+}
+
+.report-paper .report-ai-markdown p { margin: 0 0 10px; }
+.report-paper .report-ai-markdown p:last-child { margin-bottom: 0; }
+
+/* ---- ANSWERS ---- */
+.report-paper .report-answer {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  border-bottom: var(--report-rule-soft);
+  box-shadow: none;
+  padding: 16px 0;
+  margin: 0;
+  position: relative;
+  transition: none;
+}
+
+.report-paper .report-answer:last-child { border-bottom: 0; }
+
+/* A ranked response gets an amber rule, not a gold gradient and a glow.
+   The rule survives a monochrome printer; the gradient becomes a smudge. */
+.report-paper .report-answer.winner {
+  background: none;
+  box-shadow: inset 3px 0 0 var(--primary);
+  padding-left: 16px;
+}
+
+.report-paper .answer-text {
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  font-style: normal;
+  color: var(--text);
+  quotes: "\201C" "\201D";
+}
+
+.report-paper .answer-text::before { content: open-quote; }
+.report-paper .answer-text::after  { content: close-quote; }
+
+.report-paper .answer-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.report-paper .answer-meta > * + *::before {
+  content: "·";
+  margin-right: 14px;
+  color: rgba(27, 41, 66, 0.3);
+}
+
+.report-paper .winner-badge {
+  position: static;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--primary-deep);
+}
+
+.report-paper .answer-author {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.report-paper .answer-points {
+  background: none;
+  color: var(--muted);
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-feature-settings: "tnum" 1;
+}
+
+.report-paper .no-answers {
+  color: var(--muted);
+  font-size: 0.95rem;
+  padding: 12px 0;
+  margin: 0;
+}
+
+/* ---- FINAL SCORES ----
+   A ranked list, set as a table. The auto-fit grid of coloured tiles was a
+   dashboard widget; on a page it produced a different number of columns at
+   every width, which is half of why the printed width looked wrong. */
+.report-paper .score-grid {
+  display: block;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  grid-template-columns: none;
+}
+
+.report-paper .score-item {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  background: none;
+  color: var(--text);
+  border-radius: 0;
+  border-bottom: var(--report-rule-soft);
+  padding: 12px 0;
+  text-align: left;
+  transition: none;
+}
+
+.report-paper .score-item:hover { transform: none; }
+.report-paper .score-item:last-child { border-bottom: 0; }
+
+.report-paper .score-item.champion {
+  background: none;
+  box-shadow: inset 3px 0 0 var(--primary);
+  color: var(--text);
+  padding: 12px 0 12px 16px;
+}
+
+.report-paper .score-rank {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 3.2em;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--muted);
+  font-feature-settings: "tnum" 1;
+}
+
+.report-paper .score-item .player-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text);
+}
+
+.report-paper .champion-badge {
+  position: static;
+  transform: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--primary-deep);
+}
+
+.report-paper .player-final-score {
+  margin-left: auto;
+  text-align: right;
+  min-width: 4.5em;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 800;
+  font-feature-settings: "tnum" 1;
+}
+
+.report-paper .player-final-score::after {
+  content: " pts";
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Print-only furniture, invisible on screen. */
+.report-paper .report-colophon { display: none; }
+
+@media (max-width: 640px) {
+  .report-paper .report-doc {
+    margin: 16px auto;
+    padding: 32px 20px 40px;
+    border-radius: 0;
+  }
+  .report-paper .report-meta-item {
+    padding-right: 18px;
+    margin-right: 18px;
+  }
+}
+
+/* ==========================================================================
+   PRINT
+   ==========================================================================
+   The brief, in one line: a document a marketing team would hand a client, not
+   a screenshot of an application.
+
+   The two named faults and what actually fixes them:
+
+   WIDTH — the screen measure is `max-width: 44rem` centred in a viewport, and
+   the container is `min-height: 100vh`. Neither means anything on paper. The
+   page box is declared with `@page` and the document is told to be `width:
+   auto` inside it, so the measure is the paper's, set by the margins.
+
+   PAGE BREAKS MID-PARAGRAPH — three mechanisms, used for three different
+   jobs, and they are not interchangeable:
+     · `orphans` / `widows` are the ones that fix a badly split PARAGRAPH.
+       They are the least-used properties in CSS and the only ones that say
+       "you may break this text, but never leave fewer than N lines behind or
+       carry fewer than N over". Set to 3 here, which is the trade printers'
+       floor. `break-inside: avoid` on a paragraph is the WRONG tool — a long
+       AI summary would then be shoved whole onto the next page, leaving a
+       third of a page blank.
+     · `break-inside: avoid` is for the small indivisible UNITS: a quoted
+       answer with its attribution, one trivia option, one standings row. Only
+       ever on things that certainly fit on a page.
+     · `break-after: avoid` on every heading, so a section title can never
+       strand alone at the foot of a page with its content overleaf.
+   ========================================================================== */
+@media print {
+
+  /* Letter, with a generous asymmetric margin — more at the foot than the
+     head, which is what makes a page look typeset rather than filled. */
+  @page {
+    size: Letter portrait;
+    /* Asymmetric: a page with more air below than above reads as typeset
+       rather than filled, and the deeper foot leaves the browser's own print
+       footer (page number, and the document title this component sets) room
+       that is not shared with body copy. 0.85in of side margin gives a
+       measure of roughly 78 characters at 10.5pt, which is the band where a
+       serif-free text face stays comfortable. */
+    margin: 0.7in 0.85in 0.95in;
+  }
+
+  html, body {
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Nothing outside the report goes to paper. */
+  body > *:not(#root) { display: none !important; }
+
+  .report-paper .report-noprint,
+  .report-paper .report-toolbar,
+  .report-paper .report-state,
+  .report-paper button,
+  .expanded-qr-overlay,
+  .issue-fab,
+  .clipboard-success { display: none !important; }
+
+  /* Kill the app chrome: the full-bleed field, the viewport height, the
+     scroll container, the drop shadow, the rounded card. */
+  .report-container.report-paper {
+    background: #fff !important;
+    color: #000;
+    min-height: 0;
+    height: auto;
+    overflow: visible;
+    padding: 0;
+    display: block;
+    /* The document-wide default. Everything inherits it; the few blocks that
+       must not break at all override with break-inside: avoid. */
+    orphans: 3;
+    widows: 3;
+  }
+
+  .report-paper .report-doc {
+    max-width: none;
+    width: auto;
+    margin: 0;
+    /* No padding at all. The measure and the position of the text block are
+       the @page margin's job on paper, and an element padding here would only
+       apply to the first page — which is exactly how the first draft ended up
+       with page 1 inset and pages 2+ running under the furniture. */
+    padding: 0;
+    background: #fff;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    font-size: 10.5pt;
+    line-height: 1.5;
+    color: #000;
+  }
+
+  .report-paper p,
+  .report-paper li,
+  .report-paper blockquote,
+  .report-paper .report-ai-markdown p {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* ---- TITLE BLOCK ----
+     Page one opens on it, and it never splits. `break-after: avoid` keeps the
+     first round's heading from being orphaned onto page 2 on its own. */
+  .report-paper .report-titleblock {
+    break-inside: avoid;
+    break-after: avoid;
+    border-bottom: 1.5pt solid #000;
+    padding: 0 0 16pt;
+    margin: 6pt 0 26pt;
+  }
+
+  .report-paper .report-eyebrow {
+    font-size: 8pt;
+    letter-spacing: 0.24em;
+    color: #000;
+    margin-bottom: 10pt;
+  }
+
+  .report-paper .report-title {
+    font-size: 26pt;
+    line-height: 1.05;
+    color: #000;
+  }
+
+  .report-paper .report-date {
+    font-size: 9.5pt;
+    color: #444;
+    margin-bottom: 16pt;
+  }
+
+  .report-paper .report-meta dt { font-size: 6.8pt; color: #666; }
+  .report-paper .report-meta dd { font-size: 10.5pt; color: #000; }
+  .report-paper .report-meta-item {
+    border-right: 0.5pt solid #999;
+    padding-right: 16pt;
+    margin-right: 16pt;
+  }
+
+  /* ---- SECTION BREAKS ----
+     A rule and 26pt of air. Not a card: cards on paper are the single loudest
+     tell that a page was screenshotted rather than typeset. */
+  .report-paper .report-content > * + * { margin-top: 24pt; }
+
+  .report-paper .report-content > *:not(:first-child) > .report-question-header {
+    border-top: 0.5pt solid #000;
+    padding-top: 20pt;
+  }
+
+  .report-paper .report-question,
+  .report-paper .report-final-scores {
+    background: none;
+    box-shadow: none;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  /* The header block of a section is small and indivisible, and its content
+     must follow it onto the same page. Both properties, deliberately:
+     `avoid` alone still permits the break to land immediately after. */
+  .report-paper .report-question-header {
+    break-inside: avoid;
+    break-after: avoid;
+    margin-bottom: 12pt;
+  }
+
+  .report-paper h1, .report-paper h2, .report-paper h3, .report-paper h4,
+  .report-paper .report-block-heading,
+  .report-paper .report-answers > h3 {
+    break-after: avoid;
+    break-inside: avoid;
+  }
+
+  .report-paper .report-section-number { font-size: 8pt; color: #000; }
+
+  .report-paper .field-badge {
+    font-size: 7pt;
+    color: #444;
+    border: 0.5pt solid #999;
+    background: none;
+  }
+
+  .report-paper .report-lesson-heading {
+    font-size: 15pt;
+    line-height: 1.15;
+    color: #000;
+  }
+
+  /* The lead paragraph MAY break — it can run long — but never badly. This is
+     precisely the orphans/widows case. */
+  .report-paper .report-lesson-detail {
+    font-size: 11pt;
+    line-height: 1.5;
+    color: #000;
+    margin-bottom: 18pt;
+    orphans: 3;
+    widows: 3;
+  }
+
+  .report-paper .report-block { margin: 18pt 0; }
+
+  .report-paper .report-block-heading,
+  .report-paper .report-answers > h3 {
+    font-size: 7.5pt;
+    letter-spacing: 0.2em;
+    color: #444;
+    border-bottom: 0.5pt solid #bbb;
+    padding-bottom: 5pt;
+    margin-bottom: 10pt;
+  }
+
+  /* ---- TRIVIA CHOICES — one option is an indivisible unit ---- */
+  .report-paper .trivia-option-report {
+    break-inside: avoid;
+    padding: 5pt 0;
+    border-bottom: 0.5pt solid #ddd;
+  }
+
+  .report-paper .trivia-option-report.correct-answer {
+    box-shadow: none;                       /* shadows do not print reliably */
+    border-left: 2pt solid #000;
+    padding-left: 8pt;
+  }
+
+  .report-paper .trivia-option-report .option-letter {
+    border: 0.5pt solid #999;
+    color: #444;
+    font-size: 7.5pt;
+  }
+
+  .report-paper .trivia-option-report.correct-answer .option-letter {
+    border-color: #000;
+    color: #000;
+  }
+
+  .report-paper .trivia-option-report .option-text { font-size: 10.5pt; color: #000; }
+
+  /* The one piece of COLOUR kept in the body copy, deliberately. This mark is
+     the only thing on the page that says which answer was right; the row also
+     carries a rule and bold text so a monochrome printer still resolves it,
+     but where colour is available it should be used here. */
+  .report-paper .trivia-option-report .correct-indicator {
+    font-size: 7pt;
+    font-weight: 800;
+  }
+  .report-paper .correct-indicator .ws-icon {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* ---- AI ANALYSIS ----
+     The one fill kept on paper, and therefore the one place print-color-adjust
+     is needed: without it Chrome drops the background and the panel silently
+     becomes body copy, which misattributes a machine's words to the host. A
+     hairline box plus a 6% warm tint — light enough to photocopy, dark enough
+     to see. It may break across pages (these run long); the heading may not
+     be left behind, and neither may a single line. */
+  .report-paper .report-ai-summary {
+    background: #F3EFE7;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    border: 0.5pt solid #C9BFAE;
+    border-left: 2pt solid #000;
+    border-radius: 0;
+    padding: 12pt 14pt;
+    margin: 16pt 0;
+    orphans: 3;
+    widows: 3;
+  }
+
+  .report-paper .report-ai-summary .report-block-heading {
+    color: #000;
+    border-bottom: 0;
+    margin-bottom: 8pt;
+  }
+
+  .report-paper .report-ai-content { font-size: 10pt; line-height: 1.5; color: #000; }
+  .report-paper .report-ai-content h4 { font-size: 7.5pt; color: #444; margin: 12pt 0 4pt; }
+
+  .report-paper .report-ai-discussion li,
+  .report-paper .report-ai-steps li {
+    break-inside: avoid;
+    font-size: 9.5pt;
+    margin-bottom: 4pt;
+  }
+
+  .report-paper .report-ai-discussion li::before {
+    background: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .report-paper .report-ai-steps li::before { color: #000; }
+
+  /* ---- ANSWERS — a quotation and its attribution are ONE unit ----
+     This is the owner's "page breaks in the middle of a paragraph" in its most
+     visible form: a response split from the name of the person who gave it. */
+  .report-paper .report-answer {
+    break-inside: avoid;
+    padding: 8pt 0;
+    border-bottom: 0.5pt solid #ddd;
+  }
+
+  .report-paper .report-answer.winner {
+    box-shadow: none;
+    border-left: 2pt solid #000;
+    padding-left: 8pt;
+  }
+
+  .report-paper .answer-text {
+    font-size: 10.5pt;
+    line-height: 1.45;
+    color: #000;
+  }
+
+  .report-paper .answer-meta { font-size: 8pt; color: #555; }
+  .report-paper .answer-meta > * + *::before { color: #999; }
+  .report-paper .winner-badge { font-size: 7pt; color: #000; }
+  .report-paper .answer-author { font-size: 8.5pt; color: #000; }
+  .report-paper .answer-points { font-size: 8pt; color: #000; }
+
+  /* ---- FINAL STANDINGS ----
+     Its own page. A closing section that begins halfway down a sheet under the
+     tail of the last round reads as a leftover; a marketing person would give
+     the standings the page. Each row is indivisible; the block as a whole is
+     not, because a 30-player session legitimately runs over. */
+  .report-paper .report-final-scores {
+    break-before: page;
+    margin-top: 0;
+  }
+
+  /* A forced page break makes this section's rule meaningless — it would print
+     as a stray hairline under the top margin of a fresh page. */
+  .report-paper .report-final-scores > .report-question-header {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .report-paper .score-item {
+    break-inside: avoid;
+    padding: 7pt 0;
+    border-bottom: 0.5pt solid #ddd;
+    color: #000;
+  }
+
+  .report-paper .score-item.champion {
+    box-shadow: none;
+    border-left: 2pt solid #000;
+    padding-left: 8pt;
+  }
+
+  .report-paper .score-rank { font-size: 8.5pt; color: #555; }
+  .report-paper .score-item .player-name { font-size: 10.5pt; color: #000; }
+  .report-paper .champion-badge { font-size: 7pt; color: #000; }
+  .report-paper .player-final-score { font-size: 13pt; color: #000; }
+  .report-paper .player-final-score::after { font-size: 7pt; color: #555; }
+
+  /* ---- COLOPHON ----
+     The page has to say it is finished. A document that simply stops at the
+     last row is the other tell of a screenshot. */
+  .report-paper .report-colophon {
+    display: block;
+    break-inside: avoid;
+    margin-top: 26pt;
+    padding-top: 8pt;
+    border-top: 0.5pt solid #000;
+    font-size: 7.5pt;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #666;
+    text-align: center;
+  }
+
+  /* Links print as text; a bare URL in parentheses is noise on paper. */
+  .report-paper a { text-decoration: none; color: #000; }
+  .report-paper a::after { content: ""; }
+}

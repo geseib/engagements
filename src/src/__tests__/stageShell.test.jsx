@@ -125,6 +125,57 @@ describe('the stage grid', () => {
   });
 
   /**
+   * THE DOCUMENT DOES NOT SCROLL WHILE THE STAGE IS UP.
+   *
+   * The owner, on the pager that shipped: *"no way to scroll down, as the
+   * entire page scrolls down."* Both halves are one bug. `.stage` is 100dvh —
+   * the SMALL viewport — inside `.main-layout{min-height:100vh}`, the LARGE
+   * one, so on any browser with a collapsible toolbar the document out-measures
+   * the stage and Down scrolls the whole screen. What moves is the stage and
+   * its chrome; `.content` carries its clipped content along unchanged and not
+   * one cut-off word becomes readable. Motion that recovers nothing is worse
+   * than a key that does nothing, because it tells the host the content is
+   * reachable.
+   *
+   * Asserted as a class, not as a scroll offset: jsdom has no layout engine and
+   * `scrollTop` is 0 forever here, so a scroll assertion would pass with the
+   * lock deleted. `:root.stage-locked` in styles/stage.css is the other half.
+   */
+  test('the stage locks the document while it is mounted', () => {
+    // rejects: never adding the lock, which leaves the page scrolling behind a
+    // stage that cannot scroll — the owner's report itself.
+    render(<Stage profile="room" phase="ASK"><div /></Stage>);
+    expect(document.documentElement.classList.contains('stage-locked')).toBe(true);
+  });
+
+  test('unmounting gives the document its scroll back', () => {
+    // rejects: a lock with no cleanup. The host page's other full-screen views
+    // — the session report, the reports list — REPLACE the stage and are meant
+    // to scroll; a leaked class strands them with no scrollbar and no way to
+    // reach the bottom of a report.
+    const { unmount } = render(<Stage profile="room" phase="ASK"><div /></Stage>);
+    unmount();
+    expect(document.documentElement.classList.contains('stage-locked')).toBe(false);
+  });
+
+  test('switching profile does not release and re-take the lock', () => {
+    // rejects: folding the lock into the profile effect, whose cleanup runs on
+    // every profile change. Asserting the class AFTER the switch would not
+    // catch that — React re-runs the effect in the same commit, so the class is
+    // back either way and the test would pass with the bug present. What
+    // separates the two is whether `remove` was ever called, so that is what is
+    // watched.
+    const remove = jest.spyOn(DOMTokenList.prototype, 'remove');
+    const { rerender } = render(<Stage profile="room" phase="ASK"><div /></Stage>);
+    remove.mockClear();
+    rerender(<Stage profile="tv" phase="ASK"><div /></Stage>);
+    const removed = remove.mock.calls.reduce((all, args) => all.concat(args), []);
+    remove.mockRestore();
+    expect(removed).toContain('d-room');        // the profile class DOES churn
+    expect(removed).not.toContain('stage-locked');
+  });
+
+  /**
    * The named slots — the Task 5 ruling's whole subject, and until now the one
    * part of it nothing asserted.
    */

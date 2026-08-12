@@ -52,6 +52,41 @@ export default function Stage({
     return () => root.classList.remove(cls);
   }, [profile]);
 
+  /**
+   * THE DOCUMENT DOES NOT SCROLL WHILE THE STAGE IS UP.
+   *
+   * The owner's report on the pager that shipped: *"no way to scroll down, as
+   * the entire page scrolls down."* Both halves of that are one bug. `.stage`
+   * is `height:100dvh; overflow:hidden`, but it is mounted inside
+   * `.main-layout{min-height:100vh}` — and `dvh` is the SMALL viewport while
+   * `vh` is the LARGE one, so on any browser showing a collapsible toolbar the
+   * document is taller than the stage and Down scrolls it. What moves is the
+   * whole stage, chrome and all: the dock slides off the bottom, `.content`
+   * carries its clipped content along unchanged, and not one word that was cut
+   * off becomes readable. It is motion that looks like scrolling and recovers
+   * nothing, which is worse than a key that does nothing at all — a host
+   * pressing Down sees the screen move and concludes the content is reachable.
+   *
+   * Locking it is the fix, not a mitigation. A stage that cannot scroll is the
+   * premise the whole fitter/pager design rests on: content that does not fit
+   * is PAGED, and anything that offers a second, silent way to move content is
+   * a way for content to be lost off a projector no one in the room can drive.
+   *
+   * SEPARATE FROM THE PROFILE EFFECT ABOVE, and `[]` rather than `[profile]`,
+   * so switching profile cannot leave a window in which the lock is off. It is
+   * scoped to this component's life rather than declared in the stylesheet
+   * because the host page's other full-screen views — the session report, the
+   * reports list — replace the stage entirely and DO scroll; a rule on `:root`
+   * in stage.css would take their scrollbar away with no way to give it back.
+   * Overlays keep their own `max-height:90vh; overflow-y:auto`, so nothing that
+   * scrolls today stops.
+   */
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add('stage-locked');
+    return () => root.classList.remove('stage-locked');
+  }, []);
+
   return (
     <main className="stage" ref={stageRef}>
       <div className="field" aria-hidden="true" />

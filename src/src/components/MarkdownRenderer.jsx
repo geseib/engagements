@@ -68,6 +68,15 @@ function MarkdownRenderer({ content, className = '' }) {
   let listItems = [];
   let inList = false;
   let listType = 'ul';
+  /*
+   * The number the FIRST item of the current ordered run wrote. Without it an
+   * <ol> always starts at 1, which is wrong twice: a model writing "3." after a
+   * paragraph got "1." on the projector, and — since config/stagePaging.js may
+   * now break a page BETWEEN two items of one list — page two of a numbered
+   * list would restart at 1 while the host said "question four". The same
+   * positional-label trap pageSlice's `offset` exists for.
+   */
+  let listStart = 1;
   let tableRows = [];
   let inTable = false;
   let tableHeaders = [];
@@ -78,12 +87,19 @@ function MarkdownRenderer({ content, className = '' }) {
     if (listItems.length > 0) {
       const ListTag = listType;
       elements.push(
-        <ListTag key={elements.length} className="markdown-list">
+        <ListTag
+          key={elements.length}
+          className="markdown-list"
+          start={listType === 'ol' && listStart !== 1 ? listStart : undefined}
+        >
           {listItems}
         </ListTag>
       );
       listItems = [];
       inList = false;
+      // listStart is NOT reset here. Every ordered run assigns it as it opens
+      // (below), so a reset would be dead code — and dead code beside a
+      // correctness fix reads as the thing keeping it correct.
     }
   };
 
@@ -301,6 +317,10 @@ function MarkdownRenderer({ content, className = '' }) {
         flushList();
         inList = true;
         listType = 'ol';
+        // The run's own first ordinal, kept so the <ol> starts where the source
+        // says rather than always at 1. See the declaration of listStart.
+        const n = parseInt(trimmedLine, 10);
+        listStart = Number.isFinite(n) && n > 0 ? n : 1;
       }
       const content = trimmedLine.replace(/^\d+\.\s/, '');
       listItems.push(

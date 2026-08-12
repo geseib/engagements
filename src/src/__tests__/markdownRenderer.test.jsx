@@ -262,6 +262,36 @@ describe('MarkdownRenderer — lists and the Lead idiom', () => {
     expect(draw('- one\n- two').querySelector('ul')).not.toBeNull();
   });
 
+  /*
+   * Rejects: hardcoding an <ol> to start at 1.
+   *
+   * Two live consequences, one old and one new. Old: a model writing "3." after
+   * a paragraph got "1." on a projector, silently contradicting its own prose.
+   * New: config/stagePaging.js may now break a Field Notes page BETWEEN two
+   * items of one numbered list, so a list restarting at 1 puts "1." on the wall
+   * while the host, and the session report, call it question four — the same
+   * positional-label trap pageSlice's `offset` exists for on the answer cards.
+   */
+  test('an ordered list starts where its source says, not always at 1', () => {
+    expect(draw('4. four\n5. five').querySelector('ol').getAttribute('start')).toBe('4');
+    // ...and a list that does start at 1 carries no attribute, so the common
+    // case is unchanged markup.
+    expect(draw('1. one\n2. two').querySelector('ol').hasAttribute('start')).toBe(false);
+  });
+
+  // Rejects: capturing the ordinal once and keeping it — the shape a "remember
+  // where we started" variable takes if it is only ever assigned when it is
+  // still at its default. A second list in the same summary would then open at
+  // the FIRST list's number, which is worse than always starting at 1 because
+  // it is wrong in a way that looks deliberate.
+  test('each list starts at its own number, not the previous one\'s', () => {
+    const c = draw('4. four\n\ntext\n\n1. one');
+    const lists = c.querySelectorAll('ol');
+    expect(lists).toHaveLength(2);
+    expect(lists[0].getAttribute('start')).toBe('4');
+    expect(lists[1].hasAttribute('start')).toBe(false);
+  });
+
   // Rejects: removing formatListItem. jsdom has no layout engine, so this is
   // asserted at the class level: that .md-lead and .md-rest exist and carry
   // the right halves. Whether they stack as headline-over-caption is CSS
@@ -281,31 +311,40 @@ describe('MarkdownRenderer — lists and the Lead idiom', () => {
   });
 });
 
-describe('the fallback render paths on the host page', () => {
-  const host = stripComments(fs.readFileSync(src('GameHostPage.jsx'), 'utf8'));
+describe('the fallback render paths on the host surfaces', () => {
   /*
    * The Field Notes fallback moved out of GameHostPage into
    * components/AISummaryStatus.jsx when that surface grew a fourth state (a
    * failed summary, which used to be indistinguishable from an empty one). The
-   * assertion follows it — the branch is the same branch, and reverting it to a
-   * bare <p> would be the same regression wherever it lives. The report's
-   * fallback stayed put.
+   * report's fallback has since moved too — out of GameHostPage and into
+   * components/GameReport.jsx, where the report now lives as a component of
+   * its own. The assertions follow both: the branch is the same branch, and
+   * reverting it to a bare <p> would be the same regression wherever it lives.
    */
   const status = stripComments(fs.readFileSync(src('components/AISummaryStatus.jsx'), 'utf8'));
+  const report = stripComments(fs.readFileSync(src('components/GameReport.jsx'), 'utf8'));
+  const host = stripComments(fs.readFileSync(src('GameHostPage.jsx'), 'utf8'));
 
   /*
    * Asserted on source rather than rendered. Reaching these two branches in
-   * jsdom means driving GameHostPage into FIELD_NOTES and into the report with
-   * an AI summary that has no markdownResponse; the render-level assertion is
-   * the whole of MarkdownRenderer above, and this pins only the wiring.
+   * jsdom means driving them with an AI summary that has no markdownResponse;
+   * the render-level assertion is the whole of MarkdownRenderer above, and this
+   * pins only the wiring.
    */
 
   // Rejects: reverting either fallback to a bare <p>, which is how '**bold**'
   // came to show as literal asterisks on a projector.
   test('both fallbacks route their text through MarkdownRenderer', () => {
     expect(status).toMatch(/content=\{insights\.summary\}/);
-    expect(host).toMatch(/content=\{aiSummary\.summaryText\}/);
+    expect(report).toMatch(/content=\{aiSummary\.summaryText\}/);
     expect(status).not.toMatch(/<p[^>]*>\{insights\.summary\}/);
-    expect(host).not.toMatch(/<p[^>]*>\{aiSummary\.summaryText\}/);
+    expect(report).not.toMatch(/<p[^>]*>\{aiSummary\.summaryText\}/);
+  });
+
+  // Rejects: the extraction leaving a second, stale copy of the report's AI
+  // fallback behind on the host page — two renderers of one branch, one of
+  // which nothing mounts and nobody would think to keep in step.
+  test('the host page no longer carries the report fallback itself', () => {
+    expect(host).not.toMatch(/aiSummary\.summaryText/);
   });
 });

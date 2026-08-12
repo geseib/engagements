@@ -40,6 +40,14 @@ import {
  * three responses sees the list it always saw, with no pips and no instruction
  * about a control that would do nothing.
  *
+ * `caption` IS FOR THE CONTENT THAT CANNOT BE COUNTED. Field Notes pages PROSE,
+ * not items, and "lines 18–34 of 61" tells a room nothing it can use. Passing a
+ * caption swaps that clause for the name of the section on screen — `Next
+ * Steps · page 3 of 4 · ↑ ↓ to page` — and leaves the position and the key hint
+ * exactly where they were. Callers that page prose hand `total` the PAGE COUNT
+ * with `pageSize={1}`, because for prose the item IS the page; the from/to
+ * arithmetic below still runs and is still correct, it is simply not printed.
+ *
  * NOT DROPPABLE, AND THIS IS A DEPARTURE FROM THE MOCKUP THAT IS WORTH THE
  * WORDS. `05-vote.html` marks its pager `data-drop="1"` — the first thing the
  * fitter sacrifices. That is right for the mockup, where the pager ANNOTATES a
@@ -53,7 +61,7 @@ import {
  * reason.
  */
 export default function Pager({
-  total, page = 0, pageSize, noun = 'Responses', onPage, enabled = true,
+  total, page = 0, pageSize, noun = 'Responses', caption = '', onPage, enabled = true,
 }) {
   // Normalised ONCE, and never re-derived from `total / pages`. `Math.ceil(4/2)`
   // is 2, not the 3 the slice actually took, so a re-derived size prints
@@ -116,7 +124,7 @@ export default function Pager({
         />
       ))}
       <span className="pgr-label">
-        {pagerLabel({ noun, from, to, total, page: current, pages })}
+        {pagerLabel({ caption, noun, from, to, total, page: current, pages })}
       </span>
     </div>
   );

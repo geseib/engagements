@@ -96,6 +96,26 @@ body{
   --measure:var(--measure-base);
 }
 
+/* THE DOCUMENT IS PINNED WHILE THE STAGE IS MOUNTED — components/stage/Stage.jsx
+   adds and removes `.stage-locked` on :root, and the reasoning is in the effect
+   beside it. Short version: `.stage` is 100dvh (the SMALL viewport) inside
+   `.main-layout{min-height:100vh}` (the LARGE one), so on any browser with a
+   collapsible toolbar the document out-measures the stage and Down scrolls the
+   whole screen — dock included — while `.content` carries its clipped content
+   along unchanged. Nothing is recovered and the host is told, in motion, that
+   something was. Content that does not fit is PAGED here; a second, silent way
+   to move it is a way to lose it off a projector.
+
+   `height:100%` on both is what makes `overflow:hidden` bind: an `auto`-height
+   html/body grows to its content and has nothing to clip. Overlays keep their
+   own `max-height:90vh; overflow-y:auto`, so nothing that scrolls today stops.
+   The class is added by the component rather than declared against `.stage`'s
+   presence because the report and reports-list views REPLACE the stage and do
+   scroll — a stylesheet rule could not give them their scrollbar back. */
+:root.stage-locked, :root.stage-locked body{
+  height:100%; overflow:hidden; overscroll-behavior:none;
+}
+
 /* --------------------------------------------------------------- the stage */
 .stage{
   position:relative; height:100dvh; width:100%; overflow:hidden;

@@ -166,9 +166,315 @@ export function pageSlice(items, index, size) {
  * instruction the room ever sees on this line and it earns its place — a
  * position indicator that does not say how to change position is a status
  * light.
+ *
+ * `caption` REPLACES THE FIRST FACT WHEN THE ITEMS ARE NOT COUNTABLE. Prose has
+ * no honest "4–6 of 20": a room cannot be told it is looking at lines 18 to 34
+ * of a summary and be any the wiser, and printing a line count invites the
+ * reader to believe the count is stable when the model's next rewrite changes
+ * it. What a room CAN use is the name of the section it is reading — which the
+ * summary's own `##` heading already supplies — so Field Notes prints
+ * `Next Steps · page 3 of 4 · ↑ ↓ to page`. The other two facts are unchanged,
+ * so the line still says where you are and how to move.
  */
-export function pagerLabel({ noun = 'Responses', from, to, total, page, pages } = {}) {
-  return `${noun} ${from}–${to} of ${total} · page ${page + 1} of ${pages} · ↑ ↓ to page`;
+export function pagerLabel({
+  caption = '', noun = 'Responses', from, to, total, page, pages,
+} = {}) {
+  const what = caption ? String(caption) : `${noun} ${from}–${to} of ${total}`;
+  return `${what} · page ${page + 1} of ${pages} · ↑ ↓ to page`;
+}
+
+/* ===========================================================================
+   PAGING PROSE, WHICH IS A DIFFERENT PROBLEM FROM PAGING A LIST
+   ===========================================================================
+
+ * The owner, on the pager that shipped for VOTE and RESULTS: *"it seems like we
+ * still have some cutoff and no way to scroll down, as the entire page scrolls
+ * down. should be able to flip through details. most apparent in the ai
+ * feedback page results."*
+ *
+ * Field Notes is the state that escaped, because everything above pages a LIST
+ * and Workie's summary is not one. `pageSlice` needs items; the summary is one
+ * continuous markdown document. Three ways to cut it were on the table.
+ *
+ *   A MEASURED COLUMN — render it, read the box, cut where it stops fitting.
+ *     Rejected for the two reasons the answer budget was already declared
+ *     rather than measured, both of which bite HARDER here. jsdom reports every
+ *     box as zero, so a measured cut is a feature no test in this repo can hold
+ *     (RESUME.md, Landmines). And a measured cut MOVES: the fitter is running
+ *     against this same box and changes `--fit` as a consequence of what is on
+ *     the page, so a page boundary derived from the rendered height feeds back
+ *     into the scale that produced it. The room would watch the text resize
+ *     and the boundary walk.
+ *
+ *   BY RENDERED BLOCK, N BLOCKS TO A PAGE — simple, testable, and wrong in the
+ *     one way that matters: a block is not a unit of stage. One paragraph and
+ *     one twelve-item list are both "a block", and a page of three blocks is
+ *     either two-thirds empty or twice over the screen depending on which
+ *     three it got.
+ *
+ *   BY SECTION, WITH A LINE BUDGET — what this does, and it is the summary's
+ *     OWN structure rather than one imposed on it. lambda-functions/game/
+ *     personas.js `buildOutputContract()` tells the model, non-negotiably, to
+ *     "reply using exactly these N headings, in this order, spelled exactly as
+ *     shown, and add no other headings" — so a `##` heading is a boundary the
+ *     AUTHOR drew, and cutting there cuts nothing in half. Default shape is
+ *     three sections (Summary / Discussion Questions / Next Steps), which is
+ *     three pages a host can flip like cards, each with its own name on the
+ *     pager line.
+ *
+ * THE LINE BUDGET IS THE FALLBACK, AND IT IS NOT OPTIONAL. Two paths reach this
+ * with no headings at all: get-ai-summary.js:201 stores `markdownResponse: raw`
+ * when the model's reply does not parse, and a prompt may declare its own
+ * shape. Sections alone would put the whole of that on one page, which is the
+ * defect the owner reported. So a section that outruns the budget CONTINUES on
+ * the next page — and the pager keeps printing the section's name, so a room
+ * looking at a continuation still knows what it is reading.
+ *
+ * ------------------------------------------------------------------ the unit
+ *
+ * A LINE OF 34 CHARACTERS. `styles/stage.css` declares exactly one measure for
+ * Field Notes body text — `.notes li span{max-width:34ch}` — and
+ * `09-field-notes.html` clamps that same span to three lines under pressure.
+ * So 34ch is the design's own line, not a guess, and the cost of a block is how
+ * many of them its text needs. Computed from the SOURCE STRING and nothing
+ * else, which is what makes it stable: the summary is written once per beat and
+ * never changes under the host's eye, so unlike a measured cut this boundary
+ * cannot move while the room is looking at it.
+ *
+ * It is an ESTIMATE and it is allowed to be. Paging removes the pressure; it
+ * does not repeal the fitter, which is still behind this doing what it does.
+ */
+
+/** The stylesheet's own Field Notes measure: `.notes li span{max-width:34ch}`. */
+export const PROSE_MEASURE = 34;
+
+/**
+ * How many 34-character lines of prose fit on one page, per display profile.
+ *
+ * Room is read off `09-field-notes.html`: its Field Notes body is a lead beside
+ * three points, each point clamped at three lines — call it nine lines of point
+ * plus the lead's own — across the two columns `.notes .notes-md{column-count:2}`
+ * gives the markdown path. Eighteen.
+ *
+ * The other three keep the answer budget's ratios exactly, because they are the
+ * same ladders being divided: TV's type is ~1.3x Room's on every rung and the
+ * design spec says of TV in so many words that "less content fits", Call keeps
+ * Room's ladder verbatim and changes treatment only, and Table's is ~0.65x with
+ * the reader at arm's length. 18 : 12 : 18 : 30 is 3 : 2 : 3 : 5, six lines to
+ * the response card.
+ */
+export const PROSE_BUDGET = {
+  room: 18,
+  tv: 12,
+  call: 18,
+  table: 30,
+};
+
+export const DEFAULT_PROSE_BUDGET = 18;
+
+export function proseBudgetFor(profile) {
+  const size = PROSE_BUDGET[String(profile ?? '').toLowerCase()];
+  return Number.isFinite(size) && size > 0 ? size : DEFAULT_PROSE_BUDGET;
+}
+
+/**
+ * What a run of markdown costs in lines, once its decoration is discounted.
+ *
+ * `**Lead phrase**: the rest` is fourteen characters of asterisk and bracket
+ * that occupy no width on screen, and a link's href is the whole URL for a
+ * label of two words. Counting the raw source would bill a page for characters
+ * the room never sees, so the markers come off first. Never less than one: a
+ * block occupies a line even when it is empty.
+ */
+export function proseCost(text) {
+  const plain = String(text ?? '')
+    .replace(/^\s{0,3}(?:#{1,6}\s+|>\s?|[-*+]\s+|\d+[.)]\s+)/gm, '')
+    .replace(/\[([^\]]*)\]\([^)\s]*\)/g, '$1')
+    .replace(/[*_`|]/g, '')
+    .trim();
+  return Math.max(1, Math.ceil(plain.length / PROSE_MEASURE));
+}
+
+const HEADING_RE = /^\s{0,3}(#{1,6})\s+(.*)$/;
+const FENCE_RE = /^\s{0,3}(```|~~~)/;
+const RULE_RE = /^\s{0,3}(-{3,}|\*{3,}|_{3,})\s*$/;
+const ITEM_RE = /^\s{0,3}(?:[-*+]|\d+[.)])\s+/;
+const QUOTE_RE = /^\s{0,3}>\s?/;
+const ROW_RE = /^\s{0,3}\|.*\|\s*$/;
+
+/**
+ * The summary, cut into the smallest pieces a page boundary may fall between.
+ *
+ * THE GRAMMAR IS MarkdownRenderer's, DELIBERATELY. A boundary this file draws
+ * in a place that file does not recognise is a boundary that reaches a
+ * projector as raw characters — cut a table between its header and its
+ * separator row and page two prints `| --- | --- |`. So fences, tables and
+ * quote runs are ATOMIC here for the same reason they are atomic there.
+ *
+ * A LIST ITEM IS ITS OWN BLOCK, though, and that is the one place this is
+ * finer-grained than the renderer. A list is the shape Workie's Discussion
+ * Questions and Next Steps always take (personas.js asks for "two or three
+ * numbered questions" and "two to four numbered, concrete actions"), and a
+ * ten-item list held atomic is exactly the page-sized cliff this exists to
+ * remove. Splitting between items is safe because the ordinal travels in the
+ * source — `3. …` stays `3. …` — and MarkdownRenderer now carries that number
+ * onto the `<ol start>` rather than restarting at 1. That mattering at all is
+ * the same positional-label trap `pageSlice`'s `offset` exists for: a room
+ * being asked about "question 1" that the host calls "question 3".
+ */
+export function proseBlocks(markdown) {
+  const lines = String(markdown ?? '').split('\n');
+  const blocks = [];
+  let run = null;      // { kind, lines: [] } for the runs that accumulate
+  const flush = () => {
+    if (!run) return;
+    const text = run.lines.join('\n');
+    blocks.push({
+      text,
+      lines: run.kind === 'fence' || run.kind === 'table'
+        ? Math.max(1, run.lines.length)
+        : proseCost(text),
+      heading: false,
+      level: 0,
+    });
+    run = null;
+  };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (run && run.kind === 'fence') {
+      run.lines.push(line);
+      if (FENCE_RE.test(trimmed)) flush();
+      continue;
+    }
+    if (FENCE_RE.test(trimmed)) { flush(); run = { kind: 'fence', lines: [line] }; continue; }
+
+    if (!trimmed) { flush(); continue; }
+
+    const heading = trimmed.match(HEADING_RE);
+    if (heading) {
+      flush();
+      blocks.push({
+        text: trimmed,
+        lines: proseCost(heading[2]),
+        heading: true,
+        level: heading[1].length,
+        title: heading[2].replace(/[*_`]/g, '').trim(),
+      });
+      continue;
+    }
+
+    // A rule is tested before a table row so a `| --- |` separator is never
+    // eaten as one — the same ordering MarkdownRenderer uses, for the same
+    // reason.
+    if (RULE_RE.test(trimmed)) { flush(); blocks.push({ text: trimmed, lines: 1, heading: false, level: 0 }); continue; }
+
+    if (ROW_RE.test(trimmed) && trimmed.length > 2) {
+      if (!run || run.kind !== 'table') { flush(); run = { kind: 'table', lines: [] }; }
+      run.lines.push(line);
+      continue;
+    }
+    if (run && run.kind === 'table') flush();
+
+    if (QUOTE_RE.test(trimmed)) {
+      if (!run || run.kind !== 'quote') { flush(); run = { kind: 'quote', lines: [] }; }
+      run.lines.push(line);
+      continue;
+    }
+    if (run && run.kind === 'quote') flush();
+
+    if (ITEM_RE.test(trimmed)) {
+      // Each item stands alone. A continuation line indented under one is
+      // flattened into it by the renderer, so it is appended here too rather
+      // than becoming a paragraph that could be paged away from its item.
+      flush();
+      run = { kind: 'item', lines: [line] };
+      continue;
+    }
+    if (run && run.kind === 'item') { run.lines.push(line); continue; }
+
+    if (!run || run.kind !== 'para') { flush(); run = { kind: 'para', lines: [] }; }
+    run.lines.push(line);
+  }
+  flush();
+  return blocks;
+}
+
+/**
+ * The document, cut into pages.
+ *
+ * Two rules, in this order:
+ *
+ *   1. A TOP-LEVEL HEADING ALWAYS OPENS A PAGE. `##` is the boundary the
+ *      output contract makes the model draw, so a section never begins halfway
+ *      down a page under the tail of the one before it. `###` and below do NOT
+ *      break — they are structure INSIDE a section, and breaking on them would
+ *      shred a section the model deliberately subdivided.
+ *   2. OTHERWISE, FILL TO THE BUDGET. A block that would put the page over goes
+ *      on the next one — unless the page is empty, in which case it goes on
+ *      anyway: an oversized block gets a page to itself rather than looping
+ *      forever, and the fitter takes it from there.
+ *
+ * AND A HEADING NEVER ENDS A PAGE. A page whose last block is a heading names a
+ * section whose body is on the next page — the room reads a title, the host
+ * turns, and the title is gone. Any trailing headings are carried over with the
+ * block that displaced them.
+ *
+ * Returns `[{ text, section }]` — `section` being the `##` in force at the top
+ * of that page, carried forward onto continuations so page 3 of Next Steps
+ * still says Next Steps.
+ */
+export function prosePages(markdown, budget) {
+  const per = Number.isFinite(Number(budget)) && Number(budget) > 0
+    ? Math.floor(Number(budget)) : DEFAULT_PROSE_BUDGET;
+  const blocks = proseBlocks(markdown);
+  if (!blocks.length) return [];
+
+  const groups = [];
+  let current = [];
+  let used = 0;
+  const close = () => { if (current.length) groups.push(current); current = []; used = 0; };
+
+  blocks.forEach((block) => {
+    if (block.heading && block.level <= 2) {
+      close();
+    } else if (current.length && used + block.lines > per) {
+      const carried = [];
+      while (current.length && current[current.length - 1].heading) carried.unshift(current.pop());
+      // A page that was ONLY headings has nothing to carry them to; keep it
+      // whole rather than emitting an empty page and an orphan pair.
+      if (!current.length) { current = carried.splice(0, carried.length); }
+      close();
+      current = carried;
+      used = carried.reduce((n, b) => n + b.lines, 0);
+    }
+    current.push(block);
+    used += block.lines;
+  });
+  close();
+
+  let section = '';
+  return groups.map((group) => {
+    if (group[0].heading && group[0].level <= 2) section = group[0].title || '';
+    return { text: group.map((b) => b.text).join('\n\n'), section };
+  });
+}
+
+/**
+ * One page of the summary, and where it sits — `pageSlice`'s shape for prose.
+ *
+ * Clamped, not reset, for the same reason the answer list is: a Redo rewrites
+ * the summary underneath a host who has already paged into it, and landing on
+ * the last page that exists beats a blank projector.
+ */
+export function prosePageSlice(markdown, index, budget) {
+  const all = prosePages(markdown, budget);
+  const pages = Math.max(1, all.length);
+  const page = clampPage(index, pages);
+  const chosen = all[page] || { text: '', section: '' };
+  return { content: chosen.text, section: chosen.section, page, pages };
 }
 
 const TYPING_TAGS = { INPUT: true, TEXTAREA: true, SELECT: true };

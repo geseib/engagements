@@ -1,17 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import html2pdf from 'html2pdf.js';
 import webSocketClient from './WebSocketClient';
-import MarkdownRenderer from './components/MarkdownRenderer';
 import IssueFab from './components/IssueFab';
 import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
 import WelcomeScreen from './components/WelcomeScreen';
 import WavelengthWordCloud from './components/WavelengthWordCloud';
 import Icon from './components/Icon';
-import RankIcon from './components/RankIcon';
 import SetImageBadge from './components/SetImageBadge';
 import HostActionBar from './components/HostActionBar';
+import GameReport from './components/GameReport';
 import AISummaryStatus from './components/AISummaryStatus';
 import Stage from './components/stage/Stage';
 import Rail from './components/stage/Rail';
@@ -32,7 +30,6 @@ import {
   classifyAISummaryFailure, shouldAutoRetry, autoRetryDelayMs, isOnline,
   AI_NOTIFICATION_TIMEOUT_MS, AI_POLL_ATTEMPTS, AI_POLL_INTERVAL_MS,
 } from './utils/aiSummaryRecovery';
-import { calculatePlayerRankings } from './config/podium';
 import { createGameBody } from './config/createGame';
 import { gameTypeMeta, gameTypeLabel } from './config/gameTypes';
 import {
@@ -194,7 +191,13 @@ function GameHostPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [rosterMode]);
   /**
-   * WHICH PAGE OF THE ANSWER LIST IS ON THE WALL.
+   * WHICH PAGE OF THE STAGE IS ON THE WALL.
+   *
+   * One index, three states. VOTE and RESULTS page the answer list; FIELD_NOTES
+   * pages Workie's summary, which is prose rather than items and is cut by
+   * config/stagePaging.js's `prosePageSlice`. They share this because the key
+   * below carries the PHASE, so they can never be live at once and a second
+   * piece of state would only be a second reset to keep in step with this one.
    *
    * KEYED TO THE BEAT, WHICH IS WHAT MAKES THE RESET FREE. The state carries
    * the phase and round it belongs to and is read back only for that beat, so a
@@ -229,6 +232,15 @@ function GameHostPage() {
 
   const [showReport, setShowReport] = useState(false);
   const [reportData, setReportData] = useState(null);
+  // 'idle' | 'loading' | 'ready' | 'error'. The report is BUILT on demand —
+  // `POST games/{id}/report` re-derives it every time — so opening it is a
+  // request, not a navigation, and the shell has to be able to say so.
+  const [reportStatus, setReportStatus] = useState('idle');
+  const [reportError, setReportError] = useState(null);
+  // Which session the open report is for, so Try again can retry THAT one.
+  // Not `gameId`: the report is also opened from the history list, for
+  // sessions that are not the one currently loaded.
+  const [reportTarget, setReportTarget] = useState(null);
   const [lessonNumber, setLessonNumber] = useState(0);
   // SERVER TRUTH: has this round's AuthorsRevealed been set? It flips
   // automatically when the round enters RESULTS (get-results.js's
@@ -3231,7 +3243,34 @@ Ready to engage? See you there!`;
     }
   };
 
+  /**
+   * THE REPORT BUTTON OPENS THE REPORT.
+   *
+   * It used to open the games-history list, from which the host picked the
+   * session they were already running and clicked Report a second time. Every
+   * caller of this already knows which session it means — `gameId` is in scope
+   * — so the list was a menu with the answer already on it.
+   *
+   * The list is not gone; it moved to where it is actually a choice. From
+   * inside the report, `All session reports` reaches it (see
+   * handleBrowseReportHistory), and it is still the fallback here for the one
+   * case where the question is real: no session loaded, so there is no "this
+   * one" to open.
+   */
   const handleViewReports = async () => {
+    if (gameId) {
+      generateReportForGame(gameId, eventTitle);
+      return;
+    }
+    await handleBrowseReportHistory();
+  };
+
+  /** The old behaviour, kept and reachable — just no longer the front door. */
+  const handleBrowseReportHistory = async () => {
+    // Order matters: the report is an early `return` above the whole page, so
+    // it would swallow the modal if it were left standing.
+    setShowReport(false);
+    setReportStatus('idle');
     await fetchGamesList();
     setReportsModalMode('reports');
     setShowReportsModal(true);
@@ -3239,9 +3278,19 @@ Ready to engage? See you there!`;
 
 
   const generateReportForGame = async (targetGameId, targetEventTitle) => {
+    // Show the report SHELL first, in its loading state. `create-report` is a
+    // POST that rebuilds the document server-side every time, so there is a
+    // real wait here — and the two alternatives are both worse than a spinner:
+    // staying on the previous screen makes the button look dead, and rendering
+    // nothing until the payload lands is a blank page of unknown duration.
+    setShowReportsModal(false);
+    setReportTarget({ gameId: targetGameId, eventTitle: targetEventTitle });
+    setReportError(null);
+    setReportStatus('loading');
+    setShowReport(true);
     try {
       console.log(`📊 Generating report for game ${targetGameId}...`);
-      
+
       // Use the backend create-report endpoint instead of frontend logic
       const reportRes = await fetch(`${API_BASE}games/${targetGameId}/report`, {
         method: 'POST',
@@ -3331,14 +3380,16 @@ Ready to engage? See you there!`;
         console.log(`🎯 GameData Player ${idx + 1}: ${player.playerName} - totalScore: ${player.totalScore}`);
       });
 
-      // Close reports modal and show report
-      setShowReportsModal(false);
       setReportData(gameData);
-      setShowReport(true);
+      setReportStatus('ready');
       console.log('📊 Report generated successfully');
     } catch (error) {
       console.error('Error generating report:', error);
-      alert('Failed to generate report. Please try again.');
+      // Not an alert(). The host is already looking at the report shell; an
+      // alert dismisses to a blank one and offers no way to try again, which
+      // is the bounce-to-nothing the whole change exists to remove.
+      setReportError(error?.message || 'The report could not be built.');
+      setReportStatus('error');
     }
   };
 
@@ -3465,9 +3516,26 @@ Ready to engage? See you there!`;
     );
   }
 
-  // Render the report if it's being shown
-  if (showReport && reportData) {
-    return <GameReport reportData={reportData} onClose={() => setShowReport(false)} />;
+  // Render the report if it's being shown.
+  //
+  // `showReport` alone, deliberately — NOT `showReport && reportData`. The
+  // report is fetched, so there is a window in which the host has asked for it
+  // and the payload has not landed; the old condition fell through that window
+  // to the stage behind, so the button read as broken. GameReport owns the
+  // wait now, via `status`.
+  if (showReport) {
+    return (
+      <GameReport
+        reportData={reportData}
+        status={reportStatus}
+        error={reportError}
+        onClose={() => { setShowReport(false); setReportStatus('idle'); }}
+        onRetry={reportTarget
+          ? () => generateReportForGame(reportTarget.gameId, reportTarget.eventTitle)
+          : null}
+        onBrowseAll={handleBrowseReportHistory}
+      />
+    );
   }
 
 
@@ -3925,12 +3993,22 @@ Ready to engage? See you there!`;
    */
   const stagePageSize = pageSizeFor(profile);
   const pageKey = `${hostPhase}#${lessonNumber}`;
-  const answerPage = pageSlice(
-    answers,
-    stagePage && stagePage.key === pageKey ? stagePage.index : 0,
-    stagePageSize
-  );
-  const setAnswerPage = (index) => setStagePage({ key: pageKey, index });
+  /* ONE INDEX FOR THE WHOLE STAGE, because the states that page are mutually
+     exclusive and the key already carries the phase. FIELD_NOTES pages prose
+     rather than answers (components/AISummaryStatus.jsx), and giving it a
+     second piece of state would be a second reset to keep in step with this
+     one — for a beat that can never be live at the same time. It reads 0 on
+     arrival for free: `hostPhase` is part of the key, so entering FIELD_NOTES
+     changes the key and the index is not carried over from RESULTS.
+
+     BOTH GO IN `fitKey`. `answerPage.page` is clamped against `answers.length`,
+     which on FIELD_NOTES is a single page — so it reads 0 however far the host
+     has paged into the summary. Without the raw index beside it the fitter
+     never re-runs on a notes page turn, and page 2 is drawn at the scale chosen
+     for page 1. */
+  const stagePageIndex = stagePage && stagePage.key === pageKey ? stagePage.index : 0;
+  const setStagePageIndex = (index) => setStagePage({ key: pageKey, index });
+  const answerPage = pageSlice(answers, stagePageIndex, stagePageSize);
 
   /**
    * Why the primary is greyed out, and the key that fires it when it is not.
@@ -4026,6 +4104,8 @@ Ready to engage? See you there!`;
           // of the counts above it, so without this the fitter would keep the
           // scale it found for the previous page's content.
           answerPage.page, stagePageSize,
+          // FIELD_NOTES' own page: answerPage.page clamps to 0 there.
+          stagePageIndex,
           loadingAIInsights, currentAIInsights ? 1 : 0,
         ].join('|')}
         rail={(
@@ -4243,7 +4323,7 @@ Ready to engage? See you there!`;
                   total={answers.length}
                   page={answerPage.page}
                   pageSize={stagePageSize}
-                  onPage={setAnswerPage}
+                  onPage={setStagePageIndex}
                   enabled={!anyOverlayOpen}
                 />
               </>
@@ -4414,7 +4494,7 @@ Ready to engage? See you there!`;
                     total={answers.length}
                     page={answerPage.page}
                     pageSize={stagePageSize}
-                    onPage={setAnswerPage}
+                    onPage={setStagePageIndex}
                     enabled={!anyOverlayOpen}
                   />
                 )}
@@ -4455,12 +4535,24 @@ Ready to engage? See you there!`;
                     API left the nothing-yet placeholder on the wall, which is
                     indistinguishable from "still thinking" and stayed that way
                     for the rest of the session. */}
+                {/* AND IT PAGES — the state the first pager missed. VOTE and
+                    RESULTS page a LIST; Workie's summary is one continuous
+                    document, so there were no items to slice and it simply ran
+                    off the bottom of `.content{overflow:hidden}`. The same
+                    three arguments the other two pagers take: the profile
+                    decides the budget, the index is the stage's own beat-keyed
+                    one, and `enabled` is the existing suppressor rather than a
+                    second rule beside it. */}
                 <AISummaryStatus
                   loading={loadingAIInsights}
                   insights={currentAIInsights}
                   failure={aiSummaryFailure}
                   retrying={aiRetrying}
                   onRetry={handleRetryAISummary}
+                  profile={profile}
+                  page={stagePageIndex}
+                  onPage={setStagePageIndex}
+                  enabled={!anyOverlayOpen}
                 />
 
                 {/* Host controls, so they are chrome and they are droppable —
@@ -4766,440 +4858,6 @@ Ready to engage? See you there!`;
 
     </div>
     
-    </>
-  );
-}
-
-// Game Report Component
-function GameReport({ reportData, onClose }) {
-  const { gameId, eventTitle, players, questions, allAnswers, allVotes } = reportData;
-  // Same round noun the live screens use. resolveRoundNoun() identifies an art
-  // round by a non-empty `image`/`Image` on the question — art is not a game
-  // type, so the artwork is the only signal. create-report.js projects `image`
-  // onto questionData for exactly this; if it is ever absent the helper simply
-  // falls back to the game type's noun, so the report degrades to "Round"
-  // rather than breaking.
-  const reportRoundNoun = (questionData) =>
-    resolveRoundNoun(questionData, reportData.gameType, reportData.roundNoun);
-
-  // The header counts the whole set, so it must not judge by question 1 alone —
-  // a set whose first question happens to carry no image would be headed
-  // "3 Rounds" while every row beneath it said "Artwork".
-  const headerSampleQuestion =
-    (questions || []).map((q) => q?.questionData).find((q) => (q?.image || q?.Image || '').trim())
-    || questions?.[0]?.questionData;
-  const [isSaving, setIsSaving] = useState(false);
-  const [showSaveReportModal, setShowSaveReportModal] = useState(false);
-  const [saveModalData, setSaveModalData] = useState(null);
-  const [saveAsPermanent, setSaveAsPermanent] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [confirmModalProps, setConfirmModalProps] = useState({
-    title: '',
-    message: '',
-    confirmText: 'Proceed',
-    onConfirm: () => {},
-    onCancel: () => {}
-  });
-
-  const initiateSaveReport = () => {
-    setShowSaveReportModal(true);
-  };
-  
-  const saveReportToPDF = async (permanent = false) => {
-    if (isSaving) return;
-    
-    setIsSaving(true);
-    setShowSaveReportModal(false);
-    try {
-      // Generate PDF from the report content
-      const element = document.querySelector('.report-container');
-      
-      const opt = {
-        margin: [0.5, 0.5, 0.5, 0.5],
-        filename: `${eventTitle.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { 
-          scale: 2,
-          useCORS: true,
-          letterRendering: true,
-          scrollX: 0,
-          scrollY: 0
-        },
-        jsPDF: { 
-          unit: 'in', 
-          format: 'letter', 
-          orientation: 'portrait' 
-        }
-      };
-
-      // Generate PDF as blob
-      const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('dataurlstring');
-      
-      // Extract base64 data
-      const base64Data = pdfBlob.split(',')[1];
-      
-      // Send to backend for S3 storage
-      const response = await fetch(`${API_BASE}games/${gameId}/save-report`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          gameId,
-          eventTitle,
-          pdfBlob: base64Data,
-          permanent: permanent
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to save report');
-      }
-      
-      const result = await response.json();
-      
-      // Store result for success modal
-      setSaveModalData(result);
-      
-      // Show appropriate notification based on save type
-      const message = permanent 
-        ? 'Report saved permanently! Your report will be kept for 1 year.'
-        : 'Report saved! Download link expires in 24 hours.';
-      
-      setConfirmModalProps({
-        title: 'Report Saved Successfully',
-        message: `${message}\n\nWould you like to download the report now?`,
-        confirmText: 'Download Now',
-        cancelText: 'Copy Link',
-        onConfirm: () => {
-          window.open(result.downloadUrl, '_blank');
-          setShowConfirmModal(false);
-        },
-        onCancel: () => {
-          navigator.clipboard.writeText(result.downloadUrl).then(() => {
-            // Show brief success message
-            const successDiv = document.createElement('div');
-            successDiv.className = 'clipboard-success';
-            successDiv.textContent = 'Download link copied to clipboard!';
-            document.body.appendChild(successDiv);
-            setTimeout(() => successDiv.remove(), 3000);
-          }).catch(() => {
-            // Fallback: show the URL in an input for manual copying
-            const input = document.createElement('input');
-            input.value = result.downloadUrl;
-            input.select();
-            document.execCommand('copy');
-          });
-          setShowConfirmModal(false);
-        }
-      });
-      setShowConfirmModal(true);
-      
-    } catch (error) {
-      console.error('Error saving report:', error);
-      alert('Failed to save report. Please try again.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-
-  return (
-    <>
-    <div className="report-container">
-      <div className="report-header">
-        <h2 className="report-title">Engagements Game Report</h2>
-        
-        <div className="report-summary">
-          <h3>{eventTitle}</h3>
-          <div className="report-date">
-            {new Date().toLocaleDateString('en-US', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
-            })}
-          </div>
-          <div className="report-meta">
-            <span>Game ID: <strong>{gameId}</strong></span>
-            <span>{players.length} Player{players.length !== 1 ? 's' : ''}</span>
-            <span>
-              {questions.length}{' '}
-              {pluralRoundNoun(reportRoundNoun(headerSampleQuestion), questions.length)}
-            </span>
-          </div>
-        </div>
-        
-        <div className="report-header-actions">
-          <button 
-            className="btn-primary" 
-            onClick={initiateSaveReport}
-            disabled={isSaving}
-          >
-            {isSaving ? 'Saving...' : 'Save Report'}
-          </button>
-          <button className="btn-secondary report-close" onClick={onClose}>
-            <Icon name="ArrowLeft" weight="bold" size={16} /> Back to Game
-          </button>
-        </div>
-      </div>
-
-      <div className="report-content">
-        {questions.map((question, qIdx) => {
-          // Extract question data from backend format
-          const questionNumber = question.questionNumber;
-          const questionData = question.questionData || {};
-          const questionAnswers = question.answers || [];
-          const aiSummary = question.aiSummary;
-          
-          // Calculate rankings from backend data
-          const rankedAnswers = questionAnswers.sort((a, b) => b.totalScore - a.totalScore);
-          const topAnswers = rankedAnswers.slice(0, 3); // Show top 3
-          
-          return (
-            <div key={questionNumber} className="report-question">
-              <div className="report-question-header">
-                <h3 className="report-lesson-heading">
-                  {reportRoundNoun(questionData)} {qIdx + 1} - {questionData.title || `${reportRoundNoun(questionData)} ${questionNumber}`}
-                </h3>
-                <div className="field-badge">{questionData.category || 'General'}</div>
-              </div>
-              
-              {questionData.detail && (
-                <div className="report-lesson-detail">
-                  {questionData.detail}
-                </div>
-              )}
-              
-              {/* Trivia Question Options - show choices with correct answer marked */}
-              {reportData.gameType === 'trivia' && (
-                <div className="report-trivia-choices">
-                  <h4>Answer Choices:</h4>
-                  <div className="trivia-options-report">
-                    {['A', 'B', 'C', 'D', 'E', 'F'].map(letter => {
-                      const optionField = `option${letter}`;
-                      const optionText = questionData[optionField];
-                      if (!optionText) return null;
-                      
-                      // Check if this option is the correct answer
-                      const correctAnswer = questionData.correctAnswer || questionData.CorrectAnswer;
-                      const isCorrect = correctAnswer === `Option${letter}` || correctAnswer === optionText;
-                      
-                      return (
-                        <div key={letter} className={`trivia-option-report ${isCorrect ? 'correct-answer' : ''}`}>
-                          <span className="option-letter">{letter})</span>
-                          <span className="option-text">{optionText}</span>
-                          {isCorrect && <span className="correct-indicator"><Icon name="CheckCircle" weight="fill" size={14} color="var(--success)" /> Correct Answer</span>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              
-              {/* AI Summary for this question */}
-              {aiSummary && (
-                <div className="report-ai-summary">
-                  <h4><Icon name="Sparkle" weight="duotone" size={18} color="var(--primary)" />AI Analysis</h4>
-                  
-                  <div className="report-ai-content">
-                    {aiSummary.markdownResponse ? (
-                      // Use Markdown renderer if available
-                      <MarkdownRenderer 
-                        content={aiSummary.markdownResponse} 
-                        className="report-ai-markdown"
-                      />
-                    ) : (
-                      // Fallback to structured display
-                      <>
-                        {/* Summary */}
-                        {aiSummary.summaryText && (
-                          <div className="report-ai-text">
-                            <h5>Summary</h5>
-                            {/* Same reason as the stage fallback: this text is
-                                model output and carries markdown. */}
-                            <MarkdownRenderer content={aiSummary.summaryText} className="report-ai-markdown" />
-                          </div>
-                        )}
-                        
-                        {/* Conversation Starters */}
-                        {aiSummary.discussionQuestions && aiSummary.discussionQuestions.length > 0 && (
-                          <div className="report-ai-discussion">
-                            <h5>Conversation Starters</h5>
-                            <ul>
-                              {aiSummary.discussionQuestions.map((discussionQuestion, idx) => (
-                                <li key={idx}>{discussionQuestion}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        
-                        {/* Next Steps */}
-                        {aiSummary.nextSteps && aiSummary.nextSteps.length > 0 && (
-                          <div className="report-ai-steps">
-                            <h5>Next Steps</h5>
-                            <ul>
-                              {aiSummary.nextSteps.map((step, idx) => (
-                                <li key={idx}>{step}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-              
-              <div className="report-answers">
-                <h4>Player Applications:</h4>
-                {questionAnswers.length > 0 ? (
-                  questionAnswers.map((answer, aIdx) => (
-                    <div key={aIdx} className={`report-answer ${answer.rank <= 3 ? 'winner' : ''}`}>
-                      {answer.rank <= 3 && (
-                        <div className="winner-badge">{answer.rankDisplay}</div>
-                      )}
-                      <div className="answer-text">"{answer.answerText}"</div>
-                      <div className="answer-meta">
-                        <span className="answer-author">by {answer.playerName}</span>
-                        <span className="answer-points">{answer.totalScore} point{answer.totalScore !== 1 ? 's' : ''}</span>
-                        <span className="answer-breakdown">({answer.voteBreakdown})</span>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="no-answers">No answers recorded for this question.</div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-        
-        <div className="report-final-scores">
-          <h3>Final Scores</h3>
-          <div className="score-grid">
-            {(() => {
-              // Debug logging to understand data structure
-              console.log('🔍 Players data in report:', players);
-              console.log('🔍 Sample player:', players[0]);
-              
-              // Map backend player data to expected format for calculatePlayerRankings
-              const playersWithScore = players.map(player => ({
-                ...player,
-                name: player.playerName || player.name,
-                score: player.totalScore || player.score || 0
-              }));
-              
-              console.log('🔍 Players with score mapping:', playersWithScore);
-              
-              const rankedPlayers = calculatePlayerRankings(playersWithScore);
-              console.log('🔍 Ranked players:', rankedPlayers);
-              const highestScore = rankedPlayers[0]?.score || 0;
-              
-              return rankedPlayers.map((player, idx) => {
-                const isChampion = (player.score || 0) === highestScore;
-                const rankIcon = <RankIcon rank={player.rank} size={18} />;
-                return (
-                  <div key={player.name} className={`score-item ${isChampion ? 'champion' : ''}`}>
-                    {isChampion && <div className="champion-badge"><Icon name="Trophy" weight="duotone" size={16} color="var(--primary)" /> Session Champion</div>}
-                    <div className="player-name">{rankIcon} #{player.rank} {player.name}</div>
-                    <div className="player-final-score">{player.score || 0} points</div>
-                  </div>
-                );
-              });
-            })()}
-          </div>
-        </div>
-      </div>
-    </div>
-      
-      {/* Save Report Modal */}
-      {showSaveReportModal && (
-        <div className="expanded-qr-overlay" onClick={() => setShowSaveReportModal(false)}>
-          <div className="expanded-qr-content save-report-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="confirmation-header">
-              <h2>Save Report Options</h2>
-            </div>
-            <div className="save-report-content">
-              <p className="save-description">
-                Choose how you'd like to save this report:
-              </p>
-              
-              <div className="save-option">
-                <input 
-                  type="radio" 
-                  id="save-temporary" 
-                  name="saveType" 
-                  checked={!saveAsPermanent}
-                  onChange={() => setSaveAsPermanent(false)}
-                />
-                <label htmlFor="save-temporary">
-                  <strong>Temporary Save (24 hours)</strong>
-                  <span className="save-option-desc">Report will be automatically deleted after 24 hours</span>
-                </label>
-              </div>
-              
-              <div className="save-option">
-                <input 
-                  type="radio" 
-                  id="save-permanent" 
-                  name="saveType" 
-                  checked={saveAsPermanent}
-                  onChange={() => setSaveAsPermanent(true)}
-                />
-                <label htmlFor="save-permanent">
-                  <strong>Permanent Save (1 year)</strong>
-                  <span className="save-option-desc">Report will be kept for 1 year for future reference</span>
-                </label>
-              </div>
-            </div>
-            
-            <div className="dialog-actions">
-              <button 
-                className="btn-secondary" 
-                onClick={() => setShowSaveReportModal(false)}
-              >
-                Cancel
-              </button>
-              <button 
-                className="btn-primary" 
-                onClick={() => saveReportToPDF(saveAsPermanent)}
-                disabled={isSaving}
-              >
-                {isSaving ? 'Saving...' : 'Save Report'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Success Confirmation Modal */}
-      {showConfirmModal && (
-        <div className="expanded-qr-overlay" onClick={confirmModalProps.onCancel}>
-          <div className="expanded-qr-content confirmation-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="confirmation-header">
-              <h2>{confirmModalProps.title}</h2>
-            </div>
-            <div className="confirmation-message">
-              {confirmModalProps.message}
-            </div>
-            <div className="dialog-actions">
-              <button 
-                className="btn-secondary" 
-                onClick={confirmModalProps.onCancel}
-              >
-                {confirmModalProps.cancelText || 'Cancel'}
-              </button>
-              <button 
-                className="btn-primary" 
-                onClick={confirmModalProps.onConfirm}
-              >
-                {confirmModalProps.confirmText}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

@@ -33,10 +33,11 @@ describe('the stage pages its answer list, and the page keys obey the existing s
   test('comments really were stripped', () => {
     // The guard on every other assertion in this file. `Pager` is named a dozen
     // times in the doc-blocks this change added.
-    ['NOT A CAROUSEL AND NOT A CLIFF', 'RESULTS PAGES TOO'].forEach((phrase) => {
-      expect(SOURCE).toContain(phrase);
-      expect(CODE).not.toContain(phrase);
-    });
+    ['NOT A CAROUSEL AND NOT A CLIFF', 'RESULTS PAGES TOO', 'AND IT PAGES']
+      .forEach((phrase) => {
+        expect(SOURCE).toContain(phrase);
+        expect(CODE).not.toContain(phrase);
+      });
   });
 
   test('the page keys are gated on the SAME value as the advance key', () => {
@@ -84,8 +85,52 @@ describe('the stage pages its answer list, and the page keys obey the existing s
       expect(el).toMatch(/total=\{answers\.length\}/);
       expect(el).toMatch(/page=\{answerPage\.page\}/);
       expect(el).toMatch(/pageSize=\{stagePageSize\}/);
-      expect(el).toMatch(/onPage=\{setAnswerPage\}/);
+      expect(el).toMatch(/onPage=\{setStagePageIndex\}/);
     });
+  });
+
+  test('FIELD_NOTES pages too, and it is the state the owner reported', () => {
+    // rejects: shipping prose paging as a module and a component and never
+    // handing the page down from the host page — which is the exact shape of
+    // failure RESUME.md records for shortcutsSuppressed: an extracted, tested
+    // rule that the page then calls with an argument missing, whole suite green.
+    //
+    // All four arguments matter. `profile` is the budget (a literal is what
+    // goes on cutting TV off), `page`/`onPage` are what make it move at all,
+    // and `enabled` is the SAME suppressor the advance key uses — hardcoding it
+    // true is invisible in every component test.
+    const el = elementAt(CODE, 'AISummaryStatus');
+    expect(el).not.toBeNull();
+    expect(el).toMatch(/profile=\{profile\}/);
+    expect(el).toMatch(/page=\{stagePageIndex\}/);
+    expect(el).toMatch(/onPage=\{setStagePageIndex\}/);
+    expect(el).toMatch(/enabled=\{!anyOverlayOpen\}/);
+  });
+
+  test('the summary page is the SAME beat-keyed index the answer list uses', () => {
+    // rejects: a second `useState` for the notes page. It would need its own
+    // reset, and RESUME.md records the `resultsBeat` reset effect as fragile on
+    // purpose and already responsible for one live defect. The three states
+    // that page are mutually exclusive and `pageKey` carries the phase, so one
+    // index reads 0 on arrival for free.
+    expect(CODE).toMatch(
+      /const stagePageIndex = stagePage && stagePage\.key === pageKey \? stagePage\.index : 0;/
+    );
+    expect(CODE).toMatch(/const setStagePageIndex = \(index\) => setStagePage\(\{ key: pageKey, index \}\)/);
+    expect(CODE.match(/useState\(null\);?\s*$/gm) || []).not.toHaveLength(0);
+    // ...and there is exactly one page-index state on the page.
+    expect(CODE.match(/setStagePage\(/g)).toHaveLength(1);
+  });
+
+  test('a summary page turn re-measures the stage, on its OWN index', () => {
+    // rejects: relying on `answerPage.page` for FIELD_NOTES. That index is
+    // clamped against `answers.length`, which on FIELD_NOTES is one page — so
+    // it reads 0 however far the host has paged, the fitter never re-runs, and
+    // page 2 of the summary is drawn at the scale chosen for page 1.
+    const at = CODE.indexOf('fitKey={[');
+    expect(at).toBeGreaterThan(-1);
+    const fitKey = CODE.slice(at, CODE.indexOf('].join', at));
+    expect(fitKey).toMatch(/\bstagePageIndex\b/);
   });
 
   test('the page size comes from the display profile, not from a constant', () => {
