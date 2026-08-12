@@ -268,9 +268,14 @@ body{
 .meter.is-complete .count{animation:cue 1.5s ease-in-out 3}
 @media (prefers-reduced-motion:reduce){.meter.is-complete .count{animation:none}}
 
-/* THE WAITING LIST — who the room is waiting for, on demand only.
-   RoomMeter.jsx's doc-block carries the ruling that put names here at all and
-   config/anonymity.js carries the gate; these are the rules that draw it.
+/* THE METER'S NAME LIST — on demand only, and NOT ALWAYS THE SAME SET.
+   On ASK and VOTE it is who the room is waiting for; in the LOBBY it is who
+   has already joined, which is the opposite polarity and a separate ruling by
+   the owner. The class stays `.waiting` because the box is identical and a
+   second class would be two things to keep in step — the difference is carried
+   by the caption and by `data-list-kind`, in RoomMeter.jsx, whose doc-block
+   holds both rulings. config/anonymity.js carries the gates (waitingRoster,
+   joinedRoster); these are the rules that draw the result.
 
    Deliberately NOT `.roster`. That class is the mockup's STANDINGS list —
    name plus score (07-results-trivia.html:771) — and a score beside a name is

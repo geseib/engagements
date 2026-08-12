@@ -40,20 +40,45 @@ import React from 'react';
  * facilitator's job is to nudge *Dana*, and making that require projecting an
  * operator surface is the worse outcome. The owner has now chosen the stage.
  *
- * THE POLARITY IS THE DECISION, AND IT IS NOT SYMMETRIC. Only the waiting are
- * named. Naming who HAS answered is a participation league table and stays
- * forbidden; it is also the version USER-REVIEWS.md rejected outright ("naming
- * and shaming three named colleagues on the all-hands screen"). Two things
- * blunt that objection here and both are load-bearing: the list is never up
- * unless the host asks for it, and it is the list of people the room is
- * waiting for, which is a nudge with a purpose, not a scoreboard.
+ * THE POLARITY IS THE DECISION, AND IT IS NOT SYMMETRIC. Inside a round, only
+ * the waiting are named. Naming who HAS answered is a participation league
+ * table and stays forbidden; it is also the version USER-REVIEWS.md rejected
+ * outright ("naming and shaming three named colleagues on the all-hands
+ * screen"). Two things blunt that objection here and both are load-bearing:
+ * the list is never up unless the host asks for it, and it is the list of
+ * people the room is waiting for, which is a nudge with a purpose, not a
+ * scoreboard. (The LOBBY is the one phase where the list is the other set, at
+ * the owner's request — see the paragraph after next, which is also where the
+ * reason it is not the rejected version is written out.)
  *
- * NOT IN THE LOBBY. The design sentence says "the room count and the
- * answered/voted fractions", but in the lobby there is no waiting set to
- * name: nobody is late to a round that has not started, there is no invite
- * list, and the only list available is who has joined — which is the exact
- * polarity the owner rejected. So LOBBY keeps a bare count, and the reveal
- * exists on ASK and VOTE, where "still waiting" means something.
+ * THE LOBBY IS THE ONE EXCEPTION TO THE POLARITY, BY THE OWNER'S OWN REQUEST.
+ * This paragraph used to read "NOT IN THE LOBBY", and its argument was sound
+ * as far as it went: in the lobby there is no waiting set to name — nobody is
+ * late to a round that has not started, there is no invite list, and the only
+ * list available is who has JOINED, the exact polarity rejected above. THE
+ * OWNER HAS NOW ASKED FOR THAT LIST: *"the lobby list is great, so we know who
+ * has joined, and for small groups easily see who is missing."*
+ *
+ * It is a different feature wearing the same control, and three things keep it
+ * from becoming the league table:
+ *
+ *   - There is nothing to be ranked by. A joined list has no scores, no order
+ *     but arrival, and no round behind it. The thing USER-REVIEWS.md rejected
+ *     was three named colleagues shown as laggards; this is the room's own
+ *     attendance, before anything has been asked of anyone.
+ *   - It says so. The heading over the lobby list is the lobby's own word
+ *     ("Already joined"), never a waiting caption — see REVEAL_LABEL below and
+ *     `data-list-kind`, which exists so a test can assert the polarity rather
+ *     than infer it from copy. A joined list under "Still to answer" would be
+ *     an accusation, and that is this polarity's failure mode.
+ *   - The host still asks for it. Same hover/focus/click, same never-unprompted
+ *     rule, same dismissal.
+ *
+ * The gate does not apply either, and `joinedRoster` in ../../config/anonymity.js
+ * carries the argument: nothing is on the wall to attribute in a lobby, and
+ * routing it through the response-count threshold would suppress the list
+ * permanently on every anonymous format, since the response count there is
+ * always zero.
  *
  * THE GATE IS NOT HERE. Whether the list may be shown at all during an
  * anonymous round is decided by `waitingRoster()` in ../../config/anonymity.js,
@@ -92,11 +117,34 @@ import React from 'react';
  * forgetting.
  */
 
-/** The heading over the names, in the phase's own words (17-remote.html). */
-const WAITING_LABEL = {
+/**
+ * The heading over the names, in the phase's own words (17-remote.html).
+ *
+ * LOBBY IS THE ODD ONE AND ITS COPY IS DOING THE WORK. ASK and VOTE name the
+ * people the room is waiting for; LOBBY names the people who are already here,
+ * which is the inverse set. "Already joined" was chosen because it cannot be
+ * read as a waiting list under any stress — not "In the room" (which repeats
+ * the heading above it word for word) and not anything built on "waiting",
+ * "still" or "yet", which are the words the other two phases own. The fallback
+ * stays a waiting phrase because every OTHER phase this component could be
+ * handed a list on is a phase where somebody is being waited for.
+ */
+const REVEAL_LABEL = {
+  LOBBY: 'Already joined',
   ASK: 'Still to answer',
   VOTE: 'Still to vote',
 };
+
+/**
+ * Which set the list is — 'joined' or 'waiting'.
+ *
+ * Emitted as `data-list-kind` so the polarity is a fact in the markup rather
+ * than something inferred from the caption. An implementation that fed the
+ * lobby's joined names into an ASK-labelled list, or the answerers into a
+ * waiting one, is the way this feature ships backwards while looking right;
+ * this is what a test can hold on to.
+ */
+const LIST_KIND = { LOBBY: 'joined' };
 
 /**
  * How many names are printed before the list becomes "+ N more".
@@ -117,7 +165,9 @@ export default function RoomMeter({
   const names = (waiting && waiting.names) || [];
   const interactive = Boolean(names.length && waiting && typeof waiting.onPreview === 'function');
   const revealed = interactive && (waiting.mode === 'preview' || waiting.mode === 'pinned');
-  const label = WAITING_LABEL[String(phase ?? '').toUpperCase()] || 'Still waiting';
+  const phaseKey = String(phase ?? '').toUpperCase();
+  const label = REVEAL_LABEL[phaseKey] || 'Still waiting';
+  const listKind = LIST_KIND[phaseKey] || 'waiting';
   const shown = names.slice(0, NAMES_SHOWN);
   const rest = names.length - shown.length;
 
@@ -156,7 +206,7 @@ export default function RoomMeter({
         {body}
       </div>
       {revealed && (
-        <div className="waiting" data-waiting-list="">
+        <div className="waiting" data-waiting-list="" data-list-kind={listKind}>
           <h5>{label}</h5>
           <ul>
             {shown.map((name) => <li key={name}>{name}</li>)}

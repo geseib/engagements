@@ -15,6 +15,7 @@ import {
   playerAnsweredActions,
   answeredNamesFrom,
   answeredCountFrom,
+  answererIdsFrom,
   stageLabelFor,
   displayLabelFor,
 } from '../config/anonymity';
@@ -103,6 +104,59 @@ describe('answeredCountFrom — the meter must move on an anonymous round', () =
   test('nobody has answered is zero, not NaN', () => {
     expect(answeredCountFrom([], [])).toBe(0);
     expect(answeredCountFrom(null, undefined)).toBe(0);
+  });
+});
+
+/**
+ * The names' OTHER source. `answeredNamesFrom` reads the /answers rows, which
+ * carry nothing on a hidden round; this reads /state's participation list,
+ * which is the only thing that can move the names there. The fixtures below are
+ * the shapes get-game-state.js:398 actually emits — it assembles
+ * `answerProgress` only under `?includeHostData=true` and only while the round
+ * is in ASK#, so "no answerProgress" is a real and frequent payload rather than
+ * a defensive hypothetical.
+ */
+describe('answererIdsFrom — the participation list a redacted frame cannot carry', () => {
+  test('CRITICAL: a payload with no answerProgress says NOTHING, and must not blank the list', () => {
+    // The round moved to VOTE while the refresh was in flight, or the caller
+    // forgot includeHostData. Reading either as "nobody has answered" wipes the
+    // names the server already supplied — the same clobber answeredNamesFrom's
+    // doc-block warns about, arriving from the other direction.
+    //
+    // rejects: `return stateData?.answerProgress?.answererIds || []`, which is
+    // the one-liner this function exists instead of.
+    expect(answererIdsFrom({ state: 'VOTE#001' })).toBeNull();
+    expect(answererIdsFrom({ answerProgress: { answersReceived: 3 } })).toBeNull();
+    expect(answererIdsFrom({})).toBeNull();
+    expect(answererIdsFrom(null)).toBeNull();
+    expect(answererIdsFrom(undefined)).toBeNull();
+  });
+
+  test('an empty list IS an answer, and a different one', () => {
+    // rejects: collapsing [] onto null. The server saying "nobody yet" is a
+    // fact worth applying — it is how a round that was reset stops showing the
+    // previous round's answerers.
+    expect(answererIdsFrom({ answerProgress: { answererIds: [] } })).toEqual([]);
+  });
+
+  test('it returns the names, deduplicated and blank-free', () => {
+    // rejects: passing the array through untouched. A duplicate inflates
+    // answeredCountFrom (which takes a LENGTH) past the number of people who
+    // actually answered, and a blank inflates waitingRoster's freshness check
+    // — which would unblock a stale list, printing a name on the wall for
+    // somebody who has already answered.
+    expect(answererIdsFrom({
+      answerProgress: { answererIds: ['Ada', 'Grace', 'Ada', '', null, 'Hedy'] },
+    })).toEqual(['Ada', 'Grace', 'Hedy']);
+  });
+
+  test('the real shape, whole', () => {
+    // Copied from get-game-state.js:398 rather than imagined — the landmine in
+    // RESUME.md is eighteen green tests against a fixture nothing emits.
+    expect(answererIdsFrom({
+      state: 'ASK#001',
+      answerProgress: { answersReceived: 2, totalPlayers: 8, answererIds: ['Ada', 'Grace'] },
+    })).toEqual(['Ada', 'Grace']);
   });
 });
 

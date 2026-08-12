@@ -23,7 +23,7 @@ import RoomMeter from '../components/stage/RoomMeter';
 import HostActionBar from '../components/HostActionBar';
 import { hostControlsFor } from '../config/hostControls';
 import { shortcutsSuppressed } from '../utils/hostOverlays';
-import { waitingRoster, MIN_ANONYMOUS_ANSWERS } from '../config/anonymity';
+import { waitingRoster, joinedRoster, MIN_ANONYMOUS_ANSWERS } from '../config/anonymity';
 
 const roster = (...names) => names.map((name) => ({ name }));
 
@@ -158,6 +158,70 @@ describe('waitingRoster — who may be named', () => {
       answerCount: 1,
       ...open,
     })).toEqual(['Dana']);
+  });
+});
+
+/**
+ * THE LOBBY'S LIST — the other polarity, and the owner's second ruling.
+ *
+ * The lobby was excluded from the reveal precisely because the only list it can
+ * draw is who has JOINED. The owner has since asked for that list ("so we know
+ * who has joined, and for small groups easily see who is missing"), so it is a
+ * separate function with a separate polarity rather than a flag on the one
+ * above — and these tests exist to keep the two from being merged by anyone who
+ * notices they both subtract from the same roster. One of them does not
+ * subtract at all.
+ */
+describe('joinedRoster — who is already here', () => {
+  test('it names everybody in the room, which is the OPPOSITE set to waitingRoster', () => {
+    // rejects: implementing the lobby list by calling waitingRoster with an
+    // empty `responded` — which returns the same names today and diverges the
+    // moment anybody answers, and which would drag the anonymity gate along
+    // with it. The two functions are asserted against the same roster here so
+    // the difference is visible in one screenful.
+    const players = roster('Dana', 'Tomás', 'Jordan');
+    expect(joinedRoster({ players })).toEqual(['Dana', 'Tomás', 'Jordan']);
+    expect(waitingRoster({
+      players, responded: ['Dana'], respondedCount: 1, answerCount: 1, ...open,
+    })).toEqual(['Tomás', 'Jordan']);
+  });
+
+  test('an empty room offers nothing at all', () => {
+    // rejects: returning [] for an empty room. `null` is what the call site
+    // reads as "no reveal", and an empty array would hand the meter an
+    // affordance that opens a box with nothing in it.
+    expect(joinedRoster({ players: [] })).toBeNull();
+    expect(joinedRoster({})).toBeNull();
+    expect(joinedRoster()).toBeNull();
+  });
+
+  test('blanks and duplicates cannot pad the room', () => {
+    // rejects: printing the roster raw. Two rows for one name is normal here —
+    // join-game.js keys players by name and a rejoin writes a second record —
+    // and the same person twice on the wall reads as two people.
+    expect(joinedRoster({
+      players: [{ name: 'Dana' }, { name: '' }, { playerName: 'Tomás' }, { name: 'Dana' }, null],
+    })).toEqual(['Dana', 'Tomás']);
+  });
+
+  test('NO ANONYMITY GATE — an anonymous poll still names its lobby', () => {
+    // THE OWNER'S RULING, and the one an implementation gets wrong by being
+    // careful. waitingRoster suppresses the list on a hidden round until
+    // MIN_ANONYMOUS_ANSWERS responses exist, because naming the waiters shrinks
+    // the anonymity set of the responses on the stage. In a lobby there are no
+    // responses — answers is empty, no round has opened — so that threshold
+    // would compare against a constant zero and suppress the lobby list for
+    // the entire session on exactly the formats the owner was looking at.
+    //
+    // rejects: routing the lobby through waitingRoster or through
+    // anonymityActive/MIN_ANONYMOUS_ANSWERS in any form. Joining is not a
+    // response; anonymity here is about authorship of answers.
+    const players = roster('Dana', 'Tomás');
+    expect(joinedRoster({ players, ...hidden })).toEqual(['Dana', 'Tomás']);
+    // The same room, same size, through the round-phase gate: refused.
+    expect(waitingRoster({
+      players, responded: [], respondedCount: 0, answerCount: 0, ...hidden,
+    })).toBeNull();
   });
 });
 
@@ -378,24 +442,51 @@ describe('GameHostPage wires the reveal through the gate', () => {
     expect(call).not.toMatch(/authorsHiddenOnStage/);
   });
 
-  test('the lobby count is not a reveal', () => {
-    // rejects: extending the affordance to LOBBY, where the only list
-    // available is who has JOINED — the polarity the owner rejected. The
-    // guard is that the gate is only consulted on ASK and VOTE.
-    const at = markup.indexOf('const waitingNames');
+  /**
+   * THE RULE THAT USED TO BE HERE.
+   *
+   * This was `test('the lobby count is not a reveal')`, and it asserted that
+   * the gate was consulted on ASK and VOTE and nowhere else — holding the
+   * decision that the lobby keeps a bare count, because the only list a lobby
+   * can draw is who has JOINED, the polarity the round phases reject.
+   *
+   * THE OWNER HAS CHANGED THAT CALL and asked for the joined list by name. The
+   * test is rewritten rather than deleted, because the new rule is narrower
+   * than the one it replaces: the lobby gets a list, it gets a DIFFERENT list,
+   * and it must not be obtained by handing the round-phase gate an empty
+   * `responded` — which would return the right names today and drag the
+   * anonymity threshold along, suppressing the whole feature on an anonymous
+   * poll from the first response onwards.
+   */
+  test('the lobby reveals who has JOINED, through its own gate', () => {
+    const at = markup.indexOf('const revealNames');
     expect(at).toBeGreaterThan(-1);
-    const condition = markup.slice(at, markup.indexOf('? waitingRoster', at));
-    // The phases named, ENUMERATED — not merely "ASK and VOTE appear". An
-    // assertion that only looked for those two goes on passing when a third
-    // is appended, which is exactly how this would be extended by someone
-    // reading the design sentence ("the room count and the fractions")
-    // without the reason the lobby is excluded.
-    expect(condition.match(/hostPhase === '(\w+)'/g))
+    const block = markup.slice(at, markup.indexOf('return waitingRoster', at));
+
+    // rejects: leaving the lobby out (the old rule), and rejects assembling
+    // the list inline with `players.map(...)` at the meter — which skips the
+    // dedupe and the blank-name filter that stop one person appearing twice.
+    expect(block).toMatch(/hostPhase === 'LOBBY'\) return joinedRoster\(\{ players \}\)/);
+    expect(source).toMatch(/import \{[\s\S]{0,400}joinedRoster[\s\S]{0,400}\} from '\.\/config\/anonymity'/);
+
+    // rejects: routing the lobby through the answer-count threshold. There is
+    // no round in a lobby, so `answers.length` is 0 there and the gate would
+    // refuse forever on every anonymous format.
+    const lobbyBranch = block.slice(block.indexOf("hostPhase === 'LOBBY'"));
+    ['answerCount', 'anonymousUntilReveal', 'authorsRevealed', 'waitingRoster']
+      .forEach((arg) => expect(lobbyBranch).not.toMatch(new RegExp(`\\b${arg}\\b`)));
+
+    // And the ROUND-phase gate is still exactly two phases, ENUMERATED — not
+    // merely "ASK and VOTE appear". An assertion that only looked for those
+    // two goes on passing when a third is appended, which is how the lobby
+    // would be wired to the wrong gate by someone who saw it needed one.
+    const roundBranch = block.slice(block.indexOf('joinedRoster'));
+    expect(roundBranch.match(/hostPhase === '(\w+)'/g))
       .toEqual(["hostPhase === 'ASK'", "hostPhase === 'VOTE'"]);
   });
 
   test('the meter is handed names only when there are names, and handlers with them', () => {
-    // rejects: passing `{ names: waitingNames }` with no handlers (a control
+    // rejects: passing `{ names: revealNames }` with no handlers (a control
     // that opens nothing) and passing an empty list (a control that opens an
     // empty box). RoomMeter refuses both, and this keeps the page from
     // relying on that refusal.
@@ -407,8 +498,8 @@ describe('GameHostPage wires the reveal through the gate', () => {
     const defAt = markup.indexOf('const meterWaiting');
     expect(defAt).toBeGreaterThan(-1);
     const def = markup.slice(defAt, markup.indexOf(';', defAt));
-    expect(def).toMatch(/waitingNames && waitingNames\.length/);
-    expect(def).toMatch(/names:\s*waitingNames/);
+    expect(def).toMatch(/revealNames && revealNames\.length/);
+    expect(def).toMatch(/names:\s*revealNames/);
     expect(def).toMatch(/mode:\s*rosterReveal/);
     expect(def).toMatch(/\.\.\.rosterHandlers/);
     expect(def).toMatch(/:\s*null/);

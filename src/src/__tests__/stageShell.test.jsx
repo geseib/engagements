@@ -276,8 +276,14 @@ describe('the room meter', () => {
    * replaces and every one of them is a way to ship the wrong thing while
    * looking finished.
    *
-   * The three below are the edges. `roomMeterWaiting.test.jsx` holds the gate
-   * itself (config/anonymity.js's waitingRoster) and the interaction.
+   * THEN IT MOVED AGAIN: the owner has since asked the LOBBY to name WHO HAS
+   * JOINED, which is the opposite set. So the rule now has a polarity that
+   * depends on the phase, and the test below that holds the lobby's caption is
+   * doing more work than a caption test looks like it does.
+   *
+   * The four below are the edges. `roomMeterWaiting.test.jsx` holds the gates
+   * themselves (config/anonymity.js's waitingRoster and joinedRoster) and the
+   * interaction.
    */
   test('it names nobody unless the caller hands it names AND handlers', () => {
     // rejects: a meter that reads a roster prop and prints it. The old rule's
@@ -330,6 +336,44 @@ describe('the room meter', () => {
       <RoomMeter phase="VOTE" heading="VOTED" body="26 / 40" waiting={waiting} />
     );
     expect(voting.querySelector('[data-waiting-list] h5').textContent).toBe('Still to vote');
+  });
+
+  test('the LOBBY list says it is the joined set, in the markup and in the copy', () => {
+    // THE OWNER'S SECOND RULING, and the one place the polarity inverts. The
+    // lobby's list is who HAS joined — "so we know who has joined, and for
+    // small groups easily see who is missing" — which is the exact set the
+    // round phases refuse to name. That makes the caption load-bearing rather
+    // than decorative: these same names under "Still to answer" would accuse
+    // the room of being late to a round that has not started.
+    //
+    // rejects: reusing a waiting caption in the lobby (the shortest way to
+    // ship this is to add LOBBY to the label map and stop), and rejects a
+    // component that cannot tell a caller which set it is drawing.
+    const waiting = {
+      names: ['Dana', 'Tomás'],
+      mode: 'pinned',
+      onPreview: jest.fn(), onPreviewEnd: jest.fn(), onPin: jest.fn(),
+    };
+    const { container } = render(
+      <RoomMeter phase="LOBBY" heading="IN THE ROOM" body="2" waiting={waiting} />
+    );
+    const list = container.querySelector('[data-waiting-list]');
+    expect(list.dataset.listKind).toBe('joined');
+    expect(list.querySelector('h5').textContent).toBe('Already joined');
+    // Not merely "it is not the ASK caption": no waiting vocabulary at all.
+    expect(list.querySelector('h5').textContent).not.toMatch(/wait|still|yet/i);
+    // ...and the round phases keep theirs, and keep saying which set they are.
+    const { container: asking } = render(
+      <RoomMeter phase="ASK" heading="ANSWERED" body="1 / 2" waiting={waiting} />
+    );
+    expect(asking.querySelector('[data-waiting-list]').dataset.listKind).toBe('waiting');
+    // An unknown phase falls back to the waiting side, which is the safe
+    // direction: a list of laggards mislabelled as joiners would be worse.
+    const { container: odd } = render(
+      <RoomMeter phase="SOMETHING" heading="X" body="1" waiting={waiting} />
+    );
+    expect(odd.querySelector('[data-waiting-list]').dataset.listKind).toBe('waiting');
+    expect(odd.querySelector('[data-waiting-list] h5').textContent).toBe('Still waiting');
   });
 
   test('nothing is named until the host asks — mode is what puts names on the wall', () => {

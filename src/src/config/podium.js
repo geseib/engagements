@@ -13,12 +13,26 @@
  * room just did. The first is surveillance; the second is why people came.
  *
  * This used to read "`RoomMeter` refuses to name anybody and keeps refusing".
- * IT NO LONGER DOES: the owner has since decided the meter may name WHO IS
- * STILL WAITING, on demand (see RoomMeter.jsx's doc-block and
- * anonymity.js's `waitingRoster`). Nothing above depends on that — the
- * podium's limits are its own — and the pair still brackets the same
- * territory from both ends: the meter may name who has not acted, the podium
- * may name three who did, and neither may put a full scoreboard on the wall.
+ * IT NO LONGER DOES, and it has since moved twice, so here is the current
+ * state rather than a note about the last change:
+ *
+ *   1. The owner decided the meter may name WHO IS STILL WAITING during a
+ *      round, on demand (RoomMeter.jsx's doc-block, anonymity.js's
+ *      `waitingRoster`).
+ *   2. The owner has now ALSO asked the LOBBY to name WHO HAS JOINED
+ *      (`joinedRoster`) — *"so we know who has joined, and for small groups
+ *      easily see who is missing."* An earlier version of this file said the
+ *      lobby was excluded precisely because a joined list is the opposite
+ *      polarity; that exclusion is retired, and the reasoning is kept in
+ *      `joinedRoster` rather than deleted.
+ *
+ * NONE OF IT REACHES THE PODIUM, which is the only reason this paragraph is
+ * short. The podium's limits are its own: three names, ordered, earned, and
+ * only where a result exists. What the pair still guarantees between them is
+ * the thing that matters here — a full roster WITH SCORES never goes on the
+ * wall. The meter's lists carry no score at all (that is `standingsVisible`'s
+ * job, and it is unmoved), and the podium's three carry one but are never the
+ * roster.
  */
 import { standingsVisible } from './anonymity';
 import { hostRunsVotePhase } from './hostControls';

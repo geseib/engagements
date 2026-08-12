@@ -112,6 +112,35 @@ export function answeredNamesFrom(answers) {
 }
 
 /**
+ * The server's participation list, out of a `/games/{id}/state` payload.
+ *
+ * `answerProgress.answererIds` is the authoritative answer to "who has acted",
+ * and it is deliberately public — get-answers.js:216 spells out why: "who has
+ * not acted yet is a different fact from who wrote what". get-game-state.js
+ * emits it only under `?includeHostData=true` and only while the round is in
+ * `ASK#`, so a payload without it is not "nobody has answered" — it is "this
+ * payload says nothing about participation".
+ *
+ * RETURNS null FOR THAT CASE, and a list otherwise. The distinction is the
+ * whole reason this is a function: a caller that read a missing `answerProgress`
+ * as `[]` would blank `playersWhoAnswered` every time a refresh raced the round
+ * into VOTE, which is the same clobber `answeredNamesFrom`'s doc-block warns
+ * about from the other direction.
+ *
+ * Blanks dropped and names deduplicated, matching `rosterNames` below: the
+ * count derived from this list (answeredCountFrom) would otherwise be inflated
+ * by a duplicate row, and a blank would inflate the freshness check in
+ * waitingRoster and unblock a stale list.
+ */
+export function answererIdsFrom(stateData) {
+  const ids = stateData && stateData.answerProgress && stateData.answerProgress.answererIds;
+  if (!Array.isArray(ids)) return null;
+  return Array.from(new Set(
+    ids.filter((n) => typeof n === 'string' && n.length > 0)
+  ));
+}
+
+/**
  * How many responses are in for the round on the stage.
  *
  * THE METER'S NUMERATOR, and it needs two sources because on a hidden round
@@ -170,6 +199,74 @@ export function anonymityActive({ gameType, anonymousUntilReveal }) {
  */
 export function standingsVisible({ gameType, anonymousUntilReveal, authorsRevealed } = {}) {
   return !anonymityActive({ gameType, anonymousUntilReveal }) || authorsRevealed === true;
+}
+
+/**
+ * The roster as a list of names — deduplicated, blanks dropped.
+ *
+ * Deduplicated because the roster is keyed by name everywhere else in this
+ * product (join-game.js writes PLAYER#{playerName}, which is why two people
+ * called Chris silently merge) and because a repeated name would print the same
+ * person twice on the wall. Blanks dropped because a roster entry with no name
+ * would otherwise render as an empty pill.
+ *
+ * One helper rather than two copies: `waitingRoster` subtracts from it and
+ * `joinedRoster` prints it, and the two must agree on what counts as a person
+ * or the lobby and the round would name different rooms.
+ */
+function rosterNames(players) {
+  return Array.from(new Set(
+    (players || [])
+      .map((p) => (p && (p.name || p.playerName)) || '')
+      .filter((n) => typeof n === 'string' && n.length > 0)
+  ));
+}
+
+/**
+ * WHO HAS JOINED — the LOBBY's reveal, and the one list in this file whose
+ * polarity is the people who HAVE acted rather than the people who have not.
+ *
+ * THE OWNER CHANGED THIS CALL, AND THE OLD REASONING IS RECORDED RATHER THAN
+ * DELETED. This file, RoomMeter.jsx and config/podium.js all used to say the
+ * lobby keeps a bare count, on the grounds that the only list a lobby can draw
+ * is who has JOINED — the opposite polarity to "still waiting", and the
+ * polarity the answer phases forbid. The owner has now asked for exactly that
+ * list: *"the lobby list is great, so we know who has joined, and for small
+ * groups easily see who is missing."* Both halves of that sentence are the
+ * reason it is a different feature rather than the rejected one: there is no
+ * invite list anywhere in this system, so nothing here can compute who is
+ * missing — a host of twelve reads the joined names and does that subtraction
+ * from their own knowledge of who was expected.
+ *
+ * IT IS A DIFFERENT LIST AND IT MUST READ AS ONE. RoomMeter labels this in the
+ * lobby's own words ("Already joined"); a list of joiners under a waiting
+ * caption would be an accusation rather than a nudge, and that is the failure
+ * mode this polarity has.
+ *
+ * NO ANONYMITY GATE, AND THAT IS A DECISION, NOT AN OMISSION. `waitingRoster`'s
+ * gate exists because naming the waiters hands the room the ANSWERER set by
+ * subtraction, shrinking the anonymity set of the responses on the stage. In
+ * the lobby there are no responses: no round has opened, `answers` is empty,
+ * and there is nothing on the wall to attribute to anyone. Joining is not a
+ * response — `anonymityActive` is about authorship of ANSWERS — and the roster
+ * is not secret from the room in the first place: every player's own screen
+ * lists it and get-players is unauthenticated. Routing this through
+ * MIN_ANONYMOUS_ANSWERS would gate the lobby on a round that does not exist,
+ * and since the response count there is always 0 it would suppress the list
+ * permanently on every anonymous format — i.e. delete the feature that was
+ * asked for while appearing to ship it.
+ *
+ * NO FRESHNESS GUARD EITHER, for the same structural reason: this is not a
+ * subtraction, so there is no second source that can fall behind it. It is the
+ * roster, printed. (`playerJoined` refetches the roster on every arrival, so it
+ * is also the freshest list on this page.)
+ *
+ * Returns `null` for "nothing to offer" — an empty room — matching
+ * waitingRoster so the call site can treat both the same way.
+ */
+export function joinedRoster({ players } = {}) {
+  const roster = rosterNames(players);
+  return roster.length ? roster : null;
 }
 
 /**
@@ -239,16 +336,26 @@ export const MIN_ANONYMOUS_ANSWERS = 5;
  * whole of the difference between a list on the host's phone and a list on a
  * projector.
  *
- * THE SECOND GUARD IS NOT ABOUT PRIVACY AT ALL, and it fires more often. On a
- * hidden round `playersWhoAnswered` is only as fresh as the last /state
- * resync — message.js strips the name from every `playerAnswered` frame and
- * answeredNamesFrom() returns nothing to replace it (see fetchAnswersForQuestion,
- * which leaves the list alone rather than overwriting it with blanks), while
- * the row count keeps climbing. Subtracting a stale list would print
- * "still waiting: Dana" at a room twenty seconds after Dana answered, and it
- * would understate the answerer set, which misattributes rather than merely
- * leaking. So the list is offered only when the names on hand account for
- * every response counted.
+ * THE SECOND GUARD IS NOT ABOUT PRIVACY AT ALL. On a hidden round
+ * `playersWhoAnswered` cannot grow from the socket — message.js strips the name
+ * from every `playerAnswered` frame and answeredNamesFrom() returns nothing to
+ * replace it (see fetchAnswersForQuestion, which leaves the list alone rather
+ * than overwriting it with blanks) — while the row count keeps climbing.
+ * Subtracting a stale list would print "still waiting: Dana" at a room twenty
+ * seconds after Dana answered, and it would understate the answerer set, which
+ * misattributes rather than merely leaking. So the list is offered only when
+ * the names on hand account for every response counted.
+ *
+ * IT USED TO FIRE FOR THE WHOLE ROUND, and that is the defect the owner
+ * reported as "the names lag the count". The names could only ever arrive on a
+ * resync — mount, reconnect or refocus — so on a hidden round the reveal was
+ * suppressed until the host happened to touch the tab. The host page now pulls
+ * `answerProgress.answererIds` (answererIdsFrom) on the hidden branch of the
+ * `playerAnswered` handler, coalesced, so the gap this guard covers is the
+ * fraction of a second between a frame landing and that refresh returning. The
+ * guard stays exactly as it is: it is what makes that window safe, and it is
+ * still the only thing standing between a dropped refresh and a wrong name on
+ * a projector.
  *
  * Returns `null` for "do not offer this at all" — distinct from `[]`, which
  * means "offered, and nobody is waiting".
@@ -262,15 +369,8 @@ export function waitingRoster({
   anonymousUntilReveal,
   authorsRevealed,
 } = {}) {
-  // Deduplicated, because the roster is keyed by name everywhere else in this
-  // product (join-game.js writes PLAYER#{playerName}, which is why two people
-  // called Chris silently merge) and because a repeated name would print the
-  // same person twice on the wall.
-  const roster = Array.from(new Set(
-    (players || [])
-      .map((p) => (p && (p.name || p.playerName)) || '')
-      .filter((n) => typeof n === 'string' && n.length > 0)
-  ));
+  // Deduplicated and blank-free — see rosterNames, which joinedRoster shares.
+  const roster = rosterNames(players);
   if (roster.length === 0) return null;
 
   const acted = new Set(

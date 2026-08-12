@@ -40,7 +40,7 @@ import {
 import {
   anonymityApplies, anonymityActive, createPayloadFor, displayLabelFor,
   stageLabelFor, standingsVisible, playerAnsweredActions, answeredNamesFrom,
-  answeredCountFrom, waitingRoster,
+  answeredCountFrom, waitingRoster, joinedRoster, answererIdsFrom,
 } from './config/anonymity';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
@@ -191,6 +191,21 @@ function GameHostPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [rosterMode]);
+  /**
+   * The pending hidden-round participation refresh — see
+   * `scheduleAnswererSync`, which is where the whole mechanism is explained.
+   * A ref rather than state because nothing renders from it and a re-render
+   * per socket frame is what this is trying to avoid in the first place.
+   */
+  const answererSyncRef = useRef(null);
+  // A timer may outlive a render; it must never outlive the page. Without this
+  // a fetch fires into an unmounted component after the host has left the
+  // stage, which React answers with a warning and nobody reads.
+  useEffect(() => () => {
+    if (answererSyncRef.current) clearTimeout(answererSyncRef.current);
+    answererSyncRef.current = null;
+  }, []);
+
   const [showReport, setShowReport] = useState(false);
   const [reportData, setReportData] = useState(null);
   const [lessonNumber, setLessonNumber] = useState(0);
@@ -1201,10 +1216,17 @@ Focus on actionable business strategy insights.`;
           return prev;
         });
       } else {
-        // Hidden round: the roster ticks come from the server's participation
-        // list (get-game-state's answerProgress.answererIds) on the next
-        // resync, not from this frame.
-        console.log('🔒 Answer received on an anonymous round — no name to mark');
+        // HIDDEN ROUND: the frame carries no name, so the names have to be
+        // asked for. This used to log and stop, which left `playersWhoAnswered`
+        // frozen until the host happened to refocus the tab while the count
+        // climbed beside it — and the waiting-list reveal, which refuses to
+        // subtract a stale list, went dark for the rest of the round.
+        //
+        // Coalesced (scheduleAnswererSync): a burst of answers costs one
+        // /state call, not one per frame. Hidden rounds only — the branch
+        // above already has the name in hand and needs no request at all.
+        console.log('🔒 Answer received on an anonymous round — pulling the participation list');
+        scheduleAnswererSync();
       }
 
       // Unconditional: this is what enables the vote button.
@@ -1752,6 +1774,97 @@ Focus on actionable business strategy insights.`;
     } catch (e) {
       console.error('Error fetching answers for question:', e);
     }
+  };
+
+  /**
+   * WHO HAS ANSWERED, PULLED FROM THE SERVER BECAUSE THE FRAME COULD NOT SAY.
+   *
+   * THE DEFECT THIS FIXES. On a hidden round message.js strips `playerName`
+   * from every `playerAnswered` frame (correctly — it would otherwise hand the
+   * host's socket a live author-to-answer mapping). The unconditional /answers
+   * refetch still moves the COUNT, because redacted rows are still rows and
+   * `answeredCountFrom` takes the larger of the two sources. But nothing moved
+   * the NAMES: `playersWhoAnswered` was written only by restoreGameState, which
+   * runs on mount, reconnect or refocus. So the count climbed, the name list
+   * stood still, and `waitingRoster`'s freshness guard correctly refused to
+   * print a list it knew was stale — for the rest of the round. What the owner
+   * saw was a reveal that stopped working the moment the second person
+   * answered.
+   *
+   * IT EXPOSES NOTHING NEW. `answerProgress.answererIds` is the same field
+   * restoreGameState already reads on every resync, on the same public route,
+   * and get-answers.js:216 documents it as deliberately public: "who has not
+   * acted yet is a different fact from who wrote what."
+   *
+   * `includeHostData=true` because get-game-state only assembles
+   * `answerProgress` under that flag — without it this would read a payload
+   * with no participation in it at all and quietly do nothing.
+   */
+  const refreshAnswerersFromState = async (forGameId) => {
+    try {
+      const res = await fetch(`${API_BASE}games/${forGameId}/state?includeHostData=true`);
+      if (!res.ok) return;
+      const stateData = await res.json();
+      // The host may have switched games while this was in flight; the same
+      // guard restoreGameState uses, for the same reason.
+      if (activeGameIdRef.current !== forGameId) {
+        console.log(`🚫 HOST: discarding answerer sync for game ${forGameId}`);
+        return;
+      }
+      const ids = answererIdsFrom(stateData);
+      // null means the payload said nothing about participation — the round has
+      // moved to VOTE, or the read raced a state change. Leave the list alone
+      // rather than blanking it; an empty ARRAY is a different answer and is
+      // applied, because that one means "the server says nobody yet".
+      if (!ids) return;
+      setPlayersWhoAnswered(ids);
+      console.log(`🔄 HOST: participation list refreshed from /state — ${ids.length} answered`);
+    } catch (e) {
+      // Best effort. The count is already correct without this; only the names
+      // lag, and the next frame schedules another attempt.
+      console.error('Error refreshing the participation list:', e);
+    }
+  };
+
+  /**
+   * COALESCED, NOT DEBOUNCED, AND THE DIFFERENCE MATTERS HERE.
+   *
+   * Ten people answering at once must not fire ten /state calls. Two ways to
+   * arrange that, and this one takes the second:
+   *
+   *   - A resetting debounce (clear the timer, start it again on every frame)
+   *     STARVES under exactly the load this feature is for. A room answering
+   *     steadily every 300ms would push the refresh back forever and the names
+   *     would never arrive — the same defect being fixed, wearing a timer.
+   *   - COALESCING: the first frame schedules a refresh, and every frame that
+   *     arrives before it fires is absorbed by the one already pending. A burst
+   *     of ten costs one call, and a steady stream refreshes on a fixed
+   *     cadence instead of never.
+   *
+   * WORST CASE, 40-PERSON ROOM: one /state call per ANSWERER_SYNC_MS window,
+   * so at most 2.5/s however fast the frames arrive, AND at most one per
+   * answer. The worst case is therefore 40 calls for a 40-person round — the
+   * case where every answer lands more than 400ms after the last, spread over
+   * the whole round, and never more than the 40 /answers refetches that
+   * already fire beside them unconditionally. A room answering within a few
+   * seconds of each other, which is the normal one, is one or two calls for
+   * the entire round.
+   *
+   * Trailing rather than leading: the value wanted is the state AFTER the burst
+   * has been written, and a leading-edge call would read the server before the
+   * answers that triggered it had landed.
+   */
+  const ANSWERER_SYNC_MS = 400;
+
+  const scheduleAnswererSync = () => {
+    // A refresh is already pending; it will see everything that arrived in the
+    // meantime. This early return IS the coalescing.
+    if (answererSyncRef.current) return;
+    const forGameId = gameId;
+    answererSyncRef.current = setTimeout(() => {
+      answererSyncRef.current = null;
+      refreshAnswerersFromState(forGameId);
+    }, ANSWERER_SYNC_MS);
   };
 
   const fetchVotesForQuestion = async (questionNumber) => {
@@ -3692,32 +3805,51 @@ Ready to engage? See you there!`;
   })();
 
   /**
-   * WHO THE ROOM IS WAITING FOR, when the meter may say so.
+   * WHO THE METER MAY NAME — and it is a DIFFERENT SET IN THE LOBBY.
    *
-   * The gate is `waitingRoster` in config/anonymity.js — including the
-   * judgement about what naming the non-responders leaks during an anonymous
-   * round, which is the reason this is a function call and not four inline
-   * conditions. `null` means "do not offer the reveal at all".
+   * TWO GATES, NOT ONE, because the two phases are answering two different
+   * questions and the polarity is the whole decision:
    *
-   * ASK and VOTE only. LOBBY deliberately keeps a bare count: nobody is late
-   * to a round that has not started, there is no invite list, and the only
-   * list the lobby could draw is who has JOINED — the polarity the owner
-   * rejected. RoomMeter's doc-block carries the same note.
+   *   - LOBBY → `joinedRoster`: who HAS joined. The owner asked for this
+   *     directly — *"the lobby list is great, so we know who has joined, and
+   *     for small groups easily see who is missing"* — and it is the inverse of
+   *     the list the round phases print. RoomMeter labels it "Already joined"
+   *     and stamps `data-list-kind="joined"` so the two can never be confused
+   *     for one another on the wall.
+   *   - ASK / VOTE → `waitingRoster`: who has NOT responded, subject to the
+   *     anonymity gate, because naming the waiters hands the room the answerer
+   *     set by subtraction. That judgement is written out in
+   *     config/anonymity.js, which is why this is a function call rather than
+   *     four inline conditions.
+   *
+   * THE LOBBY IS NOT ROUTED THROUGH THE ANSWER-COUNT THRESHOLD, deliberately.
+   * `anonymityActive` is about authorship of ANSWERS; joining is not a
+   * response, no round has opened, and `answers` is empty there — so the
+   * threshold would compare against a constant zero and suppress the list
+   * forever on exactly the anonymous formats the owner was looking at. The
+   * argument in full is in `joinedRoster`'s doc-block, next to the code it
+   * justifies.
+   *
+   * `null` from either means "do not offer the reveal at all".
    *
    * `authorsRevealed` is the SERVER flag, not `authorsHiddenOnStage`: the
    * stage's display toggle only exists on RESULTS, where this meter is null.
    */
-  const waitingNames = (hostPhase === 'ASK' || hostPhase === 'VOTE')
-    ? waitingRoster({
-      players,
-      responded: hostPhase === 'VOTE' ? playersWhoVoted : playersWhoAnswered,
-      respondedCount: hostPhase === 'VOTE' ? playersWhoVoted.length : answeredCount,
-      answerCount: answers.length,
-      gameType: currentGameType,
-      anonymousUntilReveal,
-      authorsRevealed,
-    })
-    : null;
+  const revealNames = (() => {
+    if (hostPhase === 'LOBBY') return joinedRoster({ players });
+    if (hostPhase === 'ASK' || hostPhase === 'VOTE') {
+      return waitingRoster({
+        players,
+        responded: hostPhase === 'VOTE' ? playersWhoVoted : playersWhoAnswered,
+        respondedCount: hostPhase === 'VOTE' ? playersWhoVoted.length : answeredCount,
+        answerCount: answers.length,
+        gameType: currentGameType,
+        anonymousUntilReveal,
+        authorsRevealed,
+      });
+    }
+    return null;
+  })();
 
   /**
    * The reveal's three handlers, Rail's QR trigger copied one for one — with
@@ -3745,8 +3877,8 @@ Ready to engage? See you there!`;
      count unless it is handed both names and handlers, so a gated round — or
      a round everybody is already in — offers no affordance at all rather than
      a control that opens an empty list. */
-  const meterWaiting = waitingNames && waitingNames.length
-    ? { names: waitingNames, mode: rosterReveal, ...rosterHandlers }
+  const meterWaiting = revealNames && revealNames.length
+    ? { names: revealNames, mode: rosterReveal, ...rosterHandlers }
     : null;
 
   /**
@@ -3838,7 +3970,7 @@ Ready to engage? See you there!`;
           authorsRevealed, authorsHiddenOnStage,
           // The reveal changes the meter's height and the fitter measures the
           // meter (`.rail, .meter`); without this it would never re-measure.
-          rosterReveal || '', waitingNames ? waitingNames.length : -1,
+          rosterReveal || '', revealNames ? revealNames.length : -1,
           loadingAIInsights, currentAIInsights ? 1 : 0,
         ].join('|')}
         rail={(
