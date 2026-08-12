@@ -146,7 +146,29 @@ function check(label, fn) {
   catch (e) { say(`  FAIL  ${label}\n        ${e.message}`); fail++; }
 }
 
-const edit = (setId, body) => editSet({ pathParameters: { setId }, body: JSON.stringify(body) });
+/**
+ * An ADMIN caller, in this API's real event shape.
+ *
+ * These cases are all about WHICH CLAUSES reach the UpdateExpression, not about
+ * who is allowed to send them, so every one of them is an administrator — who
+ * may edit any set. The handler now enforces per-set ownership
+ * (shared/question-set-access.js) and refuses an event with no authorizer
+ * context, which is why this is no longer `{ pathParameters, body }` alone.
+ *
+ * `.authorizer.lambda` with groups comma-joined is the shape the custom Lambda
+ * authorizer really emits (auth/authorizer.js:171-182) — NOT `.jwt.claims`.
+ * Ownership is covered on its own in tests/question-set-ownership.js.
+ */
+const adminContext = () => ({
+  requestContext: {
+    authorizer: { lambda: { username: 'ada', userId: 'sub-ada', groups: 'admins', status: 'enabled' } },
+  },
+});
+const edit = (setId, body) => editSet({
+  ...adminContext(),
+  pathParameters: { setId },
+  body: JSON.stringify(body),
+});
 const parse = (res) => JSON.parse(res.body);
 const metaOf = (setId) => store.get(k('SETS', `SET#${setId}`));
 

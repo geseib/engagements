@@ -2,6 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { collectPartitionKeys, batchDeleteKeys } = require('./shared/ddb-delete');
 const { knownVersions, setPartition, toVersion } = require('./shared/set-version');
+const { requireSetManager } = require('./shared/question-set-access');
 
 // How far past the highest recorded version to sweep for orphans. A replace
 // that died between writing `SET#<id>#v<n>` and flipping activeVersion leaves an
@@ -64,6 +65,16 @@ exports.handler = async (event) => {
         headers
       };
     }
+
+    // WHO OWNS IT. Hosts reach this route now (auth/authorizer.js's
+    // HOST_ADMIN_ROUTES), so being signed in is not being allowed: a host may
+    // delete only a set they created, an admin may delete any, and a set with no
+    // recorded owner is admin-only. See shared/question-set-access.js.
+    //
+    // Placed after the existence check and BEFORE the first destructive call, so
+    // a refused delete removes nothing — not one content row, not the index row.
+    const denied = requireSetManager(event, metaRes.Item, 'delete');
+    if (denied) return denied;
 
     const setName = metaRes.Item.name || metaRes.Item.Name;
 

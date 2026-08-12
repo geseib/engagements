@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { requireSetManager } = require('./shared/question-set-access');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -66,6 +67,42 @@ exports.handler = async (event) => {
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
     }
+
+    // WHO OWNS THIS SET — read before anything is written.
+    //
+    // Two things depend on this read, and both were missing:
+    //
+    // 1. OWNERSHIP. Hosts reach this route now (auth/authorizer.js's
+    //    HOST_ADMIN_ROUTES), so "signed in" no longer implies "allowed". A host
+    //    may rename only a set they created; an admin may rename any. The rule
+    //    and the reasoning live in shared/question-set-access.js.
+    //
+    // 2. EXISTENCE. `UpdateCommand` is an UPSERT. Without this read a PUT to
+    //    /admin/edit-question-set/anything-at-all silently CREATED a SETS row
+    //    carrying nothing but a name and a timestamp — no engagementType, no
+    //    questions, no owner — which then appeared in the admin list as an
+    //    unownable empty set. That was survivable while only admins could call
+    //    it. It is not survivable now: it would be a way to manufacture rows
+    //    outside the ownership rule entirely.
+    const existing = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: 'SETS', SK: `SET#${setId}` }
+    }));
+
+    if (!existing.Item) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ error: `Question set "${setId}" was not found.` }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
+    // 403 before any write. Checked here rather than as a ConditionExpression so
+    // "not yours" and "not there" stay distinguishable — a conditional write
+    // collapses both into one opaque ConditionalCheckFailedException, and the
+    // host surface needs to tell those two apart to say anything useful.
+    const denied = requireSetManager(event, existing.Item, 'edit');
+    if (denied) return denied;
 
     // Update the question set metadata.
     //

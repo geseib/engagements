@@ -157,7 +157,29 @@ if (!process.env.DEBUG) { console.log = () => {}; console.error = () => {}; }
 const say = (...a) => process.stdout.write(a.join(' ') + '\n');
 
 // ---- helpers ---------------------------------------------------------------
-const invoke = (setId) => handler({ pathParameters: setId === undefined ? {} : { setId } });
+/**
+ * An ADMIN caller, in this API's real event shape.
+ *
+ * This file used to invoke the handler with `{ pathParameters }` and nothing
+ * else, which was accurate while the route was gated to `admins` upstream and
+ * the handler asked no questions of its own. It now enforces per-set ownership
+ * (shared/question-set-access.js), so an event carrying no authorizer context
+ * is an anonymous caller and is refused — correctly. Every case below is about
+ * the MECHANICS of deletion, so the caller is an administrator, who may delete
+ * any set. Ownership itself is covered by tests/question-set-ownership.js.
+ *
+ * `.authorizer.lambda` with groups comma-joined is what the custom Lambda
+ * authorizer emits (auth/authorizer.js:171-182) — NOT `.jwt.claims`.
+ */
+const adminContext = () => ({
+  requestContext: {
+    authorizer: { lambda: { username: 'ada', userId: 'sub-ada', groups: 'admins', status: 'enabled' } },
+  },
+});
+const invoke = (setId) => handler({
+  ...adminContext(),
+  pathParameters: setId === undefined ? {} : { setId },
+});
 const parse = (res) => JSON.parse(res.body);
 
 function seedSet(setId, { questions = 3, categories = 1, name = setId } = {}) {

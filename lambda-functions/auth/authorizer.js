@@ -91,12 +91,51 @@ function hasPermission(groups, requiredGroups) {
   return requiredGroups.some(group => groups.includes(group));
 }
 
+// Routes under /admin/* that HOSTS may also reach, matched on the EXACT
+// "METHOD path" pair.
+//
+// These are the question-set routes the create-engagement flow needs: hosts
+// build their own sets there rather than in the admin console. Reaching a route
+// is not the same as being allowed to change a given row — WHICH set a host may
+// edit or delete is decided per-row by `admin/shared/question-set-access.js`,
+// which refuses any set the caller did not create. This gate only decides who
+// may knock.
+//
+// EXACT PAIRS, NOT A PREFIX, AND THAT IS THE WHOLE POINT. `path.startsWith(
+// 'admin/question-sets')` would read as the same intent and would additionally
+// open `admin/question-sets/{setId}/versions`, `.../versions/{version}` (a
+// DELETE) and `.../versions/{version}/promote` — three routes that decide which
+// content a live game plays and that nothing here is asking to share. This is
+// the mirror of the `path === 'games'` decision below: prefix matching in this
+// function has already been the wrong tool once, in both directions.
+//
+// Not included, deliberately: toggle-question-set and toggle-quickstart (global
+// curation — which sets the whole product offers), the AI generation routes
+// (they spend Bedrock budget), download-question-set, and every version route.
+const HOST_ADMIN_ROUTES = new Set([
+  // The list. Authenticated, and the only projection carrying ownership, so a
+  // host can see which sets are theirs.
+  'GET admin/question-sets',
+  // Create a set (and, with replaceSetId, replace one the caller owns).
+  'POST admin/upload-questions',
+  // The blank CSV a host fills in. Read-only and set-independent.
+  'GET admin/download-template',
+  // Rename/describe a set. Ownership checked in the handler.
+  'PUT admin/edit-question-set/{setId}',
+  // Delete a set. Ownership checked in the handler.
+  'DELETE admin/question-sets/{setId}',
+]);
+
 // Which groups a route requires. `path` is the route path without a leading
 // slash, e.g. "admin/clear-game/{gameId}"; `method` is the HTTP verb.
 function requiredGroupsForRoute(method, path) {
   // Hosts reset their own games via the admin clear-game endpoint
   // (GameHostPage.jsx), so hosts are allowed there.
   if (path.startsWith('admin/clear-game')) {
+    return ['hosts', 'admins'];
+  }
+  // Hosts build and manage their own question sets. See HOST_ADMIN_ROUTES.
+  if (HOST_ADMIN_ROUTES.has(`${method} ${path}`)) {
     return ['hosts', 'admins'];
   }
   // All other admin routes require the admins group
@@ -187,6 +226,7 @@ exports.handler = async (event) => {
 };
 
 // Export for testing
+module.exports.HOST_ADMIN_ROUTES = HOST_ADMIN_ROUTES;
 module.exports.verifyToken = verifyToken;
 module.exports.getUserGroups = getUserGroups;
 module.exports.hasPermission = hasPermission;

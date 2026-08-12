@@ -1,4 +1,5 @@
 import React from 'react';
+import CompletionFlag from './CompletionFlag';
 
 /**
  * The ONE room meter.
@@ -109,6 +110,18 @@ import React from 'react';
  * bare meter, or any phase with no waiting set, gets the plain element rather
  * than a button that does nothing.
  *
+ * COMPLETION IS NOW A FLAG AS WELL AS A COLOUR, AND THE OLD REASONING IS
+ * NARROWED RATHER THAN DELETED. Revision 2 of the design cut the mockup's
+ * "Everyone is in" SENTENCE as the fourth of six statements of one fact, and
+ * that cut stands: there is still no sentence here, still no bar, still no dot
+ * matrix, and still exactly one fraction. What the cut left behind was a
+ * completed state carried by hue and weight alone — `.count.done` turning
+ * `--success-text` — on a surface the same document says cannot be trusted with
+ * hue, in front of a room that includes colour-blind people and a projector
+ * that has lifted the black point. The owner's report is that it does not read.
+ * `CompletionFlag` answers that with a word, a glyph and a filled plate rather
+ * than with a second count; its doc-block carries the argument in full.
+ *
  * A `players` prop may still be handed in by a caller that has the roster on
  * hand, and it is STILL NEVER READ — the surviving half of the old rule. This
  * component does not assemble a list of people; it renders the one it is
@@ -205,6 +218,12 @@ export default function RoomMeter({
       >
         {body}
       </div>
+      {/* Its own row, not appended to the heading. `.meter h4` is
+          `white-space:nowrap` inside a column capped at
+          `clamp(210px, 21vw, 460px)`, and "ANSWERED ✓ ALL IN" at TV's 26-31px
+          label tier does not fit that cap — the heading would clip its own
+          completion cue on the profile that loses the most. */}
+      {complete && <CompletionFlag />}
       {revealed && (
         <div className="waiting" data-waiting-list="" data-list-kind={listKind}>
           <h5>{label}</h5>

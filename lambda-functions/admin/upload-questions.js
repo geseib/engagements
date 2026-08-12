@@ -11,6 +11,7 @@ const {
   toVersion,
 } = require('./shared/set-version');
 const { normalizeTags } = require('./shared/tags');
+const { ownerStamp, requireSetManager } = require('./shared/question-set-access');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -131,6 +132,18 @@ exports.handler = async (event) => {
       if (!existingMeta) {
         return notFound(`Question set "${replaceSetId}" does not exist, so there is nothing to replace.`);
       }
+      // A REPLACE IS AN EDIT, and the most consequential one in the product: it
+      // writes a new version of an existing set and flips the live pointer to
+      // it, so it changes what every future game plays. It therefore takes the
+      // SAME ownership check as edit and delete — a host may replace only a set
+      // they created. Checked here, before the CSV is even parsed, so a refused
+      // replace costs nothing and touches nothing.
+      //
+      // The plain-create branch below needs no such check: it refuses to write
+      // over any set that already exists, so it can only ever add a new row.
+      const denied = requireSetManager(event, existingMeta, 'replace');
+      if (denied) return denied;
+
       if (engagementType === undefined || engagementType === null || String(engagementType).trim() === '') {
         engagementType = existingMeta.engagementType || 'call-and-answer';
         console.log(`↻ Replace: inheriting engagement type "${engagementType}" from the existing set`);
@@ -572,6 +585,18 @@ exports.handler = async (event) => {
       categoryCount: categories.size,
       active: isAIGenerated ? false : true,  // AI-generated content starts as inactive
       createdAt: new Date().toISOString(),
+      // WHO MADE IT — `createdBy` (Cognito sub) plus `createdByName` for
+      // display. This is the field the edit and delete rules read; without it a
+      // host could create a set and then be unable to touch it, since an
+      // ownerless set is admin-only by design. `{}` when the caller cannot be
+      // identified, which records no owner rather than an owner of ''.
+      // See shared/question-set-access.js for the whole rule.
+      //
+      // A REPLACE never reaches this object — it updates the existing metadata
+      // row through the flip below — so replacing a set deliberately leaves its
+      // original creator in place instead of transferring it to whoever last
+      // uploaded a CSV.
+      ...ownerStamp(event),
       updatedAt: new Date().toISOString(),
       sourceFile: fileName,
       engagementType: engagementType || 'call-and-answer',

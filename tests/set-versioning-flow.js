@@ -245,13 +245,33 @@ const csvV2 = [
   '"Renaissance",3,"THE WAVE","A wave.","Hokusai","Invent a title.","wave.jpg"',
 ].join('\n');
 
+/**
+ * An ADMIN caller, in this API's real event shape.
+ *
+ * A REPLACE and a DELETE now check who is asking, per set
+ * (shared/question-set-access.js): a host may only replace or delete a set they
+ * created, an admin may do either to any. Everything in this file is about
+ * versioning mechanics, so every caller here is an administrator. An event with
+ * no authorizer context is anonymous and would be refused — correctly.
+ *
+ * `.authorizer.lambda` with groups comma-joined is what the custom Lambda
+ * authorizer emits (auth/authorizer.js:171-182) — NOT `.jwt.claims`, a shape
+ * this API never produces. Ownership itself: tests/question-set-ownership.js.
+ */
+const adminContext = () => ({
+  requestContext: {
+    authorizer: { lambda: { username: 'ada', userId: 'sub-ada', groups: 'admins', status: 'enabled' } },
+  },
+});
 const importSet = (title, csv, extra = {}) => upload({
+  ...adminContext(),
   body: JSON.stringify({
     fileName: `${title}.csv`, fileContent: csv,
     customTitle: title, engagementType: 'call-and-answer', ...extra,
   }),
 });
 const replaceSet = (setId, csv, extra = {}) => upload({
+  ...adminContext(),
   body: JSON.stringify({
     fileName: 'replacement.csv', fileContent: csv, replaceSetId: setId, ...extra,
   }),
@@ -688,7 +708,7 @@ function decorate(setId, fields) {
       PK: 'SET#wipeset#v4', SK: 'QUESTION#c001#001', Title: 'ORPHAN',
     });
 
-    const res = await deleteSet({ pathParameters: { setId: 'wipeset' } });
+    const res = await deleteSet({ ...adminContext(), pathParameters: { setId: 'wipeset' } });
     check('deleting a versioned set succeeds', () => assert.strictEqual(res.statusCode, 200, res.body));
     check('every version partition is emptied', () => {
       const left = [...store.values()].filter((i) => String(i.PK).startsWith('SET#wipeset'));
