@@ -31,10 +31,11 @@
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-ui);
-  /* No `overflow-y: auto` — the old rule made the report its own scroll
-     container inside a dusk-coloured <body>, which left a dark band under the
-     document whenever the two heights disagreed. The page scrolls; the
-     container's min-height keeps the paper ground under the whole viewport. */
+  /* No `overflow-y: auto`. The old rule made the report its own scroll
+     container, which buys nothing here and puts the sticky toolbar in a
+     scroller of its own; the page scrolls instead. `min-height: 100vh` keeps
+     the paper ground under the whole viewport, so <body>'s dusk background
+     never shows through under a short report. */
   min-height: 100vh;
   padding: 0 0 96px;
 }
