@@ -18,8 +18,10 @@ import Rail from './components/stage/Rail';
 import RoomMeter from './components/stage/RoomMeter';
 import Podium from './components/stage/Podium';
 import Dock from './components/stage/Dock';
+import Pager from './components/stage/Pager';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
 import { loadProfile, saveProfile } from './config/displayProfile';
+import { pageSizeFor, pageSlice } from './config/stagePaging';
 import { qrOverlayClassName } from './utils/qrOverlayClassName';
 import { shortcutsSuppressed, qrOverlayInstructions } from './utils/hostOverlays';
 import {
@@ -191,6 +193,25 @@ function GameHostPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [rosterMode]);
+  /**
+   * WHICH PAGE OF THE ANSWER LIST IS ON THE WALL.
+   *
+   * KEYED TO THE BEAT, WHICH IS WHAT MAKES THE RESET FREE. The state carries
+   * the phase and round it belongs to and is read back only for that beat, so a
+   * new round starts at page 1 with no effect to run — the same shape as
+   * `rosterMode` above, and chosen for the same reason plus one more: RESUME.md
+   * records that the `resultsBeat` reset effect is fragile on purpose and has
+   * already cost one live defect, because an effect that resets on a dependency
+   * change fires on dependency changes nobody intended. A key comparison cannot
+   * do that. Nothing reflows when the beat changes underneath the host; the page
+   * simply reads 0 for a beat it was not set on.
+   *
+   * ANSWERS ARRIVE WHILE THE HOST IS PAGING, so the index is CLAMPED rather
+   * than reset when the list shrinks (config/stagePaging.js's clampPage). A page
+   * turn is never undone by an unrelated arrival, and a host parked past the end
+   * lands on the last page that exists rather than on a blank stage.
+   */
+  const [stagePage, setStagePage] = useState(null);
   /**
    * The pending hidden-round participation refresh — see
    * `scheduleAnswererSync`, which is where the whole mechanism is explained.
@@ -3882,6 +3903,36 @@ Ready to engage? See you there!`;
     : null;
 
   /**
+   * THE ANSWER LIST, CUT INTO PAGES THE STAGE CAN ACTUALLY HOLD.
+   *
+   * The owner's report: *"when there are more answers than fit on the screen,
+   * we dont provide a way to scroll/arrow through the answers. on a tv or
+   * projector view these can even get cut off."* The fitter cannot fix that —
+   * it shrinks to `--fit` and stops at the profile floor, and 07-results-trivia
+   * is already AT the floor with `data-clamped="on"` at 1280x720 on real
+   * content. Past the floor every lever removes content silently.
+   *
+   * The budget is per profile and DECLARED rather than measured; the reasoning
+   * (a measured size moves under the host's eye, and jsdom cannot test a
+   * measurement) is in config/stagePaging.js beside the numbers.
+   *
+   * `pageOffset` IS NOT A CONVENIENCE. Every anonymous response is labelled
+   * positionally — `displayLabelFor(answer, index)` renders
+   * `Response ${index + 1}` and PlayerPage renders the same label from the same
+   * index on every phone in the room. Mapping a page with a fresh counter would
+   * label page two's first card "Response 1" on the projector while twelve
+   * phones called it "Response 4".
+   */
+  const stagePageSize = pageSizeFor(profile);
+  const pageKey = `${hostPhase}#${lessonNumber}`;
+  const answerPage = pageSlice(
+    answers,
+    stagePage && stagePage.key === pageKey ? stagePage.index : 0,
+    stagePageSize
+  );
+  const setAnswerPage = (index) => setStagePage({ key: pageKey, index });
+
+  /**
    * Why the primary is greyed out, and the key that fires it when it is not.
    *
    * HostActionBar renders both itself and then hides both in big-screen mode —
@@ -3971,6 +4022,10 @@ Ready to engage? See you there!`;
           // The reveal changes the meter's height and the fitter measures the
           // meter (`.rail, .meter`); without this it would never re-measure.
           rosterReveal || '', revealNames ? revealNames.length : -1,
+          // A page turn replaces every card in the list without changing any
+          // of the counts above it, so without this the fitter would keep the
+          // scale it found for the previous page's content.
+          answerPage.page, stagePageSize,
           loadingAIInsights, currentAIInsights ? 1 : 0,
         ].join('|')}
         rail={(
@@ -4011,6 +4066,16 @@ Ready to engage? See you there!`;
             kbd={dockKbd}
             onSetup={() => setSetupPanelOpen((open) => !open)}
             complete={everybodyIn}
+            /* THE SAME ONE COUNT, NOT A SECOND ONE. This is the meter's own
+               `heading` / `body`, handed to the dock so that the fitter taking
+               the meter's COLUMN no longer takes the NUMBER with it — which is
+               the owner's "the larger views also dont have the player counts".
+               Only one of the two is ever visible and the switch is a CSS rule
+               keyed on the fitter's own `data-auto-solo`; Dock.jsx and
+               styles/stage.css both carry the argument next to the mechanism.
+               Passing `meter` unchanged is deliberate: two sources for one
+               fraction is how they drift apart. */
+            progress={meter ? { ...meter, complete: everybodyIn } : null}
           >
             {/* Not reimplemented here. HostActionBar keeps its keyboard
                 handling, its typing-target guard and its disabled hint; only
@@ -4148,22 +4213,39 @@ Ready to engage? See you there!`;
                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
                   />
                 )}
-                {/* Every response, at once. What used to be here was a
-                    one-at-a-time carousel with ‹ › arrows: it asked a room to
-                    vote on a list it could only ever see one line of, and
-                    asked the host to drive it while the room waited. */}
+                {/* A PAGE OF RESPONSES, NOT A CAROUSEL AND NOT A CLIFF.
+                    What used to be here was a one-at-a-time carousel with ‹ ›
+                    arrows: it asked a room to vote on a list it could only ever
+                    see one line of, and asked the host to drive it while the
+                    room waited. That was replaced by "every response, at once",
+                    which is right until there are more responses than stage —
+                    at which point the tail was simply cut off, with nothing on
+                    screen saying so.
+                    A page is the middle: as many as the profile can hold, a
+                    printed position, and two keys the room can read off the
+                    line itself. */}
                 <div className="cards">
-                  {answers.map((answer, idx) => (
-                    <div key={idx} className="card">
-                      <div className="body">
-                        <div className="ans">{`“${answer.answer}”`}</div>
-                        <span className={`who ${authorsRevealed ? 'revealed' : 'anon'}`}>
-                          {displayLabelFor(answer, idx)}
-                        </span>
+                  {answerPage.items.map((answer, i) => {
+                    const idx = answerPage.offset + i;
+                    return (
+                      <div key={idx} className="card">
+                        <div className="body">
+                          <div className="ans">{`“${answer.answer}”`}</div>
+                          <span className={`who ${authorsRevealed ? 'revealed' : 'anon'}`}>
+                            {displayLabelFor(answer, idx)}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
+                <Pager
+                  total={answers.length}
+                  page={answerPage.page}
+                  pageSize={stagePageSize}
+                  onPage={setAnswerPage}
+                  enabled={!anyOverlayOpen}
+                />
               </>
             )}
 
@@ -4282,7 +4364,8 @@ Ready to engage? See you there!`;
                   />
                 ) : (
                   <div className="cards">
-                    {answers.map((answer, idx) => {
+                    {answerPage.items.map((answer, i) => {
+                      const idx = answerPage.offset + i;
                       const points = answer.points || 0;
                       const player = players.find((p) => p.name === answer.player);
                       // The stage toggle beats the row here: these rows always
@@ -4315,6 +4398,25 @@ Ready to engage? See you there!`;
                       );
                     })}
                   </div>
+                )}
+
+                {/* RESULTS PAGES TOO, AND ON THIS PHASE IT MATTERS MOST.
+                    The meter is null here, so `.main` is solo from the start
+                    and the fitter's cheapest lever — taking the meter's column
+                    — does not exist. Everything the fitter has left removes
+                    content, which is how a dense reveal reached `--fit .55`
+                    with `data-clamped="on"` on real content. Trivia and
+                    wavelength are excluded by construction: trivia's list is at
+                    most six options and has a column-count lever of its own,
+                    and the word cloud is one drawing rather than a list. */}
+                {currentGameType !== 'trivia' && currentGameType !== 'wavelength' && (
+                  <Pager
+                    total={answers.length}
+                    page={answerPage.page}
+                    pageSize={stagePageSize}
+                    onPage={setAnswerPage}
+                    enabled={!anyOverlayOpen}
+                  />
                 )}
 
                 {/* THE PODIUM IS CONTENT, AND IT LIVES HERE — inside .content,

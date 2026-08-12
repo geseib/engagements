@@ -51,6 +51,20 @@ import './QuestionSetsPanel.css';
  * upload, so the preflight blocks the Upload button and says so — instead of
  * the shipped behaviour, which offered the type, enabled the button, and
  * admitted the problem only in a sentence beside the file picker.
+ *
+ * SHARED WITH THE HOST, VIA PROPS RATHER THAN A FORK. Hosts create sets too
+ * now, from the create-engagement flow (components/HostQuestionSetsDialog.jsx),
+ * and the CSV contract, the preflight and the importer's quirks are identical
+ * for both audiences — two copies of this form would mean two places to fix the
+ * next importer gap. What differs is not the upload, it is the surrounding
+ * ADMIN machinery: the AI builders spend Bedrock budget and their modals live in
+ * AdminPage; the summary-prompt picker chooses between records only an admin can
+ * see or edit; `/builder` is an admin route. Each of those is a flag below,
+ * defaulting to ON so the admin console renders exactly as it did.
+ *
+ * A flag here hides a control. It is NOT the permission — the permission is
+ * `auth/authorizer.js` plus `admin/shared/question-set-access.js`, and a request
+ * for a hidden capability is refused by the API whatever this component drew.
  */
 export default function QuestionSetUploadPanel({
   engagementType,
@@ -62,6 +76,21 @@ export default function QuestionSetUploadPanel({
   onOpenBuilder,
   /** A set landed. The page re-reads the list. */
   onUploaded,
+  /** Offer the AI builders. Off for hosts: the generation routes are
+   *  admins-only and their modals belong to AdminPage. */
+  showAIBuilder = true,
+  /** Offer the manual /builder route. Off for hosts — an admin route. */
+  showManualBuilder = true,
+  /** Offer the AI summary-prompt picker. Off for hosts: the prompt library is
+   *  an admin surface, and an unset promptId already resolves a
+   *  type-appropriate default at run time (get-ai-summary.js). */
+  showSummaryPrompt = true,
+  /** Fields beyond title/description. Off for hosts, who are creating a set to
+   *  play in the next ten minutes, not curating the library. */
+  showAdvancedFields = true,
+  /** Heading and lead-in, so the host's copy is not the console's copy. */
+  heading = 'New question set',
+  intro = null,
 }) {
   const [file, setFile] = useState(null);
   const [report, setReport] = useState(null);
@@ -191,11 +220,15 @@ export default function QuestionSetUploadPanel({
 
   return (
     <div className="qsets qsets-panel">
-      <h3>New question set</h3>
+      <h3>{heading}</h3>
       <p>
-        The engagement type is asked once, here, because it decides everything below it: which
-        builder opens, which template you get, which summary prompts apply, and how the
-        importer reads your columns.
+        {intro || (
+          <>
+            The engagement type is asked once, here, because it decides everything below it: which
+            builder opens, which template you get, which summary prompts apply, and how the
+            importer reads your columns.
+          </>
+        )}
       </p>
 
       <div className="qsets-field" style={{ maxWidth: '340px' }}>
@@ -225,6 +258,7 @@ export default function QuestionSetUploadPanel({
       <div className="qsets-section">
         <h4>Create</h4>
         <div className="qsets-actions">
+          {showAIBuilder && (
           <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onOpenBuilder && onOpenBuilder(engagementType)}>
             <Icon name="Sparkle" weight="duotone" size={14} color="currentColor" />
             {/* The survey builder does not upload: handleSurveyGenerated builds a
@@ -232,6 +266,7 @@ export default function QuestionSetUploadPanel({
                 the fact (OPEN-QUESTIONS #3, option (c)'s copy). */}
             AI {gameTypeLabel(engagementType)} builder{playable ? '' : ' (exports JSON)'}
           </button>
+          )}
           <button type="button" className="qsets-btn" onClick={() => downloadTemplate(engagementType)}>
             <Icon name="FileText" weight="bold" size={14} color="currentColor" />
             Download {gameTypeLabel(engagementType)} template
@@ -247,10 +282,12 @@ export default function QuestionSetUploadPanel({
               Download Art Title template
             </button>
           )}
+          {showManualBuilder && (
           <button type="button" className="qsets-btn" onClick={() => window.open('/builder', '_blank')}>
             <Icon name="Palette" weight="duotone" size={14} color="currentColor" />
             Manual builder
           </button>
+          )}
         </div>
       </div>
 
@@ -300,6 +337,8 @@ export default function QuestionSetUploadPanel({
             />
           </div>
 
+          {showAdvancedFields && (
+          <>
           <div className="qsets-field">
             <label htmlFor="qsets-custom-instructions">
               Custom instructions{' '}
@@ -337,7 +376,10 @@ export default function QuestionSetUploadPanel({
               placeholder="Describe your project, team context, industry or goals…"
             />
           </div>
+          </>
+          )}
 
+          {showSummaryPrompt && (
           <div className="qsets-field qsets-field--wide">
             <label htmlFor="qsets-prompt-id">AI summary prompt (optional)</label>
             <select
@@ -363,6 +405,7 @@ export default function QuestionSetUploadPanel({
             </small>
             <PromptShapePreview promptId={promptId} prompts={promptChoices} />
           </div>
+          )}
         </div>
 
         <div className="qsets-actions">

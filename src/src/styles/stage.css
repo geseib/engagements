@@ -268,6 +268,41 @@ body{
 .meter.is-complete .count{animation:cue 1.5s ease-in-out 3}
 @media (prefers-reduced-motion:reduce){.meter.is-complete .count{animation:none}}
 
+/* ------------------------------------------------------- THE COMPLETION FLAG
+   `.flag` is ported from 02-ask-call-and-answer.html:359-361 — the mockups'
+   `CORRECT` word-flag, which exists because of the standing rule NEVER COLOUR
+   ALONE ("Correct is --success PLUS a 2px border PLUS a CORRECT word-flag").
+
+   The `[data-all-in]` variant is that same flag doing a harder job. The CORRECT
+   flag sits inside one option row and only has to beat the row next to it; this
+   one has to be seen from the back of a room that is looking at a question. So
+   it is FILLED rather than outlined: a plate of luminance appearing where there
+   was none changes the region's silhouette, and a silhouette is what survives a
+   projector that has crushed the hue, a lamp that has aged yellow, and a
+   colour-blind host. The word and the tick carry it the rest of the way.
+
+   FILL IS --success-text, NOT --success, and that is a contrast decision. On a
+   projector-lifted background --success lands about 3.4:1 against --bg, which
+   only clears the large-text bar; --success-text lands about 6.5:1, which
+   clears the normal-text bar with room to spare. Design spec 4.3 is where those
+   two tints and the lift model come from.
+
+   1.25x THE LABEL TIER, AND IT NEVER SCALES. --t-meta is the profile's angular
+   floor and is deliberately excluded from --fit ("Label and meta tiers do NOT
+   scale", above), so this cue is the same size on the dense round that drives
+   the fitter to its floor as on an empty one — which is the round the host most
+   needs to know they can move on. 1.25x rather than more because .meter is
+   capped at clamp(210px, 21vw, 460px) and a nowrap flag wider than the cap
+   would be clipped by the meter's own overflow:hidden at TV/1280. */
+.flag{flex:none;align-self:flex-start;font-family:var(--font-display);font-weight:800;
+  font-size:var(--t-meta);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--success-text);border:2px solid var(--success);border-radius:999px;
+  padding:.24em .7em;white-space:nowrap}
+.flag[data-all-in]{font-size:calc(var(--t-meta) * 1.25);
+  display:inline-flex;align-items:center;gap:.45em;
+  background:var(--success-text);color:var(--bg);border-color:var(--success-text)}
+.flag .tick{font-family:var(--font-ui);font-weight:800;line-height:1}
+
 /* THE METER'S NAME LIST — on demand only, and NOT ALWAYS THE SAME SET.
    On ASK and VOTE it is who the room is waiting for; in the LOBBY it is who
    has already joined, which is the opposite polarity and a separate ruling by
@@ -345,6 +380,49 @@ body{
    exists. That was exactly backwards, and a first-look reviewer caught it. */
 .dock .hint{font-size:var(--t-meta);color:var(--muted);text-align:right;max-width:28ch;line-height:1.25}
 
+/* ------------------------------------------- THE COUNT, WHEN THE COLUMN GOES
+   THE DEFECT THIS FIXES, stated as measurement rather than opinion. The fitter
+   enters the meter into the ordered sacrifice at priority -1 (hooks/fitPolicy.js)
+   and `widen()` surrenders the column with `meter.hidden = true`. Run against
+   the mockups with the shipped fitter: at 1280x720 on 05-vote, Room, TV AND
+   Call all lose the meter and only Table keeps it; on 03-ask-trivia, TV loses it
+   at 1920x1080 as well. The bigger the ladder, the sooner the content overflows,
+   so the LARGER the display the more reliably the answered/voted count vanishes.
+   That is the owner's report, and it is a side effect rather than a decision.
+
+   CHROME BEFORE CONTENT IS NOT BEING REVERSED. The column still goes first, and
+   an answer is still never sacrificed to keep it — width is the cheapest lever
+   on the stage and that reasoning stands. What changes is that surrendering the
+   COLUMN no longer deletes the COUNT. The column is 210-460px of horizontal
+   stage; the fraction is seven characters, and the dock is already a
+   fixed-height flex row with a `.spacer` in it, so this costs no content height
+   and no column width.
+
+   EXACTLY ONE OF THE TWO IS EVER VISIBLE. Audit check A12 fails a viewport that
+   states progress more than once, so the mirror is display:none until the
+   fitter has actually taken the column. The switch is this selector and nothing
+   else: `data-auto-solo` is set by widen() and cleared by unwiden(), so React
+   never has to learn what the fitter decided and the two cannot disagree. It is
+   a GENERAL sibling combinator because .main and .dock are both children of
+   .stage, in that order, with .field/.rail/.bar in between.
+
+   `.main.solo` WITHOUT `data-auto-solo` MUST NOT MATCH. RESULTS, FIELD_NOTES
+   and ENDED render no meter at all and are solo from the start; there is no
+   count on those phases to mirror, and matching them would print an empty
+   label in the dock for the rest of the session. */
+.dock-progress{display:none;flex:none;align-items:baseline;gap:.55em;min-width:0}
+.main[data-auto-solo="1"] ~ .dock .dock-progress{display:inline-flex}
+.dock-progress .lbl{font-size:var(--t-meta);color:var(--muted);font-weight:700;
+  letter-spacing:.13em;text-transform:uppercase;white-space:nowrap}
+.dock-progress .val{font-family:var(--font-display);font-weight:800;line-height:1;
+  font-size:max(var(--floor),calc(var(--t-body) * 1.05));color:var(--text);white-space:nowrap}
+.dock-progress.done .val{color:var(--success-text)}
+/* The same finite pulse the meter and the dock status already use, on the same
+   stable class, so it runs once when completion lands rather than restarting on
+   every socket frame. */
+.dock-progress.done .val{animation:cue 1.5s ease-in-out 3}
+@media (prefers-reduced-motion:reduce){.dock-progress.done .val{animation:none}}
+
 /* ===========================================================================
    CONTENT TYPOGRAPHY — the minimum that makes the shell functional.
 
@@ -373,10 +451,13 @@ body{
    second clamp keyed on a different attribute would be a second place for a
    line clamp to live, which is how one got back into base CSS the first time.
 
-   NOT ported because nothing renders them yet: .flag, .pager, .split,
-   .artwork. Dead CSS is what Task 4's .chip note was about; it is not
-   repeated here. (.hero and .podium/.pod have since been ported, each beside
-   the state that renders it — ENDED's hero, and the podium below it.)
+   NOT ported because nothing renders them yet: .split, .artwork. Dead CSS is
+   what Task 4's .chip note was about; it is not repeated here. (.hero and
+   .podium/.pod have since been ported, each beside the state that renders it —
+   ENDED's hero, and the podium below it. .flag and .pager have since been
+   ported too, each beside what renders it: .flag with the meter's completion
+   block, because CompletionFlag.jsx is what brought it in, and .pager below
+   .cards, because Pager.jsx is what brought it in.)
 
    The per-state TREATMENT — which of these each phase uses, and the content
    deletions in spec §6 — is plan 4. This block is types and boxes only.
@@ -505,6 +586,47 @@ body{
 .card .rank{flex:none;font-family:var(--font-display);font-weight:800;
   font-size:max(var(--floor),calc(var(--t-secondary)*.78));color:var(--muted);width:1.4em;text-align:center}
 .card.lead .rank{color:var(--primary)}
+
+/* ------------------------------------------------------------------- PAGER
+   Ported from docs/design/host-redesign/05-vote.html:385-389, which is the one
+   mockup that draws a way THROUGH a list rather than a way to cut one.
+
+   WHY THIS EXISTS AT ALL. On a dense round the responses exceed the stage. The
+   fitter's cheapest lever is type, and it stops at the profile floor: measured,
+   07-results-trivia renders at --fit .55 with data-clamped="on" at 1280x720 on
+   real content, before a podium exists. Past the floor every remaining lever
+   removes content, and the room cannot see what was removed. A scrollbar is not
+   the answer either — 6px of track is invisible from twenty-five feet and a
+   scroll offset is not a fact a host can say out loud. A printed position is.
+
+   Two departures from the mockup, both deliberate:
+
+   1. THE PIPS ARE BUTTONS, not inert <i>. Same size, same drawing, same place;
+      the only pointer route to a page that is not a key press. The room reads
+      them, the host can also press them.
+   2. NO data-drop. The mockup marks its pager data-drop="1" — first to be
+      sacrificed — which is right when the pager merely annotates a cut the
+      fitter made. Here the pager announces a cut THE PAGER MADE: drop the line
+      and a room looking at three of twenty responses has nothing telling it
+      seventeen more exist, and the host has no sign the keys do anything. See
+      components/stage/Pager.jsx. */
+.pager{display:flex;align-items:center;gap:.5em;
+  font-size:var(--t-meta);color:var(--muted);letter-spacing:.09em;
+  text-transform:uppercase;font-weight:700;white-space:nowrap;flex-wrap:wrap}
+/* The mockup's `.pager i` dot, rebuilt on a <button> — every inherited button
+   affordance reset, so the room sees a dot and not a control. The 44px hit area
+   is a transparent outset, not a visible box: a trackpad target the audience
+   cannot see. */
+.pager .pip{appearance:none;-webkit-appearance:none;font:inherit;color:inherit;
+  width:.6em;height:.6em;border-radius:50%;border:0;padding:0;
+  background:rgba(155,168,190,.3);cursor:pointer;flex:none;
+  position:relative;outline-offset:8px}
+/* The hit area, not the drawing. A .6em dot is about 12px at Room — a target
+   nobody hits with a trackpad while a room watches. inset:-16px puts ~44px of
+   pressable area around a dot that still LOOKS like a dot to the audience. */
+.pager .pip::after{content:"";position:absolute;inset:-16px}
+.pager .pip.on{background:var(--primary)}
+.pgr-label{min-width:0}
 
 /* join block — exactly one QR exists in the product and it lives here */
 .joinblock{display:flex;align-items:center;gap:calc(2vw + 14px);min-width:0}
