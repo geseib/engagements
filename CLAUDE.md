@@ -1,14 +1,40 @@
 # CLAUDE.md - Engage2 Project Context
 
-## **🚨 CRITICAL DEPLOYMENT RULE 🚨**
-**ALWAYS LET USER DEPLOY - NEVER AUTO-DEPLOY OR SUGGEST DEPLOYMENT**
-User handles all deployments manually. Claude should never attempt to deploy.
+## **🚨 DEPLOYMENT RULE 🚨**
+
+**DEV: Claude may deploy. TEST AND PROD: the owner deploys, always.**
+
+Changed 2026-08-12 by the owner. The previous rule reserved every tier to the owner; dev is
+now Claude's to ship so review can happen against a running environment instead of a diff.
+
+| Tier | Who pushes the tag |
+|---|---|
+| **dev** (`dev-v*`) | **Claude may push it** once the work is committed and the baselines hold. |
+| **test** (`test-v*`) | Owner only. Never push this. |
+| **prod** (`prod-v*`) | Owner only. Never push this. It halts at `ApprovalForProd` regardless, but do not start it. |
+
+What dev being Claude's does **not** change:
+- **Tests and build first.** A dev tag goes up only after the backend suite, the frontend suite
+  and `npm run build` have been run and the baselines hold. A red suite is not a deploy.
+- **Say what you deployed.** Name the tag and the commit in the reply. The execution history is
+  the only reliable record of what is live.
+- **Push the branch or the tag, never both at once** — two executions of one commit race into
+  the same stack.
+- **Never run `./deployall`, `./scripts/deploy-clean.sh` or `./scripts/deploy-frontend-eng.sh`.**
+  They target the off-pipeline `engdev` stack, not the CI/CD tiers.
 
 **What counts as a deploy, as of 2026-08-10: pushing a `<tier>-v*` tag. That is the only
 thing that reaches an environment.** The pipelines are tag-triggered only
 (`cicd/pipeline-clean.yaml`), so `git push origin dev` is now just a push. It used to deploy —
 each `Triggers` block carried a `- Branches:` entry — and any older instruction saying a branch
 merge auto-deploys is stale.
+
+**Caveat worth checking once:** `b6929cac` made the pipelines tag-only in the template, and
+`docs/handoff/RESUME.md` records that it was **committed and never applied** to the running
+stack. If that is still true, a branch push to `dev` also deploys. Confirm with:
+```bash
+aws codepipeline get-pipeline --name engagecicd-pipeline-dev --query 'pipeline.triggers'
+```
 
 Never run `./deployall`, `./scripts/deploy-clean.sh` or `./scripts/deploy-frontend-eng.sh`. They
 target the off-pipeline `engdev` stack, not the CI/CD tiers.
