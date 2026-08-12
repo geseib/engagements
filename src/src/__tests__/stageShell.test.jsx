@@ -661,14 +661,57 @@ describe('what the host page must now render', () => {
     expect(dockEl).toMatch(/\bhint=\{/);
   });
 
-  test('the RESULTS authors toggle is not something the fitter may sacrifice', () => {
-    // On RESULTS the meter runs solo, so this was the ONLY data-drop group on
-    // the state: the first and only thing dropped before the terminal clamp,
-    // with no note to say it had gone. Losing it while the names are showing
-    // leaves them on the projector with no way to take them down.
-    const at = source.indexOf('stage-authors-toggle');
+  /**
+   * THE RULE THAT USED TO BE HERE.
+   *
+   * This was `test('the RESULTS authors toggle is not something the fitter may
+   * sacrifice')`, and it held a real hazard: on RESULTS the meter runs solo, so
+   * `.stage-authors-toggle` was the ONLY data-drop group on the state — the
+   * first and only thing dropped before the terminal clamp, with no note to say
+   * it had gone — and losing it while the names were showing left them on the
+   * projector with no way to take them down.
+   *
+   * THE OWNER RETIRED THE CONTROL, so the test is rewritten to hold the
+   * stronger version of the same property rather than deleted. Author reveal is
+   * one session setting in the sidebar's Settings tab now, with no per-round
+   * override: *"Just leave the decision to the host."* The panel is a sibling of
+   * <Stage> that the fitter never measures, so the host can always reach the
+   * decision — the hazard is answered by the control's location instead of by
+   * an exemption from the drop ladder.
+   */
+  test('neither anonymity control is on the projected stage any more', () => {
+    // rejects: leaving either control behind, which would put a second,
+    // per-round switch beside the session setting — two controls for one
+    // decision, which is what this change removed. Also rejects re-adding one
+    // with a data-drop number, where the fitter could strand the room's names.
+    const markup = source.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(markup).not.toMatch(/stage-authors-toggle/);
+    expect(markup).not.toMatch(/reveal-authors-btn/);
+    expect(markup).not.toMatch(/className="early-reveal"/);
+    // ...and the setting that replaced them is genuinely wired to the panel,
+    // or this test passes on a feature that was simply deleted.
+    expect(markup).toMatch(/onAnonymousUntilRevealChange=\{setAnonymousUntilReveal\}/);
+  });
+
+  test('the RESULTS rows take their labels AND their arithmetic from the session setting', () => {
+    // WHY THE ROW CANNOT ANSWER THIS. Entering RESULTS reveals the round
+    // server-side (get-results.js's enterResultsState) whatever the host chose,
+    // so every row on this state carries its author and `displayLabelFor` would
+    // print all of them. Only the setting knows whether they may go on a wall.
+    //
+    // rejects: dropping back to displayLabelFor on RESULTS, which silently
+    // names every author on a session set to hide them. And rejects hiding the
+    // label while leaving the points: a score that jumps names its author as
+    // surely as a label does (§5.6.4), so the two must read one source.
+    const markup = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+    const at = markup.indexOf('const displayName = stageLabelFor');
     expect(at).toBeGreaterThan(-1);
-    expect(source.slice(at, at + 200)).not.toMatch(/data-drop=/);
+    const rows = markup.slice(at, markup.indexOf('return (', at));
+    expect(rows).toMatch(/authorsHidden: anonymityActive\(\{/);
+    expect(rows).toMatch(/const showPoints = standingsVisible\(\{/);
+    expect(rows).toMatch(/authorsRevealed: !anonymityActive\(\{/);
+    // Both derive from the one flag, so they cannot disagree.
+    expect((rows.match(/anonymousUntilReveal/g) || []).length).toBe(3);
   });
 
   test('a finished session does not advertise a live join on the rail', () => {
@@ -729,7 +772,14 @@ describe('what the host page must now render', () => {
     // The states this covers: LOBBY, ASK, VOTE and FIELD_NOTES all carry
     // groups. A refactor that silently stopped matching would pass everything
     // below on an empty set.
-    expect(groups.length).toBeGreaterThanOrEqual(7);
+    //
+    // THE FLOOR MOVED FROM 7 TO 6, ON PURPOSE. `.early-reveal` — the ASK/VOTE
+    // "Reveal Authors" button, one of the two data-drop="1" chrome groups — is
+    // retired: the author reveal is a session setting in the sidebar now, and a
+    // control that is not on the stage cannot be sacrificed from it. The floor
+    // is lowered by exactly one rather than deleted, so a refactor that stops
+    // matching still fails here.
+    expect(groups.length).toBeGreaterThanOrEqual(6);
 
     const chrome = groups.filter((g) => !g.announced).map((g) => g.order);
     const content = groups.filter((g) => g.announced).map((g) => g.order);

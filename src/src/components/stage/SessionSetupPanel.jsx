@@ -5,6 +5,9 @@ import {
   setupPanelTabs, categoryRows, questionsRemaining,
   browserRow, filterBrowserRows, rosterRows,
 } from '../../config/setupPanel';
+import {
+  anonymityApplies, anonymityActive, waitingNamesCaution,
+} from '../../config/anonymity';
 
 /**
  * Everything the host needs and the room does not, behind one dock button.
@@ -89,6 +92,31 @@ export default function SessionSetupPanel({
   onShowJoinCode = () => {},
   profile = 'room',
   onProfileChange = () => {},
+
+  // Settings — the two name decisions the owner moved out of the code.
+  //
+  // BOTH ARE SESSION-LEVEL AND NEITHER HAS A PER-ROUND OVERRIDE: *"Just leave
+  // the decision to the host."* `anonymousUntilReveal` is not a new flag — it
+  // is the per-game flag chosen at setup (config/anonymity.js's
+  // createPayloadFor), read back by get-game.js, surfaced here so a host can
+  // change their mind mid-session. The checkbox below is its inverse, because
+  // the host-facing question is "show the names?" and the stored flag is
+  // "withhold them?".
+  //
+  // `profile` IS NOT AN INPUT TO EITHER, and that is a ruling rather than an
+  // oversight: *"Don't use screen type for name reveal decision. I often have a
+  // projector with a team of four."* A display profile is not a proxy for room
+  // size, audience or sensitivity. Nothing in this section may read it.
+  gameType = '',
+  anonymousUntilReveal = true,
+  onAnonymousUntilRevealChange = () => {},
+  nameWaitingWhenAnonymous = true,
+  onNameWaitingChange = () => {},
+  // The round's response count and reveal state — the caution's quantity, never
+  // a threshold that decides anything. See config/anonymity.js's
+  // MIN_ANONYMOUS_ANSWERS for what this used to gate.
+  answerCount = 0,
+  authorsRevealed = false,
   onViewReports = () => {},
   onShowHowToPlay = () => {},
   onSwitchGame = () => {},
@@ -432,6 +460,73 @@ export default function SessionSetupPanel({
               id="setup-panel-settings"
               aria-labelledby="setup-tab-settings"
             >
+              {/* NAMES FIRST, ahead of Display and the join links, because it
+                  is the only thing in this tab that changes what the room can
+                  learn about a colleague. The rest of the tab is plumbing. */}
+              {anonymityApplies(gameType) && (
+                <>
+                  <h3 className="setup-h">Names</h3>
+
+                  <label className="setup-toggle">
+                    <input
+                      type="checkbox"
+                      data-testid="attribute-authors"
+                      checked={anonymousUntilReveal === false}
+                      onChange={(e) => onAnonymousUntilRevealChange(!e.target.checked)}
+                    />
+                    <span>Show who wrote each response</span>
+                  </label>
+                  <p className="setup-note">
+                    Off, the stage labels responses “Response 1”, “Response 2” and names
+                    nobody, all session. On, every response carries its author.
+                  </p>
+                  {/* THE TRADE-OFF, STATED, NOT ENFORCED. The two directions are
+                      genuinely not symmetric — one crosses the wire and one does
+                      not — and a host standing in front of a room deserves to
+                      know which is which BEFORE they press it, rather than
+                      afterwards. */}
+                  <p className="setup-note">
+                    <b>Turning this on shows the names to everyone and cannot be taken back.</b>{' '}
+                    Turning it off again takes them off the stage; it does not un-send them.
+                  </p>
+
+                  {anonymityActive({ gameType, anonymousUntilReveal }) && (
+                    <>
+                      <label className="setup-toggle">
+                        <input
+                          type="checkbox"
+                          data-testid="name-waiting"
+                          checked={nameWaitingWhenAnonymous !== false}
+                          onChange={(e) => onNameWaitingChange(e.target.checked)}
+                        />
+                        <span>Name who is still waiting</span>
+                      </label>
+                      <p className="setup-note">
+                        The room meter can list who has not responded yet — only while you
+                        hover or click it, and never who has.
+                      </p>
+                      {(() => {
+                        const caution = waitingNamesCaution({
+                          answerCount, gameType, anonymousUntilReveal, authorsRevealed,
+                        });
+                        if (!caution) return null;
+                        return (
+                          <p
+                            className={`setup-note${caution.strong ? ' setup-note--warn' : ''}`}
+                            data-testid="waiting-caution"
+                            data-strong={String(caution.strong)}
+                          >
+                            {'Naming who is still waiting also names who has answered — the room '
+                              + 'can subtract one list from the other. '}
+                            {caution.text}
+                          </p>
+                        );
+                      })()}
+                    </>
+                  )}
+                </>
+              )}
+
               <h3 className="setup-h">Display</h3>
               <label className="setup-field">
                 <span>Display profile</span>

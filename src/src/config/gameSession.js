@@ -64,9 +64,13 @@ export function initialGameSession() {
     // --- the round in play ---------------------------------------------
     gameState: 'CREATED',
     currentGameType: 'call-and-answer',
-    // Whether THIS game holds authorship back until reveal — set once at
-    // creation (config/anonymity.js: createPayloadFor) and constant for the
-    // game's lifetime. Default ON, matching the backend gate's own default,
+    // Whether THIS game holds authorship back — chosen at creation
+    // (config/anonymity.js: createPayloadFor) and NO LONGER constant for the
+    // game's lifetime: the session sidebar's Settings tab now sets the same
+    // flag while the session runs, because the owner asked for author reveal to
+    // be *"just a setting on the settings tab in the session sidebar"*. One
+    // flag, two places to set it — there is deliberately no second boolean for
+    // the same decision. Default ON, matching the backend gate's own default,
     // so the brief window before a restored game's real value loads is the
     // safe (hidden) state rather than the open one.
     anonymousUntilReveal: true,
@@ -77,10 +81,26 @@ export function initialGameSession() {
     // Whether the round in play has shown its authors. Round-scoped, exactly
     // like lessonNumber — a new game must not inherit the last one's reveal.
     authorsRevealed: false,
-    // The projector-only override on top of it. Same reason it is listed here:
-    // a host who hid the names on the last game's final round must not walk
-    // into the next game's results with them already hidden.
-    authorsHiddenOnStage: false,
+    // `authorsHiddenOnStage` USED TO BE HERE — the projector-only override on
+    // top of the reveal, a Show/Hide authors button that lived on the RESULTS
+    // stage and reset every round. IT IS RETIRED, not lost: the owner ruled the
+    // decision session-level with no per-round override, so
+    // `anonymousUntilReveal` above now does its job and `stageLabelFor` reads
+    // that instead. Its one surviving caveat moved with it into that function's
+    // doc-block — hiding a name on the stage is display-only and un-sends
+    // nothing. The reason it was listed here (a host who hid the names on the
+    // last game's final round must not walk into the next game's results with
+    // them already hidden) is answered by `anonymousUntilReveal` being reset
+    // here too.
+    //
+    // Whether the room meter may name who has not responded yet, on a session
+    // that is hiding authors. The second of the two name decisions the owner
+    // moved out of the code (config/anonymity.js: MIN_ANONYMOUS_ANSWERS was a
+    // hard block and is now a sentence). Listed here rather than treated as a
+    // room preference like `profile`: it is a judgement about THIS room's
+    // sensitivity, and carrying it into the next session's first round would be
+    // the same "one stale panel" failure this module exists to stop.
+    nameWaitingWhenAnonymous: true,
 
     // --- the room ------------------------------------------------------
     players: [],

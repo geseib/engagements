@@ -680,6 +680,44 @@ body {
   color: #F4EDE4;
 }
 
+/* A SETTING THE HOST READS UNDER PRESSURE, so it is a full-width row with the
+   box first and the sentence beneath it, rather than a right-aligned switch a
+   host has to hunt for. The label is the page's own text colour, not the muted
+   `.setup-field` grey: it is a decision, and the explanation below it is the
+   part that may recede. */
+.setup-toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #F4EDE4;
+  cursor: pointer;
+  margin-top: 2px;
+}
+.setup-toggle input[type="checkbox"] {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+/* The note that belongs to the control above it, pulled up out of the body's
+   12px gap so the pair reads as one block rather than two loose lines. */
+.setup-toggle + .setup-note { margin-top: -6px; }
+.setup-note + .setup-note { margin-top: -6px; }
+
+/* THE CAUTION, WHEN THE SUBTRACTION WOULD ACTUALLY IDENTIFY SOMEBODY. Amber and
+   a rule rather than red and a box: it is information at the point of decision,
+   not an error, and nothing here blocks the host. The word carries it too —
+   never hue alone — because this panel is read on a projector that has lifted
+   the black point. */
+.setup-note--warn {
+  color: #F4EDE4;
+  border-left: 2px solid var(--primary);
+  padding-left: 9px;
+}
+
 /* --- Players ------------------------------------------------------------- */
 .setup-roster { list-style: none; margin: 0; padding: 0; }
 .setup-roster__row {
@@ -10093,68 +10131,29 @@ body {
   font-style: italic;
 }
 
-/* THE EARLY REVEAL (ASK# / VOTE#). This one is irreversible and ends the
-   room's anonymity, so it is deliberately not a primary-weight button — the
-   host should have to mean it. */
-.early-reveal {
-  margin: 16px auto 0;
-  max-width: 520px;
-  text-align: center;
-}
+/* THE TWO STAGE ANONYMITY CONTROLS USED TO BE STYLED HERE — `.early-reveal`
+   with `.reveal-authors-btn` and `.early-reveal-help` on ASK#/VOTE#, and
+   `.stage-authors-toggle` on RESULTS#. Both markup and rules are gone: the
+   author reveal is one session setting in the sidebar's Settings tab now
+   (`.setup-toggle` above), with no per-round override, so nothing on the
+   projected stage renders these class names.
 
-/* SIZE LIVES IN styles/stage.css, NOT HERE. These three controls are rendered
-   inside .content, which means they are projected at a room. A fixed px
-   font-size on projected text reads nothing from the profile ladder, sits
-   below every profile's floor, and is invisible to both the fitter's scale
-   search and the floor clamp — so all four profiles drew them identically.
-   Colour, border and hover stay; font-size is set by the profile. */
-.reveal-authors-btn {
-  background: transparent;
-  color: var(--primary);
-  border: 2px solid var(--primary);
-  padding: 10px 22px;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.reveal-authors-btn:hover {
-  background: var(--primary);
-  color: var(--bg);
-}
-
-.early-reveal-help {
-  margin: 8px 0 0;
-  line-height: 1.45;
-  color: var(--muted);
-}
-
-/* THE STAGE TOGGLE (RESULTS#). Display only — it calls nothing and un-sends
-   nothing — so it is deliberately the quietest control on the panel. */
-.stage-authors-toggle {
-  display: block;
-  margin: 0 auto 16px;
-  background: transparent;
-  color: var(--muted);
-  border: var(--hairline);
-  padding: 6px 14px;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.stage-authors-toggle:hover {
-  color: var(--primary);
-  border-color: var(--primary);
-}
-
-/* The `.big-screen-mode .stage-authors-toggle, .big-screen-mode
-   .reveal-authors-btn` override that used to sit here is deleted. There is no
-   .big-screen-mode ancestor over these elements any more — there is no second
-   layout mode at all — so it was dead, and it was also the only thing in the
-   file that pretended these controls scaled with the display. */
+   What the rules said, kept because the reasoning outlived the elements:
+     - the early reveal was deliberately NOT primary-weight, because it was
+       irreversible and the host should have to mean it. The Settings tab makes
+       the same point in words instead of in font-weight, which is the better
+       place for it — the sentence is next to the decision.
+     - the RESULTS toggle was the quietest control on the panel because it was
+       display-only.
+     - SIZE LIVED IN styles/stage.css, NOT HERE, because all three were
+       rendered inside .content and therefore projected at a room; fixed px
+       there reads nothing from the profile ladder and sits below every
+       profile's floor. That constraint no longer applies to either control,
+       because neither is inside .content any more — the Settings tab is host
+       chrome at a fixed reading distance. The matching `.content` rules in
+       styles/stage.css are deleted with these.
+     - a `.big-screen-mode` override that pretended these scaled with the
+       display was already dead and already deleted. */
 
 /* ---------------------------------------------------------------------------
    HOST-ONLY PANEL ADDITIONS (see components/stage/ and styles/stage.css for

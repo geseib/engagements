@@ -75,20 +75,24 @@ import CompletionFlag from './CompletionFlag';
  *   - The host still asks for it. Same hover/focus/click, same never-unprompted
  *     rule, same dismissal.
  *
- * The gate does not apply either, and `joinedRoster` in ../../config/anonymity.js
- * carries the argument: nothing is on the wall to attribute in a lobby, and
- * routing it through the response-count threshold would suppress the list
- * permanently on every anonymous format, since the response count there is
- * always zero.
+ * The round-phase rule does not apply either, and `joinedRoster` in
+ * ../../config/anonymity.js carries the argument: nothing is on the wall to
+ * attribute in a lobby, and routing it through that rule would suppress the
+ * list on every anonymous format — first as a response-count threshold the
+ * lobby can never meet, and now as a host setting about rounds that have not
+ * started.
  *
- * THE GATE IS NOT HERE. Whether the list may be shown at all during an
- * anonymous round is decided by `waitingRoster()` in ../../config/anonymity.js,
- * which hands this component `null` when it may not. The reasoning — naming
- * the waiters hands the room the answerer set by subtraction, so the guard
- * counts RESPONSES rather than waiters — is written out there, next to the
- * constant it turns on. This component renders what it is given and enforces
- * nothing, which is deliberate: a gate that lives inside a rendered component
- * is a gate that gets moved by a styling change.
+ * THE DECISION IS NOT HERE, AND IT IS NO LONGER THE CODE'S. Whether the list
+ * may be shown during an anonymous round is `waitingRoster()`'s answer, in
+ * ../../config/anonymity.js, which hands this component `null` when it may not.
+ * IT USED TO BE AN AUTOMATIC GATE — withheld below five responses, no override —
+ * and the owner retired it: *"the host has the info and the control."* It is
+ * now the host's own setting in the sidebar's Settings tab, with the reasoning
+ * that used to be the threshold printed beside the control as a sentence
+ * (`waitingNamesCaution`). What has not moved is where any of it is decided:
+ * this component renders what it is given and enforces nothing, deliberately,
+ * because a rule that lives inside a rendered component is a rule that gets
+ * moved by a styling change.
  * ─────────────────────────────────────────────────────────────────────────
  *
  * THE INTERACTION IS RAIL'S, COPIED RATHER THAN INVENTED. Hover previews,

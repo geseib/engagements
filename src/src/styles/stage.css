@@ -784,23 +784,19 @@ body{
   color:var(--text);background:transparent;
   border:var(--hair) solid var(--rule);border-radius:8px;padding:.3em .6em;cursor:pointer}
 
-/* THE ANONYMITY CONTROLS, SIZED BY THE PROFILE INSTEAD OF BY A CONSTANT.
-   All three of these live inside .content now, which means all three are
-   PROJECTED — and all three carried fixed px in styles.css: the button at
-   15px, the help sentence and the RESULTS toggle at 13px. Every one of those
-   is below every profile's floor (Room/Call 20px, TV 26px), and .early-reveal-
-   help is a whole sentence explaining an action that cannot be undone: 13px at
-   25ft subtends about 5 arcminutes against an 8.3' target. Reading nothing
-   from --t-* also made them invisible to the fitter's scale search and to the
-   floor clamp, so they rendered pixel-identical in all four profiles — the
-   same defect §4.2 records the scalar approach shipping.
+/* THE ANONYMITY CONTROLS USED TO BE SIZED HERE, and the rule that put them
+   here is worth keeping even though the elements are gone: anything inside
+   .content is PROJECTED, so its size must come from the profile ladder
+   (--t-*) and never from a fixed px in styles.css — fixed px sits below every
+   profile's floor (Room/Call 20px, TV 26px) and is invisible to both the
+   fitter's scale search and the floor clamp, so all four profiles draw it
+   identically. That is what these three lines fixed for
+   `.reveal-authors-btn`, `.early-reveal-help` and `.stage-authors-toggle`.
 
-   Sizes only. The colours, borders and hover states stay in styles.css; the
-   .big-screen-mode override that used to sit beside them is deleted, because
-   no .big-screen-mode ancestor exists over these elements any more. */
-.content .reveal-authors-btn{font-size:max(var(--floor),calc(var(--t-body) * .9))}
-.content .early-reveal-help{font-size:var(--t-meta)}
-.content .stage-authors-toggle{font-size:var(--t-meta)}
+   All three elements are retired: the author reveal is now one session setting
+   in the sidebar's Settings tab, which is host chrome at a reading distance
+   rather than content on a wall, so the ladder does not apply to it. If any
+   anonymity control ever returns to .content, it needs a rule here again. */
 
 /* WAVELENGTH RESULTS, CAPPED SO IT CANNOT CLIP.
    WavelengthWordCloud draws a fixed 800x400 SVG. Fixed means the scale search

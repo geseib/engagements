@@ -247,11 +247,20 @@ function GameHostPage() {
   // enterResultsState); handleRevealAuthors is the override for a host who
   // wants names back before voting closes.
   const [authorsRevealed, setAuthorsRevealed] = useState(false);
-  // DISPLAY ONLY, and deliberately separate from the above. The RESULTS payload
-  // has already been delivered with its names in it; this decides whether the
-  // projector prints them. It un-sends nothing and must never be described as
-  // a security control. Resets per round.
-  const [authorsHiddenOnStage, setAuthorsHiddenOnStage] = useState(false);
+  // `authorsHiddenOnStage` USED TO BE HERE — a per-round, RESULTS-only display
+  // toggle sitting beside a per-round server reveal, two controls for one
+  // decision. The owner replaced both with ONE session setting in the sidebar's
+  // Settings tab: *"Just leave the decision to the host."* That setting is
+  // `anonymousUntilReveal` (above), and `stageLabelFor` now reads it. The
+  // display-only caveat this comment carried is preserved in that function's
+  // doc-block, because it is still true of the hide direction.
+  //
+  // The other half of the same ruling: whether the room meter may name who has
+  // not responded yet while the session is hiding authors. It replaces
+  // config/anonymity.js's MIN_ANONYMOUS_ANSWERS block, which withheld that list
+  // below five responses with no override — dead for a whole session in a room
+  // of four, which is the room the owner runs.
+  const [nameWaitingWhenAnonymous, setNameWaitingWhenAnonymous] = useState(true);
 
   // Custom instruction state for question set instructions
   const [customInstruction, setCustomInstruction] = useState(null);
@@ -604,7 +613,7 @@ function GameHostPage() {
     currentQuestionIndex: setCurrentQuestionIndex,
     lessonNumber: setLessonNumber,
     authorsRevealed: setAuthorsRevealed,
-    authorsHiddenOnStage: setAuthorsHiddenOnStage,
+    nameWaitingWhenAnonymous: setNameWaitingWhenAnonymous,
     players: setPlayers,
     answers: setAnswers,
     playersWhoAnswered: setPlayersWhoAnswered,
@@ -2872,13 +2881,23 @@ Focus on actionable business strategy insights.`;
     }
   };
 
-  // THE EARLY REVEAL — reachable only from ASK# / VOTE#. AuthorsRevealed flips
-  // by itself when voting closes (get-results.js:enterResultsState), so this
-  // endpoint is load-bearing exactly when the host wants the names up first.
-  // The RESULTS-phase control is a separate, purely-local display toggle and
-  // deliberately does NOT come through here: the rows it renders are
-  // tally-shaped (points/votes/placement) and this endpoint answers with
-  // ballot-shaped ones, so calling it there blanked the whole panel.
+  // MAKING THE SERVER AGREE WITH THE HOST'S SETTING — no longer a button.
+  //
+  // IT USED TO BE THE "Reveal Authors" CONTROL on the ASK/VOTE stage: a
+  // per-round override the host pressed to end one round's anonymity early. The
+  // owner retired that shape — the decision is session-level and lives in the
+  // Settings tab, with no per-round override — so this is now the MECHANISM
+  // behind that setting rather than a thing a host presses. The effect below
+  // calls it.
+  //
+  // IT IS STILL NEEDED, AND THE REASON IS THAT THE SERVER REDACTS, NOT THE
+  // CLIENT. lambda-functions/game/anonymity.js strips playerName from every row
+  // while the game's stored `anonymousUntilReveal` is on and the round is
+  // unrevealed. A host who switches the setting to "show the names" would
+  // otherwise get a stage that claims to attribute and prints "Response 1"
+  // forever, because there is nothing in the payload to print. So the setting
+  // reveals the round in play — which is exactly what this endpoint does, per
+  // round, idempotently.
   //
   // The guard stays: an already-revealed round has nothing to fetch, and the
   // endpoint is idempotent anyway.
@@ -2905,6 +2924,35 @@ Focus on actionable business strategy insights.`;
       console.error('❌ HOST: reveal error', e);
     }
   };
+
+  /**
+   * THE SESSION SETTING, APPLIED TO WHATEVER ROUND IS IN PLAY.
+   *
+   * The host makes the call once, in the Settings tab; this is what carries it
+   * into round 4 and round 5 without asking again. That is the difference
+   * between a session setting and the per-round button it replaced — and it is
+   * not the code deciding anything: every branch below is either "the host said
+   * no" or "there is nothing to reveal".
+   *
+   * WHY IT CANNOT JUST TRUST THE CLIENT FLAG. `anonymousUntilReveal` is
+   * editable here, but the copy the SERVER redacts from is the game's stored
+   * HostPreferences, which this page does not write. Without this effect,
+   * switching the setting on would attribute round 3 (whose reveal the switch
+   * itself triggered) and silently stop attributing round 4.
+   *
+   * `answers.length` rather than a phase check: the endpoint answers with the
+   * ballot, so there has to be a ballot. `handleRevealAuthors` is idempotent
+   * and returns early once `authorsRevealed` is true, so this settles after one
+   * call per round.
+   */
+  useEffect(() => {
+    if (anonymousUntilReveal !== false) return;          // the host wants no names
+    if (!anonymityApplies(currentGameType)) return;      // nothing authored to attribute
+    if (authorsRevealed) return;                         // this round is already out
+    if (!lessonNumber || answers.length === 0) return;   // nothing to reveal yet
+    handleRevealAuthors();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anonymousUntilReveal, currentGameType, authorsRevealed, lessonNumber, answers.length]);
 
   // Refresh the Host Remote's action handles on every render so the one-time
   // window-message listener above always calls the current-state versions.
@@ -3906,10 +3954,12 @@ Ready to engage? See you there!`;
    *     and stamps `data-list-kind="joined"` so the two can never be confused
    *     for one another on the wall.
    *   - ASK / VOTE → `waitingRoster`: who has NOT responded, subject to the
-   *     anonymity gate, because naming the waiters hands the room the answerer
-   *     set by subtraction. That judgement is written out in
+   *     host's own setting, because naming the waiters hands the room the
+   *     answerer set by subtraction. That judgement is written out in
    *     config/anonymity.js, which is why this is a function call rather than
-   *     four inline conditions.
+   *     four inline conditions. It used to be an automatic block below five
+   *     responses; it is now `nameWaitingWhenAnonymous`, and the argument for
+   *     the old number ships as copy in the Settings tab instead.
    *
    * THE LOBBY IS NOT ROUTED THROUGH THE ANSWER-COUNT THRESHOLD, deliberately.
    * `anonymityActive` is about authorship of ANSWERS; joining is not a
@@ -3921,8 +3971,10 @@ Ready to engage? See you there!`;
    *
    * `null` from either means "do not offer the reveal at all".
    *
-   * `authorsRevealed` is the SERVER flag, not `authorsHiddenOnStage`: the
-   * stage's display toggle only exists on RESULTS, where this meter is null.
+   * `authorsRevealed` is the SERVER flag — whether this round's names are out.
+   * `anonymousUntilReveal` is the session setting. Both are needed: the first
+   * says there is nothing left to protect on this round, the second says this
+   * session never protected anything.
    */
   const revealNames = (() => {
     if (hostPhase === 'LOBBY') return joinedRoster({ players });
@@ -3935,6 +3987,7 @@ Ready to engage? See you there!`;
         gameType: currentGameType,
         anonymousUntilReveal,
         authorsRevealed,
+        nameWaitingWhenAnonymous,
       });
     }
     return null;
@@ -4096,7 +4149,7 @@ Ready to engage? See you there!`;
         fitKey={[
           hostPhase, currentQuestionId, questions.length, answers.length,
           players.length, playersWhoAnswered.length, playersWhoVoted.length,
-          authorsRevealed, authorsHiddenOnStage,
+          authorsRevealed, anonymousUntilReveal,
           // The reveal changes the meter's height and the fitter measures the
           // meter (`.rail, .meter`); without this it would never re-measure.
           rosterReveal || '', revealNames ? revealNames.length : -1,
@@ -4183,7 +4236,10 @@ Ready to engage? See you there!`;
             may never sort before a group without one (chrome goes silently).
 
             Numbering per state, in this file:
-              1  early-reveal / fn-controls   host-only controls
+              1  fn-controls                  host-only controls
+                 (`early-reveal` was the other 1 and is retired — the author
+                  reveal is a session setting in the sidebar now, and a control
+                  that is not on the stage cannot be sacrificed from it)
               2  debug-prompt-content         host-only, debug builds only
               3  anon-line / "How to answer"  room-facing, secondary
               4  "Full prompt" / .recap       room-facing, primary
@@ -4213,10 +4269,16 @@ Ready to engage? See you there!`;
                     </div>
                   </div>
                 )}
+                {/* "until voting closes" USED TO END THIS SENTENCE and it is
+                    now a lie: entering RESULTS reveals the round on the server,
+                    but the stage attributes nobody unless the host's session
+                    setting says to. So the room is told the fact that is
+                    actually true — nobody is named — and told who can change
+                    it. */}
                 {anonymityApplies(currentGameType) && anonymousUntilReveal && (
                   <p className="anon-line" data-drop="3" data-drop-note="Anonymity note">
                     <b>Answers are anonymous.</b> Nobody sees who wrote what — the
-                    host included — until voting closes.
+                    host included — unless the host turns names on.
                   </p>
                 )}
               </>
@@ -4329,35 +4391,28 @@ Ready to engage? See you there!`;
               </>
             )}
 
-            {/* THE REVEAL, in the only phases where it means anything.
-                AuthorsRevealed flips by itself when voting closes, so
-                POST /reveal-authors is load-bearing exactly here — a host who
-                wants the names on screen BEFORE the vote closes. Unlike the
-                RESULTS toggle this is not cosmetic; it ends the round's
-                anonymity for the whole room and cannot be undone, so the copy
-                says so.
+            {/* THE "Reveal Authors" BUTTON USED TO BE HERE, on ASK and VOTE,
+                with a two-line irreversibility warning beneath it.
 
-                It is host-only chrome, so it is droppable — and it is
-                data-drop="1", the FIRST thing sacrificed on a dense ASK or
-                VOTE, ahead of every room-facing line. It shipped at "4" once,
-                which sorted it after the question's full prompt and after the
-                VOTE recap: a dense round threw away the one sentence telling
-                the room what it was voting about and kept a button only the
-                host can press, plus two lines explaining it. */}
-            {(hostPhase === 'ASK' || hostPhase === 'VOTE')
-              && anonymityActive({ gameType: currentGameType, anonymousUntilReveal })
-              && !authorsRevealed
-              && answers.length > 0 && (
-              <div className="early-reveal" data-drop="1">
-                <button className="reveal-authors-btn" onClick={handleRevealAuthors}>
-                  Reveal Authors
-                </button>
-                <p className="early-reveal-help">
-                  Shows who wrote each response to everyone, now, instead of waiting for
-                  voting to close. This cannot be undone.
-                </p>
-              </div>
-            )}
+                RETIRED, NOT LOST. It was a PER-ROUND override, and the owner
+                ruled the decision session-level with none: *"Just leave the
+                decision to the host"* — one setting, in the sidebar's Settings
+                tab, for the whole session. Three things about it survive there:
+
+                  - the endpoint. POST /reveal-authors is still what makes the
+                    server stop redacting; it is now driven by the setting (see
+                    the effect beside handleRevealAuthors) rather than pressed.
+                  - the warning. "This cannot be undone" is the copy next to the
+                    setting, where the host is actually deciding, instead of
+                    beside a button on a stage the room is watching.
+                  - the drop order. It was data-drop="1" — host-only chrome,
+                    the first thing a dense ASK sacrificed, ahead of every
+                    room-facing line — after shipping at "4" and throwing away
+                    the question's own prompt to keep a button nobody in the
+                    room can press. Nothing takes its number; the remaining
+                    groups still sort chrome before content, which is the rule
+                    stageShell.test.jsx holds. A control that is not on the
+                    stage cannot be sacrificed from it. */}
 
             {hostPhase === 'RESULTS' && (
               <>
@@ -4365,29 +4420,24 @@ Ready to engage? See you there!`;
                   {`${getHostRoundNoun()} ${lessonNumber} · Results`}
                 </div>
 
-                {/* A PROJECTOR CONTROL, NOT A REVEAL. By the time RESULTS is on
-                    screen the round is already revealed (get-results.js's
-                    enterResultsState) and every row here carries its author, so
-                    there is nothing left to fetch — this only decides whether
-                    the room sees the names right now. It calls no endpoint. */}
-                {/* NOT DROPPABLE, deliberately, and the one control here that
-                    is not. On RESULTS the meter runs solo, so this was the
-                    only data-drop group on the state — the first and only
-                    thing the fitter sacrificed before the terminal clamp, with
-                    no data-drop-note to say it had gone. Losing it while
-                    `authorsHiddenOnStage` is false leaves every author's name
-                    on the projector with no way to take it down. The
-                    early-reveal control on ASK/VOTE stays droppable because
-                    losing it fails safe in the other direction: it can only
-                    ever reveal names, never strand them. */}
-                {anonymityActive({ gameType: currentGameType, anonymousUntilReveal }) && (
-                  <button
-                    className="stage-authors-toggle"
-                    onClick={() => setAuthorsHiddenOnStage((h) => !h)}
-                  >
-                    {authorsHiddenOnStage ? 'Show authors' : 'Hide authors'}
-                  </button>
-                )}
+                {/* THE "Show authors / Hide authors" TOGGLE USED TO BE HERE.
+                    RETIRED INTO THE SESSION SETTING, which is the same decision
+                    made once instead of every round.
+
+                    Its reasoning is kept because half of it is still true and
+                    now belongs to the setting. It was A PROJECTOR CONTROL, NOT
+                    A REVEAL: by the time RESULTS is on screen the round is
+                    already revealed (get-results.js's enterResultsState) and
+                    every row carries its author, so hiding a name here un-sends
+                    nothing — it decides what the projector prints. That caveat
+                    now lives in config/anonymity.js's stageLabelFor, next to
+                    the code it describes, and in the Settings tab's own copy.
+
+                    It was also the one control on this state that was NOT
+                    droppable, because losing it would have left every author's
+                    name on the projector with no way to take it down. That
+                    hazard is gone with the button: the setting is in a panel
+                    the fitter never touches, so the host can always reach it. */}
 
                 {/* WHAT THIS STATE NO LONGER SHOWS, RECORDED.
                     Trivia's `trivia-player-scores` (every player, their
@@ -4448,18 +4498,29 @@ Ready to engage? See you there!`;
                       const idx = answerPage.offset + i;
                       const points = answer.points || 0;
                       const player = players.find((p) => p.name === answer.player);
-                      // The stage toggle beats the row here: these rows always
-                      // carry their author by the time RESULTS is showing.
-                      const displayName = stageLabelFor(answer, idx, { authorsHidden: authorsHiddenOnStage });
+                      // THE SESSION SETTING BEATS THE ROW HERE, and it has to:
+                      // these rows always carry their author by the time
+                      // RESULTS is showing, because entering RESULTS reveals
+                      // the round server-side whatever the host chose. So the
+                      // row cannot answer "may this name go on the wall" — only
+                      // the setting can. (This was the per-round
+                      // `authorsHiddenOnStage` toggle; same call, one source.)
+                      const displayName = stageLabelFor(answer, idx, {
+                        authorsHidden: anonymityActive({
+                          gameType: currentGameType, anonymousUntilReveal,
+                        }),
+                      });
                       // Attribution by arithmetic: a score that jumps names its
                       // author as surely as a label would, so hiding the names
-                      // takes the arithmetic with it or the button is
+                      // takes the arithmetic with it or the setting is
                       // decorative. Cumulative standings stay off the stage
                       // entirely — a list of names is an attendance record.
                       const showPoints = standingsVisible({
                         gameType: currentGameType,
                         anonymousUntilReveal,
-                        authorsRevealed: !authorsHiddenOnStage,
+                        authorsRevealed: !anonymityActive({
+                          gameType: currentGameType, anonymousUntilReveal,
+                        }),
                       });
                       return (
                         <div key={idx} className={`card ${answer.placement === 1 ? 'lead' : ''}`}>
@@ -4511,16 +4572,22 @@ Ready to engage? See you there!`;
                     which is worse than no podium because the host has already
                     told the room it is coming.
 
-                    `authorsRevealed` is the STAGE TOGGLE here, not the server
-                    flag: by RESULTS every row already carries its author, and
-                    the toggle is what decides whether the projector prints
-                    them. Hiding the names has to take the arithmetic with it —
-                    a score that jumps names its author as surely as a label. */}
+                    `authorsRevealed` is the SESSION SETTING here, not the
+                    server flag — it was the per-round stage toggle until the
+                    owner made the decision session-level. By RESULTS every row
+                    already carries its author, so the server flag is true for
+                    every round and would answer "show them" always; what
+                    decides whether the projector prints them is the host's
+                    setting. Hiding the names has to take the arithmetic with
+                    it — a score that jumps names its author as surely as a
+                    label. */}
                 <Podium
                   phase="RESULTS"
                   gameType={currentGameType}
                   anonymousUntilReveal={anonymousUntilReveal}
-                  authorsRevealed={!authorsHiddenOnStage}
+                  authorsRevealed={!anonymityActive({
+                    gameType: currentGameType, anonymousUntilReveal,
+                  })}
                   players={players}
                 />
               </>
@@ -4646,9 +4713,11 @@ Ready to engage? See you there!`;
                     the design layer. The slot is the podium's, and the podium
                     is three cards.
 
-                    `authorsRevealed` is the SERVER flag here, not the stage
-                    toggle: the toggle is scoped to a round's own results view
-                    and the session is over. Gating on the reveal having
+                    `authorsRevealed` is the SERVER flag here, not the session
+                    setting, and the difference is deliberate: the setting is
+                    about attributing RESPONSES, and this podium attributes
+                    none — it ranks people by a score, with no response on
+                    screen to pin to anybody. Gating on the reveal having
                     happened is the point — a podium is a score table for the
                     whole session, and a session with an unrevealed round would
                     attribute it retroactively. */}
@@ -4709,6 +4778,19 @@ Ready to engage? See you there!`;
           onShowJoinCode={() => setQrMode('pinned')}
           profile={profile}
           onProfileChange={setProfile}
+          /* THE TWO NAME DECISIONS, both session-level, both the host's.
+             `anonymousUntilReveal` is the SAME flag the create dialog set —
+             not a second one — so the setter is the same setter; the effect
+             beside handleRevealAuthors is what makes the server agree when it
+             turns off. `profile` is passed to this panel for the display
+             picker and must never reach either of these. */
+          gameType={currentGameType}
+          anonymousUntilReveal={anonymousUntilReveal}
+          onAnonymousUntilRevealChange={setAnonymousUntilReveal}
+          nameWaitingWhenAnonymous={nameWaitingWhenAnonymous}
+          onNameWaitingChange={setNameWaitingWhenAnonymous}
+          answerCount={answers.length}
+          authorsRevealed={authorsRevealed}
           onViewReports={handleViewReports}
           onShowHowToPlay={() => setLessonExpanded(true)}
           onSwitchGame={handleSwitchGame}

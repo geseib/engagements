@@ -520,3 +520,178 @@ describe('the Settings tab', () => {
     expect(screen.getByText('Report a problem')).toBeInTheDocument();
   });
 });
+
+/**
+ * THE TWO NAME DECISIONS THE OWNER MOVED OUT OF THE CODE.
+ *
+ * Both were rules the implementation applied by itself: author reveal was a
+ * per-round button plus a per-round display toggle, and the waiting list was
+ * withheld below five responses with no override at all. Both are now one
+ * session-level setting each, in this tab, and the reasoning that used to be a
+ * condition ships as copy beside them.
+ *
+ * The panel is presentational — the state and the setters are GameHostPage's —
+ * so what is asserted here is what a host sees and what the control emits.
+ * roomMeterWaiting.test.jsx holds the other end of the wire.
+ */
+describe('the Settings tab is where the names decisions are made', () => {
+  const openNames = (props = {}) => {
+    const result = renderPanel({ gameType: 'poll', ...props });
+    openTab('Settings');
+    return result;
+  };
+
+  test('the author setting is offered, off by default, and reads as a question about names', () => {
+    // rejects: shipping the section with the box pre-ticked. Default hidden is
+    // the owner's call and it is also the safe direction — turning it on cannot
+    // be taken back.
+    openNames();
+    const box = screen.getByTestId('attribute-authors');
+    expect(box.checked).toBe(false);
+    expect(screen.getByLabelText(/show who wrote each response/i)).toBe(box);
+  });
+
+  test('ticking it emits the FLAG, not the checkbox — one flag, inverted once', () => {
+    // THE TRAP THIS GUARDS. The stored per-game flag is `anonymousUntilReveal`
+    // ("withhold the names"); the host-facing question is "show the names".
+    // They are inverses, and the inversion happens exactly here.
+    //
+    // rejects: emitting the checkbox value straight through, which silently
+    // means the opposite of what it says and would hand a room every author's
+    // name the moment a host ticked a box labelled "show", then hide them when
+    // it was cleared. Also rejects introducing a second boolean beside
+    // `anonymousUntilReveal` to dodge the inversion.
+    const onAnonymousUntilRevealChange = jest.fn();
+    const { unmount } = openNames({ onAnonymousUntilRevealChange });
+    fireEvent.click(screen.getByTestId('attribute-authors'));
+    expect(onAnonymousUntilRevealChange).toHaveBeenCalledWith(false);
+    unmount();
+
+    // ...and back the other way, which is the direction a copy-paste gets wrong.
+    onAnonymousUntilRevealChange.mockClear();
+    openNames({ anonymousUntilReveal: false, onAnonymousUntilRevealChange });
+    fireEvent.click(screen.getByTestId('attribute-authors'));
+    expect(onAnonymousUntilRevealChange).toHaveBeenCalledWith(true);
+  });
+
+  test('the irreversible direction is named as irreversible, next to the control', () => {
+    // THE GOVERNING PRINCIPLE: where a real trade-off exists, tell the host at
+    // the point of decision instead of deciding for them. The two directions
+    // genuinely differ — one reaches the server and one does not — and a host
+    // standing in front of a room needs to know which is which BEFORE pressing.
+    //
+    // rejects: dropping the warning, and rejects the symmetric lie that it can
+    // simply be toggled back.
+    const { container } = openNames();
+    const section = container.querySelector('.setup-settings');
+    expect(section.textContent).toMatch(/cannot be taken back/i);
+    expect(section.textContent).toMatch(/does not un-send/i);
+  });
+
+  test('the waiting-names setting is offered, ON by default, and says what it lists', () => {
+    // DEFAULT ON, and that is the whole retirement of the five-response block.
+    // The list is never up unless the host hovers or clicks the meter, so
+    // defaulting on puts nothing on a wall by itself — while defaulting off
+    // would rebuild the old block for the owner's own room, a team of four,
+    // where the response count never reaches five.
+    //
+    // rejects: a default-off replacement, and rejects copy that leaves the
+    // polarity ambiguous — a list of who HAS answered is the participation
+    // league table this product refuses to draw.
+    openNames();
+    const box = screen.getByTestId('name-waiting');
+    expect(box.checked).toBe(true);
+    fireEvent.click(box);
+    expect(screen.getByLabelText(/name who is still waiting/i)).toBe(box);
+  });
+
+  test('the caution states the risk AND the live count, and does not block anything', () => {
+    // THE SENTENCE THAT REPLACED THE BLOCK. `MIN_ANONYMOUS_ANSWERS` used to
+    // return null below five responses; it now words this.
+    //
+    // rejects: shipping the retirement with no explanation at all — the risk is
+    // real and the host is the one who has to weigh it — and rejects a generic
+    // disclaimer with no number in it, which is what a host learns to skip.
+    const { container } = openNames({ answerCount: 2 });
+    const caution = screen.getByTestId('waiting-caution');
+    expect(caution.textContent).toMatch(/subtract one list from the other/i);
+    expect(caution.textContent).toMatch(/\b2 responses\b/);
+    expect(caution.dataset.strong).toBe('true');
+    // ...and the control it sits under is still usable. rejects: a disabled
+    // input, which is the old block wearing an explanation.
+    expect(screen.getByTestId('name-waiting').disabled).toBe(false);
+    expect(container.querySelector('.setup-note--warn')).not.toBeNull();
+  });
+
+  test('a round with responses to hide inside is cautioned differently', () => {
+    // rejects: one flat warning for every round, which tells a host nothing
+    // they can act on and trains them to ignore the one that matters.
+    openNames({ answerCount: 12 });
+    const caution = screen.getByTestId('waiting-caution');
+    expect(caution.dataset.strong).toBe('false');
+    expect(caution.textContent).toMatch(/\b12 responses\b/);
+  });
+
+  test('nothing about names is asked of a format that has no authorship', () => {
+    // The file's own principle: an option that cannot do anything is a question
+    // a host should not be asked. Trivia's response is a letter, so there is
+    // nothing authored to attribute.
+    //
+    // rejects: rendering the section for every game type, which would offer a
+    // trivia host a switch that changes nothing on screen.
+    const { container } = renderPanel({ gameType: 'trivia' });
+    openTab('Settings');
+    expect(container.querySelector('[data-testid="attribute-authors"]')).toBeNull();
+    expect(container.querySelector('.setup-settings').textContent).not.toMatch(/still waiting/i);
+  });
+
+  test('a session that already shows its authors is not asked about waiting names', () => {
+    // rejects: leaving the second control on screen once the first makes it
+    // moot. With the names up there is no subtraction to protect, so
+    // waitingRoster ignores this setting entirely — and a switch that moves
+    // nothing is exactly what this panel refuses to draw.
+    const { container } = renderPanel({ gameType: 'poll', anonymousUntilReveal: false });
+    openTab('Settings');
+    expect(container.querySelector('[data-testid="attribute-authors"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="name-waiting"]')).toBeNull();
+    expect(container.querySelector('[data-testid="waiting-caution"]')).toBeNull();
+  });
+
+  test('the caution goes quiet once this round\'s authors are out', () => {
+    // rejects: a warning that stays on screen after the thing it protects is
+    // already public. The round is revealed; there is no anonymity set left to
+    // shrink, and a caution that is always up is a caution nobody reads.
+    const { container } = renderPanel({
+      gameType: 'poll', answerCount: 2, authorsRevealed: true,
+    });
+    openTab('Settings');
+    expect(container.querySelector('[data-testid="name-waiting"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="waiting-caution"]')).toBeNull();
+  });
+
+  test('THE DISPLAY PROFILE IS NOT AN INPUT TO EITHER DECISION', () => {
+    // THE OWNER'S RULING, verbatim: *"Don't use screen type for name reveal
+    // decision. I often have a projector with a team of four. Just leave the
+    // decision to the host."* A projector is not a proxy for room size,
+    // audience or sensitivity.
+    //
+    // rejects: any implementation that pre-ticks, hides, disables or re-words
+    // either control based on `profile` — the shortcut that looks thoughtful
+    // and is exactly the inference the owner forbade. Asserted by rendering the
+    // same panel on all four profiles and requiring identical answers.
+    const seen = ['room', 'tv', 'call', 'table'].map((profile) => {
+      const { container, unmount } = renderPanel({ gameType: 'poll', profile, answerCount: 2 });
+      openTab('Settings');
+      const section = container.querySelector('.setup-settings');
+      const snapshot = {
+        attribute: container.querySelector('[data-testid="attribute-authors"]').checked,
+        waiting: container.querySelector('[data-testid="name-waiting"]').checked,
+        caution: container.querySelector('[data-testid="waiting-caution"]').dataset.strong,
+        text: section.textContent.replace(/Room — projector|TV — large panel|Call — screen share|Table — laptop/g, ''),
+      };
+      unmount();
+      return snapshot;
+    });
+    seen.forEach((snapshot) => expect(snapshot).toEqual(seen[0]));
+  });
+});

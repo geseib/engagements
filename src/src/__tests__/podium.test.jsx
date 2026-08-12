@@ -225,13 +225,28 @@ describe('the page actually renders it, in the right place, from the right sourc
     expect((host.match(/<Podium\s/g) || []).length).toBe(2);
   });
 
-  test('RESULTS reads the display toggle; ENDED reads the server reveal', () => {
-    // rejects: wiring both to one source. Point ENDED at the RESULTS toggle
-    // and the podium disappears whenever the host last pressed Hide authors;
-    // point RESULTS at the server flag and hiding the names leaves the
-    // arithmetic — and therefore the attribution — on the wall.
-    expect(host).toMatch(/<Podium[^>]*[\s\S]{0,400}?authorsRevealed=\{!authorsHiddenOnStage\}/);
+  /**
+   * THE RULE THIS REPLACES. This was `test('RESULTS reads the display toggle;
+   * ENDED reads the server reveal')`, and the display toggle was
+   * `authorsHiddenOnStage` — a per-round Show/Hide authors button on the RESULTS
+   * stage. The owner replaced it with ONE session setting in the sidebar, with
+   * no per-round override, so RESULTS now reads that setting. ENDED is
+   * unchanged and the two must still not be merged.
+   */
+  test('RESULTS reads the session setting; ENDED reads the server reveal', () => {
+    // rejects: wiring both to one source. Point ENDED at the session setting
+    // and a whole anonymous session loses its closing podium — which attributes
+    // no response, only ranks people by score with nothing on screen to pin to
+    // anybody. Point RESULTS at the server flag and the podium is always on,
+    // because entering RESULTS reveals the round server-side whatever the host
+    // chose — so hiding the names would leave the arithmetic, and therefore the
+    // attribution, on the wall.
+    expect(host).toMatch(
+      /<Podium[^>]*[\s\S]{0,400}?authorsRevealed=\{!anonymityActive\(\{\s*\n?\s*gameType: currentGameType, anonymousUntilReveal,\s*\n?\s*\}\)\}/
+    );
     expect(host).toMatch(/<Podium[^>]*[\s\S]{0,400}?authorsRevealed=\{authorsRevealed\}/);
+    // rejects: the retired per-round toggle coming back anywhere near it.
+    expect(host).not.toMatch(/authorsHiddenOnStage/);
   });
 
   test('it is content inside the stage, not the meter', () => {

@@ -23,7 +23,9 @@ import RoomMeter from '../components/stage/RoomMeter';
 import HostActionBar from '../components/HostActionBar';
 import { hostControlsFor } from '../config/hostControls';
 import { shortcutsSuppressed } from '../utils/hostOverlays';
-import { waitingRoster, joinedRoster, MIN_ANONYMOUS_ANSWERS } from '../config/anonymity';
+import {
+  waitingRoster, joinedRoster, waitingNamesCaution, MIN_ANONYMOUS_ANSWERS,
+} from '../config/anonymity';
 
 const roster = (...names) => names.map((name) => ({ name }));
 
@@ -85,44 +87,81 @@ describe('waitingRoster — who may be named', () => {
     })).toBeNull();
   });
 
-  test('a hidden round with too few responses is not named, however many are waiting', () => {
-    // THE ANONYMITY GATE. Naming the waiters hands the room the answerer set
-    // by subtraction: every response on the stage drops from "one of N" to
-    // "one of k". At k = 1 that is complete de-anonymisation produced by a
-    // list that mentions the author nowhere.
-    //
-    // rejects: shipping the reveal with no anonymity gate at all, and rejects
-    // the intuitive gate — "only when several people are waiting, so nobody is
-    // singled out" — which is backwards on both halves. Nine of ten waiting is
-    // the dangerous case; one of forty is the safe one.
+  /**
+   * THE RULE THIS REPLACES, AND IT IS THE POINT OF THIS REVISION.
+   *
+   * This was `test('a hidden round with too few responses is not named, however
+   * many are waiting')`, and it held `answerCount < MIN_ANONYMOUS_ANSWERS →
+   * null`: the waiting list withheld on an anonymous round until five responses
+   * were in, with no override anywhere. THE OWNER OVERRULED IT — *"i said it was
+   * ok to reveal names if the host really wants to... the host has the info and
+   * the control"* — so the block is gone and the decision is a session setting.
+   * The test is rewritten to assert the NEW rule rather than deleted, because
+   * the risk it was protecting against is unchanged; only who decides has moved.
+   *
+   * The old block also failed the owner's own room. A team of four never reaches
+   * five responses, so the list was dead for the whole session and nothing said
+   * why — the reason a default-ON setting, not a default-OFF one, is the honest
+   * replacement.
+   */
+  test('a hidden round is named or not because the HOST said so, never because of a count', () => {
+    // rejects: leaving the count gate in place under any name. The first case
+    // is the one the old rule refused outright — 10 players, 1 response, 9
+    // waiting — and it is now offered, because the host has not said otherwise.
     const players = roster('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j');
     expect(waitingRoster({
       players, responded: ['a'], respondedCount: 1, answerCount: 1, ...hidden,
+    })).toEqual(['b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']);
+
+    // rejects: ignoring the setting, which would make the control decorative.
+    expect(waitingRoster({
+      players, responded: ['a'], respondedCount: 1, answerCount: 1, ...hidden,
+      nameWaitingWhenAnonymous: false,
     })).toBeNull();
 
-    // ...and the same round, once enough responses exist to hide inside.
-    const many = ['a', 'b', 'c', 'd', 'e'].slice(0, MIN_ANONYMOUS_ANSWERS);
+    // DEFAULT ON, and only an explicit `false` turns it off — the same rule
+    // anonymousUntilReveal uses, so the two host settings read the same way.
+    // rejects: a truthiness test (`if (!nameWaiting)`), which would refuse for
+    // an undefined prop and kill the feature the moment a caller forgot it.
+    [undefined, null, true].forEach((value) => {
+      expect(waitingRoster({
+        players, responded: ['a'], respondedCount: 1, answerCount: 1, ...hidden,
+        nameWaitingWhenAnonymous: value,
+      })).not.toBeNull();
+    });
+
+    // ...and above the old threshold nothing changed either way: the number no
+    // longer decides anything here.
+    // rejects: moving the constant into the condition again from the other side.
     expect(waitingRoster({
       players,
-      responded: many,
-      respondedCount: many.length,
+      responded: ['a', 'b', 'c', 'd', 'e'],
+      respondedCount: MIN_ANONYMOUS_ANSWERS,
       answerCount: MIN_ANONYMOUS_ANSWERS,
       ...hidden,
-    })).not.toBeNull();
+      nameWaitingWhenAnonymous: false,
+    })).toBeNull();
   });
 
-  test('the gate counts responses, not waiters', () => {
-    // rejects: gating on the size of the waiting list. That guard would block
-    // this case — 39 answered, 1 waiting, no leak whatsoever — while
-    // permitting the 1-answered/39-waiting case above.
+  test('the host setting binds only while there is something to protect', () => {
+    // rejects: applying the setting to an open round. On a session that
+    // attributes its authors there is no subtraction to worry about, so a host
+    // who once switched the waiting names off must not lose the list on a
+    // format that never hid anything — that would be a second, invisible rule.
     const players = roster(...Array.from({ length: 40 }, (_, i) => `p${i}`));
     const responded = players.slice(0, 39).map((p) => p.name);
     expect(waitingRoster({
-      players, responded, respondedCount: 39, answerCount: 39, ...hidden,
+      players, responded, respondedCount: 39, answerCount: 39, ...open,
+      nameWaitingWhenAnonymous: false,
     })).toEqual(['p39']);
+    // The same room on a hidden round: now it binds.
+    expect(waitingRoster({
+      players, responded, respondedCount: 39, answerCount: 39, ...hidden,
+      nameWaitingWhenAnonymous: false,
+    })).toBeNull();
   });
 
-  test('the gate lifts when there is nothing left to protect', () => {
+  test('the setting lifts when there is nothing left to protect', () => {
     // Two ways a round stops being hidden, and both must lift it or the
     // feature is dead on the states that need it most.
     //
@@ -158,6 +197,70 @@ describe('waitingRoster — who may be named', () => {
       answerCount: 1,
       ...open,
     })).toEqual(['Dana']);
+  });
+});
+
+/**
+ * THE SENTENCE THAT REPLACED THE BLOCK.
+ *
+ * `MIN_ANONYMOUS_ANSWERS` used to refuse; it now words a caution and the host
+ * decides. These tests hold the half of the old rule that survived — the risk is
+ * measured in RESPONSES, not in waiters — and the half that is new: it is
+ * information, so it must be specific, and it must not be on screen when there
+ * is nothing to be careful about.
+ */
+describe('waitingNamesCaution — information, not gating', () => {
+  test('it says nothing when there is nothing to be careful about', () => {
+    // rejects: a caution that is always on screen, which is a caution nobody
+    // reads. Three ways a round has no anonymity to lose, and all three must
+    // silence it or the panel cries wolf on every trivia game.
+    expect(waitingNamesCaution({
+      answerCount: 1, gameType: 'trivia', anonymousUntilReveal: true,
+    })).toBeNull();
+    expect(waitingNamesCaution({ answerCount: 1, ...open })).toBeNull();
+    expect(waitingNamesCaution({
+      answerCount: 1, ...hidden, authorsRevealed: true,
+    })).toBeNull();
+  });
+
+  test('below the old threshold it says so, and says it strongly', () => {
+    // rejects: dropping `strong`, which is the only machine-readable half — the
+    // panel styles the caution from it, and without it the dangerous case and
+    // the safe one look identical on a projector.
+    const c = waitingNamesCaution({ answerCount: 2, ...hidden });
+    expect(c.strong).toBe(true);
+    // rejects: a generic disclaimer. The live count is IN the sentence, which
+    // is the whole difference between "this may reduce anonymity" and a fact
+    // the host can act on.
+    expect(c.text).toMatch(/\b2 responses\b/);
+    // rejects: keeping the old constant as a boundary bug — 4 is cautioned
+    // strongly, 5 is not, matching MIN_ANONYMOUS_ANSWERS exactly.
+    expect(waitingNamesCaution({ answerCount: MIN_ANONYMOUS_ANSWERS - 1, ...hidden }).strong)
+      .toBe(true);
+    expect(waitingNamesCaution({ answerCount: MIN_ANONYMOUS_ANSWERS, ...hidden }).strong)
+      .toBe(false);
+  });
+
+  test('one response is singular, and none is neither', () => {
+    // rejects: `${n} responses` unconditionally — "1 responses in" on the one
+    // round where the subtraction is total is the sentence a host reads least
+    // charitably. And rejects treating an empty round as the dangerous case:
+    // there is nothing on the stage to attribute yet, so saying so is honest
+    // and saying "0 responses — few enough to identify" is not.
+    expect(waitingNamesCaution({ answerCount: 1, ...hidden }).text).toMatch(/\b1 response\b/);
+    const none = waitingNamesCaution({ answerCount: 0, ...hidden });
+    expect(none.strong).toBe(false);
+    expect(none.text).toMatch(/nothing to work out/);
+  });
+
+  test('it measures responses, not waiters', () => {
+    // THE HALF OF THE OLD RULE THAT DID NOT CHANGE. rejects: wording the
+    // caution from the size of the waiting list. 39 responses in and 1 person
+    // waiting is the SAFE case; 1 response and 39 waiting is the catastrophic
+    // one, and a caution built on the waiting count says the opposite of the
+    // truth in both.
+    expect(waitingNamesCaution({ answerCount: 39, ...hidden }).strong).toBe(false);
+    expect(waitingNamesCaution({ answerCount: 1, ...hidden }).strong).toBe(true);
   });
 });
 
@@ -206,21 +309,31 @@ describe('joinedRoster — who is already here', () => {
 
   test('NO ANONYMITY GATE — an anonymous poll still names its lobby', () => {
     // THE OWNER'S RULING, and the one an implementation gets wrong by being
-    // careful. waitingRoster suppresses the list on a hidden round until
-    // MIN_ANONYMOUS_ANSWERS responses exist, because naming the waiters shrinks
-    // the anonymity set of the responses on the stage. In a lobby there are no
-    // responses — answers is empty, no round has opened — so that threshold
-    // would compare against a constant zero and suppress the lobby list for
-    // the entire session on exactly the formats the owner was looking at.
+    // careful. The round phases have an anonymity rule at all because naming
+    // the waiters shrinks the anonymity set of the responses on the stage. In a
+    // lobby there are no responses — answers is empty, no round has opened — so
+    // there is nothing to shrink, and the round-phase rule must not reach here
+    // in any of its forms. It used to be an automatic threshold against
+    // `answerCount`, which in a lobby is a constant zero: routing the lobby
+    // through it would have suppressed the list for the entire session on
+    // exactly the formats the owner was looking at. It is now a host setting,
+    // and routing the lobby through THAT would be the same mistake wearing a
+    // checkbox — a host who does not want names inside a round has said nothing
+    // about the attendance list before it starts.
     //
     // rejects: routing the lobby through waitingRoster or through
-    // anonymityActive/MIN_ANONYMOUS_ANSWERS in any form. Joining is not a
-    // response; anonymity here is about authorship of answers.
+    // anonymityActive/MIN_ANONYMOUS_ANSWERS/nameWaitingWhenAnonymous in any
+    // form. Joining is not a response; anonymity here is about authorship of
+    // answers.
     const players = roster('Dana', 'Tomás');
     expect(joinedRoster({ players, ...hidden })).toEqual(['Dana', 'Tomás']);
-    // The same room, same size, through the round-phase gate: refused.
+    expect(joinedRoster({ players, ...hidden, nameWaitingWhenAnonymous: false }))
+      .toEqual(['Dana', 'Tomás']);
+    // The same room, same size, through the round-phase rule with the host's
+    // setting off: refused there, and only there.
     expect(waitingRoster({
       players, responded: [], respondedCount: 0, answerCount: 0, ...hidden,
+      nameWaitingWhenAnonymous: false,
     })).toBeNull();
   });
 });
@@ -413,7 +526,15 @@ describe('the reveal behaves like the QR trigger it was copied from', () => {
  */
 describe('GameHostPage wires the reveal through the gate', () => {
   const source = readFileSync(join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
-  const markup = source.replace(/\/\*[\s\S]*?\*\//g, '');
+  // BLOCK **AND** LINE COMMENTS, the same stripper setupPanelCallSite.test.js
+  // uses. Block-only was enough until this change: the page now explains in a
+  // `//` comment what `authorsHiddenOnStage` was and why it is retired, and a
+  // scan that reads the file's own account of a deleted identifier as the
+  // identifier reports the explanation as the bug.
+  const markup = source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^[ \t]*\/\/.*$/gm, '')
+    .replace(/([^:'"`\\])\/\/.*$/gm, '$1');
 
   test('the page asks the gate rather than assembling a list itself', () => {
     // rejects: computing `players.filter(...)` inline at the meter, which is
@@ -426,20 +547,77 @@ describe('GameHostPage wires the reveal through the gate', () => {
     // Every argument the gate needs. A missing anonymity argument does not
     // throw — it reads as undefined and quietly opens the gate.
     ['players', 'responded', 'respondedCount', 'answerCount', 'gameType',
-      'anonymousUntilReveal', 'authorsRevealed'].forEach((arg) => {
+      'anonymousUntilReveal', 'authorsRevealed', 'nameWaitingWhenAnonymous'].forEach((arg) => {
       expect(call).toMatch(new RegExp(`\\b${arg}\\b`));
     });
     // The freshness guard only means something if the count passed is the
     // meter's own numerator and the names are the participation list.
     expect(call).toMatch(/responded:\s*hostPhase === 'VOTE' \? playersWhoVoted : playersWhoAnswered/);
     expect(call).toMatch(/respondedCount:\s*hostPhase === 'VOTE' \? playersWhoVoted\.length : answeredCount/);
-    // The anonymity gate measures the CONTENT on the wall, so the response
-    // count is the round's answers — not the voted count, and not the roster.
+    // The caution measures the CONTENT on the wall, so the response count is
+    // the round's answers — not the voted count, and not the roster.
     expect(call).toMatch(/answerCount:\s*answers\.length/);
-    // The server flag, not the RESULTS display toggle, which does not exist
-    // on the two phases this meter appears on.
+    // The server flag — whether THIS round's names are out.
     expect(call).toMatch(/authorsRevealed,/);
-    expect(call).not.toMatch(/authorsHiddenOnStage/);
+    // rejects: the retired per-round display toggle reappearing anywhere.
+    expect(markup).not.toMatch(/authorsHiddenOnStage/);
+    // THE HOST'S SETTING, passed through rather than re-derived at the meter.
+    // rejects: the page reading the count itself (`answers.length >= 5 &&`),
+    // which is the old block moved one file over.
+    expect(call).toMatch(/nameWaitingWhenAnonymous,/);
+    expect(markup).toMatch(/const \[nameWaitingWhenAnonymous, setNameWaitingWhenAnonymous\]/);
+  });
+
+  /**
+   * THE SETTINGS TAB IS WHERE THE TWO DECISIONS ARE MADE, and the panel is a
+   * presentational component — so if the page does not hand it the state and the
+   * setters, both controls render, move nothing, and reset on the next open.
+   */
+  test('both name settings reach the panel, and neither is derived from the display profile', () => {
+    const at = markup.indexOf('<SessionSetupPanel');
+    expect(at).toBeGreaterThan(-1);
+    const el = markup.slice(at, markup.indexOf('/>', at));
+
+    // rejects: rendering the controls with no way to change anything, and
+    // rejects a second flag beside anonymousUntilReveal — the setter here is
+    // the SAME setter the create path and the restore path use.
+    expect(el).toMatch(/anonymousUntilReveal=\{anonymousUntilReveal\}/);
+    expect(el).toMatch(/onAnonymousUntilRevealChange=\{setAnonymousUntilReveal\}/);
+    expect(el).toMatch(/nameWaitingWhenAnonymous=\{nameWaitingWhenAnonymous\}/);
+    expect(el).toMatch(/onNameWaitingChange=\{setNameWaitingWhenAnonymous\}/);
+    // The caution needs the live round to say anything specific.
+    expect(el).toMatch(/answerCount=\{answers\.length\}/);
+    expect(el).toMatch(/gameType=\{currentGameType\}/);
+
+    // THE OWNER'S RULING: *"Don't use screen type for name reveal decision."*
+    // rejects: any future shortcut that reads the display profile — a projector
+    // is not a proxy for room size, audience or sensitivity, and the owner runs
+    // one with a team of four.
+    const panelSrc = readFileSync(
+      join(__dirname, '..', 'components', 'stage', 'SessionSetupPanel.jsx'), 'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+    const names = panelSrc.slice(panelSrc.indexOf('<h3 className="setup-h">Names'));
+    const namesSection = names.slice(0, names.indexOf('<h3 className="setup-h">Display'));
+    expect(namesSection.length).toBeGreaterThan(200);
+    expect(namesSection).not.toMatch(/\bprofile\b/);
+  });
+
+  test('the session setting is what makes the server stop redacting', () => {
+    // rejects: flipping the client flag and nothing else. The SERVER strips the
+    // names (lambda-functions/game/anonymity.js), so a host who switches
+    // attribution on would otherwise get a stage that claims to name authors
+    // and prints "Response 1" — and would get it again on every later round,
+    // because the game's stored preference never changed.
+    const at = markup.indexOf('if (anonymousUntilReveal !== false) return;');
+    expect(at).toBeGreaterThan(-1);
+    const effect = markup.slice(at, markup.indexOf('}, [', at));
+    expect(effect).toMatch(/handleRevealAuthors\(\)/);
+    // rejects: an effect that re-posts forever. The round's own reveal flag is
+    // the stop condition, and there must be a ballot to reveal.
+    expect(effect).toMatch(/if \(authorsRevealed\) return;/);
+    expect(effect).toMatch(/answers\.length === 0/);
+    // rejects: revealing a format with nothing authored to attribute.
+    expect(effect).toMatch(/anonymityApplies\(currentGameType\)/);
   });
 
   /**
