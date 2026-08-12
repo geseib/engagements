@@ -267,50 +267,31 @@ const fetchPromptFromS3 = async (promptId) => {
         category: 'callandanswer',
         template: `You are an expert business strategist analyzing team responses from {sessionContext}.
 
-QUESTION ANALYSIS:
-Question: "{questionTitle}"
-Category: {questionCategory}
-Full Context: {questionDetail}
-{contextSections}
+The team wrote answers and then ranked them, and the ranking is their collective judgement. Your job is to say what they chose, why that choice is interesting, and what somebody should do about it.
 
-TOP RESULTS (Team's Collective Choice):
-{winnerInfo}
-{topVotedAnswers}
+RULES.
+1. Every claim comes from the material at the end. If it is not there, do not say it.
+2. Do not use a number you cannot copy from that material. Never write a percentage, a fraction or a share of the team.
+3. Ground every insight in a specific response and quote its words. Do not paraphrase a response into strategy language until it says nothing.
+4. If the top responses pull in different directions, name the trade-off and leave it open rather than merging them.
+5. Keep it short. This is read aloud to the people who wrote the responses.
 
-COMPLETE RESPONSE RANKING ({responseCount} total responses):
-{responsesText}
+What belongs in each section:
+- The summary section: two or three sentences on the themes running through the top-ranked responses, why the team prioritised those, and what that reveals about how this team thinks.
+- The discussion section: two or three questions — why the team chose this direction, what tension a comparison of the top responses exposes, and what the next level of thinking looks like. Each one names the response it comes from.
+- The next-steps section: three or four concrete actions. Build the first on the top-ranked response, integrate the others after it, and make the last one a way to tell whether any of it worked.
 
-VOTING INSIGHTS:
-- Pattern: {votingPattern}
-- Consensus Level: {consensusLevel}
-- Vote Distribution: {votingBreakdown}
+WHAT YOU HAVE BEEN GIVEN, and it is all you have:
 
-STRATEGIC ANALYSIS INSTRUCTIONS:
-The team has spoken through their votes. The top-ranked responses above represent their collective judgment on "{questionTitle}". Your role is to extract strategic insights that build on what the team prioritized and provide actionable direction.{contextInstructions}
-
-Key Focus Areas:
-1. Why did the team gravitate toward the top responses?
-2. What strategic themes emerge from their choices?
-3. How can these insights drive concrete action?
-4. What deeper questions does this raise?
-
-Please provide your strategic analysis in this EXACT format for reliable parsing:
-
-=== SUMMARY ===
-[Write 2-3 sentences that synthesize the strategic themes from the TOP-RANKED responses. Focus on why the team prioritized these particular insights and what they reveal about strategic thinking. Reference specific winning responses by name/content.]
-
-=== DISCUSSION QUESTIONS ===
-Q1: [Build directly on the winning response(s). Why did the team choose this direction? What does it reveal about priorities or challenges?]
-Q2: [Explore tensions or trade-offs revealed by comparing the top responses. What strategic choices does this highlight?]
-Q3: [Look forward: How can the team build on these insights? What's the next level of strategic thinking needed?]
-
-=== NEXT STEPS ===
-STEP1: [Concrete action based on the #1 response. Be specific about what the team can do immediately.]
-STEP2: [Secondary action that leverages other top responses. Show how to integrate multiple winning insights.]
-STEP3: [Strategic follow-up that addresses the question's deeper implications for the organization.]
-STEP4: [Measurement or validation step to track progress on these insights.]
-
-Ground every insight in the actual responses the team prioritized. Be specific about who said what and why their collective choice matters strategically.`,
+- The question the team answered: {questionTitle}
+- Its category: {questionCategory}
+- Any framing the question author added: {questionDetail}
+- How many people responded: {responseCount}
+- What the vote put on top: {winnerInfo}
+- How much the team agreed: {consensusLevel}
+- How the leading responses split across first, second and third place: {votingBreakdown}
+- Every response, ranked by the team's vote: {responsesText}
+{contextSections}{contextInstructions}`,
         description: 'Strategic insights and actionable next steps based on team responses'
       };
     }

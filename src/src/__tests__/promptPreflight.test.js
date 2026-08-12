@@ -11,10 +11,19 @@
  * making that exact change and watching the test go red — the list of mutations
  * is in the handoff for this work.
  *
- * THE PRIMARY FIXTURE IS A REAL PROMPT.
+ * THE PRIMARY FIXTURE IS A REAL PROMPT, AND IT IS NOW A DATED ONE.
  * `sets/prompt-callandanswer-workie-advisor.json` was authored with unusual
- * care, run end to end, and still shipped six defects. It is read off disk
- * rather than copied in, so an edit to that file moves these tests.
+ * care, run end to end, and still shipped six defects. The detector was built
+ * against that text, and every measured number below — 2,244 / 635 / 732 chars,
+ * 6,025 authored, 18,072 assembled — belongs to it.
+ *
+ * The prompt has since been swept: the rules name their fields by LABEL instead
+ * of by token, so D2 is gone from it. A detector needs a defective specimen, so
+ * the version the evaluation measured is frozen at
+ * `__tests__/fixtures/advisor-prompt-as-evaluated-2026-08-11.json` and the
+ * detector tests read THAT. The swept file is read separately, and the last
+ * describe block in this file asserts it is clean — which is a different
+ * question and a check the repo did not have before.
  */
 const fs = require('fs');
 const path = require('path');
@@ -23,8 +32,12 @@ import { preflightPrompt, describePreflight } from '../utils/promptPreflight';
 
 const SETS = path.join(__dirname, '..', '..', '..', 'sets');
 const loadPrompt = (file) => JSON.parse(fs.readFileSync(path.join(SETS, file), 'utf8'));
+const loadFixture = (file) => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', file), 'utf8'));
 
-const ADVISOR = loadPrompt('prompt-callandanswer-workie-advisor.json');
+/** The prompt exactly as the 2026-08-11 evaluation measured it. Do not edit. */
+const ADVISOR = loadFixture('advisor-prompt-as-evaluated-2026-08-11.json');
+/** The same prompt as it ships today, after the sweep. */
+const ADVISOR_LIVE = loadPrompt('prompt-callandanswer-workie-advisor.json');
 
 const codes = (list) => list.map((f) => f.code);
 const byCode = (list, code) => list.filter((f) => f.code === code);
@@ -142,14 +155,14 @@ describe('tier one — the prompt will not run as written', () => {
     // rejecting shapes the engine accepts. rejects: an over-eager check — the
     // advisor's own four sections must pass, and they are the reason
     // prompt-owned structure exists at all.
-    const report = preflightPrompt(ADVISOR);
+    const report = preflightPrompt(ADVISOR_LIVE);
     expect(report.blocking).toEqual([]);
   });
 });
 
 /* ================================================================ SILENT == */
 
-describe('the real advisor prompt — the defects it shipped with', () => {
+describe('the advisor prompt as it was evaluated — the defects it shipped with', () => {
   const report = preflightPrompt(ADVISOR);
 
   test('D2: it finds the four fields whose names were destroyed by their own values', () => {
@@ -274,15 +287,23 @@ describe('the other prompts this repo ships — the false-positive floor', () =>
     expect(byCode(report.silent, 'prose-inlined-variable')).toEqual([]);
   });
 
-  test('the shipped poll and wavelength defaults still get their unsafe-variable findings', () => {
-    // Quiet is not the same as blind. rejects: suppressing the unsafe list
-    // along with the prose noise — {topVotedAnswers} in the poll default really
-    // does render "a participant: 13 vote points" with no answer text, and
-    // {totalParticipants} in the wavelength default really is the answer count.
-    const poll = preflightPrompt(loadPrompt('prompt-poll-round.json'));
-    const wave = preflightPrompt(loadPrompt('prompt-wavelength-round.json'));
-    expect(titled(poll.silent, '{topVotedAnswers}')).toBeTruthy();
-    expect(titled(wave.silent, '{totalParticipants}')).toBeTruthy();
+  test('a prompt in the shipped prompts\' own shape still gets its unsafe-variable findings', () => {
+    // Quiet is not the same as blind. Both of these were live in `sets/` until
+    // the sweep — the poll default carried {topVotedAnswers}, which really does
+    // render "a participant: 13 vote points" with no answer text, and the
+    // wavelength default carried {totalParticipants}, which really is the
+    // answer count. They are written here in the labelled field-list form the
+    // shipped prompts use, so the ONLY thing that can produce a finding is the
+    // unsafe list itself.
+    // rejects: suppressing the unsafe list along with the prose noise — a
+    // detector tuned until working prompts are silent can go silent on these
+    // two as well, and they are the reason it was built.
+    const report = preflightPrompt(ok({
+      instructions: '- What rose to the top: {topVotedAnswers}\n- How many took part: {totalParticipants}',
+    }));
+    expect(byCode(report.silent, 'prose-inlined-variable')).toEqual([]);
+    expect(titled(report.silent, '{topVotedAnswers}')).toBeTruthy();
+    expect(titled(report.silent, '{totalParticipants}')).toBeTruthy();
   });
 });
 
@@ -560,5 +581,170 @@ describe('the numbers the panel shows', () => {
       instructions: '- The answers: {responsesText}\n\nSay what the room decided.',
     })));
     expect(line).toContain('nothing to report');
+  });
+});
+
+/* ============================================================== THE SWEEP == */
+
+/**
+ * The preflight run over every prompt this product actually ships, as a gate.
+ *
+ * The module above answers "what will this prompt do?". This block answers the
+ * question that motivated it: "is anything we ship still doing it?" — which is
+ * the check that was missing when the advisor prompt shipped D2 past a green
+ * save gate and a clean `unresolvedVariables`.
+ *
+ * Everything here is derived from the preflight report or from the token
+ * positions, never from the prompt's prose, so re-wording a rule cannot break
+ * it and re-introducing a defect cannot slip past it.
+ */
+describe('every prompt this product ships is clean', () => {
+  const REPO = path.join(__dirname, '..', '..', '..');
+  const GAS = fs.readFileSync(path.join(REPO, 'lambda-functions', 'game', 'get-ai-summary.js'), 'utf8');
+  const DEFAULTS = JSON.parse(
+    fs.readFileSync(path.join(REPO, 'lambda-functions', 'admin', 'default-ai-prompts.json'), 'utf8')
+  );
+
+  const SET_FILES = [
+    'prompt-callandanswer-workie-advisor.json',
+    'prompt-poll-round.json',
+    'prompt-trivia-vj.json',
+    'prompt-wavelength-round.json',
+  ];
+
+  /** Every shipped prompt, as preflightPrompt() input, with a name to fail under. */
+  const SHIPPED = [
+    ...SET_FILES.map((file) => [`sets/${file}`, loadPrompt(file)]),
+    ...Object.entries(DEFAULTS).flatMap(([gameType, categories]) =>
+      Object.entries(categories).map(([cat, p]) => [
+        `default-ai-prompts.json ${gameType}/${cat}`,
+        { ...p, gameType: p.gameType || gameType, category: p.category || cat },
+      ])),
+    ['get-ai-summary.js hardcoded fallback', {
+      template: GAS.slice(GAS.indexOf('`', GAS.indexOf('template: `You are an expert business strategist')) + 1,
+        GAS.indexOf('`,', GAS.indexOf('template: `You are an expert business strategist'))),
+      gameType: 'call-and-answer',
+    }],
+  ];
+
+  test.each(SHIPPED)('%s has no blocking finding', (_name, prompt) => {
+    // A blocking finding means the prompt does not run as written: a token that
+    // survives substitution and lands on a projector as literal braces, or a
+    // declared output shape that normalizeOutputSections throws away whole.
+    // Nine of these shipped — eight in the Workie trivia default and one in the
+    // wavelength word-analysis default, each of them a `{token}` whose meaning
+    // lived in a sibling `variables` map that populate-defaults.js drops.
+    // rejects: re-adding a token no `templateVars` key fills, which is the
+    // single cheapest way to put `{braces}` in front of a room.
+    expect(preflightPrompt(prompt).blocking).toEqual([]);
+  });
+
+  test.each(SHIPPED)('%s inlines no data into a sentence and repeats no large field', (_name, prompt) => {
+    // D2, as a gate. `prose-inlined-variable` is a rule whose field name was
+    // replaced by the field's value ("If 11 is 0"); `duplicated-variable` is a
+    // large value substituted twice. Together they were 40% of the advisor's
+    // 18,072-character prompt.
+    // rejects: naming a field by its token inside a rule again, and rejects:
+    // listing the same large field twice — both of which pass the save gate,
+    // pass `unresolvedVariables`, and are invisible to a host.
+    const report = preflightPrompt(prompt);
+    expect(codes(report.silent).filter((c) => c === 'prose-inlined-variable' || c === 'duplicated-variable'))
+      .toEqual([]);
+  });
+
+  test.each(SHIPPED)('%s names none of the five variables that resolve cleanly and are wrong', (_name, prompt) => {
+    // {votingPattern} compares vote POINTS against a count of VOTERS
+    // (get-ai-summary.js:1580); {resultsSummary} divides by totalVotes * 3 with
+    // a literal 3 while first place is worth scoringConfig.firstPlacePoints;
+    // {topVotedAnswers} carries no answer text off trivia; {totalParticipants}
+    // is the answer count, not the room; {activeParticipants} silently becomes
+    // the answer count when nobody voted.
+    // rejects: putting any of the five back into a shipped prompt. Each one is
+    // a number or a label a host reads aloud, and each is the same shape as the
+    // participation lie 78df15ca removed.
+    expect(codes(preflightPrompt(prompt).silent).filter((c) => c === 'unsafe-variable')).toEqual([]);
+  });
+
+  test.each(SET_FILES)('sets/%s puts every token in the field list, never in a rule', (file) => {
+    // The fix D2 called for, stated as an invariant rather than as prose: a
+    // `{token}` may appear only as the value of a labelled field-list line, so
+    // substitution can only ever fill a field and never overwrite a rule's
+    // reference to one. The rules point at labels instead, and a label survives
+    // the substitution loop.
+    // rejects: a rule that names a token — the exact edit that produced "If 11
+    // is 0" and a 1,557-character rule 4. The preflight's cue list only reports
+    // a prose token when one of five grammatical cues fires; this rejects the
+    // shape outright, including the cases the cue list misses.
+    const prompt = loadPrompt(file);
+    const offenders = [];
+    for (const field of ['instructions', 'outputFormat']) {
+      for (const line of String(prompt[field] || '').split('\n')) {
+        if (!/\{[A-Za-z_$][A-Za-z0-9_$]*\}/.test(line)) continue;
+        if (!/^- [^{}]+: \{[A-Za-z_$][A-Za-z0-9_$]*\}$/.test(line)) offenders.push(`${field}: ${line}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  test.each(SET_FILES)('sets/%s names each field exactly once', (file) => {
+    // Every occurrence is substituted separately, so a field named twice is its
+    // value twice. rejects: a second mention of a field anywhere — the field
+    // list is the one place a token belongs, and once there is nowhere else for
+    // a duplicate to hide.
+    const prompt = loadPrompt(file);
+    const text = `${prompt.instructions || ''}\n${prompt.outputFormat || ''}`;
+    const counts = {};
+    for (const m of text.match(/\{[A-Za-z_$][A-Za-z0-9_$]*\}/g) || []) counts[m] = (counts[m] || 0) + 1;
+    expect(Object.entries(counts).filter(([, n]) => n > 1)).toEqual([]);
+  });
+
+  test('the swept advisor assembles smaller than the one that was evaluated', () => {
+    // The point of the sweep, in one number. The evaluated prompt inlined
+    // responsesText, voteTally and votingBreakdown twice each; the swept one
+    // names each field once and dropped voteTally, whose whole content is the
+    // top three lines of responsesText.
+    // rejects: a re-write that reads well and assembles no smaller — the defect
+    // was never the wording, it was what substitution did to it.
+    const before = preflightPrompt(ADVISOR).stats;
+    const after = preflightPrompt(ADVISOR_LIVE).stats;
+    expect(after.duplicatedChars).toBe(0);
+    expect(before.duplicatedChars).toBeGreaterThan(3000);
+    expect(after.inlinedChars).toBeLessThan(before.inlinedChars / 2);
+    expect(after.assembledChars).toBeLessThan(before.assembledChars - 3000);
+  });
+
+  test('no default template mandates headings of its own', () => {
+    // buildOutputContract() is appended last and says it "supersedes any
+    // formatting or output-structure instruction that appeared earlier in this
+    // prompt", and parseAIResponse fills discussionQuestions and nextSteps only
+    // from a SECTION_SYNONYMS match. Six defaults carried their own emoji
+    // heading skeletons — "## 🤔 Reflection Questions" matches no synonym — so a
+    // model that obeyed the template emptied both fields and the host remote
+    // and the host panel went quiet while the projector looked right. Two of
+    // the six were the isDefault prompt for their game type.
+    // rejects: pasting a heading skeleton back into a template. A prompt that
+    // wants its own shape declares `outputSections`, which is validated and
+    // actually honoured; a `##` line in the body is only a contradiction.
+    const offenders = [];
+    for (const [gameType, categories] of Object.entries(DEFAULTS)) {
+      for (const [cat, p] of Object.entries(categories)) {
+        if (p.outputSections) continue; // a declared shape is honoured, not overridden
+        const headings = String(p.template || '').match(/^#{1,6}\s.+$/gm) || [];
+        if (headings.length) offenders.push(`${gameType}/${cat}: ${headings.join(' · ')}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  test('no default template carries a `variables` map the seeder throws away', () => {
+    // populate-defaults.js builds its S3 record field by field and never reads
+    // `variables`, so a token defined only there reaches the model undefined.
+    // That is where eight of the nine blocking findings came from: the map read
+    // like a definition and was dead data.
+    // rejects: re-adding the map, which makes an unresolvable token look
+    // deliberate to the next person who opens the file.
+    const offenders = Object.entries(DEFAULTS).flatMap(([g, cs]) =>
+      Object.entries(cs).filter(([, p]) => p.variables).map(([c]) => `${g}/${c}`));
+    expect(offenders).toEqual([]);
   });
 });
