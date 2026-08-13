@@ -7,11 +7,11 @@
 Changed 2026-08-12 by the owner. The previous rule reserved every tier to the owner; dev is
 now Claude's to ship so review can happen against a running environment instead of a diff.
 
-| Tier | Who pushes the tag |
+| Tier | Who may deploy it — **by tag OR by branch push, both of which deploy** |
 |---|---|
-| **dev** (`dev-v*`) | **Claude may push it** once the work is committed and the baselines hold. |
-| **test** (`test-v*`) | Owner only. Never push this. |
-| **prod** (`prod-v*`) | Owner only. Never push this. It halts at `ApprovalForProd` regardless, but do not start it. |
+| **dev** (`dev-v*` tag, or a push to `dev`) | **Claude may deploy** once the work is committed and the baselines hold. In practice this means pushing `dev`, since tag pushes 403 from the remote container. |
+| **test** (`test-v*` tag, or a push to `test`) | Owner only. Never push the tag **and never push the branch** — on this pipeline they are the same act. |
+| **prod** (`prod-v*` tag, or a push to `prod`) | Owner only. Never push either. It halts at `ApprovalForProd` regardless, but do not start it. |
 
 What dev being Claude's does **not** change:
 - **Tests and build first.** A dev tag goes up only after the backend suite, the frontend suite
@@ -23,18 +23,38 @@ What dev being Claude's does **not** change:
 - **Never run `./deployall`, `./scripts/deploy-clean.sh` or `./scripts/deploy-frontend-eng.sh`.**
   They target the off-pipeline `engdev` stack, not the CI/CD tiers.
 
-**What counts as a deploy, as of 2026-08-10: pushing a `<tier>-v*` tag. That is the only
-thing that reaches an environment.** The pipelines are tag-triggered only
-(`cicd/pipeline-clean.yaml`), so `git push origin dev` is now just a push. It used to deploy —
-each `Triggers` block carried a `- Branches:` entry — and any older instruction saying a branch
-merge auto-deploys is stale.
+## **WHAT COUNTS AS A DEPLOY — read this before believing the template**
 
-**Caveat worth checking once:** `b6929cac` made the pipelines tag-only in the template, and
-`docs/handoff/RESUME.md` records that it was **committed and never applied** to the running
-stack. If that is still true, a branch push to `dev` also deploys. Confirm with:
+**BOTH a `<tier>-v*` TAG AND A PUSH TO THE TIER BRANCH DEPLOY.** Confirmed by the owner
+2026-08-12. `git push origin dev` reaches the dev environment on its own; no tag is required.
+
+**The template in this repo says otherwise and the template is not what is running.**
+`cicd/pipeline-clean.yaml` was changed by `b6929cac` to carry only `- Tags:` in each `Triggers`
+block, and `docs/handoff/RESUME.md` has always recorded that this commit was **committed and
+never applied**. The running pipelines still carry their `- Branches:` entry. Reading the
+template and concluding "branch pushes are inert" is wrong, and an earlier version of this file
+said exactly that.
+
+Consequences that actually matter:
+
+- **A branch push is a deploy.** Pushing work to `dev` to share it, back it up, or get it
+  reviewed also ships it. There is no "just push it" on a tier branch.
+- **Push the branch OR the tag, never both.** Both trigger, so doing both fires two executions
+  of the same commit into the same stack.
+- **`main` has no pipeline** and triggers nothing.
+
+To re-check at any time — and do re-check before trusting either rule:
 ```bash
 aws codepipeline get-pipeline --name engagecicd-pipeline-dev --query 'pipeline.triggers'
 ```
+
+If that comes back tags-only, `b6929cac` has finally been applied and this section needs
+rewriting again.
+
+**Known environment limitation:** in the Claude Code remote container, pushes to `refs/tags/*`
+fail with **HTTP 403** while pushes to `refs/heads/*` succeed. Verified four ways, including a
+`--dry-run` tag push that succeeds where the real one does not. So from that environment a
+branch push is the only deploy route available, which — given the rule above — works.
 
 Never run `./deployall`, `./scripts/deploy-clean.sh` or `./scripts/deploy-frontend-eng.sh`. They
 target the off-pipeline `engdev` stack, not the CI/CD tiers.
