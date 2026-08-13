@@ -236,6 +236,23 @@ export function normalizeVersions(payload, activeVersion) {
     ? payload
     : (payload && Array.isArray(payload.versions) ? payload.versions : []);
 
+  // EXACTLY ONE SOURCE OF TRUTH, and which one is decided per payload rather
+  // than per row.
+  //
+  // This used to be `v.isActive === true || version === Number(activeVersion)`,
+  // an OR across two sources — and after adding a version it lit up TWO rows.
+  // The server computes isActive from the SETS row it has just read
+  // (get-set-versions.js:87), so it is fresh and correct. `activeVersion` here
+  // comes from the set the EDITOR was handed, which is a list payload fetched
+  // before the save. So the moment a save bumped the active version, the fresh
+  // server flag marked the new version and the stale prop marked the old one,
+  // and the OR happily kept both.
+  //
+  // So: if the payload carries isActive at all, it is authoritative and the
+  // prop is ignored entirely. The prop is only a fallback for a payload that
+  // omits the field — which is what the fallback was for in the first place.
+  const payloadDeclaresActive = list.some((v) => typeof v.isActive === 'boolean');
+
   return list
     .map((v) => {
       const version = Number(v.version);
@@ -245,9 +262,9 @@ export function normalizeVersions(payload, activeVersion) {
         questionCount: Number(v.questionCount || 0),
         categoryCount: Number(v.categoryCount || 0),
         sourceFile: v.sourceFile || '',
-        // The row's own flag wins, but fall back to the set's activeVersion so a
-        // versions payload that omits isActive still marks something active.
-        isActive: v.isActive === true || (activeVersion != null && version === Number(activeVersion)),
+        isActive: payloadDeclaresActive
+          ? v.isActive === true
+          : (activeVersion != null && version === Number(activeVersion)),
         pinnedByGames: Array.isArray(v.pinnedByGames) ? v.pinnedByGames : []
       };
     })

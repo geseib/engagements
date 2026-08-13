@@ -261,6 +261,43 @@ describe('normalizeVersions', () => {
     expect(normalizeVersions(PAYLOAD).map((v) => v.version)).toEqual([3, 2, 1]);
   });
 
+  // THE REPORTED BUG: adding a question wrote v2 and the panel then showed BOTH
+  // v1 and v2 as active. The server had it right; the client ORed the server's
+  // fresh flag with a stale `activeVersion` prop taken from a list payload
+  // fetched before the save.
+  // rejects: any return to `v.isActive === true || version === Number(active)`.
+  it('never marks two versions active when the prop is stale', () => {
+    const fresh = [
+      { version: 1, isActive: false },
+      { version: 2, isActive: true }   // the server has already moved on
+    ];
+    // ...while the editor is still holding the pre-save set, which said v1.
+    const out = normalizeVersions(fresh, 1);
+    expect(out.filter((v) => v.isActive).map((v) => v.version)).toEqual([2]);
+  });
+
+  // rejects: trusting the stale prop over the payload — the mirror-image error.
+  it('the payload wins over the prop, not the other way round', () => {
+    const out = normalizeVersions([{ version: 5, isActive: true }], 9);
+    expect(out[0].isActive).toBe(true);
+  });
+
+  // rejects: deleting the fallback, which would leave a payload with no
+  // isActive field showing nothing active at all.
+  it('falls back to the prop only when the payload declares no active flag', () => {
+    const noFlags = [{ version: 1 }, { version: 2 }];
+    const out = normalizeVersions(noFlags, 2);
+    expect(out.filter((v) => v.isActive).map((v) => v.version)).toEqual([2]);
+  });
+
+  // rejects: a per-row fallback — if ANY row declares the flag the payload is
+  // authoritative, so a payload that says "none of these are active" is obeyed
+  // rather than quietly overridden by the prop.
+  it('a payload that says nothing is active is believed', () => {
+    const out = normalizeVersions([{ version: 1, isActive: false }, { version: 2, isActive: false }], 1);
+    expect(out.some((v) => v.isActive)).toBe(false);
+  });
+
   it('marks exactly one row active from the payload flag', () => {
     const rows = normalizeVersions(PAYLOAD);
     expect(rows.filter((v) => v.isActive).map((v) => v.version)).toEqual([3]);
