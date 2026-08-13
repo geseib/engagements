@@ -1,0 +1,206 @@
+/* ============================================================================
+   THE CATEGORY COMBOBOX — components/CategoryPicker.jsx
+
+   A SEPARATE FILE RATHER THAN A BLOCK IN styles.css, for the same reason
+   RoundKindPicker.css, RemoteCategoryList.css and GeneratedItemsTable.css are
+   separate: this control is being built to be dropped into the add-question
+   modal that is under construction in another change. A component that carries
+   its own paint moves in one piece; a block appended to the 10,700-line
+   styles.css is a merge conflict with whoever is editing the same tail.
+
+   IT IS NOT A NEW DESIGN LANGUAGE. Every value below is lifted from the
+   question-set editor block already in styles.css (`.qs-panel`,
+   `.qs-question-row`, `.qs-dirty-bar`, `.qs-change-badge`), which is the idiom
+   this control sits inside:
+
+     surface        #FFFFFF on the panel's #F1EDE4 paper
+     hairline       rgba(155, 168, 190, 0.28)
+     muted text     #5E6167
+     amber (paper)  #8a5300   — 6.33:1 on white, the one that can carry text.
+                                NOT --primary #F6A94C, which is 1.96:1.
+     amber wash     #FFFBF4 / rgba(138, 83, 0, 0.12)
+     alarm          #B04A45 / #FBF3F2, the tombstone red from .qs-question-row.removed
+
+   EVERY COLOUR IS A LITERAL, matching that block's own note: an undefined
+   custom property invalidates the whole declaration, and this control renders
+   in component tests where styles.css's :root is not loaded.
+
+   THE TWO IMPACT TONES ARE DELIBERATELY DIFFERENT PAINT. `--moved` is amber:
+   bits shuffled, host toggles now point at the wrong category, recoverable by
+   putting the row somewhere else. `--evicted` is the tombstone red: a category
+   pushed past the 24th mask bit can never be toggled again, and it should not
+   look like a milder version of the amber one. The JSX makes the same
+   distinction to assistive technology with role="alert" against role="status".
+   ========================================================================== */
+
+.qs-cat-picker {
+  position: relative;
+}
+
+.qs-cat-input {
+  width: 100%;
+}
+
+/* The list floats over the fields below it rather than pushing them down: this
+   renders inside a modal whose height is the dialog's, and a list that grew the
+   form would move the input out from under the cursor mid-type. */
+.qs-cat-list {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+  background: #FFFFFF;
+  border: 1px solid rgba(155, 168, 190, 0.28);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(44, 62, 80, 0.12);
+}
+
+.qs-cat-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* Keyboard highlight. `active` is aria-activedescendant's element, so this is
+   the only thing telling a sighted keyboard user where Enter will land —
+   focus itself never leaves the input. */
+.qs-cat-option.active {
+  background: #FFFBF4;
+  box-shadow: inset 0 0 0 1px rgba(138, 83, 0, 0.35);
+}
+
+.qs-cat-option:hover {
+  background: #F7F5F0;
+}
+
+.qs-cat-name {
+  color: #2c3e50;
+}
+
+/* Past the 24th bit: stored, counted, and untoggleable. Struck through for the
+   same reason a tombstoned question row is — a state you cannot see is a state
+   you cannot act on. */
+.qs-cat-option.unreachable .qs-cat-name {
+  color: #6B6E74;
+  text-decoration: line-through;
+}
+
+.qs-cat-flag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(176, 74, 69, 0.12);
+  color: #B04A45;
+}
+
+.qs-cat-empty {
+  padding: 7px 10px;
+  color: #5E6167;
+  font-style: italic;
+}
+
+/* Pinned to the bottom of the list, and separated from it, because it is not
+   one of the set's categories — it is the only thing in the list that writes. */
+.qs-cat-new {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(155, 168, 190, 0.45);
+  color: #8a5300;
+  font-weight: 600;
+}
+
+.qs-cat-new.refused {
+  cursor: not-allowed;
+  color: #6B6E74;
+  font-weight: 400;
+}
+
+/* The cap, stated where the button would have been. Not a tooltip and not a
+   toast: the reason has to survive on screen while the owner decides what to
+   do instead. */
+.qs-cat-refusal {
+  flex: 1 1 100%;
+  color: #4A3512;
+  font-size: 0.86rem;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+/* Creating in place. The row becomes the input — never a second modal. */
+.qs-cat-create {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 10px;
+  border-top: 1px dashed rgba(155, 168, 190, 0.45);
+}
+
+.qs-cat-create-label {
+  flex: 1 1 100%;
+  color: #5E6167;
+  font-size: 0.86rem;
+}
+
+.qs-cat-create .form-input {
+  flex: 1 1 180px;
+  min-width: 140px;
+}
+
+.qs-cat-error,
+.qs-cat-overcap,
+.qs-cat-impact {
+  margin: 8px 0 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.qs-cat-error {
+  background: #FBF3F2;
+  border: 1px solid rgba(176, 74, 69, 0.35);
+  color: #7A2E2A;
+}
+
+/* A set that is already over the cap. Reported flatly rather than alarmingly:
+   it is a fact about the set the owner inherited, not something they just did. */
+.qs-cat-overcap {
+  background: #F7F5F0;
+  border: 1px solid rgba(155, 168, 190, 0.28);
+  color: #5E6167;
+}
+
+/* Bits shuffled. Recoverable — put the row somewhere else. */
+.qs-cat-impact--moved {
+  background: #FFF8EC;
+  border: 1px solid rgba(138, 83, 0, 0.35);
+  border-left: 4px solid #8a5300;
+  color: #4A3512;
+}
+
+/* A category pushed out of the masks. Not recoverable by a host: they simply
+   lose the toggle. The tombstone red, because that is what it is. */
+.qs-cat-impact--evicted {
+  background: #FBF3F2;
+  border: 1px solid rgba(176, 74, 69, 0.45);
+  border-left: 4px solid #B04A45;
+  color: #7A2E2A;
+}
+
+.qs-cat-steer {
+  margin-left: 4px;
+}
