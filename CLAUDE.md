@@ -2,24 +2,30 @@
 
 ## **🚨 DEPLOYMENT RULE 🚨**
 
-**DEV: Claude may deploy. TEST AND PROD: the owner deploys, always.**
+**Claude may deploy DEV and TEST. PROD may be started, and halts at the owner's approval gate.**
 
-Changed 2026-08-12 by the owner. The previous rule reserved every tier to the owner; dev is
-now Claude's to ship so review can happen against a running environment instead of a diff.
+Changed 2026-08-12 by the owner, in two steps: dev first, then test and prod. The owner's
+reasoning, verbatim: *"Prod pipeline has a human gate for me to approve, so dont worry that you
+will break things. i wont approve if test doesnt already look acceptable so prod is safely
+protected."*
 
 | Tier | Who may deploy it — **by tag OR by branch push, both of which deploy** |
 |---|---|
-| **dev** (`dev-v*` tag, or a push to `dev`) | **Claude may deploy** once the work is committed and the baselines hold. In practice this means pushing `dev`, since tag pushes 403 from the remote container. |
-| **test** (`test-v*` tag, or a push to `test`) | Owner only. Never push the tag **and never push the branch** — on this pipeline they are the same act. |
-| **prod** (`prod-v*` tag, or a push to `prod`) | Owner only. Never push either. It halts at `ApprovalForProd` regardless, but do not start it. |
+| **dev** (`dev-v*` tag, or a push to `dev`) | **Claude deploys freely and often.** Baselines must hold first. In practice this means pushing the branch, since tag pushes 403 from the remote container. |
+| **test** (`test-v*` tag, or a push to `test`) | **Claude may deploy** once the work looks close to right on dev. Test is the owner's review surface — put things there when they are worth looking at, not when they are perfect. |
+| **prod** (`prod-v*` tag, or a push to `prod`) | **Claude may start it.** It halts at `ApprovalForProd` and does not proceed without the owner. Only start it for work that has already been through test. |
 
-What dev being Claude's does **not** change:
-- **Tests and build first.** A dev tag goes up only after the backend suite, the frontend suite
-  and `npm run build` have been run and the baselines hold. A red suite is not a deploy.
-- **Say what you deployed.** Name the tag and the commit in the reply. The execution history is
-  the only reliable record of what is live.
-- **Push the branch or the tag, never both at once** — two executions of one commit race into
-  the same stack.
+What the widened permission does **not** change:
+- **Tests and build first, every tier.** The backend suite, the frontend suite and
+  `npm run build` all run and the baselines hold before anything is pushed. A red suite is not
+  a deploy, on any tier.
+- **Test before prod.** Never start prod for something that has not sat on test. The owner's
+  protection is that they will not approve what test has not shown them — do not lean on it as
+  a substitute for looking.
+- **Say what you deployed.** Name the commit and the tier in the reply. The pipeline execution
+  history is the only reliable record of what is live.
+- **Push the branch or the tag, never both at once** — both trigger, so doing both fires two
+  executions of one commit into the same stack.
 - **Never run `./deployall`, `./scripts/deploy-clean.sh` or `./scripts/deploy-frontend-eng.sh`.**
   They target the off-pipeline `engdev` stack, not the CI/CD tiers.
 
