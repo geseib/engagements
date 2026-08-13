@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
+import Modal from './Modal';
 import StatusMessage from './StatusMessage';
 import QuestionPullDialog from './QuestionPullDialog';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType } from '../config/gameTypes';
 import { ROUND_KIND_IDS, ROUND_KINDS, roundKindApplies } from '../config/roundKinds';
 import { summarizeCsv, describeReplacePlan } from '../utils/questionSetEditing';
+import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
+import { interpretGenerationJob, generationJobTone } from '../utils/generationJob';
 import {
   editableRows,
   blankRow,
@@ -17,9 +20,28 @@ import {
   describeRowChanges,
   versionNote,
   toTagList,
+  toRow,
 } from '../utils/questionRows';
 
 const API_BASE = () => window.API_BASE;
+
+/**
+ * "Three to five existing questions from the chosen category"
+ * (docs/design/admin-container-rule.md, "The sibling browser"). Five is the
+ * ceiling; a category with fewer shows what it has, and one with none says so
+ * rather than rendering an empty box.
+ */
+const SIBLING_LIMIT = 5;
+
+/**
+ * The provenance stamp on an AI-drafted question. A tag, not a new attribute,
+ * for one reason: the row's tags are already carried through `rowsToCsv` into
+ * the `Tags` column and back out of the importer, so the authorship survives
+ * the save, the download, a pull into another set and a round trip through
+ * Excel. A new field would need a new CSV column, and the importer's
+ * `getColumnIndex` silently drops columns it does not know.
+ */
+const AI_DRAFT_TAG = 'ai-drafted';
 
 /**
  * THE QUESTIONS PANEL — add, edit, delete, reorder, and pull from another set.
@@ -107,8 +129,35 @@ export default function QuestionsPanel({
   const [saving, setSaving] = useState(false);
 
   /* ------------------------------------------------------------- editing -- */
-  const [editingUid, setEditingUid] = useState(null);
+  //
+  // THE DRAFT IS NOT IN THE WORKING COPY UNTIL IT IS COMMITTED.
+  //
+  // `startAdd` used to append a blank row to `rows` and then render the form
+  // inside that row's `<li>`, which had two consequences worth naming. The
+  // visible one: on a hundred-question set the form landed below the hundredth
+  // row, off screen, and the button looked broken. The quiet one: a partly
+  // typed row that was then abandoned SURVIVED — `cancelEdit` only collected
+  // the blank row back when BOTH title and category were still empty — so a
+  // half-typed add left a row behind that blocked every later Save with
+  // "needs a title", from a form nobody could see.
+  //
+  // The draft now lives here and only here until Done. `rows` gains nothing
+  // from an add that was abandoned, whatever was typed into it.
   const [draft, setDraft] = useState(null);
+  // The draft as it was when the modal opened, so closing can tell "you have
+  // typed something" from "you opened this and changed your mind".
+  const [draftSeed, setDraftSeed] = useState(null);
+  const [confirmDropDraft, setConfirmDropDraft] = useState(false);
+  // Validation belongs INSIDE the modal — the panel's status bar is behind it.
+  const [formError, setFormError] = useState('');
+
+  /* ------------------------------------------------------- AI assistance -- */
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiBrief, setAiBrief] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiStatus, setAiStatus] = useState({ text: '', tone: '' });
+  const [aiDrafted, setAiDrafted] = useState(false);
+
   const [selected, setSelected] = useState([]);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [showPull, setShowPull] = useState(false);
@@ -158,15 +207,25 @@ export default function QuestionsPanel({
     }
   }, [setId]);
 
+  const closeForm = useCallback(() => {
+    setDraft(null);
+    setDraftSeed(null);
+    setConfirmDropDraft(false);
+    setFormError('');
+    setAiOpen(false);
+    setAiBrief('');
+    setAiStatus({ text: '', tone: '' });
+    setAiDrafted(false);
+  }, []);
+
   useEffect(() => {
     setRows([]);
     setSelected([]);
-    setEditingUid(null);
-    setDraft(null);
+    closeForm();
     setStatus({ text: '', tone: '' });
     setCategoryFilter('');
     load();
-  }, [setId, load]);
+  }, [setId, load, closeForm]);
 
   // Tell the editor, so closing it can ask first.
   useEffect(() => {
@@ -194,40 +253,85 @@ export default function QuestionsPanel({
     ? rows.filter((r) => r.category === categoryFilter)
     : rows;
 
-  const startAdd = () => {
-    const seedCategory = categoryFilter || rows[rows.length - 1]?.category || '';
-    const row = blankRow({ category: seedCategory });
-    setRows((current) => [...current, row]);
-    setEditingUid(row.uid);
+  /**
+   * THE SIBLING BROWSER — "Writing alongside these."
+   *
+   * Not decoration. The design doc is explicit: this is the AI prompt made
+   * visible, so ONE list serves the human's "what am I matching?" and an honest
+   * statement of what the model is being conditioned on. `buildAiContext` below
+   * sends this very array, so if the two ever disagree it is a bug, and it is a
+   * bug a test can see.
+   *
+   * Read out of the WORKING COPY, not the server: an edit made two minutes ago
+   * and not yet saved is part of the voice the next question has to match.
+   * Tombstones are excluded — a question the owner has removed is not something
+   * to write alongside — and so is the row being edited, which cannot be its
+   * own sibling.
+   */
+  const draftCategory = String(draft?.category || '').trim();
+  const siblings = useMemo(() => {
+    if (!draft || !draftCategory) return [];
+    return rows
+      .filter((r) => !r.removed
+        && r.uid !== draft.uid
+        && String(r.category || '').trim() === draftCategory
+        && (r.title || r.detail))
+      .slice(0, SIBLING_LIMIT);
+  }, [rows, draft, draftCategory]);
+
+  const openForm = (row) => {
     setDraft(row);
+    setDraftSeed(row);
+    setConfirmDropDraft(false);
+    setFormError('');
+    setAiOpen(false);
+    setAiBrief('');
+    setAiStatus({ text: '', tone: '' });
+    setAiDrafted(false);
     setStatus({ text: '', tone: '' });
   };
 
-  const startEdit = (row) => {
-    setEditingUid(row.uid);
-    setDraft({ ...row });
+  const startAdd = () => {
+    // The seed is unchanged: whatever the list is filtered to, else the
+    // category of the last row, so adding a run of questions to one category
+    // does not mean retyping its name every time.
+    const seedCategory = categoryFilter || rows[rows.length - 1]?.category || '';
+    openForm(blankRow({ category: seedCategory }));
   };
 
+  const startEdit = (row) => openForm({ ...row });
+
+  /** Is this draft in the working copy already, or is it an add in progress? */
+  const isAdding = Boolean(draft) && !rows.some((r) => r.uid === draft.uid);
+  // Reference equality is enough and is what we want: `openForm` stores the very
+  // object it hands the form, and every edit replaces it.
+  const draftTouched = Boolean(draft) && draft !== draftSeed;
+
   const cancelEdit = () => {
-    // A brand-new row abandoned before it was ever filled in leaves nothing
-    // behind; anything else keeps whatever it had.
-    setRows((current) => current.filter((r) => !(r.uid === editingUid && r.origin === 'new' && !r.title && !r.category)));
-    setEditingUid(null);
-    setDraft(null);
+    // Closing throws the draft away — that is the whole point of keeping it out
+    // of `rows` — so an unsaved keystroke has to be asked about first. The
+    // question is asked INSIDE this modal, never in a second one over it
+    // (docs/design/admin-container-rule.md: "Never open a second modal from
+    // inside a modal").
+    if (draftTouched) setConfirmDropDraft(true);
+    else closeForm();
   };
 
   const commitEdit = () => {
     if (!draft) return;
     const problemsNow = rowProblems(draft, engagementType);
     if (problemsNow.length) {
-      setStatus({ text: `That question ${problemsNow.join(', and ')}.`, tone: 'error' });
+      // In the modal, not in the panel's status bar underneath it.
+      setFormError(`That question ${problemsNow.join(', and ')}.`);
       return;
     }
-    setRows((current) => current.map((r) => (r.uid === draft.uid
-      ? { ...draft, edited: r.origin === 'loaded' ? true : r.edited }
-      : r)));
-    setEditingUid(null);
-    setDraft(null);
+    setRows((current) => (current.some((r) => r.uid === draft.uid)
+      ? current.map((r) => (r.uid === draft.uid
+        ? { ...draft, edited: r.origin === 'loaded' ? true : r.edited }
+        : r))
+      // An add only reaches the working copy here.
+      : [...current, draft]));
+    closeForm();
     setStatus({ text: '', tone: '' });
   };
 
@@ -237,7 +341,7 @@ export default function QuestionsPanel({
       .filter((r) => !(r.uid === uid && r.origin !== 'loaded'))
       .map((r) => (r.uid === uid ? { ...r, removed: true } : r)));
     setSelected((s) => s.filter((id) => id !== uid));
-    if (editingUid === uid) { setEditingUid(null); setDraft(null); }
+    if (draft && draft.uid === uid) closeForm();
   };
 
   const restoreRow = (uid) =>
@@ -251,8 +355,7 @@ export default function QuestionsPanel({
   const discard = () => {
     setRows(baseline);
     setSelected([]);
-    setEditingUid(null);
-    setDraft(null);
+    closeForm();
     setConfirmDiscard(false);
     setStatus({ text: 'Unsaved changes discarded. The set is as it was when you opened it.', tone: 'pending' });
   };
@@ -267,6 +370,146 @@ export default function QuestionsPanel({
         + 'They are copies — editing them here will not change the originals. Nothing is saved until you press Save.',
       tone: 'pending'
     });
+  };
+
+  /* ------------------------------------------------- AI drafting one row --- */
+
+  /**
+   * WHAT THE MODEL IS TOLD, in one function, so the screen and the wire cannot
+   * drift apart.
+   *
+   * Before this there was NO AI affordance anywhere in the add-question flow —
+   * `AIAssistant` is imported by `BuilderPage` alone, and BuilderPage never
+   * opens an existing set — so a question added to a set that had been
+   * generated with a voice, a description and a set of AI instructions was
+   * written with none of them in front of the author or the model.
+   *
+   * `siblingQuestions` is the SAME array the sibling browser renders. That is
+   * the point of the sibling browser (see the memo above), and
+   * questionSetEditorQuestions.test.jsx compares the rendered titles to this
+   * request body for exactly that reason.
+   */
+  const buildAiContext = () => ({
+    title: setName,
+    description: questionSet?.description || '',
+    // The set's fields are SINGULAR on the client (`editableSnapshot`) and
+    // PLURAL on the wire (`ai-generate-questions.js` reads context.customInstructions
+    // and context.aiContextInstructions). Mapped here, once, deliberately.
+    customInstructions: questionSet?.customInstruction || '',
+    aiContextInstructions: questionSet?.aiContextInstruction || '',
+    // The categories that exist in the WORKING COPY — including ones added in
+    // this session and not yet saved. `set.categoryCount` is a stale integer
+    // from the last save and the categories endpoint serves the persisted
+    // version; neither is the truth the author is looking at.
+    categories,
+    category: draftCategory,
+    siblingQuestions: siblings.map((r) => ({
+      title: r.title,
+      category: r.category,
+      detail: r.detail,
+      customInstructions: r.customInstruction,
+    })),
+  });
+
+  /**
+   * A generated item becomes an EDITABLE DRAFT. It is never written.
+   *
+   * Two hazards handled here rather than by hand-assigning fields:
+   *
+   *  - `normalizeItem` (ai-generate-questions.js:209) emits camelCase that is
+   *    neither the row shape nor the CSV column names, so the item goes through
+   *    `toRow`, the same reader the loader uses. That is what maps
+   *    `customInstructions` → `customInstruction`, and what makes a trivia
+   *    item's `questionDetail` land in `detail` (the column the trivia CSV
+   *    calls QuestionDetail) instead of its scene-setting `detail`.
+   *  - `normalizeItem` also stamps `id: Date.now() + Math.random()`, and
+   *    `toRow` reads `id` as the row's STORED SORT KEY. Feeding it straight in
+   *    would overwrite a real `c001#003` with a float. `id` and `active` are
+   *    dropped before the read, and every identity/provenance field is then
+   *    taken back off the row being edited.
+   */
+  const applyGenerated = (item) => {
+    const { id, active, ...fields } = item || {};
+    const generated = toRow(fields);
+    setDraft((current) => ({
+      ...generated,
+      // Identity, provenance and everything this form never renders belong to
+      // the row, not to the generator.
+      uid: current.uid,
+      sk: current.sk,
+      origin: current.origin,
+      edited: current.edited,
+      removed: current.removed,
+      questionNumber: current.questionNumber,
+      image: current.image,
+      sourceSetId: current.sourceSetId,
+      sourceQuestionSk: current.sourceQuestionSk,
+      sourceAttribution: current.sourceAttribution,
+      // The author already chose these. A generator guess must not silently
+      // move a question into a different category or round direction.
+      category: current.category || generated.category,
+      roundKind: current.roundKind || generated.roundKind,
+      // AI authorship stays visible, and stays visible through the CSV.
+      tags: generated.tags.includes(AI_DRAFT_TAG)
+        ? generated.tags
+        : [...generated.tags, AI_DRAFT_TAG],
+    }));
+    setAiDrafted(true);
+    setFormError('');
+  };
+
+  const generateDraft = async () => {
+    const brief = aiBrief.trim();
+    if (!brief) {
+      setAiStatus({ text: 'Say what this question should be about first.', tone: 'error' });
+      return;
+    }
+    setAiBusy(true);
+    setAiStatus({ text: 'Starting generation...', tone: 'pending' });
+    const endpoint = `${API_BASE()}admin/ai-generate-questions`;
+    const onStatus = (text) => setAiStatus({ text, tone: 'pending' });
+    try {
+      // Generation cannot run inside the request — API Gateway's 30s ceiling —
+      // so this is the same start-a-job-and-poll shape every other builder uses.
+      const { jobId } = await startGenerationJob(endpoint, {
+        engagementType,
+        userInput: brief,
+        questionCount: 1,
+        roundKind: draft?.roundKind || questionSet?.roundKind || '',
+        roundKindBrief: questionSet?.roundKindBrief || '',
+        context: buildAiContext(),
+        // De-dup against the set as it stands, the same way the bulk branch
+        // de-dups against what it has already produced.
+        alreadyUsedTitles: rows
+          .filter((r) => !r.removed && r.uid !== draft?.uid && r.title)
+          .map((r) => r.title),
+      }, { label: 'Generation', onStatus });
+
+      const job = await pollGenerationJob(endpoint, jobId, { label: 'Generation', onStatus });
+
+      // Read the outcome, never `items.length` — see utils/generationJob.js.
+      const interpreted = interpretGenerationJob(job);
+      if (interpreted.outcome !== 'complete') {
+        setAiStatus({
+          text: `Nothing was drafted: ${interpreted.error
+            || interpreted.warnings.join(' ')
+            || 'the job ended without producing a question'}. Your question is untouched.`,
+          tone: generationJobTone(interpreted.outcome),
+        });
+        return;
+      }
+      applyGenerated(interpreted.items[0]);
+      setAiStatus({
+        text: 'Drafted. It is filled into the form below and nothing has been added to the set — '
+          + 'read it, change what you want, then press Done.',
+        tone: 'success',
+      });
+    } catch (error) {
+      console.error('AI question draft error:', error);
+      setAiStatus({ text: `${error.message} Your question is untouched.`, tone: 'error' });
+    } finally {
+      setAiBusy(false);
+    }
   };
 
   /* ------------------------------------------------------------- saving --- */
@@ -731,21 +974,61 @@ export default function QuestionsPanel({
                     )}
                   </div>
                 </div>
-
-                {editingUid === row.uid && draft && (
-                  <QuestionForm
-                    draft={draft}
-                    engagementType={engagementType}
-                    showKind={showKind}
-                    onChange={setDraft}
-                    onCancel={cancelEdit}
-                    onDone={commitEdit}
-                  />
-                )}
               </li>
             );
           })}
         </ol>
+      )}
+
+      {/* ONE CONTAINER FOR "MAKE OR EDIT ONE THING".
+          The form used to render inside the row's <li>, at the bottom of a list
+          that can be a hundred rows long. See docs/design/admin-container-rule.md:
+          appending a form below the list — and scrolling to it — is the thing
+          being removed, not the thing being improved.
+
+          The backdrop is inert on purpose: there is a half-filled form in here
+          and a mis-aimed click on the margin must not throw it away. Escape
+          still works, and goes through the same "are you sure" as Cancel. */}
+      {draft && (
+        <Modal
+          overlayClassName="modal-overlay"
+          contentClassName="modal-content qs-question-dialog"
+          labelledBy="qs-question-dialog-title"
+          onClose={cancelEdit}
+          closeOnBackdrop={false}
+          closeOnEscape={() => !aiBusy}
+        >
+          <h3 id="qs-question-dialog-title">
+            <Icon name="PencilSimple" weight="bold" size={16} color="var(--primary)" />{' '}
+            {isAdding ? 'New question' : 'Edit question'}
+          </h3>
+
+          <QuestionForm
+            draft={draft}
+            engagementType={engagementType}
+            showKind={showKind}
+            onChange={(next) => { setDraft(next); setFormError(''); }}
+            onCancel={cancelEdit}
+            onDone={commitEdit}
+            formError={formError}
+            confirmDrop={confirmDropDraft}
+            onKeepEditing={() => setConfirmDropDraft(false)}
+            onDropDraft={closeForm}
+            isAdding={isAdding}
+            siblings={siblings}
+            siblingCategory={draftCategory}
+            ai={{
+              open: aiOpen,
+              brief: aiBrief,
+              busy: aiBusy,
+              status: aiStatus,
+              drafted: aiDrafted,
+              onToggle: () => setAiOpen((o) => !o),
+              onBrief: setAiBrief,
+              onGenerate: generateDraft,
+            }}
+          />
+        </Modal>
       )}
 
       {status.text && <StatusMessage message={status.text} tone={status.tone} />}
@@ -900,7 +1183,17 @@ export default function QuestionsPanel({
  * field this form never renders survives the save untouched (asserted in
  * tests/question-set-roundtrip.js, "keeps every field the form never showed").
  */
-function QuestionForm({ draft, engagementType, showKind, onChange, onCancel, onDone }) {
+function QuestionForm({
+  draft, engagementType, showKind, onChange, onCancel, onDone,
+  formError = '',
+  confirmDrop = false,
+  onKeepEditing,
+  onDropDraft,
+  isAdding = false,
+  siblings = [],
+  siblingCategory = '',
+  ai,
+}) {
   const set = (field) => (e) => onChange({ ...draft, [field]: e.target.value });
   const id = (field) => `q-${field}-${draft.uid}`;
 
@@ -914,7 +1207,92 @@ function QuestionForm({ draft, engagementType, showKind, onChange, onCancel, onD
         <div className="form-group">
           <label htmlFor={id('title')}>Title *</label>
           <input id={id('title')} className="form-input" value={draft.title} onChange={set('title')} />
+          {ai && (
+            <button
+              type="button"
+              className="btn-secondary btn-small qs-ai-toggle"
+              onClick={ai.onToggle}
+              aria-expanded={ai.open}
+              disabled={ai.busy}
+            >
+              <Icon name="Sparkle" weight="duotone" size={14} color="currentColor" />{' '}
+              {ai.open ? 'Hide the AI draft' : 'Draft this with AI'}
+            </button>
+          )}
         </div>
+      </div>
+
+      {ai && ai.open && (
+        <div className="qs-ai-panel" data-testid="ai-draft-panel">
+          <div className="form-group">
+            <label htmlFor={id('ai-brief')}>What should this question be about?</label>
+            <textarea
+              id={id('ai-brief')}
+              className="form-textarea"
+              rows="2"
+              value={ai.brief}
+              onChange={(e) => ai.onBrief(e.target.value)}
+              disabled={ai.busy}
+              placeholder="e.g. the moment a team realises the estimate was wrong"
+            />
+          </div>
+          <p className="qs-panel-note">
+            The generator is given this set&rsquo;s description and instructions, the
+            {siblingCategory ? ` ${siblings.length}` : ''} question
+            {siblings.length === 1 ? '' : 's'} shown under &ldquo;Writing alongside these&rdquo;,
+            the categories already in the set, and the titles already used so it does not
+            repeat one. Nothing it writes is saved — it fills this form in and you confirm it.
+            {engagementType === 'trivia' && ' It writes four options (A–D); E and F are yours to add.'}
+          </p>
+          <div className="qs-panel-actions">
+            <button className="btn-primary btn-small" onClick={ai.onGenerate} disabled={ai.busy}>
+              {ai.busy ? 'Drafting…' : 'Draft it'}
+            </button>
+          </div>
+          {ai.status.text && <StatusMessage message={ai.status.text} tone={ai.status.tone} />}
+        </div>
+      )}
+
+      {ai && ai.drafted && (
+        <p className="qs-ai-provenance" data-testid="ai-provenance">
+          <Icon name="Sparkle" weight="duotone" size={14} color="var(--primary)" />{' '}
+          <strong>AI drafted this.</strong> It is a draft in this form and nothing else — it is
+          not in the set until you press Done, and not written until you Save. The
+          <code> {AI_DRAFT_TAG} </code> tag is added so the authorship stays visible afterwards;
+          delete it from Tags if you rewrite the question as your own.
+        </p>
+      )}
+
+      {/* WRITING ALONGSIDE THESE — the same list the generator is given. */}
+      <div className="qs-siblings" data-testid="sibling-browser">
+        <h4>Writing alongside these.</h4>
+        {!siblingCategory ? (
+          <p className="qs-empty">
+            Choose a category and the other questions in it appear here — they are what this
+            question has to sound like, and what the generator is given to match.
+          </p>
+        ) : siblings.length === 0 ? (
+          <p className="qs-empty">
+            Nothing else in &ldquo;{siblingCategory}&rdquo; yet, so this would be the first.
+            The generator has only the set&rsquo;s own description and instructions to go on.
+          </p>
+        ) : (
+          <ol className="qs-sibling-list">
+            {siblings.map((r) => (
+              <li key={r.uid} data-testid="sibling">
+                <strong>{r.title || <em>Untitled question</em>}</strong>
+                {r.detail && (
+                  <span className="qs-question-detail">
+                    {r.detail.slice(0, 120)}{r.detail.length > 120 ? '…' : ''}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ol>
+        )}
+        <p className="qs-panel-note">
+          Unsaved edits included — this is the set as you have it, not as it was last saved.
+        </p>
       </div>
 
       <div className="form-group">
@@ -1040,13 +1418,34 @@ function QuestionForm({ draft, engagementType, showKind, onChange, onCancel, onD
         </div>
       </div>
 
-      <div className="qs-panel-actions">
-        <button className="btn-primary btn-small" onClick={onDone}>Done</button>
-        <button className="btn-secondary btn-small" onClick={onCancel}>Cancel</button>
-        <span className="qs-panel-note">
-          Nothing is written until you Save the set.
-        </span>
-      </div>
+      {formError && <StatusMessage message={formError} tone="error" />}
+
+      {confirmDrop ? (
+        // Asked HERE, inside the same dialog. A second modal over this one is
+        // forbidden by the container rule, and there is nothing behind this
+        // question that needs covering — the thing at risk is on screen.
+        <div className="qs-form-discard" role="alert">
+          <p>
+            <Icon name="Warning" weight="fill" size={16} color="#8a5300" />{' '}
+            <strong>Throw this {isAdding ? 'new question' : 'edit'} away?</strong>{' '}
+            {isAdding
+              ? 'It was never added to the set, so closing leaves nothing behind — including nothing half-typed to block the next Save.'
+              : 'The question goes back to what it was before you opened this. The rest of your unsaved changes are untouched.'}
+          </p>
+          <div className="qs-panel-actions">
+            <button className="btn-secondary btn-small" onClick={onKeepEditing}>Keep editing</button>
+            <button className="btn-danger btn-small" onClick={onDropDraft}>Throw it away</button>
+          </div>
+        </div>
+      ) : (
+        <div className="qs-panel-actions">
+          <button className="btn-primary btn-small" onClick={onDone}>Done</button>
+          <button className="btn-secondary btn-small" onClick={onCancel}>Cancel</button>
+          <span className="qs-panel-note">
+            Done puts it in the working copy. Nothing is written until you Save the set.
+          </span>
+        </div>
+      )}
     </div>
   );
 }

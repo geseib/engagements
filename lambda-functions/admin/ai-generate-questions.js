@@ -27,6 +27,11 @@ const {
 
 const MAX_COUNT = 100;
 
+const textList = (value, limit) => (Array.isArray(value) ? value : [])
+  .map((entry) => String(entry ?? '').trim())
+  .filter(Boolean)
+  .slice(0, limit);
+
 function parseRequest(payload) {
   const existing = payload.existingQuestion || null;
   // Refining one question produces exactly one question, whatever was asked.
@@ -40,6 +45,11 @@ function parseRequest(payload) {
       userInput: String(payload.userInput || '').trim(),
       existingQuestion: existing,
       context: payload.context || {},
+      // Titles the CALLER already holds, as opposed to the ones this job has
+      // produced. The add-a-question modal in the console sends the titles
+      // already in the working copy: without them the model has no way to know
+      // it is rewriting question 41 of a set it cannot see.
+      callerUsedTitles: textList(payload.alreadyUsedTitles, 200),
       // DIRECTION. Unknown values fall back to `produce` at the reader rather
       // than failing the job; the 400 belongs on the write paths. See
       // shared/round-kinds.js.
@@ -193,10 +203,41 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
     if (context?.description) p += `Description: ${context.description}\n`;
     if (context?.customInstructions) p += `Set Instructions: ${context.customInstructions}\n`;
     if (context?.aiContextInstructions) p += `Additional Context: ${context.aiContextInstructions}\n`;
+    if (context?.category) p += `Category to write in: ${context.category}\n`;
 
-    if (alreadyUsedTitles.length > 0) {
+    // THE SET'S SHAPE, which the console's add-a-question modal can see and
+    // this prompt previously could not. Both blocks are additive: a caller
+    // that sends neither (BuilderPage, AIAssistant) gets the prompt it always
+    // got.
+    const categories = textList(context?.categories, 24);
+    if (categories.length > 0) {
+      p += `\nCATEGORIES ALREADY IN THIS SET (prefer one of these; a new one is a real cost): ${categories.join(', ')}\n`;
+    }
+
+    // "Writing alongside these." The author is shown this exact list in the
+    // modal, and the design doc's whole argument for showing it is that the
+    // human's "what am I matching?" and the model's conditioning must be ONE
+    // list. Dropping it here would make the screen a lie.
+    const siblings = Array.isArray(context?.siblingQuestions)
+      ? context.siblingQuestions.filter((s) => s && String(s.title || '').trim()).slice(0, 5)
+      : [];
+    if (siblings.length > 0) {
+      p += '\nWRITING ALONGSIDE THESE — existing questions from the same set. Match their voice,'
+        + ' their length and their level of specificity. Do not repeat them:\n';
+      for (const s of siblings) {
+        p += `- ${String(s.title).trim()}`;
+        if (s.detail) p += `\n  ${String(s.detail).trim()}`;
+        if (s.customInstructions) p += `\n  Instruction: ${String(s.customInstructions).trim()}`;
+        p += '\n';
+      }
+    }
+
+    // The caller's titles and this job's own, in one list: the model needs to
+    // avoid both what the set already holds and what this run has just made.
+    const avoid = [...new Set([...(config.callerUsedTitles || []), ...alreadyUsedTitles])];
+    if (avoid.length > 0) {
       p += `\nALREADY GENERATED for this set — do not repeat, rephrase, or write a near-variant of any of these:\n`;
-      p += alreadyUsedTitles.map((t) => `- ${t}`).join('\n');
+      p += avoid.map((t) => `- ${t}`).join('\n');
     }
   }
 

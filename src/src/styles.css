@@ -10224,6 +10224,82 @@ body {
   gap: 0 16px;
 }
 
+/* --- one question, in the modal that owns it --- */
+.qs-question-dialog {
+  max-width: 760px;
+  width: 100%;
+}
+
+/* Inside the dialog the form is the whole content, so it needs no divider. */
+.qs-question-dialog .qs-question-form {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.qs-ai-toggle {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
+.qs-ai-panel {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(155, 168, 190, 0.35);
+  border-radius: var(--radius-sm, 8px);
+  background: rgba(155, 168, 190, 0.08);
+}
+
+.qs-ai-provenance {
+  margin: 8px 0 12px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--primary, #8a5300);
+  background: rgba(138, 83, 0, 0.08);
+  font-size: 0.85rem;
+}
+
+/* --- writing alongside these --- */
+.qs-siblings {
+  margin: 14px 0;
+  padding: 12px 14px;
+  border: 1px dashed rgba(155, 168, 190, 0.45);
+  border-radius: var(--radius-sm, 8px);
+}
+
+.qs-siblings h4 {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+}
+
+.qs-sibling-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.qs-sibling-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.85rem;
+}
+
+.qs-form-discard {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm, 8px);
+  background: rgba(138, 83, 0, 0.10);
+}
+
+.qs-form-discard p {
+  margin: 0 0 8px;
+}
+
 /* --- pulling from another set --- */
 .qs-pull-dialog {
   max-width: 760px;

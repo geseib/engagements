@@ -219,5 +219,80 @@ const BASE = { engagementType: 'call-and-answer', userInput: 'leadership scenari
     }
   });
 
+  console.log('\nthe set context the console\'s add-a-question modal sends');
+
+  await test('the sibling questions reach the prompt, not just the screen', async () => {
+    // docs/design/admin-container-rule.md: the sibling browser "is the AI
+    // prompt made visible... If the two ever disagree, that is a bug we want
+    // visible." The console renders those questions above the AI button and
+    // sends them here; a handler that accepts them and drops them on the floor
+    // makes that screen a lie, which is worse than not showing it.
+    reset();
+    state.bedrockHandler = () => toolResponse(makeQuestions(1, 'sibling'));
+    await runJob({
+      ...BASE,
+      questionCount: 1,
+      context: {
+        title: 'Lessons Learned',
+        siblingQuestions: [
+          { title: 'WHAT WENT WRONG', detail: 'Pick one incident.', customInstructions: 'From your own experience.' },
+          { title: 'WHO SHOULD HAVE SAID SOMETHING', detail: 'Nobody is named.' },
+        ],
+      },
+    });
+    const { prompt } = state.bedrockCalls[0];
+    assert.match(prompt, /WRITING ALONGSIDE THESE/);
+    assert.match(prompt, /WHAT WENT WRONG/);
+    assert.match(prompt, /Pick one incident\./);
+    assert.match(prompt, /WHO SHOULD HAVE SAID SOMETHING/);
+  });
+
+  await test('the set\'s existing categories reach the prompt', async () => {
+    // rejects: leaving the model to invent a category name. Category identity
+    // is POSITIONAL — first appearance in the CSV decides the host mask bit —
+    // so an invented category reindexes the set, and past 24 it makes a
+    // category no host can ever toggle.
+    reset();
+    state.bedrockHandler = () => toolResponse(makeQuestions(1, 'cat'));
+    await runJob({
+      ...BASE, questionCount: 1,
+      context: { categories: ['Retro', 'Delivery'], category: 'Retro' },
+    });
+    assert.match(state.bedrockCalls[0].prompt, /CATEGORIES ALREADY IN THIS SET.*Retro, Delivery/);
+    assert.match(state.bedrockCalls[0].prompt, /Category to write in: Retro/);
+  });
+
+  await test('titles the CALLER already holds are avoided, not only the ones this job made', async () => {
+    // rejects: reading `alreadyUsedTitles` only off `produced`. On the console's
+    // one-at-a-time path `produced` is EMPTY on the only pass there is, so
+    // without the caller's list the model has no way to know it is being asked
+    // for question 41 of a set it cannot see, and writes number 12 again.
+    reset();
+    state.bedrockHandler = () => toolResponse(makeQuestions(1, 'dedup'));
+    await runJob({
+      ...BASE, questionCount: 1,
+      alreadyUsedTitles: ['WHAT WENT WRONG', 'ARE WE SHIPPING'],
+    });
+    const { prompt } = state.bedrockCalls[0];
+    assert.match(prompt, /ALREADY GENERATED/);
+    assert.match(prompt, /- WHAT WENT WRONG/);
+    assert.match(prompt, /- ARE WE SHIPPING/);
+  });
+
+  await test('a caller that sends none of it gets the prompt it always got', async () => {
+    // rejects: making the new blocks unconditional. BuilderPage and AIAssistant
+    // send `context` with four keys and nothing else; an empty "WRITING
+    // ALONGSIDE THESE:" header with no questions under it is an instruction to
+    // match nothing.
+    reset();
+    state.bedrockHandler = () => toolResponse(makeQuestions(2, 'bare'));
+    await runJob({ ...BASE, questionCount: 2, context: { title: 'A set', description: 'A description' } });
+    const { prompt } = state.bedrockCalls[0];
+    assert.ok(!/WRITING ALONGSIDE THESE/.test(prompt), 'no siblings sent means no siblings block');
+    assert.ok(!/CATEGORIES ALREADY IN THIS SET/.test(prompt), 'no categories sent means no categories block');
+    assert.ok(!/ALREADY GENERATED/.test(prompt), 'the first pass has produced nothing to avoid');
+    assert.match(prompt, /Description: A description/, 'the context that always worked still works');
+  });
+
   summary();
 })();
