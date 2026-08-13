@@ -227,7 +227,9 @@ const metaOf = (setId) => store.get(k('SETS', `SET#${setId}`));
 const contentRows = (setId) =>
   [...store.values()].filter((i) => String(i.PK).startsWith(`SET#${setId}`));
 
-function seedSet(setId, { owner, name = setId, questions = 2 } = {}) {
+function seedSet(setId, {
+  owner, name = setId, questions = 2, createdBy, createdByName,
+} = {}) {
   put({
     PK: 'SETS', SK: `SET#${setId}`, name,
     description: 'seeded', engagementType: 'call-and-answer',
@@ -235,6 +237,12 @@ function seedSet(setId, { owner, name = setId, questions = 2 } = {}) {
     createdAt: '2020-01-01T00:00:00.000Z', updatedAt: '2020-01-01T00:00:00.000Z',
     // `owner` deliberately omitted for the legacy rows: that is the whole point.
     ...(owner ? { createdBy: owner.userId, createdByName: owner.username } : {}),
+    // Set the two ownership attributes INDEPENDENTLY, for the rows that exist
+    // to prove sub and username are not interchangeable. Seeding both from one
+    // `owner` makes every fixture a row where they agree, and a rule that reads
+    // the wrong one is then indistinguishable from the right one.
+    ...(createdBy === undefined ? {} : { createdBy }),
+    ...(createdByName === undefined ? {} : { createdByName }),
   });
   put({ PK: `SET#${setId}`, SK: 'CATEGORY#c001', Name: 'Renaissance', QuestionCount: questions });
   for (let q = 1; q <= questions; q++) {
@@ -624,10 +632,11 @@ function reset() { store.clear(); log.length = 0; }
   seedSet('rajs', { owner: OTHER_HOST, name: 'Raj Set' });
   seedSet('eighties', { name: '80s Trivia' });
 
-  const listAs = async (who) => {
-    const out = parse(await adminList(callerEvent(who)));
+  const listWithEvent = async (ev) => {
+    const out = parse(await adminList(ev));
     return Object.fromEntries(out.questionSets.map((s) => [s.id, s]));
   };
+  const listAs = (who) => listWithEvent(callerEvent(who));
 
   let seen = await listAs(HOST);
   // REJECTS: not projecting canManage, so the console has to guess — and any
@@ -660,6 +669,115 @@ function reset() { store.clear(); log.length = 0; }
     assert.strictEqual(seen.ivys.createdBy, 'sub-ivy'));
   check('...and null on a set that has no owner', () =>
     assert.strictEqual(seen.eighties.createdBy, null));
+
+  // =========================================================================
+  say('\n5. THE LIST AND THE HANDLERS, CROSS-CHECKED — one rule, or two?');
+
+  // Sections 3 and 4 each assert against literals THIS FILE chose. They agree
+  // with the product only for as long as somebody keeps both columns of
+  // expectations in step by hand, and nothing makes them do that. Section 4
+  // could be updated to match a wrong `canManage` and go green.
+  //
+  // That is exactly the drift `canManage` exists to prevent, and it is the
+  // invisible kind: a console computing "is this mine" its own way keeps
+  // rendering perfectly while it starts offering buttons the handler 403s. So
+  // this section states NO expected answer. For the same caller and the same
+  // row it asks three things —
+  //
+  //   the LIST         get-question-sets.js's `canManage`
+  //   the GUARD        requireSetManager(), the function the handlers call
+  //   the HANDLER      the real edit and delete lambdas, hand-made request
+  //
+  // — and requires all three to be the same answer. Fixture-free: whatever the
+  // rule is, these must not be able to disagree about it.
+  const ANON = {};   // no authorizer context at all — must fail closed, in all three
+
+  // THE ROWS AND CALLERS ARE CHOSEN TO SEPARATE `sub` FROM `username`, and that
+  // is the difference between this section working and this section being
+  // decorative. Every other fixture in this file seeds `createdBy` and
+  // `createdByName` from one person, so a rule that authorised on the display
+  // name would give the identical answer everywhere and no assertion here would
+  // notice — a first draft of this section proved exactly that by failing to
+  // kill a mutant that compared usernames. `impostor` and `REBORN_IVY` are the
+  // two halves of the trap the module header describes: a recycled username,
+  // and a name that belongs to someone other than the owner.
+  const REBORN_IVY = { groups: 'hosts', userId: 'sub-ivy-2', username: 'ivy' };
+  const seedMatrix = () => {
+    reset();
+    seedSet('ivys', { owner: HOST });
+    seedSet('rajs', { owner: OTHER_HOST });
+    seedSet('eighties');
+    // Owned by raj's sub, but carrying ivy's display name.
+    seedSet('impostor', { createdBy: 'sub-raj', createdByName: 'ivy' });
+  };
+
+  const CROSS = [];
+  for (const [whoName, who] of [
+    ['the creating host', HOST],
+    ['another host', OTHER_HOST],
+    ['an admin', ADMIN],
+    // Same username as HOST, different sub — the deleted-and-recreated account
+    // that `question-set-access.js` picked `sub` in order to keep out.
+    ['a host who reused ivy\'s username', REBORN_IVY],
+    ['an unauthenticated caller', ANON],
+  ]) {
+    for (const setId of ['ivys', 'rajs', 'eighties', 'impostor']) CROSS.push([whoName, who, setId]);
+  }
+
+  for (const [whoName, who, setId] of CROSS) {
+    const eventFor = () => (who === ANON ? {} : callerEvent(who));
+
+    // The LIST's answer.
+    seedMatrix();
+    const listSaid = (await listWithEvent(eventFor()))[setId].canManage;
+
+    // The GUARD's answer, asked directly of the function the handlers enforce
+    // with. null means "proceed"; a response object means refused.
+    const guardSaid = access.requireSetManager(eventFor(), metaOf(setId), 'edit') === null;
+
+    // The real EDIT handler's answer, from a request with no console involved.
+    const editRes = await editSet({
+      ...eventFor(),
+      pathParameters: { setId },
+      body: JSON.stringify({ name: `renamed by ${whoName}` }),
+    });
+    const editSaid = editRes.statusCode !== 403;
+
+    // The real DELETE handler's answer. Reseeded first: the edit above may have
+    // succeeded, and delete destroys rows either way.
+    seedMatrix();
+    const delRes = await deleteSet({ ...eventFor(), pathParameters: { setId } });
+    const delSaid = delRes.statusCode !== 403;
+
+    // REJECTS: the whole reason this field exists — a list that decides
+    // manageability by any route other than the one the handlers enforce.
+    // Re-deriving "is this mine" in get-question-sets.js (comparing usernames
+    // instead of subs, defaulting an unowned set to manageable, or hard-coding
+    // true) moves `listSaid` and leaves the other three where they were.
+    check(`${whoName} on ${setId}: list, guard, edit and delete all say the same`, () =>
+      assert.deepStrictEqual(
+        { list: listSaid, guard: guardSaid, edit: editSaid, delete: delSaid },
+        { list: guardSaid, guard: guardSaid, edit: guardSaid, delete: guardSaid },
+        `canManage=${listSaid} but requireSetManager=${guardSaid}, `
+        + `edit=${editRes.statusCode}, delete=${delRes.statusCode} — `
+        + 'the console would offer a control the handler refuses, or hide one it allows'));
+  }
+
+  // REJECTS: a cross-check that is vacuously true because every answer is the
+  // same. If `canManage` were hard-coded true the loop above would still pass
+  // whenever the guard also said true everywhere, so the matrix must be proven
+  // to contain both answers.
+  seedMatrix();
+  const hostRow = await listAs(HOST);
+  const adminRow = await listAs(ADMIN);
+  check('the cross-checked matrix contains both a true and a false', () =>
+    assert.deepStrictEqual(
+      [...new Set([
+        hostRow.ivys.canManage, hostRow.rajs.canManage, hostRow.eighties.canManage,
+        adminRow.ivys.canManage,
+      ])].sort(),
+      [false, true],
+      'every case agrees because every case is the same answer — section 5 proves nothing'));
 
   say(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
