@@ -109,43 +109,100 @@ exports.handler = async (event) => {
       };
     } else {
       // CSV export - structured for re-import
+      //
+      // THE ONE RULE FOR THIS WHOLE BLOCK: **upload-questions.js is the
+      // contract.** Every column emitted here must be a column the importer
+      // actually reads, spelled the way the importer spells it. Its
+      // `getColumnIndex` is an exact case-insensitive match, and its generic
+      // fallback block covers exactly nine columns — Category, Title,
+      // QuestionDetail, AnswerDetails, Detail, School, CustomInstruction, Image,
+      // Tags — and NO option column of any kind. So a header this file invents
+      // is not "mostly right", it is silently dropped on the way back in.
+      //
+      // That is not hypothetical. This file used to emit
+      // `CorrectAnswer,WrongAnswer1,WrongAnswer2,WrongAnswer3` for trivia,
+      // filled from optionA/B/C — a header the importer has never read, with
+      // optionD/E/F thrown away before it even mattered — and it read the
+      // capitalised `q.Options` for polls, an attribute the importer never
+      // writes (it writes lower-case `options`), so the column came out empty.
+      // Download a trivia or poll set, fix a typo, upload it back: every
+      // question lost every answer, with a 200 and a success message.
+      //
+      // Sibling warning, same contract, do not undo either half:
+      // AdminPage.jsx's generatePollCSV — "Do not 'restore' the numbered
+      // columns". Proof for this half: tests/question-set-roundtrip.js.
       let csvContent = '';
-      
-      if (engagementType === 'trivia') {
-        csvContent = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,CorrectAnswer,WrongAnswer1,WrongAnswer2,WrongAnswer3,Difficulty,Tags\n';
-        questions.forEach((q, index) => {
-          const category = q.Category || q.category || '';
-          const questionNum = index + 1;
-          const title = (q.Title || q.title || '').replace(/"/g, '""');
-          const detail = (q.Detail || q.detail || '').replace(/"/g, '""');
-          const school = (q.School || q.school || '').replace(/"/g, '""');
-          const customInst = (q.CustomInstructions || q.customInstructions || '').replace(/"/g, '""');
-          const correct = (q.CorrectAnswer || q.correctAnswer || '').replace(/"/g, '""');
-          const wrong1 = (q.WrongAnswer1 || q.wrongAnswer1 || q.optionA || '').replace(/"/g, '""');
-          const wrong2 = (q.WrongAnswer2 || q.wrongAnswer2 || q.optionB || '').replace(/"/g, '""');
-          const wrong3 = (q.WrongAnswer3 || q.wrongAnswer3 || q.optionC || '').replace(/"/g, '""');
-          const difficulty = q.Difficulty || q.difficulty || 'medium';
-          // Pipe-separated, matching the Options column's convention that
-          // upload-questions.js already parses (tagsCell.split('|')).
-          const tags = Array.isArray(q.Tags) ? q.Tags.join('|') : (q.Tags || '');
 
-          csvContent += `"${category}",${questionNum},"${title}","${detail}","${school}","${customInst}","${correct}","${wrong1}","${wrong2}","${wrong3}","${difficulty}","${tags}"\n`;
+      // Pipe-separated, matching the Options column's convention that
+      // upload-questions.js already parses (tagsCell.split('|')).
+      const tagsOf = (q) => (Array.isArray(q.Tags) ? q.Tags.join('|') : (q.Tags || ''));
+      const esc = (v) => String(v ?? '').replace(/"/g, '""');
+      // The STORED question number, never a fresh index. A set's numbering is
+      // category-relative (1,2 in one category and 1,2 in the next), and
+      // renumbering it globally on export made the next import rewrite it to
+      // 1,2,3,4 — a quiet reordering of somebody's set on a round trip that
+      // changed nothing. `index + 1` is only a floor for legacy rows that
+      // predate the attribute.
+      const numberOf = (q, index) => q.QuestionNumber ?? q.questionNumber ?? (index + 1);
+      // Optional columns, emitted only when the set actually uses them, so an
+      // ordinary set's CSV keeps its familiar shape. Both are read by the
+      // importer for EVERY engagement type, not just call-and-answer.
+      const carriesImages = questions.some(q => String(q.Image || q.image || '').trim());
+      const carriesAnswerDetails = questions.some(q => String(q.AnswerDetails || q.answerDetails || '').trim());
+      const optionalHeader = (carriesAnswerDetails ? ',AnswerDetails' : '') + (carriesImages ? ',Image' : '');
+      const optionalCells = (q) =>
+        (carriesAnswerDetails ? `,"${esc(q.AnswerDetails || q.answerDetails)}"` : '')
+        + (carriesImages ? `,"${esc(q.Image || q.image)}"` : '');
+
+      if (engagementType === 'trivia') {
+        // OptionA..OptionF, which is what the importer reads and what every
+        // hand-authored set in sets/, download-template.js and the trivia AI
+        // builder (AdminPage.jsx / TriviaAIBuilder.jsx) already emit. All six
+        // are emitted even when empty: the stored row always has all six, so
+        // round-tripping the empties is what keeps the export byte-stable.
+        csvContent = 'Category,Question#,Title,QuestionDetail,School,CustomInstruction,'
+          + 'OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty'
+          + optionalHeader
+          + ',Tags'
+          + '\n';
+        questions.forEach((q, index) => {
+          // The stored attributes are LOWER-case (optionA, correctAnswer,
+          // difficulty) — confirmed against real rows in engagedev. The
+          // capitalised reads are the tolerant half, for anything hand-written.
+          const options = ['A', 'B', 'C', 'D', 'E', 'F']
+            .map((letter) => `,"${esc(q[`Option${letter}`] || q[`option${letter}`])}"`)
+            .join('');
+
+          csvContent += `"${esc(q.Category || q.category)}",${numberOf(q, index)},`
+            + `"${esc(q.Title || q.title)}","${esc(q.Detail || q.detail)}",`
+            + `"${esc(q.School || q.school)}","${esc(q.CustomInstructions || q.customInstructions)}"`
+            + options
+            + `,"${esc(q.CorrectAnswer || q.correctAnswer)}"`
+            + `,"${esc(q.Difficulty || q.difficulty || 'medium')}"`
+            + optionalCells(q)
+            + `,"${tagsOf(q)}"`
+            + '\n';
         });
       } else if (engagementType === 'poll') {
-        csvContent = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple,Tags\n';
+        csvContent = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple'
+          + optionalHeader
+          + ',Tags'
+          + '\n';
         questions.forEach((q, index) => {
-          const category = q.Category || q.category || '';
-          const questionNum = index + 1;
-          const title = (q.Title || q.title || '').replace(/"/g, '""');
-          const detail = (q.Detail || q.detail || '').replace(/"/g, '""');
-          const school = (q.School || q.school || '').replace(/"/g, '""');
-          const customInst = (q.CustomInstructions || q.customInstructions || '').replace(/"/g, '""');
-          const options = Array.isArray(q.Options) ? q.Options.join('|') : (q.Options || '');
-          const allowMultiple = q.AllowMultiple || q.allowMultiple || false;
-          // Pipe-separated, matching the Options column's convention.
-          const tags = Array.isArray(q.Tags) ? q.Tags.join('|') : (q.Tags || '');
+          // LOWER-case `options` is what the importer writes; the capitalised
+          // read is the tolerant half. Reading only `q.Options` exported an
+          // empty column for every poll set in the product.
+          const rawOptions = q.options ?? q.Options;
+          const options = Array.isArray(rawOptions) ? rawOptions.join('|') : (rawOptions || '');
+          const allowMultiple = q.AllowMultiple ?? q.allowMultiple ?? false;
 
-          csvContent += `"${category}",${questionNum},"${title}","${detail}","${school}","${customInst}","${options}","${allowMultiple}","${tags}"\n`;
+          csvContent += `"${esc(q.Category || q.category)}",${numberOf(q, index)},`
+            + `"${esc(q.Title || q.title)}","${esc(q.Detail || q.detail)}",`
+            + `"${esc(q.School || q.school)}","${esc(q.CustomInstructions || q.customInstructions)}"`
+            + `,"${esc(options)}","${allowMultiple === true || allowMultiple === 'true'}"`
+            + optionalCells(q)
+            + `,"${tagsOf(q)}"`
+            + '\n';
         });
       } else {
         // call-and-answer (default)
@@ -156,30 +213,24 @@ exports.handler = async (event) => {
         // fixed six columns silently dropped both, so download → edit → re-upload
         // destroyed the artwork and the reveal. Emit them only when the set
         // actually has them, so an ordinary set keeps its familiar shape.
-        const hasImages = questions.some(q => (q.Image || q.image || '').trim());
-        const hasAnswerDetails = questions.some(q => (q.AnswerDetails || q.answerDetails || '').trim());
-
+        //
+        // WAVELENGTH RIDES THIS BRANCH TOO, and correctly: a wavelength question
+        // row carries no type-specific attribute at all — only the shared
+        // Title/Detail/Category/School/CustomInstructions/Tags set (confirmed
+        // against engagedev). The importer likewise has no wavelength branch. So
+        // these six-plus-optional columns are the whole of a wavelength question,
+        // and a wavelength-specific export branch would only be a new way to emit
+        // columns nothing reads.
         csvContent = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction'
-          + (hasAnswerDetails ? ',AnswerDetails' : '')
-          + (hasImages ? ',Image' : '')
+          + optionalHeader
           + ',Tags'
           + '\n';
         questions.forEach((q, index) => {
-          const category = q.Category || q.category || '';
-          const questionNum = index + 1;
-          const title = (q.Title || q.title || '').replace(/"/g, '""');
-          const detail = (q.Detail || q.detail || '').replace(/"/g, '""');
-          const school = (q.School || q.school || '').replace(/"/g, '""');
-          const customInst = (q.CustomInstructions || q.customInstructions || '').replace(/"/g, '""');
-          const answerDetails = (q.AnswerDetails || q.answerDetails || '').replace(/"/g, '""');
-          const image = (q.Image || q.image || '').replace(/"/g, '""');
-          // Pipe-separated, matching the Options column's convention.
-          const tags = Array.isArray(q.Tags) ? q.Tags.join('|') : (q.Tags || '');
-
-          csvContent += `"${category}",${questionNum},"${title}","${detail}","${school}","${customInst}"`
-            + (hasAnswerDetails ? `,"${answerDetails}"` : '')
-            + (hasImages ? `,"${image}"` : '')
-            + `,"${tags}"`
+          csvContent += `"${esc(q.Category || q.category)}",${numberOf(q, index)},`
+            + `"${esc(q.Title || q.title)}","${esc(q.Detail || q.detail)}",`
+            + `"${esc(q.School || q.school)}","${esc(q.CustomInstructions || q.customInstructions)}"`
+            + optionalCells(q)
+            + `,"${tagsOf(q)}"`
             + '\n';
         });
       }
