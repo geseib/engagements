@@ -690,6 +690,28 @@ into `HOST_ADMIN_ROUTES`, which would open the version DELETE.
 
 ### S6 — The question library
 
+> ## ⚠️ OWNER DECISION TAKEN 2026-08-13: **SEARCH IS OUT. A GSI IS NOT THE ANSWER.**
+>
+> The owner's call, and it is the right one: *"Maybe we hold off on that search but. I think it
+> might need a different tool."*
+>
+> **What this removes:** free-text search across questions. Do not build it, and do not add a
+> GSI to enable it. A GSI buys one cross-set partition to query — it does not buy relevance,
+> ranking or tokenisation, so it would fund a *worse* search than the substring matching a
+> fan-out already gives, at the price of write capacity on every question write, projection
+> storage, and a backfill migration over every existing row. Real search is OpenSearch or an
+> equivalent, which is a disproportionate dependency for an authoring screen.
+>
+> **What survives:** *filter and find* — list, facet by category and `roundKind`, and select.
+> A bounded fan-out serves that honestly at this scale (dozens of sets, ≤160 questions each).
+> **Name it "filter", never "search", in the UI**, so the screen does not promise what it does.
+>
+> **The one thing that would reopen it is Groups.** *"Show me my group's questions"* is exactly
+> a GSI-shaped query, and once ownership is a group rather than a person, fan-out-then-filter
+> stops being adequate. So the cheap insurance is unchanged from decision 5: make sure question
+> rows carry the attribute such an index would key on, so adding it later is a backfill and not
+> a redesign. **Do not add the index now.**
+
 **capability, frontend + one backend route, L. This is the cut line.**
 
 A different screen with a different primary object: the question, not the set. Treat it as
