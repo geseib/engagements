@@ -71,13 +71,57 @@ a plain select is a scroll.
 
 ### Why 24 and not "no limit"
 
-`lambda-functions/admin/update-game-categories.js:30` does
-`Math.min(categoryCount, 24)`. Categories are packed into three eight-bit host
-masks (`HostMask1-8`, `HostMask9-16`, `HostMask17-24`). A category at index 25 or
-beyond never reaches the mask, which means **a host can never toggle it** — the
-questions in it are unreachable in a live session.
+Categories are packed into three eight-bit host masks (`HostMask1-8`,
+`HostMask9-16`, `HostMask17-24`). A category at index 25 or beyond never reaches
+the mask, which means **a host can never toggle it** — the questions in it are
+unreachable in a live session.
+
+The authoritative writer is
+`lambda-functions/websocket/schema-compliant-manager.js:211` (`bitPosition <= 24`,
+with no `else` branch) and `:322` (`categoryIndex < 24` for the counts arrays).
+`lambda-functions/admin/update-game-categories.js` contains the same cap at
+`:30`, but treat it as semi-dead: no frontend code calls its route, and it
+matches categories by `SK`-derived id (`c001`) against human names, so its
+`findIndex` never hits. An earlier draft of this document cited it as the
+enforcement point; the live path is `schema-compliant-manager.js`.
 
 Today nothing refuses the 25th category. It is accepted, stored, and silently
 inert. A `+ New category` button that lets someone build an unusable category is
 worse than no button, so the cap is enforced at the point of creation with the
 reason stated, not silently swallowed.
+
+### The larger hazard behind the cap: silent reindexing
+
+The cap is the visible half of a sharper problem. **Category identity is
+positional, and the position is derived from first appearance in the CSV.**
+
+`upload-questions.js:442,558,727-733` re-derives the category list from scratch
+on every save, in the order categories first appear while parsing rows top to
+bottom, assigning `c001…cNNN`. Every consumer then treats that array index as the
+bit position — `schema-compliant-manager.js:176`, `config/setupPanel.js:57`,
+`toggle-category.js:91`, `GameHostPage.jsx:4762`, which sends the position over
+the wire as `categoryId`.
+
+There is no per-question write. Every add is a full-set CSV replace. So:
+
+- Adding a question whose category is new, **anywhere but at the end of the row
+  list**, shifts every category that first appears later by one position. The bit
+  that meant "Strategy" now means "Culture".
+- At 24 categories, an insertion early in the file pushes whichever category
+  lands at index 24 out of maskable range entirely — permanently untoggleable.
+- The existing ↑/↓ row-reorder buttons (`QuestionsPanel.jsx:702-719`) can cause
+  the same reindexing today, with no new feature involved.
+
+Live games are protected: both `update-game-categories.js:98-103` and
+`get-categories.js:26` resolve through the game's pinned `QuestionSetVersion`.
+New games started on the new version get the new indexing.
+
+**Consequences for the design.** A new category must be appended so that its
+first appearance falls after every existing category's, which keeps existing
+positions stable. And the combobox's counts must be derived from the **working
+copy** (`rows`) — not `set.categoryCount`, a stale integer from the last save
+(`QuestionSetEditor.jsx:303,539`), and not `GET /question-sets/{setId}/categories`,
+which serves the persisted version and which the admin editor deliberately does
+not call (`QuestionSetEditor.jsx:530-535`). A combobox reading "Strategy · 12"
+while the unsaved working copy holds 14 would be a new lie in a panel whose whole
+design is about telling the truth about unsaved state.
