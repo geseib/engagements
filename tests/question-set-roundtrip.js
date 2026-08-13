@@ -628,6 +628,9 @@ const WAVELENGTH_CSV = [
       assert.strictEqual(meta.versions.length, 3);
     });
 
+    // rejects: a serialiser that writes the tombstoned rows out anyway. The
+    // panel keeps a removed question on screen so it can be restored, and a
+    // writer that does not filter them turns every delete into a no-op.
     check('the deleted question is gone and the other two survive', () => {
       const titles = saved.rows.map((r) => r.Title).sort();
       assert.deepStrictEqual(titles, ['WHICH DIRECTOR', 'WHICH SCORE', 'WHO REALLY SANG IT']);
@@ -644,6 +647,8 @@ const WAVELENGTH_CSV = [
       assert.deepStrictEqual(rest, restBefore);
     });
 
+    // rejects: a new question serialised into columns the importer does not
+    // read — the WrongAnswer* defect, reintroduced by the second writer.
     check('the added question arrives complete', () => {
       const added = saved.rows.find((r) => r.Title === 'WHICH SCORE');
       assert.strictEqual(added.optionA, 'Vangelis');
@@ -652,6 +657,9 @@ const WAVELENGTH_CSV = [
       assert.deepStrictEqual(added.Tags, ['80s', 'score']);
     });
 
+    // rejects: a note that says something happened without saying what. Four
+    // versions that all read "edited" are four versions you cannot choose
+    // between when you need to roll one back.
     check('the version note says what changed', () => {
       const meta = store.get(`SETS|SET#${t.setId}`);
       const note = meta.versions[meta.versions.length - 1].note;
@@ -687,6 +695,8 @@ const WAVELENGTH_CSV = [
     check('a reorder counts as an unsaved change', () =>
       assert.strictEqual(summarizeRowChanges(moved, baseline).reordered, true));
 
+    // rejects: a save that keeps the load order regardless of the moves — the
+    // reorder would appear to work on screen and be gone on reload.
     check('the new order is the stored order', () =>
       assert.deepStrictEqual(saved.rows.map((r) => r.Title),
         ['IS THE RELEASE NOTE READY', 'WHAT WENT WRONG LAST QUARTER',
@@ -752,6 +762,9 @@ const WAVELENGTH_CSV = [
       ...adminContext(),
       body: JSON.stringify({ replaceSetId: target.setId, fileName: 'again.csv', fileContent: parse(again).content }),
     });
+    // rejects: an exporter that does not emit the two provenance columns. The
+    // stamp would survive exactly one replace and then vanish, which is worse
+    // than never stamping it.
     check('provenance survives a further export and re-import', () => {
       assert.strictEqual(rebounced.statusCode, 200, rebounced.body);
       const after = rowsIn(`SET#${target.setId}#v${parse(rebounced).version}`);
@@ -823,6 +836,9 @@ const WAVELENGTH_CSV = [
         engagementType: 'call-and-answer',
       }),
     });
+    // rejects: a fork that lands unowned. An unowned set is admin-only by rule
+    // (question-set-access.js), so the host would create a copy and instantly
+    // be unable to edit it — the exact trap the fork exists to avoid.
     check('the fork creates a new set owned by the person who forked it', () => {
       assert.strictEqual(forked.statusCode, 200, forked.body);
       const meta = store.get(`SETS|SET#${parse(forked).setId}`);

@@ -519,8 +519,9 @@ export default function QuestionSetEditor({
               <span className="stat-badge">{currentSet.totalQuestions || 0} questions</span>
             </div>
             <small className="help-text">
-              Categories come from the Category column of the set's CSV. To add, rename or remove
-              one, download the CSV below, edit it, and upload it as a new version.
+              Categories come from the questions themselves. To add, rename or remove one, change
+              the category on a question in the Questions panel below — there is no separate list
+              to keep in step, which is why there is no field here.
             </small>
           </div>
 
