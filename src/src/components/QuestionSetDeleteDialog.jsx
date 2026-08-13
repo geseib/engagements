@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Icon from './Icon';
+import Modal from './Modal';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import { gameTypeLabel } from '../config/gameTypes';
@@ -89,107 +90,108 @@ export default function QuestionSetDeleteDialog({
   const busy = phase === 'deleting';
   const finished = phase === 'done';
 
+  // THE GATE, STATED ONCE AND SPENT TWICE. An in-flight delete must not be
+  // dismissable — unmounting the only surface that can report the outcome is
+  // the whole defect this dialog was written for — and a finished one closes by
+  // acknowledgement, not by dismissal. Escape is now held to exactly the same
+  // rule as the scrim; a second way out that skips the gate is the same bug.
+  const dismissable = () => !busy && !finished;
+
   return (
-    <div
-      className="qsets qsets-scrim"
-      onClick={() => {
-        if (!busy && !finished) onCancel && onCancel();
-      }}
+    <Modal
+      overlayClassName="qsets qsets-scrim"
+      contentClassName="qsets-modal"
+      labelledBy="qsets-del-title"
+      onClose={() => onCancel && onCancel()}
+      closeOnBackdrop={dismissable}
+      closeOnEscape={dismissable}
     >
-      <div
-        className="qsets-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="qsets-del-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header>
-          <Icon
-            name={finished ? 'Check' : 'Warning'}
-            weight="fill"
-            size={20}
-            color={finished ? 'var(--success)' : 'var(--danger-text)'}
-          />
-          <div>
-            <h2 id="qsets-del-title">{finished ? 'Question set deleted' : 'Delete this question set?'}</h2>
-            <p className="qsets-dim">
-              {name} · {gameTypeLabel(questionSet.engagementType)} · {questions} question
-              {questions === 1 ? '' : 's'} in {categories} categor{categories === 1 ? 'y' : 'ies'}
-            </p>
-          </div>
-        </header>
-
-        <div className="qsets-modal-body">
-          {!finished && (
-            <>
-              <p>
-                This removes every question, category and version in the set. It cannot be
-                undone.
-              </p>
-              {/*
-                Unconditionally true, so it is stated without needing B1's usage
-                list: the report is built from the live set on demand.
-              */}
-              <p>
-                A session report is built from the live set the first time it is asked for, so
-                deleting this set decides, permanently, which past sessions can still produce
-                one.
-              </p>
-
-              {onDeactivate && questionSet.active && (
-                <div className="qsets-alt">
-                  <b>Or deactivate it instead.</b> It stops appearing in the host's picker and
-                  nothing is lost — you can turn it back on from the list at any time.{' '}
-                  {/* The set's name is already in the header. Repeating it inside a
-                      link is how a 98-character title (the longest this product
-                      has produced) pushes the dialog sideways. */}
-                  <button
-                    type="button"
-                    className="qsets-btn qsets-btn--link"
-                    disabled={busy}
-                    onClick={() => onDeactivate(questionSet)}
-                  >
-                    Deactivate it instead
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-
-          {message && (
-            <div
-              className={`qsets-alert ${phase === 'failed' ? 'qsets-alert--error' : 'qsets-alert--success'}`}
-              role={phase === 'failed' ? 'alert' : 'status'}
-            >
-              <Icon
-                name={phase === 'failed' ? 'Warning' : 'Check'}
-                weight="fill"
-                size={16}
-                color="currentColor"
-              />
-              <span>{message}</span>
-            </div>
-          )}
+      <header>
+        <Icon
+          name={finished ? 'Check' : 'Warning'}
+          weight="fill"
+          size={20}
+          color={finished ? 'var(--success)' : 'var(--danger-text)'}
+        />
+        <div>
+          <h2 id="qsets-del-title">{finished ? 'Question set deleted' : 'Delete this question set?'}</h2>
+          <p className="qsets-dim">
+            {name} · {gameTypeLabel(questionSet.engagementType)} · {questions} question
+            {questions === 1 ? '' : 's'} in {categories} categor{categories === 1 ? 'y' : 'ies'}
+          </p>
         </div>
+      </header>
 
-        <footer>
-          <span className="qsets-grow" />
-          {finished ? (
-            <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onDeleted && onDeleted(message)}>
-              Done
-            </button>
-          ) : (
-            <>
-              <button type="button" className="qsets-btn" disabled={busy} onClick={() => onCancel && onCancel()}>
-                {phase === 'failed' ? 'Close' : 'Keep it'}
-              </button>
-              <button type="button" className="qsets-btn qsets-btn--dangersolid" disabled={busy} onClick={remove}>
-                {busy ? 'Deleting…' : phase === 'failed' ? 'Try again' : 'Delete the set'}
-              </button>
-            </>
-          )}
-        </footer>
+      <div className="qsets-modal-body">
+        {!finished && (
+          <>
+            <p>
+              This removes every question, category and version in the set. It cannot be
+              undone.
+            </p>
+            {/*
+              Unconditionally true, so it is stated without needing B1's usage
+              list: the report is built from the live set on demand.
+            */}
+            <p>
+              A session report is built from the live set the first time it is asked for, so
+              deleting this set decides, permanently, which past sessions can still produce
+              one.
+            </p>
+
+            {onDeactivate && questionSet.active && (
+              <div className="qsets-alt">
+                <b>Or deactivate it instead.</b> It stops appearing in the host's picker and
+                nothing is lost — you can turn it back on from the list at any time.{' '}
+                {/* The set's name is already in the header. Repeating it inside a
+                    link is how a 98-character title (the longest this product
+                    has produced) pushes the dialog sideways. */}
+                <button
+                  type="button"
+                  className="qsets-btn qsets-btn--link"
+                  disabled={busy}
+                  onClick={() => onDeactivate(questionSet)}
+                >
+                  Deactivate it instead
+                </button>
+              </div>
+            )}
+          </>
+        )}
+
+        {message && (
+          <div
+            className={`qsets-alert ${phase === 'failed' ? 'qsets-alert--error' : 'qsets-alert--success'}`}
+            role={phase === 'failed' ? 'alert' : 'status'}
+          >
+            <Icon
+              name={phase === 'failed' ? 'Warning' : 'Check'}
+              weight="fill"
+              size={16}
+              color="currentColor"
+            />
+            <span>{message}</span>
+          </div>
+        )}
       </div>
-    </div>
+
+      <footer>
+        <span className="qsets-grow" />
+        {finished ? (
+          <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onDeleted && onDeleted(message)}>
+            Done
+          </button>
+        ) : (
+          <>
+            <button type="button" className="qsets-btn" disabled={busy} onClick={() => onCancel && onCancel()}>
+              {phase === 'failed' ? 'Close' : 'Keep it'}
+            </button>
+            <button type="button" className="qsets-btn qsets-btn--dangersolid" disabled={busy} onClick={remove}>
+              {busy ? 'Deleting…' : phase === 'failed' ? 'Try again' : 'Delete the set'}
+            </button>
+          </>
+        )}
+      </footer>
+    </Modal>
   );
 }

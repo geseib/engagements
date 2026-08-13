@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Icon from './Icon';
+import Modal from './Modal';
 import SetImageBadge from './SetImageBadge';
 import QuestionSetUploadPanel from './QuestionSetUploadPanel';
 import QuestionSetDeleteDialog from './QuestionSetDeleteDialog';
@@ -145,256 +146,250 @@ export default function HostQuestionSetsDialog({
   };
 
   return (
-    <div
-      className="qsets qsets--onlight qsets-scrim qsets-scrim--over"
-      onClick={() => onClose && onClose()}
+    <Modal
+      overlayClassName="qsets qsets--onlight qsets-scrim qsets-scrim--over"
+      contentClassName="qsets-modal qsets-modal--wide"
+      labelledBy="hqs-title"
+      onClose={() => onClose && onClose()}
     >
-      <div
-        className="qsets-modal qsets-modal--wide"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="hqs-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header>
-          <Icon name="Books" weight="duotone" size={20} color="var(--primary)" />
-          <div className="qsets-grow">
-            <h2 id="hqs-title">Your question sets</h2>
-            <p className="qsets-dim">
-              Sets you made. You can rename or delete these; everything else in the library stays
-              as your administrator left it.
-            </p>
-          </div>
-          <button type="button" className="qsets-btn qsets-btn--sm" onClick={() => onClose && onClose()}>
-            Close
-          </button>
-        </header>
+      <header>
+        <Icon name="Books" weight="duotone" size={20} color="var(--primary)" />
+        <div className="qsets-grow">
+          <h2 id="hqs-title">Your question sets</h2>
+          <p className="qsets-dim">
+            Sets you made. You can rename or delete these; everything else in the library stays
+            as your administrator left it.
+          </p>
+        </div>
+        <button type="button" className="qsets-btn qsets-btn--sm" onClick={() => onClose && onClose()}>
+          Close
+        </button>
+      </header>
 
-        <div className="qsets-modal-body">
-          {notice && notice.text && (
-            <div
-              className={`qsets-alert${notice.tone === 'error' ? ' qsets-alert--error' : ' qsets-alert--success'}`}
-              role={notice.tone === 'error' ? 'alert' : 'status'}
-            >
-              <Icon
-                name={notice.tone === 'error' ? 'Warning' : 'Check'}
-                weight="fill"
-                size={16}
-                color="currentColor"
-              />
-              <span>{notice.text}</span>
-              <button type="button" className="qsets-alert-close" onClick={() => setNotice(null)}>
-                Dismiss
-              </button>
-            </div>
-          )}
-
-          {error && (
-            <div className="qsets-alert qsets-alert--error" role="alert">
-              <Icon name="Warning" weight="fill" size={16} color="currentColor" />
-              <span>{error}</span>
-              <button type="button" className="qsets-alert-close" onClick={() => load()}>
-                Try again
-              </button>
-            </div>
-          )}
-
-          {loading && sets.length === 0 && <p className="qsets-loading">Loading your question sets…</p>}
-
-          {!loading && !error && mine.length === 0 && (
-            /*
-              NOT the console's three-path empty state. Two of those three paths
-              are admin-only routes, and a host reading "Generate with AI" would
-              be reading about a button that is not here.
-            */
-            <div className="qsets-empty">
-              <Icon name="Books" weight="duotone" size={34} color="var(--muted)" />
-              <h3>You haven&apos;t made a question set yet</h3>
-              <p>
-                Download the template for the format you want, fill in your questions, and upload
-                it. It becomes yours: only you and an administrator can change it.
-              </p>
-            </div>
-          )}
-
-          {mine.length > 0 && (
-            <table className="qsets-tbl">
-              <thead>
-                <tr>
-                  <th className="qsets-col-set">Set</th>
-                  <th className="qsets-col-type">Format</th>
-                  <th className="qsets-col-qs">Qs</th>
-                  <th className="qsets-col-acts" />
-                </tr>
-              </thead>
-              <tbody>
-                {mine.map((set) => (
-                  editing && editing.id === set.id ? (
-                    <tr key={set.id}>
-                      <td colSpan={4}>
-                        <div className="qsets-field">
-                          <label htmlFor={`hqs-name-${set.id}`}>Name</label>
-                          <input
-                            id={`hqs-name-${set.id}`}
-                            type="text"
-                            className="qsets-input"
-                            value={editing.name}
-                            disabled={editing.busy}
-                            onChange={(event) => setEditing({ ...editing, name: event.target.value })}
-                          />
-                        </div>
-                        <div className="qsets-field">
-                          <label htmlFor={`hqs-desc-${set.id}`}>Description</label>
-                          <input
-                            id={`hqs-desc-${set.id}`}
-                            type="text"
-                            className="qsets-input"
-                            value={editing.description}
-                            disabled={editing.busy}
-                            onChange={(event) => setEditing({ ...editing, description: event.target.value })}
-                          />
-                        </div>
-                        <div className="qsets-actions">
-                          <button
-                            type="button"
-                            className="qsets-btn qsets-btn--primary"
-                            disabled={editing.busy || !editing.name.trim()}
-                            onClick={saveEdit}
-                          >
-                            {editing.busy ? 'Saving…' : 'Save'}
-                          </button>
-                          <button
-                            type="button"
-                            className="qsets-btn"
-                            disabled={editing.busy}
-                            onClick={() => setEditing(null)}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    <tr key={set.id}>
-                      <td>
-                        <span className="qsets-nm">
-                          {set.name}
-                          <SetImageBadge hasImages={set.hasImages} />
-                        </span>
-                        {!set.active && <span className="qsets-sub">Not offered in the picker</span>}
-                      </td>
-                      <td>
-                        <span className="qsets-chip qsets-chip--type">{gameTypeLabel(set.engagementType)}</span>
-                      </td>
-                      <td className="qsets-num">{set.totalQuestions ?? 0}</td>
-                      <td>
-                        <div className="qsets-rowact">
-                          <button
-                            type="button"
-                            className="qsets-btn qsets-btn--sm"
-                            onClick={() => setEditing({
-                              id: set.id,
-                              name: set.name || '',
-                              description: set.description || '',
-                              busy: false,
-                            })}
-                          >
-                            Rename
-                          </button>
-                          <button
-                            type="button"
-                            className="qsets-btn qsets-btn--sm qsets-btn--ghostdanger"
-                            onClick={() => setDeleting(set)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {!loading && theirs > 0 && (
-            /*
-              The rule, stated once, where the absence of buttons would otherwise
-              be unexplained. No control is drawn for these — a disabled Delete on
-              somebody else's set is an invitation, and this is not a permission
-              a host can request.
-            */
-            <p className="qsets-dim">
-              {theirs} other set{theirs === 1 ? '' : 's'} {theirs === 1 ? 'is' : 'are'} available to
-              play. {theirs === 1 ? 'It was' : 'They were'} made by someone else, so only an
-              administrator can change {theirs === 1 ? 'it' : 'them'}.
-            </p>
-          )}
-
-          <div className="qsets-head">
-            <span className="qsets-head-grow" />
-            <button
-              type="button"
-              className="qsets-btn qsets-btn--primary"
-              onClick={() => setCreating(!creating)}
-            >
-              <Icon name="Plus" weight="bold" size={14} color="currentColor" />
-              {creating ? 'Hide new set' : 'New question set'}
+      <div className="qsets-modal-body">
+        {notice && notice.text && (
+          <div
+            className={`qsets-alert${notice.tone === 'error' ? ' qsets-alert--error' : ' qsets-alert--success'}`}
+            role={notice.tone === 'error' ? 'alert' : 'status'}
+          >
+            <Icon
+              name={notice.tone === 'error' ? 'Warning' : 'Check'}
+              weight="fill"
+              size={16}
+              color="currentColor"
+            />
+            <span>{notice.text}</span>
+            <button type="button" className="qsets-alert-close" onClick={() => setNotice(null)}>
+              Dismiss
             </button>
           </div>
+        )}
 
-          {creating && (
-            /*
-              THE SHARED FORM, NOT A COPY. The CSV contract and its preflight are
-              identical for both audiences; what is switched off is the admin
-              machinery around it — the AI builders (admins-only routes, modals
-              owned by AdminPage), the prompt library, /builder, and the two
-              instruction fields that belong to library curation rather than to
-              getting a room playing. An unset promptId resolves a
-              type-appropriate default at run time, so nothing is lost by not
-              asking.
-            */
-            <QuestionSetUploadPanel
-              engagementType={newSetType}
-              onEngagementTypeChange={setNewSetType}
-              showAIBuilder={false}
-              showManualBuilder={false}
-              showSummaryPrompt={false}
-              showAdvancedFields={false}
-              heading="New question set"
-              intro={
-                <>
-                  Download the template for the format you want, fill it in, and upload it. The
-                  format decides how your columns are read, so pick it first.
-                </>
-              }
-              onUploaded={(message) => {
-                setCreating(false);
-                load(message);
-              }}
-            />
-          )}
+        {error && (
+          <div className="qsets-alert qsets-alert--error" role="alert">
+            <Icon name="Warning" weight="fill" size={16} color="currentColor" />
+            <span>{error}</span>
+            <button type="button" className="qsets-alert-close" onClick={() => load()}>
+              Try again
+            </button>
+          </div>
+        )}
+
+        {loading && sets.length === 0 && <p className="qsets-loading">Loading your question sets…</p>}
+
+        {!loading && !error && mine.length === 0 && (
+          /*
+            NOT the console's three-path empty state. Two of those three paths
+            are admin-only routes, and a host reading "Generate with AI" would
+            be reading about a button that is not here.
+          */
+          <div className="qsets-empty">
+            <Icon name="Books" weight="duotone" size={34} color="var(--muted)" />
+            <h3>You haven&apos;t made a question set yet</h3>
+            <p>
+              Download the template for the format you want, fill in your questions, and upload
+              it. It becomes yours: only you and an administrator can change it.
+            </p>
+          </div>
+        )}
+
+        {mine.length > 0 && (
+          <table className="qsets-tbl">
+            <thead>
+              <tr>
+                <th className="qsets-col-set">Set</th>
+                <th className="qsets-col-type">Format</th>
+                <th className="qsets-col-qs">Qs</th>
+                <th className="qsets-col-acts" />
+              </tr>
+            </thead>
+            <tbody>
+              {mine.map((set) => (
+                editing && editing.id === set.id ? (
+                  <tr key={set.id}>
+                    <td colSpan={4}>
+                      <div className="qsets-field">
+                        <label htmlFor={`hqs-name-${set.id}`}>Name</label>
+                        <input
+                          id={`hqs-name-${set.id}`}
+                          type="text"
+                          className="qsets-input"
+                          value={editing.name}
+                          disabled={editing.busy}
+                          onChange={(event) => setEditing({ ...editing, name: event.target.value })}
+                        />
+                      </div>
+                      <div className="qsets-field">
+                        <label htmlFor={`hqs-desc-${set.id}`}>Description</label>
+                        <input
+                          id={`hqs-desc-${set.id}`}
+                          type="text"
+                          className="qsets-input"
+                          value={editing.description}
+                          disabled={editing.busy}
+                          onChange={(event) => setEditing({ ...editing, description: event.target.value })}
+                        />
+                      </div>
+                      <div className="qsets-actions">
+                        <button
+                          type="button"
+                          className="qsets-btn qsets-btn--primary"
+                          disabled={editing.busy || !editing.name.trim()}
+                          onClick={saveEdit}
+                        >
+                          {editing.busy ? 'Saving…' : 'Save'}
+                        </button>
+                        <button
+                          type="button"
+                          className="qsets-btn"
+                          disabled={editing.busy}
+                          onClick={() => setEditing(null)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr key={set.id}>
+                    <td>
+                      <span className="qsets-nm">
+                        {set.name}
+                        <SetImageBadge hasImages={set.hasImages} />
+                      </span>
+                      {!set.active && <span className="qsets-sub">Not offered in the picker</span>}
+                    </td>
+                    <td>
+                      <span className="qsets-chip qsets-chip--type">{gameTypeLabel(set.engagementType)}</span>
+                    </td>
+                    <td className="qsets-num">{set.totalQuestions ?? 0}</td>
+                    <td>
+                      <div className="qsets-rowact">
+                        <button
+                          type="button"
+                          className="qsets-btn qsets-btn--sm"
+                          onClick={() => setEditing({
+                            id: set.id,
+                            name: set.name || '',
+                            description: set.description || '',
+                            busy: false,
+                          })}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          className="qsets-btn qsets-btn--sm qsets-btn--ghostdanger"
+                          onClick={() => setDeleting(set)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {!loading && theirs > 0 && (
+          /*
+            The rule, stated once, where the absence of buttons would otherwise
+            be unexplained. No control is drawn for these — a disabled Delete on
+            somebody else's set is an invitation, and this is not a permission
+            a host can request.
+          */
+          <p className="qsets-dim">
+            {theirs} other set{theirs === 1 ? '' : 's'} {theirs === 1 ? 'is' : 'are'} available to
+            play. {theirs === 1 ? 'It was' : 'They were'} made by someone else, so only an
+            administrator can change {theirs === 1 ? 'it' : 'them'}.
+          </p>
+        )}
+
+        <div className="qsets-head">
+          <span className="qsets-head-grow" />
+          <button
+            type="button"
+            className="qsets-btn qsets-btn--primary"
+            onClick={() => setCreating(!creating)}
+          >
+            <Icon name="Plus" weight="bold" size={14} color="currentColor" />
+            {creating ? 'Hide new set' : 'New question set'}
+          </button>
         </div>
 
-        {deleting && (
+        {creating && (
           /*
-            THE SHARED DIALOG, UNCHANGED. It needs no ownership prop: it is only
-            ever opened from a row the server already said `canManage` on, and
-            the handler refuses regardless. `onDeactivate` is deliberately not
-            passed — the Active toggle is admin curation, and offering a host a
-            "deactivate instead" button that 403s would be worse than not
-            offering it.
+            THE SHARED FORM, NOT A COPY. The CSV contract and its preflight are
+            identical for both audiences; what is switched off is the admin
+            machinery around it — the AI builders (admins-only routes, modals
+            owned by AdminPage), the prompt library, /builder, and the two
+            instruction fields that belong to library curation rather than to
+            getting a room playing. An unset promptId resolves a
+            type-appropriate default at run time, so nothing is lost by not
+            asking.
           */
-          <QuestionSetDeleteDialog
-            questionSet={deleting}
-            onCancel={() => setDeleting(null)}
-            onDeleted={(message) => {
-              setDeleting(null);
+          <QuestionSetUploadPanel
+            engagementType={newSetType}
+            onEngagementTypeChange={setNewSetType}
+            showAIBuilder={false}
+            showManualBuilder={false}
+            showSummaryPrompt={false}
+            showAdvancedFields={false}
+            heading="New question set"
+            intro={
+              <>
+                Download the template for the format you want, fill it in, and upload it. The
+                format decides how your columns are read, so pick it first.
+              </>
+            }
+            onUploaded={(message) => {
+              setCreating(false);
               load(message);
             }}
           />
         )}
       </div>
-    </div>
+
+      {deleting && (
+        /*
+          THE SHARED DIALOG, UNCHANGED. It needs no ownership prop: it is only
+          ever opened from a row the server already said `canManage` on, and
+          the handler refuses regardless. `onDeactivate` is deliberately not
+          passed — the Active toggle is admin curation, and offering a host a
+          "deactivate instead" button that 403s would be worse than not
+          offering it.
+        */
+        <QuestionSetDeleteDialog
+          questionSet={deleting}
+          onCancel={() => setDeleting(null)}
+          onDeleted={(message) => {
+            setDeleting(null);
+            load(message);
+          }}
+        />
+      )}
+    </Modal>
   );
 }

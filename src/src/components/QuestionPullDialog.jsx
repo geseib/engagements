@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Icon from './Icon';
+import Modal from './Modal';
 import StatusMessage from './StatusMessage';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType, gameTypeLabel } from '../config/gameTypes';
@@ -133,142 +134,145 @@ export default function QuestionPullDialog({
   const carriesImages = rows.some((r) => chosen.includes(r.uid) && r.image);
 
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal-content qs-pull-dialog" onClick={(e) => e.stopPropagation()}>
-        <h3>
-          <Icon name="Books" weight="bold" size={16} color="var(--primary)" />{' '}
-          {sourceSet ? `Pull questions from "${sourceSet.name}"` : 'Pull questions from another set'}
-        </h3>
+    <Modal
+      overlayClassName="modal-overlay"
+      contentClassName="modal-content qs-pull-dialog"
+      labelledBy="qs-pull-title"
+      onClose={onCancel}
+    >
+      <h3 id="qs-pull-title">
+        <Icon name="Books" weight="bold" size={16} color="var(--primary)" />{' '}
+        {sourceSet ? `Pull questions from "${sourceSet.name}"` : 'Pull questions from another set'}
+      </h3>
 
-        {!sourceSet && (
-          <>
-            <p>
-              Pick the set to take questions from. Only {gameTypeLabel(wanted)} sets are listed:
-              a question from another kind of set would lose the fields this one plays with.
-              {hiddenCount > 0 && ` ${hiddenCount} set${hiddenCount === 1 ? ' is' : 's are'} hidden for that reason.`}
+      {!sourceSet && (
+        <>
+          <p>
+            Pick the set to take questions from. Only {gameTypeLabel(wanted)} sets are listed:
+            a question from another kind of set would lose the fields this one plays with.
+            {hiddenCount > 0 && ` ${hiddenCount} set${hiddenCount === 1 ? ' is' : 's are'} hidden for that reason.`}
+          </p>
+          <div className="form-group">
+            <label htmlFor="pull-set-filter">Filter sets by name</label>
+            <input
+              id="pull-set-filter"
+              type="text"
+              className="form-input"
+              value={setFilter}
+              onChange={(e) => setSetFilter(e.target.value)}
+              placeholder="Type part of a set's name"
+            />
+          </div>
+          {listedSets.length === 0 ? (
+            <p className="qs-empty">
+              {compatible.length
+                ? 'No set matches that filter.'
+                : `There is no other ${gameTypeLabel(wanted)} set to pull from yet.`}
             </p>
-            <div className="form-group">
-              <label htmlFor="pull-set-filter">Filter sets by name</label>
-              <input
-                id="pull-set-filter"
-                type="text"
-                className="form-input"
-                value={setFilter}
-                onChange={(e) => setSetFilter(e.target.value)}
-                placeholder="Type part of a set's name"
-              />
-            </div>
-            {listedSets.length === 0 ? (
-              <p className="qs-empty">
-                {compatible.length
-                  ? 'No set matches that filter.'
-                  : `There is no other ${gameTypeLabel(wanted)} set to pull from yet.`}
-              </p>
+          ) : (
+            <ul className="qs-pull-set-list">
+              {listedSets.map((s) => (
+                <li key={s.id}>
+                  <button className="qs-pull-set" onClick={() => { setSourceSet(s); setChosen([]); }}>
+                    <strong>{s.name}</strong>
+                    <span className="qs-question-meta">
+                      <span>{s.totalQuestions || s.questionCount || 0} questions</span>
+                      <span>{s.categoryCount || 0} categories</span>
+                      {/* The server's own answer, never a comparison made here. */}
+                      {s.mine ? <span>yours</span> : <span>someone else's</span>}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+
+      {sourceSet && (
+        <>
+          <p>
+            These become <strong>copies</strong>. Editing them in this set will not change
+            the originals in "{sourceSet.name}", and nothing here changes that set at all.
+          </p>
+
+          <div className="qs-pull-filters">
+            {categories.length > 1 && (
+              <label>
+                Filter by category:{' '}
+                <select className="form-select" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+                  <option value="">All categories</option>
+                  {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+            )}
+            {roundKindApplies(wanted) && kinds.length > 0 && (
+              <label>
+                Filter by direction:{' '}
+                <select className="form-select" value={kindFilter} onChange={(e) => setKindFilter(e.target.value)}>
+                  <option value="">Any direction</option>
+                  {kinds.map((k) => (
+                    <option key={k} value={k}>{ROUND_KINDS[k]?.label || k}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <button className="btn-secondary btn-small" onClick={selectAllFiltered} disabled={!filtered.length}>
+              Select all {filtered.length}
+            </button>
+          </div>
+
+          {loading && <p className="qs-empty">Loading questions…</p>}
+          {error && <StatusMessage message={error} tone="error" />}
+
+          {!loading && !error && (
+            filtered.length === 0 ? (
+              <p className="qs-empty">Nothing in this set matches those filters.</p>
             ) : (
-              <ul className="qs-pull-set-list">
-                {listedSets.map((s) => (
-                  <li key={s.id}>
-                    <button className="qs-pull-set" onClick={() => { setSourceSet(s); setChosen([]); }}>
-                      <strong>{s.name}</strong>
-                      <span className="qs-question-meta">
-                        <span>{s.totalQuestions || s.questionCount || 0} questions</span>
-                        <span>{s.categoryCount || 0} categories</span>
-                        {/* The server's own answer, never a comparison made here. */}
-                        {s.mine ? <span>yours</span> : <span>someone else's</span>}
+              <ul className="qs-pull-question-list" data-testid="pull-questions">
+                {filtered.map((r) => (
+                  <li key={r.uid}>
+                    <label>
+                      <input type="checkbox" checked={chosen.includes(r.uid)} onChange={() => toggle(r.uid)} />
+                      <span className="qs-question-text">
+                        <strong>{r.title}</strong>
+                        <span className="qs-question-meta">
+                          <span>{r.category}</span>
+                          {r.roundKind && <span>{ROUND_KINDS[r.roundKind]?.label || r.roundKind}</span>}
+                          {r.detail && <span className="qs-question-detail">{r.detail.slice(0, 80)}{r.detail.length > 80 ? '…' : ''}</span>}
+                        </span>
                       </span>
-                    </button>
+                    </label>
                   </li>
                 ))}
               </ul>
-            )}
-          </>
-        )}
+            )
+          )}
 
-        {sourceSet && (
-          <>
-            <p>
-              These become <strong>copies</strong>. Editing them in this set will not change
-              the originals in "{sourceSet.name}", and nothing here changes that set at all.
+          {carriesImages && (
+            <p className="qs-pull-caveat">
+              <Icon name="Warning" weight="fill" size={14} color="#8a5300" />{' '}
+              One or more of these carries artwork. The image file lives with the set it came
+              from, so the copy will point at a picture this set does not have until you upload it.
             </p>
+          )}
+        </>
+      )}
 
-            <div className="qs-pull-filters">
-              {categories.length > 1 && (
-                <label>
-                  Filter by category:{' '}
-                  <select className="form-select" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-                    <option value="">All categories</option>
-                    {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </label>
-              )}
-              {roundKindApplies(wanted) && kinds.length > 0 && (
-                <label>
-                  Filter by direction:{' '}
-                  <select className="form-select" value={kindFilter} onChange={(e) => setKindFilter(e.target.value)}>
-                    <option value="">Any direction</option>
-                    {kinds.map((k) => (
-                      <option key={k} value={k}>{ROUND_KINDS[k]?.label || k}</option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              <button className="btn-secondary btn-small" onClick={selectAllFiltered} disabled={!filtered.length}>
-                Select all {filtered.length}
-              </button>
-            </div>
-
-            {loading && <p className="qs-empty">Loading questions…</p>}
-            {error && <StatusMessage message={error} tone="error" />}
-
-            {!loading && !error && (
-              filtered.length === 0 ? (
-                <p className="qs-empty">Nothing in this set matches those filters.</p>
-              ) : (
-                <ul className="qs-pull-question-list" data-testid="pull-questions">
-                  {filtered.map((r) => (
-                    <li key={r.uid}>
-                      <label>
-                        <input type="checkbox" checked={chosen.includes(r.uid)} onChange={() => toggle(r.uid)} />
-                        <span className="qs-question-text">
-                          <strong>{r.title}</strong>
-                          <span className="qs-question-meta">
-                            <span>{r.category}</span>
-                            {r.roundKind && <span>{ROUND_KINDS[r.roundKind]?.label || r.roundKind}</span>}
-                            {r.detail && <span className="qs-question-detail">{r.detail.slice(0, 80)}{r.detail.length > 80 ? '…' : ''}</span>}
-                          </span>
-                        </span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              )
-            )}
-
-            {carriesImages && (
-              <p className="qs-pull-caveat">
-                <Icon name="Warning" weight="fill" size={14} color="#8a5300" />{' '}
-                One or more of these carries artwork. The image file lives with the set it came
-                from, so the copy will point at a picture this set does not have until you upload it.
-              </p>
-            )}
-          </>
+      <div className="modal-actions">
+        {sourceSet && (
+          <button className="btn-secondary" onClick={() => { setSourceSet(null); setRows([]); setChosen([]); }}>
+            Pick a different set
+          </button>
         )}
-
-        <div className="modal-actions">
-          {sourceSet && (
-            <button className="btn-secondary" onClick={() => { setSourceSet(null); setRows([]); setChosen([]); }}>
-              Pick a different set
-            </button>
-          )}
-          <button className="btn-secondary" onClick={onCancel}>Cancel</button>
-          {sourceSet && (
-            <button className="btn-primary" onClick={copyChosen} disabled={!chosen.length}>
-              <Icon name="Plus" weight="bold" size={16} color="currentColor" />{' '}
-              Copy {chosen.length || ''} question{chosen.length === 1 ? '' : 's'} in
-            </button>
-          )}
-        </div>
+        <button className="btn-secondary" onClick={onCancel}>Cancel</button>
+        {sourceSet && (
+          <button className="btn-primary" onClick={copyChosen} disabled={!chosen.length}>
+            <Icon name="Plus" weight="bold" size={16} color="currentColor" />{' '}
+            Copy {chosen.length || ''} question{chosen.length === 1 ? '' : 's'} in
+          </button>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }

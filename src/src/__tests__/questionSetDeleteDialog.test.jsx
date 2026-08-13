@@ -142,6 +142,52 @@ describe('while the request is in flight', () => {
     expect(onCancel).not.toHaveBeenCalled();
     release();
   });
+
+  test('Escape does not close a delete that is running either', () => {
+    // The shared <Modal> gives every dialog an Escape it did not have before.
+    // rejects: wiring Escape past the gate the scrim above obeys — a second way
+    // out that skips the check is the same defect, through a different door.
+    const onCancel = jest.fn();
+    const release = mockApi({ hang: true });
+    mount({ onCancel });
+    fireEvent.click(confirmButton());
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onCancel).not.toHaveBeenCalled();
+    release();
+  });
+});
+
+/* ------------------------------------------------------- the ways out of it */
+
+describe('dismissing it', () => {
+  test('Escape cancels while nothing has been sent', () => {
+    // The dialog shipped with no keyboard way out at all. rejects: dropping
+    // Escape when the gate is added — the gate exists to hold it back during
+    // the request, not to remove it.
+    const onCancel = jest.fn();
+    mockApi();
+    mount({ onCancel });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  test('a completed delete is closed by acknowledgement, not by Escape', async () => {
+    // The outcome banner is the whole point of the dialog surviving the
+    // request. rejects: letting Escape dismiss the success screen, which puts
+    // the operator back exactly where the original defect left them — the
+    // dialog went away and nothing said what happened.
+    const onCancel = jest.fn();
+    const onDeleted = jest.fn();
+    mockApi();
+    mount({ onCancel, onDeleted });
+    fireEvent.click(confirmButton());
+    await within(dialog()).findByText(/Deleted question set/i);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(onDeleted).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
 });
 
 /* ----------------------------------------------------------------- outcomes */
