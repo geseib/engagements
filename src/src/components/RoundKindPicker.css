@@ -1,0 +1,229 @@
+/* ============================================================================
+   THE ROUND DIRECTION PICKER — components/RoundKindPicker.jsx
+
+   Scoped under `.round-kind-picker`, and every colour it uses is declared on
+   that root as a `--rkp-*` custom property. Two reasons, both learned here:
+
+   1. THE COMPONENT RENDERS ON TWO DIFFERENT SURFACES. It sits inside the AI
+      builder modal (`.modal-content`, white) and inside the set editor's
+      Details panel (`.qs-editor .qs-panel`, `--surface-2` = #F1EDE4 on paper).
+      A component that inherits its surface has to be audited twice and drifts
+      the moment either parent is repainted. This one PAINTS ITS OWN CARDS, so
+      the composite is the same in both places and can be measured once.
+
+   2. AN UNDEFINED CUSTOM PROPERTY INVALIDATES THE WHOLE DECLARATION
+      (UserManagement.css says the same, and QuestionSetsPanel.css repeats it).
+      Borrowing `var(--primary)` from styles.css would silently produce an
+      unstyled control anywhere styles.css is not loaded — which is every
+      component test.
+
+   PAPER, NOT DUSK. Both surfaces are authoring UI, which the Warm Summit split
+   keeps light. `--primary` #F6A94C is 1.96:1 on white and cannot be text or a
+   meaningful icon here; the paper amber is #8a5300, which GeneratedItemsTable
+   .css already uses in the same modal as `--git-warn`. Reused rather than
+   reinvented.
+
+   MEASURED, on the two surfaces this component actually paints:
+
+     --rkp-text   #2c3e50 on #FFFFFF 10.98:1   on #FDF3E4 10.00:1
+     --rkp-muted  #5b6b7c on #FFFFFF  5.47:1   on #FDF3E4  4.98:1
+     --rkp-accent #8a5300 on #FFFFFF  6.33:1   on #FDF3E4  5.76:1
+
+   Every pairing above is asserted in __tests__/roundKindPicker.test.jsx with
+   the compositing functions lifted from docs/design/admin-redesign/audit.html,
+   so a repaint that drops one under AA is a red suite and not a discovery.
+
+   THE FIVE CARDS ARE A GRID AND NOT A DROPDOWN, and that is the design
+   decision worth defending. The owner sketched a dropdown with brief
+   definitions. A dropdown shows one option at a time, and the choice that will
+   be got wrong — Apply versus Improve — is a COMPARISON: they are mechanically
+   identical and differ only by who owns the material. You cannot compare two
+   options you cannot see at once. Five cards fit; forty-one would not (see
+   QuestionSetsPanel.css / RATIONALE §4 on why the set list is a table).
+   ========================================================================== */
+
+.round-kind-picker {
+  --rkp-text: #2c3e50;
+  --rkp-muted: #5b6b7c;
+  --rkp-accent: #8a5300;
+  --rkp-card: #ffffff;
+  --rkp-card-hover: #f8f9fa;
+  --rkp-card-selected: #fdf3e4;
+  --rkp-rule: #e3e8ee;
+  --rkp-radius: 8px;
+
+  color: var(--rkp-text);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.round-kind-picker *,
+.round-kind-picker *::before,
+.round-kind-picker *::after { box-sizing: border-box; }
+
+/* ---------------------------------------------------------------- options -- */
+
+.round-kind-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.round-kind-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: var(--rkp-card);
+  border: 1px solid var(--rkp-rule);
+  border-radius: var(--rkp-radius);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.round-kind-option:hover { background: var(--rkp-card-hover); }
+
+/* Selection is carried by THREE signals, not one: the border, the tint and the
+   radio's own checked state. Colour alone would leave the choice invisible to
+   anyone who cannot see the amber, and the radio is a real input precisely so
+   the browser's own affordance is the third. */
+.round-kind-option.is-selected {
+  background: var(--rkp-card-selected);
+  border-color: var(--rkp-accent);
+  box-shadow: inset 0 0 0 1px var(--rkp-accent);
+}
+
+/* Not `display:none` and not `visibility:hidden`: either takes the input out of
+   the accessibility tree and off the keyboard, and the radiogroup's arrow-key
+   behaviour is the whole reason it is a radiogroup. Clipped instead. */
+.round-kind-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.round-kind-option:focus-within {
+  outline: 2px solid var(--rkp-accent);
+  outline-offset: 2px;
+}
+
+.round-kind-option-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding-top: 1px;
+}
+
+.round-kind-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.round-kind-option-label {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--rkp-text);
+}
+
+.round-kind-option-blurb {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--rkp-muted);
+}
+
+/* ----------------------------------------------------------------- detail -- */
+
+/* The selected kind, unpacked. This strip is the answer to "a dropdown with
+   brief definitions is not enough": the blurb on the card is the one-liner, and
+   this is what somebody who has never met these four words needs on top of it. */
+.round-kind-detail {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: var(--rkp-card-selected);
+  border: 1px solid var(--rkp-accent);
+  border-radius: var(--rkp-radius);
+}
+
+.round-kind-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 4px 20px;
+  margin: 0;
+}
+
+.round-kind-fact { min-width: 0; }
+
+.round-kind-fact dt {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rkp-accent);
+  margin: 0 0 2px;
+}
+
+.round-kind-fact dd {
+  margin: 0;
+  font-size: 14px;
+  color: var(--rkp-text);
+}
+
+.round-kind-when {
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid rgba(138, 83, 0, 0.22);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--rkp-muted);
+}
+
+/* ----------------------------------------------------------------- custom -- */
+
+.round-kind-custom {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.round-kind-gap {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--rkp-accent);
+}
+
+/* ------------------------------------------------------- the step it sits in */
+
+/* Only in the builder, where the picker is a step of its own above the topic
+   cards. The editor renders it inside an ordinary .form-group. */
+.round-kind-step {
+  margin-bottom: 28px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #e3e8ee;
+}
+
+.round-kind-step .step-lede {
+  max-width: 62ch;
+  margin: 0 auto 16px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #5b6b7c;
+}
+
+/* A topic card cannot advance the wizard while the custom direction is
+   incomplete, and it must look like it cannot. */
+.scenario-types-grid.is-blocked {
+  opacity: 0.45;
+  pointer-events: none;
+}

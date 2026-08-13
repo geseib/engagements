@@ -147,12 +147,27 @@ exports.handler = async (event) => {
       // Optional columns, emitted only when the set actually uses them, so an
       // ordinary set's CSV keeps its familiar shape. Both are read by the
       // importer for EVERY engagement type, not just call-and-answer.
+      //
+      // RoundKind and SourceAttribution join the same pattern. RoundKind is the
+      // per-question OVERRIDE of the set's direction and SourceAttribution is
+      // whose material an Apply question carries; both are absent from every
+      // set written before this slice, so both columns simply do not appear on
+      // an ordinary set's CSV. A column the importer reads and the exporter
+      // never emits is destroyed by the next replace — that is precisely the
+      // defect the round trip was just repaired for, so these two are wired on
+      // BOTH sides in the same change and asserted in
+      // tests/question-set-roundtrip.js.
       const carriesImages = questions.some(q => String(q.Image || q.image || '').trim());
       const carriesAnswerDetails = questions.some(q => String(q.AnswerDetails || q.answerDetails || '').trim());
-      const optionalHeader = (carriesAnswerDetails ? ',AnswerDetails' : '') + (carriesImages ? ',Image' : '');
+      const carriesRoundKind = questions.some(q => String(q.RoundKind || q.roundKind || '').trim());
+      const carriesAttribution = questions.some(q => String(q.SourceAttribution || q.sourceAttribution || '').trim());
+      const optionalHeader = (carriesAnswerDetails ? ',AnswerDetails' : '') + (carriesImages ? ',Image' : '')
+        + (carriesRoundKind ? ',RoundKind' : '') + (carriesAttribution ? ',SourceAttribution' : '');
       const optionalCells = (q) =>
         (carriesAnswerDetails ? `,"${esc(q.AnswerDetails || q.answerDetails)}"` : '')
-        + (carriesImages ? `,"${esc(q.Image || q.image)}"` : '');
+        + (carriesImages ? `,"${esc(q.Image || q.image)}"` : '')
+        + (carriesRoundKind ? `,"${esc(q.RoundKind || q.roundKind)}"` : '')
+        + (carriesAttribution ? `,"${esc(q.SourceAttribution || q.sourceAttribution)}"` : '');
 
       if (engagementType === 'trivia') {
         // OptionA..OptionF, which is what the importer reads and what every

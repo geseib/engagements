@@ -48,6 +48,7 @@ const {
 const {
   newJobId, createJob, updateJobProgress, completeJob, failJob, getJob, jobToResponse,
 } = require('./shared/generation-jobs');
+const { normalizeRoundKind, roundKindDirection } = require('./shared/round-kinds');
 
 const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const lambda = new LambdaClient({ region: process.env.AWS_REGION });
@@ -127,10 +128,34 @@ async function resolvePromptTemplate({ scenarioType, engagementType, prompt }) {
 
 function buildPrompt({
   template, engagementType, count, difficulty, context, audience, customPrompt,
-  categories, mustHaveCategories, alreadyUsedTitles,
+  categories, mustHaveCategories, alreadyUsedTitles, roundKind, roundKindBrief,
 }) {
   const itemNoun = engagementType === 'wavelength' ? 'wavelength subjects' : 'scenarios';
-  let p = `Create ${count} ${itemNoun}. ${template.basePrompt}`;
+
+  // DIRECTION BEFORE TOPIC, and this ordering is the whole fix.
+  //
+  // `template.basePrompt` is a TOPIC — "scenarios based on common workplace
+  // challenges and the lessons learned from them" — and it used to be the first
+  // instruction the model read, with the operator's own text appended far below
+  // as "Additional Requirements". That is why typing an Apply brief into the
+  // details box never changed the shape of what came back: the house topic led,
+  // and first is what a model follows.
+  //
+  // The round kind says what the room will be ASKED TO DO with each item, which
+  // governs the structure of every field. It therefore goes in front, and says
+  // in words that it outranks the topic where the two disagree. Empty for
+  // trivia, wavelength and survey — see shared/round-kinds.js for why a
+  // direction written for discussion rounds must not reach them.
+  const direction = roundKindDirection(engagementType, roundKind, roundKindBrief);
+
+  // With no direction the opening line stays byte-identical to what it has
+  // always been. Trivia and wavelength take no direction, and their prompts
+  // should not drift as a side effect of a call-and-answer fix.
+  let p = direction
+    ? `Create ${count} ${itemNoun}.\n\n${direction}\n\n`
+      + `Where the direction above and the topic below disagree, follow the direction.\n\n`
+      + `TOPIC: ${template.basePrompt}`
+    : `Create ${count} ${itemNoun}. ${template.basePrompt}`;
 
   if (context && template.contextTemplate) p += template.contextTemplate.replace('{context}', context);
   if (audience && template.audienceTemplate) p += template.audienceTemplate.replace('{audience}', audience);
@@ -153,7 +178,7 @@ function buildPrompt({
     p += alreadyUsedTitles.map((t) => `- ${t}`).join('\n');
   }
 
-  p += lengthGuidance(engagementType);
+  p += lengthGuidance(engagementType, roundKind);
   p += tagGuidance();
   p += `\n\nReturn the items by calling the emit_items tool. Do not write prose.`;
   return p;
@@ -212,7 +237,22 @@ async function runWorker(event, context) {
     const {
       scenarioType, engagementType = 'call-and-answer', prompt, count, difficulty,
       context: brief, audience, customPrompt, numberOfCategories, mustHaveCategories,
+      roundKindBrief,
     } = payload;
+
+    // DIRECTION, validated against the closed enum before it reaches a prompt.
+    //
+    // An unknown value resolves to `produce` rather than throwing — a worker
+    // that dies on a typo has burned the whole job — but it is WARNED about, so
+    // the review panel says the round was generated as Produce instead of
+    // letting the operator discover it from the questions. The writers
+    // (edit-question-set.js, upload-questions.js) are where an unknown kind is
+    // refused outright with a 400; that is the only place a refusal can still
+    // reach somebody in time.
+    const roundKind = normalizeRoundKind(payload.roundKind);
+    if (payload.roundKind && !roundKind) {
+      warnings.push(`"${payload.roundKind}" is not a round kind; generated as Produce instead.`);
+    }
 
     const total = Math.min(Math.max(parseInt(count, 10) || 1, 1), MAX_COUNT);
 
@@ -229,7 +269,7 @@ async function runWorker(event, context) {
     }
 
     const perCall = itemsPerCall(engagementType);
-    const tool = buildItemsTool(engagementType);
+    const tool = buildItemsTool(engagementType, roundKind);
 
     await updateJobProgress(dynamodb, tableName, jobId, {
       completed: 0,
@@ -262,6 +302,8 @@ async function runWorker(event, context) {
         categories,
         mustHaveCategories,
         alreadyUsedTitles: produced.map((s) => s.title),
+        roundKind,
+        roundKindBrief,
       });
 
       let result;
@@ -282,6 +324,7 @@ async function runWorker(event, context) {
               template, engagementType, count: halved, difficulty, context: brief, audience,
               customPrompt, categories, mustHaveCategories,
               alreadyUsedTitles: produced.map((s) => s.title),
+              roundKind, roundKindBrief,
             }),
             tool,
             maxTokens: maxTokensFor(engagementType, halved),

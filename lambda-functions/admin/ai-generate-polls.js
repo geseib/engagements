@@ -16,6 +16,9 @@
 const { makeGenerationHandler } = require('./shared/generation-handler');
 const { tagGuidance } = require('./shared/structured-generation');
 const { normalizeTags } = require('./shared/tags');
+const {
+  normalizeRoundKind, roundKindDirection, roundKindDetailCeiling,
+} = require('./shared/round-kinds');
 
 const MAX_COUNT = 100;
 const MIN_OPTIONS = 2;
@@ -32,11 +35,24 @@ function parseRequest(payload) {
       difficulty: payload.difficulty || 'medium',
       allowMultiple: payload.allowMultiple === true,
       customPrompt: payload.customPrompt || '',
+      // DIRECTION — what the room is asked to DO with each item, as opposed to
+      // the topic it is about. A poll round can hand people somebody else's
+      // material and ask where it lands just as a call-and-answer round can;
+      // the only difference is that the answers are picked rather than written.
+      // Unknown values resolve to `produce` at the reader — the 400 belongs on
+      // the write paths. See shared/round-kinds.js.
+      roundKind: normalizeRoundKind(payload.roundKind),
+      roundKindBrief: String(payload.roundKindBrief || '').trim(),
     },
   };
 }
 
 function buildTool(config) {
+  // An Apply or Improve poll must CARRY the material it is about — the room is
+  // choosing between readings of a passage it was handed, and a passage that
+  // does not fit cannot be read. See shared/round-kinds.js for the ceilings.
+  const detailMax = roundKindDetailCeiling('poll', config.roundKind);
+  const detailSentences = detailMax > 350 ? '3-8 sentences' : '1-3 sentences';
   return {
     name: 'emit_items',
     description: 'Return the generated poll questions as structured data.',
@@ -51,7 +67,14 @@ function buildTool(config) {
             properties: {
               title: { type: 'string', description: 'The poll question itself, 3-20 words.' },
               category: { type: 'string', description: 'The category this poll belongs to.' },
-              detail: { type: 'string', description: 'Background or context, 1-3 sentences, 300 characters maximum.' },
+              detail: {
+                type: 'string',
+                // The schema and the LENGTH LIMITS block below are two
+                // statements of one instruction. They have to move together, or
+                // a model reading 300 in one and 900 in the other obeys
+                // whichever it read last.
+                description: `Background or context, ${detailSentences}, ${detailMax} characters maximum.`,
+              },
               school: { type: 'string', description: 'Broader subject area.' },
               customInstructions: { type: 'string', description: 'What the participant should do, one sentence.' },
               options: {
@@ -80,6 +103,16 @@ function buildTool(config) {
 
 function buildPrompt({ config, count, alreadyUsedTitles }) {
   let p = `You are an expert poll question creator. Create ${count} poll questions about ${config.topic}.`;
+
+  // DIRECTION BEFORE TOPIC — the same ordering, and the same reason, as
+  // ai-generate-scenarios.js: the topic used to be the first and only steering
+  // an operator had, so a request to hand the room foreign material came back
+  // shaped like the house's own reflection prompts.
+  const direction = roundKindDirection('poll', config.roundKind, config.roundKindBrief);
+  if (direction) {
+    p += `\n\n${direction}\n\nWhere the direction above and the topic disagree, follow the direction.`;
+  }
+
   if (config.category) p += `\nCategory: ${config.category}.`;
   if (config.audience) p += `\nTarget audience: ${config.audience}.`;
   p += `\nComplexity level: ${config.difficulty}.`;
@@ -93,12 +126,13 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
     p += alreadyUsedTitles.map((t) => `- ${t}`).join('\n');
   }
 
+  const detailMax = roundKindDetailCeiling('poll', config.roundKind);
   p += [
     '',
     '',
     'LENGTH LIMITS (hard limits, not targets):',
     '- title: the question itself, 3-20 words.',
-    '- detail: 1-3 sentences, 300 characters maximum.',
+    `- detail: ${detailMax > 350 ? '3-8' : '1-3'} sentences, ${detailMax} characters maximum.`,
     '- customInstructions: one sentence.',
     `- options: ${MIN_OPTIONS}-${MAX_OPTIONS} of them, 60 characters each.`,
     'Write only what the content needs; do not pad to reach a limit.',

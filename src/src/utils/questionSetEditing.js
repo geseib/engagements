@@ -19,6 +19,7 @@
  */
 
 import { normalizeGameType } from '../config/gameTypes';
+import { normalizeRoundKind, ROUND_KINDS } from '../config/roundKinds';
 
 /**
  * Question-set fields the editor can change, and how to describe a change to
@@ -35,7 +36,9 @@ export const EDITABLE_SET_FIELDS = {
   promptId: 'AI summary prompt',
   engagementType: 'engagement type',
   roundNoun: 'round label',
-  personaId: "Workie's voice"
+  personaId: "Workie's voice",
+  roundKind: 'round direction',
+  roundKindBrief: 'custom direction'
 };
 
 export function describeSetChange(field, value) {
@@ -43,8 +46,13 @@ export function describeSetChange(field, value) {
   if (!value) {
     if (field === 'promptId') return 'AI summary prompt reset to the game-type default';
     if (field === 'personaId') return "Workie's voice reset to adapting to the session";
+    if (field === 'roundKind') return 'round direction reset to Produce';
     return `${label} cleared`;
   }
+  // The stored value is an enum id; the operator picked a labelled card. Echo
+  // the label back, or a save confirmation reads "round direction set to
+  // \"judge\"" for something the screen called Judge.
+  if (field === 'roundKind') return `round direction set to ${ROUND_KINDS[value]?.label || value}`;
   return `${label} set to "${value}"`;
 }
 
@@ -70,7 +78,15 @@ export function editableSnapshot(questionSet = {}) {
     promptId: trimmed(questionSet.promptId),
     engagementType: normalizeGameType(questionSet.engagementType),
     roundNoun: trimmed(questionSet.roundNoun),
-    personaId: trimmed(questionSet.personaId)
+    personaId: trimmed(questionSet.personaId),
+    // Kept RAW, not resolved to `produce`. The save payload is a diff against
+    // this snapshot, so resolving an absent value to a default here would make
+    // every open-and-save of the ~41 sets that predate this field write a
+    // direction nobody chose — the exact opposite of D1's "no migration".
+    // An unrecognised stored value normalises to '' for the same reason a
+    // reader treats it as produce: the form must not offer to re-save junk.
+    roundKind: normalizeRoundKind(questionSet.roundKind) || '',
+    roundKindBrief: trimmed(questionSet.roundKindBrief)
   };
 }
 

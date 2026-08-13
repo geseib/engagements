@@ -212,3 +212,88 @@ describe('saving details', () => {
     expect(body.name).toBe('Lessons Learned');
   });
 });
+
+describe('the set-level round direction', () => {
+  /** Capture the PUT body for a save driven through the real form. */
+  function captureSave() {
+    const captured = { body: null };
+    mockApi({
+      'PUT /admin/edit-question-set/': async (url, options) => {
+        captured.body = JSON.parse(options.body);
+        return jsonResponse(200, { updated: captured.body });
+      }
+    });
+    return captured;
+  }
+
+  it('offers the direction picker on a call-and-answer set', async () => {
+    // rejects: leaving the direction settable only at generation time. The ~41
+    // sets that predate the field, and every set imported from a CSV, would
+    // otherwise be permanently Produce with no way to say otherwise.
+    mockApi();
+    renderEditor();
+    await screen.findByTestId('version-3');
+    expect(screen.getByRole('radio', { name: /Apply/i })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Judge/i })).toBeInTheDocument();
+  });
+
+  it('hides it on a wavelength set', async () => {
+    // rejects: showing a direction for a game that hands the room a bare
+    // subject and asks for word associations. There is no material to apply,
+    // improve or judge, and offering the choice implies there is.
+    mockApi();
+    renderEditor({ questionSet: { ...SET, engagementType: 'wavelength' } });
+    await screen.findByTestId('version-3');
+    expect(screen.queryByRole('radio', { name: /Apply/i })).not.toBeInTheDocument();
+  });
+
+  it('sends the chosen direction and nothing else', async () => {
+    // rejects: a picker that renders but is not wired into the diff. The whole
+    // point of editing it here is that the generator reads it on the next run.
+    const captured = captureSave();
+    renderEditor();
+    await screen.findByTestId('version-3');
+
+    fireEvent.click(screen.getByRole('radio', { name: /Judge/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+    await waitFor(() => expect(captured.body).not.toBeNull());
+    expect(captured.body.roundKind).toBe('judge');
+    expect('description' in captured.body).toBe(false);
+  });
+
+  it('does not write a direction onto a set that was only renamed', async () => {
+    // rejects: seeding the form with 'produce' instead of ''. Every
+    // open-and-save of an untouched legacy set would then stamp a direction
+    // nobody chose, which is the no-migration decision undone one save at a
+    // time — and it is invisible, because the value it writes is the one the
+    // reader would have defaulted to anyway.
+    const captured = captureSave();
+    renderEditor();
+    await screen.findByTestId('version-3');
+
+    fireEvent.change(screen.getByLabelText(/Round Label/i), { target: { value: 'Lesson' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+    await waitFor(() => expect(captured.body).not.toBeNull());
+    expect('roundKind' in captured.body).toBe(false);
+  });
+
+  it('drops the custom brief when the direction moves off Something else', async () => {
+    // rejects: leaving an orphan brief on the SETS row. It is rendered into the
+    // generation prompt in place of the house direction, so a stale one steers
+    // a Judge set with the words of a custom round that no longer exists.
+    const captured = captureSave();
+    renderEditor({
+      questionSet: { ...SET, roundKind: 'custom', roundKindBrief: 'Two proposals, pick one.' }
+    });
+    await screen.findByTestId('version-3');
+
+    fireEvent.click(screen.getByRole('radio', { name: /Improve/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+    await waitFor(() => expect(captured.body).not.toBeNull());
+    expect(captured.body.roundKind).toBe('improve');
+    expect(captured.body.roundKindBrief).toBe('');
+  });
+});

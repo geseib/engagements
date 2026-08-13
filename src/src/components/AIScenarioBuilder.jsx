@@ -5,6 +5,13 @@ import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { normalizeTags, tagsToCsvCell } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
 import Icon from './Icon';
+import RoundKindPicker from './RoundKindPicker';
+import {
+  roundKindApplies,
+  roundKindParticipantInstruction,
+  roundKindGaps,
+  DEFAULT_ROUND_KIND,
+} from '../config/roundKinds';
 import GenerationJobPanel from './GenerationJobPanel';
 import GeneratedItemsTable from './GeneratedItemsTable';
 import StatusMessage from './StatusMessage';
@@ -35,7 +42,12 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     customPrompt: '',
     customTitle: '',
     numberOfCategories: 3,
-    mustHaveCategories: ''
+    mustHaveCategories: '',
+    // DIRECTION — what the room is asked to DO, which is not the same question
+    // as the topic the cards below answer. See config/roundKinds.js.
+    roundKind: DEFAULT_ROUND_KIND,
+    roundKindBrief: '',
+    roundKindInstruction: ''
   });
   const [generatedScenarios, setGeneratedScenarios] = useState([]);
   const [generatedMetadata, setGeneratedMetadata] = useState(null);
@@ -359,7 +371,27 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     };
   };
 
+  /**
+   * Is the direction complete enough to generate with?
+   *
+   * Only `custom` can be incomplete: it has no house direction and no house
+   * participant instruction, so an empty brief would send the generator a
+   * prompt with a hole where the direction should be, and an empty instruction
+   * would put a blank line in front of the room. The four named kinds are
+   * always complete, which is why this is empty for them.
+   */
+  const kindGaps = roundKindApplies(engagementType)
+    ? roundKindGaps(scenarioConfig.roundKind, {
+      brief: scenarioConfig.roundKindBrief,
+      instruction: scenarioConfig.roundKindInstruction,
+    })
+    : [];
+
   const handleTypeSelection = (type) => {
+    // Refused here rather than at Generate: picking a topic is the step that
+    // leaves this screen, and an incomplete direction is not recoverable from
+    // the next one — the picker does not live there.
+    if (kindGaps.length > 0) return;
     const templateDefaults = getTemplateDefaults(type);
     setScenarioConfig(prev => ({ 
       ...prev, 
@@ -553,7 +585,13 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         customPrompt: scenarioConfig.customPrompt,
         customTitle: scenarioConfig.customTitle,
         numberOfCategories: scenarioConfig.numberOfCategories,
-        mustHaveCategories: scenarioConfig.mustHaveCategories
+        mustHaveCategories: scenarioConfig.mustHaveCategories,
+        // DIRECTION. The backend puts this IN FRONT OF the topic's basePrompt,
+        // because basePrompt used to be the first thing the model read and
+        // first is what a model follows — which is why typing an Apply brief
+        // into "Additional Requirements" never changed the shape of the output.
+        roundKind: scenarioConfig.roundKind,
+        roundKindBrief: scenarioConfig.roundKindBrief
       }, { label: 'Generation', onStatus: setGenerationStatus });
 
       rememberGenerationJob(ENDPOINT, jobId, { scenarioType: backendScenarioType });
@@ -636,7 +674,13 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     dismissJob();
     onScenariosGenerated({
       scenarios: keptScenarios,
-      metadata: metadata
+      metadata: metadata,
+      // The set's DIRECTION travels with it to /admin/upload-questions. Without
+      // this the kind would steer the generation and then be forgotten at the
+      // moment the set is created, so the library, the editor and every later
+      // regeneration would believe the set was Produce.
+      roundKind: scenarioConfig.roundKind,
+      roundKindBrief: scenarioConfig.roundKindBrief
     });
   };
 
@@ -663,29 +707,55 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     return `${generatedScenarios.length} AI-generated scenarios for ${scenarioConfig.difficulty} difficulty level.${audienceText}${contextText}`;
   };
 
-  // Generate custom instructions based on scenario type
+  /**
+   * WHAT THE ROOM IS TOLD WHILE IT ANSWERS — derived from the round KIND.
+   *
+   * THIS IS THE LINE THAT PRODUCED THE REPORTED DEFECT. It used to be a
+   * hardcoded map keyed on the scenario TYPE, with this fallback for every type
+   * outside its six keys — which is every database prompt and every "something
+   * else":
+   *
+   *     'Engage thoughtfully with each scenario and share your experiences
+   *      and insights.'
+   *
+   * The importer stamps this string onto every question that carries no
+   * instruction of its own (upload-questions.js) and the room reads it during
+   * ASK. So a round that had just handed people a passage about somebody else's
+   * surgical checklists told them to draw on their own experience. The set was
+   * not confusing because the questions were bad; it was confusing because the
+   * instruction was answering a different question from the one on screen.
+   *
+   * The kind is the only thing that knows what the participant is holding, so
+   * the kind writes this line. The scenario type does not, and must not: a
+   * topic-keyed map here is exactly the defect, whatever its contents.
+   */
   const generateCustomInstructions = () => {
-    // Check if it's a database prompt with specific scenario type
-    const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
-    const actualScenarioType = selectedType?.source === 'database' && selectedType.dbPrompt 
-      ? selectedType.dbPrompt.scenarioType 
-      : scenarioConfig.type;
-
-    const typeInstructions = {
-      'amazon-principles': 'Answer using the STAR format (Situation, Task, Action, Results). Focus on demonstrating specific leadership principles through real examples.',
-      'interview-prep': 'Practice answering these questions with specific examples from your experience. Be prepared to provide concrete details and measurable results.',
-      'problem-solving': 'Work through these challenges systematically. Consider multiple solutions and discuss the pros and cons of each approach.',
-      'lessons-learned': 'Share specific experiences and focus on what was learned and how it changed your approach going forward.',
-      'team-building': 'Engage in open discussion and listen to different perspectives. Focus on building understanding and collaboration.',
-      'custom': 'Follow the specific guidelines provided for your scenario type.'
-    };
-
-    // Wavelength sets share one instruction: players list words for a subject
+    // Wavelength takes no round kind — the room is handed a bare subject and
+    // lists associations, so "invention" and "verdict" mean nothing for it.
+    // Its one instruction is a property of the game, not of a direction.
     if (engagementType === 'wavelength') {
       return 'Enter up to 10 words or short phrases that come to mind when you think about this subject.';
     }
 
-    return typeInstructions[actualScenarioType] || 'Engage thoughtfully with each scenario and share your experiences and insights.';
+    const base = roundKindParticipantInstruction(
+      scenarioConfig.roundKind,
+      scenarioConfig.roundKindInstruction
+    );
+
+    // A topic may ADD a format note on top of the direction. It may never
+    // replace it and there is deliberately NO FALLBACK ENTRY: an unrecognised
+    // topic contributes nothing, which is the whole difference between this map
+    // and the one it replaced. STAR is the only survivor of the old six because
+    // it is the only one that described a FORMAT rather than a direction — the
+    // other five were all doing the round kind's job, badly, from the wrong
+    // axis. Do not restore them and do not give this map a `||` default.
+    const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
+    const actualScenarioType = selectedType?.source === 'database' && selectedType.dbPrompt
+      ? selectedType.dbPrompt.scenarioType
+      : scenarioConfig.type;
+    const addendum = { 'amazon-principles': 'Use the STAR format: Situation, Task, Action, Results.' }[actualScenarioType];
+
+    return [base, addendum].filter(Boolean).join(' ');
   };
 
   // Generate AI context instructions
@@ -793,8 +863,45 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         <div className="modal-body">
           {step === 1 && (
             <div className="scenario-type-selection">
+              {/*
+                TWO CONTROLS, NOT ONE, AND IN THIS ORDER.
+
+                Direction first, topic second. They are different questions —
+                "what does the room DO" and "what is it ABOUT" — and conflating
+                them into the topic cards alone is the defect this slice
+                repairs: every built-in topic is reflection-shaped, so an
+                operator who wanted "here is somebody else's material, land it
+                here" had one lever and it steered the wrong axis.
+
+                Direction leads because it changes what a good topic answer even
+                looks like, and because the generator reads it first for the
+                same reason. Wavelength renders no picker: it hands the room a
+                bare subject and asks for word associations, so no direction
+                applies to it (config/roundKinds.js).
+              */}
+              {roundKindApplies(engagementType) && (
+                <section className="round-kind-step">
+                  <h3 id="round-kind-heading">What will the room do with each one?</h3>
+                  <p className="step-lede">
+                    This is the direction, not the subject. It decides whether people are
+                    inventing an answer, working on material you hand them, or delivering a
+                    verdict — and it is what makes the questions and the on-screen
+                    instruction agree with each other.
+                  </p>
+                  <RoundKindPicker
+                    headingId="round-kind-heading"
+                    value={scenarioConfig.roundKind}
+                    onChange={(roundKind) => setScenarioConfig(prev => ({ ...prev, roundKind }))}
+                    brief={scenarioConfig.roundKindBrief}
+                    onBriefChange={(roundKindBrief) => setScenarioConfig(prev => ({ ...prev, roundKindBrief }))}
+                    instruction={scenarioConfig.roundKindInstruction}
+                    onInstructionChange={(roundKindInstruction) => setScenarioConfig(prev => ({ ...prev, roundKindInstruction }))}
+                  />
+                </section>
+              )}
+
               <h3>What type of {engagementType === 'trivia' ? 'trivia questions' : engagementType === 'poll' ? 'poll questions' : engagementType === 'wavelength' ? 'wavelength topics' : 'scenarios'} do you want to create?</h3>
-              
+
               {loadingPrompts ? (
                 <div className="loading-prompts">
                   <div className="spinner"></div>
@@ -814,11 +921,12 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                 </div>
               ) : null}
               
-              <div className="scenario-types-grid">
+              <div className={`scenario-types-grid${kindGaps.length > 0 ? ' is-blocked' : ''}`}>
                 {scenarioTypes.map(type => (
                   <div
                     key={type.id}
                     className="scenario-type-card"
+                    aria-disabled={kindGaps.length > 0 || undefined}
                     onClick={() => handleTypeSelection(type.id)}
                   >
                     <h4>{type.title}</h4>

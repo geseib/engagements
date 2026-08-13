@@ -12,6 +12,9 @@ const {
 } = require('./shared/set-version');
 const { normalizeTags } = require('./shared/tags');
 const { ownerStamp, requireSetManager } = require('./shared/question-set-access');
+const {
+  ROUND_KIND_IDS, MAX_ROUND_KIND_BRIEF, normalizeRoundKind,
+} = require('./shared/round-kinds');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -101,6 +104,22 @@ exports.handler = async (event) => {
     }
 
     const { fileName, fileContent, customTitle, customDescription, customInstructions, aiContextInstructions, promptId, isAIGenerated } = payload;
+
+    // THE SET'S DIRECTION — what the room is asked to DO with each item, which
+    // is a different question from what the set is ABOUT. Validated against the
+    // closed enum here, on the create path, for the same reason
+    // edit-question-set.js validates it: a typo must not become a sixth kind
+    // that every exhaustive switch downstream silently misses. Absent is fine
+    // and means `produce`; nothing is backfilled. See shared/round-kinds.js.
+    const rawRoundKind = String(payload.roundKind ?? '').trim();
+    const setRoundKind = rawRoundKind === '' ? '' : normalizeRoundKind(rawRoundKind);
+    if (setRoundKind === null) {
+      return badRequest(`Unknown round kind "${payload.roundKind}". Expected one of: ${ROUND_KIND_IDS.join(', ')}`);
+    }
+    const setRoundKindBrief = String(payload.roundKindBrief ?? '').trim();
+    if (setRoundKindBrief.length > MAX_ROUND_KIND_BRIEF) {
+      return badRequest(`The round direction is ${setRoundKindBrief.length} characters; the limit is ${MAX_ROUND_KIND_BRIEF}.`);
+    }
 
     // REPLACE. When present, this import does not create a set — it writes a
     // NEW VERSION of an existing one and flips activeVersion to it. See
@@ -287,6 +306,12 @@ exports.handler = async (event) => {
     // Optional Tags column. Every AI builder now suggests tags, and until this
     // existed they were displayed, edited and then silently dropped at import.
     let tagsIndex = getColumnIndex('Tags');
+    // Optional per-question round-kind OVERRIDE and, for Apply rounds, whose
+    // material the question carries. Both are absent from every set that exists
+    // today and both are emitted by download-question-set.js only when a set
+    // actually uses them, so an ordinary CSV keeps its familiar shape.
+    let roundKindIndex = getColumnIndex('RoundKind');
+    let sourceAttributionIndex = getColumnIndex('SourceAttribution');
 
     // Engagement-type specific columns
     let correctAnswerIndex = -1;
@@ -344,6 +369,15 @@ exports.handler = async (event) => {
       const hl = h.toLowerCase().trim();
       return hl === 'tags' || hl === 'tag' || hl === 'keywords' || hl === 'labels';
     });
+    // Same EXACT-ish discipline as Tags, and it matters more here: a loose
+    // `includes('kind')` or `includes('source')` would happily claim a column
+    // called "SourceFile" or "Kindness", and a mis-claimed column feeds a
+    // validated enum with prose that then 400s the whole import.
+    const looseMatch = (names) => headers.findIndex(h => names.includes(
+      h.toLowerCase().trim().replace(/[\s_-]/g, '')
+    ));
+    if (roundKindIndex === -1) roundKindIndex = looseMatch(['roundkind', 'kind', 'direction']);
+    if (sourceAttributionIndex === -1) sourceAttributionIndex = looseMatch(['sourceattribution', 'attribution']);
 
     console.log('📋 Column Mapping:');
     console.log(`  Category: ${categoryIndex >= 0 ? headers[categoryIndex] : 'NOT FOUND'} (index: ${categoryIndex})`);
@@ -371,6 +405,10 @@ exports.handler = async (event) => {
     const questions = [];
     const categories = new Set();
     const skippedRows = [];
+    // Rows whose RoundKind cell is not one of the five. Collected rather than
+    // thrown at the first one so the author is told about ALL of them in a
+    // single 400 instead of fixing a hundred-row CSV one cell per upload.
+    const badRoundKinds = [];
     let questionCount = 0;
 
     // Read one already-parsed cell. Deliberately NO `.replace(/"/g, '')` here:
@@ -398,6 +436,17 @@ exports.handler = async (event) => {
         const questionCustomInstruction = cell(values, customInstructionIndex);
         const image = cell(values, imageIndex);
         const tagsCell = cell(values, tagsIndex);
+        const roundKindCell = cell(values, roundKindIndex);
+        const sourceAttribution = cell(values, sourceAttributionIndex);
+
+        // The per-question OVERRIDE. Empty means inherit the set's direction,
+        // which is what every row of every existing set does. A non-empty cell
+        // that is not one of the five is refused rather than dropped: dropping
+        // it would leave the question quietly inheriting a direction its author
+        // had explicitly tried to change, which is the failure this slice
+        // exists to stop.
+        const rowRoundKind = roundKindCell ? normalizeRoundKind(roundKindCell) : '';
+        if (rowRoundKind === null) badRoundKinds.push({ row: i + 1, value: roundKindCell });
 
         // Use new fields if available, otherwise fall back to legacy
         const finalQuestionDetail = questionDetail || legacyDetail || ''; // Use question detail or legacy detail for trivia
@@ -421,6 +470,10 @@ exports.handler = async (event) => {
             // normalizeTags also accepts a comma string, so a hand-edited CSV
             // using commas inside a quoted cell still works.
             Tags: normalizeTags(tagsCell.includes('|') ? tagsCell.split('|') : tagsCell),
+            // Capitalised, matching every other CSV-derived attribute on this
+            // row (Title, Detail, Category, Tags, AnswerDetails, School, Image).
+            RoundKind: rowRoundKind || '',
+            SourceAttribution: sourceAttribution,
             Active: true,
             QuestionNumber: questionNumber ? parseInt(questionNumber) : questionCount // Use Question# from CSV if available, otherwise use global count
           };
@@ -482,6 +535,19 @@ exports.handler = async (event) => {
         skippedRows.push({ row: i + 1, reason: `malformed row: ${e.message}` });
         console.log(`⚠️ Skipping malformed row ${i + 1}: ${JSON.stringify(values).substring(0, 100)}...`);
       }
+    }
+
+    // Refused BEFORE anything is written, and refused for the whole file. A
+    // partial import is the worse outcome here: half the rows would carry the
+    // direction their author asked for and half would silently inherit, and
+    // nothing downstream could tell the two apart afterwards.
+    if (badRoundKinds.length > 0) {
+      const shown = badRoundKinds.slice(0, 5).map((b) => `row ${b.row} ("${b.value}")`).join(', ');
+      const more = badRoundKinds.length > 5 ? ` and ${badRoundKinds.length - 5} more` : '';
+      return badRequest(
+        `The RoundKind column has ${badRoundKinds.length} unrecognised value${badRoundKinds.length === 1 ? '' : 's'}: `
+        + `${shown}${more}. Expected one of: ${ROUND_KIND_IDS.join(', ')}, or an empty cell to inherit the set's.`
+      );
     }
 
     if (questions.length === 0) {
@@ -581,6 +647,14 @@ exports.handler = async (event) => {
       // wrong choice at import time and becomes a dangling reference the moment
       // that prompt is deleted.
       ...(String(promptId ?? '').trim() ? { promptId: String(promptId).trim() } : {}),
+      // The set's DIRECTION, written only when one was chosen. Absent reads as
+      // `produce` at every reader, which is what the ~41 sets that predate this
+      // field genuinely are — they hand the room a prompt and the room supplies
+      // the material. Writing `produce` onto every new set would destroy the
+      // distinction between "chose Produce" and "never asked", which is the
+      // distinction that keeps the no-migration decision cheap.
+      ...(setRoundKind ? { roundKind: setRoundKind } : {}),
+      ...(setRoundKindBrief ? { roundKindBrief: setRoundKindBrief } : {}),
       questionCount: questions.length,
       categoryCount: categories.size,
       active: isAIGenerated ? false : true,  // AI-generated content starts as inactive
@@ -666,6 +740,12 @@ exports.handler = async (event) => {
         ...(question.AnswerDetails ? { AnswerDetails: question.AnswerDetails } : {}),
         CustomInstructions: question.CustomInstructions || '',
         Tags: question.Tags || [],
+        // Per-question OVERRIDE of the set's direction, and the Apply round's
+        // "whose material is this". Written only when non-empty, so every
+        // existing set's rows are byte-identical to what they were and the
+        // download stays free to omit both columns.
+        ...(question.RoundKind ? { RoundKind: question.RoundKind } : {}),
+        ...(question.SourceAttribution ? { SourceAttribution: question.SourceAttribution } : {}),
         OrderInCategory: categoryRelativeNumber,
         QuestionNumber: question.QuestionNumber || categoryCounters[categoryId], // Use CSV value or category counter
         CategoryQuestionNumber: question.QuestionNumber || categoryCounters[categoryId], // Same as QuestionNumber

@@ -26,6 +26,7 @@
 
 const { retryWithBackoff } = require('./bedrock-utils');
 const { MIN_SUGGESTED_TAGS, MAX_TAGS } = require('./tags');
+const { roundKindDetailCeiling } = require('./round-kinds');
 
 const SONNET = () => `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-sonnet-4-6`;
 const HAIKU = () => `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`;
@@ -83,8 +84,16 @@ function maxTokensFor(engagementType, count) {
  * "Level of Detail: detailed" alone produced 8,500-character scenarios. The
  * final line matters as much as the numbers — without it the model treats the
  * ceiling as a target and pads to reach it.
+ *
+ * THE `detail` CEILING IS ROUND-KIND AWARE, and it has to be, because this
+ * block is appended LAST and a model weights the most recent formatting
+ * instruction most heavily. An Apply or Improve question must CARRY the
+ * material it is about; a flat 350 characters would quietly win that argument
+ * and produce a round that gestures at a passage nobody was given. Produce
+ * keeps 350 — its `detail` is framing, not source material. See
+ * shared/round-kinds.js for the ceilings and the engagement-type gate.
  */
-function lengthGuidance(engagementType) {
+function lengthGuidance(engagementType, roundKind) {
   if (engagementType === 'wavelength') {
     return [
       '',
@@ -95,11 +104,16 @@ function lengthGuidance(engagementType) {
       'Write only what the content needs; do not pad to reach a limit.',
     ].join('\n');
   }
+  const detailMax = roundKindDetailCeiling(engagementType, roundKind);
+  // A 900-character ceiling with a "2-4 sentences" cap beside it is two limits
+  // that contradict each other, and the model would obey whichever it read
+  // last. The sentence count scales with the ceiling instead.
+  const sentences = detailMax > 350 ? '3-8 sentences' : '2-4 sentences';
   return [
     '',
     'LENGTH LIMITS (hard limits, not targets):',
     '- title: 3-10 words. Do not use a colon to bolt a subtitle onto the title.',
-    '- detail: 2-4 sentences, 350 characters maximum.',
+    `- detail: ${sentences}, ${detailMax} characters maximum.`,
     '- customInstructions: 1-2 sentences, 200 characters maximum.',
     'Write only what the content needs; do not pad to reach a limit. A short,',
     'sharp scenario is better than a thorough one nobody reads aloud.',
@@ -123,8 +137,14 @@ function tagGuidance() {
  * the model that just wrote the scenario is the thing best placed to say what
  * it is about, and once we are no longer regex-parsing prose it is nearly free.
  */
-function buildItemsTool(engagementType) {
+function buildItemsTool(engagementType, roundKind) {
   const isWavelength = engagementType === 'wavelength';
+  // The schema description is a SECOND statement of the length limit, and a
+  // model reads both. Leaving it hardcoded at 350 while lengthGuidance() says
+  // 900 would put the two halves of the same instruction in disagreement, which
+  // is the failure mode this whole module was written to stop.
+  const detailMax = roundKindDetailCeiling(engagementType, roundKind);
+  const detailSentences = detailMax > 350 ? '3-8 sentences' : '2-4 sentences';
   return {
     name: TOOL_NAME,
     description: isWavelength
@@ -151,7 +171,7 @@ function buildItemsTool(engagementType) {
                 type: 'string',
                 description: isWavelength
                   ? 'One sentence of framing, 140 characters maximum.'
-                  : 'The scenario itself, 2-4 sentences, 350 characters maximum.',
+                  : `The scenario itself, ${detailSentences}, ${detailMax} characters maximum.`,
               },
               customInstructions: {
                 type: 'string',

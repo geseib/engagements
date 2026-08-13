@@ -21,6 +21,9 @@ const { makeGenerationHandler } = require('./shared/generation-handler');
 const { tagGuidance } = require('./shared/structured-generation');
 const { normalizeTags } = require('./shared/tags');
 const { normalizeGameType } = require('./shared/game-types');
+const {
+  normalizeRoundKind, roundKindDirection, roundKindDetailCeiling,
+} = require('./shared/round-kinds');
 
 const MAX_COUNT = 100;
 
@@ -37,6 +40,11 @@ function parseRequest(payload) {
       userInput: String(payload.userInput || '').trim(),
       existingQuestion: existing,
       context: payload.context || {},
+      // DIRECTION. Unknown values fall back to `produce` at the reader rather
+      // than failing the job; the 400 belongs on the write paths. See
+      // shared/round-kinds.js.
+      roundKind: normalizeRoundKind(payload.roundKind),
+      roundKindBrief: String(payload.roundKindBrief || '').trim(),
     },
   };
 }
@@ -52,7 +60,18 @@ const baseProps = {
 const baseRequired = ['title', 'category', 'detail', 'customInstructions', 'tags'];
 
 function buildTool(config) {
-  let properties = { ...baseProps };
+  // The schema's `detail` description is a second statement of the length
+  // limit. It has to move with lengthGuidanceFor() or the two halves of the
+  // same instruction contradict each other — an Apply question cannot carry its
+  // material through a schema that still says 350 characters.
+  const detailMax = roundKindDetailCeiling(config.gameType, config.roundKind);
+  let properties = {
+    ...baseProps,
+    detail: {
+      type: 'string',
+      description: `Context or the scenario itself, ${detailMax > 350 ? '3-8' : '2-4'} sentences, ${detailMax} characters maximum.`,
+    },
+  };
   let required = [...baseRequired];
 
   if (config.gameType === 'trivia') {
@@ -101,7 +120,7 @@ function buildTool(config) {
   };
 }
 
-function lengthGuidanceFor(gameType) {
+function lengthGuidanceFor(gameType, roundKind) {
   if (gameType === 'wavelength') {
     return [
       '',
@@ -116,20 +135,37 @@ function lengthGuidanceFor(gameType) {
       'anything with a correct answer.',
     ].join('\n');
   }
+  // Round-kind aware, and appended LAST, which is why it has to be: a model
+  // weights the most recent formatting instruction most heavily, so a flat 350
+  // would quietly overrule an Apply direction that needs the material carried.
+  const detailMax = roundKindDetailCeiling(gameType, roundKind);
   return [
     '',
     '',
     'LENGTH LIMITS (hard limits, not targets):',
     '- title: 3-10 words. Do not use a colon to bolt a subtitle onto the title.',
-    '- detail: 2-4 sentences, 350 characters maximum.',
+    `- detail: ${detailMax > 350 ? '3-8' : '2-4'} sentences, ${detailMax} characters maximum.`,
     '- customInstructions: 1-2 sentences, 200 characters maximum.',
     'Write only what the content needs; do not pad to reach a limit.',
   ].join('\n');
 }
 
 function buildPrompt({ config, count, alreadyUsedTitles }) {
-  const { gameType, existingQuestion, context, userInput } = config;
+  const { gameType, existingQuestion, context, userInput, roundKind, roundKindBrief } = config;
   let p = 'You are an expert educational content creator.\n\n';
+
+  // DIRECTION FIRST, for both the bulk and the refine paths.
+  //
+  // Refine needs it as much as bulk does, and for a reason worth stating: the
+  // refine prompt below opens "Improve the following question based on the
+  // user's feedback", which is an IMPROVE operation on OUR OWN DRAFT and has
+  // nothing to do with the `improve` ROUND KIND. Without the direction a refine
+  // of an Apply question drifts back towards the house shape, because nothing
+  // in the prompt any longer knows the room was handed foreign material.
+  const direction = roundKindDirection(gameType, roundKind, roundKindBrief);
+  if (direction) {
+    p += `${direction}\n\nThis direction governs the shape of every question below.\n\n`;
+  }
 
   if (existingQuestion) {
     p += `Improve the following ${gameType} question based on the user's feedback.\n\n`;
@@ -164,7 +200,7 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
     }
   }
 
-  p += lengthGuidanceFor(gameType);
+  p += lengthGuidanceFor(gameType, roundKind);
   p += tagGuidance();
   p += `\n\nReturn the questions by calling the emit_items tool. Do not write prose.`;
   return p;

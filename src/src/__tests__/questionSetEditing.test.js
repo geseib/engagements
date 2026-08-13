@@ -27,6 +27,12 @@ const SET = {
   engagementType: 'callandanswer',
   roundNoun: 'Lesson',
   personaId: 'coach',
+  // The set's DIRECTION — what the room does with each item, as opposed to the
+  // topic. Present on the fixture so "clear every editable field" below stays a
+  // real assertion: buildEditPayload is a DIFF, so a field whose original is
+  // already '' is correctly omitted rather than cleared.
+  roundKind: 'custom',
+  roundKindBrief: 'Hand them two proposals and ask which they would fund.',
   totalQuestions: 42,
   categoryCount: 5,
   activeVersion: 3
@@ -50,6 +56,23 @@ describe('editableSnapshot', () => {
   it('trims, so reopening and saving an untouched set reports no changes', () => {
     const snapshot = editableSnapshot({ description: '  spaced  ' });
     expect(snapshot.description).toBe('spaced');
+  });
+
+  it('leaves an unset round direction UNSET rather than resolving it to produce', () => {
+    // rejects: `resolveRoundKind(questionSet.roundKind)` here. The save payload
+    // is a diff against this snapshot, so a resolved default would make every
+    // open-and-save of the ~41 sets that predate the field write a direction
+    // nobody chose — turning "no migration" into a migration performed one
+    // accidental save at a time.
+    expect(editableSnapshot({ id: 'old-set' }).roundKind).toBe('');
+    expect(editableSnapshot({ roundKind: 'apply' }).roundKind).toBe('apply');
+  });
+
+  it('drops a stored round direction that is not one of the five', () => {
+    // rejects: round-tripping junk back to the server. A reader resolves an
+    // unknown value to produce; the FORM must not offer to re-save it, because
+    // the writers would 400 and the owner would have no idea why.
+    expect(editableSnapshot({ roundKind: 'reflect' }).roundKind).toBe('');
   });
 });
 
@@ -121,6 +144,18 @@ describe('describeSetChange / summarizeEditResult', () => {
     expect(describeSetChange('promptId', '')).toMatch(/game-type default/);
     expect(describeSetChange('personaId', '')).toMatch(/adapting to the session/);
     expect(describeSetChange('description', '')).toBe('description cleared');
+    // rejects: reporting a cleared direction as "round direction cleared". It
+    // does not clear to nothing — absent reads as Produce at every reader, and
+    // an owner told "cleared" would not know the set still has a direction.
+    expect(describeSetChange('roundKind', '')).toBe('round direction reset to Produce');
+  });
+
+  it('reports the round direction by the name the picker used', () => {
+    // rejects: echoing the raw enum id. The screen shows a card called
+    // "Something else"; a confirmation reading 'set to "custom"' names a value
+    // the owner never saw and cannot map back to what they clicked.
+    expect(describeSetChange('roundKind', 'judge')).toBe('round direction set to Judge');
+    expect(describeSetChange('roundKind', 'custom')).toBe('round direction set to Something else');
   });
 
   it('admits when only the title moved', () => {

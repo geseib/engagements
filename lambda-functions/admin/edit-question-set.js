@@ -1,6 +1,9 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { requireSetManager } = require('./shared/question-set-access');
+const {
+  ROUND_KIND_IDS, MAX_ROUND_KIND_BRIEF, normalizeRoundKind,
+} = require('./shared/round-kinds');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -41,7 +44,12 @@ const OPTIONAL_FIELDS = [
   'aiContextInstruction',
   'promptId',
   'roundNoun',
-  'personaId'
+  'personaId',
+  // The operator's own direction, used ONLY when roundKind === 'custom'. It is
+  // free text and belongs here rather than beside the validated enum for
+  // exactly that reason: the KEY stays closed, the prose does not become one.
+  // It inherits the clear-vs-skip semantics documented below for free.
+  'roundKindBrief'
 ];
 
 exports.handler = async (event) => {
@@ -135,6 +143,19 @@ exports.handler = async (event) => {
     // null means "no value", which is exactly what an empty string records.
     // Downstream readers (get-ai-summary.js:800-841) test truthiness, so '' and
     // "attribute absent" behave identically at runtime.
+    // The brief is free text, so it gets a length ceiling rather than a value
+    // check. 500 characters is enough for a real instruction and short enough
+    // that a set cannot smuggle a second prompt template into the generator.
+    if (typeof body.roundKindBrief === 'string' && body.roundKindBrief.trim().length > MAX_ROUND_KIND_BRIEF) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error: `The round direction is ${body.roundKindBrief.trim().length} characters; the limit is ${MAX_ROUND_KIND_BRIEF}.`
+        }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
     const applied = {};
     for (const field of OPTIONAL_FIELDS) {
       if (!(field in body) || body[field] === undefined) continue;
@@ -162,6 +183,33 @@ exports.handler = async (event) => {
       updateParams.ExpressionAttributeNames['#engagementType'] = 'engagementType';
       updateParams.ExpressionAttributeValues[':engagementType'] = normalized;
       applied.engagementType = normalized;
+    }
+
+    // roundKind is validated exactly like engagementType and for the same
+    // reason: every generator branch, every future library facet and every test
+    // switches on it exhaustively, so a typo must not silently become a new
+    // kind. The enum is closed; `custom` plus the free-text roundKindBrief
+    // above is the escape hatch, which is what keeps it closed.
+    //
+    // '' is allowed through as a deliberate CLEAR — it restores the reader
+    // default (produce) without inventing a stored value for the ~41 sets that
+    // predate this field.
+    if ('roundKind' in body && body.roundKind !== undefined) {
+      const raw = body.roundKind === null ? '' : String(body.roundKind).trim();
+      const normalized = raw === '' ? '' : normalizeRoundKind(raw);
+      if (normalized === null) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({
+            error: `Unknown round kind "${body.roundKind}". Expected one of: ${ROUND_KIND_IDS.join(', ')}`
+          }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+      updateParams.UpdateExpression += ', #roundKind = :roundKind';
+      updateParams.ExpressionAttributeNames['#roundKind'] = 'roundKind';
+      updateParams.ExpressionAttributeValues[':roundKind'] = normalized;
+      applied.roundKind = normalized;
     }
 
     await db.send(new UpdateCommand(updateParams));

@@ -2,6 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
+import RoundKindPicker from './RoundKindPicker';
+import {
+  roundKindParticipantInstruction, roundKindGaps, DEFAULT_ROUND_KIND,
+} from '../config/roundKinds';
 import { normalizeTags, tagsToCsvCell } from '../utils/tags';
 import { csvRow, buildCsv, optionsToCsvCell, allowMultipleToCsvCell } from '../utils/csv';
 import GenerationJobPanel from './GenerationJobPanel';
@@ -27,7 +31,14 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
     difficulty: 'medium',
     count: 10,
     allowMultiple: false,
-    customPrompt: ''
+    customPrompt: '',
+    // DIRECTION — what the room is asked to DO with each item, as distinct
+    // from the topic. A poll round can hand people somebody else's material
+    // and ask which reading of it lands; the difference from call-and-answer
+    // is only that the answers are picked rather than written.
+    roundKind: DEFAULT_ROUND_KIND,
+    roundKindBrief: '',
+    roundKindInstruction: ''
   });
   const [generatedPolls, setGeneratedPolls] = useState([]);
   const [currentPollIndex, setCurrentPollIndex] = useState(0);
@@ -99,6 +110,19 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
     watchJob(stored.jobId);
   }, [watchJob]);
 
+  /**
+   * Empty for the four named kinds; `custom` supplies its own or it is not ready.
+   *
+   * A custom direction with an empty brief would send the generator a prompt
+   * with a hole where the direction should be, and an empty instruction would
+   * put a blank line in front of the room. Gates the Generate button below,
+   * beside the existing "a poll needs a topic" gate.
+   */
+  const kindGaps = roundKindGaps(pollConfig.roundKind, {
+    brief: pollConfig.roundKindBrief,
+    instruction: pollConfig.roundKindInstruction,
+  });
+
   const handleConfigSubmit = async () => {
     setIsGenerating(true);
     setGenerationStatus('Starting generation...');
@@ -121,7 +145,9 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
         difficulty: pollConfig.difficulty,
         count: pollConfig.count,
         allowMultiple: pollConfig.allowMultiple,
-        customPrompt: pollConfig.customPrompt
+        customPrompt: pollConfig.customPrompt,
+        roundKind: pollConfig.roundKind,
+        roundKindBrief: pollConfig.roundKindBrief
       }, { label: 'Generation', onStatus: setGenerationStatus });
 
       rememberGenerationJob(ENDPOINT, jobId, { topic: pollConfig.topic });
@@ -239,14 +265,28 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
     const metadata = {
       title: `${pollConfig.topic} Polls${pollConfig.audience ? ` for ${pollConfig.audience}` : ''}`,
       description: `${keptPolls.length} AI-generated poll questions about ${pollConfig.topic}. Difficulty: ${pollConfig.difficulty}.`,
-      customInstructions: `Select your preferred option(s) for each poll question. ${pollConfig.allowMultiple ? 'Multiple selections may be allowed for some questions.' : ''}`,
+      // The MECHANIC line plus the round's DIRECTION. The mechanic ("pick an
+      // option") is a property of the game and never changes; the direction is
+      // what tells the room whether they are choosing between their own
+      // instincts, between readings of a passage they were handed, or between
+      // verdicts. A poll that says only "select your preferred option" leaves
+      // the second and third of those looking identical to the first.
+      customInstructions: [
+        `Select your preferred option(s) for each poll question.`,
+        pollConfig.allowMultiple ? 'Multiple selections may be allowed for some questions.' : '',
+        roundKindParticipantInstruction(pollConfig.roundKind, pollConfig.roundKindInstruction),
+      ].filter(Boolean).join(' '),
       aiContextInstructions: `These are ${pollConfig.difficulty}-level poll questions about ${pollConfig.topic}. Encourage thoughtful consideration and diverse perspectives.`
     };
 
     dismissJob();
     onPollGenerated({
       questions: keptPolls,
-      metadata: metadata
+      metadata: metadata,
+      // The direction travels with the set, or it steers one generation and is
+      // then forgotten — see AdminPage's handleScenariosGenerated.
+      roundKind: pollConfig.roundKind,
+      roundKindBrief: pollConfig.roundKindBrief
     });
   };
 
@@ -287,6 +327,29 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
               {/* Only ever set on step 1 by the resume path, when the stored
                   job id has outlived the job record's three-day TTL. */}
               <StatusMessage message={generationStatus} tone="pending" />
+
+              {/* Direction before topic, for the same reason it leads in the
+                  scenario builder: it changes what a good topic answer even
+                  looks like. */}
+              <section className="round-kind-step">
+                <h4 id="poll-round-kind-heading">What will the room do with each one?</h4>
+                <p className="step-lede">
+                  This is the direction, not the subject. It decides whether people are
+                  choosing between their own instincts, between readings of material you
+                  hand them, or between verdicts.
+                </p>
+                <RoundKindPicker
+                  headingId="poll-round-kind-heading"
+                  idPrefix="poll-round-kind"
+                  value={pollConfig.roundKind}
+                  onChange={(roundKind) => setPollConfig(prev => ({ ...prev, roundKind }))}
+                  brief={pollConfig.roundKindBrief}
+                  onBriefChange={(roundKindBrief) => setPollConfig(prev => ({ ...prev, roundKindBrief }))}
+                  instruction={pollConfig.roundKindInstruction}
+                  onInstructionChange={(roundKindInstruction) => setPollConfig(prev => ({ ...prev, roundKindInstruction }))}
+                />
+              </section>
+
               <div className="config-form">
                 <div className="form-row">
                   <div className="form-group">
@@ -609,7 +672,7 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
               <button
                 className="btn-primary"
                 onClick={handleConfigSubmit}
-                disabled={!pollConfig.topic.trim()}
+                disabled={!pollConfig.topic.trim() || kindGaps.length > 0}
               >
                 <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> Generate Poll Questions
               </button>

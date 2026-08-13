@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import StatusMessage from './StatusMessage';
 import PromptShapePreview from './PromptShapePreview';
+import RoundKindPicker from './RoundKindPicker';
 import { authFetch } from '../auth/authFetch';
 import { GAME_TYPE_LIST, gameTypeLabel, normalizeGameType } from '../config/gameTypes';
 import {
@@ -16,6 +17,7 @@ import {
   interpretVersionDelete,
   versionDeleteTone
 } from '../utils/questionSetEditing';
+import { roundKindApplies, roundKindGaps } from '../config/roundKinds';
 
 const API_BASE = () => window.API_BASE;
 
@@ -59,6 +61,13 @@ export default function QuestionSetEditor({
   // Per-set voice. '' means "adapt to the session", which is the default and
   // beats the prompt template's baked-in persona on purpose.
   const [personaId, setPersonaId] = useState('');
+  // THE SET'S DIRECTION — what the room is asked to DO with each item, as
+  // distinct from the topic it is about. '' means the set has never been asked,
+  // which every reader treats as `produce`. Kept as '' rather than 'produce' so
+  // the diffed save does not write a value nobody chose onto the ~41 sets that
+  // predate the field. See config/roundKinds.js.
+  const [roundKind, setRoundKind] = useState('');
+  const [roundKindBrief, setRoundKindBrief] = useState('');
   // Snapshot of the set as it was when the editor opened; the save payload is a
   // diff against this.
   const [original, setOriginal] = useState({});
@@ -121,6 +130,8 @@ export default function QuestionSetEditor({
     setPromptId(snapshot.promptId);
     setRoundNoun(snapshot.roundNoun);
     setPersonaId(snapshot.personaId);
+    setRoundKind(snapshot.roundKind);
+    setRoundKindBrief(snapshot.roundKindBrief);
     setOriginal(snapshot);
     setSaveStatus('');
     setSaveOk(null);
@@ -156,7 +167,12 @@ export default function QuestionSetEditor({
       promptId: promptId.trim(),
       engagementType: normalizeGameType(engagementType),
       roundNoun: roundNoun.trim(),
-      personaId: personaId.trim()
+      personaId: personaId.trim(),
+      roundKind: roundKind.trim(),
+      // Only meaningful for `custom`; cleared when the kind moves off it, so a
+      // set cannot keep steering the generator with a brief for a direction it
+      // no longer has.
+      roundKindBrief: roundKind === 'custom' ? roundKindBrief.trim() : ''
     };
 
     // Only send what actually changed. An omitted key means "leave it alone";
@@ -495,6 +511,35 @@ export default function QuestionSetEditor({
               Changing it does not rewrite the questions themselves.
             </small>
           </div>
+
+          {/*
+            THE SET'S DIRECTION, editable here because it is the only place a
+            set that already exists can acquire one. The builder sets it at
+            generation time; the ~41 sets that predate this field, and every set
+            imported from a CSV, would otherwise be stuck reading as Produce
+            with no way to say otherwise. It steers the generator and it is what
+            the participant instruction should agree with.
+          */}
+          {roundKindApplies(engagementType) && (
+            <div className="form-group">
+              <label id="edit-round-kind-label">Round Direction</label>
+              <RoundKindPicker
+                headingId="edit-round-kind-label"
+                idPrefix="edit-round-kind"
+                value={roundKind}
+                onChange={setRoundKind}
+                brief={roundKindBrief}
+                onBriefChange={setRoundKindBrief}
+              />
+              <small className="help-text">
+                What the room is asked to DO with each item — not what the set is about.
+                It steers AI generation for this set. Leave it on Produce for a set that
+                hands people a prompt and nothing else.
+                {roundKindGaps(roundKind, { brief: roundKindBrief, instruction: 'n/a' }).length > 0
+                  && ' Saving without a description leaves the generator no direction to follow.'}
+              </small>
+            </div>
+          )}
 
           <div className="form-group">
             <label htmlFor="edit-round-noun">Round Label</label>

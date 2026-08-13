@@ -266,6 +266,34 @@ const ART_CSV = [
     + '"Real title: The Great Wave off Kanagawa. A woodblock print, not a painting.","wave.jpg","ukiyo-e"',
 ].join('\n');
 
+/**
+ * Call-and-answer carrying the two columns Slice 2 added: the per-question
+ * RoundKind override and, for Apply rounds, whose material the question holds.
+ *
+ * These are here for exactly the reason the file exists. A column the importer
+ * reads and the exporter does not emit is destroyed by the next replace, in
+ * total silence, with a 200 — that is what happened to trivia options, the
+ * trivia reveal and every poll option. Adding two columns without adding two
+ * fixtures would have reproduced the same defect on a fourth and fifth column
+ * a week after fixing it on three.
+ *
+ * The set deliberately MIXES kinds: the owner named the mixed case directly
+ * (open Produce to warm the room, move to Improve once people are talking), and
+ * a fixture where every row carries the same value cannot catch a round trip
+ * that collapses them all onto the first one.
+ */
+const ROUND_KIND_CSV = [
+  'Category,Question#,Title,Detail_lesson,School,CustomInstruction,RoundKind,SourceAttribution,Tags',
+  '"Opening",1,"WHAT WENT WRONG LAST QUARTER","Think of one incident you were in the room for.",'
+    + '"Business School","Answer from your own experience.","produce","","retro|opening"',
+  '"Transfer",1,"THE PRE-MORTEM RULE","Before starting, the team writes the failure report as if it had already happened, then works backwards from it.",'
+    + '"Business School","Say where it would land here.","apply","Gary Klein, Performing a Project Premortem","planning|foreign"',
+  '"Our Words",1,"THE ON-CALL PARAGRAPH","\'The on-call engineer is expected to respond promptly to pages during their rotation.\'",'
+    + '"Business School","Rewrite it.","improve","","runbook|ours"',
+  '"Verdict",1,"IS THE RELEASE NOTE READY","Judge it against the bar we set in January: could a customer act on it without asking us anything?",'
+    + '"Business School","Give a verdict.","judge","","release|verdict"',
+].join('\n');
+
 const WAVELENGTH_CSV = [
   'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags',
   '"Technology",1,"Agentic AI","Your PM wants it on the dashboard by Friday.","Business School",'
@@ -382,6 +410,53 @@ const WAVELENGTH_CSV = [
         ['sets/roundtripart/smile.jpg', 'sets/roundtripart/night.jpg', 'sets/roundtripart/wave.jpg']));
     check('category-relative Question# numbering is not rewritten', () =>
       assert.deepStrictEqual(t.after.map((r) => r.QuestionNumber), [1, 2, 1]));
+  }
+
+  // ==== call-and-answer, carrying the round-kind columns ===================
+  say('\n  -- call-and-answer (round kind: RoundKind + SourceAttribution) --');
+  resetDb();
+  {
+    const t = await roundTrip('Roundtrip Kinds', 'call-and-answer', ROUND_KIND_CSV);
+
+    // rejects: a vacuous fixture, and an importer change that stops writing the
+    // override at all — either would make every deepStrictEqual below green
+    // while the column was being destroyed.
+    check('the seeded set really carries a per-question RoundKind', () =>
+      assertCarries(t.before, ['RoundKind']));
+
+    // rejects: emitting RoundKind under any header the importer's exact-ish
+    // matcher cannot claim, which is the WrongAnswer* defect on a new column.
+    check('the exported header names RoundKind and SourceAttribution', () => {
+      const cols = t.header.split(',');
+      assert.ok(cols.includes('RoundKind'), t.header);
+      assert.ok(cols.includes('SourceAttribution'), t.header);
+    });
+
+    check('every question survives the round trip field for field', () =>
+      assertSameQuestions(t.before, t.after));
+
+    // rejects: collapsing a mixed set onto one kind, or dropping the override
+    // and silently inheriting the set's direction — a question would then carry
+    // a direction its author explicitly changed away from.
+    check('the four kinds come back distinct and in order', () =>
+      assert.deepStrictEqual(t.after.map((r) => r.RoundKind),
+        ['produce', 'apply', 'improve', 'judge']));
+
+    // rejects: dropping SourceAttribution, which is the only record of WHOSE
+    // material an Apply question carries. Without it an Apply round cannot tell
+    // the room the passage is not theirs, which is the whole distinction.
+    check('the Apply row keeps its attribution and the others stay empty', () => {
+      const byTitle = Object.fromEntries(t.after.map((r) => [r.Title, r.SourceAttribution]));
+      assert.strictEqual(byTitle['THE PRE-MORTEM RULE'], 'Gary Klein, Performing a Project Premortem');
+      assert.strictEqual(byTitle['WHAT WENT WRONG LAST QUARTER'], undefined);
+    });
+
+    // rejects: the exporter drifting on trip two — an alphabetically-sorted
+    // partition plus two new conditional columns is exactly the shape that
+    // renumbers or re-orders once and then looks stable.
+    const again = await download({ pathParameters: { setId: t.setId }, queryStringParameters: {} });
+    check('a second export of the kinded set is byte-identical', () =>
+      assert.strictEqual(parse(again).content, t.csv));
   }
 
   // ==== wavelength =========================================================

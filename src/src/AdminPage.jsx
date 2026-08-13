@@ -451,8 +451,12 @@ function AdminPage() {
   const handleScenariosGenerated = async (scenarioData) => {
     setShowAIScenarioBuilder(false);
 
-    // scenarioData now includes both scenarios and metadata
-    const { scenarios, metadata } = scenarioData;
+    // scenarioData carries the scenarios, the set-level metadata, and the round
+    // DIRECTION the builder was steered with. The direction has to reach the
+    // SETS row or it steers one generation and is then forgotten — a set that
+    // was generated as Apply would read back as Produce for the editor, the
+    // library and every later regeneration.
+    const { scenarios, metadata, roundKind, roundKindBrief } = scenarioData;
 
     // Convert scenarios to CSV format and upload
     const csvContent = generateScenariosCSV(scenarios);
@@ -474,6 +478,8 @@ function AdminPage() {
           customInstructions: metadata.customInstructions,
           aiContextInstructions: metadata.aiContextInstructions,
           engagementType: engagementType,
+          ...(roundKind ? { roundKind } : {}),
+          ...(roundKindBrief ? { roundKindBrief } : {}),
           isAIGenerated: true
         })
       });
@@ -621,8 +627,11 @@ function AdminPage() {
   const handlePollGenerated = async (pollData) => {
     setShowPollAIBuilder(false);
 
-    // pollData includes both questions and metadata
-    const { questions, metadata } = pollData;
+    // pollData carries the questions, the set-level metadata, and the round
+    // DIRECTION the builder was steered with. Same reasoning as
+    // handleScenariosGenerated: a direction that does not reach the SETS row
+    // steers one generation and is then forgotten.
+    const { questions, metadata, roundKind, roundKindBrief } = pollData;
 
     // Convert polls to CSV format and upload
     const csvContent = generatePollCSV(questions);
@@ -644,6 +653,8 @@ function AdminPage() {
           customInstructions: metadata.customInstructions,
           aiContextInstructions: metadata.aiContextInstructions,
           engagementType: 'poll',
+          ...(roundKind ? { roundKind } : {}),
+          ...(roundKindBrief ? { roundKindBrief } : {}),
           isAIGenerated: true
         })
       });

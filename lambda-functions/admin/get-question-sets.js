@@ -37,6 +37,15 @@ exports.handler = async (event) => {
       // Per-set round-label override ("Lesson 3" on a genuine lessons set while
       // the default stays "Round"). Resolved for display by resolveRoundNoun().
       roundNoun: item.roundNoun,
+      // THE SET'S DIRECTION — what the room is asked to DO with each item, as
+      // distinct from the topic it is about. Projected RAW, not resolved to
+      // `produce`: the editor has to be able to tell "the author chose Produce"
+      // from "nobody has ever been asked", because its save payload is a diff
+      // and a resolved default would make every open-and-save write a value
+      // that was never chosen. Readers apply the default themselves
+      // (config/roundKinds.js resolveRoundKind).
+      roundKind: item.roundKind || '',
+      roundKindBrief: item.roundKindBrief || '',
       engagementType: item.engagementType,
       questionCount: item.questionCount || 0,
       totalQuestions: item.questionCount || 0, // Add for frontend compatibility
