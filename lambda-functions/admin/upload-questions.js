@@ -19,6 +19,9 @@ const {
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
 
+/** `versions[].note` ceiling. A label for a version list, not a changelog. */
+const MAX_VERSION_NOTE = 300;
+
 const badRequest = (error) => ({
   statusCode: 400,
   body: JSON.stringify({ error }),
@@ -120,6 +123,23 @@ exports.handler = async (event) => {
     if (setRoundKindBrief.length > MAX_ROUND_KIND_BRIEF) {
       return badRequest(`The round direction is ${setRoundKindBrief.length} characters; the limit is ${MAX_ROUND_KIND_BRIEF}.`);
     }
+
+    // WHAT THIS VERSION CHANGED, in words. `versions[].note` has existed since
+    // versioning shipped, is seeded on the legacy->v1 snapshot, and is written
+    // by nothing else — so every entry in the list reads identically and a
+    // rollback is a guess between four rows that all say the same nothing.
+    // The console's editor sends "3 added, 1 edited, 2 removed"; a CSV replace
+    // that sends no note still gets '', exactly as before.
+    //
+    // Truncated rather than refused: a note is a nicety, and 400ing a whole
+    // import over a long label would trade a real save for a cosmetic field.
+    const versionNote = String(payload.versionNote ?? '').trim().slice(0, MAX_VERSION_NOTE);
+
+    // Where a FORKED set came from — the set-level twin of the row-level
+    // SourceSetId, and the same rule: provenance, never identity. Nothing reads
+    // it for a permission decision; `createdBy` (stamped below by ownerStamp)
+    // is the only owner this set has, and it is the person who forked it.
+    const sourceSetIdMeta = String(payload.sourceSetId ?? '').trim().slice(0, 200);
 
     // REPLACE. When present, this import does not create a set — it writes a
     // NEW VERSION of an existing one and flips activeVersion to it. See
@@ -312,6 +332,16 @@ exports.handler = async (event) => {
     // actually uses them, so an ordinary CSV keeps its familiar shape.
     let roundKindIndex = getColumnIndex('RoundKind');
     let sourceAttributionIndex = getColumnIndex('SourceAttribution');
+    // PROVENANCE, never identity (decision 2). Where a copied question came
+    // from, stamped once when it was copied and read by NOTHING — no permission
+    // decision, no propagation, no lookup. They are here for one reason: the
+    // console's editor can now copy a question out of another set, and a column
+    // the importer does not read is destroyed by the next replace, silently,
+    // with a 200. That is the exact defect Slice 1 repaired on three other
+    // columns, so these two are wired on BOTH sides in the same change and
+    // asserted in tests/question-set-roundtrip.js.
+    let sourceSetIdIndex = getColumnIndex('SourceSetId');
+    let sourceQuestionSkIndex = getColumnIndex('SourceQuestionSk');
 
     // Engagement-type specific columns
     let correctAnswerIndex = -1;
@@ -378,6 +408,12 @@ exports.handler = async (event) => {
     ));
     if (roundKindIndex === -1) roundKindIndex = looseMatch(['roundkind', 'kind', 'direction']);
     if (sourceAttributionIndex === -1) sourceAttributionIndex = looseMatch(['sourceattribution', 'attribution']);
+    // Only the normalised spelling ("Source Set Id" as well as "SourceSetId").
+    // Nothing looser: a bare `source` would claim the SourceAttribution column
+    // next door, and provenance that quietly overwrites an Apply round's "whose
+    // material is this" is worse than provenance that is absent.
+    if (sourceSetIdIndex === -1) sourceSetIdIndex = looseMatch(['sourcesetid']);
+    if (sourceQuestionSkIndex === -1) sourceQuestionSkIndex = looseMatch(['sourcequestionsk']);
 
     console.log('📋 Column Mapping:');
     console.log(`  Category: ${categoryIndex >= 0 ? headers[categoryIndex] : 'NOT FOUND'} (index: ${categoryIndex})`);
@@ -438,6 +474,8 @@ exports.handler = async (event) => {
         const tagsCell = cell(values, tagsIndex);
         const roundKindCell = cell(values, roundKindIndex);
         const sourceAttribution = cell(values, sourceAttributionIndex);
+        const sourceSetIdCell = cell(values, sourceSetIdIndex);
+        const sourceQuestionSkCell = cell(values, sourceQuestionSkIndex);
 
         // The per-question OVERRIDE. Empty means inherit the set's direction,
         // which is what every row of every existing set does. A non-empty cell
@@ -474,6 +512,8 @@ exports.handler = async (event) => {
             // row (Title, Detail, Category, Tags, AnswerDetails, School, Image).
             RoundKind: rowRoundKind || '',
             SourceAttribution: sourceAttribution,
+            SourceSetId: sourceSetIdCell,
+            SourceQuestionSk: sourceQuestionSkCell,
             Active: true,
             QuestionNumber: questionNumber ? parseInt(questionNumber) : questionCount // Use Question# from CSV if available, otherwise use global count
           };
@@ -655,6 +695,8 @@ exports.handler = async (event) => {
       // distinction that keeps the no-migration decision cheap.
       ...(setRoundKind ? { roundKind: setRoundKind } : {}),
       ...(setRoundKindBrief ? { roundKindBrief: setRoundKindBrief } : {}),
+      // The set this one was forked from, when it was. Provenance only.
+      ...(sourceSetIdMeta ? { sourceSetId: sourceSetIdMeta } : {}),
       questionCount: questions.length,
       categoryCount: categories.size,
       active: isAIGenerated ? false : true,  // AI-generated content starts as inactive
@@ -746,6 +788,12 @@ exports.handler = async (event) => {
         // download stays free to omit both columns.
         ...(question.RoundKind ? { RoundKind: question.RoundKind } : {}),
         ...(question.SourceAttribution ? { SourceAttribution: question.SourceAttribution } : {}),
+        // Write-once provenance. NEVER read for a permission decision — the
+        // rule is `canManageSet` on the SET this row now lives in, and nothing
+        // else. A copied question belongs to its new set outright; that is what
+        // keeps groups a one-function change later (decision 5).
+        ...(question.SourceSetId ? { SourceSetId: question.SourceSetId } : {}),
+        ...(question.SourceQuestionSk ? { SourceQuestionSk: question.SourceQuestionSk } : {}),
         OrderInCategory: categoryRelativeNumber,
         QuestionNumber: question.QuestionNumber || categoryCounters[categoryId], // Use CSV value or category counter
         CategoryQuestionNumber: question.QuestionNumber || categoryCounters[categoryId], // Same as QuestionNumber
@@ -831,7 +879,7 @@ exports.handler = async (event) => {
         questionCount: questions.length,
         categoryCount: categories.size,
         sourceFile: fileName,
-        note: ''
+        note: versionNote
       };
       // The snapshot entry (legacy -> v1) only exists in memory until now; if it
       // was taken, seed versions[] with it rather than an empty list.

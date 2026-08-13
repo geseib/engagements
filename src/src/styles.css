@@ -10056,12 +10056,242 @@ body {
   font-size: 0.9rem;
 }
 
+/* ==========================================================================
+   The questions themselves (components/QuestionsPanel.jsx)
+
+   Same paper surface as the rest of the editor. Every colour is a literal,
+   matching the block above: an undefined custom property invalidates the whole
+   declaration, and these rules have to hold in component tests where
+   styles.css's :root is not loaded.
+
+   The amber is the paper amber #8a5300 (6.33:1 on white), not --primary
+   #F6A94C, which is 1.96:1 on white and cannot carry text. Same reasoning as
+   RoundKindPicker.css, and the same value.
+   ========================================================================== */
+
+/* THE DIRTY BAR. The one thing on this screen that must not be missable: it is
+   the answer to "have I lost my work?". Amber left edge, its own surface, and
+   both ways out sitting inside it. */
+.qs-dirty-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: #FFF8EC;
+  border: 1px solid rgba(138, 83, 0, 0.35);
+  border-left: 4px solid #8a5300;
+  border-radius: var(--radius-sm, 8px);
+  color: #4A3512;
+}
+
+.qs-dirty-text {
+  flex: 1 1 320px;
+  line-height: 1.5;
+}
+
+.qs-dirty-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.qs-filter {
+  color: #5E6167;
+  font-size: 0.9rem;
+}
+
+.qs-filter .form-select {
+  width: auto;
+  display: inline-block;
+}
+
+/* --- the question list --- */
+.qs-question-list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qs-question-row {
+  padding: 10px 14px;
+  background: #FFFFFF;
+  border: 1px solid rgba(155, 168, 190, 0.28);
+  border-left: 4px solid transparent;
+  border-radius: var(--radius-sm, 8px);
+}
+
+/* Changed but not yet saved. The row itself says so, so a long set does not
+   depend on the bar at the top being on screen. */
+.qs-question-row.changed {
+  border-left-color: #8a5300;
+  background: #FFFBF4;
+}
+
+/* A tombstone: removed in the working copy, still restorable, not yet written.
+   Struck through rather than gone, because a delete you cannot see is a delete
+   you cannot undo. */
+.qs-question-row.removed {
+  border-left-color: #B04A45;
+  background: #FBF3F2;
+}
+
+.qs-question-row.removed .qs-question-title {
+  text-decoration: line-through;
+  color: #6B6E74;
+}
+
+.qs-question-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.qs-question-select {
+  margin-top: 4px;
+}
+
+.qs-question-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.qs-question-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.qs-question-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin-top: 2px;
+  color: #5E6167;
+  font-size: 0.86rem;
+}
+
+.qs-question-detail {
+  flex: 1 1 100%;
+  color: #6B6E74;
+}
+
+.qs-question-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.qs-change-badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(138, 83, 0, 0.12);
+  color: #8a5300;
+}
+
+.qs-change-badge.removed {
+  background: rgba(176, 74, 69, 0.12);
+  color: #B04A45;
+}
+
+/* --- one question's fields --- */
+.qs-question-form {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(155, 168, 190, 0.45);
+}
+
+.qs-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0 16px;
+}
+
+/* --- pulling from another set --- */
+.qs-pull-dialog {
+  max-width: 760px;
+  width: 100%;
+}
+
+.qs-pull-set-list,
+.qs-pull-question-list {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.qs-pull-set {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  background: #FFFFFF;
+  border: 1px solid rgba(155, 168, 190, 0.28);
+  border-radius: var(--radius-sm, 8px);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.qs-pull-set:hover,
+.qs-pull-set:focus-visible {
+  border-color: #8a5300;
+  background: #FFFBF4;
+}
+
+.qs-pull-question-list label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #FFFFFF;
+  border: 1px solid rgba(155, 168, 190, 0.28);
+  border-radius: var(--radius-sm, 8px);
+  cursor: pointer;
+}
+
+.qs-pull-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  color: #5E6167;
+  font-size: 0.9rem;
+}
+
+.qs-pull-filters .form-select {
+  width: auto;
+  display: inline-block;
+}
+
+.qs-pull-caveat {
+  margin: 10px 0 0;
+  color: #4A3512;
+  font-size: 0.9rem;
+}
+
 /* Placeholder until the media panel lands; see the SEAM comment in the JSX. */
 .qs-media-seam {
   opacity: 0.75;
 }
 
 @media (max-width: 700px) {
+  .qs-question-main,
+  .qs-dirty-bar,
   .qs-version-row,
   .qs-panel-actions {
     flex-direction: column;

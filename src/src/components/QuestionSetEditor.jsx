@@ -1,16 +1,15 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Icon from './Icon';
 import StatusMessage from './StatusMessage';
 import PromptShapePreview from './PromptShapePreview';
 import RoundKindPicker from './RoundKindPicker';
+import QuestionsPanel from './QuestionsPanel';
 import { authFetch } from '../auth/authFetch';
 import { GAME_TYPE_LIST, gameTypeLabel, normalizeGameType } from '../config/gameTypes';
 import {
   editableSnapshot,
   buildEditPayload,
   summarizeEditResult,
-  summarizeCsv,
-  describeReplacePlan,
   selectableSummaryPrompts,
   normalizeVersions,
   nextVersionNumber,
@@ -31,18 +30,26 @@ const API_BASE = () => window.API_BASE;
  *
  * Four panels, in the order the owner works:
  *   1. Details    — every field settable at creation
- *   2. Questions  — download the current CSV, upload a replacement
+ *   2. Questions  — the questions themselves: add, edit, delete, reorder, and
+ *                   pull from another set (components/QuestionsPanel.jsx)
  *   3. Versions   — list, promote, delete
  *   4. Media      — seam only; a separate change owns uploads
  *
  * The save payload is a DIFF (see utils/questionSetEditing). Do not "simplify"
  * it into sending the whole form: null used to mean "skip" in the lambda, which
  * made clearing any field a silent no-op.
+ *
+ * TWO PANELS NOW HOLD UNSAVED STATE and they save to different places: Details
+ * PUTs metadata (no version), Questions POSTs a replace (one version). They are
+ * deliberately separate saves — a rename must not manufacture a version a game
+ * could pin to — so Cancel has to ask about the Questions panel's working copy
+ * before it closes the editor and drops it.
  */
 export default function QuestionSetEditor({
   questionSet,
   availablePrompts = [],
   availablePersonas = [],
+  availableSets = [],
   defaultInstructions = '',
   onSaved,
   onChanged,
@@ -84,12 +91,12 @@ export default function QuestionSetEditor({
   // still playing this version, held until the owner says go ahead.
   const [pendingDelete, setPendingDelete] = useState(null);
 
-  /* ------------------------------------------------------------- replace -- */
-  const [replaceFile, setReplaceFile] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [replaceStatus, setReplaceStatus] = useState({ text: '', tone: '' });
-  const [isReplacing, setIsReplacing] = useState(false);
-  const replaceInputRef = useRef(null);
+  /* ----------------------------------------------------------- questions -- */
+  // The Questions panel's working copy is unsaved until IT saves. Closing the
+  // editor drops it, so Cancel asks first — reported up rather than reached
+  // into, so the panel stays the only owner of its own state.
+  const [questionsDirty, setQuestionsDirty] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
 
   const activeVersion = questionSet?.activeVersion;
 
@@ -135,12 +142,9 @@ export default function QuestionSetEditor({
     setOriginal(snapshot);
     setSaveStatus('');
     setSaveOk(null);
-    setReplaceFile(null);
-    setPreview(null);
-    setReplaceStatus({ text: '', tone: '' });
     setVersionStatus({ text: '', tone: '' });
     setPendingDelete(null);
-    if (replaceInputRef.current) replaceInputRef.current.value = '';
+    setConfirmClose(false);
     loadVersions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setId]);
@@ -207,144 +211,6 @@ export default function QuestionSetEditor({
       console.error('Edit save error:', error);
       setSaveOk(false);
       setSaveStatus(`Save failed: ${error.message}`);
-    }
-  };
-
-  /* ----------------------------------------------------------- download --- */
-
-  const saveBlob = (content, filename, mimeType) => {
-    const blob = new Blob([content], { type: mimeType });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-  };
-
-  const handleDownload = async () => {
-    setReplaceStatus({ text: 'Downloading question set...', tone: 'pending' });
-    try {
-      const response = await authFetch(`${API_BASE()}admin/download-question-set/${setId}`);
-      const text = await response.text();
-
-      if (!response.ok) {
-        let error = `HTTP ${response.status}`;
-        try { error = JSON.parse(text).error || error; } catch (_) { /* not JSON */ }
-        setReplaceStatus({ text: `Download failed: ${error}`, tone: 'error' });
-        return;
-      }
-
-      // download-question-set.js answers { filename, content, contentType } the
-      // same way download-template does. Tolerate a raw CSV body too, so a route
-      // that later starts streaming the file does not break this button.
-      let filename = `${(questionSet?.name || setId).replace(/[^a-zA-Z0-9-_]/g, '_')}.csv`;
-      let content = text;
-      let contentType = 'text/csv';
-      try {
-        const parsed = JSON.parse(text);
-        if (parsed && typeof parsed.content === 'string') {
-          content = parsed.content;
-          filename = parsed.filename || filename;
-          contentType = parsed.contentType || contentType;
-        }
-      } catch (_) { /* raw CSV body */ }
-
-      saveBlob(content, filename, contentType);
-      setReplaceStatus({ text: `${filename} downloaded`, tone: 'success' });
-    } catch (error) {
-      console.error('Download question set error:', error);
-      setReplaceStatus({ text: `Download failed: ${error.message}`, tone: 'error' });
-    }
-  };
-
-  /* ------------------------------------------------------------- upload --- */
-
-  const handleReplaceFileSelect = (event) => {
-    const file = event.target.files && event.target.files[0];
-    setPreview(null);
-    setReplaceFile(null);
-    if (!file) return;
-
-    if (!/\.csv$/i.test(file.name)) {
-      setReplaceStatus({ text: 'Please select a CSV file', tone: 'error' });
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const summary = summarizeCsv(e.target.result);
-      if (summary.error) {
-        setReplaceStatus({ text: summary.error, tone: 'error' });
-        return;
-      }
-      setReplaceFile(file);
-      setPreview({ ...summary, content: e.target.result, fileName: file.name });
-      setReplaceStatus({
-        text: summary.warning || `Read ${file.name}. Review the change below, then confirm.`,
-        tone: summary.warning ? 'pending' : 'success'
-      });
-    };
-    reader.onerror = () => setReplaceStatus({ text: `Could not read ${file.name}`, tone: 'error' });
-    reader.readAsText(file);
-  };
-
-  const handleReplace = async () => {
-    if (!preview || !replaceFile) return;
-    setIsReplacing(true);
-    setReplaceStatus({ text: 'Uploading new version...', tone: 'pending' });
-    try {
-      // replaceSetId is what turns this from "create a set" into "write a new
-      // version of this set". Title and description are deliberately NOT sent:
-      // they belong to the details form above, and a CSV must never silently
-      // rename the set it replaces.
-      const response = await authFetch(`${API_BASE()}admin/upload-questions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          replaceSetId: setId,
-          fileName: replaceFile.name,
-          fileContent: preview.content,
-          engagementType: normalizeGameType(engagementType)
-        })
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        const version = result.version != null ? `Version ${result.version}` : 'A new version';
-        const count = result.questionCount != null ? ` with ${result.questionCount} questions` : '';
-        // The importer reports rows it could not use. Say so — an import that
-        // quietly drops half a file otherwise looks like a clean success.
-        const skipped = Number(result.skippedRowCount || 0);
-        setReplaceStatus({
-          text: `${version} of "${questionSet?.name || setId}" is now live${count}. `
-            + (skipped
-              ? `${skipped} row${skipped === 1 ? '' : 's'} in the file could not be read and ${skipped === 1 ? 'was' : 'were'} skipped. `
-              : '')
-            + 'The previous version is still listed below and can be promoted back.',
-          tone: 'success'
-        });
-        setReplaceFile(null);
-        setPreview(null);
-        if (replaceInputRef.current) replaceInputRef.current.value = '';
-        await loadVersions();
-        if (onChanged) onChanged();
-      } else {
-        // Nothing was written: the lambda validates the whole file before it
-        // touches a single row, and the flip to the new version is one write.
-        setReplaceStatus({
-          text: `Upload failed: ${result.error || 'Unknown error'} — nothing changed, the current version is still live.`,
-          tone: 'error'
-        });
-      }
-    } catch (error) {
-      console.error('Replace question set error:', error);
-      setReplaceStatus({ text: `Upload failed: ${error.message}`, tone: 'error' });
-    } finally {
-      setIsReplacing(false);
     }
   };
 
@@ -667,7 +533,10 @@ export default function QuestionSetEditor({
               <Icon name="FloppyDisk" weight="bold" size={16} color="currentColor" />{' '}
               {saveStatus === 'Saving...' ? 'Saving...' : 'Save Changes'}
             </button>
-            <button className="btn-secondary" onClick={onCancel}>
+            <button
+              className="btn-secondary"
+              onClick={() => (questionsDirty ? setConfirmClose(true) : onCancel && onCancel())}
+            >
               Cancel
             </button>
           </div>
@@ -681,77 +550,20 @@ export default function QuestionSetEditor({
         </div>
       </section>
 
-      {/* ================================================ 2. QUESTIONS === */}
-      <section className="qs-panel">
-        <div className="qs-panel-header">
-          <h3><Icon name="Books" weight="bold" size={16} color="currentColor" /> Questions</h3>
-          <span className="qs-panel-note">Download the current CSV, edit it, upload it back</span>
-        </div>
-
-        <div className="qs-panel-actions">
-          <button className="btn-secondary" onClick={handleDownload}>
-            <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" />{' '}
-            Download CSV
-          </button>
-
-          <div className="file-input-wrapper qs-replace-input">
-            <input
-              type="file"
-              id="replace-questions-file"
-              accept=".csv"
-              ref={replaceInputRef}
-              onChange={handleReplaceFileSelect}
-              className="file-input"
-            />
-            <label htmlFor="replace-questions-file" className="file-input-label">
-              {replaceFile ? replaceFile.name : 'Choose a replacement CSV...'}
-            </label>
-          </div>
-        </div>
-
-        {preview && (
-          <div className="qs-replace-preview">
-            <h4>
-              <Icon name="Info" weight="bold" size={16} color="var(--primary)" />{' '}
-              Before you replace
-            </h4>
-            <ul className="qs-preview-lines">
-              {describeReplacePlan(currentSet, preview, plannedVersion).map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-            {preview.categories && preview.categories.length > 0 && (
-              <p className="qs-preview-categories">
-                <strong>Categories in the new file:</strong> {preview.categories.join(', ')}
-              </p>
-            )}
-            <div className="qs-panel-actions">
-              <button className="btn-primary" onClick={handleReplace} disabled={isReplacing}>
-                <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" />{' '}
-                {isReplacing
-                  ? 'Uploading...'
-                  : `Replace questions with ${preview.fileName}`}
-              </button>
-              <button
-                className="btn-secondary"
-                onClick={() => {
-                  setPreview(null);
-                  setReplaceFile(null);
-                  if (replaceInputRef.current) replaceInputRef.current.value = '';
-                  setReplaceStatus({ text: '', tone: '' });
-                }}
-                disabled={isReplacing}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
-        {replaceStatus.text && (
-          <StatusMessage message={replaceStatus.text} tone={replaceStatus.tone} />
-        )}
-      </section>
+      {/* ================================================ 2. QUESTIONS ===
+        The working copy: add, edit, delete, reorder, pull from another set,
+        then ONE Save = one replace = one version. It owns the download and the
+        replace-from-a-file controls too, because a file replace and an unsaved
+        working copy are two writers of the same rows and only a panel that
+        holds both can say so. See components/QuestionsPanel.jsx.
+      */}
+      <QuestionsPanel
+        questionSet={currentSet}
+        availableSets={availableSets}
+        plannedVersion={plannedVersion}
+        onChanged={async () => { await loadVersions(); if (onChanged) onChanged(); }}
+        onDirtyChange={setQuestionsDirty}
+      />
 
       {/* ================================================= 3. VERSIONS === */}
       <section className="qs-panel">
@@ -854,6 +666,32 @@ export default function QuestionSetEditor({
           column of the set's CSV.
         </p>
       </section>
+
+      {/* Closing with an unsaved working copy. The Questions panel holds edits
+          that exist nowhere but this browser tab, so closing the editor is the
+          one click that can silently destroy an afternoon's work. */}
+      {confirmClose && (
+        <div className="modal-overlay" onClick={() => setConfirmClose(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>
+              <Icon name="Warning" weight="fill" size={16} color="var(--primary)" />{' '}
+              You have unsaved questions
+            </h3>
+            <p>
+              The Questions panel has changes that have not been saved. Closing the editor
+              throws them away — there is no draft kept anywhere.
+            </p>
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setConfirmClose(false)}>
+                Go back and save them
+              </button>
+              <button className="btn-danger" onClick={() => { setConfirmClose(false); if (onCancel) onCancel(); }}>
+                Close and lose the changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Pinned-game delete confirmation. The ids matter: "some games are using
           this" is not enough information to decide with. */}

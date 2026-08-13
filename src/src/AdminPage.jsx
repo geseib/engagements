@@ -859,6 +859,10 @@ function AdminPage() {
             questionSet={editingSet}
             availablePrompts={availablePrompts}
             availablePersonas={availablePersonas}
+            // Every set the caller can see, for the Questions panel's
+            // "pull from another set" picker. Already loaded for the list, so
+            // the picker costs no request of its own.
+            availableSets={questionSets}
             defaultInstructions={defaultInstructions}
             onSaved={handleEditorSaved}
             onChanged={fetchQuestionSets}

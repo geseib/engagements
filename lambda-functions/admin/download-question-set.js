@@ -157,17 +157,29 @@ exports.handler = async (event) => {
       // defect the round trip was just repaired for, so these two are wired on
       // BOTH sides in the same change and asserted in
       // tests/question-set-roundtrip.js.
+      //
+      // SourceSetId / SourceQuestionSk join them on the same terms. They are
+      // PROVENANCE, never identity (decision 2): stamped when a question is
+      // copied out of another set, read by nothing, propagated to nothing. They
+      // are emitted here for one reason — a column the importer reads and this
+      // file does not emit is destroyed by the next replace, in silence, which
+      // is precisely the defect this block was rewritten to end.
       const carriesImages = questions.some(q => String(q.Image || q.image || '').trim());
       const carriesAnswerDetails = questions.some(q => String(q.AnswerDetails || q.answerDetails || '').trim());
       const carriesRoundKind = questions.some(q => String(q.RoundKind || q.roundKind || '').trim());
       const carriesAttribution = questions.some(q => String(q.SourceAttribution || q.sourceAttribution || '').trim());
+      const carriesSourceSet = questions.some(q => String(q.SourceSetId || q.sourceSetId || '').trim());
+      const carriesSourceSk = questions.some(q => String(q.SourceQuestionSk || q.sourceQuestionSk || '').trim());
       const optionalHeader = (carriesAnswerDetails ? ',AnswerDetails' : '') + (carriesImages ? ',Image' : '')
-        + (carriesRoundKind ? ',RoundKind' : '') + (carriesAttribution ? ',SourceAttribution' : '');
+        + (carriesRoundKind ? ',RoundKind' : '') + (carriesAttribution ? ',SourceAttribution' : '')
+        + (carriesSourceSet ? ',SourceSetId' : '') + (carriesSourceSk ? ',SourceQuestionSk' : '');
       const optionalCells = (q) =>
         (carriesAnswerDetails ? `,"${esc(q.AnswerDetails || q.answerDetails)}"` : '')
         + (carriesImages ? `,"${esc(q.Image || q.image)}"` : '')
         + (carriesRoundKind ? `,"${esc(q.RoundKind || q.roundKind)}"` : '')
-        + (carriesAttribution ? `,"${esc(q.SourceAttribution || q.sourceAttribution)}"` : '');
+        + (carriesAttribution ? `,"${esc(q.SourceAttribution || q.sourceAttribution)}"` : '')
+        + (carriesSourceSet ? `,"${esc(q.SourceSetId || q.sourceSetId)}"` : '')
+        + (carriesSourceSk ? `,"${esc(q.SourceQuestionSk || q.sourceQuestionSk)}"` : '');
 
       if (engagementType === 'trivia') {
         // OptionA..OptionF, which is what the importer reads and what every

@@ -151,6 +151,25 @@ process.env.TABLE_NAME = TABLE;
 
 const upload = require(path.join(REPO, 'lambda-functions', 'admin', 'upload-questions.js')).handler;
 const download = require(path.join(REPO, 'lambda-functions', 'admin', 'download-question-set.js')).handler;
+// The read the CONSOLE EDITOR loads its working copy from. Unauthenticated by
+// design (template-clean.yaml has no Auth block on it and two callers use bare
+// fetch), so the editor and the copy-from-another-set picker both use it.
+const getQuestions = require(path.join(REPO, 'lambda-functions', 'admin', 'get-question-set-questions.js')).handler;
+
+/**
+ * THE EDITOR'S SERIALISER — the real one, not a copy of it.
+ *
+ * `src/src/utils/questionRows.js` is CommonJS precisely so this file can
+ * require the module the browser ships. Slice 4 adds a SECOND writer of this
+ * CSV (the console's Save, alongside download-question-set.js), and a second
+ * writer is a second chance to reintroduce the defect this whole file exists
+ * for. So it is held to the same contract, in process, against the real
+ * handlers — not reviewed by eye.
+ */
+const {
+  editableRows, rowsToCsv, blankRow, copiedRow, moveRow,
+  summarizeRowChanges, versionNote, rowProblems,
+} = require(path.join(REPO, 'src', 'src', 'utils', 'questionRows.js'));
 
 if (!process.env.DEBUG) console.log = () => {};
 const say = (...a) => process.stdout.write(a.join(' ') + '\n');
@@ -495,6 +514,342 @@ const WAVELENGTH_CSV = [
     const secondCsv = parse(again).content;
     check('exporting the re-imported set yields byte-identical CSV', () =>
       assert.strictEqual(secondCsv, first.csv));
+  }
+
+  // ==== the console editor's working copy ==================================
+  //
+  // Slice 4: add, edit, delete, reorder and copy-from-another-set, all against
+  // a working copy in the browser, saved as ONE replace. The working copy is
+  // loaded from get-question-set-questions.js and serialised by
+  // src/src/utils/questionRows.js — so the loop under test here is
+  //
+  //     importer -> questions endpoint -> editableRows -> rowsToCsv -> importer
+  //
+  // with every handler being the real one. A question the editor did not touch
+  // must come out the far end field for field identical, or "I fixed one typo"
+  // is once again "I lost every answer in the set".
+  say('\n  -- the console editor: working copy -> CSV -> replace --');
+
+  /** The editor's load: the real endpoint, then the real row mapper. */
+  async function workingCopy(setId) {
+    const res = await getQuestions({ pathParameters: { setId }, queryStringParameters: {} });
+    assert.strictEqual(res.statusCode, 200, `questions read failed: ${res.body}`);
+    return editableRows(JSON.parse(res.body));
+  }
+
+  /** The editor's Save: one replace, one version, carrying the version note. */
+  async function saveWorkingCopy(setId, rows, engagementType, baselineOrder, extra = {}) {
+    const summary = summarizeRowChanges(rows, baselineOrder);
+    const res = await upload({
+      ...adminContext(),
+      body: JSON.stringify({
+        replaceSetId: setId,
+        fileName: 'console-edit.csv',
+        fileContent: rowsToCsv(rows, engagementType, { renumber: summary.reordered }),
+        engagementType,
+        versionNote: versionNote(summary),
+        ...extra,
+      }),
+    });
+    assert.strictEqual(res.statusCode, 200, `console save failed: ${res.body}`);
+    const version = parse(res).version;
+    return { version, rows: rowsIn(`SET#${setId}#v${version}`), summary };
+  }
+
+  resetDb();
+  {
+    const t = await roundTrip('Console Trivia', 'trivia', TRIVIA_CSV);
+    const rows = await workingCopy(t.setId);
+
+    // rejects: a working copy sorted the way the endpoint returns it. That
+    // endpoint sorts on `sortOrder`, which NO writer sets, so every set comes
+    // back alphabetically by title — WHICH ALBUM before WHO SANG IT. Saving
+    // that order would silently reorder somebody's set on a save that was only
+    // meant to fix a typo.
+    check('the working copy is in set order, not the endpoint\'s alphabetical order', () =>
+      assert.deepStrictEqual(rows.map((r) => r.title),
+        ['WHO SANG IT', 'WHICH ALBUM', 'WHICH DIRECTOR']));
+
+    // rejects: ANY divergence between the console's serialiser and the
+    // exporter — a renamed column, a dropped conditional column, different
+    // quoting, a different default for Difficulty. The importer matches column
+    // names EXACTLY and has no fallback for an option column, so a serialiser
+    // that is merely "close" destroys answers in silence. This is the single
+    // assertion that keeps the second writer honest.
+    check('the console serialises byte-identically to download-question-set.js', () =>
+      assert.strictEqual(rowsToCsv(rows, 'trivia'), t.csv));
+
+    // rejects: a save that sends the whole form, or one that renumbers, or one
+    // that drops a field the editor does not render. An untouched Save is a new
+    // version of exactly the same questions.
+    const untouched = await saveWorkingCopy(t.setId, rows, 'trivia', rows.map((r) => r.uid));
+    check('saving an untouched working copy changes no question at all', () =>
+      assertSameQuestions(t.after, untouched.rows));
+
+    // rejects: `versions[].note` staying '' on every entry, which is what made
+    // the version list four identical rows and a rollback a guess.
+    check('the version records what the save actually did', () => {
+      const meta = store.get(`SETS|SET#${t.setId}`);
+      const entry = meta.versions[meta.versions.length - 1];
+      assert.strictEqual(entry.version, untouched.version);
+      assert.match(entry.note, /no changes/i);
+    });
+  }
+
+  resetDb();
+  {
+    const t = await roundTrip('Console Edits', 'trivia', TRIVIA_CSV);
+    const rows = await workingCopy(t.setId);
+    const baseline = rows.map((r) => r.uid);
+
+    // Delete one, edit one, add one — the three operations, in one Save.
+    let next = rows.map((r) => (r.title === 'WHICH ALBUM' ? { ...r, removed: true } : r));
+    next = next.map((r) => (r.title === 'WHO SANG IT'
+      ? { ...r, title: 'WHO REALLY SANG IT', edited: true }
+      : r));
+    next = [...next, {
+      ...blankRow(),
+      category: 'Film',
+      title: 'WHICH SCORE',
+      detail: 'Synths, mostly.',
+      optionA: 'Vangelis', optionB: 'Zimmer', optionC: 'Williams', optionD: 'Elfman',
+      correctAnswer: 'OptionA', difficulty: 'hard', tags: ['80s', 'score'],
+    }];
+
+    const saved = await saveWorkingCopy(t.setId, next, 'trivia', baseline);
+
+    // rejects: a Save that fires one request per edit. Three operations, one
+    // version — that is decision 3's whole point, and it is what makes the
+    // version list readable instead of a per-keystroke log.
+    check('add + edit + delete land as ONE new version', () => {
+      const meta = store.get(`SETS|SET#${t.setId}`);
+      assert.strictEqual(saved.version, 3, `expected v3, got v${saved.version}`);
+      assert.strictEqual(meta.activeVersion, 3);
+      assert.strictEqual(meta.versions.length, 3);
+    });
+
+    check('the deleted question is gone and the other two survive', () => {
+      const titles = saved.rows.map((r) => r.Title).sort();
+      assert.deepStrictEqual(titles, ['WHICH DIRECTOR', 'WHICH SCORE', 'WHO REALLY SANG IT']);
+    });
+
+    // rejects: an edit that writes the title and quietly drops everything the
+    // editor does not render — options E and F, the reveal, the tags. The row
+    // the editor holds is the WHOLE question, not the fields on screen.
+    check('the edited question keeps every field the form never showed', () => {
+      const edited = saved.rows.find((r) => r.Title === 'WHO REALLY SANG IT');
+      const before = t.after.find((r) => r.Title === 'WHO SANG IT');
+      const { Title, PK, ...rest } = edited;
+      const { Title: _t, PK: _p, ...restBefore } = before;
+      assert.deepStrictEqual(rest, restBefore);
+    });
+
+    check('the added question arrives complete', () => {
+      const added = saved.rows.find((r) => r.Title === 'WHICH SCORE');
+      assert.strictEqual(added.optionA, 'Vangelis');
+      assert.strictEqual(added.correctAnswer, 'OptionA');
+      assert.strictEqual(added.difficulty, 'hard');
+      assert.deepStrictEqual(added.Tags, ['80s', 'score']);
+    });
+
+    check('the version note says what changed', () => {
+      const meta = store.get(`SETS|SET#${t.setId}`);
+      const note = meta.versions[meta.versions.length - 1].note;
+      assert.match(note, /1 added/);
+      assert.match(note, /1 edited/);
+      assert.match(note, /1 removed/);
+    });
+
+    // rejects: a validation gate that only checks the server's answer. The
+    // importer SKIPS a row with no Category or Title — 200, cheerful message,
+    // silently one question short — so the editor has to refuse it first.
+    check('a half-filled row is refused before it can be silently skipped', () => {
+      const problems = rowProblems({ ...blankRow(), title: 'NO CATEGORY' }, 'trivia');
+      assert.ok(problems.some((p) => /category/i.test(p)), problems.join('; '));
+    });
+  }
+
+  // ==== reordering =========================================================
+  resetDb();
+  {
+    const t = await roundTrip('Console Order', 'call-and-answer', ROUND_KIND_CSV);
+    const rows = await workingCopy(t.setId);
+    const baseline = rows.map((r) => r.uid);
+
+    // Two questions in one category, so a move is visible in the stored keys.
+    const twoInOne = rows.map((r) => ({ ...r, category: 'Opening' }));
+    const moved = moveRow(twoInOne, twoInOne[3].uid, -3);
+    const saved = await saveWorkingCopy(t.setId, moved, 'call-and-answer', baseline);
+
+    // rejects: dropping `reordered` from the change summary, which would leave
+    // Save disabled after a move — the owner drags a row, nothing happens, and
+    // the move is lost on close.
+    check('a reorder counts as an unsaved change', () =>
+      assert.strictEqual(summarizeRowChanges(moved, baseline).reordered, true));
+
+    check('the new order is the stored order', () =>
+      assert.deepStrictEqual(saved.rows.map((r) => r.Title),
+        ['IS THE RELEASE NOTE READY', 'WHAT WENT WRONG LAST QUARTER',
+          'THE PRE-MORTEM RULE', 'THE ON-CALL PARAGRAPH']));
+
+    // rejects: emitting the STORED Question# after a reorder. The numbers would
+    // then read 4,1,2,3 down a list the owner just put in order — the attribute
+    // is only ever a label, and a label that contradicts the order it labels is
+    // worse than no label.
+    check('question numbers are rewritten to match the new order', () =>
+      assert.deepStrictEqual(saved.rows.map((r) => r.QuestionNumber), [1, 2, 3, 4]));
+  }
+
+  // ==== copying a question out of another set ==============================
+  //
+  // The owner's idea: the add-question button offers to pull from another set.
+  // A pulled question is a COPY (decision 2) — new keys, no link, no
+  // propagation — carrying provenance that is read by nothing.
+  say('\n  -- pulling a question from another set --');
+  resetDb();
+  {
+    const target = await roundTrip('Console Target', 'call-and-answer', ART_CSV);
+    const source = await roundTrip('Console Source', 'call-and-answer', ROUND_KIND_CSV);
+
+    const targetRows = await workingCopy(target.setId);
+    const baseline = targetRows.map((r) => r.uid);
+    const sourceRows = await workingCopy(source.setId);
+    const pulled = sourceRows.filter((r) => r.title === 'THE PRE-MORTEM RULE')
+      .map((r) => copiedRow(r, source.setId, r.sk));
+
+    const saved = await saveWorkingCopy(target.setId, [...targetRows, ...pulled], 'call-and-answer', baseline);
+    const landed = saved.rows.find((r) => r.Title === 'THE PRE-MORTEM RULE');
+
+    // rejects: a copy that carries the title and loses the material. An Apply
+    // question IS its detail and its attribution; a copy without them is a
+    // prompt about nothing.
+    check('the pulled question arrives with its material, direction and attribution', () => {
+      assert.ok(landed, `not copied: ${saved.rows.map((r) => r.Title).join(', ')}`);
+      assert.match(landed.Detail, /writes the failure report/);
+      assert.strictEqual(landed.RoundKind, 'apply');
+      assert.strictEqual(landed.SourceAttribution, 'Gary Klein, Performing a Project Premortem');
+      assert.deepStrictEqual(landed.Tags, ['planning', 'foreign']);
+    });
+
+    // rejects: reusing the source's identity. A shared key would put the copy
+    // in the source set's partition — or, worse, make an edit here rewrite what
+    // a game pinned to the source set is already playing.
+    check('the copy has its own key in the target set, not the source\'s', () => {
+      assert.strictEqual(landed.PK, `SET#${target.setId}#v${saved.version}`);
+      assert.notStrictEqual(landed.SK, 'QUESTION#c002#001');
+    });
+
+    // rejects: provenance columns the importer does not read — which is the
+    // WrongAnswer* defect on a sixth and seventh column. Stamped once, then
+    // destroyed by the next replace, is worse than never stamped.
+    check('provenance is stamped, and it names the source set and row', () => {
+      assert.strictEqual(landed.SourceSetId, source.setId);
+      assert.strictEqual(landed.SourceQuestionSk, 'c002#001');
+    });
+
+    const again = await download({ pathParameters: { setId: target.setId }, queryStringParameters: {} });
+    const rebounced = await upload({
+      ...adminContext(),
+      body: JSON.stringify({ replaceSetId: target.setId, fileName: 'again.csv', fileContent: parse(again).content }),
+    });
+    check('provenance survives a further export and re-import', () => {
+      assert.strictEqual(rebounced.statusCode, 200, rebounced.body);
+      const after = rowsIn(`SET#${target.setId}#v${parse(rebounced).version}`);
+      const still = after.find((r) => r.Title === 'THE PRE-MORTEM RULE');
+      assert.strictEqual(still.SourceSetId, source.setId);
+      assert.strictEqual(still.SourceQuestionSk, 'c002#001');
+    });
+
+    // rejects: propagation of any kind. The whole cost of decision 2 is that a
+    // question living in two sets is fixed twice; the whole benefit is that
+    // nothing an editor does here can reach into a set it does not own.
+    check('the source set is untouched by the copy', () => {
+      const sourceMeta = store.get(`SETS|SET#${source.setId}`);
+      assert.strictEqual(sourceMeta.activeVersion, 2);
+      assert.strictEqual(sourceMeta.versions.length, 2);
+      assert.strictEqual(rowsIn(`SET#${source.setId}#v2`).length, 4);
+    });
+  }
+
+  // ==== forking: saving a set you do not own ===============================
+  //
+  // The owner's ruling: editing a set you do not own is allowed, and on SAVE it
+  // becomes YOUR copy. The client chooses WHICH set to write; it does not get
+  // to relax WHO may write where. So the fork is a plain create — the same code
+  // path as building a subset out of pulled questions — and a host who
+  // hand-crafts a replace against somebody else's set is still refused.
+  say('\n  -- fork on save, and the refusal that makes it necessary --');
+  resetDb();
+  {
+    const hostContext = (sub) => ({
+      requestContext: {
+        authorizer: { lambda: { username: `host-${sub}`, userId: sub, groups: 'hosts', status: 'enabled' } },
+      },
+    });
+
+    // An admin's set. Every set that predates ownership reads as admin-owned,
+    // so this is also the shape of all ~41 existing ones.
+    const original = await roundTrip('House Set', 'call-and-answer', ROUND_KIND_CSV);
+    const rows = await workingCopy(original.setId);
+
+    // rejects: moving the ownership decision into the console. A hidden button
+    // is not a permission; the handler is. If this ever returns 200 the fork is
+    // decoration and a host can add a version to a set they cannot manage.
+    const refused = await upload({
+      ...hostContext('sub-bo'),
+      body: JSON.stringify({
+        replaceSetId: original.setId,
+        fileName: 'sneaky.csv',
+        fileContent: rowsToCsv(rows, 'call-and-answer'),
+      }),
+    });
+    check('a host replacing a set they do not own is still refused', () => {
+      assert.strictEqual(refused.statusCode, 403, refused.body);
+      assert.match(parse(refused).error, /belongs to someone else/i);
+    });
+
+    // The fork: one create, seeded from the same working copy. No replaceSetId,
+    // so nothing about the original is read for writing and nothing is flipped.
+    const forked = await upload({
+      ...hostContext('sub-bo'),
+      body: JSON.stringify({
+        fileName: 'fork.csv',
+        fileContent: rowsToCsv(rows.map((r) => ({
+          ...r, sourceSetId: original.setId, sourceQuestionSk: r.sk,
+        })), 'call-and-answer'),
+        customTitle: 'House Set, adapted by Bo',
+        customDescription: 'Adapted from "House Set".',
+        sourceSetId: original.setId,
+        engagementType: 'call-and-answer',
+      }),
+    });
+    check('the fork creates a new set owned by the person who forked it', () => {
+      assert.strictEqual(forked.statusCode, 200, forked.body);
+      const meta = store.get(`SETS|SET#${parse(forked).setId}`);
+      assert.strictEqual(meta.createdBy, 'sub-bo');
+      assert.strictEqual(meta.sourceSetId, original.setId);
+      assert.strictEqual(meta.questionCount, 4);
+    });
+
+    // rejects: a fork that writes anything at all into the original — a
+    // version, a flip, a row. "Not touched at all" is the promise.
+    check('the original set is byte-for-byte what it was', () => {
+      const meta = store.get(`SETS|SET#${original.setId}`);
+      assert.strictEqual(meta.activeVersion, 2);
+      assert.strictEqual(meta.versions.length, 2);
+      assert.strictEqual(meta.createdBy, 'sub-ada');
+      assertSameQuestions(original.after, rowsIn(`SET#${original.setId}#v2`));
+    });
+
+    // rejects: a fork whose questions came out different from the original's.
+    // It is the same working copy through the same serialiser, so the rows must
+    // match field for field apart from the provenance stamp.
+    check('the forked set carries the same questions, with provenance', () => {
+      const forkedRows = rowsIn(`SET#${parse(forked).setId}`);
+      assert.deepStrictEqual(forkedRows.map((r) => r.Title), original.after.map((r) => r.Title));
+      assert.ok(forkedRows.every((r) => r.SourceSetId === original.setId),
+        'a forked row lost its provenance');
+    });
   }
 
   say(`\n${pass} passed, ${fail} failed`);
