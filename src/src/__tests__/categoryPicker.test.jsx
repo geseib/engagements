@@ -72,6 +72,29 @@ describe('type to filter', () => {
     row('Risk', 'r1'),
   ];
 
+  test('typing a name filters but does NOT commit it', () => {
+    // rejects: treating the filter box as a free-text category field. That is
+    // the behaviour being removed: a name that differed by one character minted
+    // a category on a fresh host-mask bit position, and nothing refused the
+    // 25th. Typing has to stay inert until the owner picks or creates.
+    const onChange = jest.fn();
+    render(<Harness rows={rows} onChange={onChange} />);
+    openList();
+    fireEvent.change(combobox(), { target: { value: 'Strategyy' } });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test('emptying the box clears the choice', () => {
+    // rejects: a category that can be set and never unset. Typing is inert (see
+    // above), so without this branch the only way out of a chosen category is
+    // another category — and the required-category check downstream becomes
+    // unreachable on every set whose add-form seed is non-empty.
+    const onChange = jest.fn();
+    render(<Harness rows={rows} initial="Strategy" onChange={onChange} />);
+    fireEvent.change(combobox(), { target: { value: '' } });
+    expect(onChange).toHaveBeenCalledWith('');
+  });
+
   test('typing narrows the list to the categories that match', () => {
     // rejects: rendering every category regardless of what was typed. That is
     // the `<select>` the design note rejected wearing an input's clothes — at

@@ -3,6 +3,7 @@ import Icon from './Icon';
 import Modal from './Modal';
 import StatusMessage from './StatusMessage';
 import QuestionPullDialog from './QuestionPullDialog';
+import CategoryPicker from './CategoryPicker';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType } from '../config/gameTypes';
 import { ROUND_KIND_IDS, ROUND_KINDS, roundKindApplies } from '../config/roundKinds';
@@ -1015,6 +1016,7 @@ export default function QuestionsPanel({
             onKeepEditing={() => setConfirmDropDraft(false)}
             onDropDraft={closeForm}
             isAdding={isAdding}
+            rows={rows}
             siblings={siblings}
             siblingCategory={draftCategory}
             ai={{
@@ -1190,6 +1192,7 @@ function QuestionForm({
   onKeepEditing,
   onDropDraft,
   isAdding = false,
+  rows = [],
   siblings = [],
   siblingCategory = '',
   ai,
@@ -1202,7 +1205,25 @@ function QuestionForm({
       <div className="qs-form-grid">
         <div className="form-group">
           <label htmlFor={id('category')}>Category *</label>
-          <input id={id('category')} className="form-input" value={draft.category} onChange={set('category')} />
+          {/*
+            NOT a free-text input any more. Typing here used to mint a category
+            on a fresh host-mask bit position the moment it differed by a
+            character, and nothing anywhere refused the 25th — the one past the
+            three eight-bit masks, which no host can ever toggle. The picker
+            filters what exists, counts it from the working copy, and makes
+            creating a category a deliberate act that can be refused.
+
+            `insertIndex` is left unset on purpose: the add flow appends, which
+            is the placement that moves nobody, so the reindex warning is
+            correctly silent. It becomes load-bearing the day placement is
+            something the author chooses.
+          */}
+          <CategoryPicker
+            id={id('category')}
+            rows={rows}
+            value={draft.category}
+            onChange={(name) => onChange({ ...draft, category: name })}
+          />
         </div>
         <div className="form-group">
           <label htmlFor={id('title')}>Title *</label>

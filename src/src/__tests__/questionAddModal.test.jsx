@@ -180,6 +180,28 @@ const editQuestion = async (title) => {
   return screen.findByRole('dialog');
 };
 
+/**
+ * Set the category the way the picker requires. Typing into it only FILTERS —
+ * free text used to mint a category on a fresh host-mask bit the moment it
+ * differed by a character — so committing is either picking one that exists or
+ * creating one on purpose, which is where the 24 cap gets its chance to refuse.
+ * Emptying the box still clears the choice.
+ */
+const chooseCategory = (name) => {
+  const box = screen.getByLabelText('Category *');
+  fireEvent.click(box);
+  fireEvent.change(box, { target: { value: name } });
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const existing = screen.queryByRole('option', { name: new RegExp(`^${escaped} · `) });
+  if (existing) {
+    fireEvent.click(existing);
+    return;
+  }
+  fireEvent.click(screen.getByRole('option', { name: /\+ New category/ }));
+  fireEvent.change(screen.getByLabelText('New category name'), { target: { value: name } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add category' }));
+};
+
 /* ------------------------------------------------------------ the container */
 
 describe('the container the form lives in', () => {
@@ -408,7 +430,7 @@ describe('writing alongside these', () => {
     await addQuestion();
 
     // Seeded from the last row's category — Delivery, which holds only itself.
-    fireEvent.change(screen.getByLabelText('Category *'), { target: { value: 'Brand New' } });
+    chooseCategory('Brand New');
     expect(screen.queryAllByTestId('sibling')).toHaveLength(0);
     expect(screen.getByText(/Nothing else in .Brand New. yet/i)).toBeInTheDocument();
 
@@ -476,7 +498,7 @@ describe('drafting a question with AI', () => {
     renderPanel();
     await ready();
     await addQuestion();
-    fireEvent.change(screen.getByLabelText('Category *'), { target: { value: 'Retro' } });
+    chooseCategory('Retro');
     await draftWithAi('one about the estimate');
 
     const body = aiPosts[0];

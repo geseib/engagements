@@ -375,10 +375,17 @@ export default function CategoryPicker({
         }
         value={filterText === null ? value : filterText}
         onChange={(event) => {
-          setFilterText(event.target.value);
+          const next = event.target.value;
+          setFilterText(next);
           setActiveIndex(0);
           setOpen(true);
           setCreating(false);
+          // EMPTYING THE BOX CLEARS THE CHOICE. Typing a name only filters —
+          // free text minting a category on a fresh host-mask bit is the bug
+          // this control exists to stop — but without this branch a category,
+          // once set, could never be unset, and the required-field check
+          // downstream would be unreachable on any set whose seed is non-empty.
+          if (next === '' && value !== '' && onChange) onChange('');
         }}
         onKeyDown={onInputKeyDown}
         onClick={() => setOpen(true)}
