@@ -296,4 +296,54 @@ describe('the set-level round direction', () => {
     expect(captured.body.roundKind).toBe('improve');
     expect(captured.body.roundKindBrief).toBe('');
   });
+
+  // THE REPORTED BUG: Business Concepts in engagedev is isAIGenerated:true AND
+  // active:true, and the editor told it "is currently inactive … activate it
+  // when ready". The banner rendered on the AI flag alone while its copy
+  // hardcoded the inactive claim, so a live set asked to be switched on.
+  describe('the AI banner', () => {
+    // rejects: hardcoding the inactive sentence again, or gating the whole
+    //          banner on `isAIGenerated` without consulting `active`.
+    it('does not tell an ACTIVE set that it is inactive', async () => {
+      mockApi();
+      render(<QuestionSetEditor
+        questionSet={{ ...SET, isAIGenerated: true, active: true }}
+        onSaved={jest.fn()} onChanged={jest.fn()} onCancel={jest.fn()} />);
+      expect(await screen.findByText(/written by ai/i)).toBeInTheDocument();
+      expect(screen.queryByText(/currently inactive/i)).toBeNull();
+      expect(screen.queryByText(/activate it when ready/i)).toBeNull();
+    });
+
+    // rejects: dropping the provenance note once the set goes active — the
+    //          owner wants AI authorship shown either way.
+    it('still says it was written by AI when active', async () => {
+      mockApi();
+      render(<QuestionSetEditor
+        questionSet={{ ...SET, isAIGenerated: true, active: true }}
+        onSaved={jest.fn()} onChanged={jest.fn()} onCancel={jest.fn()} />);
+      expect(await screen.findByText(/written by ai/i)).toBeInTheDocument();
+    });
+
+    // rejects: losing the real call to action on a set that genuinely needs it.
+    it('keeps the review prompt while the set is INACTIVE', async () => {
+      mockApi();
+      render(<QuestionSetEditor
+        questionSet={{ ...SET, isAIGenerated: true, active: false }}
+        onSaved={jest.fn()} onChanged={jest.fn()} onCancel={jest.fn()} />);
+      expect(await screen.findByText(/review required/i)).toBeInTheDocument();
+      expect(screen.getByText(/currently inactive/i)).toBeInTheDocument();
+    });
+
+    // rejects: showing an AI banner on a human-authored set.
+    it('shows nothing for a set that was not AI-written', async () => {
+      mockApi();
+      render(<QuestionSetEditor
+        questionSet={{ ...SET, active: true }}
+        onSaved={jest.fn()} onChanged={jest.fn()} onCancel={jest.fn()} />);
+      await screen.findByTestId('version-3'); // editor has settled
+      expect(screen.queryByText(/written by ai/i)).toBeNull();
+      expect(screen.queryByText(/review required/i)).toBeNull();
+    });
+  });
+
 });

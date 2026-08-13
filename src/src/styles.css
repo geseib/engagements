@@ -5324,6 +5324,14 @@ body {
   animation: subtle-glow 3s infinite;
 }
 
+/* The set is AI-written AND already active: provenance, not a task. It keeps
+   the badge and loses the pulse, because an animation that never stops is a
+   request for attention, and nothing here is being asked of anybody. */
+.ai-review-banner--noted {
+  animation: none;
+  background: var(--surface);
+}
+
 .ai-review-content {
   display: flex;
   align-items: flex-start;

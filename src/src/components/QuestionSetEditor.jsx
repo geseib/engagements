@@ -304,19 +304,40 @@ export default function QuestionSetEditor({
         {activeVersion != null && <> · active version {activeVersion}</>}
       </p>
 
-      {/* AI-Generated Content Warning */}
+      {/*
+        AI PROVENANCE, AND — SEPARATELY — WHETHER ANYTHING IS ASKED OF YOU.
+        These are two different facts and the banner used to conflate them: it
+        rendered on `isAIGenerated` alone while the copy hardcoded "is currently
+        inactive … activate it when ready". Business Concepts in engagedev is
+        `isAIGenerated: true, active: true`, so a live set was telling its editor
+        it was switched off and asking to be switched on. Being AI-written is
+        worth saying permanently; needing activation is only worth saying while
+        it is true.
+      */}
       {currentSet.isAIGenerated && (
-        <div className="ai-review-banner">
+        <div className={`ai-review-banner${currentSet.active ? ' ai-review-banner--noted' : ''}`}>
           <div className="ai-review-content">
             <span className="ai-review-icon">
               <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" />
             </span>
             <div className="ai-review-text">
-              <strong>AI-Generated Content - Review Required</strong>
-              <p>
-                This question set was created by AI and is currently inactive. Please review and
-                edit the content, then activate it when ready.
-              </p>
+              {currentSet.active ? (
+                <>
+                  <strong>Written by AI</strong>
+                  <p>
+                    This question set was generated, then activated. Edits you make here are
+                    live for anyone hosting from it.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <strong>AI-Generated Content - Review Required</strong>
+                  <p>
+                    This question set was created by AI and is currently inactive. Please review and
+                    edit the content, then activate it when ready.
+                  </p>
+                </>
+              )}
             </div>
           </div>
         </div>
