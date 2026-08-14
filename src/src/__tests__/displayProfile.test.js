@@ -10,7 +10,7 @@
  */
 import {
   PROFILES, DEFAULT_PROFILE, FLOORS,
-  profileClass, autoProfile, loadProfile, saveProfile,
+  profileClass, autoProfile, loadProfile, saveProfile, toggleBigScreen,
 } from '../config/displayProfile';
 
 /** A localStorage stand-in. jsdom provides one, but an explicit fake keeps
@@ -106,5 +106,54 @@ describe('persistence', () => {
     };
     expect(() => saveProfile(hostile, 'tv')).not.toThrow();
     expect(loadProfile(hostile, 1920)).toBe('room');
+  });
+});
+
+/*
+ * THE REMOTE'S BIG-SCREEN BUTTON, WHICH DID NOTHING FOR THE WHOLE OF THIS
+ * MODULE'S EXISTENCE.
+ *
+ * This file replaced a `bigScreenMode` boolean with four profiles and its
+ * header says so. GameHostPage's remote-command handler was not updated: it
+ * kept calling `setBigScreenMode`, a binding that no longer existed, so
+ * TOGGLE_BIG_SCREEN threw a ReferenceError and the projector never changed.
+ * Nothing caught it — there is no ESLint in this project, and that handler sits
+ * in the one file jsdom cannot mount. (`__tests__/undeclaredSetters.test.js`
+ * now catches the class.)
+ */
+describe('toggling the big screen from the remote', () => {
+  // rejects: a toggle that only goes one way, which is the same dead button
+  //          with an extra step — the host presses it twice and the room is
+  //          stuck on TV.
+  test('it goes to TV and back again', () => {
+    expect(toggleBigScreen('room', 1920)).toBe('tv');
+    expect(toggleBigScreen('tv', 1920)).toBe('room');
+  });
+
+  // rejects: hardcoding 'room' as the way back. A host on a laptop who toggles
+  //          TV on and off must land on `table`, not on a projector ladder that
+  //          over-serves an eye three feet away.
+  test('turning it off returns to what the viewport implies, not a constant', () => {
+    expect(toggleBigScreen('tv', 1280)).toBe('table');
+    expect(toggleBigScreen('tv', 1920)).toBe('room');
+  });
+
+  // rejects: cycling all four. Room and Call are undetectable in principle and
+  //          are Console choices; a button that walks through them leaves the
+  //          host pressing until the room looks right.
+  test('it never lands on a profile the remote cannot mean', () => {
+    for (const from of [...PROFILES, undefined, 'banana']) {
+      expect(['tv', 'room', 'table']).toContain(toggleBigScreen(from, 1920));
+    }
+  });
+
+  // rejects: returning something that is not a profile, which saveProfile would
+  //          silently refuse to persist — losing the presentation state on the
+  //          next reload, in front of a room.
+  test('every result is a real profile', () => {
+    for (const from of [...PROFILES, undefined, null, 'banana']) {
+      expect(PROFILES).toContain(toggleBigScreen(from, 1920));
+      expect(PROFILES).toContain(toggleBigScreen(from, NaN));
+    }
   });
 });

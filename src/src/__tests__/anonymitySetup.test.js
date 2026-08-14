@@ -8,7 +8,7 @@
  */
 import { hostRunsVotePhase } from '../config/hostControls';
 import {
-  anonymityApplies, anonymityActive, createPayloadFor, displayLabelFor, isRedacted, standingsVisible,
+  anonymityApplies, anonymityActive, authorsHiddenNow, createPayloadFor, displayLabelFor, isRedacted, standingsVisible,
 } from '../config/anonymity';
 
 describe('which formats offer anonymous responses', () => {
@@ -113,6 +113,76 @@ describe('standings before the reveal', () => {
     expect(standingsVisible({
       gameType: 'call-and-answer', anonymousUntilReveal: false, authorsRevealed: false,
     })).toBe(true);
+  });
+});
+
+/*
+ * ARE THE AUTHORS STILL HIDDEN, RIGHT NOW — the predicate three call sites
+ * re-derived by hand and got wrong the same way.
+ *
+ * Reported live, on a call-and-answer session with the default anonymity on:
+ * *"it doesnt reveal names at the results for the round, and it doesnt show the
+ * top 3 place overall. this used to be there before"*. The RESULTS stage asked
+ * `anonymityActive` alone — the first half of `anonymous UNTIL reveal` — which
+ * is true for every round of that session including the ones already revealed.
+ * So the names never came back and `podiumEntries` bailed at its anonymity
+ * gate, for the whole game, on the one format that has a podium.
+ *
+ * The server had already sent every author by then: closing a round writes
+ * AuthorsRevealed unconditionally (get-results.js's enterResultsState). Only the
+ * client was still hiding.
+ */
+describe('whether the authors are hidden right now', () => {
+  // rejects: THE REPORTED BUG. `anonymityActive` is true here and must not be
+  //          the answer — the round has been revealed, which is the whole
+  //          second half of the setting's name.
+  test('a revealed round is not hidden, even on an anonymous session', () => {
+    expect(authorsHiddenNow({
+      gameType: 'call-and-answer', anonymousUntilReveal: true, authorsRevealed: true,
+    })).toBe(false);
+  });
+
+  // rejects: revealing early. Before the round closes there is a real ballot on
+  //          the stage and the promise made to the room still stands.
+  test('an unrevealed round on an anonymous session is hidden', () => {
+    expect(authorsHiddenNow({
+      gameType: 'call-and-answer', anonymousUntilReveal: true, authorsRevealed: false,
+    })).toBe(true);
+  });
+
+  // rejects: reading a missing flag as a reveal. A payload that says nothing
+  //          about the reveal has not reported one, and the safe reading of
+  //          silence is that the names are still down.
+  test('an absent flag is not a reveal', () => {
+    expect(authorsHiddenNow({ gameType: 'call-and-answer', anonymousUntilReveal: true }))
+      .toBe(true);
+    expect(authorsHiddenNow({
+      gameType: 'call-and-answer', anonymousUntilReveal: true, authorsRevealed: 'yes',
+    })).toBe(true);
+  });
+
+  // rejects: gating a format that never hid anything. Trivia's answer is a
+  //          letter — there is no authorship to withhold and no reveal to wait
+  //          for, so a trivia podium must never depend on one.
+  test('a format with no anonymity is never hidden', () => {
+    expect(authorsHiddenNow({
+      gameType: 'trivia', anonymousUntilReveal: true, authorsRevealed: false,
+    })).toBe(false);
+  });
+
+  // rejects: the two drifting apart. The scores go wherever the names go is one
+  //          rule asked from both directions, not two rules that resemble each
+  //          other — and the call sites that hardcoded one of them are exactly
+  //          how they came apart.
+  test('standingsVisible is its exact negation, on every combination', () => {
+    for (const gameType of ['call-and-answer', 'trivia', 'poll', 'wavelength']) {
+      for (const anonymousUntilReveal of [true, false, undefined]) {
+        for (const authorsRevealed of [true, false, undefined]) {
+          const args = { gameType, anonymousUntilReveal, authorsRevealed };
+          expect(standingsVisible(args)).toBe(!authorsHiddenNow(args));
+        }
+      }
+    }
   });
 });
 

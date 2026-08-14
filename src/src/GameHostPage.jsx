@@ -19,7 +19,7 @@ import Podium from './components/stage/Podium';
 import Dock from './components/stage/Dock';
 import Pager from './components/stage/Pager';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
-import { loadProfile, saveProfile } from './config/displayProfile';
+import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfile';
 import { pageSizeFor, pageSlice } from './config/stagePaging';
 import { qrOverlayClassName } from './utils/qrOverlayClassName';
 import { shortcutsSuppressed, qrOverlayInstructions } from './utils/hostOverlays';
@@ -38,7 +38,7 @@ import {
   stageBeatFromFrame,
 } from './config/hostControls';
 import {
-  anonymityApplies, anonymityActive, createPayloadFor, displayLabelFor,
+  anonymityApplies, authorsHiddenNow, createPayloadFor, displayLabelFor,
   stageLabelFor, standingsVisible, playerAnsweredActions, answeredNamesFrom,
   answeredCountFrom, waitingRoster, joinedRoster, answererIdsFrom,
 } from './config/anonymity';
@@ -317,6 +317,17 @@ function GameHostPage() {
   
   // New Game Dialog
   const [showNewGameDialog, setShowNewGameDialog] = useState(false);
+  /*
+    THE SET THE HOST WAS LAST RUNNING, held across Switch game.
+
+    Deliberately NOT on gameSession.js's per-game list, and not inside
+    GameSetupDialog either. It has to outlive the reset — its entire job is to
+    survive `leaveCurrentGame()`, which clears `selectedSetId` — and it has to
+    outlive the welcome screen the host passes through before the create dialog
+    mounts. That makes it a piece of navigation state, like the dialog flags
+    beside it, rather than either a game value or a form field.
+  */
+  const [pendingSetId, setPendingSetId] = useState('');
   const [showQuickstartMenu, setShowQuickstartMenu] = useState(false);
   const [eventTitle, setEventTitle] = useState('');
 
@@ -501,7 +512,12 @@ function GameHostPage() {
             }
             break;
           case 'TOGGLE_BIG_SCREEN':
-            setBigScreenMode(prev => !prev);
+            // Was `setBigScreenMode(prev => !prev)` — the third call left behind
+            // by a refactor that removed its state. displayProfile.js replaced
+            // the boolean with four profiles and says so in its own header; this
+            // handler was never updated, so the remote's big-screen button threw
+            // instead of doing anything.
+            setProfile((prev) => toggleBigScreen(prev, window.innerWidth));
             break;
           case 'NEXT_QUESTION':
             remoteActionsRef.current.nextQuestion?.();
@@ -2521,7 +2537,13 @@ Focus on actionable business strategy insights.`;
       setCurrentQuestionVotes([]);
       setLessonNumber(lessonNumber);
       setAuthorsRevealed(false); // A new round starts anonymous, not the last one's reveal
-      setAuthorsHiddenOnStage(false); // and not with the last round's projector override, either
+      // `setAuthorsHiddenOnStage(false)` STOOD ON THE NEXT LINE AND DID NOT EXIST.
+      // 72bf607c retired the per-round stage toggle and removed its useState and
+      // every read of it — but left this write and one more in handleShowResults.
+      // A call to an undeclared binding is a ReferenceError, thrown right here,
+      // mid-update: `setCurrentQuestionId` and `setQuestions` below never ran, and
+      // the outer catch told the host "the round moved on, but this screen could
+      // not refresh". Which was true, and was this line.
       setCurrentQuestionId(questionId);
       
       // Set the questions array
@@ -2886,9 +2908,10 @@ Focus on actionable business strategy insights.`;
       // unconditionally as part of this same request (Task 8) — mirror that
       // here instead of waiting for a re-sync to notice it.
       setAuthorsRevealed(true);
-      // Results open with the names showing; the stage toggle is an override
-      // the host applies afterwards, not a state a new round inherits.
-      setAuthorsHiddenOnStage(false);
+      // The second orphan from 72bf607c — see handleNextQuestion for the full
+      // account. It threw here too, which cost the players their RESULT#nnn
+      // frame: the notify block below never ran, so the room was left on the
+      // voting screen until something else resynced it.
       console.log(`✅ HOST: Set game state to ${resultsState}`);
       
       // Notify players that results are ready
@@ -3014,7 +3037,17 @@ Focus on actionable business strategy insights.`;
     //
     // Order matters: read selectedSetId before the reset clears it, so the
     // create dialog still opens on the set they were just using.
-    setNewGameSetId(selectedSetId);
+    //
+    // THIS LINE READ `setNewGameSetId(selectedSetId)` AND THAT IS WHY SWITCH
+    // GAME DID NOTHING. `newGameSetId` moved into GameSetupDialog during the
+    // extraction — gameSession.js's header names it among the keys the dialog
+    // now owns — and the setter here went with it, leaving a call to a binding
+    // that does not exist. It is the FIRST statement in the handler, so the
+    // ReferenceError took `leaveCurrentGame`, the welcome screen and the input
+    // reset with it: the button was wired, ran, threw, and changed nothing.
+    // Reported twice, the second time after a CSS fix that made the button
+    // reachable and could not make a dead handler work.
+    setPendingSetId(selectedSetId);
     leaveCurrentGame();
     setShowWelcomeScreen(true);
     // Clear continue game input
@@ -3128,6 +3161,9 @@ Focus on actionable business strategy insights.`;
       alert('Please select a question set and enter an event title.');
       return;
     }
+    // Spent — the same reason as the dialog's Cancel. The form's own answer is
+    // in `form.setId` from here on.
+    setPendingSetId('');
 
     try {
       // Clear all game data from database (always call, backend handles empty gameId gracefully)
@@ -3811,6 +3847,7 @@ Ready to engage? See you there!`;
         isFirstEngagement={isLobbyState(gameState) && lessonNumber === 0}
         eventTitle={eventTitle}
         onEventTitleChange={setEventTitle}
+        initialSetId={pendingSetId}
         questionSets={questionSets}
         personas={personas}
         categories={categories}
@@ -3820,6 +3857,10 @@ Ready to engage? See you there!`;
         onQuestionSetChange={handleSetupSetChange}
         onCancel={() => {
           setShowNewGameDialog(false);
+          // Spent. Carrying it forward would pre-select a set the host has
+          // since navigated away from, on a create they started for another
+          // reason entirely.
+          setPendingSetId('');
           if (isLobbyState(gameState) && lessonNumber === 0) {
             setShowWelcomeScreen(true);
           }
@@ -4531,16 +4572,22 @@ Ready to engage? See you there!`;
                       const idx = answerPage.offset + i;
                       const points = answer.points || 0;
                       const player = players.find((p) => p.name === answer.player);
-                      // THE SESSION SETTING BEATS THE ROW HERE, and it has to:
-                      // these rows always carry their author by the time
-                      // RESULTS is showing, because entering RESULTS reveals
-                      // the round server-side whatever the host chose. So the
-                      // row cannot answer "may this name go on the wall" — only
-                      // the setting can. (This was the per-round
-                      // `authorsHiddenOnStage` toggle; same call, one source.)
+                      // THE SETTING BEATS THE ROW HERE, and it has to: these rows
+                      // always carry their author by the time RESULTS is showing,
+                      // because entering RESULTS reveals the round server-side
+                      // whatever the host chose. So the row cannot answer "may
+                      // this name go on the wall".
+                      //
+                      // BUT THE SETTING IS `anonymous UNTIL REVEAL`, AND THIS IS
+                      // THE REVEAL. This line used to ask `anonymityActive` alone,
+                      // which is true for the whole session — so on an anonymous
+                      // call-and-answer game the names never came back at RESULTS,
+                      // reported as "it doesnt reveal names at the results for the
+                      // round". `authorsHiddenNow` is the same question with the
+                      // second half of the setting's name in it.
                       const displayName = stageLabelFor(answer, idx, {
-                        authorsHidden: anonymityActive({
-                          gameType: currentGameType, anonymousUntilReveal,
+                        authorsHidden: authorsHiddenNow({
+                          gameType: currentGameType, anonymousUntilReveal, authorsRevealed,
                         }),
                       });
                       // Attribution by arithmetic: a score that jumps names its
@@ -4548,12 +4595,15 @@ Ready to engage? See you there!`;
                       // takes the arithmetic with it or the setting is
                       // decorative. Cumulative standings stay off the stage
                       // entirely — a list of names is an attendance record.
+                      // Pass the reveal flag itself. It used to pass
+                      // `!anonymityActive(...)` in its place, which threw the
+                      // flag away and hardcoded the session setting — so the
+                      // points vanished with the names, for the same reason and
+                      // in the same rounds.
                       const showPoints = standingsVisible({
                         gameType: currentGameType,
                         anonymousUntilReveal,
-                        authorsRevealed: !anonymityActive({
-                          gameType: currentGameType, anonymousUntilReveal,
-                        }),
+                        authorsRevealed,
                       });
                       return (
                         <div key={idx} className={`card ${answer.placement === 1 ? 'lead' : ''}`}>
@@ -4605,22 +4655,28 @@ Ready to engage? See you there!`;
                     which is worse than no podium because the host has already
                     told the room it is coming.
 
-                    `authorsRevealed` is the SESSION SETTING here, not the
-                    server flag — it was the per-round stage toggle until the
-                    owner made the decision session-level. By RESULTS every row
-                    already carries its author, so the server flag is true for
-                    every round and would answer "show them" always; what
-                    decides whether the projector prints them is the host's
-                    setting. Hiding the names has to take the arithmetic with
-                    it — a score that jumps names its author as surely as a
-                    label. */}
+                    THE PODIUM WENT MISSING ENTIRELY, and this prop is why.
+                    It passed `!anonymityActive(...)` — the session setting,
+                    inverted, standing in for the reveal flag — on the reasoning
+                    that by RESULTS the server flag is true for every round and
+                    so decides nothing. The first half is right; the conclusion
+                    was not. Substituting the setting made the expression read
+                    `false` for the whole of any anonymous call-and-answer
+                    session, `standingsVisible` returned false with it, and
+                    `podiumEntries` bailed at its second gate — no top three at
+                    RESULTS, ever, on the format that has one. Reported together
+                    with the missing names, because it is the same substitution
+                    made twice.
+
+                    So: pass the flag. It is false exactly while the round is
+                    genuinely unrevealed, which is the case this gate is for, and
+                    it carries the names and the arithmetic together — a score
+                    that jumps names its author as surely as a label. */}
                 <Podium
                   phase="RESULTS"
                   gameType={currentGameType}
                   anonymousUntilReveal={anonymousUntilReveal}
-                  authorsRevealed={!anonymityActive({
-                    gameType: currentGameType, anonymousUntilReveal,
-                  })}
+                  authorsRevealed={authorsRevealed}
                   players={players}
                 />
               </>

@@ -226,27 +226,39 @@ describe('the page actually renders it, in the right place, from the right sourc
   });
 
   /**
-   * THE RULE THIS REPLACES. This was `test('RESULTS reads the display toggle;
-   * ENDED reads the server reveal')`, and the display toggle was
-   * `authorsHiddenOnStage` — a per-round Show/Hide authors button on the RESULTS
-   * stage. The owner replaced it with ONE session setting in the sidebar, with
-   * no per-round override, so RESULTS now reads that setting. ENDED is
-   * unchanged and the two must still not be merged.
+   * THIS TEST USED TO ASSERT THE DEFECT, AND THAT IS THE POINT OF THE REWRITE.
+   *
+   * It read `RESULTS reads the session setting; ENDED reads the server reveal`
+   * and pinned RESULTS to `authorsRevealed={!anonymityActive({...})}` — the
+   * session setting, inverted, standing in for the reveal flag. The reasoning
+   * was that by RESULTS the server flag is true for every round and therefore
+   * decides nothing, so the setting should decide instead. The premise is true
+   * and the substitution still broke it: `!anonymityActive(...)` is `false` for
+   * the WHOLE of an anonymous call-and-answer session, so `standingsVisible`
+   * returned false and `podiumEntries` bailed at its second gate. No top three
+   * at RESULTS, on the one format that has one. Reported from a live session:
+   * *"it doesnt show the top 3 place overall. this used to be there before"* —
+   * and it did, before the toggle was retired.
+   *
+   * A test that spells out a defect in a regex is worse than no test: it makes
+   * the fix look like the regression. So this now pins the property both
+   * podiums must have rather than the expression either one is written with.
    */
-  test('RESULTS reads the session setting; ENDED reads the server reveal', () => {
-    // rejects: wiring both to one source. Point ENDED at the session setting
-    // and a whole anonymous session loses its closing podium — which attributes
-    // no response, only ranks people by score with nothing on screen to pin to
-    // anybody. Point RESULTS at the server flag and the podium is always on,
-    // because entering RESULTS reveals the round server-side whatever the host
-    // chose — so hiding the names would leave the arithmetic, and therefore the
-    // attribution, on the wall.
-    expect(host).toMatch(
-      /<Podium[^>]*[\s\S]{0,400}?authorsRevealed=\{!anonymityActive\(\{\s*\n?\s*gameType: currentGameType, anonymousUntilReveal,\s*\n?\s*\}\)\}/
-    );
-    expect(host).toMatch(/<Podium[^>]*[\s\S]{0,400}?authorsRevealed=\{authorsRevealed\}/);
+  test('both podiums gate on the reveal actually having happened', () => {
+    // rejects: THE REPORTED BUG — deriving either podium's gate from
+    // `anonymityActive` instead of from the reveal flag. The setting is named
+    // `anonymous UNTIL REVEAL`; substituting its first half for the whole makes
+    // the gate permanent, and takes the podium with it for the entire session.
+    const at = [];
+    for (let i = host.indexOf('<Podium'); i !== -1; i = host.indexOf('<Podium', i + 1)) at.push(i);
+    expect(at).toHaveLength(2);
+    for (const i of at) {
+      const props = host.slice(i, host.indexOf('/>', i));
+      expect(props).toMatch(/authorsRevealed=\{authorsRevealed\}/);
+      expect(props).not.toMatch(/anonymityActive/);
+    }
     // rejects: the retired per-round toggle coming back anywhere near it.
-    expect(host).not.toMatch(/authorsHiddenOnStage/);
+    expect(host).not.toMatch(/setAuthorsHiddenOnStage/);
   });
 
   test('it is content inside the stage, not the meter', () => {

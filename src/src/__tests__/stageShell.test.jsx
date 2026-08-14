@@ -693,25 +693,37 @@ describe('what the host page must now render', () => {
     expect(markup).toMatch(/onAnonymousUntilRevealChange=\{setAnonymousUntilReveal\}/);
   });
 
-  test('the RESULTS rows take their labels AND their arithmetic from the session setting', () => {
+  test('the RESULTS rows take their labels AND their arithmetic from the reveal', () => {
     // WHY THE ROW CANNOT ANSWER THIS. Entering RESULTS reveals the round
     // server-side (get-results.js's enterResultsState) whatever the host chose,
     // so every row on this state carries its author and `displayLabelFor` would
     // print all of them. Only the setting knows whether they may go on a wall.
     //
+    // THIS TEST PREVIOUSLY PINNED `authorsHidden: anonymityActive({` AND
+    // `authorsRevealed: !anonymityActive({`, WHICH WAS THE BUG WRITTEN DOWN.
+    // `anonymityActive` answers "does this session withhold authorship" and is
+    // true for every round of an anonymous call-and-answer game — including the
+    // ones already revealed. Asked on its own it never lets go, so the names
+    // never came back at RESULTS and the points went with them. Reported live:
+    // *"it doesnt reveal names at the results for the round"*. `authorsHiddenNow`
+    // is the same question with `until reveal` still in it.
+    //
     // rejects: dropping back to displayLabelFor on RESULTS, which silently
-    // names every author on a session set to hide them. And rejects hiding the
+    // names every author on a session set to hide them. Rejects hiding the
     // label while leaving the points: a score that jumps names its author as
-    // surely as a label does (§5.6.4), so the two must read one source.
+    // surely as a label does (§5.6.4), so the two must read one source. And
+    // rejects the regression above returning — either gate re-derived from the
+    // session setting alone, with no reveal flag in it.
     const markup = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
     const at = markup.indexOf('const displayName = stageLabelFor');
     expect(at).toBeGreaterThan(-1);
     const rows = markup.slice(at, markup.indexOf('return (', at));
-    expect(rows).toMatch(/authorsHidden: anonymityActive\(\{/);
+    expect(rows).toMatch(/authorsHidden: authorsHiddenNow\(\{/);
     expect(rows).toMatch(/const showPoints = standingsVisible\(\{/);
-    expect(rows).toMatch(/authorsRevealed: !anonymityActive\(\{/);
-    // Both derive from the one flag, so they cannot disagree.
-    expect((rows.match(/anonymousUntilReveal/g) || []).length).toBe(3);
+    expect(rows).not.toMatch(/anonymityActive/);
+    // Both derive from the one setting AND the one flag, so they cannot disagree.
+    expect((rows.match(/anonymousUntilReveal/g) || []).length).toBe(2);
+    expect((rows.match(/\bauthorsRevealed\b/g) || []).length).toBe(2);
   });
 
   test('a finished session does not advertise a live join on the rail', () => {

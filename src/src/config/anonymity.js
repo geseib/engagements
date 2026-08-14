@@ -212,6 +212,33 @@ export function anonymityActive({ gameType, anonymousUntilReveal }) {
 }
 
 /**
+ * ARE THIS ROUND'S AUTHORS STILL HIDDEN, RIGHT NOW.
+ *
+ * `anonymityActive` answers a different and weaker question — "does this SESSION
+ * withhold authorship" — and it is true for the whole of a call-and-answer game
+ * whose host left the default on. It is the first half of the setting's name.
+ * This is the second half: *until reveal*. The reveal is not a maybe and not a
+ * button any more; closing a round performs it, server-side and unconditionally
+ * (get-results.js's enterResultsState, `Unconditional SET, so it is idempotent`),
+ * and `authorsRevealed` is that write read back — from get-game-state on a
+ * restore, from the `authorsRevealed` socket frame, or set locally the moment
+ * the host closes the round.
+ *
+ * THE BUG THIS EXISTS TO STOP, reported live and worth naming because the shape
+ * recurs: the RESULTS stage asked `anonymityActive` on its own. So on every
+ * anonymous call-and-answer session the names never came back and the podium
+ * never appeared — not at RESULTS, not ever — while the server had already sent
+ * every author. The predicate was RIGHT in this file (`standingsVisible` below
+ * has always had this shape) and WRONG at the three call sites that re-derived
+ * it, which is precisely the argument for naming it once.
+ *
+ * `!== true` rather than `=== false`: an absent flag is not a reveal.
+ */
+export function authorsHiddenNow({ gameType, anonymousUntilReveal, authorsRevealed } = {}) {
+  return anonymityActive({ gameType, anonymousUntilReveal }) && authorsRevealed !== true;
+}
+
+/**
  * Whether standings may be shown ALONGSIDE A ROUND'S ANSWERS. See §5.6.4: a
  * score printed next to a response is attribution by arithmetic — it names the
  * author as surely as a label would — so it goes wherever the names go.
@@ -224,12 +251,12 @@ export function anonymityActive({ gameType, anonymousUntilReveal }) {
  * nothing anyway: no points exist until RESULTS, and entering RESULTS is what
  * reveals.
  *
- * `authorsRevealed` here is whatever currently decides the labels — on the
- * RESULTS stage that is the local display toggle, not the server flag, so that
- * hiding the names takes the arithmetic with it.
+ * Exactly the negation of `authorsHiddenNow`, and now written as one so the two
+ * cannot drift: the scores go wherever the names go is not a resemblance
+ * between two rules, it is one rule asked from both directions.
  */
 export function standingsVisible({ gameType, anonymousUntilReveal, authorsRevealed } = {}) {
-  return !anonymityActive({ gameType, anonymousUntilReveal }) || authorsRevealed === true;
+  return !authorsHiddenNow({ gameType, anonymousUntilReveal, authorsRevealed });
 }
 
 /**
@@ -355,7 +382,7 @@ export const MIN_ANONYMOUS_ANSWERS = 5;
 export function waitingNamesCaution({
   answerCount, gameType, anonymousUntilReveal, authorsRevealed,
 } = {}) {
-  const hidden = anonymityActive({ gameType, anonymousUntilReveal }) && authorsRevealed !== true;
+  const hidden = authorsHiddenNow({ gameType, anonymousUntilReveal, authorsRevealed });
   if (!hidden) return null;
 
   const n = Number(answerCount) || 0;
@@ -493,7 +520,7 @@ export function waitingRoster({
 
   // THE HOST'S CALL, not the code's. `answerCount` no longer appears in this
   // condition; it is the caution's quantity, not a threshold.
-  const hidden = anonymityActive({ gameType, anonymousUntilReveal }) && authorsRevealed !== true;
+  const hidden = authorsHiddenNow({ gameType, anonymousUntilReveal, authorsRevealed });
   if (hidden && nameWaitingWhenAnonymous === false) return null;
 
   return roster.filter((name) => !acted.has(name));

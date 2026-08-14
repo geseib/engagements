@@ -63,6 +63,16 @@ export default function GameSetupDialog({
   isFirstEngagement = true,
   eventTitle = '',
   onEventTitleChange,
+  /*
+    THE SET THE HOST WAS JUST USING, so Switch game reopens on it.
+
+    Seeded once rather than controlled: after mount the picker below owns this
+    value, and a prop that kept re-asserting itself would fight every change the
+    host makes. `handleSwitchGame` reads the outgoing game's set before the
+    reset clears it, which is the whole reason it is captured there and not
+    read from the page here.
+  */
+  initialSetId = '',
   questionSets = [],
   personas = [],
   categories = [],
@@ -74,7 +84,7 @@ export default function GameSetupDialog({
   onCreate,
 }) {
   const [engagementType, setEngagementType] = useState('call-and-answer');
-  const [newGameSetId, setNewGameSetId] = useState('');
+  const [newGameSetId, setNewGameSetId] = useState(initialSetId || '');
   const [eventDetails, setEventDetails] = useState('');
   const [gameAiContext, setGameAiContext] = useState('');
   const [newGamePersonaId, setNewGamePersonaId] = useState('');

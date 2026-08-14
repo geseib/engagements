@@ -72,6 +72,30 @@ export function loadProfile(storage, viewportWidth) {
   return isProfile(stored) ? stored : autoProfile(viewportWidth);
 }
 
+/**
+ * What the remote's TOGGLE_BIG_SCREEN command means now that the boolean is gone.
+ *
+ * `bigScreenMode` was a two-state flag and this file replaced it with four
+ * profiles — but the remote handler kept calling `setBigScreenMode`, a binding
+ * that no longer existed, so the command threw and the projector never changed.
+ * A dead remote button is the worst possible failure for this control: the host
+ * is holding a phone at the back of a room.
+ *
+ * TV IS "BIG SCREEN", and the way back is the inferred profile rather than a
+ * remembered previous one. Remembering would need somewhere to keep it, and the
+ * thing worth remembering across a reload is the CURRENT profile, which
+ * loadProfile already does. Toggling off means "stop overriding" — exactly what
+ * `autoProfile` answers.
+ *
+ * Room and Call are not reachable from here and should not be: they are
+ * undetectable in principle (see autoProfile) and are Console choices. A toggle
+ * that cycled all four would leave a host pressing a button until the room
+ * looked right.
+ */
+export function toggleBigScreen(profile, viewportWidth) {
+  return profile === 'tv' ? autoProfile(viewportWidth) : 'tv';
+}
+
 export function saveProfile(storage, profile) {
   if (!isProfile(profile)) return;
   try {
