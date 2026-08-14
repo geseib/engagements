@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import webSocketClient from './WebSocketClient';
+import { requestNextQuestion } from './utils/nextQuestion';
 import IssueFab from './components/IssueFab';
 import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
@@ -2455,21 +2456,40 @@ Focus on actionable business strategy insights.`;
         requestBody.action = 'skip';
       }
       
-      // Use the new next-question API that handles category selection and progression
-      const nextQuestionRes = await fetch(`${API_BASE}games/${gameId}/next-question`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
+      /*
+        THE ADVANCE, AND ONLY THE ADVANCE.
+
+        Reported live: "Failed to start next question", and then the next
+        question appeared. Both were true — the round moved and the message said
+        it had not. Two faults, and `utils/nextQuestion.js` carries the detail.
+
+        The one that mattered here: this used to read a failed response with
+        `await res.json()`, so a body that is not JSON — API Gateway's HTML on a
+        504, an empty 502 — threw, and the throw landed in the outer catch, which
+        blames the advance. The single case where the server had something useful
+        to say was the case whose message got replaced by "please try again".
+
+        Past this call the round HAS moved and the backend has broadcast it, so
+        nothing below may tell the host to press again. Pressing again skips a
+        question, live, in front of a room.
+      */
+      const attempt = await requestNextQuestion({
+        fetchFn: fetch, apiBase: API_BASE, gameId, body: requestBody,
       });
-      
-      if (!nextQuestionRes.ok) {
-        const errorData = await nextQuestionRes.json();
-        console.error('Failed to get next question:', errorData);
-        alert(`Failed to get next question: ${errorData.error || 'Unknown error'}`);
+
+      if (!attempt.advanced) {
+        console.error('Failed to get next question:', attempt.error);
+        alert(`Failed to get next question: ${attempt.error}`);
         return;
       }
-      
-      const nextQuestionData = await nextQuestionRes.json();
+      if (attempt.error) {
+        // Advanced, but its body was unreadable. Say so without implying a retry;
+        // the WebSocket broadcast repairs the panel on its own.
+        console.warn('Next question advanced with an unreadable body:', attempt.error);
+      }
+      if (!attempt.data) return;
+
+      const nextQuestionData = attempt.data;
       console.log(`📝 HOST: Next question selected:`, nextQuestionData);
       
       const questionId = nextQuestionData.questionId;
@@ -2522,8 +2542,21 @@ Focus on actionable business strategy insights.`;
       }, 3000);
       
     } catch (e) {
-      console.error('Failed to get next question', e);
-      alert('Failed to start next question. Please try again.');
+      /*
+        THE ROUND HAS ALREADY MOVED BY THE TIME ANYTHING HERE CAN THROW.
+
+        `requestNextQuestion` above never throws and returns early when the
+        advance genuinely failed, so everything this catch can still see happens
+        AFTER a successful POST — reading the question, and the state updates.
+        The backend has broadcast the new round by then, which is why the
+        original report was an error message followed by the question appearing.
+
+        So this must not say "please try again". Re-pressing Next after a round
+        that already advanced skips a question, live. Say what actually broke and
+        let the WebSocket finish repairing the panel, which it does on its own.
+      */
+      console.error('Next question advanced, but the host panel could not refresh', e);
+      alert('The round moved on, but this screen could not refresh. It should catch up on its own — do not press Next again.');
     } finally {
       // Hide loading overlay
       setIsLoadingData(false);
