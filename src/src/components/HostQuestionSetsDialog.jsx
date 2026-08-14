@@ -121,7 +121,16 @@ export default function HostQuestionSetsDialog({
   // two implementations of one rule is how a UI ends up offering what the API
   // refuses.
   const mine = sets.filter((set) => set.canManage);
-  const theirs = sets.length - mine.length;
+  /*
+    HOUSE SETS ARE NOW LISTED, NOT COUNTED.
+    They used to be a sentence — "N other sets are available to play" — because
+    the only controls on offer were Rename and Delete, and a disabled Delete on
+    somebody else's set is an invitation to ask for a permission that does not
+    exist. Copy-and-edit is a different kind of control: it needs no permission
+    over the original at all, so the reason for withholding it does not apply.
+  */
+  const house = sets.filter((set) => !set.canManage);
+  const theirs = house.length;
 
   const saveEdit = async () => {
     const target = sets.find((set) => set.id === editing.id);
@@ -344,16 +353,59 @@ export default function HostQuestionSetsDialog({
 
         {!loading && theirs > 0 && (
           /*
-            The rule, stated once, where the absence of buttons would otherwise
-            be unexplained. No control is drawn for these — a disabled Delete on
-            somebody else's set is an invitation, and this is not a permission
-            a host can request.
+            THE HOUSE SHELF, AND THE ONE CONTROL THAT MAKES SENSE ON IT.
+
+            The owner's model: editing a set you own makes a new VERSION of it;
+            editing a set an administrator made gives you a NEW SET of your own.
+            The second half is what this section is for.
+
+            Copy-and-edit needs no permission over the original — it reads the
+            questions (that route is unauthenticated) and writes a set the host
+            owns, through `POST admin/upload-questions` with `customTitle`, which
+            is on the host route list and stamps them as the creator. Rename and
+            Delete are still absent, and still for the original reason: those
+            need authority over somebody else's row, and offering a disabled
+            control invites a request for a permission that does not exist.
+
+            The outcome is in the button, not in a dialog afterwards. "Copy and
+            edit" is a different promise from "Edit questions" one table up, and
+            the person should be able to tell which they are getting before they
+            press it — QuestionsPanel then honours that promise on save, since it
+            already routes a save from a caller without `canManage` into a new
+            set rather than a replace.
           */
-          <p className="qsets-dim">
-            {theirs} other set{theirs === 1 ? '' : 's'} {theirs === 1 ? 'is' : 'are'} available to
-            play. {theirs === 1 ? 'It was' : 'They were'} made by someone else, so only an
-            administrator can change {theirs === 1 ? 'it' : 'them'}.
-          </p>
+          <>
+            <p className="qsets-dim">
+              {theirs} set{theirs === 1 ? '' : 's'} below {theirs === 1 ? 'was' : 'were'} made by an
+              administrator. You can play {theirs === 1 ? 'it' : 'them'} as {theirs === 1 ? 'it is' : 'they are'},
+              or take your own copy to change — the original stays untouched.
+            </p>
+            <table className="qsets-tbl">
+              <tbody>
+                {house.map((set) => (
+                  <tr key={set.id} data-testid={`house-${set.id}`}>
+                    <td className="qsets-col-set">
+                      <span className="qsets-nm">{set.name || set.id}</span>
+                    </td>
+                    <td className="qsets-col-type">{gameTypeLabel(set.engagementType)}</td>
+                    <td className="qsets-col-qs">{set.totalQuestions || 0}</td>
+                    <td className="qsets-col-acts">
+                      <div className="qsets-rowact">
+                        <button
+                          type="button"
+                          className="qsets-btn qsets-btn--sm"
+                          onClick={() => { setEditorDirty(false); setEditingQuestions(set); }}
+                          title={`Take your own copy of ${set.name || set.id} and edit it`}
+                        >
+                          Copy and edit
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
 
         <div className="qsets-head">

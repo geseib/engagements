@@ -183,13 +183,20 @@ describe('a host sees their own sets, and only controls they can use', () => {
     expect(within(row).getByRole('button', { name: /delete/i })).toBeTruthy();
   });
 
-  test("another host's set is not listed at all, so it carries no controls", async () => {
-    // THE HEADLINE AFFORDANCE. rejects: rendering every set and relying on the
-    // API to say no — a Delete button on somebody else's work is an invitation,
-    // and a disabled one is a lie about what could be requested.
+  test("another host's set carries no control that needs authority over it", async () => {
+    // THE HEADLINE AFFORDANCE, restated for a shelf that is now listed rather
+    // than counted. rejects: drawing Rename or Delete on somebody else's work —
+    // an invitation, and a disabled one is a lie about what could be requested.
+    //
+    // Copy-and-edit is deliberately NOT in that category and is asserted below:
+    // it needs no permission over the original, reads a route that is
+    // unauthenticated, and writes a set the host will own.
     await openDialog();
-    expect(screen.queryByText('Raj Quiz')).toBeNull();
-    expect(screen.queryByText('80s Trivia')).toBeNull();
+    for (const name of ['Raj Quiz', '80s Trivia']) {
+      const row = screen.getByText(name).closest('tr');
+      expect(within(row).queryByRole('button', { name: /rename/i })).toBeNull();
+      expect(within(row).queryByRole('button', { name: /delete/i })).toBeNull();
+    }
   });
 
   test('exactly two controls exist — one Rename, one Delete', async () => {
@@ -200,12 +207,82 @@ describe('a host sees their own sets, and only controls they can use', () => {
     expect(screen.getAllByRole('button', { name: /^delete$/i })).toHaveLength(1);
   });
 
-  test('the library the host cannot change is counted, and the rule is stated', async () => {
+  test('the library the host cannot change is listed, and the rule is stated', async () => {
     // rejects: hiding the other sets silently, which leaves a host who can PLAY
-    // 41 sets wondering where 40 of them went.
+    // 41 sets wondering where 40 of them went. They used to be a count; the
+    // owner asked for an edit affordance here, so a count is no longer enough —
+    // you cannot put a button on a number.
     await openDialog();
-    expect(screen.getByText(/2 other sets are available to play/i)).toBeTruthy();
-    expect(screen.getByText(/only an administrator can change them/i)).toBeTruthy();
+    expect(screen.getByText('Raj Quiz')).toBeTruthy();
+    expect(screen.getByText('80s Trivia')).toBeTruthy();
+    expect(screen.getByText(/made by an administrator/i)).toBeTruthy();
+  });
+
+  test('a house set offers a copy, and says so before it is pressed', async () => {
+    // rejects: labelling it "Edit questions" like the row above. Editing a set
+    // you own makes a new VERSION of that set; editing a house set gives you a
+    // NEW SET and leaves the original alone. Those are different outcomes and
+    // the person has to be able to tell which one they are about to get.
+    await openDialog();
+    const row = screen.getByText('80s Trivia').closest('tr');
+    expect(within(row).getByRole('button', { name: /copy and edit/i })).toBeTruthy();
+    expect(within(row).queryByRole('button', { name: /^edit questions$/i })).toBeNull();
+  });
+
+  test('editing a house set saves a copy and leaves the original alone', async () => {
+    // THE OTHER HALF OF THE OWNER'S MODEL, and the mirror of the owned-set test
+    // below: editing a set you own makes a new VERSION of it; editing a set an
+    // administrator made gives you a NEW SET.
+    //
+    // rejects: handing the editor a house set with canManage stripped or forced
+    // true. QuestionsPanel forks on exactly that flag, so a shelf that passes a
+    // set claiming to be manageable would send `replaceSetId` and overwrite the
+    // administrator's set — the label promises a copy and the save would take
+    // the original. Asserting the button's text cannot catch that; only the
+    // request body can.
+    // Its own list: the shared fixture's house sets are `trivia`, and the mocked
+    // questions route serves one call-and-answer body for every set id, so those
+    // rows load without the options and correct answer a trivia row needs and
+    // the save is refused on validation before it ever reaches the fork branch.
+    // That is the fixture disagreeing with itself, not the product — so this
+    // test supplies a house set whose type matches the questions it will get.
+    const HOUSE_CALL_AND_ANSWER = [
+      HOST_VIEW[0],
+      {
+        id: 'house-retro', name: 'House Retro', description: 'House content',
+        engagementType: 'call-and-answer', totalQuestions: 12, categoryCount: 2,
+        active: true, hasImages: false, canManage: false, mine: false, createdByName: null,
+      },
+    ];
+    const { uploads } = await openDialog({}, { sets: HOUSE_CALL_AND_ANSWER });
+
+    const row = screen.getByText('House Retro').closest('tr');
+    fireEvent.click(within(row).getByRole('button', { name: /copy and edit/i }));
+    await screen.findByTestId('question-0');
+
+    fireEvent.click(within(screen.getByTestId('question-0')).getByRole('button', { name: /^edit$/i }));
+    const form = await screen.findByRole('dialog', { name: /^edit question$/i });
+    fireEvent.change(within(form).getByLabelText('Title *'), { target: { value: 'MY OWN TAKE' } });
+    fireEvent.click(within(form).getByRole('button', { name: /^done$/i }));
+
+    // The save button says which save it is BEFORE it is pressed — "Save as my
+    // own copy…", not "Save" — and the ellipsis is honest: it opens a naming
+    // step rather than writing anything. That is the promise being kept.
+    fireEvent.click(screen.getAllByRole('button', { name: /save as my own copy/i })[0]);
+
+    // It names the original and promises to leave it alone, before anything is
+    // written. Targeted by its label rather than by role, because this dialog is
+    // one of the two raw .modal-overlay divs that never registered with the
+    // Modal primitive and so carries no role="dialog" — tracked separately.
+    expect(await screen.findByLabelText('Name the new set')).toBeTruthy();
+    expect(screen.getByText(/the original is left exactly as it is/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /^create the set$/i }));
+
+    await waitFor(() => expect(uploads()).toHaveLength(1));
+    const [body] = uploads();
+    expect(body.replaceSetId).toBeUndefined();
+    expect(body.customTitle).toBeTruthy();
+    expect(body.fileContent).toContain('MY OWN TAKE');
   });
 
   test('an admin, on the same screen, sees every set as manageable', async () => {
