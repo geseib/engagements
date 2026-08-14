@@ -248,12 +248,18 @@
 }
 .qsets-tbl tbody tr:hover td { background: var(--qsets-row-hover); }
 
-.qsets-col-set   { width: 34%; }
+/* 10% did not hold the console's own pair. "Edit" and "Delete" at
+   `.qsets-btn--sm`'s 9px padding need more than a tenth of the table, so the
+   row overflowed at every width and the alignment fault above turned that
+   overflow into a clipped Edit button. The width comes out of the name column,
+   which ellipsizes and degrades gracefully; every other column here is holding
+   a short fixed token and has nothing spare. */
+.qsets-col-set   { width: 28%; }
 .qsets-col-type  { width: 12%; }
 .qsets-col-qs    { width: 6%; text-align: right; }
 .qsets-col-state { width: 26%; }
 .qsets-col-when  { width: 12%; }
-.qsets-col-acts  { width: 10%; }
+.qsets-col-acts  { width: 16%; }
 
 /* A SINGLE TEXT NODE with min-width:0, never a flex container with span
    children — host spec §5.1, audit A2: `text-overflow` is inert on a flex box,
@@ -282,7 +288,23 @@
 .qsets-dimrow td { color: var(--muted); font-style: italic; font-size: var(--qsets-t-label); }
 
 .qsets-states { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.qsets-rowact { display: flex; gap: 5px; justify-content: flex-end; }
+/* THE LEFTMOST BUTTON WAS BEING CUT OFF, AND `justify-content` WAS WHY.
+
+   Reported from real use: the console's Edit button and the host's Rename
+   button both clipped on their LEFT edge. This row is `overflow: hidden` (on
+   `.qsets-tbl td`) and was `justify-content: flex-end`, so once the buttons were
+   wider than the cell the group overflowed towards the START of the row — and a
+   hidden overflow on the leading edge cannot be reached by anything. End
+   alignment and centre alignment share that fault; it is the same one that made
+   a too-tall dialog unreachable in styles.css, one axis over.
+
+   `margin-left: auto` on the first child right-aligns the group exactly as
+   `flex-end` did while it fits, and collapses to zero when it does not, so any
+   overflow lands on the trailing edge where the cell can at least be widened to
+   reveal it. `flex-wrap` then means a narrow viewport wraps to a second line
+   instead of losing a control altogether. */
+.qsets-rowact { display: flex; gap: 5px; flex-wrap: wrap; }
+.qsets-rowact > :first-child { margin-left: auto; }
 
 .qsets-chip {
   display: inline-flex;
