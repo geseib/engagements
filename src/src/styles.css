@@ -5461,6 +5461,29 @@ body {
   cursor: pointer;
 }
 
+/*
+  A DIALOG TALLER THAN THE SCREEN USED TO BE A TRAP.
+
+  This was `align-items: center` with no `overflow` on the scrim and no
+  `max-height` on the card, so a dialog taller than the viewport was centred —
+  overflowing the top AND the bottom at once — with no scroll container
+  anywhere. The footer holding Cancel and Done sat below the fold and could not
+  be reached. On a tablet, with no Escape key and a backdrop the question dialog
+  deliberately makes inert so a stray tap cannot discard a draft, that left no
+  way out of the dialog at all.
+
+  `align-items: flex-start` plus `margin: auto` on the card is what fixes it,
+  and the pairing is deliberate: a flex child centred with `align-items` cannot
+  be scrolled back to once it overflows its container, because the overflow goes
+  in both directions and only one of them is reachable. `margin: auto` centres
+  the card while it fits and yields to the scroll once it does not.
+
+  `dvh` before `vh` for iOS: `vh` there is the LARGE viewport, measured as if the
+  browser toolbars were hidden, so `100vh` is taller than what you can actually
+  see and the last stretch of a dialog hides behind the chrome. `dvh` tracks the
+  visible area. The `vh` line stays first as the fallback for browsers without
+  `dvh`; both are `max-height`, so the smaller wins where both are understood.
+*/
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -5469,9 +5492,18 @@ body {
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 24px 16px;
   z-index: 9999;
+}
+
+/* Centred while it fits; scrolled once it does not. See the note above. */
+.modal-overlay > * {
+  margin: auto;
 }
 
 .modal-content {
