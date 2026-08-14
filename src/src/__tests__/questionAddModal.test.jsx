@@ -350,6 +350,43 @@ describe('closing the dialog with something typed in it', () => {
     expect(screen.getByTestId('unsaved-bar')).toHaveTextContent('1 removed');
   });
 
+  it('offers a close control that asks before binning a draft', async () => {
+    // rejects: shipping the dialog with no close control at all, which is how
+    // it went out. The footer holding Cancel runs past the fold on a long form,
+    // the backdrop is inert on purpose, and a tablet has no Escape key — so on
+    // an iPad there was no way out of this dialog. Reported from real use.
+    mockApi();
+    renderPanel();
+    await ready();
+    await addQuestion();
+
+    fireEvent.change(screen.getByLabelText('Title *'), { target: { value: 'HALF TYPED' } });
+    fireEvent.click(within(dialog()).getByRole('button', { name: /close/i }));
+
+    // It asks. Silently binning typed work is what the inert backdrop exists to
+    // prevent; a close control that skips the ask would reopen that hole.
+    expect(await screen.findByRole('button', { name: /Throw it away/i })).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Throw it away/i }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.queryByText('HALF TYPED')).not.toBeInTheDocument();
+  });
+
+  it('closes straight away when nothing has been typed', async () => {
+    // rejects: asking "are you sure" over an untouched form. The ask is for
+    // work worth keeping; on an empty draft it is a second obstacle in front of
+    // someone who already found the exit hard to reach.
+    mockApi();
+    renderPanel();
+    await ready();
+    await addQuestion();
+
+    fireEvent.click(within(dialog()).getByRole('button', { name: /close/i }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /Throw it away/i })).not.toBeInTheDocument();
+  });
+
   it('reports a half-filled question inside the dialog, where the form is', async () => {
     // rejects: reporting it in the panel's status bar underneath the modal,
     // which is where `commitEdit` used to put it — behind the dialog, invisible

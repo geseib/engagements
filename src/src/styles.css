@@ -10262,6 +10262,49 @@ body {
   width: 100%;
 }
 
+/*
+  The title and the way out, on one line. The close control sits in the header
+  rather than the footer because the footer is the part that goes past the fold
+  on a long form — putting the only escape down there is what made this dialog
+  a trap on a tablet in the first place.
+*/
+.qs-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.qs-dialog-head h3 {
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+.qs-dialog-close {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.6rem;
+  line-height: 1;
+  padding: 0 4px;
+  color: var(--muted, #5E6167);
+  /* 44px is the touch target this bug was reported on. A 1.6rem glyph is about
+     half that, and a close control you have to aim at is the thing that sends
+     someone back to the inert backdrop they cannot use. */
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.qs-dialog-close:hover:not(:disabled) {
+  color: var(--text, #1B2942);
+}
+
+.qs-dialog-close:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* Inside the dialog the form is the whole content, so it needs no divider. */
 .qs-question-dialog .qs-question-form {
   margin-top: 0;

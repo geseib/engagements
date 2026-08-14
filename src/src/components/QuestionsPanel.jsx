@@ -1024,10 +1024,42 @@ export default function QuestionsPanel({
           closeOnBackdrop={false}
           closeOnEscape={() => !aiBusy}
         >
-          <h3 id="qs-question-dialog-title">
-            <Icon name="PencilSimple" weight="bold" size={16} color="var(--primary)" />{' '}
-            {isAdding ? 'New question' : 'Edit question'}
-          </h3>
+          {/*
+            THE CLOSE CONTROL IS A SAFETY FIX, NOT A CONVENIENCE.
+
+            Reported from an iPad: no way out of this dialog. Three things had
+            to line up for that — the form ran past the fold, the footer holding
+            Cancel was down there with it, and the backdrop is inert on purpose
+            so a mis-aimed tap cannot bin a half-filled form. On a tablet there
+            is no Escape key either, so the deliberate choice and the layout bug
+            combined into a trap. The scroll fault is fixed in styles.css; this
+            is the affordance people look for first, and it should not have
+            shipped absent when three other dialogs here already carry one.
+
+            It goes through `cancelEdit`, exactly as Cancel and Escape do, so an
+            unsaved draft still gets the "are you sure" strip instead of being
+            silently binned — the whole reason the backdrop is inert.
+
+            Disabled while the model is generating, matching `closeOnEscape`
+            below. Leaving one exit live while the other is gated would be an
+            inconsistency people discover at the worst moment.
+          */}
+          <div className="qs-dialog-head">
+            <h3 id="qs-question-dialog-title">
+              <Icon name="PencilSimple" weight="bold" size={16} color="var(--primary)" />{' '}
+              {isAdding ? 'New question' : 'Edit question'}
+            </h3>
+            <button
+              type="button"
+              className="qs-dialog-close"
+              onClick={cancelEdit}
+              disabled={aiBusy}
+              aria-label="Close"
+              title={aiBusy ? 'Wait for the draft to finish' : 'Close'}
+            >
+              ×
+            </button>
+          </div>
 
           <QuestionForm
             draft={draft}
