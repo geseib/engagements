@@ -131,6 +131,175 @@ function lateDeps(src) {
   return [...new Set(problems)];
 }
 
+/**
+ * A HOOK BELOW AN EARLY RETURN — the second way this file's ordering kills the
+ * page, and the one that actually reached a host.
+ *
+ * Reported as *"I also still see blank page once starting the quick start"*,
+ * with `Minified React error #310` — "rendered more hooks than during the
+ * previous render". A different fault from the dependency-array one above, in a
+ * different commit, with the identical symptom.
+ *
+ *     if (showQuickstartMenu) { return (<QuickstartMenu … />); }   // line 3276
+ *     …
+ *     const [spotlightIndex, setSpotlightIndex] = useState(null);  // line 3739
+ *
+ * On the Quick Start menu the component returns at 3276 and that `useState`
+ * never runs. Pick a lesson, the flag clears, the render carries past it — and
+ * React counts one more hook than last time. It only breaks on the TRANSITION,
+ * which is why it survived every other route.
+ *
+ * The rule is React's first: hooks run unconditionally, in the same order,
+ * every render. A plain function may live below an early return; a hook may not.
+ *
+ * `hookDepOrder`'s scan above cannot see this — it compares a dep array against
+ * declaration offsets and has no notion of a return statement. Two rules, two
+ * scans, one file.
+ */
+const HOOK = /\buse(?:State|Effect|Memo|Callback|Ref|LayoutEffect|Reducer|Context)\s*\(/;
+
+/**
+ * Every top-level function in a file, as `{ name, start, end }` line offsets.
+ *
+ * BRACE DEPTH, NOT INDENTATION, and the first version of this used indentation
+ * and produced three false positives on its first run — `useStageFit.js`,
+ * `UserManagement.jsx` and `VerificationForm.jsx` all have module-level helpers
+ * full of perfectly correct `if (!value) return '—';` guard clauses, which sit
+ * at the same two-space indent as a component's own early return. A check that
+ * cries wolf on correct code is one that gets deleted, so it has to know the
+ * difference between "in the component body" and "in some function".
+ */
+function topLevelFunctions(lines) {
+  const out = [];
+  const OPENS = /^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)|^(?:export\s+)?const\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?\(/;
+  for (let i = 0; i < lines.length; i += 1) {
+    const m = lines[i].match(OPENS);
+    if (!m) continue;
+    let depth = 0;
+    let started = false;
+    for (let j = i; j < lines.length; j += 1) {
+      for (const ch of lines[j]) {
+        if (ch === '{') { depth += 1; started = true; }
+        else if (ch === '}') depth -= 1;
+      }
+      if (started && depth <= 0) {
+        out.push({ name: m[1] || m[2], start: i, end: j });
+        i = j;
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/** Depth of the body of `fn`, per line — 1 means directly in that body. */
+function depthMap(lines, fn) {
+  const at = new Map();
+  let depth = 0;
+  for (let i = fn.start; i <= fn.end; i += 1) {
+    at.set(i, depth);
+    for (const ch of lines[i]) {
+      if (ch === '{') depth += 1;
+      else if (ch === '}') depth -= 1;
+    }
+  }
+  return at;
+}
+
+function hooksBelowEarlyReturn(src) {
+  const lines = src.split('\n');
+  const found = [];
+  for (const fn of topLevelFunctions(lines)) {
+    const depth = depthMap(lines, fn);
+    // Only functions that use hooks are components or custom hooks; a helper
+    // with guard clauses and no hooks cannot have this bug.
+    const usesHooks = [];
+    for (let i = fn.start; i <= fn.end; i += 1) {
+      if (depth.get(i) === 1 && HOOK.test(lines[i])) usesHooks.push(i);
+    }
+    if (usesHooks.length === 0) continue;
+
+    let firstReturn = null;
+    for (let i = fn.start + 1; i <= fn.end; i += 1) {
+      if (depth.get(i) !== 1) continue;
+      const isGuardBlock = /^\s*if \(.*\) \{\s*$/.test(lines[i])
+        && (() => {
+          for (let j = i + 1; j <= Math.min(i + 6, fn.end); j += 1) {
+            if (depth.get(j) === 2 && /^\s*return\b/.test(lines[j])) return true;
+          }
+          return false;
+        })();
+      const isGuardLine = /^\s*if \(.*\)\s*return\b/.test(lines[i]);
+      if (isGuardBlock || isGuardLine) { firstReturn = i; break; }
+    }
+    if (firstReturn === null) continue;
+
+    for (const i of usesHooks) {
+      if (i > firstReturn) found.push(`${fn.name}:${i + 1}: ${lines[i].trim().slice(0, 50)}`);
+    }
+  }
+  return found;
+}
+
+describe('no hook runs below an early return', () => {
+  // rejects: THE QUICK START BLANK PAGE. A hook past a `return` is skipped on
+  //          the renders that take that branch and runs on the ones that do
+  //          not, so the count changes and React throws #310. It breaks only on
+  //          the transition between the two, which is why every other route
+  //          looked fine.
+  test.each(sourceFiles(SRC).map((f) => [path.relative(SRC, f), f]))(
+    '%s',
+    (_rel, file) => {
+      expect(hooksBelowEarlyReturn(code(fs.readFileSync(file, 'utf8')))).toEqual([]);
+    },
+  );
+});
+
+describe('the early-return scan can actually fail', () => {
+  // rejects: the matcher missing the exact shape that shipped.
+  test('it catches a useState below a guard clause', () => {
+    const src = code(`
+function Thing() {
+  const [a, setA] = useState(0);
+  if (a) {
+    return (<div />);
+  }
+  const [b, setB] = useState(null);
+}
+`);
+    expect(hooksBelowEarlyReturn(src)).toHaveLength(1);
+  });
+
+  // rejects: flagging the correct arrangement, which is most of this codebase.
+  test('hooks above every early return are fine', () => {
+    const src = code(`
+function Thing() {
+  const [a, setA] = useState(0);
+  const [b, setB] = useState(null);
+  if (a) {
+    return (<div />);
+  }
+  const helper = () => setB(1);
+}
+`);
+    expect(hooksBelowEarlyReturn(src)).toEqual([]);
+  });
+
+  // rejects: flagging a `return` inside a nested function, which bounds
+  //          nothing about hook order and is everywhere in this file.
+  test('a return inside a callback is not an early return', () => {
+    const src = code(`
+function Thing() {
+  const go = () => {
+    if (x) return;
+  };
+  const [b, setB] = useState(null);
+}
+`);
+    expect(hooksBelowEarlyReturn(src)).toEqual([]);
+  });
+});
+
 describe('a hook never depends on something declared later', () => {
   // rejects: THE BLANK SCREEN. A dependency array is an argument, evaluated
   //          during render — unlike a function body, which runs after every

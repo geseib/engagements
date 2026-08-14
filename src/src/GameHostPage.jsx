@@ -272,6 +272,23 @@ function GameHostPage() {
   const [rounds, setRounds] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [pastRoundIndex, setPastRoundIndex] = useState(null);
+  /*
+    WHICH ANSWER IS BEING READ IN FULL, or null. An ABSOLUTE index into
+    `answers`, never a page-relative one — utils/answerSpotlight.js has why that
+    distinction is the whole of the arithmetic.
+
+    IT LIVES UP HERE BECAUSE IT IS A HOOK, and that is not a style preference.
+    It was declared beside `answerPage`, ~1000 lines down and BELOW five early
+    returns (showQuickstartMenu, showWelcomeScreen, showReport, showReportsModal,
+    showNewGameDialog). On the Quick Start menu the component returned at the
+    first of those and this `useState` never ran; picking a lesson cleared the
+    flag, the render carried past it, and React counted one more hook than the
+    time before — error #310, and a blank page in front of a host.
+
+    Every hook has to run on every render. The helper below may stay where it
+    is, because a function is not a hook.
+  */
+  const [spotlightIndex, setSpotlightIndex] = useState(null);
   const [regeneratingRounds, setRegeneratingRounds] = useState([]);
 
   const loadRounds = useCallback(async () => {
@@ -4251,15 +4268,15 @@ Ready to engage? See you there!`;
   const answerPage = pageSlice(answers, stagePageIndex, stagePageSize);
 
   /*
-    WHICH ANSWER IS BEING READ IN FULL, or null. An ABSOLUTE index into
-    `answers`, never a page-relative one — see utils/answerSpotlight.js for why
-    that distinction is the whole of the arithmetic.
-
     Closing returns the grid to the page holding whatever was reached, so a host
     who pages forward inside the dialog and then closes is not dropped back
     behind where they got to.
+
+    A PLAIN FUNCTION, AND IT MAY LIVE DOWN HERE — it needs `stagePageSize` and
+    `setStagePageIndex`, which are declared just above, and it runs from a
+    click. `spotlightIndex` itself is a HOOK and had to move to the top; see
+    its declaration for what that cost.
   */
-  const [spotlightIndex, setSpotlightIndex] = useState(null);
   const closeSpotlight = () => {
     if (spotlightIndex !== null) setStagePageIndex(pageOf(spotlightIndex, stagePageSize));
     setSpotlightIndex(null);
