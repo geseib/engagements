@@ -40,7 +40,9 @@ jest.mock('../WordCloudTest', () => () => <div data-testid="wordcloud" />);
 jest.mock('../auth/AuthPage', () => () => <div data-testid="auth-page" />);
 jest.mock('../components/RootPage', () => () => <div data-testid="root-page" />);
 
-// eslint-disable-next-line import/first
+// Imported AFTER jest.mock above, which jest hoists — the order is required,
+// not accidental. (Was an `import/first` disable directive; see .eslintrc.js
+// for why no import plugin is configured.)
 import App from '../App';
 
 const goTo = (path) => window.history.pushState({}, '', path);

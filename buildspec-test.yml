@@ -77,6 +77,26 @@ phases:
       - echo "Generated config.js contents:"
       - cat public/config.js
 
+      # ── THE GATE THAT DID NOT EXIST ──────────────────────────────────
+      # This pipeline ran `npm ci` and `npm run build` and nothing else. No
+      # lint, no tests. Three product-down bugs shipped through it in two days
+      # — four calls to deleted setters, a hook depending on a later const, and
+      # a useState below five early returns — every one a clean webpack build,
+      # because babel transpiles without resolving identifiers or understanding
+      # React.
+      #
+      # `lint` is what catches that class at all: react-hooks/rules-of-hooks
+      # and no-undef, and nothing else, so it stays readable (see
+      # src/.eslintrc.js for why the rule set is deliberately tiny).
+      #
+      # `test` runs 111 suites. Five of them had never run since the day they
+      # were written, which is how the largest file in the product came to have
+      # no runtime coverage at all.
+      - echo "Linting..."
+      - npm run lint
+      - echo "Running frontend tests..."
+      - npm test
+      - echo "Building..."
       - npm run build
 
       - echo "Verifying config.js in dist folder..."

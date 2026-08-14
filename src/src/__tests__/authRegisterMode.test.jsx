@@ -20,7 +20,9 @@ jest.mock('../auth/ForgotPasswordForm', () => () => <div data-testid="forgot-for
 jest.mock('../auth/PendingApproval', () => () => <div data-testid="pending" />);
 jest.mock('../auth/PasswordChangeForm', () => () => <div data-testid="password-change" />);
 
-// eslint-disable-next-line import/first
+// Imported AFTER jest.mock above, which jest hoists — the order is required,
+// not accidental. (Was an `import/first` disable directive; no import plugin
+// is configured, and a directive for an unknown rule is itself an error.)
 import AuthPage from '../auth/AuthPage';
 
 const goTo = (path) => window.history.pushState({}, '', path);

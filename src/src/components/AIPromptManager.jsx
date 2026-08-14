@@ -41,7 +41,11 @@ const SUMMARY_MODEL_ID = 'claude-haiku-4-5-20251001';
 const PREFLIGHT_MODULE = 'promptPreflight';
 function loadPreflight() {
   try {
-    // eslint-disable-next-line import/no-dynamic-require, global-require
+    // A DELIBERATE dynamic require: the preflight module is optional and this
+    // returns null rather than failing the editor when it is absent. (Was a
+    // disable directive for import/no-dynamic-require and global-require;
+    // neither rule is configured, and a directive naming an unknown rule is an
+    // error in itself.)
     const mod = require(`../utils/${PREFLIGHT_MODULE}`);
     const fn = mod && (mod.preflightPrompt || (mod.default && mod.default.preflightPrompt));
     return typeof fn === 'function' ? fn : null;

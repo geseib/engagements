@@ -20,7 +20,8 @@ jest.mock('qrcode.react', () => ({
   QRCodeSVG: ({ value }) => <div data-testid="qr" data-value={value} />,
 }));
 
-// eslint-disable-next-line import/first
+// Imported AFTER jest.mock above, which jest hoists — the order is required,
+// not accidental. (Was an `import/first` disable directive.)
 import SessionSetupPanel from '../components/stage/SessionSetupPanel';
 
 const players = [

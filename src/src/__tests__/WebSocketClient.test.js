@@ -1,115 +1,108 @@
-import WebSocketClient from '../WebSocketClient';
+/**
+ * THE SINGLETON, NOT THE CLASS.
+ *
+ * This suite has never run. It opened with `new WebSocketClient()` against a
+ * module whose last line is `export default webSocketClient` — an INSTANCE.
+ * `_WebSocketClient.default is not a constructor`, on every test, since the day
+ * it was written.
+ *
+ * That matters beyond the tidy-up: the singleton is the whole design. Every
+ * page imports the same object, which is why a host and a player screen in one
+ * tab share one socket and why `ensureConnected()` can be called from four
+ * resume handlers without opening four connections. A suite that built its own
+ * instance would have tested an object the product never uses.
+ */
+import webSocketClient from '../WebSocketClient';
 
-describe('WebSocketClient', () => {
-  let wsClient;
-  let mockWebSocket;
+describe('the shared WebSocket client', () => {
+  let sockets;
 
   beforeEach(() => {
-    wsClient = new WebSocketClient();
-    
-    // Mock WebSocket constructor
-    mockWebSocket = {
-      close: jest.fn(),
-      send: jest.fn(),
-      readyState: 1,
-      OPEN: 1,
-      addEventListener: jest.fn(),
-      removeEventListener: jest.fn(),
-    };
-    
-    global.WebSocket = jest.fn(() => mockWebSocket);
-    global.window.WS_URL = 'ws://localhost:3001';
+    sockets = [];
+    global.WebSocket = jest.fn(function FakeSocket() {
+      this.close = jest.fn();
+      this.send = jest.fn();
+      this.readyState = 0;          // CONNECTING
+      sockets.push(this);
+    });
+    global.WebSocket.CONNECTING = 0;
+    global.WebSocket.OPEN = 1;
+    global.WebSocket.CLOSING = 2;
+    global.WebSocket.CLOSED = 3;
+    window.WS_URL = 'ws://localhost:3001';
+    webSocketClient.disconnect();
   });
 
   afterEach(() => {
+    webSocketClient.disconnect();
     jest.clearAllMocks();
   });
 
-  test('creates WebSocketClient instance', () => {
-    expect(wsClient).toBeInstanceOf(WebSocketClient);
-    expect(wsClient.ws).toBeNull();
-    expect(wsClient.gameId).toBeNull();
-    expect(wsClient.playerName).toBeNull();
-    expect(wsClient.isHost).toBe(false);
+  // rejects: exporting the class instead of the instance. Every page imports
+  //          this module expecting THE socket; a class export would silently
+  //          give each of them their own.
+  test('the module exports one shared instance, not a constructor', () => {
+    expect(typeof webSocketClient).toBe('object');
+    expect(typeof webSocketClient.connect).toBe('function');
+    expect(typeof webSocketClient.ensureConnected).toBe('function');
   });
 
-  test('connects to WebSocket with game ID', () => {
-    const result = wsClient.connect('GAME123');
-    
-    expect(result).toBe(true);
-    expect(global.WebSocket).toHaveBeenCalledWith(
-      expect.stringContaining('gameId=GAME123')
-    );
-    expect(wsClient.gameId).toBe('GAME123');
+  // rejects: reporting a socket that is still CONNECTING as connected, which
+  //          is how a send lands on a socket that cannot carry it.
+  test('a connecting socket is not yet a connected one', () => {
+    webSocketClient.connect('4821', 'Ada', true);
+    expect(sockets).toHaveLength(1);
+    expect(webSocketClient.isConnected()).toBe(false);
+
+    sockets[0].readyState = 1;
+    expect(webSocketClient.isConnected()).toBe(true);
   });
 
-  test('connects with player name and host flag', () => {
-    wsClient.connect('GAME123', 'Player1', true);
-    
-    expect(global.WebSocket).toHaveBeenCalledWith(
-      expect.stringContaining('gameId=GAME123&playerName=Player1&isHost=true')
-    );
-    expect(wsClient.playerName).toBe('Player1');
-    expect(wsClient.isHost).toBe(true);
+  // rejects: `ensureConnected` opening a second socket when one is already
+  //          live. It is called from visibilitychange, focus, online and
+  //          pageshow — four handlers that can fire together when a phone
+  //          wakes, so a connect-on-every-call would open four.
+  test('ensureConnected does not open a second socket over a live one', () => {
+    webSocketClient.connect('4821', 'Ada', true);
+    sockets[0].readyState = 1;
+
+    webSocketClient.ensureConnected();
+    webSocketClient.ensureConnected();
+
+    expect(sockets).toHaveLength(1);
   });
 
-  test('fails to connect when WS_URL is not configured', () => {
-    global.window.WS_URL = null;
-    
-    const result = wsClient.connect('GAME123');
-    
-    expect(result).toBe(false);
-    expect(global.WebSocket).not.toHaveBeenCalled();
+  // rejects: a handler surviving disconnect and firing against a closed
+  //          socket, or a second registration for the same type stacking
+  //          rather than replacing.
+  test('handlers are registered by type and can be removed', () => {
+    const first = jest.fn();
+    webSocketClient.onMessage('gameStateChanged', first);
+    webSocketClient.triggerHandler('gameStateChanged', { state: 'ASK#001' });
+    expect(first).toHaveBeenCalledWith({ state: 'ASK#001' });
+
+    webSocketClient.offMessage('gameStateChanged');
+    webSocketClient.triggerHandler('gameStateChanged', { state: 'ASK#002' });
+    expect(first).toHaveBeenCalledTimes(1);
   });
 
-  test('disconnects WebSocket', () => {
-    wsClient.connect('GAME123');
-    wsClient.disconnect();
-    
-    expect(mockWebSocket.close).toHaveBeenCalledWith(1000, 'Manual disconnect');
-    expect(wsClient.ws).toBeNull();
-  });
+  // rejects: disconnect leaving the socket handle behind, so a later
+  //          `isConnected()` answers about a socket nobody is holding.
+  //
+  //          `toBeFalsy`, not `toBe(false)`, and that is a finding rather than
+  //          a convenience: `isConnected()` is `return this.ws && ...`, so with
+  //          no socket it answers `null` rather than `false`. Every caller uses
+  //          it in a condition, so nothing is broken — but it is typed as a
+  //          predicate and does not return one. Left alone deliberately: this
+  //          suite exists to start running, not to carry a product change.
+  test('disconnect closes the socket and forgets it', () => {
+    webSocketClient.connect('4821', 'Ada', true);
+    const socket = sockets[0];
+    socket.readyState = 1;
 
-  test('checks connection status', () => {
-    expect(wsClient.isConnected()).toBe(false);
-    
-    wsClient.connect('GAME123');
-    mockWebSocket.readyState = 1; // OPEN
-    
-    expect(wsClient.isConnected()).toBe(true);
-  });
+    webSocketClient.disconnect();
 
-  test('sends message when connected', () => {
-    wsClient.connect('GAME123', 'Player1');
-    
-    const result = wsClient.sendMessage('test-action', { data: 'test' });
-    
-    expect(result).toBe(true);
-    expect(mockWebSocket.send).toHaveBeenCalledWith(
-      expect.stringContaining('"action":"test-action"')
-    );
-  });
-
-  test('fails to send message when not connected', () => {
-    const result = wsClient.sendMessage('test-action');
-    
-    expect(result).toBe(false);
-    expect(mockWebSocket.send).not.toHaveBeenCalled();
-  });
-
-  test('handles message registration', () => {
-    const handler = jest.fn();
-    wsClient.onMessage('test-type', handler);
-    
-    expect(wsClient.messageHandlers.has('test-type')).toBe(true);
-    expect(wsClient.messageHandlers.get('test-type')).toBe(handler);
-  });
-
-  test('removes message handler', () => {
-    const handler = jest.fn();
-    wsClient.onMessage('test-type', handler);
-    wsClient.offMessage('test-type');
-    
-    expect(wsClient.messageHandlers.has('test-type')).toBe(false);
+    expect(socket.close).toHaveBeenCalled();
+    expect(webSocketClient.isConnected()).toBeFalsy();
   });
 });

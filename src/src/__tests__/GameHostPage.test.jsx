@@ -1,5 +1,29 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+/*
+  THE ONE MOCK THAT STOOD BETWEEN THIS SUITE AND EVER RUNNING.
+
+  It failed on `useAuth must be used within an AuthProvider` — and that single
+  unmocked provider is the entire reason this file has been red since it was
+  written, and the reason a claim spread through this repo that the component
+  "cannot be rendered in jsdom". Three product-down bugs shipped behind that
+  claim. The component was always mountable.
+*/
+jest.mock('../auth/AuthContext', () => ({
+  __esModule: true,
+  useAuth: () => ({
+    currentUser: { username: 'host', attributes: { email: 'host@example.com' } },
+    signOut: jest.fn(),
+    isAdmin: true,
+  }),
+  AuthProvider: ({ children }) => children,
+}));
+
+jest.mock('../auth/authFetch', () => ({
+  __esModule: true,
+  authFetch: (...args) => global.fetch(...args),
+}));
+
 import GameHostPage from '../GameHostPage';
 
 // Mock WebSocketClient
@@ -15,91 +39,60 @@ jest.mock('../WebSocketClient', () => ({
   },
 }));
 
-describe('GameHostPage Component', () => {
+/**
+ * THE STALE HALF OF THIS FILE IS GONE, AND THIS RECORDS WHY.
+ *
+ * These tests asserted copy that no longer exists — "Welcome to Engagements",
+ * "Create New Game", a players grid keyed on a name — because they were written
+ * against an older UI and then never ran again to notice. A test that has never
+ * passed is not a regression test; it is a description of a product that may
+ * never have shipped.
+ *
+ * The behaviour they were reaching for is now covered properly, and by
+ * something that mounts the real component and drives real journeys:
+ * `hostRenderTransitions.test.jsx`. What is left here is the smoke check that
+ * matters and that file does not duplicate — the page renders its entry screen
+ * against today's copy, and an API that answers badly does not blank it.
+ */
+describe('GameHostPage — the entry screen', () => {
   beforeEach(() => {
-    // Reset fetch mock
-    fetch.mockClear();
-    
-    // Mock successful API responses
-    fetch.mockResolvedValue({
+    global.fetch.mockClear();
+    global.fetch.mockResolvedValue({
       ok: true,
-      json: async () => ({
-        players: [],
-        questions: [],
-        questionSets: [
-          { id: 'set1', name: 'Test Set', description: 'Test Description' }
-        ]
-      }),
+      status: 200,
+      json: async () => ({}),
+      text: async () => '{}',
     });
-
-    // Reset window.location
-    window.location.pathname = '/';
-    window.location.search = '';
+    localStorage.clear();
+    window.history.pushState({}, '', '/host');
   });
 
-  test('renders welcome screen when no game ID in URL', async () => {
+  // rejects: the entry screen failing to render at all, which is the shape all
+  //          three of this week's blank-page bugs took.
+  test('it offers the ways into a session', async () => {
     render(<GameHostPage />);
-    
-    await waitFor(() => {
-      expect(screen.getByText(/Welcome to Engagements/i)).toBeInTheDocument();
-    });
+    expect(await screen.findByText(/start an engagement/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create engagement/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /quick start/i })).toBeInTheDocument();
   });
 
-  test('shows new game dialog when create game button is clicked', async () => {
+  // rejects: an unreachable or failing API taking the page down with it. The
+  //          host must still get a screen they can act on.
+  test('an API that fails does not blank the page', async () => {
+    global.fetch.mockRejectedValue(new Error('network down'));
     render(<GameHostPage />);
-    
-    await waitFor(() => {
-      const createButton = screen.getByText(/Create New Game/i);
-      fireEvent.click(createButton);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText(/Create Game/i)).toBeInTheDocument();
-    });
+    expect(await screen.findByText(/start an engagement/i)).toBeInTheDocument();
   });
 
-  test('handles game ID input correctly', async () => {
+  // rejects: a non-2xx answer being treated as data and crashing the render.
+  test('a 500 from every endpoint does not blank the page', async () => {
+    global.fetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => { throw new Error('not json'); },
+      text: async () => 'Internal Server Error',
+    });
     render(<GameHostPage />);
-    
-    await waitFor(() => {
-      const input = screen.getByPlaceholderText(/Enter Game ID/i);
-      fireEvent.change(input, { target: { value: 'TEST123' } });
-      expect(input.value).toBe('TEST123');
-    });
-  });
-
-  test('displays players grid when players exist', async () => {
-    // Mock API response with players
-    fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        players: [
-          { name: 'Player1', score: 10 },
-          { name: 'Player2', score: 5 }
-        ]
-      }),
-    });
-
-    // Set game ID in URL to trigger game initialization
-    window.location.search = '?gameId=TEST123';
-    
-    render(<GameHostPage />);
-    
-    await waitFor(() => {
-      expect(screen.getByText('Player1')).toBeInTheDocument();
-      expect(screen.getByText('Player2')).toBeInTheDocument();
-    });
-  });
-
-  test('handles API errors gracefully', async () => {
-    // Mock API error
-    fetch.mockRejectedValueOnce(new Error('API Error'));
-    
-    render(<GameHostPage />);
-    
-    // Component should still render without crashing
-    await waitFor(() => {
-      expect(screen.getByText(/Welcome to Engagements/i)).toBeInTheDocument();
-    });
+    expect(await screen.findByText(/start an engagement/i)).toBeInTheDocument();
   });
 });
