@@ -162,56 +162,6 @@ function GameHostPage() {
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
 
 
-  /**
-   * THE ROUNDS PLAYED SO FAR — for the Rounds tab and the dialog behind it.
-   *
-   * NO NEW ENDPOINT. `POST /games/{gameId}/report` already assembles exactly
-   * this: create-report.js queries the results rows, the votes, the AI
-   * summaries and each round's source question, ranks the answers, and returns
-   * one entry per round. It is also the route that already redacts correctly
-   * for this data, and reimplementing that judgement somewhere else is the
-   * specific mistake that hid the names and the podium for a whole session
-   * earlier this week. config/sessionHistory.js has the full reasoning,
-   * including what the call costs.
-   *
-   * Refetched whenever the round advances, so a host who opens the tab after
-   * three more rounds does not read a stale list. `lessonNumber` is the trigger
-   * rather than `gameState` because a single round passes through ASK, VOTE and
-   * RESULTS and only the last of those changes what this shows.
-   */
-  const [rounds, setRounds] = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [pastRoundIndex, setPastRoundIndex] = useState(null);
-  const [regeneratingRounds, setRegeneratingRounds] = useState([]);
-
-  const loadRounds = useCallback(async () => {
-    if (!gameId) return;
-    setHistoryLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}games/${gameId}/report`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      if (!res.ok) {
-        // A session with no completed round has no report, and that is the
-        // normal state for the first few minutes of every game — not an error
-        // worth putting in front of the host. The tab's empty copy says it.
-        console.log(`ℹ️ HOST: no session report yet (${res.status})`);
-        setRounds([]);
-        return;
-      }
-      setRounds(roundsFrom(await res.json()));
-    } catch (e) {
-      console.error('Failed to load session rounds', e);
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [gameId]);
-
-  useEffect(() => {
-    if (setupPanelOpen) loadRounds();
-  }, [setupPanelOpen, lessonNumber, loadRounds]);
 
 
   const [showExpandedQR, setShowExpandedQR] = useState(false);
@@ -301,6 +251,57 @@ function GameHostPage() {
   // sessions that are not the one currently loaded.
   const [reportTarget, setReportTarget] = useState(null);
   const [lessonNumber, setLessonNumber] = useState(0);
+
+  /**
+   * THE ROUNDS PLAYED SO FAR — for the Rounds tab and the dialog behind it.
+   *
+   * NO NEW ENDPOINT. `POST /games/{gameId}/report` already assembles exactly
+   * this: create-report.js queries the results rows, the votes, the AI
+   * summaries and each round's source question, ranks the answers, and returns
+   * one entry per round. It is also the route that already redacts correctly
+   * for this data, and reimplementing that judgement somewhere else is the
+   * specific mistake that hid the names and the podium for a whole session
+   * earlier this week. config/sessionHistory.js has the full reasoning,
+   * including what the call costs.
+   *
+   * Refetched whenever the round advances, so a host who opens the tab after
+   * three more rounds does not read a stale list. `lessonNumber` is the trigger
+   * rather than `gameState` because a single round passes through ASK, VOTE and
+   * RESULTS and only the last of those changes what this shows.
+   */
+  const [rounds, setRounds] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [pastRoundIndex, setPastRoundIndex] = useState(null);
+  const [regeneratingRounds, setRegeneratingRounds] = useState([]);
+
+  const loadRounds = useCallback(async () => {
+    if (!gameId) return;
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}games/${gameId}/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        // A session with no completed round has no report, and that is the
+        // normal state for the first few minutes of every game — not an error
+        // worth putting in front of the host. The tab's empty copy says it.
+        console.log(`ℹ️ HOST: no session report yet (${res.status})`);
+        setRounds([]);
+        return;
+      }
+      setRounds(roundsFrom(await res.json()));
+    } catch (e) {
+      console.error('Failed to load session rounds', e);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [gameId]);
+
+  useEffect(() => {
+    if (setupPanelOpen) loadRounds();
+  }, [setupPanelOpen, lessonNumber, loadRounds]);
   // SERVER TRUTH: has this round's AuthorsRevealed been set? It flips
   // automatically when the round enters RESULTS (get-results.js's
   // enterResultsState); handleRevealAuthors is the override for a host who
