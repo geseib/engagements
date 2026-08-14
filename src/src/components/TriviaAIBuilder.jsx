@@ -7,6 +7,9 @@ import { csvRow, buildCsv } from '../utils/csv';
 import GenerationJobPanel from './GenerationJobPanel';
 import GeneratedItemsTable from './GeneratedItemsTable';
 import StatusMessage from './StatusMessage';
+import AIFormAssist from './AIFormAssist';
+import FieldLock from './FieldLock';
+import { BUILDER_FORM_FIELDS } from '../config/builderFormFields';
 import {
   interpretGenerationJob,
   rememberGenerationJob,
@@ -17,6 +20,7 @@ import {
 
 const API_BASE = window.API_BASE;
 const ENDPOINT = `${API_BASE}admin/ai-generate-trivia`;
+const ASSIST_FORM = BUILDER_FORM_FIELDS.trivia;
 
 function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
   const [step, setStep] = useState(1);
@@ -51,6 +55,27 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
   // the input falls back to the question's stored tags. Normalising on every
   // keystroke would eat the hyphen out of "remote-" as it is typed.
   const [tagDraft, setTagDraft] = useState(null);
+
+  /*
+   * FIELDS LOCKED AGAINST THE AI HELPER — see AIScenarioBuilder for the full
+   * note. The set is sent with the drafting request and becomes the tool schema
+   * server-side, so a locked field is never offered to the model; it is refused
+   * again on the way back in `utils/fieldDrafting.applyFieldDraft`.
+   */
+  const [lockedFields, setLockedFields] = useState(() => new Set());
+  const toggleLock = (field) => setLockedFields((prev) => {
+    const next = new Set(prev);
+    if (next.has(field)) next.delete(field); else next.add(field);
+    return next;
+  });
+  const lockFor = (field) => (
+    <FieldLock
+      field={field}
+      label={ASSIST_FORM.fields.find((f) => f.key === field).label}
+      locked={lockedFields.has(field)}
+      onToggle={toggleLock}
+    />
+  );
 
   const difficultyLevels = [
     { value: 'easy', label: 'Easy', description: 'Basic knowledge, straightforward questions' },
@@ -355,10 +380,28 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
               {/* Only ever set on step 1 by the resume path, when the stored
                   job id has outlived the job record's three-day TTL. */}
               <StatusMessage message={generationStatus} tone="pending" />
+
+              {/* The helper, before the fields it writes into. */}
+              <AIFormAssist
+                formId={ASSIST_FORM.formId}
+                fields={ASSIST_FORM.fields}
+                seed={ASSIST_FORM.seed}
+                values={triviaConfig}
+                locked={lockedFields}
+                onApply={(patch) => setTriviaConfig(prev => ({ ...prev, ...patch }))}
+                hints={[
+                  `The operator asked for ${triviaConfig.count} questions across ${triviaConfig.numberOfCategories} categories.`,
+                  `Difficulty: ${triviaConfig.difficulty}.`,
+                ]}
+              />
+
               <div className="config-form">
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Topic/Subject *</label>
+                    <div className="label-row">
+                      <label>Topic/Subject *</label>
+                      {lockFor('topic')}
+                    </div>
                     <input
                       type="text"
                       value={triviaConfig.topic}
@@ -370,7 +413,10 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Target Audience</label>
+                    <div className="label-row">
+                      <label>Target Audience</label>
+                      {lockFor('audience')}
+                    </div>
                     <input
                       type="text"
                       value={triviaConfig.audience}
@@ -478,7 +524,10 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                     </div>
                   </div>
                   <div className="form-group">
-                    <label>Must Have Categories</label>
+                    <div className="label-row">
+                      <label>Must Have Categories</label>
+                      {lockFor('mustHaveCategories')}
+                    </div>
                     <input
                       type="text"
                       value={triviaConfig.mustHaveCategories}
@@ -489,7 +538,10 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                 </div>
 
                 <div className="form-group">
-                  <label>Additional Requirements (Optional)</label>
+                  <div className="label-row">
+                    <label>Additional Requirements (Optional)</label>
+                    {lockFor('customPrompt')}
+                  </div>
                   <textarea
                     value={triviaConfig.customPrompt}
                     onChange={(e) => setTriviaConfig(prev => ({ ...prev, customPrompt: e.target.value }))}

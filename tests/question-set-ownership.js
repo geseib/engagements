@@ -302,6 +302,13 @@ function reset() { store.clear(); log.length = 0; }
     // flipping the flag.
     ['POST', 'admin/ai-draft-set-metadata'],
     ['GET', 'admin/ai-draft-set-metadata/{jobId}'],
+    // REJECTS: adding the builder-form helper to HOST_ADMIN_ROUTES because the
+    // AI builders themselves feel host-shaped. Same reasoning as the two lines
+    // above, both halves for the same reason: the POST starts a Bedrock
+    // generation, and the {jobId} GET hands back whatever any admin's job
+    // produced. The AI routes are excluded from the host list on purpose.
+    ['POST', 'admin/ai-draft-builder-form'],
+    ['GET', 'admin/ai-draft-builder-form/{jobId}'],
     // REJECTS: any regression in the guard that matters most.
     ['POST', 'admin/users/list'],
     ['PUT', 'admin/users/{username}/state'],

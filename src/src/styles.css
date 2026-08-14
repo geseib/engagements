@@ -11016,3 +11016,187 @@ body {
   line-height: 1.5;
   color: #1B2942;
 }
+
+/* ══════════════════════════════════ the AI form helper, and the field locks ══
+ *
+ * The owner: *"i do wish there was an AI helper that filled out the forms for
+ * the user based on some prelim info they offered … or if the user filled those
+ * in the ai would refine (unless locked, a small icon lock/unlock on cells."*
+ *
+ * Deliberately the same visual language as the question-set drafter above
+ * (.qs-ai-*): a panel inside the form it serves, the operator's words and the
+ * draft as two quotes side by side, the amber primary reserved for the AI's
+ * half. The class names are separate because the components are — one is inside
+ * an editor, one inside three builders — but nothing new is invented here.
+ */
+
+.form-assist {
+  margin: 0 0 16px;
+}
+
+.form-assist-body {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(155, 168, 190, 0.35);
+  border-radius: var(--radius-sm, 8px);
+  background: rgba(155, 168, 190, 0.08);
+}
+
+.form-assist-lede {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.form-assist-note {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+
+/* THE PLAN: what each field is about to get, before anything is spent. */
+.form-assist-plan {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.form-assist-plan li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(155, 168, 190, 0.22);
+  font-size: 0.8rem;
+}
+
+.form-assist-plan-field {
+  font-weight: 600;
+}
+
+.form-assist-plan-kind {
+  opacity: 0.75;
+}
+
+.form-assist-plan-locked .form-assist-plan-kind {
+  color: var(--primary, #8a5300);
+  opacity: 1;
+}
+
+.form-assist-plan-locked .form-assist-plan-field {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
+/* HELD BACK: a proposal that rewrote the operator instead of refining them. */
+.form-assist-held {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--primary, #8a5300);
+  border-radius: var(--radius-sm, 8px);
+  background: rgba(138, 83, 0, 0.06);
+}
+
+.form-assist-held h4 {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+}
+
+.form-assist-held-field {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(155, 168, 190, 0.3);
+}
+
+.form-assist-held-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.form-assist-mine,
+.form-assist-draft {
+  margin: 6px 0;
+  padding: 8px 12px;
+  border-left: 3px solid rgba(155, 168, 190, 0.55);
+  border-radius: var(--radius-sm, 8px);
+  background: rgba(155, 168, 190, 0.08);
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+}
+
+.form-assist-draft {
+  border-left-color: var(--primary, #8a5300);
+}
+
+.form-assist-quote-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.form-assist-held-actions,
+.form-assist-undo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* ── the padlock beside a field label ──────────────────────────────────────
+ *
+ * The label and its lock are one row, so the lock reads as belonging to that
+ * field and not to the one below it. `align-items: baseline` would drop the
+ * icon onto the text baseline and make it look like punctuation; centre is what
+ * keeps it reading as a control.
+ */
+.label-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.label-row > label {
+  margin: 0;
+}
+
+.field-lock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(155, 168, 190, 0.45);
+  border-radius: 999px;
+  background: transparent;
+  color: #5E6167;
+  cursor: pointer;
+}
+
+.field-lock:hover {
+  border-color: var(--primary, #8a5300);
+  color: var(--primary, #8a5300);
+}
+
+/* A LOCKED FIELD MUST BE OBVIOUS AT A GLANCE, not on hover and not by icon
+ * shape alone. Colour is not the only carrier — the padlock icon itself
+ * changes from open to closed and to a filled weight. */
+.field-lock.is-locked {
+  border-color: var(--primary, #8a5300);
+  background: rgba(138, 83, 0, 0.12);
+  color: var(--primary, #8a5300);
+}
+
+.field-lock:focus-visible {
+  outline: 2px solid var(--primary, #8a5300);
+  outline-offset: 2px;
+}

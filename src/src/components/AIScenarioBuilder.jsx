@@ -15,6 +15,9 @@ import {
 import GenerationJobPanel from './GenerationJobPanel';
 import GeneratedItemsTable from './GeneratedItemsTable';
 import StatusMessage from './StatusMessage';
+import AIFormAssist from './AIFormAssist';
+import FieldLock from './FieldLock';
+import { BUILDER_FORM_FIELDS } from '../config/builderFormFields';
 import {
   interpretGenerationJob,
   rememberGenerationJob,
@@ -74,6 +77,34 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   const [availablePrompts, setAvailablePrompts] = useState([]);
   const [loadingPrompts, setLoadingPrompts] = useState(true);
   const [promptsError, setPromptsError] = useState(null);
+
+  /*
+   * FIELDS THE OPERATOR HAS LOCKED AGAINST THE AI HELPER.
+   *
+   * The owner: *"unless locked, a small icon lock/unlock on cells."*
+   *
+   * Held here rather than inside AIFormAssist because the padlocks live beside
+   * these inputs and this is the component that owns the values they guard.
+   * The set travels with the drafting request, where it becomes the tool schema
+   * — a locked field is never offered to the model at all — and it is checked
+   * again in `utils/fieldDrafting.applyFieldDraft` on the way back. A lock is
+   * never merely a UI state.
+   */
+  const [lockedFields, setLockedFields] = useState(() => new Set());
+  const toggleLock = (field) => setLockedFields((prev) => {
+    const next = new Set(prev);
+    if (next.has(field)) next.delete(field); else next.add(field);
+    return next;
+  });
+  const assistForm = BUILDER_FORM_FIELDS.scenario;
+  const lockFor = (field) => (
+    <FieldLock
+      field={field}
+      label={assistForm.fields.find((f) => f.key === field).label}
+      locked={lockedFields.has(field)}
+      onToggle={toggleLock}
+    />
+  );
 
   // Fetch available prompts from database
   useEffect(() => {
@@ -989,9 +1020,35 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
               {/* Only ever set on this step by the resume path, when the stored
                   job id has outlived the job record's three-day TTL. */}
               <StatusMessage message={generationStatus} tone="pending" />
+
+              {/*
+                THE AI HELPER, ahead of the fields it writes into. The realistic
+                case the owner described is an operator who has filled in the
+                Context box and wants the rest proposed — so the offer belongs
+                where they are about to give up, not at the bottom of the form.
+              */}
+              <AIFormAssist
+                formId={assistForm.formId}
+                fields={assistForm.fields}
+                seed={assistForm.seed}
+                values={scenarioConfig}
+                locked={lockedFields}
+                onApply={(patch) => setScenarioConfig(prev => ({ ...prev, ...patch }))}
+                hints={[
+                  `The operator asked for ${scenarioConfig.numberOfCategories} categories.`,
+                  `Level of detail: ${scenarioConfig.difficulty}.`,
+                  scenarioTypes.find(t => t.id === scenarioConfig.type)
+                    ? `Topic card chosen: ${scenarioTypes.find(t => t.id === scenarioConfig.type).title}.`
+                    : ''
+                ].filter(Boolean)}
+              />
+
               <div className="config-form">
                 <div className="form-group">
-                  <label>Question Set Title</label>
+                  <div className="label-row">
+                    <label>Question Set Title</label>
+                    {lockFor('customTitle')}
+                  </div>
                   <input
                     type="text"
                     value={scenarioConfig.customTitle}
@@ -1001,7 +1058,10 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                 </div>
 
                 <div className="form-group">
-                  <label>Context/Background</label>
+                  <div className="label-row">
+                    <label>Context/Background</label>
+                    {lockFor('context')}
+                  </div>
                   <textarea
                     value={scenarioConfig.context}
                     onChange={(e) => setScenarioConfig(prev => ({ ...prev, context: e.target.value }))}
@@ -1011,7 +1071,10 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                 </div>
 
                 <div className="form-group">
-                  <label>Target Audience</label>
+                  <div className="label-row">
+                    <label>Target Audience</label>
+                    {lockFor('audience')}
+                  </div>
                   <input
                     type="text"
                     value={scenarioConfig.audience}
@@ -1035,7 +1098,10 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                     </small>
                   </div>
                   <div className="form-group">
-                    <label>Must Have Categories</label>
+                    <div className="label-row">
+                      <label>Must Have Categories</label>
+                      {lockFor('mustHaveCategories')}
+                    </div>
                     <input
                       type="text"
                       value={scenarioConfig.mustHaveCategories}
@@ -1100,7 +1166,10 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                 </div>
 
                 <div className="form-group">
-                  <label>Base Prompt & Additional Requirements</label>
+                  <div className="label-row">
+                    <label>Base Prompt &amp; Additional Requirements</label>
+                    {lockFor('customPrompt')}
+                  </div>
                   <textarea
                     value={scenarioConfig.customPrompt}
                     onChange={(e) => setScenarioConfig(prev => ({ ...prev, customPrompt: e.target.value }))}

@@ -1118,6 +1118,79 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # THE AI HELPER THAT FILLS IN A BUILDER FORM.
+  #
+  # The owner: "i do wish there was an AI helper that filled out the forms for
+  # the user based on some prelim info they offered ... or if the user filled
+  # those in the ai would refine (unless locked, a small icon lock/unlock on
+  # cells."
+  #
+  # Same guard as the set-metadata drafter above and for the same reason: NOT in
+  # auth/authorizer.js's HOST_ADMIN_ROUTES, so it falls through to admins-only,
+  # because reaching it is a Bedrock spend. The handler checks again with
+  # require-admin.js. Unlike that one it reads no SETS row — nothing exists yet
+  # when this runs, which is the whole premise of the screen — so its DynamoDB
+  # access is the job record and nothing else.
+  AdminAIDraftBuilderFormFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-ai-draft-builder-form'
+      CodeUri: lambda-functions/admin/
+      Handler: ai-draft-builder-form.handler
+      Runtime: nodejs22.x
+      Timeout: 900
+      MemorySize: 1024
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource:
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-sonnet-4-6'
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-6'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+        # Async generation: self-invoke worker (Event). Up to five prose fields
+        # is a ~15s happy path, but a cold start plus one throttle retry plus the
+        # Haiku fallback is three generations and two sleeps — past API Gateway's
+        # hard 30s integration ceiling. POST returns 202 and this invoke does the
+        # work against the 900s function timeout.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-admin-ai-draft-builder-form'
+      Events:
+        AdminAIDraftBuilderFormEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/ai-draft-builder-form
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # Job status poll. The admin builders have no gameId and no WebSocket,
+        # so results come back by polling rather than by broadcast.
+        AdminAIDraftBuilderFormStatusEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/ai-draft-builder-form/{jobId}
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   AdminAIGenerateScenariosFunction:
     Type: AWS::Serverless::Function
     Properties:

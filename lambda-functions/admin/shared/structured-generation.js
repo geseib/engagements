@@ -64,6 +64,13 @@ const PER_ITEM_TOKENS = {
   // four (the AI context, which conditions every later generation) barely room
   // to finish, and a truncated draft is a failed one.
   'set-metadata': 900,
+  // A BUILDER FORM, drafted as one object: up to five prose fields whose
+  // character ceilings add up to ~2200 (shared/builder-form-fields.js), which is
+  // roughly 600 output tokens. Budgeted at double that so the longest field —
+  // `customPrompt`, at 1200 characters, and the one that steers the whole
+  // generation afterwards — has room to finish. A truncated draft is a failed
+  // one, and this is the field an operator is least able to tell was cut short.
+  'builder-form': 1200,
   default: 420,
 };
 

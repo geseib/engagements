@@ -11,6 +11,9 @@ import { csvRow, buildCsv, optionsToCsvCell, allowMultipleToCsvCell } from '../u
 import GenerationJobPanel from './GenerationJobPanel';
 import GeneratedItemsTable from './GeneratedItemsTable';
 import StatusMessage from './StatusMessage';
+import AIFormAssist from './AIFormAssist';
+import FieldLock from './FieldLock';
+import { BUILDER_FORM_FIELDS } from '../config/builderFormFields';
 import {
   interpretGenerationJob,
   rememberGenerationJob,
@@ -21,6 +24,7 @@ import {
 
 const API_BASE = window.API_BASE;
 const ENDPOINT = `${API_BASE}admin/ai-generate-polls`;
+const ASSIST_FORM = BUILDER_FORM_FIELDS.poll;
 
 function PollAIBuilder({ onClose, onPollGenerated }) {
   const [step, setStep] = useState(1);
@@ -56,6 +60,27 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
   // the input falls back to the poll's stored tags. Normalising on every
   // keystroke would eat the hyphen out of "remote-" as it is typed.
   const [tagDraft, setTagDraft] = useState(null);
+
+  /*
+   * FIELDS LOCKED AGAINST THE AI HELPER — see AIScenarioBuilder for the full
+   * note. The set is sent with the drafting request and becomes the tool schema
+   * server-side, so a locked field is never offered to the model; it is refused
+   * again on the way back in `utils/fieldDrafting.applyFieldDraft`.
+   */
+  const [lockedFields, setLockedFields] = useState(() => new Set());
+  const toggleLock = (field) => setLockedFields((prev) => {
+    const next = new Set(prev);
+    if (next.has(field)) next.delete(field); else next.add(field);
+    return next;
+  });
+  const lockFor = (field) => (
+    <FieldLock
+      field={field}
+      label={ASSIST_FORM.fields.find((f) => f.key === field).label}
+      locked={lockedFields.has(field)}
+      onToggle={toggleLock}
+    />
+  );
 
   const difficultyLevels = [
     { value: 'easy', label: 'Easy', description: 'Simple, straightforward poll questions' },
@@ -383,10 +408,27 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                 />
               </section>
 
+              {/* The helper, before the fields it writes into. */}
+              <AIFormAssist
+                formId={ASSIST_FORM.formId}
+                fields={ASSIST_FORM.fields}
+                seed={ASSIST_FORM.seed}
+                values={pollConfig}
+                locked={lockedFields}
+                onApply={(patch) => setPollConfig(prev => ({ ...prev, ...patch }))}
+                hints={[
+                  `The operator asked for ${pollConfig.count} poll questions.`,
+                  `Complexity: ${pollConfig.difficulty}.`,
+                ]}
+              />
+
               <div className="config-form">
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Topic/Subject *</label>
+                    <div className="label-row">
+                      <label>Topic/Subject *</label>
+                      {lockFor('topic')}
+                    </div>
                     <input
                       type="text"
                       value={pollConfig.topic}
@@ -395,7 +437,10 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                     />
                   </div>
                   <div className="form-group">
-                    <label>Category</label>
+                    <div className="label-row">
+                      <label>Category</label>
+                      {lockFor('category')}
+                    </div>
                     <input
                       type="text"
                       value={pollConfig.category}
@@ -407,7 +452,10 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Target Audience</label>
+                    <div className="label-row">
+                      <label>Target Audience</label>
+                      {lockFor('audience')}
+                    </div>
                     <input
                       type="text"
                       value={pollConfig.audience}
@@ -472,7 +520,10 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                 </div>
 
                 <div className="form-group">
-                  <label>Additional Requirements (Optional)</label>
+                  <div className="label-row">
+                    <label>Additional Requirements (Optional)</label>
+                    {lockFor('customPrompt')}
+                  </div>
                   <textarea
                     value={pollConfig.customPrompt}
                     onChange={(e) => setPollConfig(prev => ({ ...prev, customPrompt: e.target.value }))}
