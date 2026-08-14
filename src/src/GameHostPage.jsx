@@ -21,6 +21,8 @@ import Pager from './components/stage/Pager';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
 import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfile';
 import { pageSizeFor, pageSlice } from './config/stagePaging';
+import AnswerSpotlight from './components/AnswerSpotlight';
+import { pageOf } from './utils/answerSpotlight';
 import { qrOverlayClassName } from './utils/qrOverlayClassName';
 import { shortcutsSuppressed, qrOverlayInstructions } from './utils/hostOverlays';
 import {
@@ -4137,6 +4139,21 @@ Ready to engage? See you there!`;
   const setStagePageIndex = (index) => setStagePage({ key: pageKey, index });
   const answerPage = pageSlice(answers, stagePageIndex, stagePageSize);
 
+  /*
+    WHICH ANSWER IS BEING READ IN FULL, or null. An ABSOLUTE index into
+    `answers`, never a page-relative one — see utils/answerSpotlight.js for why
+    that distinction is the whole of the arithmetic.
+
+    Closing returns the grid to the page holding whatever was reached, so a host
+    who pages forward inside the dialog and then closes is not dropped back
+    behind where they got to.
+  */
+  const [spotlightIndex, setSpotlightIndex] = useState(null);
+  const closeSpotlight = () => {
+    if (spotlightIndex !== null) setStagePageIndex(pageOf(spotlightIndex, stagePageSize));
+    setSpotlightIndex(null);
+  };
+
   /**
    * Why the primary is greyed out, and the key that fires it when it is not.
    *
@@ -4605,8 +4622,35 @@ Ready to engage? See you there!`;
                         anonymousUntilReveal,
                         authorsRevealed,
                       });
+                      /*
+                        THE CARD OPENS. A card sized to fit a screenful of its
+                        siblings is glanceable, not readable, and the host asked
+                        to be able to read one: `<AnswerSpotlight>` below.
+
+                        `idx` is ABSOLUTE — `answerPage.offset + i` — so Next
+                        walks the whole round rather than stopping at the edge
+                        of the visible page.
+
+                        A div with a role and a key handler rather than a
+                        <button>: the card carries its own block layout and a
+                        button element would need every one of those properties
+                        reset, and it must stay a legal parent for the tally.
+                      */
                       return (
-                        <div key={idx} className={`card ${answer.placement === 1 ? 'lead' : ''}`}>
+                        <div
+                          key={idx}
+                          className={`card is-openable ${answer.placement === 1 ? 'lead' : ''}`}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Read this answer in full: ${displayName}`}
+                          onClick={() => setSpotlightIndex(idx)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setSpotlightIndex(idx);
+                            }
+                          }}
+                        >
                           <span className="rank">{answer.placement || '·'}</span>
                           <div className="body">
                             <div className="ans">{`“${answer.answer}”`}</div>
@@ -4678,6 +4722,30 @@ Ready to engage? See you there!`;
                   anonymousUntilReveal={anonymousUntilReveal}
                   authorsRevealed={authorsRevealed}
                   players={players}
+                />
+
+                {/* Reading one answer properly. `answers` in FULL, not
+                    `answerPage.items` — the pager is what the grid shows, and
+                    the dialog steps through the whole round.
+
+                    `labelFor` is passed rather than resolved inside the dialog
+                    so anonymity stays decided in exactly one place: the same
+                    `authorsHiddenNow` call the card behind it uses. A dialog
+                    that re-derived it would be a fourth site to get wrong. */}
+                <AnswerSpotlight
+                  answers={answers}
+                  index={spotlightIndex}
+                  onIndex={setSpotlightIndex}
+                  onClose={closeSpotlight}
+                  showPoints={standingsVisible({
+                    gameType: currentGameType, anonymousUntilReveal, authorsRevealed,
+                  })}
+                  labelFor={(answer, idx) => stageLabelFor(answer, idx, {
+                    authorsHidden: authorsHiddenNow({
+                      gameType: currentGameType, anonymousUntilReveal, authorsRevealed,
+                    }),
+                  })}
+                  title={`Round ${lessonNumber} response`}
                 />
               </>
             )}

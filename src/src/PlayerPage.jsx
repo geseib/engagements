@@ -10,6 +10,7 @@ import {
   participationUrl, participationFrom, nextParticipation,
 } from './utils/playerParticipation';
 import JoinNameCollision from './components/JoinNameCollision';
+import AnswerSpotlight from './components/AnswerSpotlight';
 import { getClientId, classifyJoinFailure } from './components/joinResult';
 
 const API_BASE = window.API_BASE;
@@ -149,6 +150,14 @@ function PlayerPage() {
   // session: { kind: 'name-taken' | 'name-unverified', playerName, message }.
   const [joinCollision, setJoinCollision] = useState(null);
   const [votingMode, setVotingMode] = useState('quick'); // 'quick' or 'detailed'
+  /*
+    Which response is being read in full, or null. An index into `answers`.
+
+    On a phone the ballot is the screen most in need of this: the whole point of
+    a ranked vote is comparing responses, and a card clipped to fit three of its
+    siblings above the fold cannot be compared with anything.
+  */
+  const [spotlightIndex, setSpotlightIndex] = useState(null);
   const [playerScore, setPlayerScore] = useState(0);
   const [playerRanking, setPlayerRanking] = useState(null);
   const [playerScoreInfo, setPlayerScoreInfo] = useState(null);
@@ -1594,11 +1603,32 @@ function PlayerPage() {
 
             return (
               <div key={idx} className={`detailed-answer-card ${isOwn ? 'own-answer' : ''}`}>
-                <div className="answer-content">
+                {/* THE TEXT OPENS; THE VOTE BUTTONS DO NOT.
+
+                    Scoped to `.answer-content` rather than the whole card on
+                    purpose. The card also holds the three rank buttons, and a
+                    click handler on the card would fire behind every one of
+                    them — so ranking an answer would also open a dialog over
+                    the ballot the player is trying to fill in. This is a
+                    ballot, not a results wall: reading has to be the secondary
+                    gesture. */}
+                <div
+                  className="answer-content is-openable"
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Read this response in full"
+                  onClick={() => setSpotlightIndex(idx)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSpotlightIndex(idx);
+                    }
+                  }}
+                >
                   <div className="answer-text">"{answer.answer}"</div>
                   <div className="answer-author">- {displayLabelFor(answer, idx)}{isOwn ? ' (Yours)' : ''}</div>
                 </div>
-                
+
                 <div className="vote-buttons">
                   {['first', 'second', 'third'].slice(0, requiredVotes).map(position => {
                     const isSelected = currentPosition === position;
@@ -2571,6 +2601,26 @@ function PlayerPage() {
           </div>
         </div>
       )}
+
+      {/* Reading one response in full.
+
+          MOUNTED ONCE, AT THE PAGE ROOT, rather than inside the voting view —
+          `answers` is page state and the same list is on screen during VOTE and
+          during RESULTS, so one mount serves both phases and there is one piece
+          of open/closed state rather than two that can disagree.
+
+          `displayLabelFor`, not `stageLabelFor`: on a player's own device the
+          row decides. The server has already redacted what this player may not
+          see, and there is no projector here for a session setting to protect.
+          That is the same call the cards behind it make. */}
+      <AnswerSpotlight
+        answers={answers}
+        index={spotlightIndex}
+        onIndex={setSpotlightIndex}
+        onClose={() => setSpotlightIndex(null)}
+        labelFor={displayLabelFor}
+        title="Response"
+      />
 
       {/* GitHub Issue Reporting FAB */}
       <IssueFab context="player" gameId={gameId} />
