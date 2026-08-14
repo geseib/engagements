@@ -127,9 +127,57 @@ const first = (question, ...names) => {
  * they are. The stage browser shows what the question is ABOUT; the remote, on
  * the host's own phone, is where the text lives.
  */
-export function browserRow(question = {}, { usedIds = [] } = {}) {
+/**
+ * THE SAME QUESTION UNDER TWO NAMES, WHICH IS WHY "Unasked only" DID NOTHING.
+ *
+ * Reported: *"the unasked only filter does not work."* It never could. The
+ * filter itself is one correct line — `if (unaskedOnly && row.used) return
+ * false` — and `row.used` was false for every row in the product, because the
+ * two sides compare ids from different spaces:
+ *
+ *   the browser's rows  `admin/get-question-set-questions.js:75` maps
+ *                       `id: item.SK.replace('QUESTION#', '')`   ->  c005#001
+ *   the "asked" list    `game/get-question.js:124` returns
+ *                       `questionId: sourceQuestionId`           ->  QUESTION#c005#001
+ *
+ * So `usedIds.includes(row.id)` was asking whether "QUESTION#c005#001" equals
+ * "c005#001". Nothing was ever dimmed either — the same `used` flag drives the
+ * row's own styling, so both halves of the feature were dead and one of them
+ * looked merely subtle.
+ *
+ * Normalised HERE rather than at either end, because both spellings are correct
+ * in their own file and both are on the wire: the prefixed form is a real
+ * DynamoDB sort key and the bare form is what the browsing endpoint has
+ * published for as long as it has existed. Changing either would be a
+ * compatibility break to fix a comparison.
+ */
+export function questionKey(id) {
+  return String(id ?? '').replace(/^QUESTION#/, '');
+}
+
+export function browserRow(question = {}, { usedIds = [], activeCategories = null } = {}) {
   const id = first(question, 'id', 'Id', 'questionId');
-  const used = usedIds instanceof Set ? usedIds.has(id) : usedIds.includes(id);
+  const key = questionKey(id);
+  const usedKeys = (usedIds instanceof Set ? [...usedIds] : usedIds).map(questionKey);
+  const used = usedKeys.includes(key);
+  const category = first(question, 'category', 'Category') || '';
+  /*
+    IS THIS QUESTION'S CATEGORY SWITCHED OFF?
+
+      "if the question are turned off with the top buttons ... if turned off
+       category, mark disabled."
+
+    `null` means the caller did not say, which is NOT the same as "no categories
+    are active" — during setup, before any game has started, there are no masks
+    at all. Treating an absent set as empty would mark every question disabled
+    on a screen where nothing is. So absent means "cannot tell", and nothing is
+    tagged.
+  */
+  const disabled = activeCategories === null
+    ? false
+    : !(activeCategories instanceof Set
+      ? activeCategories.has(category)
+      : (activeCategories || []).includes(category));
   const optionCount = OPTION_KEYS
     .filter((names) => first(question, ...names) !== undefined).length;
 
@@ -141,11 +189,12 @@ export function browserRow(question = {}, { usedIds = [] } = {}) {
       'questionDetail', 'QuestionDetail', 'detail', 'Detail',
       'customInstructions', 'CustomInstructions',
     ) || '',
-    category: first(question, 'category', 'Category') || '',
+    category,
     difficulty: first(question, 'difficulty', 'Difficulty') || '',
     responseKind: optionCount > 0 ? 'Multiple choice' : 'Free-text response',
     optionCount,
     used,
+    disabled,
   };
 }
 
@@ -157,12 +206,33 @@ export function browserRow(question = {}, { usedIds = [] } = {}) {
  * stay in the list at reduced opacity with `Ask again`, and the filter is
  * opt-in.
  */
-export function filterBrowserRows(rows = [], { search = '', category = '', unaskedOnly = false } = {}) {
+/**
+ * `enabledOnly` IS THE BUTTON THE OWNER ASKED FOR.
+ *
+ *   "if the question are turned off with the top buttons there should be a way
+ *    by default (a button that has enabled categories only however we can
+ *    briefly call that button)"
+ *
+ * The category chips above the list turn categories off during a game, and
+ * until now the browser went on listing every question in them — so a host
+ * scanning for what to ask next was reading a list of things the game would
+ * refuse to serve. This is the complement of the per-category chips rather than
+ * one more of them: those pick ONE category, this drops every switched-off one
+ * at once, which is why it sits beside "Unasked only" rather than in the chip
+ * row.
+ *
+ * It composes with the rest rather than replacing them, so "enabled and
+ * unasked" is the natural way to answer "what can I actually ask next".
+ */
+export function filterBrowserRows(rows = [], {
+  search = '', category = '', unaskedOnly = false, enabledOnly = false,
+} = {}) {
   const needle = search.trim().toLowerCase();
   return rows.filter((row) => {
     if (needle && !(row.title || '').toLowerCase().includes(needle)) return false;
     if (category && row.category !== category) return false;
     if (unaskedOnly && row.used) return false;
+    if (enabledOnly && row.disabled) return false;
     return true;
   });
 }

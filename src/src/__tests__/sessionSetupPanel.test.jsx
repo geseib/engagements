@@ -695,3 +695,110 @@ describe('the Settings tab is where the names decisions are made', () => {
     seen.forEach((snapshot) => expect(snapshot).toEqual(seen[0]));
   });
 });
+
+/*
+ * THE QUESTIONS TAB'S FILTERS AND TAGS.
+ *
+ *   "the question tab in the session, the unasked only filter does not work.
+ *    also if the question are turned off with the top buttons there should be a
+ *    way by default (a button that has enabled categories only however we can
+ *    briefly call that button) also if the question has been asked, mark that
+ *    quested as asked. and if turned off category, mark disabled. small tags
+ *    loike are used in the admin question sets for active and ai those are nice
+ *    tags."
+ *
+ * The unit tests in setupPanel.test.js pin the decisions. These pin that the
+ * panel actually asks them — the filter bug was never in the filter, it was in
+ * what the panel handed it, and no test of `filterBrowserRows` in isolation
+ * could ever have caught that.
+ */
+describe('the question browser filters on what the host can see', () => {
+  const rows = () => screen.getAllByTestId('browser-row');
+
+  // rejects: THE REPORTED BUG, END TO END. `usedQuestionIds` carries the
+  // prefixed id the game returns; the rows carry the bare id the browsing
+  // endpoint publishes. Compare them raw and nothing is ever used, so the
+  // filter drops nothing and the row never dims.
+  test('a question asked this session is tagged and filtered, despite the id prefix', () => {
+    renderPanel({ usedQuestionIds: ['QUESTION#q-2'] });
+    openTab('Questions');
+
+    expect(screen.getByText('Asked')).toBeInTheDocument();
+    expect(rows()).toHaveLength(3);
+
+    fireEvent.click(screen.getByRole('button', { name: /unasked only/i }));
+    expect(rows()).toHaveLength(2);
+    expect(screen.queryByText('Asked')).not.toBeInTheDocument();
+  });
+
+  // rejects: the tag arriving without the dimming, or vice versa. They are one
+  // state and the row's class is what the stylesheet keys off.
+  test('the asked row is marked in the DOM as well as in words', () => {
+    const { container } = renderPanel({ usedQuestionIds: ['QUESTION#q-2'] });
+    openTab('Questions');
+    expect(container.querySelectorAll('.setup-qb__row.is-used')).toHaveLength(1);
+  });
+
+  /*
+   * The file's shared mask is `11100000` — everything on, which is right for
+   * the tests it was written for and useless here. These pass their own,
+   * switching Competitive Response off, which makes q-2 the disabled question.
+   * q-2 is also the one the asked tests above use, deliberately: the two tags
+   * have to be able to coexist on one row.
+   */
+  const oneCategoryOff = {
+    categoryBitmasks: {
+      'HostMask1-8': '10100000',
+      'HostMask9-16': '00000000',
+      'HostMask17-24': '00000000',
+    },
+  };
+
+  test('a question in a switched-off category is tagged Off', () => {
+    renderPanel(oneCategoryOff);
+    openTab('Questions');
+    expect(screen.getByText('Off')).toBeInTheDocument();
+  });
+
+  // rejects: shipping the Off tag with no way to act on it — the owner asked
+  // for the button, not just the label.
+  test('"Enabled only" drops the switched-off questions', () => {
+    renderPanel(oneCategoryOff);
+    openTab('Questions');
+    expect(rows()).toHaveLength(3);
+
+    fireEvent.click(screen.getByRole('button', { name: /enabled only/i }));
+    expect(rows()).toHaveLength(2);
+    expect(screen.queryByText('Off')).not.toBeInTheDocument();
+  });
+
+  // rejects: the two filters being exclusive. "Enabled and unasked" is the
+  // literal question "what can I actually ask next".
+  test('the two filters compose', () => {
+    renderPanel({ ...oneCategoryOff, usedQuestionIds: ['QUESTION#q-1'] });
+    openTab('Questions');
+    fireEvent.click(screen.getByRole('button', { name: /enabled only/i }));
+    fireEvent.click(screen.getByRole('button', { name: /unasked only/i }));
+    // q-1 asked, q-2 off — only q-3 is both enabled and unasked.
+    expect(rows()).toHaveLength(1);
+    expect(screen.getByText('Packaging the top tier')).toBeInTheDocument();
+  });
+
+  // rejects: offering a filter that cannot do anything. Before a game starts
+  // there are no masks, nothing is switched off, and a button that filters
+  // nothing while implying otherwise is worse than no button.
+  test('"Enabled only" is not offered when there is no live mask to read', () => {
+    renderPanel({ categories: [], categoryCounts: null, categoryBitmasks: null });
+    openTab('Questions');
+    expect(screen.queryByRole('button', { name: /enabled only/i })).not.toBeInTheDocument();
+  });
+
+  // rejects: marking every question disabled on the setup screen, which is what
+  // an absent mask read as "nothing is enabled" would do.
+  test('nothing is tagged Off before a game has started', () => {
+    renderPanel({ categories: [], categoryCounts: null, categoryBitmasks: null });
+    openTab('Questions');
+    expect(screen.queryByText('Off')).not.toBeInTheDocument();
+    expect(rows()).toHaveLength(3);
+  });
+});

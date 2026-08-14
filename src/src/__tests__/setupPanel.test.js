@@ -9,7 +9,7 @@
  */
 import {
   setupPanelTabs, categoryRows, questionsRemaining,
-  browserRow, filterBrowserRows, rosterRows,
+  browserRow, filterBrowserRows, rosterRows, questionKey,
 } from '../config/setupPanel';
 
 describe('setupPanelTabs — four tabs, none of them empty', () => {
@@ -251,6 +251,72 @@ describe('browserRow — the answer never reaches the stage', () => {
     expect(browserRow({ id: 'q-99' }, { usedIds: ['q-12'] }).used).toBe(false);
     expect(browserRow({ id: 'q-12' }, { usedIds: new Set(['q-12']) }).used).toBe(true);
   });
+
+  /**
+   * THE REPORTED BUG, AND WHY THE TEST ABOVE DID NOT CATCH IT.
+   *
+   *   "the question tab in the session, the unasked only filter does not work."
+   *
+   * It never could. `filterBrowserRows` is one correct line, and `row.used` was
+   * false for every row in the product, because the two sides carry ids from
+   * different spaces:
+   *
+   *   the browser's rows   admin/get-question-set-questions.js:75 maps
+   *                        `id: item.SK.replace('QUESTION#', '')` -> c005#001
+   *   the asked list       game/get-question.js:124 returns
+   *                        `questionId: sourceQuestionId`  -> QUESTION#c005#001
+   *
+   * The test above passes because its fixture uses `q-12` on BOTH sides — a
+   * shape that occurs nowhere in the running system. It proved the flag could
+   * be set, never that it ever was. So these use the real spellings.
+   */
+  test('a prefixed asked-id matches the bare id the browser publishes', () => {
+    // rejects: THE REPORTED BUG. Comparing the raw strings makes `used` false
+    // for every question in the product, which kills the filter AND the dimming
+    // — both halves were dead, and one of them merely looked subtle.
+    expect(browserRow({ id: 'c005#001' }, { usedIds: ['QUESTION#c005#001'] }).used).toBe(true);
+    expect(browserRow({ id: 'c005#001' }, { usedIds: new Set(['QUESTION#c005#001']) }).used).toBe(true);
+  });
+
+  test('normalising does not make different questions equal', () => {
+    // rejects: over-eager stripping — matching on a suffix, say — which would
+    // mark unrelated questions asked and hide them from a host mid-session.
+    expect(browserRow({ id: 'c005#002' }, { usedIds: ['QUESTION#c005#001'] }).used).toBe(false);
+    expect(browserRow({ id: 'c006#001' }, { usedIds: ['QUESTION#c005#001'] }).used).toBe(false);
+  });
+
+  test('the same question in either spelling is one question', () => {
+    expect(questionKey('QUESTION#c005#001')).toBe('c005#001');
+    expect(questionKey('c005#001')).toBe('c005#001');
+    // Only a LEADING prefix, and only one. A question whose own id contains the
+    // word must not be rewritten mid-string.
+    expect(questionKey('QUESTION#QUESTION#x')).toBe('QUESTION#x');
+    expect(questionKey('a-QUESTION#x')).toBe('a-QUESTION#x');
+    expect(questionKey(undefined)).toBe('');
+  });
+
+  /*
+   * "if turned off category, mark disabled."
+   */
+  test('a question in a switched-off category is marked disabled', () => {
+    const active = new Set(['Pricing Power']);
+    expect(browserRow({ id: '1', category: 'Pricing Power' }, { activeCategories: active }).disabled)
+      .toBe(false);
+    expect(browserRow({ id: '2', category: 'Packaging' }, { activeCategories: active }).disabled)
+      .toBe(true);
+  });
+
+  test('not knowing which categories are on is not the same as none being on', () => {
+    // rejects: treating an absent set as empty, which marks EVERY question
+    // disabled on the setup screen — before a game starts there are no masks at
+    // all, and nothing there is switched off.
+    expect(browserRow({ id: '1', category: 'Anything' }).disabled).toBe(false);
+    expect(browserRow({ id: '1', category: 'Anything' }, { activeCategories: null }).disabled)
+      .toBe(false);
+    // ...but an explicitly empty set means exactly what it says.
+    expect(browserRow({ id: '1', category: 'Anything' }, { activeCategories: new Set() }).disabled)
+      .toBe(true);
+  });
 });
 
 describe('filterBrowserRows — narrowing forty-seven rows to five', () => {
@@ -286,6 +352,38 @@ describe('filterBrowserRows — narrowing forty-seven rows to five', () => {
   test('the filters compose', () => {
     expect(filterBrowserRows(rows, { category: 'Pricing Power', unaskedOnly: true })
       .map((r) => r.id)).toEqual(['1']);
+  });
+
+  /*
+   * "if the question are turned off with the top buttons there should be a way
+   *  by default (a button that has enabled categories only ...)"
+   */
+  describe('"Enabled only"', () => {
+    const mixed = [
+      { id: '1', title: 'On and unasked', category: 'A', used: false, disabled: false },
+      { id: '2', title: 'Off', category: 'B', used: false, disabled: true },
+      { id: '3', title: 'On but asked', category: 'A', used: true, disabled: false },
+    ];
+
+    // rejects: shipping the tag without the filter. The chips above the list
+    // switch categories off during a game, and the browser went on offering
+    // every question in them — so a host scanning for what to ask next was
+    // reading a list of things the game would refuse to serve.
+    test('it drops questions whose category is switched off', () => {
+      expect(filterBrowserRows(mixed, { enabledOnly: true }).map((r) => r.id)).toEqual(['1', '3']);
+    });
+
+    // rejects: making it exclusive with the others. "Enabled and unasked" is
+    // the literal question "what can I actually ask next", so it has to be one
+    // combination rather than two visits.
+    test('it composes with Unasked only', () => {
+      expect(filterBrowserRows(mixed, { enabledOnly: true, unaskedOnly: true }).map((r) => r.id))
+        .toEqual(['1']);
+    });
+
+    test('off by default, so nothing is hidden until it is asked for', () => {
+      expect(filterBrowserRows(mixed, {}).map((r) => r.id)).toEqual(['1', '2', '3']);
+    });
   });
 });
 

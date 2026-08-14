@@ -140,6 +140,8 @@ export default function SessionSetupPanel({
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [unaskedOnly, setUnaskedOnly] = useState(false);
+  /* "a button that has enabled categories only" — see filterBrowserRows. */
+  const [enabledOnly, setEnabledOnly] = useState(false);
 
   const panelRef = useRef(null);
   // Where focus came from, so it can go back. A keyboard host who opens this
@@ -203,15 +205,40 @@ export default function SessionSetupPanel({
   // the caller. Keeping them paired here is what lets `Ask next` hand
   // `selectQuestion` a question the next-question endpoint will accept while
   // the row on screen carries no answer.
+  /*
+    WHICH CATEGORIES ARE ON, derived from the rows the chips above already use
+    so the tag and the chip can never disagree.
+
+    `null` when there is nothing live to read — before a game starts there are
+    no masks — because `browserRow` treats an absent set as "cannot tell" rather
+    than "everything is off". Passing an empty Set instead would mark every
+    question in the set disabled on the setup screen.
+  */
+  const activeCategoryNames = useMemo(() => {
+    if (!catRows.length) return null;
+    return new Set(catRows.filter((r) => r.enabled).map((r) => r.name));
+  }, [catRows]);
+
+  // The projection is what reaches the DOM; the original is what goes back to
+  // the caller. Keeping them paired here is what lets `Ask next` hand
+  // `selectQuestion` a question the next-question endpoint will accept while
+  // the row on screen carries no answer.
   const rows = useMemo(
-    () => questions.map((question) => ({ row: browserRow(question, { usedIds: usedQuestionIds }), question })),
-    [questions, usedQuestionIds],
+    () => questions.map((question) => ({
+      row: browserRow(question, {
+        usedIds: usedQuestionIds, activeCategories: activeCategoryNames,
+      }),
+      question,
+    })),
+    [questions, usedQuestionIds, activeCategoryNames],
   );
   const visible = useMemo(() => {
-    const filtered = filterBrowserRows(rows.map((r) => r.row), { search, category: filterCategory, unaskedOnly });
+    const filtered = filterBrowserRows(rows.map((r) => r.row), {
+      search, category: filterCategory, unaskedOnly, enabledOnly,
+    });
     const keep = new Set(filtered.map((r) => r.id));
     return rows.filter(({ row }) => keep.has(row.id));
-  }, [rows, search, filterCategory, unaskedOnly]);
+  }, [rows, search, filterCategory, unaskedOnly, enabledOnly]);
 
   return (
     <>
@@ -408,6 +435,21 @@ export default function SessionSetupPanel({
                 >
                   Unasked only
                 </button>
+                {/* The complement of the category chips, not one more of them:
+                    those pick ONE category, this drops every switched-off one
+                    at once. Offered only when there is a live mask to read —
+                    before a game starts nothing is switched off, so the button
+                    would filter nothing and imply otherwise. */}
+                {activeCategoryNames && (
+                  <button
+                    type="button"
+                    className={`setup-chip ${enabledOnly ? 'on' : ''}`}
+                    aria-pressed={enabledOnly}
+                    onClick={() => setEnabledOnly((v) => !v)}
+                  >
+                    Enabled only
+                  </button>
+                )}
               </div>
 
               {/* The mockup's line, kept verbatim, because it is enforced
@@ -433,17 +475,52 @@ export default function SessionSetupPanel({
                     {visible.map(({ row, question }) => (
                       <div
                         key={row.id}
-                        className={`setup-qb__row ${row.used ? 'is-used' : ''}`}
+                        className={`setup-qb__row ${row.used ? 'is-used' : ''} ${row.disabled ? 'is-disabled' : ''}`}
                         data-testid="browser-row"
                       >
                         <div className="setup-qb__main">
-                          <div className="setup-qb__title">{row.title}</div>
+                          <div className="setup-qb__title">
+                            {row.title}
+                            {/*
+                              TAGS, in the shape the owner pointed at: *"small
+                              tags like are used in the admin question sets for
+                              active and ai those are nice tags."* Same
+                              `qsets-chip` classes as that list, so the two
+                              screens read as one product rather than as two
+                              takes on a badge.
+
+                              Beside the TITLE, not down in the meta line. The
+                              meta line is where `· already asked` used to
+                              live, in the same grey as the category and the
+                              difficulty — which is why the owner asked for
+                              this despite it technically existing. A status
+                              worth filtering on is worth seeing at a glance.
+
+                              NOT LITERALLY `.qsets-chip`, and that is not
+                              laziness. Those rules read `--qsets-t-floor` and
+                              `--qsets-rule-strong`, which are declared on
+                              `.qsets` (QuestionSetsPanel.css:52) and exist
+                              nowhere else — so the class applied here would
+                              render with no border colour and no font size.
+                              `.setup-qb__tag` copies the treatment using this
+                              panel's own variables.
+                            */}
+                            {row.used && (
+                              <span className="setup-qb__tag setup-qb__tag--asked" title="Already asked this session">
+                                Asked
+                              </span>
+                            )}
+                            {row.disabled && (
+                              <span className="setup-qb__tag setup-qb__tag--off" title="This category is switched off, so the game will not serve it">
+                                Off
+                              </span>
+                            )}
+                          </div>
                           {row.detail && <div className="setup-qb__detail">{row.detail}</div>}
                           <div className="setup-qb__meta">
                             {row.category && <span className="setup-qb__cat">{row.category}</span>}
                             {row.difficulty && <span className="setup-qb__diff">{row.difficulty}</span>}
                             <span className="setup-qb__kind">{row.responseKind}</span>
-                            {row.used && <span className="setup-qb__used">· already asked</span>}
                           </div>
                         </div>
                         <button

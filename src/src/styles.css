@@ -903,6 +903,51 @@ body {
 .setup-qb__kind,
 .setup-qb__used { color: #B6C2D4; font-weight: 600; }
 
+/* STATUS TAGS ON A QUESTION ROW.
+
+     "if the question has been asked, mark that quested as asked. and if turned
+      off category, mark disabled. small tags like are used in the admin
+      question sets for active and ai those are nice tags."
+
+   The treatment is `.qsets-chip`'s — a small bordered pill — rather than the
+   class itself, because that rule reads `--qsets-t-floor` and
+   `--qsets-rule-strong`, both declared on `.qsets` (QuestionSetsPanel.css:52)
+   and undefined anywhere else. Applying the class here would render a pill with
+   no border and no size.
+
+   `title` on the row already dims to 0.55 when asked, and the tag is what makes
+   that dimming legible as a STATE rather than as a rendering artefact. */
+.setup-qb__tag {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(155, 168, 190, 0.34);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+/* Asked is a fact, not a fault — dashed and muted, the same reading
+   `.qsets-chip--off` gives an inactive set. */
+.setup-qb__tag--asked {
+  color: #B6C2D4;
+  border-style: dashed;
+}
+/* Off is a reason the game will refuse this question, so it carries the
+   warning colour rather than the muted one. */
+.setup-qb__tag--off {
+  color: var(--danger-text, #E5645E);
+  border-color: rgba(229, 100, 94, 0.55);
+}
+/* A switched-off row dims like a used one, and the two compound: a question
+   that is both asked and off is the least likely thing a host wants next. */
+.setup-qb__row.is-disabled { opacity: 0.55; }
+.setup-qb__row.is-used.is-disabled { opacity: 0.4; }
+
 .setup-qb__use { white-space: nowrap; }
 
 .setup-loading { color: #B6C2D4; font-size: 13px; }
