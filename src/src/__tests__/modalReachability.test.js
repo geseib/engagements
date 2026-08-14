@@ -73,3 +73,42 @@ describe('a dialog taller than the screen stays reachable', () => {
     expect(overlay()).toMatch(/padding:\s*\S+/);
   });
 });
+
+/*
+ * THE SAME FAULT, ONE COMPONENT OVER.
+ *
+ * Reported from an iPad during a trivia session: the setup panel's sizing was
+ * wrong and the Switch game button "did not work". The button was fine. It sits
+ * in the last section of the panel body, below a 180px QR code, and the body was
+ * `flex: 1; overflow-y: auto` with no `min-height`. A flex item's default
+ * `min-height: auto` resolves to its content height, so the body could not be
+ * compressed, the overflow never existed for `overflow-y` to act on, and the
+ * content grew past the panel's fixed bottom edge — taking the button with it.
+ *
+ * Same class as the `.modal-overlay` bug above: a container that reads as
+ * scrollable and is not. jsdom cannot see either one.
+ */
+describe('the setup panel body actually scrolls', () => {
+  const body = () => block(GLOBAL_CSS, '.setup-panel__body');
+
+  // rejects: the exact shape of the reported bug. `overflow-y: auto` on a
+  //          column flex child is inert without this — the item cannot shrink
+  //          below its content, so there is never an overflow to scroll.
+  test('the body can be compressed below its content', () => {
+    expect(body()).toMatch(/min-height:\s*0/);
+  });
+
+  // rejects: removing the scroll while keeping min-height, which would clip the
+  //          overflow instead of showing it — a different way to lose the button.
+  test('the body still scrolls', () => {
+    expect(body()).toMatch(/overflow-y:\s*auto/);
+  });
+
+  // rejects: leaving the header and tabs shrinkable. While the body refused to
+  //          shrink, these are what the flex algorithm compressed instead, which
+  //          is the "screen sizing" half of the same report.
+  test('the header and tabs are not what gets compressed', () => {
+    expect(block(GLOBAL_CSS, '.setup-panel__header')).toMatch(/flex:\s*none/);
+    expect(block(GLOBAL_CSS, '.setup-panel__tabs')).toMatch(/flex:\s*none/);
+  });
+});

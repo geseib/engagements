@@ -515,6 +515,7 @@ body {
 .setup-panel--wide { width: min(860px, 66vw); }
 
 .setup-panel__header {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -561,6 +562,7 @@ body {
 }
 
 .setup-panel__tabs {
+  flex: none;
   display: flex;
   gap: 4px;
   padding: 10px 20px 0;
@@ -588,9 +590,36 @@ body {
 /* THE ONE SURFACE PERMITTED TO SCROLL, and only here — audit A1 says nothing
    else on the host screen may. Cold content below the fold costs nothing;
    the dock beneath it stays reachable because the panel stops short of it. */
+/*
+  `min-height: 0` IS THE WHOLE FIX, AND IT IS NOT OPTIONAL.
+
+  Reported from an iPad: the setup panel's sizing was wrong and the Switch game
+  button "did not work". One cause, and the button was fine — it was simply off
+  the bottom of the panel where no gesture could reach it.
+
+  This is `flex: 1; overflow-y: auto` inside a `flex-direction: column` parent,
+  which reads like a scrolling body and is not one. A flex item's default
+  `min-height: auto` resolves to its CONTENT height, so this box cannot be
+  compressed below everything inside it, `overflow-y: auto` never has an
+  overflow to act on, and the content grows past the panel's fixed bottom edge
+  instead of scrolling. The Session section — the one holding Switch game, below
+  a 180px QR code — is the part that ends up outside.
+
+  It never showed on a desktop monitor because the content fits there. An iPad
+  in landscape has roughly 700px once the browser chrome is taken out, and that
+  is where it stops fitting.
+
+  The header and the tabs get `flex: none` for the same fault seen from the
+  other side: while the body refuses to shrink, they are what the flex algorithm
+  compresses instead, so they lose their padding and the panel looks wrong on
+  top of behaving wrong.
+*/
 .setup-panel__body {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 16px 20px 24px;
   display: flex;
   flex-direction: column;
