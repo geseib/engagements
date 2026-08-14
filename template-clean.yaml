@@ -1046,6 +1046,78 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # Drafts a question SET's own metadata — name, description, customInstruction,
+  # aiContextInstruction — from the set's own questions. Those four fields are
+  # what QuestionsPanel.buildAiContext() sends to ai-generate-questions above as
+  # context.title / description / customInstructions / aiContextInstructions, so
+  # a thin description silently degrades every question drafted afterwards. This
+  # endpoint repairs the INPUT to the generator declared above it.
+  #
+  # NOT in auth/authorizer.js's HOST_ADMIN_ROUTES, deliberately: everything under
+  # /admin that is not on that list falls through to admins-only, and the AI
+  # routes are excluded there because they spend Bedrock budget. The Authorizer
+  # below is what enforces it; the handler checks again with require-admin.js.
+  AdminAIDraftSetMetadataFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-ai-draft-set-metadata'
+      CodeUri: lambda-functions/admin/
+      Handler: ai-draft-set-metadata.handler
+      Runtime: nodejs22.x
+      Timeout: 900
+      MemorySize: 1024
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource:
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-sonnet-4-6'
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-6'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+        # Async generation: self-invoke worker (Event). Four prose fields is a
+        # ~8s happy path, but a cold start plus one throttle retry plus the Haiku
+        # fallback is three generations and two sleeps — comfortably past API
+        # Gateway's hard 30s integration ceiling. POST returns 202 and this
+        # invoke does the work against the 900s function timeout.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-admin-ai-draft-set-metadata'
+      Events:
+        AdminAIDraftSetMetadataEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/ai-draft-set-metadata
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # Job status poll. Same shape as ai-generate-questions above: the admin
+        # builders have no gameId and no WebSocket, so results come back by
+        # polling rather than by broadcast.
+        AdminAIDraftSetMetadataStatusEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/ai-draft-set-metadata/{jobId}
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   AdminAIGenerateScenariosFunction:
     Type: AWS::Serverless::Function
     Properties:

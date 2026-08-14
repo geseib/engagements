@@ -291,6 +291,17 @@ function reset() { store.clear(); log.length = 0; }
     ['POST', 'admin/toggle-quickstart/{setId}'],
     // REJECTS: adding the download route "while we are here". Not asked for.
     ['GET', 'admin/download-question-set/{setId}'],
+    // REJECTS: adding the set-metadata drafter to HOST_ADMIN_ROUTES so that the
+    // host's copy of QuestionSetEditor can use it. Both halves of this route are
+    // listed because both spend money: the POST starts a Bedrock generation, and
+    // the {jobId} GET hands back whatever any admin's job produced. The AI routes
+    // are excluded from the host list on purpose (authorizer.js:112-114) —
+    // reaching one is a Bedrock spend, and a host's question-set permissions say
+    // nothing about budget. The host surface passes showAIAssist={false}, but a
+    // hidden button is not a permission: this is the check that survives someone
+    // flipping the flag.
+    ['POST', 'admin/ai-draft-set-metadata'],
+    ['GET', 'admin/ai-draft-set-metadata/{jobId}'],
     // REJECTS: any regression in the guard that matters most.
     ['POST', 'admin/users/list'],
     ['PUT', 'admin/users/{username}/state'],

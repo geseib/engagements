@@ -57,6 +57,13 @@ const PER_ITEM_TOKENS = {
   poll: 260,
   trivia: 380,
   question: 420,
+  // A question SET's own metadata, drafted as one object: a title, a
+  // description, a participant instruction and an AI context instruction. Four
+  // prose fields against a question's one, so it is budgeted above `question`
+  // rather than left on `default` — the default would give the longest of the
+  // four (the AI context, which conditions every later generation) barely room
+  // to finish, and a truncated draft is a failed one.
+  'set-metadata': 900,
   default: 420,
 };
 

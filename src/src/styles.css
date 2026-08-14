@@ -10362,6 +10362,81 @@ body {
   font-size: 0.85rem;
 }
 
+/* --- drafting the SET's own four fields (QuestionSetEditor Details panel) --- */
+
+/* The questions the draft was made from: same visual language as the sibling
+   browser below, because it is the same claim — this is what the model read. */
+.qs-ai-source {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px dashed rgba(155, 168, 190, 0.45);
+  border-radius: var(--radius-sm, 8px);
+}
+
+.qs-ai-source h4 {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+}
+
+/* Held back: the author already wrote these, so the draft waits beside their
+   words instead of replacing them. Warm border because it wants a decision. */
+.qs-ai-held {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--primary, #8a5300);
+  border-radius: var(--radius-sm, 8px);
+  background: rgba(138, 83, 0, 0.06);
+}
+
+.qs-ai-held h4 {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+}
+
+.qs-ai-held-field {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(155, 168, 190, 0.3);
+}
+
+.qs-ai-held-yours,
+.qs-ai-held-draft {
+  margin: 6px 0;
+  padding: 8px 12px;
+  border-left: 3px solid rgba(155, 168, 190, 0.55);
+  border-radius: var(--radius-sm, 8px);
+  background: rgba(155, 168, 190, 0.08);
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+}
+
+.qs-ai-held-draft {
+  border-left-color: var(--primary, #8a5300);
+}
+
+.qs-ai-held-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+/* Per-field provenance, beside the label of the field the model wrote. */
+.qs-ai-field-mark {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(138, 83, 0, 0.12);
+  color: var(--primary, #8a5300);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  white-space: nowrap;
+}
+
 /* --- writing alongside these --- */
 .qs-siblings {
   margin: 14px 0;

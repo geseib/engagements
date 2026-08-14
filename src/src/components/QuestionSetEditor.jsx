@@ -17,8 +17,66 @@ import {
   versionDeleteTone
 } from '../utils/questionSetEditing';
 import { roundKindApplies, roundKindGaps } from '../config/roundKinds';
+import { editableRows } from '../utils/questionRows';
+import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
+import { interpretGenerationJob, generationJobTone } from '../utils/generationJob';
 
 const API_BASE = () => window.API_BASE;
+
+/* ═══════════════════════════════════════════════ drafting the set's fields ══
+ *
+ * The owner: *"there is no ai button to update fix the question set fields."*
+ *
+ * These four fields are not decoration. `QuestionsPanel.buildAiContext()` sends
+ * exactly them to `admin/ai-generate-questions` as `context.title`,
+ * `description`, `customInstructions` and `aiContextInstructions`, so a thin
+ * description silently degrades every question drafted for the set afterwards.
+ * Repairing them by hand is the one job the console never helped with.
+ *
+ * THREE RULES GOVERN THIS PANEL and none of them is negotiable:
+ *
+ *   1. THE RESULT IS A DRAFT IN THIS FORM. Nothing is written. The Save
+ *      Changes button below is still the only writer, exactly as it is for a
+ *      question drafted in QuestionsPanel.
+ *   2. TEXT THE AUTHOR ALREADY WROTE IS NEVER REPLACED WITHOUT BEING ASKED.
+ *      A blank field is filled in — there is nothing there to destroy. A field
+ *      that already holds words is HELD BACK and shown beside what the author
+ *      has, with a per-field choice. See `applyDraft`.
+ *   3. WHAT THE SCREEN SHOWS IS WHAT THE MODEL IS GIVEN. `aiQuestions` is one
+ *      array: the list rendered under "Drafted from these questions" IS the
+ *      array in the request body. A screen that claims the model read a list it
+ *      did not read is worse than no screen at all.
+ */
+
+/** The four fields the endpoint drafts, in the order the form shows them. */
+const AI_DRAFT_FIELDS = ['name', 'description', 'customInstruction', 'aiContextInstruction'];
+
+/** What each one is called on this screen, for the provenance line. */
+const AI_FIELD_LABELS = {
+  name: 'Title',
+  description: 'Description',
+  customInstruction: 'Custom Instructions',
+  aiContextInstruction: 'AI Context Instructions'
+};
+
+/**
+ * MIRRORS `lambda-functions/admin/ai-draft-set-metadata.js` (MAX_QUESTIONS,
+ * MAX_DETAIL). Duplicated rather than imported because the lambda bundle is
+ * CommonJS and unreachable from this ESM build — the same deliberate
+ * duplication `edit-question-set.js` makes for GAME_TYPE_IDS.
+ *
+ * They are applied HERE, before the list is rendered, so the server's identical
+ * caps are a no-op on what arrives. A server-side truncation this screen did not
+ * know about would quietly break rule 3 above.
+ */
+const AI_MAX_QUESTIONS = 60;
+const AI_MAX_DETAIL = 240;
+const AI_MAX_CATEGORIES = 24;
+
+const aiClip = (value, max) => {
+  const v = String(value ?? '').trim();
+  return v.length > max ? `${v.slice(0, max - 1)}…` : v;
+};
 
 /**
  * The whole question-set admin, extracted out of AdminPage.jsx.
@@ -135,6 +193,23 @@ export default function QuestionSetEditor({
   const [questionsDirty, setQuestionsDirty] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
 
+  /* ------------------------------------------------- AI drafting the details */
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiBrief, setAiBrief] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiStatus, setAiStatus] = useState({ text: '', tone: '' });
+  // THE ONE ARRAY. Rendered under "Drafted from these questions" and sent as
+  // `questions`. Never two arrays, never re-derived at send time.
+  const [aiQuestions, setAiQuestions] = useState([]);
+  const [aiTotalQuestions, setAiTotalQuestions] = useState(0);
+  const [aiCategories, setAiCategories] = useState([]);
+  const [aiSourceState, setAiSourceState] = useState('idle'); // idle|loading|ready|error
+  // Which fields the model wrote into this form. Provenance — see the panel copy.
+  const [aiDrafted, setAiDrafted] = useState([]);
+  // Fields the model drafted that the author had ALREADY written. Held back
+  // rather than applied, and offered one at a time. `{ field: draftedText }`.
+  const [aiHeld, setAiHeld] = useState({});
+
   const activeVersion = questionSet?.activeVersion;
 
   // Prompts worth offering for THIS set. Keyed off the live engagementType
@@ -188,6 +263,17 @@ export default function QuestionSetEditor({
     setVersionStatus({ text: '', tone: '' });
     setPendingDelete(null);
     setConfirmClose(false);
+    // A different set means a different set's questions and a different set's
+    // provenance. Carrying either across would make both of them lies.
+    setAiOpen(false);
+    setAiBrief('');
+    setAiStatus({ text: '', tone: '' });
+    setAiQuestions([]);
+    setAiTotalQuestions(0);
+    setAiCategories([]);
+    setAiSourceState('idle');
+    setAiDrafted([]);
+    setAiHeld({});
     loadVersions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setId]);
@@ -203,6 +289,198 @@ export default function QuestionSetEditor({
     const match = availablePersonas.find((p) => p.personaId === id);
     return match ? match.name : `${id} (unknown — Workie will adapt instead)`;
   };
+
+  /* ------------------------------------------------ AI drafting the details */
+
+  /** The live form values, keyed the way the endpoint keys them. */
+  const aiCurrent = {
+    name: title,
+    description,
+    customInstruction: instructions,
+    aiContextInstruction: aiContext
+  };
+
+  /** Who writes each field. One table, so nothing can set the wrong box. */
+  const AI_FIELD_SETTERS = {
+    name: setTitle,
+    description: setDescription,
+    customInstruction: setInstructions,
+    aiContextInstruction: setAiContext
+  };
+
+  /**
+   * THE ARRAY THE MODEL IS GIVEN, built once, when the panel opens.
+   *
+   * Read from the SERVER's copy of the questions, not from the Questions
+   * panel's unsaved working copy — the two panels save to different places and
+   * this one cannot see inside the other. The panel copy says so out loud
+   * rather than leaving the author to guess which set of words was summarised.
+   *
+   * The caps are applied here, before anything is rendered, so the identical
+   * caps in the handler are a no-op and the list on screen is the list on the
+   * wire, character for character.
+   */
+  const loadAiSource = useCallback(async () => {
+    if (!setId) return;
+    setAiSourceState('loading');
+    try {
+      const response = await authFetch(`${API_BASE()}question-sets/${setId}/questions`);
+      if (!response.ok) {
+        setAiSourceState('error');
+        return;
+      }
+      const rows = editableRows(await response.json());
+      const shaped = rows
+        .map((r) => ({
+          title: r.title,
+          category: r.category,
+          detail: aiClip(r.detail, AI_MAX_DETAIL),
+          // SINGULAR on the row, PLURAL on the wire — the same mapping
+          // QuestionsPanel.buildAiContext() makes, and the same trap.
+          customInstructions: aiClip(r.customInstruction, AI_MAX_DETAIL)
+        }))
+        .filter((q) => q.title || q.detail)
+        .slice(0, AI_MAX_QUESTIONS);
+
+      const seen = [];
+      for (const r of rows) {
+        const c = String(r.category || '').trim();
+        if (c && !seen.includes(c)) seen.push(c);
+      }
+
+      setAiQuestions(shaped);
+      // The REAL total, so the prompt can say honestly that it read a sample.
+      setAiTotalQuestions(rows.length);
+      setAiCategories(seen.slice(0, AI_MAX_CATEGORIES));
+      setAiSourceState('ready');
+    } catch (error) {
+      console.error('AI source load error:', error);
+      setAiSourceState('error');
+    }
+  }, [setId]);
+
+  const toggleAiPanel = () => {
+    const opening = !aiOpen;
+    setAiOpen(opening);
+    // Retried on 'error' as well as 'idle'. A failed load is otherwise sticky
+    // for the life of the editor, and the copy below tells the author to close
+    // the panel and try again — advice nothing would act on.
+    if (opening && (aiSourceState === 'idle' || aiSourceState === 'error')) loadAiSource();
+  };
+
+  /**
+   * A drafted field becomes an EDITABLE FORM VALUE, or it waits its turn.
+   *
+   * The rule, and the reason it is not "fill everything in":
+   *
+   *   BLANK  → written into the form. There is nothing there to destroy, and a
+   *            blank aiContextInstruction is precisely the degraded generator
+   *            input this whole feature exists to repair.
+   *   WRITTEN → HELD. The author's words stay exactly as they typed them and the
+   *            draft is shown next to them with a per-field choice. An AI that
+   *            silently replaces a paragraph somebody wrote is a data-loss bug
+   *            wearing a feature's clothes: nothing here is saved yet, but the
+   *            author would have no way back to their own sentence.
+   *
+   * Nothing in this function calls the server. `handleSave` is still the only
+   * writer in this component.
+   */
+  const applyDraft = (item) => {
+    const written = [];
+    const held = {};
+    for (const field of AI_DRAFT_FIELDS) {
+      const drafted = String(item?.[field] ?? '').trim();
+      // A field the model left blank is a field it had nothing to say about,
+      // not an instruction to clear the author's.
+      if (!drafted) continue;
+      if (String(aiCurrent[field] ?? '').trim()) held[field] = drafted;
+      else {
+        AI_FIELD_SETTERS[field](drafted);
+        written.push(field);
+      }
+    }
+    setAiDrafted((current) => [...new Set([...current, ...written])]);
+    setAiHeld(held);
+    return { written, held: Object.keys(held) };
+  };
+
+  /** The author chose the draft over their own words, on purpose, one field. */
+  const acceptHeld = (field) => {
+    const value = aiHeld[field];
+    if (value === undefined) return;
+    AI_FIELD_SETTERS[field](value);
+    setAiDrafted((current) => [...new Set([...current, field])]);
+    setAiHeld(({ [field]: dropped, ...rest }) => rest);
+  };
+
+  /** The author kept their own words. The draft is dropped, not stored. */
+  const rejectHeld = (field) =>
+    setAiHeld(({ [field]: dropped, ...rest }) => rest);
+
+  const draftDetails = async () => {
+    setAiBusy(true);
+    setAiHeld({});
+    setAiStatus({ text: 'Starting generation...', tone: 'pending' });
+    const endpoint = `${API_BASE()}admin/ai-draft-set-metadata`;
+    const onStatus = (text) => setAiStatus({ text, tone: 'pending' });
+    try {
+      // Generation cannot run inside the request — API Gateway's 30s ceiling —
+      // so this is the same start-a-job-and-poll shape every other builder uses.
+      const { jobId } = await startGenerationJob(endpoint, {
+        setId,
+        engagementType: normalizeGameType(engagementType),
+        current: aiCurrent,
+        // THE SAME ARRAY THE LIST BELOW RENDERS. Not a copy, not a re-derivation.
+        questions: aiQuestions,
+        totalQuestions: aiTotalQuestions,
+        categories: aiCategories,
+        brief: aiBrief.trim()
+      }, { label: 'Set details', onStatus });
+
+      const job = await pollGenerationJob(endpoint, jobId, { label: 'Set details', onStatus });
+
+      // Read the outcome, never `items.length` — see utils/generationJob.js.
+      const interpreted = interpretGenerationJob(job);
+      if (interpreted.outcome !== 'complete') {
+        setAiStatus({
+          text: `Nothing was drafted: ${interpreted.error
+            || interpreted.warnings.join(' ')
+            || 'the job ended without producing anything'}. Your details are untouched.`,
+          tone: generationJobTone(interpreted.outcome)
+        });
+        return;
+      }
+
+      const { written, held } = applyDraft(interpreted.items[0]);
+      const names = (list) => list.map((f) => AI_FIELD_LABELS[f]).join(', ');
+      if (written.length === 0 && held.length === 0) {
+        setAiStatus({ text: 'The draft came back empty. Your details are untouched.', tone: 'error' });
+      } else {
+        setAiStatus({
+          text: [
+            written.length ? `Drafted into the form: ${names(written)}.` : '',
+            held.length
+              ? `${names(held)} already had your words in ${held.length === 1 ? 'it' : 'them'}, so nothing was replaced — the draft is below for you to take or leave.`
+              : '',
+            'Nothing is saved until you press Save Changes.'
+          ].filter(Boolean).join(' '),
+          tone: 'success'
+        });
+      }
+    } catch (error) {
+      console.error('AI set-details draft error:', error);
+      setAiStatus({ text: `${error.message} Your details are untouched.`, tone: 'error' });
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  /** Small "AI drafted this" mark beside a field label. Provenance, visibly. */
+  const aiMark = (field) => (aiDrafted.includes(field) ? (
+    <span className="qs-ai-field-mark" data-testid={`ai-drafted-${field}`}>
+      <Icon name="Sparkle" weight="duotone" size={12} color="var(--primary)" /> AI drafted
+    </span>
+  ) : null);
 
   /* --------------------------------------------------------------- save --- */
 
@@ -397,11 +675,186 @@ export default function QuestionSetEditor({
         <div className="qs-panel-header">
           <h3><Icon name="ClipboardText" weight="bold" size={16} color="currentColor" /> Details</h3>
           <span className="qs-panel-note">Everything that could be set when this set was created</span>
+          {/* `showAIAssist` is admins-only and Bedrock spend — the same flag the
+              Questions panel's drafter uses, and the same reason. A FLAG IS NOT
+              A PERMISSION: the route is admins-only in auth/authorizer.js and
+              the handler checks again. */}
+          {showAIAssist && (
+            <button
+              type="button"
+              className="btn-secondary btn-small qs-ai-toggle"
+              onClick={toggleAiPanel}
+              aria-expanded={aiOpen}
+              disabled={aiBusy}
+            >
+              <Icon name="Sparkle" weight="duotone" size={14} color="currentColor" />{' '}
+              {aiOpen ? 'Hide the AI draft' : 'Draft these fields with AI'}
+            </button>
+          )}
         </div>
+
+        {showAIAssist && aiOpen && (
+          <div className="qs-ai-panel" data-testid="ai-details-panel">
+            <p className="qs-panel-note">
+              These four fields are what the question generator is given every time it
+              writes for this set, so a thin description quietly degrades everything drafted
+              afterwards. The model reads the set&rsquo;s own questions and proposes new
+              wording. <strong>Nothing is saved</strong> — it fills this form in and you press
+              Save Changes, or you don&rsquo;t.
+            </p>
+
+            <div className="form-group">
+              <label htmlFor="ai-details-brief">Anything it should know? (optional)</label>
+              <textarea
+                id="ai-details-brief"
+                className="form-textarea"
+                rows="2"
+                value={aiBrief}
+                onChange={(e) => setAiBrief(e.target.value)}
+                disabled={aiBusy}
+                placeholder="e.g. this is for new managers, not for engineers"
+              />
+            </div>
+
+            {/* DRAFTED FROM THESE QUESTIONS — the array in the request body,
+                rendered. If this list and `questions` ever disagree, the screen
+                is lying about what the model read. */}
+            <div className="qs-ai-source" data-testid="ai-source-questions">
+              <h4>Drafted from these questions.</h4>
+              {aiSourceState === 'loading' && <p className="qs-empty">Loading the set&rsquo;s questions…</p>}
+              {aiSourceState === 'error' && (
+                <p className="qs-empty">
+                  The set&rsquo;s questions could not be loaded, so the model would have only what
+                  you have already typed to go on. Close this and try again.
+                </p>
+              )}
+              {aiSourceState === 'ready' && aiQuestions.length === 0 && (
+                <p className="qs-empty">
+                  This set has no questions yet. The model will work from what you have already
+                  written and will not invent content the set does not contain.
+                </p>
+              )}
+              {aiSourceState === 'ready' && aiQuestions.length > 0 && (
+                <>
+                  {/*
+                    EVERY FIELD THAT IS SENT IS RENDERED, and rendered WHOLE —
+                    no display truncation anywhere in here. The sibling browser
+                    in QuestionsPanel clips its preview at 120 characters, which
+                    is fine for a list that only claims to jog the memory; this
+                    list claims something stronger, that it IS the model's input,
+                    and a preview shorter than the payload would quietly make
+                    that false. `aiClip` has already bounded every value at
+                    AI_MAX_DETAIL, so whole is short enough to show.
+
+                    `data-field` is what lets a test reconstruct each object out
+                    of the DOM and deep-equal the result against the request
+                    body — see questionSetDetailsAi.test.jsx.
+                  */}
+                  <ol className="qs-sibling-list">
+                    {aiQuestions.map((q, i) => (
+                      <li key={`${q.title}-${i}`} data-testid="ai-source-question">
+                        <strong data-field="title">{q.title}</strong>
+                        {!q.title && <em>Untitled question</em>}
+                        {q.category && (
+                          <span className="qs-question-detail" data-field="category">{q.category}</span>
+                        )}
+                        {q.detail && (
+                          <span className="qs-question-detail" data-field="detail">{q.detail}</span>
+                        )}
+                        {q.customInstructions && (
+                          <span className="qs-question-detail" data-field="customInstructions">
+                            {q.customInstructions}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                  <p className="qs-panel-note">
+                    {aiTotalQuestions > aiQuestions.length
+                      ? `${aiQuestions.length} of ${aiTotalQuestions} questions — the first ${AI_MAX_QUESTIONS} are enough to establish the voice, and they are what is sent.`
+                      : `All ${aiQuestions.length} question${aiQuestions.length === 1 ? '' : 's'} — this is exactly what is sent.`}
+                    {' '}As last saved: unsaved edits in the Questions panel below are not
+                    included, because that panel saves separately.
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div className="qs-panel-actions">
+              <button
+                className="btn-primary btn-small"
+                onClick={draftDetails}
+                disabled={aiBusy || aiSourceState === 'loading'}
+              >
+                {aiBusy ? 'Drafting…' : 'Draft it'}
+              </button>
+            </div>
+
+            {aiStatus.text && <StatusMessage message={aiStatus.text} tone={aiStatus.tone} />}
+          </div>
+        )}
+
+        {/* HELD BACK — fields the author had already written. The draft is shown
+            beside their words and goes nowhere until they say so. */}
+        {Object.keys(aiHeld).length > 0 && (
+          <div className="qs-ai-held" data-testid="ai-held-panel">
+            <h4>
+              <Icon name="Warning" weight="fill" size={14} color="var(--primary)" />{' '}
+              You had already written {Object.keys(aiHeld).length === 1 ? 'this one' : 'these'}
+            </h4>
+            <p className="qs-panel-note">
+              Nothing below has been applied. Your wording is still in the form untouched;
+              take the draft only where you want it.
+            </p>
+            {AI_DRAFT_FIELDS.filter((f) => aiHeld[f] !== undefined).map((field) => (
+              <div className="qs-ai-held-field" key={field} data-testid={`ai-held-${field}`}>
+                <strong>{AI_FIELD_LABELS[field]}</strong>
+                <blockquote className="qs-ai-held-yours">
+                  <span className="qs-ai-held-label">Yours</span>
+                  {aiCurrent[field]}
+                </blockquote>
+                <blockquote className="qs-ai-held-draft">
+                  <span className="qs-ai-held-label">The draft</span>
+                  {aiHeld[field]}
+                </blockquote>
+                <div className="qs-panel-actions">
+                  <button className="btn-secondary btn-small" onClick={() => acceptHeld(field)}>
+                    Replace mine with this
+                  </button>
+                  <button className="btn-secondary btn-small" onClick={() => rejectHeld(field)}>
+                    Keep mine
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* PROVENANCE, and an honest statement of its limits.
+            A question carries its authorship in an `ai-drafted` TAG, which
+            survives the CSV round trip. There is no equivalent carrier here: the
+            SETS row has no tag list, and `edit-question-set.js` writes a CLOSED
+            allow-list of fields (OPTIONAL_FIELDS) that `get-question-sets.js`
+            then projects field by field — so a `draftedByAI` attribute invented
+            here would be dropped on the write, and unread on the way back. That
+            is the same silent discard `upload-questions.js`'s getColumnIndex
+            does to an unknown CSV column, which is exactly the failure the
+            question path chose a tag to avoid. So provenance lives where it can
+            still be acted on: named, per field, at the moment before the save. */}
+        {aiDrafted.length > 0 && (
+          <p className="qs-ai-provenance" data-testid="ai-set-provenance">
+            <Icon name="Sparkle" weight="duotone" size={14} color="var(--primary)" />{' '}
+            <strong>AI drafted {aiDrafted.map((f) => AI_FIELD_LABELS[f]).join(', ')}.</strong>{' '}
+            {aiDrafted.length === 1 ? 'It is' : 'They are'} a draft in this form and nothing
+            else — not written until you press Save Changes. Nothing records this afterwards:
+            a set row has no tag list the way a question does, so if the authorship is worth
+            keeping on the record, say so in the description before you save.
+          </p>
+        )}
 
         <div className="edit-form">
           <div className="form-group">
-            <label htmlFor="edit-title">Title *</label>
+            <label htmlFor="edit-title">Title *{aiMark('name')}</label>
             <input
               id="edit-title"
               type="text"
@@ -413,7 +866,7 @@ export default function QuestionSetEditor({
           </div>
 
           <div className="form-group">
-            <label htmlFor="edit-description">Description</label>
+            <label htmlFor="edit-description">Description{aiMark('description')}</label>
             <textarea
               id="edit-description"
               value={description}
@@ -494,7 +947,7 @@ export default function QuestionSetEditor({
           </div>
 
           <div className="form-group">
-            <label htmlFor="edit-instructions">Custom Instructions</label>
+            <label htmlFor="edit-instructions">Custom Instructions{aiMark('customInstruction')}</label>
             <textarea
               id="edit-instructions"
               value={instructions}
@@ -510,7 +963,7 @@ export default function QuestionSetEditor({
           </div>
 
           <div className="form-group">
-            <label htmlFor="edit-ai-context-instructions">AI Context Instructions</label>
+            <label htmlFor="edit-ai-context-instructions">AI Context Instructions{aiMark('aiContextInstruction')}</label>
             <textarea
               id="edit-ai-context-instructions"
               value={aiContext}
