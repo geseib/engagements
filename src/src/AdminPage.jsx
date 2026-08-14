@@ -456,7 +456,22 @@ function AdminPage() {
     // SETS row or it steers one generation and is then forgotten — a set that
     // was generated as Apply would read back as Produce for the editor, the
     // library and every later regeneration.
-    const { scenarios, metadata, roundKind, roundKindBrief } = scenarioData;
+    const { scenarios, metadata, roundKind, roundKindBrief, createdSet } = scenarioData;
+
+    // THE WORKER ALREADY MADE IT. Uploading again would be refused — the
+    // importer will not write over a set that exists — and would report that
+    // refusal as a failure over a set that is sitting there. So this path
+    // writes NOTHING: it re-reads the list and opens the draft.
+    if (createdSet?.setId) {
+      await fetchQuestionSets();
+      handleEditQuestionSet({ id: createdSet.setId });
+      setNotice({
+        text: `"${createdSet.setName}" was created while the generator ran. It is switched off `
+          + 'until you review it and turn it on.',
+        tone: 'success',
+      });
+      return;
+    }
 
     // Convert scenarios to CSV format and upload
     const csvContent = generateScenariosCSV(scenarios);
@@ -536,7 +551,21 @@ function AdminPage() {
     setShowTriviaAIBuilder(false);
 
     // triviaData includes both questions and metadata
-    const { questions, metadata } = triviaData;
+    const { questions, metadata, createdSet } = triviaData;
+
+    // THE WORKER ALREADY MADE IT — same rule as handleScenariosGenerated.
+    // Uploading again would be refused and the refusal would be reported as a
+    // failure over a set that exists.
+    if (createdSet?.setId) {
+      await fetchQuestionSets();
+      handleEditQuestionSet({ id: createdSet.setId });
+      setNotice({
+        text: `"${createdSet.setName}" was created while the generator ran. It is switched off `
+          + 'until you review it and turn it on.',
+        tone: 'success',
+      });
+      return;
+    }
 
     // Convert trivia to CSV format and upload
     const csvContent = generateTriviaCSV(questions);
@@ -631,7 +660,19 @@ function AdminPage() {
     // DIRECTION the builder was steered with. Same reasoning as
     // handleScenariosGenerated: a direction that does not reach the SETS row
     // steers one generation and is then forgotten.
-    const { questions, metadata, roundKind, roundKindBrief } = pollData;
+    const { questions, metadata, roundKind, roundKindBrief, createdSet } = pollData;
+
+    // THE WORKER ALREADY MADE IT — same rule as handleScenariosGenerated.
+    if (createdSet?.setId) {
+      await fetchQuestionSets();
+      handleEditQuestionSet({ id: createdSet.setId });
+      setNotice({
+        text: `"${createdSet.setName}" was created while the generator ran. It is switched off `
+          + 'until you review it and turn it on.',
+        tone: 'success',
+      });
+      return;
+    }
 
     // Convert polls to CSV format and upload
     const csvContent = generatePollCSV(questions);

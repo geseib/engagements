@@ -19,6 +19,7 @@ const { normalizeTags } = require('./shared/tags');
 const {
   normalizeRoundKind, roundKindDirection, roundKindDetailCeiling,
 } = require('./shared/round-kinds');
+const { pollsToCsv } = require('./shared/generated-set');
 
 const MAX_COUNT = 100;
 const MIN_OPTIONS = 2;
@@ -180,4 +181,19 @@ exports.handler = makeGenerationHandler({
   buildTool,
   buildPrompt,
   normalizeItem,
+  // A WHOLE-SET GENERATOR, so leaving the builder produces a draft set rather
+  // than a job record nobody turned into anything. See shared/generated-set.js.
+  //
+  // The DIRECTION travels: a poll round can hand people somebody else's
+  // material just as a call-and-answer round can, and a kind that steers the
+  // generation and is then dropped at creation leaves the library, the editor
+  // and every later regeneration believing the set was Produce.
+  setCreation: {
+    engagementType: 'poll',
+    toCsv: (items) => pollsToCsv(items),
+    roundKindFrom: (payload) => ({
+      roundKind: payload?.roundKind,
+      roundKindBrief: payload?.roundKindBrief,
+    }),
+  },
 });

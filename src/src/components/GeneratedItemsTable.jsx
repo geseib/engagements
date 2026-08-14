@@ -40,6 +40,17 @@ const NO_EXCLUSIONS = new Set();
  *                                            "Needs attention" filter
  *   columns          [{ header, value(item), width, filterable }]
  *   actions          node rendered in the header (Export / Create set / …)
+ *   savedAs          { setId, setName } when the WORKER already wrote these
+ *                    into a draft set, or null. See below.
+ *
+ * "NOTHING HAS BEEN SAVED YET" IS NOW A CONDITIONAL, not a fact. The whole-set
+ * workers create an inactive draft set before their job goes terminal, so for
+ * three of the four builders the items on this screen are already in the
+ * database by the time it renders. Saying otherwise is the same class of lie as
+ * the one this whole change repairs — a screen promising an outcome that does
+ * not match what the server did. When `savedAs` is set the caller also stops
+ * passing `onToggleExclude` and `onEdit`, because excluding a row here would
+ * change nothing about the set that exists.
  */
 export default function GeneratedItemsTable({
   items = [],
@@ -48,6 +59,7 @@ export default function GeneratedItemsTable({
   excluded = NO_EXCLUSIONS,
   onToggleExclude,
   onEdit,
+  savedAs = null,
   primary = (item) => item?.title || '',
   secondary = () => null,
   flag = () => null,
@@ -102,12 +114,21 @@ export default function GeneratedItemsTable({
       <div className="git-head">
         <div className="git-headtext">
           <h3 className="git-title">Review {rows.length} generated {noun}</h3>
-          <p className="git-sub">
-            Nothing has been saved yet.{' '}
-            {excludedCount > 0
-              ? `${excludedCount} of these ${excludedCount === 1 ? 'is' : 'are'} excluded and will not be saved.`
-              : 'Every row below will be saved unless you leave it out.'}
-          </p>
+          {savedAs ? (
+            <p className="git-sub">
+              Already saved. All {rows.length} went into the draft set
+              &ldquo;{savedAs.setName}&rdquo; while this was running, so leaving would have left
+              you these too. It is switched off until you review it &mdash; edit, remove and
+              activate in the set itself, not here.
+            </p>
+          ) : (
+            <p className="git-sub">
+              Nothing has been saved yet.{' '}
+              {excludedCount > 0
+                ? `${excludedCount} of these ${excludedCount === 1 ? 'is' : 'are'} excluded and will not be saved.`
+                : 'Every row below will be saved unless you leave it out.'}
+            </p>
+          )}
         </div>
         {actions && <div className="git-actions">{actions}</div>}
       </div>
@@ -183,7 +204,8 @@ export default function GeneratedItemsTable({
         </div>
 
         <span className="git-count">
-          {rows.length} generated &middot; {keptCount} will be saved
+          {rows.length} generated &middot;{' '}
+          {savedAs ? `all ${rows.length} are in the draft` : `${keptCount} will be saved`}
         </span>
       </div>
 
@@ -261,8 +283,10 @@ export default function GeneratedItemsTable({
 
       {filtering && visible.length > 0 && (
         <p className="git-fine">
-          Showing {visible.length} of {rows.length}. Excluding a row still excludes it from the
-          whole set, not just this view.
+          Showing {visible.length} of {rows.length}.{' '}
+          {savedAs
+            ? 'A filter changes this view and nothing else — the draft holds all of them.'
+            : 'Excluding a row still excludes it from the whole set, not just this view.'}
         </p>
       )}
     </section>

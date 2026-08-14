@@ -291,4 +291,9 @@ exports.handler = makeGenerationHandler({
   buildTool,
   buildPrompt,
   normalizeItem,
+  // NO `setCreation`, AND THAT IS THE POINT. This adds ONE question to a set
+  // that already exists; the whole-set generators create a draft set when their
+  // worker finishes (shared/generated-set.js), and doing that here would mint a
+  // second, one-question set every time somebody added a question to an
+  // existing one. Do not "make it consistent" with trivia and polls.
 });

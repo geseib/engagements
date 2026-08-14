@@ -44,6 +44,19 @@ export default function GenerationJobPanel({
   job,
   noun = 'items',
   jobId = null,
+  /**
+   * Does THIS builder's worker create the question set itself?
+   *
+   * Default false, and the default is the honest one. The whole-set generators
+   * (scenarios, trivia, polls) create an inactive draft set before the job goes
+   * terminal, so "Close — this keeps running" now produces something to come
+   * back to. The survey builder's worker creates nothing — survey is not a
+   * playable type and upload-questions.js refuses it — so it must not be handed
+   * this promise. A panel that says "and it makes the set for you" over a
+   * builder that does not is the exact defect this whole change repairs, in a
+   * new coat.
+   */
+  createsSet = false,
   // The client's own running commentary — POST retries, "reconnecting…" — which
   // is not on the wire and has no `phase` to carry it.
   statusLine = '',
@@ -89,6 +102,7 @@ export default function GenerationJobPanel({
 
   const {
     outcome, phase, items, completed, requested, warnings, error, shortfall,
+    createdSet, setCreationError,
   } = job;
 
   if (outcome === 'running') {
@@ -172,6 +186,20 @@ export default function GenerationJobPanel({
               The job record stays readable for three days.
             </span>
           </li>
+          {/* The promise this panel used to be unable to make. Rendered only
+              when the builder's worker really does create the set — see the
+              `createsSet` prop. */}
+          {createsSet && (
+            <li>
+              <Icon name="Check" weight="bold" size={16} color="var(--gjp-ok)" />
+              <span>
+                <b>The set gets made without you.</b> When the last pass finishes the worker
+                writes these {noun} into a new question set of its own &mdash; yours, marked as
+                AI-written, and switched off until you review it. Leaving now still leaves you
+                a draft.
+              </span>
+            </li>
+          )}
           <li className="gjp-no">
             <Icon name="X" weight="bold" size={16} color="var(--gjp-danger)" />
             <span>
@@ -200,9 +228,27 @@ export default function GenerationJobPanel({
       <p className="gjp-badbox">
         {outcome === 'partial' ? (
           <>
-            <b>This is a partial result, not a finished set.</b> {kept} {kept === 1 ? singular(noun) : noun}{' '}
-            {kept === 1 ? 'was' : 'were'} written and kept
-            {shortfall > 0 && <> &mdash; the remaining {shortfall} {shortfall === 1 ? 'was' : 'were'} never produced</>}.
+            {/* THE SET EXISTS OR IT DOES NOT, and the two say different things.
+                A partial run still creates its draft — that is the whole point
+                of moving creation to the worker, since a run that dies while
+                nobody is watching is exactly the case a person left for. When
+                no set was made (the survey builder, or a creation that failed)
+                the original wording stands: there is no set. */}
+            {createdSet ? (
+              <>
+                <b>This is a partial result, and it was saved anyway.</b> {kept}{' '}
+                {kept === 1 ? singular(noun) : noun} {kept === 1 ? 'was' : 'were'} written into
+                the draft set &ldquo;{createdSet.setName}&rdquo;
+                {shortfall > 0 && <> &mdash; the remaining {shortfall} {shortfall === 1 ? 'was' : 'were'} never produced</>}.
+                The draft is switched off until you review it, so a short set plays nowhere.
+              </>
+            ) : (
+              <>
+                <b>This is a partial result, not a finished set.</b> {kept}{' '}
+                {kept === 1 ? singular(noun) : noun} {kept === 1 ? 'was' : 'were'} written and kept
+                {shortfall > 0 && <> &mdash; the remaining {shortfall} {shortfall === 1 ? 'was' : 'were'} never produced</>}.
+              </>
+            )}
           </>
         ) : (
           <>
@@ -211,6 +257,15 @@ export default function GenerationJobPanel({
           </>
         )}
       </p>
+
+      {/* The worker tried to make the set and could not. Said plainly, because
+          the manual path below is the only way out of it and the operator has
+          to know why they are being asked to take it. */}
+      {setCreationError && !createdSet && (
+        <p className="gjp-errmsg">
+          The set could not be created for you: {setCreationError}
+        </p>
+      )}
 
       {error && (
         <>
@@ -253,7 +308,10 @@ export default function GenerationJobPanel({
       <div className="gjp-acts">
         {outcome === 'partial' && onReview && (
           <button type="button" className="btn-primary" onClick={onReview}>
-            Review the {kept} and make a set
+            {/* "and make a set" is a promise about what the button does. When
+                the worker already made one it is a false promise, and the
+                honest label is the one that only claims to show you them. */}
+            {createdSet ? `Review the ${kept} that were saved` : `Review the ${kept} and make a set`}
           </button>
         )}
         {onRetryRemaining && (
@@ -266,7 +324,12 @@ export default function GenerationJobPanel({
             {shortfall > 0 ? `Try again for the remaining ${shortfall}` : 'Try again'}
           </button>
         )}
-        {outcome === 'partial' && onDiscard && (
+        {/* NO DISCARD ONCE THE SET EXISTS. "Discard all 41" would clear this
+            screen and leave the draft sitting in the library — a button that
+            does the opposite of what it says. Deleting the set is a thing you
+            do to the set, from the library, where the confirmation dialog knows
+            what it is deleting. The fine print below says so. */}
+        {outcome === 'partial' && onDiscard && !createdSet && (
           <button type="button" className="btn-danger" onClick={onDiscard}>
             Discard all {kept}
           </button>
@@ -282,6 +345,16 @@ export default function GenerationJobPanel({
           Trying again starts a <b>second job</b> with the same settings and a count of{' '}
           {shortfall}. It cannot resume this one &mdash; the job record is terminal, there is
           no resume, and pretending otherwise would produce duplicates.
+          {createdSet && (
+            <> A second job also needs a different title: the draft already holds this one,
+              and a set is refused rather than overwritten when its name is taken.</>
+          )}
+        </p>
+      )}
+      {outcome === 'partial' && createdSet && (
+        <p className="gjp-fine">
+          Nothing on this screen can unmake the draft. If you do not want it, delete{' '}
+          &ldquo;{createdSet.setName}&rdquo; from the question set list.
         </p>
       )}
     </section>

@@ -59,13 +59,29 @@ const ttlFromNow = () => Math.floor(Date.now() / 1000) + JOB_TTL_SECONDS;
  * client still has something to poll that explains why, instead of a jobId that
  * 404s forever.
  */
-async function createJob(dynamodb, tableName, { jobId, kind, requested, request = {} }) {
+async function createJob(dynamodb, tableName, { jobId, kind, requested, request = {}, caller = {} }) {
   const now = new Date().toISOString();
   const item = {
     ...jobKey(jobId),
     jobId,
     kind,
     status: STATUS.QUEUED,
+    // WHO ASKED. Captured here, on the authorised POST, because the worker is
+    // invoked with `InvocationType: 'Event'` and carries no authorizer context
+    // at all — see shared/generated-set.js, note 3. The job row is the carrier
+    // rather than the dispatch payload for two reasons: the row already exists
+    // before the dispatch and is already what the client polls, so there is one
+    // truth and not two that can disagree; and `__workerMode` is an invocation
+    // path with no authorizer, so an owner read out of the payload would be an
+    // owner whoever invoked the function chose. This row can only be written by
+    // the POST that CognitoAuthorizer let through.
+    //
+    // Absent when the caller could not be identified, which records no owner
+    // rather than an owner of '' — the same rule question-set-access.js's
+    // `ownerStamp` follows, and for the same reason.
+    ...(caller.userId ? { callerUserId: caller.userId } : {}),
+    ...(caller.username && caller.username !== 'unknown'
+      ? { callerUsername: caller.username } : {}),
     requested,
     completed: 0,
     phase: 'Queued',
@@ -174,7 +190,15 @@ async function getJob(dynamodb, tableName, jobId) {
   return res.Item || null;
 }
 
-/** Poll payload. Deliberately omits `request` — the client already has it. */
+/**
+ * Poll payload. Deliberately omits `request` — the client already has it — and
+ * the caller identity, which is nobody's business but the worker's.
+ *
+ * `createdSet` is the field that stops the client creating a SECOND set. The
+ * worker writes it BEFORE the job goes terminal, so any client that sees a
+ * terminal job also sees the set; a `null` here genuinely means no set exists
+ * and the manual "Load into System" path is the right thing to offer.
+ */
 function jobToResponse(item) {
   if (!item) return null;
   return {
@@ -187,6 +211,10 @@ function jobToResponse(item) {
     warnings: item.warnings || [],
     meta: item.meta || null,
     error: item.errorMessage || null,
+    createdSet: item.createdSetId
+      ? { setId: item.createdSetId, setName: item.createdSetName || item.createdSetId }
+      : null,
+    setCreationError: item.setCreationError || null,
     updatedAt: item.updatedAt,
   };
 }

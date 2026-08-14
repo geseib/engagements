@@ -194,4 +194,9 @@ exports.handler = makeGenerationHandler({
   extractMeta,
   // The near-duplicate net keys on `question`, not `title`.
   titleOf: (item) => item?.question,
+  // NO `setCreation`. Survey is not a playable type: upload-questions.js
+  // refuses it outright ("Survey upload is not yet supported"), which is why
+  // SurveyAIBuilder exports JSON instead of loading. A worker that tried to
+  // create a set here would be asking for a 400 on every single run.
+  // See shared/generated-set.js.
 });

@@ -282,6 +282,10 @@ const generate = makeGenerationHandler({
   // a usable draft of the other three fields — so it must not be discarded for
   // want of a title.
   titleOf: (item) => item?.name || 'question set metadata',
+  // NO `setCreation`. This drafts four METADATA FIELDS for a set the operator
+  // is already editing. The whole-set generators create a draft set when their
+  // worker finishes (shared/generated-set.js); doing it here would mint an
+  // empty set every time somebody asked for help with a description.
 });
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));

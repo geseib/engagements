@@ -71,6 +71,53 @@ describe('no builder decides the outcome from how many items came back', () => {
   }
 });
 
+describe('the page does not create a set the worker already created', () => {
+  /**
+   * Source, and it has to be. AdminPage.jsx cannot render in jsdom — see
+   * docs/handoff/RESUME.md, Landmines, and the pre-existing AdminPage.test.jsx
+   * failures — so the only way to assert that its three AI handlers return
+   * BEFORE their POST is to read them.
+   */
+  const source = read('AdminPage.jsx');
+
+  for (const handler of ['handleScenariosGenerated', 'handleTriviaGenerated', 'handlePollGenerated']) {
+    test(`${handler} returns on createdSet without uploading`, () => {
+      // rejects: leaving the old unconditional POST in place. The worker now
+      // creates the set before the job goes terminal, so this path would send
+      // the same questions to /admin/upload-questions a second time — the
+      // importer refuses to overwrite an existing set, and the operator would
+      // be shown "already exists" over a set that is sitting in the list.
+      const body = source.split(`const ${handler} = async`)[1];
+      expect(body).toBeTruthy();
+      const guard = body.indexOf('createdSet?.setId');
+      const upload = body.indexOf('admin/upload-questions');
+      expect(guard).toBeGreaterThan(-1);
+      expect(upload).toBeGreaterThan(-1);
+      expect(guard).toBeLessThan(upload);
+      // The early return has to be inside the guard, before the POST.
+      expect(body.slice(guard, upload)).toMatch(/return;/);
+    });
+  }
+});
+
+describe('only the whole-set builders promise a set gets made', () => {
+  test('scenarios, trivia and polls pass createsSet to the panel', () => {
+    // rejects: shipping server-side creation without the copy that tells
+    // anyone. The report is that "Close — this keeps running" was believed and
+    // produced nothing; the panel has to say what actually happens now.
+    for (const file of ['AIScenarioBuilder.jsx', 'TriviaAIBuilder.jsx', 'PollAIBuilder.jsx']) {
+      expect(read('components', file)).toMatch(/<GenerationJobPanel[\s\S]{0,400}?createsSet/);
+    }
+  });
+
+  test('the survey builder does NOT', () => {
+    // rejects: passing it to all four. Survey is not a playable type and
+    // upload-questions.js refuses it outright, so its worker creates nothing —
+    // promising otherwise would be the same untruth in a new place.
+    expect(read('components', 'SurveyAIBuilder.jsx')).not.toMatch(/createsSet/);
+  });
+});
+
 describe('the survey builder does not claim to load anything', () => {
   const source = read('components', 'SurveyAIBuilder.jsx');
 

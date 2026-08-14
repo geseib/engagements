@@ -147,7 +147,15 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
         allowMultiple: pollConfig.allowMultiple,
         customPrompt: pollConfig.customPrompt,
         roundKind: pollConfig.roundKind,
-        roundKindBrief: pollConfig.roundKindBrief
+        roundKindBrief: pollConfig.roundKindBrief,
+        // THE SET'S OWN COPY, SENT WITH THE REQUEST. The worker creates the
+        // question set itself now — that is the fix for "Close — this keeps
+        // running", which was true about the job and false about the outcome —
+        // and it needs a title, a description and the participant instruction
+        // to do it. The instruction in particular can only be computed here:
+        // it folds in the operator's own words for a `custom` round kind,
+        // which the Lambda never sees.
+        setMetadata: buildSetMetadata()
       }, { label: 'Generation', onStatus: setGenerationStatus });
 
       rememberGenerationJob(ENDPOINT, jobId, { topic: pollConfig.topic });
@@ -261,28 +269,53 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
     return buildCsv(headers, rows);
   };
 
-  const handleLoadIntoSystem = () => {
-    const metadata = {
-      title: `${pollConfig.topic} Polls${pollConfig.audience ? ` for ${pollConfig.audience}` : ''}`,
-      description: `${keptPolls.length} AI-generated poll questions about ${pollConfig.topic}. Difficulty: ${pollConfig.difficulty}.`,
-      // The MECHANIC line plus the round's DIRECTION. The mechanic ("pick an
-      // option") is a property of the game and never changes; the direction is
-      // what tells the room whether they are choosing between their own
-      // instincts, between readings of a passage they were handed, or between
-      // verdicts. A poll that says only "select your preferred option" leaves
-      // the second and third of those looking identical to the first.
-      customInstructions: [
-        `Select your preferred option(s) for each poll question.`,
-        pollConfig.allowMultiple ? 'Multiple selections may be allowed for some questions.' : '',
-        roundKindParticipantInstruction(pollConfig.roundKind, pollConfig.roundKindInstruction),
-      ].filter(Boolean).join(' '),
-      aiContextInstructions: `These are ${pollConfig.difficulty}-level poll questions about ${pollConfig.topic}. Encourage thoughtful consideration and diverse perspectives.`
-    };
+  /**
+   * The set's own copy, from the CONFIGURATION and nothing else.
+   *
+   * Lifted out of handleLoadIntoSystem because it is needed twice and at two
+   * different moments: once here, on the manual load, and once at the START of
+   * generation, where it is sent to the worker so the worker can name the set
+   * it creates. It therefore may not depend on the generated items —
+   * `keptPolls.length` used to open the description and would read as zero at
+   * the moment the job is dispatched. The real number is on the set already, as
+   * questionCount.
+   */
+  const buildSetMetadata = () => ({
+    title: `${pollConfig.topic} Polls${pollConfig.audience ? ` for ${pollConfig.audience}` : ''}`,
+    description: `AI-generated poll questions about ${pollConfig.topic}. Difficulty: ${pollConfig.difficulty}.`,
+    // The MECHANIC line plus the round's DIRECTION. The mechanic ("pick an
+    // option") is a property of the game and never changes; the direction is
+    // what tells the room whether they are choosing between their own
+    // instincts, between readings of a passage they were handed, or between
+    // verdicts. A poll that says only "select your preferred option" leaves
+    // the second and third of those looking identical to the first.
+    customInstructions: [
+      `Select your preferred option(s) for each poll question.`,
+      pollConfig.allowMultiple ? 'Multiple selections may be allowed for some questions.' : '',
+      roundKindParticipantInstruction(pollConfig.roundKind, pollConfig.roundKindInstruction),
+    ].filter(Boolean).join(' '),
+    aiContextInstructions: `These are ${pollConfig.difficulty}-level poll questions about ${pollConfig.topic}. Encourage thoughtful consideration and diverse perspectives.`
+  });
 
+  /**
+   * The worker already made the set. Take the operator to it and write nothing.
+   *
+   * THE NO-DOUBLE-CREATION RULE. `createdSet` is written on the job record
+   * BEFORE the job goes terminal, so a terminal job either carries a set or
+   * genuinely has none. Posting to /admin/upload-questions as well would be
+   * refused — the importer will not write over a set that exists — and would
+   * report that refusal as a failure over a set that is sitting there.
+   */
+  const handleOpenCreatedSet = () => {
+    dismissJob();
+    onPollGenerated({ createdSet: interpreted.createdSet });
+  };
+
+  const handleLoadIntoSystem = () => {
     dismissJob();
     onPollGenerated({
       questions: keptPolls,
-      metadata: metadata,
+      metadata: buildSetMetadata(),
       // The direction travels with the set, or it steers one generation and is
       // then forgotten — see AdminPage's handleScenariosGenerated.
       roundKind: pollConfig.roundKind,
@@ -469,6 +502,7 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                   job={interpreted}
                   noun="poll questions"
                   jobId={jobIdRef.current}
+                  createsSet
                   statusLine={generationStatus}
                   transportError={transportError}
                   onKeepRunning={onClose}
@@ -479,13 +513,24 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                   onBackToConfig={backToConfiguration}
                 />
               ) : !editingItem ? (
+                /*
+                  ONCE THE WORKER HAS MADE THE SET, THIS TABLE IS A RECEIPT.
+                  Excluding or editing a row here would change an array that is
+                  no longer what gets saved — all of them are already in the
+                  draft. Both row controls are withheld rather than left live
+                  and inert, and the primary action opens the set instead of
+                  creating one. See AIScenarioBuilder for the same shape.
+                */
                 <GeneratedItemsTable
                   items={generatedPolls}
                   requested={interpreted.requested}
                   noun="poll questions"
                   excluded={excluded}
-                  onToggleExclude={toggleExcluded}
-                  onEdit={(index) => { setCurrentPollIndex(index); setTagDraft(null); setEditingItem(true); }}
+                  savedAs={interpreted.createdSet}
+                  onToggleExclude={interpreted.createdSet ? undefined : toggleExcluded}
+                  onEdit={interpreted.createdSet
+                    ? undefined
+                    : (index) => { setCurrentPollIndex(index); setTagDraft(null); setEditingItem(true); }}
                   primary={(poll) => poll.title}
                   secondary={(poll) => (Array.isArray(poll.options) && poll.options.length
                     ? poll.options.join(' · ')
@@ -500,9 +545,16 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                       <button className="btn-secondary" onClick={handleExportCSV}>
                         <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export CSV
                       </button>
-                      <button className="btn-primary" onClick={handleLoadIntoSystem} disabled={keptPolls.length === 0}>
-                        <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load {keptPolls.length} into System
-                      </button>
+                      {interpreted.createdSet ? (
+                        <button className="btn-primary" onClick={handleOpenCreatedSet}>
+                          <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" />{' '}
+                          Open &ldquo;{interpreted.createdSet.setName}&rdquo;
+                        </button>
+                      ) : (
+                        <button className="btn-primary" onClick={handleLoadIntoSystem} disabled={keptPolls.length === 0}>
+                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load {keptPolls.length} into System
+                        </button>
+                      )}
                     </>
                   )}
                 />

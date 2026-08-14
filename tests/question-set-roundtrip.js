@@ -868,6 +868,90 @@ const WAVELENGTH_CSV = [
     });
   }
 
+  // ==== the WORKER'S CSV, held to the same contract ========================
+  //
+  // A THIRD WRITER of this CSV, and the reason this block exists. The
+  // generation workers now create the question set themselves — the owner ran
+  // the scenario builder for "World Leaders", was told "Close — this keeps
+  // running", left, and came back to nothing, because the set was only ever
+  // created client-side. `lambda-functions/admin/shared/generated-set.js`
+  // builds the CSV the worker hands to upload-questions.js, and a second (now
+  // third) writer of that CSV is a second chance to reintroduce exactly the
+  // defect this file exists for.
+  //
+  // So its bytes go through the same loop as everything above: real importer,
+  // real exporter, real re-import. Nothing is reviewed by eye.
+  say('\n  -- the generation worker\'s CSV --');
+  const { scenariosToCsv, triviaToCsv, pollsToCsv } = require(
+    path.join(REPO, 'lambda-functions', 'admin', 'shared', 'generated-set.js'));
+
+  resetDb();
+  {
+    // The item shape ai-generate-scenarios.js's normalizeItem really produces.
+    const t = await roundTrip('Worker Scenarios', 'call-and-answer', scenariosToCsv([
+      { title: 'THE "RIGHT" CALL', category: 'Judgement', detail: 'A hard one, with a comma, too.',
+        customInstructions: 'Discuss with your team.', tags: ['judgement', 'Remote Work'] },
+      { title: 'Escalating a security incident', category: 'Incidents', detail: 'Somebody else\'s runbook.',
+        customInstructions: 'Say where it lands here.', tags: ['incidents'] },
+    ]));
+
+    check('the worker\'s scenario CSV is not vacuous', () =>
+      assertCarries(t.before, ['Title', 'Detail', 'Category', 'CustomInstructions', 'Tags']));
+    // rejects: a hand-rolled `"${value}"` in the worker's writer. THE "RIGHT"
+    // CALL interpolates to three fields and shifts every column after it —
+    // silent corruption, with a 200.
+    check('a quoted title survives the worker\'s CSV and the round trip', () =>
+      assert.strictEqual(t.before[0].Title, 'THE "RIGHT" CALL'));
+    check('every worker-built scenario survives the round trip field for field', () =>
+      assertSameQuestions(t.before, t.after));
+    // rejects: emitting raw tags instead of normalised ones. The browser's
+    // writer is `normalizeTags(tags).join('|')`, so a server CSV that skipped
+    // the normalisation would produce a different set from the same items
+    // depending on which path made it.
+    check('tags are normalised the way the browser\'s writer normalises them', () =>
+      assert.deepStrictEqual(t.before[0].Tags, ['judgement', 'remote-work']));
+  }
+
+  resetDb();
+  {
+    const t = await roundTrip('Worker Trivia', 'trivia', triviaToCsv([
+      { title: 'WHO SANG IT', questionDetail: 'Released in 1984.', answerDetails: 'Written in one night.',
+        category: 'Music', school: 'Pop School', optionA: 'Prince', optionB: 'Madonna', optionC: 'Sting',
+        optionD: 'Cyndi Lauper', optionE: '', optionF: '', correctAnswer: 'OptionA',
+        difficulty: 'easy', tags: ['music'] },
+    ]));
+
+    check('the worker\'s trivia CSV really carries options and a reveal', () =>
+      assertCarries(t.before, ['optionA', 'optionD', 'correctAnswer', 'AnswerDetails', 'difficulty']));
+    // rejects: the worker emitting WrongAnswer1/2/3 or Option1..5. The importer
+    // reads OptionA..OptionF by exact name and has NO fallback, so those
+    // columns lose every answer silently — the original defect of this file.
+    check('every worker-built trivia question survives the round trip field for field', () =>
+      assertSameQuestions(t.before, t.after));
+  }
+
+  resetDb();
+  {
+    const t = await roundTrip('Worker Polls', 'poll', pollsToCsv([
+      { title: 'Which release cadence', category: 'Delivery', detail: 'Pick one.',
+        school: 'Delivery', customInstructions: 'Choose.',
+        options: ['Weekly', 'Fort|nightly', 'Monthly'], allowMultiple: true, tags: ['delivery'] },
+    ]));
+
+    check('the worker\'s poll CSV really carries options', () =>
+      assertCarries(t.before, ['options']));
+    // rejects: restoring Option1..Option5 in the worker's writer, which is how
+    // every AI-generated poll set once imported with zero options.
+    check('every worker-built poll question survives the round trip field for field', () =>
+      assertSameQuestions(t.before, t.after));
+    // rejects: passing a literal `|` through. The importer splits on it with no
+    // escape, so an unfolded pipe silently becomes two options.
+    check('a pipe inside an option is folded, not allowed to split the option', () =>
+      assert.deepStrictEqual(t.before[0].options, ['Weekly', 'Fort/nightly', 'Monthly']));
+    check('allowMultiple survives', () =>
+      assert.strictEqual(t.before[0].allowMultiple, true));
+  }
+
   say(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { process.stdout.write(`harness error: ${e && e.stack}\n`); process.exit(1); });

@@ -23,13 +23,22 @@
  * exists for exactly this reason: a server answer with several possible
  * meanings gets read once, in a pure function, with a test per meaning.
  *
- * THE WIRE, exactly. `jobToResponse()` (generation-jobs.js:178-192) returns ten
- * keys and nothing else:
+ * THE WIRE, exactly. `jobToResponse()` (generation-jobs.js) returns twelve keys
+ * and nothing else:
  *
  *   { jobId, status, phase, requested, completed, items, warnings, meta,
- *     error, updatedAt }
+ *     error, createdSet, setCreationError, updatedAt }
  *
  * `status` ∈ queued | running | complete | error. Do not invent fields.
+ *
+ * `createdSet` IS THE ONE THAT DECIDES WHETHER THE CLIENT WRITES ANYTHING.
+ * The worker now creates the question set itself, as an inactive draft, before
+ * the job goes terminal — because "Close — this keeps running" used to be true
+ * about the job and false about the outcome, and somebody who left came back to
+ * nothing. `{ setId, setName }` means the set already exists and the client
+ * must NOT post it a second time; `null` means it does not, and the manual
+ * "Load into System" path is the right thing to offer. Never infer either from
+ * items.length, and never from the outcome.
  */
 
 /** Every outcome this module can return. Exhaustive — switch on it safely. */
@@ -85,6 +94,16 @@ export function interpretGenerationJob(job) {
     warnings,
     error: payload.error || null,
     meta: payload.meta || null,
+    /**
+     * The set the WORKER made, or null. Read defensively — a job started
+     * before server-side creation shipped, or by a builder that does not
+     * create sets at all, carries neither field — and a malformed value is
+     * read as "no set", which routes the operator to the manual path rather
+     * than to a link that goes nowhere.
+     */
+    createdSet: readCreatedSet(payload.createdSet),
+    /** Why there is no set, when the worker tried and could not. */
+    setCreationError: payload.setCreationError || null,
     updatedAt: payload.updatedAt || null,
     terminal: outcome !== 'running',
     /** Asked for 100, holding 84 → 16. Zero when nothing is missing. */
@@ -128,6 +147,14 @@ export function generationJobHeadline(interpreted, noun = 'items') {
  */
 export function warningsMayBeIncomplete(interpreted) {
   return interpreted.outcome === 'partial' || interpreted.outcome === 'empty-failure';
+}
+
+/** `{ setId, setName }` or null. A set with no id is not a set you can open. */
+function readCreatedSet(value) {
+  if (!value || typeof value !== 'object') return null;
+  const setId = String(value.setId ?? '').trim();
+  if (!setId) return null;
+  return { setId, setName: String(value.setName ?? '').trim() || setId };
 }
 
 function toCount(value) {

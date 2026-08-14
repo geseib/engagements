@@ -591,7 +591,24 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         // first is what a model follows — which is why typing an Apply brief
         // into "Additional Requirements" never changed the shape of the output.
         roundKind: scenarioConfig.roundKind,
-        roundKindBrief: scenarioConfig.roundKindBrief
+        roundKindBrief: scenarioConfig.roundKindBrief,
+        // THE SET'S OWN COPY, COMPUTED HERE AND SENT WITH THE REQUEST.
+        //
+        // The worker creates the question set itself now — that is the fix for
+        // "Close — this keeps running", which was true about the job and false
+        // about the outcome — and it needs the title, description and the two
+        // instruction fields to do it. They are computed in the browser rather
+        // than re-derived in the Lambda because only the browser holds the
+        // pieces: the operator's own participant instruction for a `custom`
+        // round kind, the chosen topic card's title, the STAR addendum. A
+        // second server-side implementation of generateCustomInstructions()
+        // would drift from this one on the first change to either.
+        setMetadata: {
+          title: generateTitle(),
+          description: generateDescription(),
+          customInstructions: generateCustomInstructions(),
+          aiContextInstructions: generateAIContextInstructions()
+        }
       }, { label: 'Generation', onStatus: setGenerationStatus });
 
       rememberGenerationJob(ENDPOINT, jobId, { scenarioType: backendScenarioType });
@@ -662,6 +679,21 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     return buildCsv(headers, rows);
   };
 
+  /**
+   * The worker already made the set. Take the operator to it and write nothing.
+   *
+   * THIS IS THE NO-DOUBLE-CREATION RULE, on the client side of it. The job
+   * record carries `createdSet` as soon as the worker has created it, and it is
+   * written BEFORE the job goes terminal, so a terminal job either has a set or
+   * genuinely has none. Posting to /admin/upload-questions here as well would
+   * be refused (the importer will not overwrite an existing set) and would
+   * report that refusal as a failure over a set that exists.
+   */
+  const handleOpenCreatedSet = () => {
+    dismissJob();
+    onScenariosGenerated({ createdSet: interpreted.createdSet });
+  };
+
   const handleLoadIntoSystem = () => {
     // Use AI-generated metadata if available, otherwise generate from configuration
     const metadata = generatedMetadata || {
@@ -704,7 +736,15 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     const contextText = scenarioConfig.context ? ` Context: ${scenarioConfig.context.substring(0, 100)}${scenarioConfig.context.length > 100 ? '...' : ''}` : '';
     const audienceText = scenarioConfig.audience ? ` Target audience: ${scenarioConfig.audience}.` : '';
 
-    return `${generatedScenarios.length} AI-generated scenarios for ${scenarioConfig.difficulty} difficulty level.${audienceText}${contextText}`;
+    // NO COUNT IN THE SENTENCE. It used to open with
+    // `${generatedScenarios.length} AI-generated scenarios`, which only worked
+    // because this ran after generation. It now also runs BEFORE it, at the
+    // moment the job is started, so the worker can name the set it creates —
+    // and at that point the count is zero. A description that says "0
+    // AI-generated scenarios" over eighteen of them is worse than one that
+    // does not count at all, and the real number is on the set already as
+    // questionCount.
+    return `AI-generated scenarios for ${scenarioConfig.difficulty} difficulty level.${audienceText}${contextText}`;
   };
 
   /**
@@ -1093,6 +1133,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                   job={interpreted}
                   noun="scenarios"
                   jobId={jobIdRef.current}
+                  createsSet
                   statusLine={generationStatus}
                   transportError={transportError}
                   onKeepRunning={onClose}
@@ -1103,13 +1144,25 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                   onBackToConfig={backToConfiguration}
                 />
               ) : !editingItem ? (
+                /*
+                  ONCE THE WORKER HAS MADE THE SET, THIS TABLE IS A RECEIPT.
+                  Excluding or editing a row here would change an array that is
+                  no longer what gets saved — all of them are already in the
+                  draft. Both row controls are therefore withheld rather than
+                  left live and inert, and the primary action opens the set
+                  instead of creating one. The set's own editor is where those
+                  edits belong, and the header copy says so.
+                */
                 <GeneratedItemsTable
                   items={generatedScenarios}
                   requested={interpreted.requested}
                   noun="scenarios"
                   excluded={excluded}
-                  onToggleExclude={toggleExcluded}
-                  onEdit={(index) => { setCurrentScenarioIndex(index); setTagDraft(null); setEditingItem(true); }}
+                  savedAs={interpreted.createdSet}
+                  onToggleExclude={interpreted.createdSet ? undefined : toggleExcluded}
+                  onEdit={interpreted.createdSet
+                    ? undefined
+                    : (index) => { setCurrentScenarioIndex(index); setTagDraft(null); setEditingItem(true); }}
                   primary={(scenario) => scenario.title}
                   secondary={(scenario) => scenario.detail}
                   flag={scenarioDefect}
@@ -1121,9 +1174,16 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                       <button className="btn-secondary" onClick={handleExportCSV}>
                         <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export CSV
                       </button>
-                      <button className="btn-primary" onClick={handleLoadIntoSystem} disabled={keptScenarios.length === 0}>
-                        <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load {keptScenarios.length} into System
-                      </button>
+                      {interpreted.createdSet ? (
+                        <button className="btn-primary" onClick={handleOpenCreatedSet}>
+                          <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" />{' '}
+                          Open &ldquo;{interpreted.createdSet.setName}&rdquo;
+                        </button>
+                      ) : (
+                        <button className="btn-primary" onClick={handleLoadIntoSystem} disabled={keptScenarios.length === 0}>
+                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load {keptScenarios.length} into System
+                        </button>
+                      )}
                     </>
                   )}
                 />

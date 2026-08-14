@@ -29,6 +29,9 @@ const { itemsPerCall, maxTokensFor, perItemTokens, invokeStructured } = require(
 const {
   newJobId, createJob, updateJobProgress, completeJob, failJob, getJob, jobToResponse,
 } = require('./generation-jobs');
+const { createSetForJob } = require('./generated-set');
+const { callerUsername } = require('./require-admin');
+const { callerUserId } = require('./question-set-access');
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -68,6 +71,19 @@ function makeGenerationHandler(config) {
     parseRequest, buildTool, buildPrompt, normalizeItem,
     extractMeta = null,
     titleOf = (item) => item?.title,
+    // OPT-IN, PER HANDLER, AND ABSENT BY DEFAULT.
+    //
+    // Only a WHOLE-SET generator may create a set. This factory is shared by
+    // `ai-generate-questions` — which adds ONE question to a set that already
+    // exists — and by `ai-draft-set-metadata`, which writes four metadata
+    // fields; either of them minting a set would be a new defect. Absent means
+    // structurally incapable, not switched off, which is why this is a config
+    // key and not a boolean flag with a default.
+    //
+    // `ai-generate-survey` omits it too, and deliberately: survey is not a
+    // playable type and upload-questions.js rejects it outright.
+    // See shared/generated-set.js.
+    setCreation = null,
   } = config;
 
   const tableName = process.env.TABLE_NAME;
@@ -83,6 +99,23 @@ function makeGenerationHandler(config) {
     const keptTokenSets = [];
     const warnings = [];
     let meta = null;
+    let generationError = null;
+
+    // WHO ASKED, read from the JOB ROW and not from the dispatch payload.
+    //
+    // This invocation arrived as `InvocationType: 'Event'` with no authorizer
+    // context of any kind, so the identity has to have been captured on the
+    // POST. It rides on the row because the row is written by the authorised
+    // request and can only be written by it, whereas `__workerMode` is a path
+    // anything able to invoke this function can take. See generation-jobs.js's
+    // createJob and shared/generated-set.js, note 3.
+    let caller = {};
+    try {
+      const record = await getJob(dynamodb, tableName, jobId);
+      caller = { userId: record?.callerUserId, username: record?.callerUsername };
+    } catch (error) {
+      console.error(`⚠️ Job ${jobId}: could not read its own row for the caller: ${error.message}`);
+    }
 
     try {
       const { total, config: reqConfig } = parseRequest(payload);
@@ -190,11 +223,30 @@ function makeGenerationHandler(config) {
         }
       }
 
-      await completeJob(dynamodb, tableName, jobId, { items: produced, warnings, meta });
-      console.log(`✅ Job ${jobId} complete: ${produced.length} items`);
     } catch (error) {
       console.error(`❌ Job ${jobId} failed:`, error);
-      await failJob(dynamodb, tableName, jobId, error.message, { items: produced });
+      generationError = error;
+    }
+
+    // THE SET IS CREATED BEFORE THE JOB GOES TERMINAL, and the order is the
+    // point. The client stops polling the moment it sees a terminal status; if
+    // the set were created afterwards it would see "complete" with no set,
+    // take its fallback path and create a SECOND one.
+    //
+    // It runs on the failure path too. A partial result is exactly the case
+    // this change exists for — somebody left, and the run died at 14 of 20 —
+    // and the set it produces is inactive, so a short draft plays nowhere until
+    // a human reviews it. `createSetForJob` does nothing when `produced` is
+    // empty and never throws.
+    await createSetForJob({
+      dynamodb, tableName, jobId, spec: setCreation, payload, items: produced, caller,
+    });
+
+    if (generationError) {
+      await failJob(dynamodb, tableName, jobId, generationError.message, { items: produced });
+    } else {
+      await completeJob(dynamodb, tableName, jobId, { items: produced, warnings, meta });
+      console.log(`✅ Job ${jobId} complete: ${produced.length} items`);
     }
   }
 
@@ -226,6 +278,12 @@ function makeGenerationHandler(config) {
 
       await createJob(dynamodb, tableName, {
         jobId, kind, requested: total, request: { kind, count: total },
+        // THE ONLY PLACE THE CALLER CAN STILL BE READ. Both parsers are the
+        // existing ones — `callerUserId` from question-set-access.js (which is
+        // what `ownerStamp` reads) and `callerUsername` from require-admin.js.
+        // A second parser here is how eighteen tests once passed against
+        // `.jwt.claims`, a shape this API has never produced.
+        caller: { userId: callerUserId(event), username: callerUsername(event) },
       });
 
       try {

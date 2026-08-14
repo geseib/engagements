@@ -22,6 +22,7 @@
 const { makeGenerationHandler } = require('./shared/generation-handler');
 const { tagGuidance } = require('./shared/structured-generation');
 const { normalizeTags } = require('./shared/tags');
+const { triviaToCsv } = require('./shared/generated-set');
 
 const MAX_COUNT = 100;
 const OPTION_KEYS = ['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF'];
@@ -183,4 +184,17 @@ exports.handler = makeGenerationHandler({
   buildTool,
   buildPrompt,
   normalizeItem,
+  // A WHOLE-SET GENERATOR, so leaving the builder produces a draft set rather
+  // than a job record nobody turned into anything. See
+  // shared/generated-set.js for what "draft" means and who owns it.
+  //
+  // NO roundKindFrom: a round kind describes what a room does with material it
+  // was handed, and trivia has a correct answer, so "invention" and "verdict"
+  // are meaningless for it — `roundKindApplies` in shared/round-kinds.js lists
+  // call-and-answer and poll only. Sending one here would write a direction
+  // onto a set whose generation never read it.
+  setCreation: {
+    engagementType: 'trivia',
+    toCsv: (items) => triviaToCsv(items),
+  },
 });

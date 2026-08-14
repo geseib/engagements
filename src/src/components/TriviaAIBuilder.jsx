@@ -142,7 +142,14 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
         numCorrect: triviaConfig.numCorrect,
         numberOfCategories: triviaConfig.numberOfCategories,
         mustHaveCategories: triviaConfig.mustHaveCategories,
-        customPrompt: triviaConfig.customPrompt
+        customPrompt: triviaConfig.customPrompt,
+        // THE SET'S OWN COPY, SENT WITH THE REQUEST. The worker creates the
+        // question set itself now — that is the fix for "Close — this keeps
+        // running", which was true about the job and false about the outcome —
+        // and it needs a title and a description to do it. Computed in the
+        // browser and sent, rather than re-derived in the Lambda, so there is
+        // one author of this copy and not two that drift.
+        setMetadata: buildSetMetadata()
       }, { label: 'Generation', onStatus: setGenerationStatus });
 
       rememberGenerationJob(ENDPOINT, jobId, { topic: triviaConfig.topic });
@@ -250,18 +257,43 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
     return buildCsv(headers, rows);
   };
 
-  const handleLoadIntoSystem = () => {
-    const metadata = {
-      title: `${triviaConfig.topic} Trivia${triviaConfig.audience ? ` for ${triviaConfig.audience}` : ''}`,
-      description: `${keptTrivia.length} AI-generated trivia questions about ${triviaConfig.topic}. Difficulty: ${triviaConfig.difficulty}. ${triviaConfig.numChoices} choices per question.`,
-      customInstructions: `Select the best answer for each question. ${triviaConfig.numCorrect > 1 ? `Some questions may have ${triviaConfig.numCorrect} correct answers.` : ''}`,
-      aiContextInstructions: `These are ${triviaConfig.difficulty}-level trivia questions about ${triviaConfig.topic}. Provide explanations for correct answers and encourage learning.`
-    };
+  /**
+   * The set's own copy, from the CONFIGURATION and nothing else.
+   *
+   * Lifted out of handleLoadIntoSystem because it is now needed twice and at
+   * two different moments: once here, on the manual load, and once at the START
+   * of generation, where it is sent to the worker so the worker can name the
+   * set it creates. It therefore may not depend on the generated items —
+   * `keptTrivia.length` used to open the description and would read as zero at
+   * the moment the job is dispatched. The real number is on the set already, as
+   * questionCount.
+   */
+  const buildSetMetadata = () => ({
+    title: `${triviaConfig.topic} Trivia${triviaConfig.audience ? ` for ${triviaConfig.audience}` : ''}`,
+    description: `AI-generated trivia questions about ${triviaConfig.topic}. Difficulty: ${triviaConfig.difficulty}. ${triviaConfig.numChoices} choices per question.`,
+    customInstructions: `Select the best answer for each question. ${triviaConfig.numCorrect > 1 ? `Some questions may have ${triviaConfig.numCorrect} correct answers.` : ''}`,
+    aiContextInstructions: `These are ${triviaConfig.difficulty}-level trivia questions about ${triviaConfig.topic}. Provide explanations for correct answers and encourage learning.`
+  });
 
+  /**
+   * The worker already made the set. Take the operator to it and write nothing.
+   *
+   * THE NO-DOUBLE-CREATION RULE. `createdSet` is written on the job record
+   * BEFORE the job goes terminal, so a terminal job either carries a set or
+   * genuinely has none. Posting to /admin/upload-questions as well would be
+   * refused — the importer will not write over a set that exists — and would
+   * report that refusal as a failure over a set that is sitting there.
+   */
+  const handleOpenCreatedSet = () => {
+    dismissJob();
+    onTriviaGenerated({ createdSet: interpreted.createdSet });
+  };
+
+  const handleLoadIntoSystem = () => {
     dismissJob();
     onTriviaGenerated({
       questions: keptTrivia,
-      metadata: metadata
+      metadata: buildSetMetadata()
     });
   };
 
@@ -487,6 +519,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                   job={interpreted}
                   noun="questions"
                   jobId={jobIdRef.current}
+                  createsSet
                   statusLine={generationStatus}
                   transportError={transportError}
                   onKeepRunning={onClose}
@@ -497,13 +530,24 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                   onBackToConfig={backToConfiguration}
                 />
               ) : !editingItem ? (
+                /*
+                  ONCE THE WORKER HAS MADE THE SET, THIS TABLE IS A RECEIPT.
+                  Excluding or editing a row here would change an array that is
+                  no longer what gets saved — all of them are already in the
+                  draft. Both row controls are withheld rather than left live
+                  and inert, and the primary action opens the set instead of
+                  creating one. See AIScenarioBuilder for the same shape.
+                */
                 <GeneratedItemsTable
                   items={generatedTrivia}
                   requested={interpreted.requested}
                   noun="questions"
                   excluded={excluded}
-                  onToggleExclude={toggleExcluded}
-                  onEdit={(index) => { setCurrentTriviaIndex(index); setTagDraft(null); setEditingItem(true); }}
+                  savedAs={interpreted.createdSet}
+                  onToggleExclude={interpreted.createdSet ? undefined : toggleExcluded}
+                  onEdit={interpreted.createdSet
+                    ? undefined
+                    : (index) => { setCurrentTriviaIndex(index); setTagDraft(null); setEditingItem(true); }}
                   primary={(trivia) => trivia.title}
                   secondary={(trivia) => {
                     const line = correctAnswerLine(trivia);
@@ -519,9 +563,16 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                       <button className="btn-secondary" onClick={handleExportCSV}>
                         <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export CSV
                       </button>
-                      <button className="btn-primary" onClick={handleLoadIntoSystem} disabled={keptTrivia.length === 0}>
-                        <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load {keptTrivia.length} into System
-                      </button>
+                      {interpreted.createdSet ? (
+                        <button className="btn-primary" onClick={handleOpenCreatedSet}>
+                          <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" />{' '}
+                          Open &ldquo;{interpreted.createdSet.setName}&rdquo;
+                        </button>
+                      ) : (
+                        <button className="btn-primary" onClick={handleLoadIntoSystem} disabled={keptTrivia.length === 0}>
+                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load {keptTrivia.length} into System
+                        </button>
+                      )}
                     </>
                   )}
                 />

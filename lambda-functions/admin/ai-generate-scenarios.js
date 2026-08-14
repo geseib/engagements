@@ -49,6 +49,9 @@ const {
   newJobId, createJob, updateJobProgress, completeJob, failJob, getJob, jobToResponse,
 } = require('./shared/generation-jobs');
 const { normalizeRoundKind, roundKindDirection } = require('./shared/round-kinds');
+const { createSetForJob, scenariosToCsv } = require('./shared/generated-set');
+const { callerUsername } = require('./shared/require-admin');
+const { callerUserId } = require('./shared/question-set-access');
 
 const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const lambda = new LambdaClient({ region: process.env.AWS_REGION });
@@ -227,11 +230,51 @@ function normalizeItem(raw) {
 
 // ------------------------------------------------------------------- worker
 
+/**
+ * WHAT THIS WORKER LEAVES BEHIND, and the defect that changed it.
+ *
+ * The owner ran this builder for a set called "World Leaders", was told
+ * *"Close — this keeps running"*, left, and came back to no set. Nothing had
+ * crashed: the worker wrote ITEMS into the job record and the SET was only ever
+ * created client-side, when a human returned and pressed "Load N into System".
+ * The panel's promise was true about the job and false about the outcome.
+ *
+ * So the worker now creates the set itself, as an inactive AI-flagged DRAFT
+ * owned by whoever started the job, before the job goes terminal. The whole
+ * mechanism — identity, idempotency, the CSV, and the reasons for each — lives
+ * in shared/generated-set.js. Read its header before changing anything here.
+ */
+const SET_CREATION = {
+  // The scenario builder is opened for call-and-answer and wavelength (and the
+  // page's current type is what the manual path posted too), so the type comes
+  // from the request rather than being fixed here.
+  engagementType: (payload) => payload?.engagementType || 'call-and-answer',
+  toCsv: (items) => scenariosToCsv(items),
+  roundKindFrom: (payload) => ({
+    roundKind: payload?.roundKind,
+    roundKindBrief: payload?.roundKindBrief,
+  }),
+};
+
 async function runWorker(event, context) {
   const { jobId, payload } = event;
   const produced = [];
   const keptTokenSets = [];
   const warnings = [];
+  let generationError = null;
+
+  // WHO ASKED, read from the JOB ROW and not from this dispatch payload. This
+  // invocation is an `InvocationType: 'Event'` one and carries no authorizer
+  // context at all, so identity had to be captured on the POST; the row is the
+  // carrier because only the authorised POST can write it. See
+  // shared/generated-set.js, note 3.
+  let caller = {};
+  try {
+    const record = await getJob(dynamodb, tableName, jobId);
+    caller = { userId: record?.callerUserId, username: record?.callerUsername };
+  } catch (error) {
+    console.error(`⚠️ Job ${jobId}: could not read its own row for the caller: ${error.message}`);
+  }
 
   try {
     const {
@@ -368,11 +411,29 @@ async function runWorker(event, context) {
       }
     }
 
-    await completeJob(dynamodb, tableName, jobId, { items: produced, warnings });
-    console.log(`✅ Job ${jobId} complete: ${produced.length} items`);
   } catch (error) {
     console.error(`❌ Job ${jobId} failed:`, error);
-    await failJob(dynamodb, tableName, jobId, error.message, { items: produced });
+    generationError = error;
+  }
+
+  // THE SET IS CREATED BEFORE THE JOB GOES TERMINAL, and the order is the
+  // point. The client stops polling the moment it sees a terminal status; a set
+  // created afterwards would arrive too late and the client would take its
+  // fallback path and create a SECOND one.
+  //
+  // It runs on the failure path too — a partial result is exactly the case this
+  // change exists for, and the set it makes is inactive, so a short draft plays
+  // nowhere until a human reviews it. `createSetForJob` does nothing when
+  // `produced` is empty and never throws.
+  await createSetForJob({
+    dynamodb, tableName, jobId, spec: SET_CREATION, payload, items: produced, caller,
+  });
+
+  if (generationError) {
+    await failJob(dynamodb, tableName, jobId, generationError.message, { items: produced });
+  } else {
+    await completeJob(dynamodb, tableName, jobId, { items: produced, warnings });
+    console.log(`✅ Job ${jobId} complete: ${produced.length} items`);
   }
 }
 
@@ -415,6 +476,12 @@ exports.handler = async (event, context) => {
         engagementType: payload.engagementType,
         count: requested,
       },
+      // THE ONLY PLACE THE CALLER CAN STILL BE READ — the worker runs without
+      // an authorizer. Both parsers are the existing ones: `callerUserId` from
+      // question-set-access.js (what `ownerStamp` reads) and `callerUsername`
+      // from require-admin.js. A second parser here is how eighteen tests once
+      // passed against `.jwt.claims`, a shape this API has never produced.
+      caller: { userId: callerUserId(event), username: callerUsername(event) },
     });
 
     try {
