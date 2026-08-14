@@ -215,3 +215,67 @@ describe('GameHostPage survives every screen change', () => {
     expect(errors.hookOrderFailures()).toEqual([]);
   });
 });
+
+/*
+ * THE ROUNDS TAB, AGAINST THE PAYLOAD THE SERVER ACTUALLY SENDS.
+ *
+ *   "i ran game 6105, and completed round 1 but the session rounds tab says
+ *    'No rounds yet. They appear here once a round has been played.'"
+ *
+ * `roundsFrom` read `detailedQuestions` off the top of the response; the POST
+ * route wraps it in `report`. Every unit test passed because its fixture was
+ * INVENTED to match my reading of the client rather than copied from the
+ * handler — so the client and the fixture agreed with each other and both
+ * disagreed with the server.
+ *
+ * The empty result is what made it invisible: an unreadable envelope and a
+ * session with no rounds produce the identical screen, so the defect reads as
+ * data.
+ *
+ * This uses the literal envelope from create-report.js:674-681. A reader that
+ * looks in the wrong place cannot pass it, whatever a fixture elsewhere
+ * believes.
+ */
+describe('the Rounds tab shows a round that has been played', () => {
+  const REPORT = {
+    success: true,
+    gameId: '6105',
+    message: 'Game report created successfully',
+    report: {
+      detailedQuestions: [{
+        questionNumber: '001',
+        questionData: { title: 'What did we learn?', category: 'Lessons', detail: 'Round one' },
+        answers: [{ answer: 'Ship smaller', playerName: 'Ada', rank: 1 }],
+        voteStats: { totalAnswers: 1, totalVotes: 1 },
+        aiSummary: { summaryText: 'The room agreed.' },
+      }],
+    },
+  };
+
+  // rejects: THE REPORTED BUG, read straight off the wire shape.
+  test('the real response envelope yields the round', () => {
+    // eslint-disable-next-line global-require
+    const { roundsFrom } = require('../config/sessionHistory');
+    const rounds = roundsFrom(REPORT);
+    expect(rounds).toHaveLength(1);
+    expect(rounds[0].title).toBe('What did we learn?');
+    expect(rounds[0].number).toBe('001');
+  });
+
+  // rejects: the page fetching the wrong route or the wrong way. create-report
+  //          is a POST; the GET route returns only a report already saved, so
+  //          pointing at it leaves the tab empty for every session that has not
+  //          generated one.
+  test('the page asks the route that assembles the rounds', async () => {
+    localStorage.clear();
+    window.history.pushState({}, '', '/host?gameId=6105');
+    installFetch({ '/report': REPORT });
+    render(<GameHostPage />);
+    await act(async () => { await Promise.resolve(); });
+
+    const reportCalls = global.fetch.mock.calls.filter(([u]) => String(u).includes('/report'));
+    for (const [, options] of reportCalls) {
+      expect(options?.method).toBe('POST');
+    }
+  });
+});

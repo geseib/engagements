@@ -56,7 +56,31 @@ function textOf(value) {
  * padded string the rest of the system uses, so a caller can pass `number`
  * straight back to the AI-summary endpoint as its `questionId`.
  */
-export function roundsFrom(report) {
+export function roundsFrom(payload) {
+  /*
+    THE ENVELOPE, WHICH I GOT WRONG AND SHIPPED.
+
+    Reported: a completed round 1, and the tab still saying *"No rounds yet."*
+
+    `POST /games/{gameId}/report` answers
+        { success, gameId, report: { … detailedQuestions … }, message }
+    and this read `payload.detailedQuestions` — one level too high, always
+    `undefined`, so every session looked empty no matter how many rounds it had.
+
+    The cause is worth naming because it is not a typo: the tests for this
+    module were written from a fixture I INVENTED to match my own reading, not
+    from what create-report.js returns. A fixture that agrees with the code
+    under test and disagrees with the server proves only that the code is
+    self-consistent. `sessionHistory.test.jsx` now builds its payload in the
+    real envelope, and the mounted panel test asserts the rounds actually
+    appear.
+
+    Both shapes are accepted rather than only the right one, because the stored
+    `REPORT` row is `reportData` itself — so `GET /games/{id}/report` hands back
+    the INNER object while POST hands back the outer. A reader that insisted on
+    one would break the moment anyone pointed this at the other route.
+  */
+  const report = (payload && payload.report) || payload;
   const raw = (report && report.detailedQuestions) || [];
   return raw
     .map((round) => {

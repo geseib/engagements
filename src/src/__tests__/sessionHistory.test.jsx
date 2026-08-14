@@ -21,10 +21,28 @@ import {
   roundsFrom, roundSubtitle, hasSummary, indexOfRound,
 } from '../config/sessionHistory';
 
-/** A report payload shaped the way create-report.js actually emits one. */
+/**
+ * A report payload shaped the way create-report.js ACTUALLY emits one.
+ *
+ * THIS USED TO BE `{ detailedQuestions }` AND THAT IS WHY THE TAB SHIPPED
+ * EMPTY. `POST /games/{gameId}/report` returns
+ * `{ success, gameId, report: { … detailedQuestions … }, message }` —
+ * create-report.js:674-681. The old fixture agreed with my reading of the
+ * client and disagreed with the server, so every test here passed while a
+ * completed round showed "No rounds yet."
+ *
+ * A fixture invented to match the code under test proves only that the code is
+ * self-consistent. This one is copied from the handler's return statement.
+ */
 const report = (overrides = []) => ({
-  detailedQuestions: overrides,
+  success: true,
+  gameId: '4821',
+  report: { detailedQuestions: overrides },
+  message: 'Game report created successfully',
 });
+
+/** The inner object, which is what the stored REPORT row and GET hand back. */
+const storedReport = (overrides = []) => ({ detailedQuestions: overrides });
 
 const q = (number, extra = {}) => ({
   questionNumber: number,
@@ -42,6 +60,21 @@ describe('turning a report into a list of rounds', () => {
   test('rounds come back in the order they were played', () => {
     const rounds = roundsFrom(report([q('10'), q('2'), q('1')]));
     expect(rounds.map((r) => r.ordinal)).toEqual([1, 2, 10]);
+  });
+
+  // rejects: THE REPORTED BUG — reading `detailedQuestions` one level too high.
+  //          The POST route wraps it in `report`, so this returned undefined for
+  //          every session and the tab said "No rounds yet" after a completed
+  //          round.
+  test('it reads through the POST envelope', () => {
+    expect(roundsFrom(report([q('1')])).map((r) => r.ordinal)).toEqual([1]);
+  });
+
+  // rejects: fixing the envelope by hard-coding the OTHER shape. The stored
+  //          REPORT row is the inner object, so GET hands back the unwrapped
+  //          form and a reader that insists on the wrapper breaks on it.
+  test('it also reads the unwrapped shape the stored report uses', () => {
+    expect(roundsFrom(storedReport([q('1')])).map((r) => r.ordinal)).toEqual([1]);
   });
 
   // rejects: handing the AI-summary endpoint an unpadded number. It takes
