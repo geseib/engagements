@@ -242,7 +242,22 @@
   color: #666;
 }
 
-/* Prompt Editor Modal */
+/* Prompt Editor Modal
+
+   THE FOURTH PLACE THIS EXACT TRAP APPEARED.
+
+   `align-items: center` on a fixed, full-viewport flex scrim with no
+   `overflow-y` centres a too-tall card, which means it overflows the top AND
+   the bottom at once and a scroll container can only ever reach one of them.
+   Already fixed in `.modal-overlay` (styles.css), `.qsets-rowact` on the
+   horizontal axis, and `.setup-panel__body`. This one matters most: the prompt
+   editor is the tallest form in the product — eleven field groups plus the
+   variable inspector, the preflight panel and the assembled preview — so its
+   Save button is the first thing to go past the fold, and this overlay has no
+   Escape handler to fall back on either.
+
+   `align-items: flex-start` plus `margin: auto` on the card centres it while it
+   fits and yields to the scroll once it does not. */
 .prompt-editor-overlay,
 .prompt-advisor-overlay {
   position: fixed;
@@ -252,10 +267,18 @@
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   z-index: 1000;
   padding: 20px;
+}
+
+.prompt-editor-overlay > *,
+.prompt-advisor-overlay > * {
+  margin: auto;
 }
 
 .prompt-editor-modal,

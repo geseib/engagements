@@ -30,6 +30,15 @@ const fs = require('fs');
 const path = require('path');
 
 const GLOBAL_CSS = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
+/*
+  READING ONLY styles.css IS HOW THE FOURTH INSTANCE HID.
+  `.prompt-editor-overlay` carried the identical fault for the tallest form in
+  the product, and this file could not see it because the rule lives in a
+  component stylesheet. Every scrim gets checked now, wherever it is declared.
+*/
+const AIPM_CSS = fs.readFileSync(
+  path.join(__dirname, '..', 'components', 'AIPromptManager.css'), 'utf8',
+);
 
 /** A rule's declaration block, read out of the stylesheet by exact selector. */
 function block(css, selector) {
@@ -110,5 +119,35 @@ describe('the setup panel body actually scrolls', () => {
   test('the header and tabs are not what gets compressed', () => {
     expect(block(GLOBAL_CSS, '.setup-panel__header')).toMatch(/flex:\s*none/);
     expect(block(GLOBAL_CSS, '.setup-panel__tabs')).toMatch(/flex:\s*none/);
+  });
+});
+
+/*
+ * THE PROMPT EDITOR, WHICH IS THE TALLEST FORM IN THE PRODUCT.
+ *
+ * Eleven field groups plus the variable inspector, the preflight panel and the
+ * assembled preview — and its scrim carried the same `align-items: center` with
+ * no overflow that trapped the question dialog. Its Save button is the first
+ * thing past the fold, and unlike the others this overlay has no Escape handler
+ * to fall back on: it does not use the Modal primitive at all.
+ *
+ * This block exists in this file rather than a new one because it is the same
+ * bug, and because the reason it survived three previous fixes is that the
+ * checks only ever read styles.css.
+ */
+describe('the prompt editor scrim is reachable too', () => {
+  const scrim = () => block(AIPM_CSS, '.prompt-editor-overlay,\n.prompt-advisor-overlay');
+
+  // rejects: the fourth recurrence of the centred-overflow trap, in the one
+  //          place where the form is tallest and there is no Escape key.
+  test('it scrolls and does not centre with the flex container', () => {
+    expect(scrim()).toMatch(/overflow-y:\s*auto/);
+    expect(scrim()).not.toMatch(/align-items:\s*center/);
+  });
+
+  // rejects: dropping the auto margin, which would jam every short prompt
+  //          dialog against the top edge.
+  test('the card still centres itself while it fits', () => {
+    expect(AIPM_CSS).toMatch(/\.prompt-(editor|advisor)-overlay\s*>\s*\*[^{]*\{[^}]*margin:\s*auto/);
   });
 });
