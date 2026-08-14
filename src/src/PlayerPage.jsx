@@ -6,6 +6,9 @@ import RankIcon, { rankLabel, VOTE_POSITIONS } from './components/RankIcon';
 import { gameTypeMeta } from './config/gameTypes';
 import { resolveInstruction, resolveRoundNoun } from './config/instructions';
 import { displayLabelFor, ownAnswerIndex } from './config/anonymity';
+import {
+  participationUrl, participationFrom, nextParticipation,
+} from './utils/playerParticipation';
 import JoinNameCollision from './components/JoinNameCollision';
 import { getClientId, classifyJoinFailure } from './components/joinResult';
 
@@ -117,6 +120,24 @@ function PlayerPage() {
   const [answers, setAnswers] = useState([]);
   const [votes, setVotes] = useState({ first: '', second: '', third: '' });
   const [hasVoted, setHasVoted] = useState(false);
+  /*
+    `hasVoted`, readable from inside an async resync.
+
+    `loadVotingData` has to know what the screen currently believes in order to
+    decide whether an unreadable server answer may lower the flag — and it runs
+    inside `checkGameState`, which the resume effect captured long ago, so the
+    `hasVoted` binding in that closure is frozen at join time. Reading the state
+    variable there is exactly the mistake that made the ballot-clearing check
+    fire on every resync (voteRoundRef's comment has that story).
+
+    Mirrored in an effect rather than written at each call site: there are five
+    writers, and a ref that one of them forgets to update is worse than a ref
+    that lags by a render. The lag is immaterial here — it is only consulted
+    when the server had no opinion AND the round did not change, and in that
+    case the value has not moved either.
+  */
+  const hasVotedRef = useRef(false);
+  useEffect(() => { hasVotedRef.current = hasVoted; }, [hasVoted]);
   const [isAnswerInputFocused, setIsAnswerInputFocused] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const [gameIdFromUrl, setGameIdFromUrl] = useState(false);
@@ -144,6 +165,16 @@ function PlayerPage() {
   // read and claimed inside async fetches that would otherwise close over a
   // stale value, and changing it must never itself cause a render.
   const draftQuestionKeyRef = useRef(null);
+  // Which VOTE round the ballot on screen belongs to. A ref for the same reason
+  // as the one above, and its absence is what un-voted people: the check that
+  // cleared the ballot compared `gameState` against the server's, from inside
+  // `checkGameState` — a function the resume effect captures once, with the
+  // deps `[gameId, playerName, joined, useWebSocket]`. `gameState` is not among
+  // them, so that closure keeps whatever the phase was when the player JOINED,
+  // and the comparison was true on every single resync. Returning to the tab
+  // during voting therefore cleared the ballot every time, before the "have you
+  // already voted" check downstream had said anything at all.
+  const voteRoundRef = useRef(null);
   const [results, setResults] = useState(null);
 
   // Game end modal state
@@ -690,16 +721,21 @@ function PlayerPage() {
    * single flaky refresh throw away a submitted answer.
    */
   const checkPlayerAnswer = async (gameId, playerName) => {
+    /*
+      THIS USED TO READ THE HOST'S ROSTER LIST, from `GET /state` with no player
+      identity on it — so the server answered as if a host had asked, and the
+      list it dug through (`answerProgress.answererIds`) only exists while the
+      state is `ASK#`. Any resync after the round moved on found nothing and had
+      to report "I could not find out". utils/playerParticipation.js has the
+      full account; the short version is that `/state/{playerName}` reads this
+      player's own answer row directly and keeps answering across phases.
+    */
     try {
-      const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
+      const stateRes = await fetch(participationUrl(API_BASE, gameId, playerName));
       if (!stateRes.ok) return null;
 
-      const stateData = await stateRes.json();
-      const answerers = stateData.answerProgress?.answererIds;
-      if (!Array.isArray(answerers)) return null;
-
-      const answered = answerers.includes(playerName);
-      console.log(`📝 PLAYER: Answer check for ${playerName}: ${answered ? 'already answered' : 'not answered yet'}`);
+      const { answered } = participationFrom(await stateRes.json());
+      console.log(`📝 PLAYER: Answer check for ${playerName}: ${answered === null ? 'unknown' : answered ? 'already answered' : 'not answered yet'}`);
       return answered;
     } catch (error) {
       console.error('Error checking player answer:', error);
@@ -755,12 +791,11 @@ function PlayerPage() {
 
         // The server is the authority when it has an opinion. When it does
         // not, only a genuinely new question may lower the flag — a refresh
-        // that learned nothing must not un-answer someone.
-        if (hasAnswered !== null) {
-          setHasAnswered(hasAnswered);
-        } else if (isNewQuestion) {
-          setHasAnswered(false);
-        }
+        // that learned nothing must not un-answer someone. The rule is now
+        // `nextParticipation` so the vote path below is held to the same one.
+        setHasAnswered((current) => nextParticipation({
+          current, server: hasAnswered, isNewQuestion,
+        }));
 
         // Reset the draft for a new question only.
         if (isNewQuestion && hasAnswered !== true) {
@@ -832,15 +867,20 @@ function PlayerPage() {
         const questionNumber = serverGameState.split('#')[1];
         console.log(`🗳️ PLAYER: VOTE state detected, question ${questionNumber}`);
         
-        // Clear previous votes when moving to new voting round
-        if (gameState !== serverGameState) {
+        // Clear the ballot only when the ROUND actually changed — see
+        // voteRoundRef. Comparing phases here read a `gameState` frozen at join
+        // time, so this fired on every resync and wiped a cast vote.
+        // Claimed before the await below, matching fetchCurrentQuestion.
+        const isNewVoteRound = questionNumber !== voteRoundRef.current;
+        voteRoundRef.current = questionNumber;
+        if (isNewVoteRound) {
           setVotes({ first: '', second: '', third: '' });
           setHasVoted(false);
-          console.log('🔄 Cleared previous votes for new voting round');
+          console.log(`🔄 Cleared previous votes for new voting round ${questionNumber}`);
         }
         
         // Load voting data for this question
-        await loadVotingData(questionNumber);
+        await loadVotingData(questionNumber, isNewVoteRound);
         
       } else if (serverGameState.startsWith('RESULTS#')) {
         // Extract question number from RESULTS#001 format
@@ -866,19 +906,29 @@ function PlayerPage() {
   };
   
   // Load voting data for the current question
-  const loadVotingData = async (questionNumber) => {
+  const loadVotingData = async (questionNumber, isNewVoteRound = false) => {
     if (!gameId || !playerName) {
       console.log('⏭️ PLAYER: Skipping loadVotingData - no gameId or playerName');
       return;
     }
-    
+
     try {
       console.log(`🗳️ PLAYER: Loading voting data for question ${questionNumber} in game ${gameId}`);
-      
-      // First, check if player has already voted by checking game state
-      const hasAlreadyVoted = await checkPlayerVote(gameId, playerName, questionNumber);
+
+      // First, check if player has already voted by checking game state.
+      // `setHasVoted(hasAlreadyVoted)` stood here and assigned the raw result,
+      // which is how a check that answered `false` for "I could not find out"
+      // reached the screen as "you have not voted". Same rule as the answer
+      // path now: the server wins when it has an opinion, and only a new round
+      // may lower the flag without one.
+      const votedOnServer = await checkPlayerVote(gameId, playerName, questionNumber);
+      const hasAlreadyVoted = nextParticipation({
+        current: hasVotedRef.current,
+        server: votedOnServer,
+        isNewQuestion: isNewVoteRound,
+      });
       setHasVoted(hasAlreadyVoted);
-      
+
       if (hasAlreadyVoted) {
         console.log(`✅ PLAYER: Already voted on question ${questionNumber} - showing vote submitted screen`);
         // Just need to load question data for display
@@ -1134,31 +1184,35 @@ function PlayerPage() {
     }
   };
   
-  // Check if player has already voted by checking if vote record exists
+  /**
+   * Has this player already voted this round? `null` when it could not be
+   * established — see utils/playerParticipation.js.
+   *
+   * THE THREE `return false`s THIS REPLACES ARE THE BUG. A non-OK response, a
+   * payload without the list, and a thrown request each reported a confident
+   * "has not voted", and the caller assigned that straight into state — so every
+   * unreadable resync actively un-voted the player and put the ballot back in
+   * front of somebody who had already cast it. The answer path above had
+   * documented that exact hazard and returned `null` for it; this one was never
+   * brought into line. Both go through one helper now so they cannot diverge
+   * again.
+   *
+   * The old comment block ("we don't have the playerId ... let's use a more
+   * direct approach") was working around something that was not true:
+   * `/games/{gameId}/state/{playerName}` existed the whole time, and the player
+   * name IS the id — votes are stored at `QUESTION#{nnn}#VOTE#{playerName}`.
+   */
   const checkPlayerVote = async (gameId, playerName, questionNumber) => {
     try {
-      // We need to check if the vote record exists for this player
-      // Since we don't have the playerId, we'll need to use a different approach
-      // The WebSocket system stores votes with the player name, so let's check directly
-      
-      // First, let's try to find the player ID by getting all players and finding by name
-      // But for now, let's use a more direct approach - check if the player is in the hasVoted list
-      
-      const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
-      if (stateRes.ok) {
-        const stateData = await stateRes.json();
-        
-        // Check if this player is in the voters list during voting phase
-        if (stateData.votingProgress && stateData.votingProgress.votersIds) {
-          const hasVoted = stateData.votingProgress.votersIds.includes(playerName);
-          console.log(`🗳️ PLAYER: Vote check for ${playerName}: ${hasVoted ? 'already voted' : 'not voted yet'}`);
-          return hasVoted;
-        }
-      }
-      return false;
+      const stateRes = await fetch(participationUrl(API_BASE, gameId, playerName));
+      if (!stateRes.ok) return null;
+
+      const { voted } = participationFrom(await stateRes.json());
+      console.log(`🗳️ PLAYER: Vote check for ${playerName}: ${voted === null ? 'unknown' : voted ? 'already voted' : 'not voted yet'}`);
+      return voted;
     } catch (error) {
       console.error('Error checking player vote:', error);
-      return false;
+      return null;
     }
   };
 
@@ -2021,7 +2075,24 @@ function PlayerPage() {
           </div>
         )}
 
-        {gameState.startsWith('VOTE#') && answers.length > 0 && (
+        {/*
+          `|| hasVoted` IS THE OTHER HALF OF THE TAB-SWITCH REPORT, and it is a
+          blank screen rather than a reset one.
+
+          `answers.length > 0` alone is right for the BALLOT — there is nothing
+          to rank until the responses are in. It is wrong for the confirmation
+          underneath it, because `loadVotingData` returns early once it learns
+          this player has already voted and never loads the answers on that
+          path. During the session that is invisible: the ballot was on screen a
+          moment ago, so `answers` is still populated. Come back to the tab and
+          the resync takes the early return with an empty `answers`, so this
+          whole block renders nothing at all and a player who has voted is shown
+          neither their ballot nor "Votes Submitted!".
+
+          The ballot markup below stays behind `!hasVoted`, so it never renders
+          against an empty list.
+        */}
+        {gameState.startsWith('VOTE#') && (answers.length > 0 || hasVoted) && (
           <div className="voting-screen">
             <h2>
               <Icon name="ListChecks" weight="duotone" size={26} color="var(--primary)" />

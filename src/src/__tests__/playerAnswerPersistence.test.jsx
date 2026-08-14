@@ -36,7 +36,9 @@ function makeServer() {
   const server = {
     state: 'ASK#001',
     gameType: 'trivia',
-    answerers: [],          // answerProgress.answererIds
+    answerers: [],          // who has answered — drives both routes below
+    voters: [],             // who has voted
+    ballot: [],             // the responses on offer during VOTE#
     question: {
       title: 'What is the capital of France?',
       questionNumber: '001',
@@ -54,13 +56,33 @@ function makeServer() {
     if (method === 'POST' && url.includes(`games/${GAME}/players`)) {
       return { ok: true, body: { success: true, playerName: ME } };
     }
+    /*
+      TWO ROUTES, AND THEY ANSWER DIFFERENT QUESTIONS — which is the whole
+      subject of this file, so the mock has to model both honestly.
+
+      `/state` carries no player identity, so get-game-state.js takes its
+      `if (!playerId || includeHostData)` branch and answers as if a host had
+      asked: roster lists, and only for the phase they belong to
+      (`answerProgress` exists solely while the state is `ASK#`).
+
+      `/state/{playerName}` reads THAT player's own answer and vote rows
+      directly and returns `playerQuestionState`. It is gated on there being a
+      current question rather than on the phase, so unlike the roster it keeps
+      answering once the round moves on. The player page reads this one.
+    */
     if (url.includes(`games/${GAME}/state`)) {
       const body = {
         state: server.state,
         gameType: server.gameType,
         currentQuestion: '001',
       };
-      if (server.state.startsWith('ASK#')) {
+      if (/\/state\/[^/?]+/.test(url)) {
+        body.playerQuestionState = {
+          questionNumber: 1,
+          hasAnswered: server.answerers.includes(ME),
+          hasVoted: server.voters.includes(ME),
+        };
+      } else if (server.state.startsWith('ASK#')) {
         body.answerProgress = {
           answersReceived: server.answerers.length,
           totalPlayers: 3,
@@ -72,17 +94,23 @@ function makeServer() {
     if (url.includes(`games/${GAME}/question`)) {
       return { ok: true, body: server.question };
     }
-    // The real shape during ASK#: a count, and nothing that identifies anyone.
+    /*
+      During ASK# this is a count and nothing that identifies anyone — exactly
+      what get-answers.js returns to a player mid-round.
+
+      During VOTE# it is the ballot, because that is what the player ranks.
+      `server.ballot` is empty by default so the ASK# tests keep the shape they
+      were written against.
+    */
     if (url.includes(`games/${GAME}/answers`)) {
-      return {
-        ok: true,
-        body: {
-          gameId: GAME,
-          questionId: '001',
-          answerCount: server.answerers.length,
-          timestamp: new Date().toISOString(),
-        },
+      const body = {
+        gameId: GAME,
+        questionId: '001',
+        answerCount: server.answerers.length,
+        timestamp: new Date().toISOString(),
       };
+      if (server.ballot.length) body.answers = [...server.ballot];
+      return { ok: true, body };
     }
     if (url.includes(`games/${GAME}/players`)) {
       return { ok: true, body: { players: [{ name: ME, playerName: ME, score: 0, totalScore: 0 }] } };
@@ -273,11 +301,16 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
     expect(screen.queryByRole('button', { name: /Submit Answer/i })).not.toBeInTheDocument();
   });
 
-  // A refresh that came back without the roster knows nothing about who
-  // answered, and must therefore change nothing. get-game-state.js only
-  // attaches answerProgress when it can resolve a current question number, so
-  // an ASK# response without it is a real reply, not a hypothetical one.
-  test('a refresh that omits the answered roster does not un-answer the player', async () => {
+  // A refresh that came back without the participation block knows nothing
+  // about who answered, and must therefore change nothing. get-game-state.js
+  // only attaches `playerQuestionState` when it can resolve a current question
+  // number, so an ASK# response without it is a real reply, not a hypothetical.
+  //
+  // THIS USED TO DELETE `answerProgress`, and after the endpoint moved that
+  // would have passed without proving anything — the page no longer reads that
+  // key, so stripping it changes nothing whether or not the guard exists. It
+  // strips what the page actually reads.
+  test('a refresh that omits the participation block does not un-answer the player', async () => {
     await joinAndReachQuestion();
 
     fireEvent.click(screen.getByText(/Paris/));
@@ -289,11 +322,11 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
     });
     server.answerers = [ME];
 
-    // Still ASK#001, still 200 OK — just no answerProgress on the payload.
+    // Still ASK#001, still 200 OK — just no playerQuestionState on it.
     const healthy = server.handle;
     server.handle = (url, options) => {
       const result = healthy(url, options);
-      if (url.includes(`games/${GAME}/state`)) delete result.body.answerProgress;
+      if (url.includes(`games/${GAME}/state`)) delete result.body.playerQuestionState;
       return result;
     };
 
@@ -373,7 +406,7 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
     const healthy = server.handle;
     server.handle = (url, options) => {
       const result = healthy(url, options);
-      if (url.includes(`games/${GAME}/state`)) delete result.body.answerProgress;
+      if (url.includes(`games/${GAME}/state`)) delete result.body.playerQuestionState;
       return result;
     };
 
@@ -384,5 +417,138 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
     });
     expect(screen.queryByText(/Answer Submitted!/i)).not.toBeInTheDocument();
     expect(submitButton()).toBeDisabled();
+  });
+});
+
+/*
+ * THE VOTE HALF, WHICH IS WHAT THE REPORT NAMED FIRST.
+ *
+ *   "if a player switches away from the tab after answering or voting, the
+ *    screen resets as if they have not already answered."
+ *
+ * Everything above is the ANSWER path, and it was hardened first — which is
+ * precisely why the vote path stayed broken so long. Two separate faults, both
+ * only on this side:
+ *
+ *   1. The ballot-clearing guard compared `gameState` (frozen at join time
+ *      inside the resume effect's closure) against the server's, so it was true
+ *      on EVERY resync and wiped the cast vote before anything else spoke.
+ *   2. `checkPlayerVote` returned a confident `false` from three exits that had
+ *      learned nothing, and its caller assigned that straight into state.
+ *
+ * Either one alone re-offers the ballot to somebody who has already voted.
+ */
+describe('PlayerPage — a cast vote survives a tab switch', () => {
+  let server;
+
+  beforeEach(() => {
+    global.fetch.mockClear();
+    localStorage.clear();
+    window.history.pushState({}, '', '/play');
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    server = makeServer();
+    server.gameType = 'call-and-answer';
+    installFetch(server);
+  });
+
+  /** Join during ASK, then let the host move the room to VOTE on the same round. */
+  async function joinAndReachVoting() {
+    await joinAndReachQuestion();
+    server.state = 'VOTE#001';
+    server.voters = [ME];          // this player has already cast their ballot
+    await switchAwayAndBack();
+    await waitFor(() => {
+      expect(screen.getByText(/Votes Submitted!/i)).toBeInTheDocument();
+    });
+  }
+
+  // rejects: BOTH vote-side faults. The stale-closure guard clears `hasVoted`
+  //          on every resync; the `return false` exits then confirm it. Restore
+  //          either and the ballot comes back in front of someone who has voted.
+  test('a second tab switch does not put the ballot back', async () => {
+    await joinAndReachVoting();
+
+    await switchAwayAndBack();
+    await switchAwayAndBack();
+
+    expect(screen.getByText(/Votes Submitted!/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Submit Votes/i })).not.toBeInTheDocument();
+  });
+
+  // rejects: collapsing "I could not find out" into "you have not voted" on the
+  //          vote path — the exact asymmetry that existed between the two
+  //          checks. Still VOTE#001, still 200 OK, just nothing said about this
+  //          player, which is what the payload looks like when a request races
+  //          the round.
+  test('a resync that says nothing about this player leaves the vote alone', async () => {
+    await joinAndReachVoting();
+
+    const healthy = server.handle;
+    server.handle = (url, options) => {
+      const result = healthy(url, options);
+      if (url.includes(`games/${GAME}/state`)) delete result.body.playerQuestionState;
+      return result;
+    };
+
+    await switchAwayAndBack();
+
+    expect(screen.getByText(/Votes Submitted!/i)).toBeInTheDocument();
+  });
+
+  // rejects: a fix that simply never clears the ballot, which would lock the
+  //          player out of voting for the rest of the session.
+  test('a genuinely new voting round does open the ballot again', async () => {
+    await joinAndReachVoting();
+
+    server.state = 'VOTE#002';
+    server.voters = [];
+    await switchAwayAndBack();
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Votes Submitted!/i)).not.toBeInTheDocument();
+    });
+  });
+
+  /**
+   * THE RANKING DRAFT, WHICH IS THE CLEARING BLOCK'S REAL JOB.
+   *
+   * Written because a mutation survived. Disabling the whole
+   * `if (isNewVoteRound)` block left every other test in this file green: the
+   * flag it sets is recomputed from `nextParticipation`, which is handed
+   * `isNewVoteRound` separately, so the server's answer covers for it. What the
+   * block uniquely does is wipe `votes` — and nothing else restores that.
+   *
+   * A stale draft is not cosmetic. `votes` holds PLAYER NAMES chosen from round
+   * one's ballot, and round two's ballot is a different set of responses. The
+   * selects come up pre-filled with a ranking the player never made for this
+   * round, over answers that may not even be on offer.
+   */
+  test("a new round does not inherit the previous round's rankings", async () => {
+    await joinAndReachQuestion();
+
+    server.state = 'VOTE#001';
+    server.ballot = [
+      { playerName: 'Ada', answer: 'A careful answer' },
+      { playerName: 'Grace', answer: 'A bolder answer' },
+    ];
+    await switchAwayAndBack();
+
+    const firstPick = () => screen.getAllByRole('combobox')[0];
+    await waitFor(() => expect(firstPick()).toBeInTheDocument());
+
+    // The option value is the ballot INDEX, not the name — that is what
+    // handleVoteChange stores and what `votes` therefore holds.
+    fireEvent.change(firstPick(), { target: { value: '0' } });
+    expect(firstPick().value).toBe('0');
+
+    // The host opens round two. Same shape of ballot, different responses.
+    server.state = 'VOTE#002';
+    server.ballot = [
+      { playerName: 'Ada', answer: 'Something else entirely' },
+      { playerName: 'Grace', answer: 'And another' },
+    ];
+    await switchAwayAndBack();
+
+    await waitFor(() => expect(firstPick().value).toBe(''));
   });
 });
