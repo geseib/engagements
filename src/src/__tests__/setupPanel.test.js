@@ -12,13 +12,25 @@ import {
   browserRow, filterBrowserRows, rosterRows,
 } from '../config/setupPanel';
 
-describe('setupPanelTabs — three tabs, none of them empty', () => {
-  test('the three tabs are Players, Questions and Settings, in that order', () => {
-    // rejects: reordering, renaming, or a fourth tab arriving unnoticed. The
-    // owner ruled these three by name.
-    expect(setupPanelTabs({}).map((t) => t.id)).toEqual(['players', 'questions', 'settings']);
+describe('setupPanelTabs — four tabs, none of them empty', () => {
+  /**
+   * THIS SAID THREE, AND THE OWNER ADDED THE FOURTH.
+   *
+   *   "perhaphs there is even a session tab that list questions so far, and
+   *    lists those."
+   *
+   * Rounds sits between Questions and Settings on purpose: it is read
+   * mid-session — "what did they say in round two" — while Settings is set once
+   * and left. The assertion is still exact rather than loosened to a
+   * `toContain`, because "a tab arriving unnoticed" is the thing worth
+   * catching and a fifth one should come past this line too.
+   */
+  test('the four tabs are Players, Questions, Rounds and Settings, in that order', () => {
+    // rejects: reordering, renaming, or a fifth tab arriving unnoticed.
+    expect(setupPanelTabs({}).map((t) => t.id))
+      .toEqual(['players', 'questions', 'history', 'settings']);
     expect(setupPanelTabs({}).map((t) => t.label))
-      .toEqual(['Players', 'Questions', 'Settings']);
+      .toEqual(['Players', 'Questions', 'Rounds', 'Settings']);
   });
 
   test('no tab is ever emitted empty', () => {

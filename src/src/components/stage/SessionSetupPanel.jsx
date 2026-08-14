@@ -8,6 +8,7 @@ import {
 import {
   anonymityApplies, anonymityActive, waitingNamesCaution,
 } from '../../config/anonymity';
+import { roundSubtitle, hasSummary } from '../../config/sessionHistory';
 
 /**
  * Everything the host needs and the room does not, behind one dock button.
@@ -127,6 +128,13 @@ export default function SessionSetupPanel({
   // only thing that can reach `useAuth`.
   isAdmin = false,
   issueControl = null,
+  /* The rounds played so far, already normalised by config/sessionHistory.js.
+     Props rather than a fetch: this panel is presentational by rule, and the
+     page owns the request — the same reason `isAdmin` arrives as a prop rather
+     than from a `useAuth` call in here. */
+  rounds = [],
+  historyLoading = false,
+  onOpenRound = () => {},
 }) {
   const [tab, setTab] = useState('players');
   const [search, setSearch] = useState('');
@@ -449,6 +457,56 @@ export default function SessionSetupPanel({
                     ))}
                   </div>
                 </>
+              )}
+            </section>
+          )}
+
+          {tab === 'history' && (
+            <section
+              className="setup-history"
+              role="tabpanel"
+              id="setup-panel-history"
+              aria-labelledby="setup-tab-history"
+            >
+              {/*
+                THE ROUNDS PLAYED SO FAR. The list is one half of what the owner
+                asked for; the arrows inside <PastRound> are the other.
+
+                `rounds` and `onOpenRound` are props rather than a fetch, because
+                this panel is presentational by rule — the same rule that keeps
+                `isAdmin` a prop rather than a `useAuth` call in here. The page
+                owns the request.
+              */}
+              {rounds.length === 0 ? (
+                <p className="setup-empty">
+                  {historyLoading
+                    ? 'Loading rounds…'
+                    : 'No rounds yet. They appear here once a round has been played.'}
+                </p>
+              ) : (
+                <ul className="setup-history__list">
+                  {rounds.map((round, i) => (
+                    <li key={round.number}>
+                      <button
+                        type="button"
+                        className="setup-history__row"
+                        onClick={() => onOpenRound(i)}
+                      >
+                        <span className="setup-history__num">{round.ordinal}</span>
+                        <span className="setup-history__text">
+                          <span className="setup-history__title">{round.title}</span>
+                          <span className="setup-history__sub">{roundSubtitle(round)}</span>
+                        </span>
+                        {/* The badge answers the question the host actually has
+                            when scanning this list — which of these has a
+                            summary I can read out — rather than decorating. */}
+                        {hasSummary(round) && (
+                          <span className="setup-history__badge" title="Has an AI summary">AI</span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
             </section>
           )}

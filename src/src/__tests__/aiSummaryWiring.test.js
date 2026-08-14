@@ -23,12 +23,30 @@ function functionBody(name) {
 }
 
 describe('the AI summary trigger', () => {
-  // rejects: reinstating a second, hand-rolled trigger fetch. The shipped bug
-  // WAS the second one — the results effect fired its own `generateNew=true`
-  // with a `.catch` that logged and cleared the watchdog, so a throw left the
-  // host with no request in flight, no notification coming, and no sign of it.
+  /**
+   * rejects: reinstating a second, hand-rolled trigger fetch. The shipped bug
+   * WAS the second one — the results effect fired its own `generateNew=true`
+   * with a `.catch` that logged and cleared the watchdog, so a throw left the
+   * host with no request in flight, no notification coming, and no sign of it.
+   *
+   * THIS ASSERTION EARNED ITS KEEP. The Rounds tab's Regenerate button was
+   * written with its own fetch and its own catch — the identical shape — and
+   * this is what caught it. It now goes through `triggerAISummary` like
+   * everything else, and gets the offline case, the 4xx case and the honest
+   * message for free.
+   *
+   * COUNTED IN CODE, NOT IN PROSE. The raw count was 1 and is now 2 only
+   * because doc-blocks in this file name the parameter when they explain it —
+   * a comment cannot fire a request, and a check that a comment can break is a
+   * check people learn to edit rather than heed. (An earlier mutation run in
+   * this codebase was fooled by exactly that: the mutation landed in a comment
+   * block and reported a false all-clear.)
+   */
   it('is fired from exactly one place in the file', () => {
-    const triggers = source.match(/generateNew=true/g) || [];
+    const code = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^[ \t]*\/\/.*$/gm, '');
+    const triggers = code.match(/generateNew=true/g) || [];
     expect(triggers).toHaveLength(1);
   });
 

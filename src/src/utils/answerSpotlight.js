@@ -12,69 +12,26 @@
  * solve "I want to READ answer nine", because a card sized to fit eight of its
  * siblings on a projector is sized to be glanced at, not read from.
  *
- * ── WHY THE INDEX ARITHMETIC IS ITS OWN MODULE ─────────────────────────────
+ * ── WHERE THE STEPPING WENT ────────────────────────────────────────────────
  *
- * Because the spotlight moves through the WHOLE list and the grid behind it
- * shows one page, and those two facts fight. The card the host clicked is at
- * `answerPage.offset + i` — a page-relative position turned absolute — and
- * every step from there has to stay absolute or Next would walk off the end of
- * the visible page and stop. Getting that wrong is silent: it looks like the
- * button simply does not work on the last card of each page, which is the same
- * symptom as three of the bugs already fixed this week.
+ * `openAt`, `step`, `canStep` and `positionLabel` now live in `utils/stepIndex.js`
+ * and are re-exported here. The session history dialog is a second consumer of
+ * exactly the same rules — one item out of a list, Previous and Next, and the
+ * edges are what matter — and the alternative was a second hand-written copy of
+ * the edge cases. Re-exported rather than moved outright so this module's own
+ * callers and tests keep one import.
  *
- * ── CLAMPED, NOT WRAPPED ───────────────────────────────────────────────────
+ * ── WHAT IS STILL SPECIFIC TO ANSWERS ──────────────────────────────────────
  *
- * Next on the last answer does nothing and says so with a disabled control,
- * rather than jumping back to the first. In front of a room the host is reading
- * down a list out loud; silently restarting reads as "there are more" and costs
- * them the sentence. `positionLabel` exists for the same reason — "3 of 12" is
- * what tells them how much is left.
+ * `pageOf`, below. It exists because the spotlight moves through the WHOLE list
+ * while the grid behind it shows one page, and those two facts fight. The card
+ * the host clicked is at `answerPage.offset + i` — a page-relative position
+ * turned absolute — and every step from there stays absolute, so Next does not
+ * walk off the end of the visible page and stop. Getting that wrong is silent:
+ * it looks like the button simply does not work on the last card of each page.
  */
-
-/** Is there a real answer at this position? */
-function inRange(index, total) {
-  return Number.isInteger(index) && index >= 0 && index < total;
-}
-
-/**
- * The answer to open, or `null` for "open nothing".
- *
- * `null` rather than a clamped index for an out-of-range request: a click on a
- * card that is no longer there — the list re-rendered under the pointer, a page
- * turned mid-tap — must open NOTHING. Clamping it to the nearest valid answer
- * would spotlight a different person's response than the one that was touched,
- * on a projector, with their name on it.
- */
-export function openAt(index, total) {
-  return inRange(index, total) ? index : null;
-}
-
-/**
- * One step through the full list, clamped at both ends.
- *
- * Returns the SAME index at an end rather than null, because null closes the
- * dialog — and a Next press on the last answer must not dismiss what the host
- * is reading.
- */
-export function step(index, delta, total) {
-  if (!inRange(index, total)) return null;
-  const next = index + delta;
-  return inRange(next, total) ? next : index;
-}
-
-/** Whether the control that moves by `delta` can do anything from here. */
-export function canStep(index, delta, total) {
-  return inRange(index, total) && inRange(index + delta, total);
-}
-
-/**
- * "3 of 12", 1-based, because it is read by a person and spoken in a room.
- * Empty string when there is nothing to number, so the caller can render it
- * unconditionally without printing "0 of 0".
- */
-export function positionLabel(index, total) {
-  return inRange(index, total) ? `${index + 1} of ${total}` : '';
-}
+export { openAt, step, canStep, positionLabel } from './stepIndex';
+import { inRange } from './stepIndex';
 
 /**
  * Which page holds this answer — so closing the spotlight can leave the grid

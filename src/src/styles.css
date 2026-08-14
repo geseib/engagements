@@ -11321,3 +11321,254 @@ body {
   outline: 3px solid var(--primary, #4a7cf7);
   outline-offset: 2px;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE ROUNDS TAB, AND ONE ROUND REOPENED.
+
+     "once you move on to a new question it would be nice to go back through AI
+      responses, and results screens. perhaphs there is even a session tab that
+      list questions so far, and lists those."
+
+   Same scroll contract as `.answer-spotlight`, and for the same reason: a past
+   round holds a question, every response and a full AI summary, so it is the
+   TALLEST dialog in the product after the prompt editor. `__body` is the only
+   part allowed to grow and carries `min-height: 0`, because a flex item's
+   default `min-height: auto` resolves to its content height and makes
+   `overflow-y: auto` inert — the trap that has now cost this codebase five
+   separate controls. Head and nav are `flex: none` so the long content yields
+   and never the Close button or the pager.
+
+   jsdom computes no heights and scrolls nothing. Pinned as text in
+   `__tests__/sessionHistory.test.jsx`.
+   ───────────────────────────────────────────────────────────────────────── */
+.past-round {
+  background: var(--surface, #fff);
+  color: var(--text, #111);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  width: min(900px, 100%);
+  max-height: min(86vh, 900px);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 22px 16px;
+  gap: 12px;
+}
+
+.past-round__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.past-round__count {
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+
+.past-round__close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  line-height: 0;
+  padding: 6px;
+  border-radius: 8px;
+}
+
+.past-round__close:hover {
+  background: rgba(0, 0, 0, 0.07);
+}
+
+/* THE ONLY PART THAT GROWS, AND THEREFORE THE ONLY PART THAT SCROLLS. */
+.past-round__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.past-round__question h3 {
+  margin: 0 0 6px;
+  font-size: 1.3rem;
+}
+
+.past-round__detail {
+  margin: 0 0 10px;
+  opacity: 0.85;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.past-round__image {
+  max-width: 100%;
+  border-radius: 10px;
+}
+
+.past-round__school,
+.past-round__voice {
+  font-size: 0.85rem;
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.past-round__options {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.past-round__answer-detail {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--primary, #4a7cf7);
+  background: rgba(0, 0, 0, 0.03);
+  overflow-wrap: anywhere;
+}
+
+.past-round__results h4,
+.past-round__summary h4 {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.past-round__answers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.past-round__answers li {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.past-round__answers li.is-lead {
+  background: rgba(74, 124, 247, 0.12);
+}
+
+.past-round__rank {
+  font-weight: 700;
+  opacity: 0.7;
+}
+
+.past-round__answer {
+  overflow-wrap: anywhere;
+}
+
+.past-round__who {
+  font-size: 0.85rem;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+.past-round__empty {
+  margin: 0;
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.past-round__regen {
+  margin-top: 12px;
+}
+
+.past-round__nav {
+  flex: none;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.past-round__nav button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The list in the sidebar tab. */
+.setup-history__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.setup-history__row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.setup-history__row:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.setup-history__num {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.setup-history__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.setup-history__title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setup-history__sub {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+/* Same small-tag treatment the admin question-set list uses for active/AI. */
+.setup-history__badge {
+  flex: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--primary, #4a7cf7);
+  color: #fff;
+}

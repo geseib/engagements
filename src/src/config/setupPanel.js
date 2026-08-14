@@ -26,6 +26,10 @@ export function setupPanelTabs() {
   return [
     { id: 'players', label: 'Players' },
     { id: 'questions', label: 'Questions' },
+    // GOING BACK THROUGH WHAT ALREADY HAPPENED. Third rather than last because
+    // it is read mid-session — "what did they say in round two" — while
+    // Settings is set once and left alone.
+    { id: 'history', label: 'Rounds' },
     { id: 'settings', label: 'Settings' },
   ];
 }

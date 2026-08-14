@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import webSocketClient from './WebSocketClient';
 import { requestNextQuestion } from './utils/nextQuestion';
@@ -23,6 +23,8 @@ import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfi
 import { pageSizeFor, pageSlice } from './config/stagePaging';
 import AnswerSpotlight from './components/AnswerSpotlight';
 import { pageOf } from './utils/answerSpotlight';
+import PastRound from './components/PastRound';
+import { roundsFrom } from './config/sessionHistory';
 import { qrOverlayClassName } from './utils/qrOverlayClassName';
 import { shortcutsSuppressed, qrOverlayInstructions } from './utils/hostOverlays';
 import {
@@ -158,6 +160,60 @@ function GameHostPage() {
   // a deliberate inspection, and the dock's SETUP button is its permanent,
   // discoverable entry point (`\` is an accelerator only).
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
+
+
+  /**
+   * THE ROUNDS PLAYED SO FAR — for the Rounds tab and the dialog behind it.
+   *
+   * NO NEW ENDPOINT. `POST /games/{gameId}/report` already assembles exactly
+   * this: create-report.js queries the results rows, the votes, the AI
+   * summaries and each round's source question, ranks the answers, and returns
+   * one entry per round. It is also the route that already redacts correctly
+   * for this data, and reimplementing that judgement somewhere else is the
+   * specific mistake that hid the names and the podium for a whole session
+   * earlier this week. config/sessionHistory.js has the full reasoning,
+   * including what the call costs.
+   *
+   * Refetched whenever the round advances, so a host who opens the tab after
+   * three more rounds does not read a stale list. `lessonNumber` is the trigger
+   * rather than `gameState` because a single round passes through ASK, VOTE and
+   * RESULTS and only the last of those changes what this shows.
+   */
+  const [rounds, setRounds] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [pastRoundIndex, setPastRoundIndex] = useState(null);
+  const [regeneratingRounds, setRegeneratingRounds] = useState([]);
+
+  const loadRounds = useCallback(async () => {
+    if (!gameId) return;
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}games/${gameId}/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        // A session with no completed round has no report, and that is the
+        // normal state for the first few minutes of every game — not an error
+        // worth putting in front of the host. The tab's empty copy says it.
+        console.log(`ℹ️ HOST: no session report yet (${res.status})`);
+        setRounds([]);
+        return;
+      }
+      setRounds(roundsFrom(await res.json()));
+    } catch (e) {
+      console.error('Failed to load session rounds', e);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [gameId]);
+
+  useEffect(() => {
+    if (setupPanelOpen) loadRounds();
+  }, [setupPanelOpen, lessonNumber, loadRounds]);
+
+
   const [showExpandedQR, setShowExpandedQR] = useState(false);
   /**
    * null | 'preview' | 'pinned'.
@@ -984,6 +1040,44 @@ function GameHostPage() {
     }
   };
 
+  /**
+   * Ask for a past round's AI summary to be written again.
+   *
+   * THROUGH `triggerAISummary`, NOT ITS OWN FETCH — and the first draft of this
+   * did roll its own, which `aiSummaryWiring.test.js` caught. That test exists
+   * because a second hand-rolled trigger has already shipped once as a bug: it
+   * carried its own `.catch` that logged and cleared the watchdog, so a throw
+   * left the host with no request in flight, no notification coming, and no
+   * sign of either. `ERR_INTERNET_DISCONNECTED` lands in exactly that branch.
+   *
+   * So this reuses the one function that classifies its own failure, and gets
+   * the offline case, the 4xx case and the honest message for free. The only
+   * thing added here is the per-round busy flag, because unlike the live round
+   * a host can start several of these and they finish in whatever order the
+   * workers finish.
+   *
+   * The 202 means "started", never "finished". The flag is released by the
+   * `aiSummaryReady` frame, not here — clearing it on the response would
+   * re-enable the button while the worker is still running, which is the whole
+   * thing it exists to prevent.
+   */
+  const regenerateRoundSummary = async (roundNumber) => {
+    if (regeneratingRounds.includes(roundNumber)) return;
+    setRegeneratingRounds((prev) => [...prev, roundNumber]);
+
+    const result = await triggerAISummary(encodeURIComponent(roundNumber));
+    if (!result.ok) {
+      setRegeneratingRounds((prev) => prev.filter((n) => n !== roundNumber));
+      // `headline` and `detail` are what classifyAISummaryFailure actually
+      // returns — there is no `message`, and reaching for one would have put
+      // the fallback sentence in front of the host on every real failure,
+      // discarding the specific one the classifier had worked out.
+      const f = result.failure;
+      alert(f ? `${f.headline}\n\n${f.detail}`
+        : 'The summary could not be regenerated. Please try again.');
+    }
+  };
+
   /** The host pressing "Try again" on the failure. Attempts start over. */
   const handleRetryAISummary = () => {
     const questionId = aiQuestionRef.current || gameState.match(/#(\d+)/)?.[1];
@@ -1363,6 +1457,22 @@ Focus on actionable business strategy insights.`;
       console.log('🔌 AI Summary ready notification:', data);
       clearAITimers();
       setAiRetrying(false);
+      /*
+        A REGENERATED PAST ROUND ARRIVES HERE TOO, and this is the only signal
+        that it did — the Rounds tab's Regenerate button gets a 202 and nothing
+        else. Reload the list so the dialog shows the new text, and release the
+        button, keyed on the round the push names rather than clearing them all:
+        a host can start two and they finish in whatever order they finish.
+
+        Unconditional rather than gated on the tab being open. The list is
+        cheap, the dialog may be open over a different tab, and a stale summary
+        that only refreshes on the next reopen is the bug this replaces.
+      */
+      if (data.questionId) {
+        const done = String(data.questionId).padStart(3, '0');
+        setRegeneratingRounds((prev) => prev.filter((n) => n !== done));
+        loadRounds();
+      }
       // Fetch the AI summary from API
       if (data.questionId) {
         console.log(`🔌 Fetching AI summary for question ${data.questionId}`);
@@ -4903,6 +5013,9 @@ Ready to engage? See you there!`;
           dock is a no-overlay zone (audit A6). */}
       {setupPanelOpen && (
         <SessionSetupPanel
+          rounds={rounds}
+          historyLoading={historyLoading}
+          onOpenRound={setPastRoundIndex}
           onClose={closeAllSidePanels}
           wsConnected={wsConnected}
           players={players}
@@ -5094,6 +5207,26 @@ Ready to engage? See you there!`;
           </div>
         </div>
       )}
+
+      {/* GOING BACK THROUGH A ROUND THAT ALREADY HAPPENED.
+
+          Mounted at the page root rather than inside the panel: the panel is
+          presentational and unmounts when it closes, and a host who opens round
+          two and then closes the sidebar should still be reading round two.
+          It is also why `pastRoundIndex` lives on the page. */}
+      <PastRound
+        rounds={rounds}
+        index={pastRoundIndex}
+        onIndex={setPastRoundIndex}
+        onClose={() => setPastRoundIndex(null)}
+        onRegenerate={regenerateRoundSummary}
+        regenerating={regeneratingRounds}
+        labelFor={(answer, idx) => stageLabelFor(answer, idx, {
+          authorsHidden: authorsHiddenNow({
+            gameType: currentGameType, anonymousUntilReveal, authorsRevealed,
+          }),
+        })}
+      />
 
     </div>
     
