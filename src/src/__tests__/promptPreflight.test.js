@@ -748,3 +748,90 @@ describe('every prompt this product ships is clean', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/*
+ * A PROMPT THAT NEVER RECEIVES THE ANSWERS IT IS ASKED TO REVIEW.
+ *
+ * Reported live, from an Amazon Leadership Principles session — the AI replied:
+ *
+ *   "I notice you haven't provided the [Summary of the core idea/response being
+ *    analyzed] yet. Please share the participant's actual response…"
+ *
+ * A player HAD answered. The worker logged `Found 1 answers, 1 votes` and the
+ * text `'Here is a simple test'`. The data was there; the PROMPT had no slot
+ * for it. Its instructions carried the persona, its outputFormat carried a
+ * bracketed layout, and neither named {responsesText}.
+ *
+ * The square brackets are what made it look finished: `[Summary of the core
+ * idea/response being analyzed]` reads like a placeholder and is prose. Only
+ * {braced} names are substituted.
+ */
+describe('a prompt with nothing to analyse', () => {
+  const persona = 'You are two executives reviewing responses on a radio show.';
+  const layout = 'REVIEWED:\n[Summary of the core idea/response being analyzed]\n{questionTitle}';
+
+  const codes = (report) => report.blocking.map((b) => b.code);
+
+  // rejects: THE REPORTED BUG. This prompt runs, costs a Bedrock call, stores
+  //          its output and shows a room a message addressed to whoever wrote
+  //          the prompt — with no error anywhere. Silent and plausible is the
+  //          worst combination this file exists to catch.
+  test('a prompt that names no answer variable is blocked', () => {
+    const report = preflightPrompt({
+      gameType: 'call-and-answer',
+      promptType: 'analysis',
+      instructions: persona,
+      outputFormat: layout,
+    });
+    expect(codes(report)).toContain('no-answer-variable');
+  });
+
+  // rejects: treating square-bracket prose as if it were a variable. That
+  //          confusion is the whole reason the prompt looked complete.
+  test('bracketed prose does not count as receiving the responses', () => {
+    const report = preflightPrompt({
+      gameType: 'call-and-answer',
+      promptType: 'analysis',
+      instructions: persona,
+      outputFormat: 'REVIEWED:\n[the response]\n[participant answer here]',
+    });
+    expect(codes(report)).toContain('no-answer-variable');
+  });
+
+  // rejects: firing on a correct prompt, which would make the check noise.
+  test('a prompt that names {responsesText} passes', () => {
+    const report = preflightPrompt({
+      gameType: 'call-and-answer',
+      instructions: persona,
+      outputFormat: `${layout}\n{responsesText}`,
+    });
+    expect(codes(report)).not.toContain('no-answer-variable');
+  });
+
+  // rejects: demanding call-and-answer's variable from every format. Trivia and
+  //          polls carry what was said under different names, and flagging a
+  //          correct trivia prompt teaches authors to ignore the report.
+  test('trivia and poll variables satisfy it too', () => {
+    for (const [gameType, token] of [['trivia', 'triviaResponses'], ['poll', 'uniqueAnswers']]) {
+      const report = preflightPrompt({
+        gameType,
+        promptType: 'analysis',
+        instructions: persona,
+        outputFormat: `${layout}\n{${token}}`,
+      });
+      expect(codes(report)).not.toContain('no-answer-variable');
+    }
+  });
+
+  // rejects: blocking a GENERATION prompt, which writes questions and has no
+  //          responses to receive by definition.
+  test('a question-generation prompt is exempt', () => {
+    const report = preflightPrompt({
+      gameType: 'call-and-answer',
+      promptType: 'generation',
+      instructions: 'Write eight scenarios about pricing.',
+      outputFormat: 'CSV with Category,Title,Detail',
+    });
+    expect(codes(report)).not.toContain('no-answer-variable');
+  });
+});

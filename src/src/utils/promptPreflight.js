@@ -885,6 +885,68 @@ export function preflightPrompt(input = {}) {
   }
 
   /*
+    A SUMMARY PROMPT THAT NEVER RECEIVES THE ANSWERS.
+
+    Reported live, from an Amazon Leadership Principles session: the AI replied
+
+        "I notice you haven't provided the [Summary of the core idea/response
+         being analyzed] yet. Please share the participant's actual response…"
+
+    A player HAD answered — the worker logged
+    `Found 1 answers, 1 votes` and `answer: 'Here is a simple test'`. The data
+    was there. The PROMPT had no slot for it: its instructions carried the
+    persona and its outputFormat carried a bracketed layout, and neither
+    mentioned {responsesText}. So the model was handed a question, a format
+    telling it to review "the response", and no response — and it did the only
+    sensible thing, which was to ask for one.
+
+    THIS IS THE WORST FAILURE MODE THIS FILE COVERS, because it is silent and
+    plausible. Every other check here catches something that breaks; this one
+    catches a prompt that RUNS, costs a Bedrock call, stores its output, and
+    shows a room a message addressed to whoever wrote the prompt. Nothing logs
+    an error. The round looks like it worked.
+
+    Blocking rather than advisory: an analysis prompt with nothing to analyse
+    has no correct output. The bracketed placeholders that make it read as
+    "nearly right" — `[Summary of ...]` — are prose to the model, not slots the
+    engine fills, and that distinction is exactly what the author missed.
+  */
+  const ANSWER_TOKENS = [
+    'responsesText', 'triviaResponses', 'uniqueAnswers', 'answerCount',
+    'voteTally', 'votingBreakdown', 'topAnswer', 'winningAnswer',
+  ];
+  const namesAnAnswer = variables.some((v) => ANSWER_TOKENS.includes(v.name));
+  /*
+    ONLY WHEN THE PROMPT SAYS IT IS AN ANALYSIS PROMPT, and the first version of
+    this got that backwards — it treated a missing `promptType` as "analysis"
+    and lit up every shipped default in default-ai-prompts.json. Those are
+    question-GENERATION prompts: they carry no promptType, they use the legacy
+    single `template` field, and they have no responses to receive because they
+    run before anybody has answered anything. Ten of them went red at once,
+    which is precisely the cries-wolf failure that gets a check deleted rather
+    than heeded.
+
+    So this fires on an explicit `analysis` only. Narrower than "anything not
+    generation", and it still covers the reported case exactly: the prompt that
+    produced the bad summary is stored with `promptType: analysis`.
+  */
+  if (!namesAnAnswer && String(input.promptType || '') === 'analysis') {
+    blocking.push(finding(
+      'no-answer-variable',
+      'This prompt never receives the responses it is asked to review.',
+      'None of the variables that carry what participants said appear anywhere in it '
+        + `(${ANSWER_TOKENS.slice(0, 3).map((t) => `{${t}}`).join(', ')}, …). The engine substitutes `
+        + 'only {braced} names; square-bracket text like "[Summary of the response]" is prose the '
+        + 'model reads, not a slot anything fills. So the model is given a question, a layout that '
+        + 'tells it to critique an answer, and no answer — and it replies by asking for one. That '
+        + 'reply is then stored and shown to the room. Nothing errors and nothing is logged.',
+      `variables found: ${variables.length ? variables.map((v) => `{${v.name}}`).join(' ') : '(none)'}`,
+      'Add {responsesText} where the responses should appear — for trivia use {triviaResponses}, '
+        + 'for a poll or survey {uniqueAnswers}.'
+    ));
+  }
+
+  /*
     A TOKEN NOTHING SUBSTITUTES. The one check that already existed, kept here
     so a single report answers the whole question. `unknownVariableTokens` is
     the same primitive `assertTemplateVariablesExist` uses
