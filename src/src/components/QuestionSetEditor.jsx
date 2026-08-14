@@ -51,8 +51,45 @@ export default function QuestionSetEditor({
   availablePersonas = [],
   availableSets = [],
   defaultInstructions = '',
+  /*
+   * ── THE THREE PANELS A HOST CANNOT CALL THE ROUTES FOR ────────────────────
+   *
+   * This editor is mounted twice: by AdminPage, and by HostQuestionSetsDialog
+   * (the owner: *"expose the same style … to the host question set screens. why
+   * recreate everything"*). Almost all of it works for a host — the details
+   * save is `PUT /admin/edit-question-set/{id}`, the questions save is
+   * `POST /admin/upload-questions` with `replaceSetId`, and both are on the host
+   * route list and ownership-guarded by `requireSetManager`.
+   *
+   * Three things are not. The version routes and the CSV download are
+   * admins-only in `auth/authorizer.js`; the AI draft is admins-only AND
+   * Bedrock spend. So they are flags, following the pattern
+   * QuestionSetUploadPanel already set (`showAIBuilder` and friends) rather
+   * than a second copy of this file.
+   *
+   * EVERY FLAG DEFAULTS TO THE CURRENT BEHAVIOUR. AdminPage passes none of
+   * them, so the console is byte-for-byte what it was — which is how you can
+   * tell the seam was cut in the right place.
+   *
+   * A FLAG IS NOT A PERMISSION. Turning `showAIAssist` on for a host would draw
+   * the button and change nothing about the 403 behind it; the route list is a
+   * separate decision in a separate file.
+   */
+  /** `GET|POST|DELETE /admin/question-sets/{id}/versions…` — admins only. */
+  showVersions = true,
+  /** `GET /admin/download-question-set/{id}` — admins only. */
+  showDownload = true,
+  /** `POST /admin/ai-generate-questions` — admins only. */
+  showAIAssist = true,
   onSaved,
   onChanged,
+  /**
+   * Reports the Questions panel's unsaved working copy upward, so a container
+   * that owns the way out (the host's modal answers Escape) can refuse to throw
+   * it away. AdminPage does not pass it: its way out is this editor's own
+   * Cancel, which already asks.
+   */
+  onDirtyChange,
   onCancel
 }) {
   const setId = questionSet?.id || '';
@@ -109,6 +146,12 @@ export default function QuestionSetEditor({
 
   const loadVersions = useCallback(async () => {
     if (!setId) return;
+    // NOT FETCHED WHEN THE PANEL IS NOT DRAWN. The catch below swallows a failed
+    // load into an empty list — correct for a set that predates versioning, and
+    // indistinguishable from the 403 a host gets. Withholding the request is
+    // what keeps "no Versions panel" from meaning "a Versions panel that is
+    // silently always empty".
+    if (!showVersions) return;
     try {
       const response = await authFetch(`${API_BASE()}admin/question-sets/${setId}/versions`);
       if (!response.ok) {
@@ -124,7 +167,7 @@ export default function QuestionSetEditor({
       console.error('Version list error:', error);
       setVersions([]);
     }
-  }, [setId, activeVersion]);
+  }, [setId, activeVersion, showVersions]);
 
   // Reload the form whenever a different set is opened.
   useEffect(() => {
@@ -148,6 +191,12 @@ export default function QuestionSetEditor({
     loadVersions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setId]);
+
+  // Pass the Questions panel's unsaved state on to whoever owns the container.
+  // Reported rather than reached into, the same way the panel reports it here.
+  useEffect(() => {
+    if (onDirtyChange) onDirtyChange(questionsDirty);
+  }, [questionsDirty, onDirtyChange]);
 
   /** Display name for a stored personaId, or a warning when it resolves to nothing. */
   const personaLabel = (id) => {
@@ -583,11 +632,14 @@ export default function QuestionSetEditor({
         questionSet={currentSet}
         availableSets={availableSets}
         plannedVersion={plannedVersion}
+        showDownload={showDownload}
+        showAIAssist={showAIAssist}
         onChanged={async () => { await loadVersions(); if (onChanged) onChanged(); }}
         onDirtyChange={setQuestionsDirty}
       />
 
       {/* ================================================= 3. VERSIONS === */}
+      {showVersions && (
       <section className="qs-panel">
         <div className="qs-panel-header">
           <h3>
@@ -664,6 +716,7 @@ export default function QuestionSetEditor({
           <StatusMessage message={versionStatus.text} tone={versionStatus.tone} />
         )}
       </section>
+      )}
 
       {/* ==================================================== 4. MEDIA === */}
       {/*

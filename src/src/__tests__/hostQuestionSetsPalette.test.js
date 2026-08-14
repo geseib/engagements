@@ -173,3 +173,91 @@ describe('the scope reaches the components nested inside it', () => {
     expect(Number(over[1])).toBeGreaterThan(Number(overlay[1]));
   });
 });
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * THE ADMIN QUESTION-SET EDITOR, MOUNTED ON THE HOST'S SHELF.
+ *
+ * `HostQuestionSetsDialog` now opens `components/QuestionSetEditor.jsx` on a row
+ * the server said `canManage` on — the owner's *"expose the same style (maybe
+ * the same modal etc) to the host question set screens. why recreate
+ * everything."* Every `.qs-*` rule those components use lives in styles.css and
+ * was measured against the ADMIN paper theme; mounted here they inherit
+ * `.qsets--onlight`'s tokens instead, because custom properties inherit and that
+ * scope re-declares GLOBAL ones rather than only its own `--qsets-*` locals.
+ *
+ * This block is the measurement of what that inheritance does.
+ */
+const EDITOR = (() => {
+  const start = QS_CSS.indexOf('.qsets--onlight .qs-editor {');
+  if (start < 0) {
+    throw new Error('.qsets--onlight .qs-editor block not found — the mounted editor has no re-tint');
+  }
+  return QS_CSS.slice(start, QS_CSS.indexOf('}', start));
+})();
+
+const editorToken = (name) => {
+  const m = EDITOR.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
+  return m ? parseHex(m[1]) : null;
+};
+
+describe('the editor, mounted inside the host dialog', () => {
+  test('the nested-card affordance survives the host surface', () => {
+    // `.qs-editor .qs-panel` is `background: var(--surface-2)` on a white modal,
+    // and it is what makes Details / Questions / Media read as four steps rather
+    // than one long form. The host scope's #FAF7F2 is 1.07:1 against the card —
+    // the boundary simply is not there. rejects: deleting this override and
+    // letting the panels dissolve into the dialog.
+    const s2 = editorToken('--surface-2');
+    expect(s2).not.toBeNull();
+    expect(ratio(s2, L.surface)).toBeGreaterThan(1.1);
+    // And it still has to carry the copy printed on it.
+    expect(ratio(L.muted, s2)).toBeGreaterThanOrEqual(AA);
+    expect(ratio(L.text, s2)).toBeGreaterThanOrEqual(AA);
+  });
+
+  test('the success status icon is readable on its own banner', () => {
+    // `utils/statusTone.js` returns `var(--success)` for the success icon, and
+    // `.qsets--onlight` does not redeclare --success — so without this override
+    // it falls through to :root DUSK #4FB286, which is 2.10:1 on the
+    // `.status-message.success` ground. The ground is READ from styles.css so
+    // this cannot go stale. rejects: dropping the override.
+    const success = editorToken('--success');
+    expect(success).not.toBeNull();
+    const banner = GLOBAL_CSS.match(/\.status-message\.success\s*\{[^}]*background:\s*(#[0-9A-Fa-f]{6})/);
+    expect(banner).not.toBeNull();
+    expect(ratio(success, L.surface)).toBeGreaterThanOrEqual(AA);
+    expect(ratio(success, parseHex(banner[1]))).toBeGreaterThanOrEqual(AA);
+  });
+
+  test('the accent is the host’s, and the console amber is not pinned back over it', () => {
+    // THE DECISION, ASSERTED. The editor inherits --primary #9A5B18 from the
+    // scope it is mounted in: one accent per stack, and #F6A94C is 1.96:1 as
+    // text on white while `--primary` carries text all through this subtree
+    // (`.btn-secondary`'s label and border, `.stat-badge`, the editor's h2).
+    // styles.css says the same thing twice in its own voice — `var(--primary,
+    // #8a5300)` on the AI provenance rule, and `.gsd-setlink` reaching for
+    // --primary-deep because *"#F6A94C carries 1.9:1 on the white dialog card"*.
+    // rejects: restoring the amber inside the mount, whether by re-declaring
+    // --primary here or by stamping [data-theme="light"] on the editor's frame.
+    expect(EDITOR).not.toMatch(/--primary\s*:/);
+    expect(GLOBAL_CSS).not.toMatch(/qs-editor[^{]*\{[^}]*data-theme/);
+    const amber = GLOBAL_CSS.match(/--primary:\s*(#[0-9A-Fa-f]{6})/);
+    expect(amber).not.toBeNull();
+    // The premise, so the assertion above cannot become decorative: the accent
+    // it declines really is the unreadable one, and the one it keeps really is
+    // readable both ways round.
+    expect(ratio(parseHex(amber[1]), L.surface)).toBeLessThan(AA);
+    expect(ratio(L.primary, L.surface)).toBeGreaterThanOrEqual(AA);
+  });
+
+  test('the frame the editor sits in is this stylesheet’s, not styles.css’s', () => {
+    // `.qsets-editor-frame` is the dialog box `Modal` renders for the editor.
+    // questionSetsPalette.test.js requires styles.css to declare NOTHING in the
+    // `.qsets*` scope — the `.qs` / `.qsets` prefixes collided once already.
+    // rejects: putting the new class where every other `.qs-*` rule lives.
+    expect(QS_CSS).toMatch(/\.qsets-editor-frame\s*\{/);
+    expect(GLOBAL_CSS).not.toMatch(/\.qsets-editor-frame/);
+  });
+});

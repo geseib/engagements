@@ -68,13 +68,59 @@ const HOST_VIEW = [
 /** The same rows as an ADMIN sees them: canManage everywhere. */
 const ADMIN_VIEW = HOST_VIEW.map((set) => ({ ...set, canManage: true, mine: set.mine }));
 
-function mockApi({ sets = HOST_VIEW, editStatus = 200, editBody = null, deleteStatus = 200, uploadStatus = 200 } = {}) {
+/**
+ * `GET /question-sets/{setId}/questions` for Ivy Retro — the route the mounted
+ * editor reads. It carries NO authorizer (template-clean.yaml:405-422), which is
+ * why a host can open the editor at all.
+ */
+const IVY_QUESTIONS = {
+  setId: 'ivy-retro',
+  questions: [
+    {
+      id: 'c001#001', Category: 'Retro', title: 'WHAT WENT WRONG', QuestionNumber: 1,
+      questionDetail: 'Pick one incident.', Tags: ['retro'],
+    },
+    {
+      id: 'c001#002', Category: 'Retro', title: 'WHAT WOULD YOU CHANGE', QuestionNumber: 2,
+      questionDetail: 'One thing only.', Tags: ['retro'],
+    },
+  ],
+};
+
+function mockApi({
+  sets = HOST_VIEW, editStatus = 200, editBody = null, deleteStatus = 200, uploadStatus = 200,
+  questions = IVY_QUESTIONS,
+} = {}) {
   let listCalls = 0;
+  // THE THREE ROUTES A HOST IS REFUSED, counted rather than left to throw.
+  // tests/question-set-ownership.js:276-290 asserts the refusals against the
+  // real authorizer; what matters HERE is that the mounted editor never asks.
+  // Routing them (instead of letting the router's throw catch it) is deliberate:
+  // the editor swallows a failed version load into an empty list, so a thrown
+  // "unhandled request" would be indistinguishable from a panel that renders and
+  // silently shows nothing. A counter can tell those apart.
+  const refused = { versions: 0, download: 0, ai: 0 };
   authFetch.mockImplementation(async (url, options = {}) => {
     const method = (options.method || 'GET').toUpperCase();
     if (method === 'GET' && /\/admin\/question-sets$/.test(url)) {
       listCalls += 1;
       return jsonResponse(200, { questionSets: typeof sets === 'function' ? sets(listCalls) : sets });
+    }
+    // The editor's own reads and writes.
+    if (method === 'GET' && /\/question-sets\/[^/]+\/questions$/.test(url)) {
+      return jsonResponse(200, questions);
+    }
+    if (/\/admin\/question-sets\/[^/]+\/versions/.test(url)) {
+      refused.versions += 1;
+      return jsonResponse(403, { error: 'Admin access required' });
+    }
+    if (method === 'GET' && url.includes('/admin/download-question-set/')) {
+      refused.download += 1;
+      return jsonResponse(403, { error: 'Admin access required' });
+    }
+    if (url.includes('/admin/ai-generate-questions')) {
+      refused.ai += 1;
+      return jsonResponse(403, { error: 'Admin access required' });
     }
     if (method === 'PUT' && url.includes('/admin/edit-question-set/')) {
       return editStatus === 200
@@ -87,8 +133,14 @@ function mockApi({ sets = HOST_VIEW, editStatus = 200, editBody = null, deleteSt
         : jsonResponse(deleteStatus, { error: 'This question set belongs to someone else. You can only change sets you created.' });
     }
     if (method === 'POST' && url.includes('/admin/upload-questions')) {
+      const body = JSON.parse(options.body || '{}');
       return uploadStatus === 200
-        ? jsonResponse(200, { message: 'Successfully created question set "Fresh"' })
+        // The replace answer carries the fields the Questions panel reports back
+        // ("Version 3 of … is now live with 2 questions"); the create answer is
+        // the upload panel's.
+        ? jsonResponse(200, body.replaceSetId
+          ? { message: 'ok', version: 3, questionCount: 2, setName: 'Ivy Retro' }
+          : { message: 'Successfully created question set "Fresh"' })
         : jsonResponse(uploadStatus, { error: 'nope' });
     }
     if (method === 'GET' && url.includes('/admin/download-template')) {
@@ -96,7 +148,13 @@ function mockApi({ sets = HOST_VIEW, editStatus = 200, editBody = null, deleteSt
     }
     throw new Error(`Unhandled request: ${method} ${url}`);
   });
-  return { editUrls: () => authFetch.mock.calls.filter((c) => (c[1]?.method || 'GET') === 'PUT').map((c) => c[0]) };
+  return {
+    editUrls: () => authFetch.mock.calls.filter((c) => (c[1]?.method || 'GET') === 'PUT').map((c) => c[0]),
+    refused,
+    uploads: () => authFetch.mock.calls
+      .filter(([url, opt]) => opt?.method === 'POST' && url.includes('/admin/upload-questions'))
+      .map(([, opt]) => JSON.parse(opt.body)),
+  };
 }
 
 async function openDialog(props = {}, options) {
@@ -218,6 +276,148 @@ describe('rename', () => {
     // rejects: closing the editor on a failure, which loses what was typed and
     // makes the refusal look like a save.
     expect(screen.getByLabelText(/^name$/i)).toBeTruthy();
+  });
+});
+
+/* ------------------------------------------------- editing the questions --- */
+
+/**
+ * THE SHARED EDITOR, MOUNTED HERE. The owner: *"expose the same style (maybe the
+ * same modal etc) to the host question set screens. why recreate everything."*
+ *
+ * So these tests are about a MOUNT, not about a new screen: what they assert is
+ * that the console's own `QuestionSetEditor` appears, that the three controls
+ * whose routes a host is refused do not, and that the write a host IS allowed
+ * goes out on the route that allows it.
+ */
+describe('a host edits the questions in a set they own', () => {
+  const openEditor = async (name = 'Ivy Retro') => {
+    fireEvent.click(within(rowFor(name)).getByRole('button', { name: /edit questions/i }));
+    // The working copy arrives from `GET question-sets/{id}/questions`, so wait
+    // for a row rather than for the panel — the panel renders while loading.
+    await screen.findByTestId('question-0');
+    return screen.getByTestId('questions-panel');
+  };
+
+  test('the affordance is drawn on manageable rows and nowhere else', async () => {
+    // rejects: putting the button in the dialog header, or on every row and
+    // relying on the 403. `mine` is `sets.filter((set) => set.canManage)` — the
+    // SERVER's answer, from the same function `requireSetManager` enforces with
+    // — so the control cannot exist for a set the replace would refuse.
+    await openDialog();
+    expect(screen.getAllByRole('button', { name: /^edit questions$/i })).toHaveLength(1);
+    expect(within(rowFor('Ivy Retro')).getByRole('button', { name: /^edit questions$/i })).toBeTruthy();
+  });
+
+  test('an admin on the same screen gets one per row', async () => {
+    // rejects: hardcoding "one editable set" or re-deriving ownership locally.
+    // Same component, same rule, three manageable rows.
+    await openDialog({}, { sets: ADMIN_VIEW });
+    expect(screen.getAllByRole('button', { name: /^edit questions$/i })).toHaveLength(3);
+  });
+
+  test('it opens the console editor itself, with the set’s real questions', async () => {
+    // rejects: a host-only re-implementation of the editor, which is the thing
+    // the owner asked NOT to happen. These are QuestionSetEditor's own heading
+    // and QuestionsPanel's own testid, rendered from the real components.
+    await openDialog();
+    await openEditor();
+    expect(screen.getByRole('heading', { name: /edit question set/i })).toBeTruthy();
+    expect(screen.getByText('WHAT WENT WRONG')).toBeTruthy();
+    expect(screen.getByText('WHAT WOULD YOU CHANGE')).toBeTruthy();
+  });
+
+  test('the editor stays inside the host dialog’s scrim subtree', async () => {
+    // NOT A GEOMETRIC ASSERTION — jsdom has no layout engine. This is DOM
+    // CONTAINMENT, which is what the stacking actually depends on:
+    // `.qsets-scrim--over` is fixed with z-index 10001 and so is its own
+    // stacking context, which is the only reason a z-index-60 scrim and a
+    // z-index-9999 `.modal-overlay` paint ABOVE it rather than behind.
+    // rejects: hoisting the editor out through `afterContent` or a portal, which
+    // would drop `.modal-overlay`'s 9999 beside `.new-game-overlay`'s 10000 —
+    // and would also degrade `Modal.topmostEntry()`, which decides by
+    // containment, to its mount-order tiebreak.
+    await openDialog();
+    const panel = await openEditor();
+    const over = document.querySelector('.qsets-scrim--over');
+    expect(over).not.toBeNull();
+    expect(over.contains(panel)).toBe(true);
+  });
+
+  test('the three admins-only controls are absent, and their routes untouched', async () => {
+    // THE POINT OF THE FLAGS. Each of these 403s for a host
+    // (tests/question-set-ownership.js:276-290 asserts every one against the
+    // real authorizer), so drawing the control would be an invitation to a
+    // refusal. rejects: mounting the editor with its defaults.
+    const { refused } = await openDialog();
+    await openEditor();
+    expect(screen.queryByRole('button', { name: /download csv/i })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /^versions$/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /promote/i })).toBeNull();
+
+    fireEvent.click(screen.getAllByRole('button', { name: /add a question/i })[0]);
+    await screen.findByRole('dialog', { name: /new question/i });
+    expect(screen.queryByRole('button', { name: /draft this with ai/i })).toBeNull();
+
+    // rejects: hiding the Versions panel but still asking for the list. The
+    // editor swallows a failed version load into an empty list, so a request
+    // that 403s would look exactly like a set with no history.
+    expect(refused).toEqual({ versions: 0, download: 0, ai: 0 });
+  });
+
+  test('an edit saves back to the host’s own set, on the route hosts may call', async () => {
+    // THE FEATURE. `POST /admin/upload-questions` with `replaceSetId` is on
+    // HOST_ADMIN_ROUTES and ownership-guarded end to end by `requireSetManager`
+    // (upload-questions.js:183), proved against the real handler in
+    // tests/question-set-ownership.js:571-617. rejects: the mount being
+    // read-only, or the save forking into a new set for a set the host owns —
+    // `customTitle` instead of `replaceSetId` would silently strand the edit in
+    // a copy.
+    const { uploads } = await openDialog();
+    await openEditor();
+
+    fireEvent.click(within(screen.getByTestId('question-0')).getByRole('button', { name: /^edit$/i }));
+    const form = await screen.findByRole('dialog', { name: /^edit question$/i });
+    fireEvent.change(within(form).getByLabelText('Title *'), { target: { value: 'WHAT WENT RIGHT' } });
+    fireEvent.click(within(form).getByRole('button', { name: /^done$/i }));
+
+    fireEvent.click(screen.getAllByRole('button', { name: /^save$/i })[0]);
+
+    await waitFor(() => expect(uploads()).toHaveLength(1));
+    const [body] = uploads();
+    expect(body.replaceSetId).toBe('ivy-retro');
+    expect(body.customTitle).toBeUndefined();
+    expect(body.fileContent).toContain('WHAT WENT RIGHT');
+  });
+
+  test('Escape closes the editor when there is nothing to lose', async () => {
+    // rejects: an editor that cannot be dismissed from the keyboard, and rejects
+    // Escape reaching past it and closing the whole shelf — `Modal` answers the
+    // innermost dialog only, and here that is the editor.
+    await openDialog();
+    await openEditor();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByTestId('questions-panel')).toBeNull());
+    expect(screen.getByRole('dialog', { name: /your question sets/i })).toBeTruthy();
+  });
+
+  test('Escape declines while an unsaved working copy is open', async () => {
+    // THE WORK-LOSS GUARD. The Questions panel holds edits that exist nowhere
+    // but this tab; the editor's own Cancel asks before dropping them, and
+    // Escape is answered by the Modal, which cannot reach that dialog. rejects:
+    // wiring Escape straight to close, which throws an afternoon away on one
+    // keypress with no question asked.
+    await openDialog();
+    await openEditor();
+    fireEvent.click(within(screen.getByTestId('question-0')).getByRole('button', { name: /^edit$/i }));
+    const form = await screen.findByRole('dialog', { name: /^edit question$/i });
+    fireEvent.change(within(form).getByLabelText('Title *'), { target: { value: 'CHANGED' } });
+    fireEvent.click(within(form).getByRole('button', { name: /^done$/i }));
+    await screen.findByTestId('unsaved-bar');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByTestId('questions-panel')).toBeTruthy();
+    expect(screen.getByTestId('unsaved-bar')).toBeTruthy();
   });
 });
 

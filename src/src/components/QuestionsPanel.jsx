@@ -111,6 +111,31 @@ export default function QuestionsPanel({
   plannedVersion,
   onChanged,
   onDirtyChange,
+  /*
+   * ── WHAT THIS PANEL MAY OFFER, WHICH IS NOT THE SAME AS WHO MAY USE IT ────
+   *
+   * This component is mounted twice now: by the admin console's
+   * QuestionSetEditor, and by the host's HostQuestionSetsDialog. A host reaches
+   * every WRITE below — `POST /admin/upload-questions` with `replaceSetId` is on
+   * the host route list and ownership-guarded by `requireSetManager` — but two
+   * of the panel's side controls call routes that are admins-only, and a button
+   * that 403s is worse than no button.
+   *
+   * So they are FLAGS on the shared component, exactly as
+   * QuestionSetUploadPanel took `showAIBuilder` / `showManualBuilder` rather
+   * than being forked (docs/handoff/question-set-management-reimagined.md:133).
+   * BOTH DEFAULT TO THE CURRENT BEHAVIOUR, so the admin mount passes neither
+   * and does not move.
+   *
+   * These are affordances and not permissions. `auth/authorizer.js` and
+   * `admin/shared/question-set-access.js` decide what is actually allowed, and
+   * tests/question-set-ownership.js drives them with hand-made events and no UI
+   * anywhere near them. Flipping a flag here grants nothing.
+   */
+  /** `GET /admin/download-question-set/{id}` — admins only. */
+  showDownload = true,
+  /** `POST /admin/ai-generate-questions` — admins only, and Bedrock spend. */
+  showAIAssist = true,
 }) {
   const setId = questionSet?.id || '';
   const setName = questionSet?.name || setId;
@@ -1019,7 +1044,12 @@ export default function QuestionsPanel({
             rows={rows}
             siblings={siblings}
             siblingCategory={draftCategory}
-            ai={{
+            /* `null`, not `{ ...disabled }`: QuestionForm already guards every
+               AI element on `ai &&`, so withholding the object removes the
+               toggle, the brief panel and the provenance line together. A
+               disabled toggle would still advertise a route the caller cannot
+               reach. */
+            ai={showAIAssist ? {
               open: aiOpen,
               brief: aiBrief,
               busy: aiBusy,
@@ -1028,7 +1058,7 @@ export default function QuestionsPanel({
               onToggle: () => setAiOpen((o) => !o),
               onBrief: setAiBrief,
               onGenerate: generateDraft,
-            }}
+            } : null}
           />
         </Modal>
       )}
@@ -1053,9 +1083,11 @@ export default function QuestionsPanel({
               Discard changes
             </button>
           )}
-          <button className="btn-secondary" onClick={handleDownload}>
-            <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Download CSV
-          </button>
+          {showDownload && (
+            <button className="btn-secondary" onClick={handleDownload}>
+              <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Download CSV
+            </button>
+          )}
           <div className="file-input-wrapper qs-replace-input">
             <input
               type="file"

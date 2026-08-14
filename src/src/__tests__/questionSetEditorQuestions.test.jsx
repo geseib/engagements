@@ -492,3 +492,142 @@ describe('closing the editor', () => {
     expect(onCancel).toHaveBeenCalled();
   });
 });
+
+/* ------------------------------------------------------- the permission flags */
+
+/**
+ * ONE EDITOR, TWO AUDIENCES. `HostQuestionSetsDialog` now mounts this same
+ * component (the owner: *"expose the same style … why recreate everything"*), and
+ * three of its controls call routes that are admins-only in
+ * `auth/authorizer.js` — the CSV download, the version list/promote/delete, and
+ * AI generation. They are flags rather than a fork, following
+ * QuestionSetUploadPanel's `showAIBuilder` and friends.
+ *
+ * The flags DEFAULT TO THE CURRENT BEHAVIOUR, so the admin console does not
+ * move. The first test below is what says so, and every other test in this file
+ * — none of which passes a flag — is the rest of the proof.
+ *
+ * A FLAG IS NOT A PERMISSION. `tests/question-set-ownership.js:276-290` drives
+ * the real authorizer with hand-made events and asserts a host is refused all
+ * three whatever this file renders.
+ */
+describe('the permission flags', () => {
+  const renderEditor = (props = {}) => render(
+    <QuestionSetEditor
+      questionSet={SET}
+      availableSets={AVAILABLE_SETS}
+      onSaved={jest.fn()}
+      onChanged={jest.fn()}
+      onCancel={jest.fn()}
+      {...props}
+    />
+  );
+
+  const versionCalls = () =>
+    authFetch.mock.calls.filter(([url]) => url.includes('/versions')).length;
+
+  it('the ADMIN mount passes no flags and keeps all three', async () => {
+    // THE BASELINE THAT MUST NOT MOVE. rejects: defaulting any flag to false,
+    // which would silently strip the console of the download, the version
+    // history and the AI draft — three features nobody asked to remove.
+    mockApi();
+    renderEditor();
+    await ready();
+
+    expect(screen.getByRole('button', { name: /download csv/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /^versions$/i })).toBeTruthy();
+    expect(versionCalls()).toBe(1);
+
+    fireEvent.click(screen.getByRole('button', { name: /add a question/i }));
+    expect(await screen.findByRole('button', { name: /draft this with ai/i })).toBeTruthy();
+  });
+
+  it('the panel carries its own defaults, not just the editor’s', async () => {
+    // QuestionsPanel declares the same two flags and is mounted DIRECTLY here
+    // and in questionAddModal.test.jsx, so its defaults are reachable
+    // independently of the editor's. Without this the panel's `= true` is dead
+    // weight: the editor always passes both explicitly, so flipping the panel's
+    // default would change nothing any other test can see.
+    // rejects: `showDownload = false` (or `showAIAssist = false`) as the panel's
+    // own default, which would strip the console the day someone mounts the
+    // panel without the editor around it.
+    mockApi();
+    renderPanel();
+    await ready();
+    expect(screen.getByRole('button', { name: /download csv/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /add a question/i }));
+    expect(await screen.findByRole('button', { name: /draft this with ai/i })).toBeTruthy();
+  });
+
+  it('the panel honours the flags when they are handed to it directly', async () => {
+    // rejects: the editor reading the props and forgetting to pass them on —
+    // the panel owns both controls, so the flags have to survive the hand-off.
+    mockApi();
+    renderPanel({ showDownload: false, showAIAssist: false });
+    await ready();
+    expect(screen.queryByRole('button', { name: /download csv/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /add a question/i }));
+    await screen.findByRole('dialog', { name: /new question/i });
+    expect(screen.queryByRole('button', { name: /draft this with ai/i })).toBeNull();
+  });
+
+  it('showDownload={false} removes only the download button', async () => {
+    // rejects: a flag that is declared and then not read — the failure mode of
+    // every permission prop that ships without a test.
+    mockApi();
+    renderEditor({ showDownload: false });
+    await ready();
+    expect(screen.queryByRole('button', { name: /download csv/i })).toBeNull();
+    // The rest of the panel is untouched: the replace-from-a-CSV control writes
+    // through `upload-questions`, which a host MAY call.
+    expect(screen.getByLabelText(/replace every question from a csv/i)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /^versions$/i })).toBeTruthy();
+  });
+
+  it('showVersions={false} removes the panel AND the request behind it', async () => {
+    // BOTH HALVES. The loader swallows a non-ok answer into an empty list, so a
+    // hidden panel that still fetched would leave a 403 looking exactly like a
+    // set with no history — and it would spend a refused round trip on every
+    // open and every save. rejects: hiding the markup only.
+    mockApi();
+    renderEditor({ showVersions: false });
+    await ready();
+    expect(screen.queryByRole('heading', { name: /^versions$/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /promote/i })).toBeNull();
+    expect(versionCalls()).toBe(0);
+  });
+
+  it('showAIAssist={false} removes the toggle, the brief and the provenance line', async () => {
+    // rejects: disabling the toggle instead of withholding it. A disabled
+    // control still advertises a route, and this one is Bedrock spend as well as
+    // a 403 — the owner's call, not this component's.
+    mockApi();
+    renderEditor({ showAIAssist: false });
+    await ready();
+    fireEvent.click(screen.getByRole('button', { name: /add a question/i }));
+    await screen.findByRole('dialog', { name: /new question/i });
+
+    expect(screen.queryByRole('button', { name: /draft this with ai/i })).toBeNull();
+    expect(screen.queryByTestId('ai-draft-panel')).toBeNull();
+    // The form itself is whole — the sibling browser is the human's half of the
+    // same idea and does not depend on the generator.
+    expect(screen.getByTestId('sibling-browser')).toBeTruthy();
+  });
+
+  it('reports the unsaved working copy upward, so a container can guard the exit', async () => {
+    // The host mounts this inside a Modal whose Escape it owns, and the editor's
+    // own "you have unsaved questions" dialog is unreachable from there.
+    // rejects: dropping the report, which leaves Escape throwing away an
+    // afternoon with no question asked.
+    mockApi();
+    const onDirtyChange = jest.fn();
+    renderEditor({ onDirtyChange });
+    await ready();
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+
+    fireEvent.click(within(rowFor('ARE WE SHIPPING')).getByRole('button', { name: /remove/i }));
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true));
+  });
+});

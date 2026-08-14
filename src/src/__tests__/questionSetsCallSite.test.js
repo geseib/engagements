@@ -147,3 +147,86 @@ describe('Q5 — the hand-rolled CSV parse left this file', () => {
     expect(page).not.toMatch(/handleFileSelect/);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * THE HOST'S CALL SITE — components/HostQuestionSetsDialog.jsx.
+ *
+ * The owner: *"expose the same style (maybe the same modal etc) to the host
+ * question set screens. why recreate everything."* The failure mode that answer
+ * rules out is not a broken screen — it is a SECOND screen: a host-shaped copy
+ * of the editor that drifts from the admin one a fix at a time. A behavioural
+ * test cannot see that; it would pass just as happily against a duplicate. So it
+ * is asserted here, at source level, the same way the three extractions above
+ * are.
+ */
+const SRC = path.join(__dirname, '..');
+
+/** Every .jsx under src/ and src/components, as { name, source-without-comments }. */
+const modules = () => {
+  const out = [];
+  for (const dir of [SRC, path.join(SRC, 'components')]) {
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith('.jsx')) continue;
+      out.push({ name, text: stripComments(fs.readFileSync(path.join(dir, name), 'utf8')) });
+    }
+  }
+  return out;
+};
+
+/** Which modules RENDER a given component (as opposed to merely mentioning it). */
+const rendererNames = (component) => modules()
+  .filter((m) => new RegExp(`<${component}[\\s>]`).test(m.text))
+  .map((m) => m.name)
+  .sort();
+
+const hostDialog = stripComments(
+  fs.readFileSync(path.join(SRC, 'components', 'HostQuestionSetsDialog.jsx'), 'utf8'),
+);
+
+describe('the host mounts the shared editor rather than a copy of it', () => {
+  test('the editor is rendered by exactly the two call sites, and nothing else', () => {
+    // rejects: a HostQuestionSetEditor.jsx appearing beside it, which is the
+    // thing the owner asked not to happen and the thing that no test of either
+    // screen's behaviour would ever notice.
+    expect(rendererNames('QuestionSetEditor')).toEqual([
+      'AdminPage.jsx', 'HostQuestionSetsDialog.jsx',
+    ]);
+  });
+
+  test('the questions panel still has exactly one owner', () => {
+    // The host reaches it THROUGH the editor. rejects: wiring QuestionsPanel
+    // into the host dialog directly as well, which would give the product two
+    // add-a-question surfaces with two sets of guards on the same working copy.
+    expect(rendererNames('QuestionsPanel')).toEqual(['QuestionSetEditor.jsx']);
+  });
+
+  test('the host mount turns off the three admins-only controls', () => {
+    // Each is a route `auth/authorizer.js` refuses a host — the CSV download,
+    // the version list/promote/delete, and AI generation. rejects: mounting the
+    // editor with its defaults, which draws three controls that 403.
+    expect(hostDialog).toMatch(/showVersions=\{false\}/);
+    expect(hostDialog).toMatch(/showDownload=\{false\}/);
+    expect(hostDialog).toMatch(/showAIAssist=\{false\}/);
+  });
+
+  test('the editor stays a DOM child of the host dialog, never an afterContent hoist', () => {
+    // `.qsets-scrim--over` is fixed with z-index 10001 and so is its own stacking
+    // context; the editor's scrim and the question dialog's `.modal-overlay`
+    // stack INSIDE it. Hoisted through `afterContent` — the escape hatch
+    // GameSetupDialog uses one level up — `.modal-overlay`'s 9999 would land
+    // beside `.new-game-overlay`'s 10000 and paint BEHIND the host dialog, and
+    // `Modal.topmostEntry()` would lose its containment answer too.
+    // rejects: reaching for that hatch here because it worked there.
+    expect(hostDialog).not.toMatch(/afterContent/);
+  });
+
+  test('AdminPage passes no flags, so the console keeps every default', () => {
+    // THE BASELINE, IN SOURCE. The behavioural half is in
+    // questionSetEditorQuestions.test.jsx; this is the half that catches someone
+    // "tidying up" by pushing the host's flags on to the admin call site.
+    const mount = page.slice(page.indexOf('<QuestionSetEditor'), page.indexOf('/>', page.indexOf('<QuestionSetEditor')));
+    expect(mount).not.toMatch(/show(Versions|Download|AIAssist)/);
+  });
+});

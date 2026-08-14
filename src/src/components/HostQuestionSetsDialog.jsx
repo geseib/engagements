@@ -4,6 +4,7 @@ import Modal from './Modal';
 import SetImageBadge from './SetImageBadge';
 import QuestionSetUploadPanel from './QuestionSetUploadPanel';
 import QuestionSetDeleteDialog from './QuestionSetDeleteDialog';
+import QuestionSetEditor from './QuestionSetEditor';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import { gameTypeLabel } from '../config/gameTypes';
@@ -83,6 +84,10 @@ export default function HostQuestionSetsDialog({
   const [newSetType, setNewSetType] = useState(engagementType);
   const [editing, setEditing] = useState(null);     // { id, name, description, busy }
   const [deleting, setDeleting] = useState(null);   // a set
+  // The set whose QUESTIONS are open in the shared editor, and whether that
+  // editor is holding an unsaved working copy.
+  const [editingQuestions, setEditingQuestions] = useState(null);
+  const [editorDirty, setEditorDirty] = useState(false);
 
   const load = useCallback(async (announce) => {
     setLoading(true);
@@ -92,14 +97,18 @@ export default function HostQuestionSetsDialog({
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
         setError(result.error || `Could not load your question sets (HTTP ${response.status}).`);
-        return;
+        return undefined;
       }
       const all = result.questionSets || [];
       setSets(all);
       if (onSetsChanged) onSetsChanged(toPickerSets(all));
       if (announce) setNotice({ text: announce, tone: 'success' });
+      // Returned so a caller that is showing ONE of these rows can re-point at
+      // the fresh copy rather than keeping the stale object it opened with.
+      return all;
     } catch (e) {
       setError(`Could not load your question sets: ${e.message}`);
+      return undefined;
     } finally {
       setLoading(false);
     }
@@ -285,6 +294,26 @@ export default function HostQuestionSetsDialog({
                     <td className="qsets-num">{set.totalQuestions ?? 0}</td>
                     <td>
                       <div className="qsets-rowact">
+                        {/*
+                          THE SAME EDITOR THE CONSOLE USES, on a row the SERVER
+                          said `canManage` on. It is drawn here and nowhere else
+                          for the same reason Rename and Delete are: `mine` is
+                          `sets.filter((set) => set.canManage)`, computed by
+                          `admin/shared/question-set-access.js` and projected by
+                          `admin/get-question-sets.js`, so the control cannot
+                          appear for a set the replace would refuse.
+
+                          Rename edits the NAME. This edits the QUESTIONS — the
+                          thing a host actually came to change, and until now the
+                          only way to change one was to re-upload the whole CSV.
+                        */}
+                        <button
+                          type="button"
+                          className="qsets-btn qsets-btn--sm"
+                          onClick={() => { setEditorDirty(false); setEditingQuestions(set); }}
+                        >
+                          Edit questions
+                        </button>
                         <button
                           type="button"
                           className="qsets-btn qsets-btn--sm"
@@ -371,6 +400,72 @@ export default function HostQuestionSetsDialog({
           />
         )}
       </div>
+
+      {editingQuestions && (
+        /*
+          THE ADMIN EDITOR, MOUNTED HERE — not a host copy of it. The owner:
+          *"expose the same style (maybe the same modal etc) to the host question
+          set screens. why recreate everything."* So this is
+          `components/QuestionSetEditor.jsx` verbatim, with three flags off.
+
+          A DOM DESCENDANT OF `.qsets-scrim--over`, DELIBERATELY, and not hoisted
+          out through `afterContent`. `.qsets-scrim--over` is `position: fixed`
+          with z-index 10001, so it is its own STACKING CONTEXT, and a positioned
+          child of it stacks inside that context whatever its z-index — which is
+          why `.qsets-scrim`'s 60 paints above the dialog here and why the delete
+          dialog below already works. Hoisted, this scrim would land beside
+          `.new-game-overlay`'s 10000 instead of inside it, and the question
+          dialog the editor opens (`.modal-overlay`, z-index 9999) would paint
+          BEHIND the host dialog. `Modal.topmostEntry()` decides by DOM
+          containment for the same reason, so hoisting would also degrade Escape
+          to its mount-order tiebreak.
+
+          `.qsets-modal`'s `overflow: auto` does not clip any of it: every layer
+          from here down is `position: fixed`, whose containing block is the
+          viewport, so overflow on an ancestor cannot reach it. That is also what
+          keeps `CategoryPicker`'s absolutely-positioned `.qs-cat-list` safe —
+          it sits inside the question dialog, which is fixed.
+
+          ESCAPE IS GATED ON THE WORKING COPY. The editor's Cancel already asks
+          before dropping unsaved questions; Escape is answered by this Modal,
+          which cannot reach that dialog, so it simply declines while there is
+          something to lose. Same predicate shape as QuestionsPanel's own
+          `closeOnEscape={() => !aiBusy}`.
+        */
+        <Modal
+          overlayClassName="qsets-scrim"
+          contentClassName="qsets-editor-frame"
+          label={`Edit ${editingQuestions.name || editingQuestions.id}`}
+          closeOnBackdrop={false}
+          closeOnEscape={() => !editorDirty}
+          onClose={() => setEditingQuestions(null)}
+        >
+          <QuestionSetEditor
+            questionSet={editingQuestions}
+            availableSets={sets}
+            /*
+              OFF, AND EACH FOR A ROUTE REASON. Download and the three version
+              routes are admins-only in `auth/authorizer.js`; AI generation is
+              admins-only AND Bedrock spend, which is the owner's call to make,
+              not this component's. The flags mean that call is one boolean.
+            */
+            showVersions={false}
+            showDownload={false}
+            showAIAssist={false}
+            onDirtyChange={setEditorDirty}
+            onSaved={(message) => { setEditingQuestions(null); load(message); }}
+            onChanged={async () => {
+              const all = await load();
+              const fresh = (all || []).find((item) => item.id === editingQuestions.id);
+              // Re-point rather than close: a questions save is not a reason to
+              // put the host back on the shelf, but the header's counts and the
+              // next version number come off this object.
+              if (fresh) setEditingQuestions(fresh);
+            }}
+            onCancel={() => setEditingQuestions(null)}
+          />
+        </Modal>
+      )}
 
       {deleting && (
         /*

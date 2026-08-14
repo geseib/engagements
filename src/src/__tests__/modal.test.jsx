@@ -226,14 +226,42 @@ describe('escape', () => {
 
 /* ------------------------------------------------------------------ nesting */
 
-/** The real shape: an outer dialog whose CHILD is another dialog. */
-function Nested({ outerClose, innerClose, innerOpen = true }) {
+/**
+ * The real shape: an outer dialog whose CHILD is another dialog.
+ *
+ * `depth` counts MODALS, and four is what the app renders once a host opens the
+ * shared question-set editor from their own shelf:
+ *
+ *   1 `.new-game-overlay`   z 10000  GameSetupDialog — the create screen
+ *   2 `.qsets-scrim--over`  z 10001  HostQuestionSetsDialog — the shelf
+ *   3 `.qsets-scrim`        z    60  the editor, mounted on a manageable row
+ *   4 `.modal-overlay`      z  9999  QuestionsPanel's add/edit-question dialog
+ *
+ * Those z-indexes only look wrong. Levels 1 and 2 are `position: fixed` with a
+ * numeric z-index, so each is its own STACKING CONTEXT and levels 3 and 4 stack
+ * INSIDE level 2 rather than against it — which is why they must stay DOM
+ * DESCENDANTS, and why `topmostEntry()` decides by containment rather than by
+ * mount order.
+ */
+function Nested({
+  outerClose, innerClose, thirdClose, fourthClose, innerOpen = true, depth = 2,
+}) {
   return (
     <Modal overlayClassName="outer-ov" contentClassName="outer-ct" onClose={outerClose}>
       <button type="button">outer button</button>
-      {innerOpen && (
+      {innerOpen && depth >= 2 && (
         <Modal overlayClassName="inner-ov" contentClassName="inner-ct" onClose={innerClose}>
           <button type="button">inner button</button>
+          {depth >= 3 && (
+            <Modal overlayClassName="third-ov" contentClassName="third-ct" onClose={thirdClose}>
+              <button type="button">third button</button>
+              {depth >= 4 && (
+                <Modal overlayClassName="fourth-ov" contentClassName="fourth-ct" onClose={fourthClose}>
+                  <button type="button">fourth button</button>
+                </Modal>
+              )}
+            </Modal>
+          )}
         </Modal>
       )}
     </Modal>
@@ -287,6 +315,86 @@ describe('three deep, which is what this app actually renders', () => {
     fireEvent.click(document.querySelector('.inner-ov'));
     expect(innerClose).toHaveBeenCalledTimes(1);
     expect(outerClose).not.toHaveBeenCalled();
+  });
+});
+
+describe('four deep, which is the host editing a question in their own set', () => {
+  const four = () => {
+    const closes = {
+      outerClose: jest.fn(), innerClose: jest.fn(), thirdClose: jest.fn(), fourthClose: jest.fn(),
+    };
+    return { closes, ...render(<Nested {...closes} depth={4} />) };
+  };
+
+  test('Escape is answered by the fourth dialog only', () => {
+    // THE CHAIN NAMED ABOVE. A host on the create screen opens their shelf,
+    // opens the shared editor on a row they own, and opens the add-question
+    // dialog inside it — four registered modals, one keypress. rejects: a
+    // topmost check that only compares the last two entries, or one that falls
+    // back to mount order; React runs CHILD effects before parent effects, so
+    // mount order would nominate the innermost only by accident.
+    const { closes } = four();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(closes.fourthClose).toHaveBeenCalledTimes(1);
+    expect(closes.thirdClose).not.toHaveBeenCalled();
+    expect(closes.innerClose).not.toHaveBeenCalled();
+    expect(closes.outerClose).not.toHaveBeenCalled();
+  });
+
+  test('closing the fourth hands the keyboard to the third, not to the first', () => {
+    // rejects: unregistering by index rather than by identity, which after four
+    // pushes and one splice leaves the wrong entry answering the keyboard.
+    const closes = {
+      outerClose: jest.fn(), innerClose: jest.fn(), thirdClose: jest.fn(), fourthClose: jest.fn(),
+    };
+    const { rerender } = render(<Nested {...closes} depth={4} />);
+    rerender(<Nested {...closes} depth={3} />);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(closes.thirdClose).toHaveBeenCalledTimes(1);
+    expect(closes.fourthClose).not.toHaveBeenCalled();
+    expect(closes.outerClose).not.toHaveBeenCalled();
+  });
+
+  test('the scroll lock survives three of the four closing', () => {
+    // rejects: lock-on-mount/unlock-on-unmount. Four levels make the reference
+    // count matter four times over — the page must not scroll away underneath a
+    // host who has only closed the question dialog.
+    const closes = {
+      outerClose: jest.fn(), innerClose: jest.fn(), thirdClose: jest.fn(), fourthClose: jest.fn(),
+    };
+    const { rerender, unmount } = render(<Nested {...closes} depth={4} />);
+    expect(document.body.style.overflow).toBe('hidden');
+    rerender(<Nested {...closes} depth={3} />);
+    rerender(<Nested {...closes} depth={2} />);
+    rerender(<Nested {...closes} depth={1} />);
+    expect(document.body.style.overflow).toBe('hidden');
+    unmount();
+    expect(document.body.style.overflow).toBe('');
+  });
+
+  test('a click on the fourth backdrop reaches none of the three behind it', () => {
+    // Every scrim here is a DOM descendant of the content above it, so one click
+    // bubbles through all four. rejects: dropping the content stopPropagation —
+    // which, at this depth, takes a mis-aimed click on a form's margin all the
+    // way back to an empty stage.
+    const { closes } = four();
+    fireEvent.click(document.querySelector('.fourth-ov'));
+    expect(closes.fourthClose).toHaveBeenCalledTimes(1);
+    expect(closes.thirdClose).not.toHaveBeenCalled();
+    expect(closes.innerClose).not.toHaveBeenCalled();
+    expect(closes.outerClose).not.toHaveBeenCalled();
+  });
+
+  test('every level really is nested inside the one above it', () => {
+    // The premise the three tests above rest on, asserted rather than assumed —
+    // NOT a geometric claim (jsdom has no layout engine) but a containment one.
+    // rejects: a future portal or `afterContent` hoist that would leave the
+    // tests passing while the real screens stacked wrongly.
+    four();
+    const level = (cls) => document.querySelector(cls);
+    expect(level('.outer-ct').contains(level('.inner-ov'))).toBe(true);
+    expect(level('.inner-ct').contains(level('.third-ov'))).toBe(true);
+    expect(level('.third-ct').contains(level('.fourth-ov'))).toBe(true);
   });
 });
 

@@ -522,6 +522,14 @@ button.qsets-chip:hover { background: var(--qsets-row-hover); }
 .qsets-modal--wide { width: min(760px, 100%); }
 .qsets-modal--wide > header { align-items: flex-start; }
 .qsets-modal--wide .qsets-panel { border: 0; padding: 0; margin-top: 4px; }
+/* THREE ROW CONTROLS NOW, NOT TWO. "Edit questions" joined Rename and Delete
+   when the shared editor was mounted here. `.qsets-col-acts` is 10%, sized for
+   the console's pair on a 1440 field; at 760px with three `white-space: nowrap`
+   buttons the third is CLIPPED rather than wrapped, because `.qsets-tbl td` is
+   `overflow: hidden`. The width comes out of the name column, which has
+   `text-overflow: ellipsis` and degrades gracefully. */
+.qsets-modal--wide .qsets-col-set { width: 30%; }
+.qsets-modal--wide .qsets-col-acts { width: 34%; }
 
 /* --------------------------------------------------------------------------
    THE SAME COMPONENTS, RE-TINTED FOR A LIGHT SURFACE.
@@ -572,6 +580,78 @@ button.qsets-chip:hover { background: var(--qsets-row-hover); }
   --qsets-tint-warn: rgba(154, 91, 24, .09);
   --qsets-tint-ok: rgba(28, 115, 80, .09);
 }
+/* --------------------------------------------------------------------------
+   THE ADMIN QUESTION-SET EDITOR, MOUNTED ON THE HOST'S SHELF.
+   --------------------------------------------------------------------------
+   components/QuestionSetEditor.jsx and components/QuestionsPanel.jsx are opened
+   from a row of the host dialog. The owner: *"expose the same style (maybe the
+   same modal etc) to the host question set screens. why recreate everything."*
+   So the components are mounted as they are and only the paint is reconciled.
+
+   WHY THE RE-TINT LIVES HERE AND NOT IN styles.css. Every `.qs-*` rule is in
+   styles.css, but `questionSetsPalette.test.js` requires styles.css to declare
+   NOTHING in the `.qsets*` scope — the two prefixes collided once already and
+   that assertion is what keeps them apart. A rule that is scoped by
+   `.qsets--onlight` is therefore this file's, wherever its subject lives.
+
+   THE ACCENT IS THE HOST'S BROWN, ON PURPOSE, AND `--primary` IS NOT RESTATED
+   BELOW. Inside `.qsets--onlight` the editor inherits `--primary: #9A5B18`
+   instead of the console's `#F6A94C`. That is a decision, not a leak:
+
+     - The editor is a dialog INSIDE the host dialog. Two accents in one stack
+       is the accidental mix; whichever one is chosen has to be chosen once.
+     - #F6A94C is 1.96:1 as text on white, and `--primary` carries text all over
+       this subtree — `.btn-secondary`'s label and border, `.stat-badge`, the
+       editor's own h2. #9A5B18 is 5.41:1, and 5.41:1 the other way round under
+       `.btn-primary`'s white label. Measured in hostQuestionSetsPalette.test.js.
+     - The repo already says so twice in its own voice: styles.css writes
+       `var(--primary, #8a5300)` for the AI provenance rule, and `.gsd-setlink`
+       — the link that opens this very dialog — reaches for `--primary-deep`
+       with the comment *"#F6A94C carries 1.9:1 on the white dialog card"*.
+
+   Two tokens DO have to be restated, because the host scope re-points one and
+   never declares the other:
+
+     --surface-2  `.qs-editor .qs-panel` is the nested-card affordance that makes
+                  Details / Questions / Media read as steps. The host scope's
+                  #FAF7F2 is 1.07:1 against the white card — the card boundary
+                  simply disappears. #F1EDE4 is the paper theme's own value and
+                  1.17:1, the step the panel was drawn for.
+     --success    `utils/statusTone.js` returns `var(--success)` for the success
+                  banner's icon, and `.qsets--onlight` does not redeclare it, so
+                  it falls through to :root DUSK #4FB286 — 2.10:1 on the
+                  `.status-message.success` #d4edda ground. #1C7350 is the value
+                  `--qsets-success-text` already uses here, at 4.68:1.
+
+   `--primary-deep` is deliberately NOT restated: nothing this subtree renders
+   uses it (`.btn-link` is the only paper rule that does, and none of these
+   components draw one). Adding a token nobody reads is how a palette drifts.
+
+   NOT FIXED, AND NAMED SO IT IS A DECISION: `.qsets :focus-visible` above also
+   sets `border-radius: 3px`, which squares off a FOCUSED .btn-primary or
+   .form-input that is otherwise 8px. CSS has no way to un-declare that from a
+   descendant rule, and restoring it would mean a hand-written radius table for
+   every control class in the editor — which is the "recreate everything" the
+   owner objected to, spent on a corner that is only visible while focused. The
+   focus RING itself is a gain: the paper editor has none.
+   -------------------------------------------------------------------------- */
+
+/* The dialog box the editor sits in. It carries only geometry — `.admin-section`
+   already paints the card — and its `overflow` clips nothing that matters,
+   because the question dialog inside it is `position: fixed` and so is
+   contained by the viewport rather than by this box. */
+.qsets-editor-frame {
+  width: min(960px, 100%);
+  max-height: 86vh;
+  overflow: auto;
+  border-radius: 12px;
+}
+
+.qsets--onlight .qs-editor {
+  --surface-2: #F1EDE4;
+  --success: #1C7350;
+}
+
 /* The tinted composites hardcode the DUSK rgb() triplets inline, so they have
    to be restated here rather than inherited. Same alphas, light hues. */
 .qsets--onlight .qsets-btn--danger,
