@@ -5,6 +5,7 @@ import StatusMessage from './StatusMessage';
 import PromptShapePreview from './PromptShapePreview';
 import RoundKindPicker from './RoundKindPicker';
 import QuestionsPanel from './QuestionsPanel';
+import SetMediaPanel from './SetMediaPanel';
 import { authFetch } from '../auth/authFetch';
 import { GAME_TYPE_LIST, gameTypeLabel, normalizeGameType } from '../config/gameTypes';
 import {
@@ -1234,26 +1235,52 @@ export default function QuestionSetEditor({
 
       {/* ==================================================== 4. MEDIA === */}
       {/*
-        SEAM — media panel. Owned by a separate change; do not build it here.
-        Contract that lands with it:
-          GET    /admin/question-sets/{setId}/media        -> { images: [{ key, url, size }] }
-          POST   /admin/question-sets/{setId}/media        -> { uploadUrl, key }  (presigned PUT)
-          DELETE /admin/question-sets/{setId}/media/{key}  -> { deleted: true }
-        Images live flat at s3://<env>-media/sets/<setId>/<filename> — per SET,
-        not per version, because versions share artwork. The browser PUTs
-        straight to S3: API Gateway caps payloads at 10 MB and base64 inflates
-        by a third, so artwork cannot go through the lambda.
-        Render the thumbnails here, inside this section, keeping .qs-panel.
+        THE SEAM THIS FILLS, and the two places the shipped thing differs from
+        the contract that was written here in advance. Both differences are
+        deliberate; the seam's third route is simply not built.
+
+          written: POST /admin/question-sets/{setId}/media -> { uploadUrl, key }
+          shipped: POST /admin/question-sets/{setId}/media/uploads
+                     -> { uploads: [{ name, key, url, contentType }], rejected: [] }
+
+          The owner asked to *"select a local folder"*. A one-URL-per-call
+          endpoint makes that N sequential authenticated round trips before the
+          first byte moves — sixty images is sixty calls to learn sixty keys
+          this handler could have derived in one. Batched, and the key is still
+          chosen by the server and never by the caller.
+
+          written: GET /admin/question-sets/{setId}/media -> { images: [...] }
+          shipped: GET /admin/question-sets/{setId}/media
+                     -> { counts, missing: [...], unused: [...] }
+
+          A thumbnail list is not the question the owner asked
+          (*"verify these images are mapped to the questions"*), and the
+          browser cannot answer it locally: CloudFront maps 403/404 to
+          /index.html with status 200, so a missing image fetches successfully
+          as the app's own HTML. The comparison has to happen server-side, and
+          once it does, the file list is a by-product of it (`unused`).
+
+          not built: DELETE .../media/{key}. Nothing asked for it, and the
+          verification report already names orphaned files without giving
+          anybody a one-click way to delete artwork a half-renamed CSV still
+          needs.
+
+        What the seam got exactly right, and what the storage decision rests on:
+        `s3://<env>-media/sets/<setId>/<filename>` — a SEPARATE BUCKET, per SET
+        and not per version. See template-clean.yaml's MediaBucket for why the
+        website bucket would have lost every image on the next deploy.
       */}
-      <section className="qs-panel qs-media-seam" data-testid="media-seam">
+      <section className="qs-panel" data-testid="media-panel">
         <div className="qs-panel-header">
-          <h3><Icon name="Image" weight="bold" size={16} color="currentColor" /> Media</h3>
-          <span className="qs-panel-note">Artwork and images used by this set's questions</span>
+          <h3><Icon name="Image" weight="bold" size={16} color="currentColor" /> Images</h3>
+          <span className="qs-panel-note">
+            Upload a folder of pictures, and see which questions are pointing at one that is not there
+          </span>
         </div>
-        <p className="qs-empty">
-          Image management is not wired up yet. Until it is, images come from the Image
-          column of the set's CSV.
-        </p>
+        <SetMediaPanel
+          setId={setId}
+          onUploaded={() => { if (onChanged) onChanged(); }}
+        />
       </section>
 
       {/*

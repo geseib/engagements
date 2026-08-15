@@ -1674,6 +1674,95 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  ## Question-set MEDIA
+  ##
+  ## Two routes, one bucket. The browser uploads STRAIGHT TO S3 with a
+  ## presigned PUT — a folder of artwork never passes through API Gateway,
+  ## whose payload ceiling is 10 MB and whose per-request cost would be paid to
+  ## move bytes nothing here looks at.
+  ##
+  ## Both are Cognito-authorised like every other /admin/* route, and both call
+  ## requireSetManager on top of that: an admin may touch any set's media, a
+  ## host only the sets they created. See lambda-functions/auth/authorizer.js —
+  ## these two are on HOST_ADMIN_ROUTES for that reason.
+
+  AdminMediaUploadUrlsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-media-upload-urls'
+      CodeUri: lambda-functions/admin/
+      Handler: media-upload-urls.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Environment:
+        Variables:
+          MEDIA_BUCKET: !Ref MediaBucket
+      Policies:
+        # READ on the table, not Crud. This function reads one SETS row to
+        # answer "does it exist and who owns it" and writes nothing anywhere.
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+        # THE WHOLE SECURITY ARGUMENT FOR THE PRESIGNED URL IS THIS STATEMENT.
+        # A presigned URL grants the intersection of the signer's permissions
+        # and the signed request, so a URL minted by this role can only ever
+        # write an object under sets/ in the media bucket — not the website
+        # bucket, not the reports bucket, not a key outside the prefix, however
+        # the handler is called and whatever it is asked to sign.
+        - Statement:
+            - Effect: Allow
+              Action: ['s3:PutObject']
+              Resource: !Sub '${MediaBucket.Arn}/sets/*'
+      Events:
+        AdminMediaUploadUrlsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/question-sets/{setId}/media/uploads
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  AdminMediaStatusFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-admin-media-status'
+      CodeUri: lambda-functions/admin/
+      Handler: media-status.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Environment:
+        Variables:
+          MEDIA_BUCKET: !Ref MediaBucket
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+        # LIST ONLY, AND ONLY UNDER sets/. Verification never reads an object's
+        # bytes — "is the image in the right place", not "is it a valid image"
+        # — so s3:GetObject is not granted and could not be used if the handler
+        # were changed to try.
+        - Statement:
+            - Effect: Allow
+              Action: ['s3:ListBucket']
+              Resource: !GetAtt MediaBucket.Arn
+              Condition:
+                StringLike:
+                  's3:prefix': ['sets/*']
+      Events:
+        AdminMediaStatusEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/question-sets/{setId}/media
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   ## Question-set VERSIONING
   ##
   ## A set's questions live at PK=SET#<id>#v<n>; the SETS metadata row carries
@@ -2259,6 +2348,87 @@ Resources:
         - Key: StackName
           Value: !Ref StackName
 
+  ### QUESTION-SET MEDIA — AND WHY IT IS NOT THE WEBSITE BUCKET
+  ###
+  ### Every buildspec publishes the frontend with
+  ###
+  ###     aws s3 sync dist/ s3://$BUCKET_NAME/ --delete
+  ###
+  ### (buildspec-dev.yml:104, buildspec-test.yml:110, buildspec-prod.yml:116).
+  ### `--delete` removes every object in the destination that is not in dist/.
+  ### Uploaded question artwork under `sets/<setId>/` is never in dist/ — the
+  ### committed repo assets under /assets/art/ survive precisely because they
+  ### ARE — so images kept in FrontendBucket would live until the next deploy
+  ### of that tier and then disappear, mid-season, with no error anywhere.
+  ###
+  ### `--exclude "sets/*"` on the sync would also work (the filter is applied
+  ### to the destination listing, so excluded keys are not deletion
+  ### candidates). It was rejected: it is an unremarkable flag in three files
+  ### that a copy-paste loses, it does nothing for a hand-run sync, and its
+  ### absence is invisible until a room is looking at a broken image. A
+  ### SEPARATE BUCKET cannot be reached by a sync aimed at the website bucket
+  ### whatever flags that sync carries.
+  ###
+  ### The images stay SAME-ORIGIN anyway: the CloudFront distribution below
+  ### serves `sets/*` from this bucket under the site's own hostname. That is
+  ### what lets the stored value keep going straight into <img src> —
+  ### PlayerPage.jsx:1961,2196 and GameHostPage.jsx:4571,4614,5213 — with no
+  ### resolver and no change to any of those call sites.
+  ###
+  ### It is deliberately NOT conditional on HasDomain: the presign and
+  ### verification Lambdas need a bucket in every stack, domain or not.
+  MediaBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${StackName}-media'
+      # Public read, exactly like FrontendBucket, because the same CloudFront
+      # origin configuration is used (S3OriginConfig with an empty
+      # OriginAccessIdentity) and because these images are shown to players who
+      # never sign in. WRITE is not public: it needs a presigned PUT, which
+      # only the admin Lambda's role can mint.
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      CorsConfiguration:
+        CorsRules:
+          # The browser PUTs straight to S3, so the bucket must answer the
+          # preflight. This grants no access — the presigned URL does that.
+          - AllowedMethods: [GET, HEAD, PUT]
+            AllowedOrigins: !If
+              - HasDomain
+              - [!Sub 'https://${DomainName}']
+              - ['*']
+            AllowedHeaders: ['*']
+            ExposedHeaders: [ETag]
+            MaxAge: 3000
+      LifecycleConfiguration:
+        Rules:
+          # A failed multipart upload otherwise bills forever and is invisible
+          # in the console's object list.
+          - Id: AbandonAbortedUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 3
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: StackName
+          Value: !Ref StackName
+
+  MediaBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref MediaBucket
+      PolicyDocument:
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub '${MediaBucket.Arn}/*'
+
   AIPromptsBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -2302,12 +2472,36 @@ Resources:
             DomainName: !GetAtt FrontendBucket.RegionalDomainName
             S3OriginConfig:
               OriginAccessIdentity: ''
+          # Question-set artwork. A SECOND ORIGIN rather than a second hostname,
+          # so `sets/<setId>/x.jpg` stored on a question stays a same-origin
+          # relative URL and <img src={question.image}> keeps working unchanged.
+          - Id: MediaOrigin
+            DomainName: !GetAtt MediaBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ''
         DefaultCacheBehavior:
           TargetOriginId: S3Origin
           ViewerProtocolPolicy: redirect-to-https
           AllowedMethods: [GET, HEAD]
           CachedMethods: [GET, HEAD]
           CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # CachingDisabled
+        CacheBehaviors:
+          # THE PATH THAT KEEPS THE IMAGES OUT OF THE DEPLOY'S REACH. Everything
+          # under sets/ comes from MediaBucket, which no `aws s3 sync dist/
+          # s3://${StackName}-web --delete` can touch. Removing this behaviour
+          # does not break the site quietly — it 404s every uploaded image at
+          # once — and __tests__/setMediaStorage.test.js fails if it is removed.
+          - PathPattern: 'sets/*'
+            TargetOriginId: MediaOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachedMethods: [GET, HEAD]
+            # CachingOptimized, unlike the default behaviour's CachingDisabled:
+            # the app bundle changes on every deploy and must not be cached, an
+            # image at a given key does not change at all. A replace writes the
+            # same key, so a replace is followed by the deploy-time
+            # invalidation or by a hard refresh — stated in the media panel.
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
         Enabled: true
         DefaultRootObject: index.html
         CustomErrorResponses:
@@ -2870,6 +3064,17 @@ Outputs:
     Value: !Ref FrontendBucket
     Export:
       Name: !Sub '${StackName}-frontend-bucket'
+
+  ## Named separately from FrontendBucketName ON PURPOSE. The buildspecs read
+  ## FrontendBucketName and sync dist/ into it with --delete; a deploy that ever
+  ## resolved that name to the media bucket would erase every uploaded image on
+  ## the spot. __tests__/setMediaStorage.test.js asserts no buildspec's
+  ## --delete sync reads this output.
+  MediaBucketName:
+    Description: Question-set media S3 bucket name (uploaded question images)
+    Value: !Ref MediaBucket
+    Export:
+      Name: !Sub '${StackName}-media-bucket'
 
   FrontendUrl:
     Description: Frontend URL

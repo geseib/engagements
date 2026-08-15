@@ -10592,11 +10592,6 @@ body {
   font-size: 0.9rem;
 }
 
-/* Placeholder until the media panel lands; see the SEAM comment in the JSX. */
-.qs-media-seam {
-  opacity: 0.75;
-}
-
 @media (max-width: 700px) {
   .qs-question-main,
   .qs-dirty-bar,

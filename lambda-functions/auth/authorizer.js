@@ -124,6 +124,18 @@ const HOST_ADMIN_ROUTES = new Set([
   'PUT admin/edit-question-set/{setId}',
   // Delete a set. Ownership checked in the handler.
   'DELETE admin/question-sets/{setId}',
+  // The set's images: mint presigned upload URLs, and report which questions
+  // point at a file that is not there. Both are ownership-guarded by
+  // `requireSetManager` in their handlers, exactly like the two above — a host
+  // who builds a set with artwork has to be able to put the artwork somewhere,
+  // and to be told when a question is pointing at nothing.
+  //
+  // STILL EXACT PAIRS. `admin/question-sets/{setId}/media` and
+  // `admin/question-sets/{setId}/media/uploads` are two entries because they
+  // are two routes; a prefix match here would additionally open every version
+  // route, which is the mistake this list's header exists to prevent.
+  'POST admin/question-sets/{setId}/media/uploads',
+  'GET admin/question-sets/{setId}/media',
 ]);
 
 // Which groups a route requires. `path` is the route path without a leading

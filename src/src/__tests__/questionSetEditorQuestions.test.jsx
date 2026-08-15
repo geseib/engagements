@@ -548,15 +548,20 @@ describe('closing the editor', () => {
   it('puts the footer after the last panel, not in the middle of the form', async () => {
     // THE WHOLE POINT OF "cancel bottom", and the one part of it jsdom CAN see.
     // Not geometry — DOCUMENT ORDER. The Details Cancel is a quarter of the way
-    // down and scrolls away; this one is past the Media panel, which is the last
-    // thing in the editor. rejects: adding a second Cancel next to the first and
-    // calling the report addressed.
+    // down and scrolls away; this one is past the Images panel, which is the
+    // last thing in the editor. rejects: adding a second Cancel next to the
+    // first and calling the report addressed.
+    //
+    // `media-panel` was `media-seam` until the panel was built: the seam was a
+    // placeholder section carrying "Image management is not wired up yet".
+    // The assertion is unchanged — the footer still has to come after the last
+    // panel, whatever that panel now contains.
     mockApi();
     renderEditor();
     await ready();
 
     const footer = screen.getByTestId('qs-editor-footer');
-    const media = screen.getByTestId('media-seam');
+    const media = screen.getByTestId('media-panel');
     const questions = screen.getByTestId('questions-panel');
     expect(media.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(questions.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

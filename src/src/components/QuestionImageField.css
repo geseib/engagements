@@ -1,0 +1,94 @@
+/* ============================================================================
+   ONE QUESTION'S PICTURE — components/QuestionImageField.jsx
+
+   Scoped `.qimg`. Not `.qi`, not `.image`, not `.q-image`: styles.css owns
+   sixteen `.qs-*` rules for this very editor and a near-miss prefix here is
+   how `.qs` cost a whole surface once (QuestionSetsPanel.css:11-18). The
+   namespace is asserted both ways in __tests__/setMediaPalette.test.js.
+
+   NO THEME IS DECLARED HERE AND THAT IS DELIBERATE — this is the ONE surface
+   in this change that inherits. The field sits inside `.qs-question-form`,
+   between a `.form-input` and a `.btn-secondary` that it is meant to look
+   continuous with, and both of those are styles.css's paper controls. A
+   `data-theme` on this element would re-point --text and --surface underneath
+   controls whose own colours come from outside the scope, and the seam would
+   be visible in the middle of a form row. It borrows `.form-input` and
+   `.btn-secondary` for exactly the same reason: reusing the editor's controls
+   is the "why recreate everything" the owner already objected to once.
+
+   So this sheet declares GEOMETRY and three text colours, and the three are
+   the paper values the surrounding editor is already using:
+
+     --qimg-muted   #5E6167 on the panel's #F1EDE4    5.32:1   the explainer
+     --qimg-ok      #1C7350 on #F1EDE4                4.97:1   "uploaded"
+     --qimg-bad     #A32B25 on #F1EDE4                6.14:1   a failure
+
+   `--danger` carries no text here — it is not referenced at all.
+   THE LADDER: 12 floor / 13 label. Nothing below 12px.
+   ========================================================================== */
+
+.qimg {
+  --qimg-t-floor: 12px;
+  --qimg-t-label: 13px;
+
+  /* Literals, in the scope's own token block, because styles.css declares no
+     paper equivalents: --muted is paper #5E6167 only under [data-theme="light"],
+     which this element deliberately does not set (see the header), and there
+     has never been a --success-text token at all. */
+  --qimg-muted: #5E6167;
+  --qimg-ok: #1C7350;
+  --qimg-bad: #A32B25;
+}
+
+.qimg-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The text field takes the space; the buttons keep their own. `min-width: 0`
+   because a flex item's default min-width is auto, which refuses to shrink
+   below its content and pushes the buttons out of the row. */
+.qimg-input { flex: 1 1 200px; min-width: 0; }
+
+/* A <label> wrapping a visually-hidden <input type=file>. Clipped rather than
+   `display: none`, which would take the control out of the tab order and out
+   of the accessibility tree and leave it mouse-only. */
+.qimg-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.qimg-picker input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.qimg-kind {
+  margin: 6px 0 0;
+  color: var(--qimg-muted);
+  font-size: var(--qimg-t-floor);
+}
+
+.qimg-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin: 6px 0 0;
+  font-size: var(--qimg-t-label);
+}
+
+.qimg-status--ok { color: var(--qimg-ok); }
+.qimg-status--bad { color: var(--qimg-bad); }
+.qimg-status--busy { color: var(--qimg-muted); }
