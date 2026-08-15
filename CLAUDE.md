@@ -203,16 +203,52 @@ This is the concrete reason for the standing rule against `./deployall`,
 `./scripts/deploy-clean.sh` and `./scripts/deploy-frontend-eng.sh`: they publish to
 `engdev-web`, which is the dead twin.
 
-### Password reset on dev needs a native account, and there isn't one
+### Password reset: which ACCOUNTS exist, never which pool is configured how
 
-`george.seib@gmail.com` exists in **both** dev pools only as `Google_1139562…`, status
-`EXTERNAL_PROVIDER` — a federated identity with no password. `ForgotPassword` on it cannot send
-anything, and because `PreventUserExistenceErrors` is **ENABLED** on the app client, Cognito
-still answers with a masked `CodeDeliveryDetails` as if it had. A silent no-op that reports
-success is what made this look like an SES fault for two sessions; it never was. All three
-pools are plain `COGNITO_DEFAULT` and identically configured.
+Reset worked on test and not on dev, and there is no configuration difference between them.
+All three pools are plain `COGNITO_DEFAULT`, identically configured, and **SES is not in the
+path at all** — which is why the SES account showed zero sends and why two sessions were spent
+chasing a delivery fault that never existed.
 
-Sign in with **Google** instead — that identity is already in the `admins` group on dev.
+`ForgotPassword` can only reset an account that HAS a password. Two states have none:
+
+| Status | Why there is no password |
+|---|---|
+| `EXTERNAL_PROVIDER` | Federated (Google). The password lives at Google. |
+| `FORCE_CHANGE_PASSWORD` | Admin-created; the temporary password was never exchanged. |
+
+Test had two `CONFIRMED` native accounts (`george+1@`, `george+3@seibtribe.com`) and dev had
+**none** — two federated identities plus one account stuck in `FORCE_CHANGE_PASSWORD` since it
+was created on 2026-08-05. That was the whole difference.
+
+**Fixed 2026-08-15**: `044864f8-10c1-70ff-1344-85423e394cfb` (`george@seibtribe.com`, `admins`)
+was moved to `CONFIRMED` with `admin-set-user-password --permanent`, using a throwaway password
+that was never recorded — the point was only to leave the account resettable so the owner sets
+their own via the emailed code. Reset on dev now works for `george@seibtribe.com`.
+
+`george.seib@gmail.com` still cannot be reset on **either** tier, and never could: it is
+federated-only in both pools. Sign in with **Google** for that identity — it is in `admins` on
+dev.
+
+### Telling a sent code from a silent no-op
+
+`PreventUserExistenceErrors` is **ENABLED** on every app client, so `ForgotPassword` answers
+with a masked `CodeDeliveryDetails` whether or not it sent anything. The response cannot be
+used as evidence. This pair can:
+
+```bash
+aws cognito-idp confirm-forgot-password --client-id <id> --username <email> \
+  --confirmation-code 000000 --password 'Zz9!aQwErTy123'
+```
+
+| Exception | Meaning |
+|---|---|
+| `CodeMismatchException` | A real pending code exists — the email WAS sent. |
+| `ExpiredCodeException` | No code was ever issued — nothing was sent. |
+
+Verify against a deliberately nonexistent address as a control; it returns `ExpiredCode`, which
+is the "nothing to reset" signature. Note this burns one wrong-code attempt against the rate
+limit, so use it sparingly rather than in a loop.
 
 ## Authentication System
 - **AWS Cognito** for user authentication and authorization
