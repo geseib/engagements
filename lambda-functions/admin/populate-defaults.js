@@ -9,6 +9,48 @@
  * `AI_PROMPT#/METADATA` key nothing else reads. The JSON was the richer of the
  * two (it had the wavelength prompts this file lacked entirely), so it won;
  * the inline literal and the dead handler are gone.
+ *
+ * ============================================================================
+ * `name` IS THE IDENTITY OF A DEFAULT PROMPT. DO NOT RENAME ONE CASUALLY.
+ * ============================================================================
+ * A promptId is minted here (`generatePromptId`) and is not derived from
+ * anything in the JSON, so it cannot be recovered from the file. The ONLY
+ * anchor tying a JSON entry to the row it seeded last time is the exact
+ * `name` string, matched at :~120 below. Consequences, both of which are
+ * silent:
+ *
+ *   - Change a `name` and the overwrite path stops finding the existing row.
+ *     A NEW promptId is minted, a SECOND row appears for the same prompt, and
+ *     every question set carrying the old promptId keeps pointing at the old
+ *     row — which now holds the text nobody meant to keep.
+ *   - Keep a `name` and `--overwrite` rewrites the same promptId in place, so
+ *     every set that references it picks up the new text with no re-attach.
+ *
+ * So: rewriting a prompt's TEXT is free. Renaming it orphans every set that
+ * points at it. The 2026-08-15 rewrite of all nineteen prompts deliberately
+ * preserved all nineteen names for exactly this reason.
+ *
+ * ============================================================================
+ * THE TWO HALVES, AND WHY THIS FILE USED TO DEFEAT THEM
+ * ============================================================================
+ * The editor and the JSON are both built around two named halves —
+ * `instructions` ("what the AI is given") and `outputFormat` ("what the AI
+ * writes"). This file used to flatten them back out:
+ *
+ *     template:     promptData.template,
+ *     instructions: promptData.template,   // "use template as instructions"
+ *     outputFormat: "Provide your analysis in the specified format …",
+ *
+ * get-ai-summary.js:2168 takes `template` and NEVER READS the other two when
+ * it is present, and promptPreflight's `promptSources` mirrors that rule. So a
+ * record written that way has an outputFormat that is decorative: the engine
+ * discards it, the preflight declines to report on it, and the boilerplate
+ * sentence above was the only format contract nineteen prompts ever carried.
+ *
+ * The JSON now ships the halves and this writer passes them through untouched.
+ * `template` is written ONLY when a hand-edited entry still has one, and then
+ * the halves are left off entirely rather than faked, so the record says which
+ * shape it actually is.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
@@ -130,10 +172,30 @@ exports.handler = async (event) => {
             console.warn(`⚠️ ${promptData.name}: outputSections is malformed — seeding without it (the default triad will apply)`);
           }
 
+          // THE SHAPE GATE, checked here rather than at runtime.
+          //
+          // get-ai-summary.js:2168-2174 accepts a `template`, or `instructions`
+          // AND `outputFormat` together, and nothing else. A record satisfying
+          // neither does not fail loudly at runtime: resolvePromptTemplate
+          // rejects it, the game silently falls back to the game-type default,
+          // and the seeded prompt has no effect anybody can see. Refuse to
+          // write it instead, so a bad hand-edit to the JSON is a visible error
+          // in this handler's results rather than a prompt that exists and does
+          // nothing.
+          const hasTemplate = typeof promptData.template === 'string' && promptData.template.trim();
+          const hasHalves = typeof promptData.instructions === 'string' && promptData.instructions.trim()
+            && typeof promptData.outputFormat === 'string' && promptData.outputFormat.trim();
+          if (!hasTemplate && !hasHalves) {
+            throw new Error(
+              `${promptData.name}: needs either a template, or both instructions and outputFormat `
+              + '(get-ai-summary.js:2168-2174 accepts nothing else)'
+            );
+          }
+
           // Store prompt template in S3 (matching create-ai-prompt format)
           const version = 1;
           const s3Key = `prompts/${gameType}/${promptId}/v${version}.json`;
-          
+
           // Use the same structure as create-ai-prompt.js for consistency
           const s3Data = {
             id: promptId,
@@ -143,10 +205,13 @@ exports.handler = async (event) => {
             gameType: gameType,
             category: promptData.category,
             scenario: categoryKey,
-            // Map the old template field to the new structured format
-            template: promptData.template,
-            instructions: promptData.template, // Use template as instructions for legacy prompts
-            outputFormat: "Provide your analysis in the specified format with clear sections and actionable insights.",
+            // The two halves, passed through as authored. `template` is written
+            // ONLY for a legacy entry that still has one — writing both would
+            // hand the engine a `template` that suppresses the halves at
+            // :2168, which is the bug this replaced.
+            ...(hasTemplate
+              ? { template: promptData.template }
+              : { instructions: promptData.instructions, outputFormat: promptData.outputFormat }),
             // A prompt's own declared output shape, when it has one. Runtime
             // reads promptData from S3 first, so it has to travel here — a
             // shape stored only in DynamoDB would never reach the model.

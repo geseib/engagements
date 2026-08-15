@@ -8,6 +8,26 @@ const { assertTemplateVariablesExist } = require('./shared/template-variable-usa
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
 
+/**
+ * THE THREE LEGAL STATUSES.
+ *
+ * `status` was written verbatim into both the DynamoDB row and the S3 object's
+ * metadata, with nothing checking it. Every consumer compares it for EXACT
+ * equality — `get-ai-prompts.js:64-67` filters on it, the library's status
+ * select offers these three strings, and `AdminPage.js:238` keeps only
+ * `status === 'active'` for the question-set prompt picker — so a value outside
+ * this list is not a cosmetic defect. The prompt vanishes from every filter and
+ * every picker while still existing, still being resolvable by id, and possibly
+ * still being the game-type default that runs for every set of its type. No
+ * surface anywhere reports that state.
+ *
+ * The list is the editor's own select (`AIPromptManager.jsx:613-615`) plus
+ * `delete-ai-prompt.js:214`, which is what writes `archived`. It is checked
+ * here rather than in the UI because both AI helpers and the library's status
+ * chip land on this route, and the UI is not the wall.
+ */
+const PROMPT_STATUSES = ['active', 'draft', 'archived'];
+
 const dynamoClient = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(dynamoClient, {
   marshallOptions: {
@@ -90,6 +110,14 @@ exports.handler = async (event) => {
       throw new Error('outputSections must be 1-8 entries of { heading, guidance }, each heading unique, single-line plain text without markdown syntax');
     }
 
+    // See PROMPT_STATUSES. `undefined` means "not supplied", same convention as
+    // every other field here; anything else has to be one of the three.
+    if (status !== undefined && !PROMPT_STATUSES.includes(status)) {
+      throw new Error(
+        `status must be one of ${PROMPT_STATUSES.join(', ')} — received ${JSON.stringify(status)}`
+      );
+    }
+
     // Get current content from S3
     let currentContent = null;
     try {
@@ -100,6 +128,38 @@ exports.handler = async (event) => {
       currentContent = JSON.parse(await s3Response.Body.transformToString());
     } catch (s3Error) {
       console.warn(`⚠️ Could not fetch current content from S3: ${s3Error.message}`);
+    }
+
+    /*
+      A PARTIAL UPDATE MUST NOT BE ABLE TO EMPTY THE PROMPT.
+
+      The read above is best-effort by design: it warns and carries on. That was
+      survivable while the only caller was the editor form, which resends both
+      halves on every save — a failed read cost the record's untouched extras
+      and nothing that decides what the model reads.
+
+      The status chip in the prompt library sends `{ status }` and NOTHING ELSE.
+      On a failed read the merge below would then write an S3 object carrying no
+      template, no instructions and no outputFormat, and set `s3Key` to point at
+      it. `isUsableSummaryPrompt` rejects that shape (get-ai-summary.js:412-431),
+      so every question set pinned to the prompt silently falls back to the
+      game-type default and the screen still shows a healthy row. A one-click
+      state change must never be able to do that, so it refuses instead.
+
+      Gated on `s3Key` because a row that never had stored content — the
+      generation prompts `populate-generation-prompts.js:497` writes straight to
+      DynamoDB — has nothing to lose, and refusing those would make them
+      permanently uneditable through this route.
+    */
+    const promptBodySupplied = template !== undefined
+      || instructions !== undefined
+      || outputFormat !== undefined;
+    if (currentPrompt.s3Key && !currentContent && !promptBodySupplied) {
+      throw new Error(
+        `Cannot apply a partial update to ${promptId}: its stored content at ${currentPrompt.s3Key} `
+        + 'could not be read, and this request supplies no replacement, so saving it would leave the '
+        + 'prompt with no text at all. Nothing was changed.'
+      );
     }
 
     // Same gate as create-ai-prompt.js, and for the same reason — the advisor's

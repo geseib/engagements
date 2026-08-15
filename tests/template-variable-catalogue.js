@@ -523,5 +523,150 @@ check('the catalogue requires nothing, so the copies stay portable', () => {
     'a require() here would resolve to a different path in each of the three bundles');
 });
 
+// === 8. The PROSE must not promise what the engine does not emit ==========
+/*
+  THE DEFECT THIS EXISTS FOR, and it shipped.
+
+  `topVotedAnswers` was described as "Top 3 most-voted responses with their vote
+  detail", with the example "Alice's response (13 points)". Both were false for
+  every game type except trivia: get-ai-summary.js branches, and the non-trivia
+  arm emits `${playerName}: ${score} vote points` — a name and a number, no
+  response text at all. Under anonymity the name degrades too.
+
+  It survived the whole game-type audit because that pass checked `gameTypes`
+  against the engine and took the DESCRIPTION on trust. That asymmetry is the
+  point: a wrong tag renders empty and somebody notices, while wrong prose sends
+  an author to the wrong variable and the prompt still produces confident output
+  about nothing. A handoff doc recommended it for exactly the round it cannot
+  serve.
+
+  So this reads the engine, not the catalogue's opinion of the engine.
+*/
+check('topVotedAnswers does not claim to carry response text it never emits', () => {
+  const engine = fs.readFileSync(
+    path.join(REPO, 'lambda-functions', 'game', 'get-ai-summary.js'), 'utf8');
+
+  // The non-trivia arm of topAnswers_formatted, which becomes topVotedAnswers.
+  const at = engine.indexOf('const topAnswers_formatted');
+  assert(at > -1, 'topAnswers_formatted has moved; re-point this assertion');
+  const branch = engine.slice(at, at + 400);
+  /*
+    THE NON-TRIVIA ARM IS THE SECOND `topAnswers.map(`, NOT "everything after
+    the first colon". My first version sliced on `indexOf(':')`, which lands
+    inside the template literal `${a.playerName}: ${a.answer}` in the TRIVIA
+    arm — so it read the trivia branch, found `a.answer`, and reported that the
+    engine had started carrying response text. A test that cannot tell the two
+    arms apart is worse than none here, because its failure message tells you
+    to delete the assertion.
+  */
+  const firstMap = branch.indexOf('topAnswers.map(');
+  const secondMap = branch.indexOf('topAnswers.map(', firstMap + 1);
+  assert(secondMap > -1, 'topAnswers_formatted is no longer a two-arm ternary; re-point this');
+  const nonTrivia = branch.slice(secondMap);
+
+  const carriesText = /a\.answer\b|answerText/.test(nonTrivia);
+  const entry = TEMPLATE_VARIABLES.find((v) => v.name === 'topVotedAnswers');
+  assert(entry, 'topVotedAnswers is gone from the catalogue');
+
+  if (!carriesText) {
+    // rejects: restoring prose that implies the responses themselves are here.
+    const says = `${entry.description} ${entry.example || ''}`;
+    assert(/no response text|name and points/i.test(says),
+      'the engine emits no response text on the non-trivia path, so the description '
+      + 'must say so plainly. Use {responsesText} for the text of every response.');
+  } else {
+    assert.fail('the engine now DOES carry answer text on the non-trivia path — '
+      + 'update the catalogue description and delete this branch.');
+  }
+});
+
+// === 9. Two more entries that promised what the engine never emits =========
+/*
+  THE SAME DEFECT AS topVotedAnswers, FOUND TWICE MORE while rewriting the
+  default prompts. Both were caught by reading get-ai-summary.js; neither was
+  visible from the catalogue, which is the whole point.
+
+  uniqueAnswers  :1644-1645  [...new Set(...)].slice(0, 5).join(', ')
+      claimed "with how many chose each", example "Ship it Friday (5)".
+      No counts exist, and everything past the FIFTH distinct answer is
+      dropped in silence — a room of thirty reads as five. Worse than the
+      topVotedAnswers case because uniqueAnswers is in promptPreflight's
+      ANSWER_TOKENS: a prompt SATISFIES the blocking "you receive no answers"
+      rule with it and is then handed less than it asked for.
+
+  answerCategories :1648-1650  a ternary between two literal sentences
+      claimed "Responses grouped into themes", example "Speed-first (5)".
+      There is no grouping anywhere. The value is a sentence about a count
+      that happens to contain the word "themes", so a prompt told to use
+      those themes will invent them.
+*/
+check('uniqueAnswers admits it has no counts and truncates', () => {
+  const engine = fs.readFileSync(
+    path.join(REPO, 'lambda-functions', 'game', 'get-ai-summary.js'), 'utf8');
+  const at = engine.indexOf('const uniqueAnswersText');
+  assert(at > -1, 'uniqueAnswersText has moved; re-point this assertion');
+  const line = engine.slice(at, at + 200);
+
+  const truncates = /slice\(0,\s*5\)/.test(line);
+  const hasCounts = /length|count|\(\$\{/.test(line.split('join')[0].replace('slice(0, 5)', ''));
+  const entry = TEMPLATE_VARIABLES.find((v) => v.name === 'uniqueAnswers');
+  const says = `${entry.description} ${entry.example || ''}`;
+
+  if (truncates) {
+    // rejects: prose that hides the cap, which is what made this survivable.
+    assert(/truncat|five|only the first/i.test(says),
+      'the engine slices to five and the description must say so');
+  }
+  if (!hasCounts) {
+    // rejects: restoring "with how many chose each" or a "(5)" example.
+    assert(!/\(\d+\)/.test(says) && /no counts/i.test(says),
+      'the engine emits a bare join with no counts; the description must not imply any');
+  }
+});
+
+check('answerCategories does not claim themes it cannot supply', () => {
+  const engine = fs.readFileSync(
+    path.join(REPO, 'lambda-functions', 'game', 'get-ai-summary.js'), 'utf8');
+  const at = engine.indexOf('const answerCategories');
+  assert(at > -1, 'answerCategories has moved; re-point this assertion');
+  const body = engine.slice(at, at + 300);
+
+  // The value is built from string literals only — no reduce, no map, no
+  // grouping of any kind. That is what makes "themes" a false promise.
+  const groups = /\.reduce\(|\.map\(|groupBy/.test(body);
+  const entry = TEMPLATE_VARIABLES.find((v) => v.name === 'answerCategories');
+  const says = `${entry.description} ${entry.example || ''}`;
+
+  if (!groups) {
+    // rejects: "Responses grouped into themes" and a "Speed-first (5)" example.
+    assert(/not themes|no grouping/i.test(says),
+      'nothing groups anything here; the description must say the themes are not real');
+    assert(!/^\s*Speed-first/.test(entry.example || ''),
+      'the example must not invent themes the engine cannot produce');
+  }
+});
+
+// === 10. The blocking rule's token list must name only real variables ======
+check('every ANSWER_TOKEN is a variable that actually resolves', () => {
+  /*
+    This list decides whether a summary prompt is BLOCKED, so a name in it that
+    is not a variable lets a prompt clear the rule with a token that renders as
+    literal braces on a projector. Three did: answerCount, topAnswer and
+    winningAnswer appear in neither the catalogue nor the engine.
+  */
+  const pf = fs.readFileSync(
+    path.join(REPO, 'src', 'src', 'utils', 'promptPreflight.js'), 'utf8');
+  const block = pf.slice(pf.indexOf('const ANSWER_TOKENS'));
+  const list = block.slice(0, block.indexOf(']'));
+  const tokens = [...list.matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]);
+  assert(tokens.length >= 5, `parsed too few ANSWER_TOKENS: ${tokens.length}`);
+
+  const known = new Set(TEMPLATE_VARIABLES.map((v) => v.name));
+  const phantom = tokens.filter((t) => !known.has(t));
+  assert.deepStrictEqual(phantom, [],
+    `ANSWER_TOKENS names variables that do not exist: ${phantom.join(', ')} — `
+    + 'a prompt can satisfy the blocking rule with one and receive nothing.');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

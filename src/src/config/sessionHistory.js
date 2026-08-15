@@ -39,9 +39,123 @@
  * can be tested beats doing it in JSX where it cannot.
  */
 
+import { PODIUM_SIZE } from './podium';
+import { isRedacted } from './anonymity';
+
 /** A round with nothing in it is still a round that happened. */
 function textOf(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+/**
+ * ONE ANSWER ROW, IN THE SHAPE THE DIALOGS ALREADY READ.
+ *
+ * THE DEFECT THIS EXISTS TO FIX, and it is the invented-fixture trap for the
+ * second time in this file. `create-report.js` builds its ranked rows as
+ *
+ *     { answerIndex, playerName?, answerText, totalScore,
+ *       firstPlace, secondPlace, thirdPlace, voteBreakdown, rank, rankDisplay }
+ *
+ * (create-report.js:384-415) — `answerText`, not `answer`. Every other answer
+ * surface in this app is fed by `GET /answers`, whose rows carry `answer`,
+ * `points` and `votes`, and `PastRound` was written against that shape. So it
+ * rendered `answer.answer` for every past round and printed nothing at all:
+ * the owner's *"the actual answers are not there"*. The rounds tab's own tests
+ * built their answer rows from the client's reading rather than from the
+ * handler, exactly as the envelope bug did, so the whole suite stayed green
+ * over a dialog that showed no responses.
+ *
+ * Normalising here rather than in the JSX means both dialogs — the list and the
+ * spotlight it opens — read one shape, and the tolerant reads sit where they
+ * can be tested.
+ *
+ * ANONYMITY IS NOT RE-DECIDED HERE, and that is the point. `create-report.js`
+ * already redacts PER ROUND, through the same `isHidden()` gate as
+ * `GET /answers`, by OMITTING `playerName` (create-report.js:344-354). This
+ * preserves that omission verbatim — omitted stays omitted, never nulled and
+ * never defaulted to a name — so `config/anonymity.js` can answer the label
+ * question from the row alone, which is what it is for.
+ */
+export function answersFrom(round) {
+  const raw = Array.isArray(round && round.answers) ? round.answers : [];
+  return raw.map((row, i) => {
+    const a = row || {};
+    // `answerText` is the report's spelling; `answer` is the live payload's.
+    // Both are accepted so one normaliser serves both routes.
+    const name = typeof a.playerName === 'string' && a.playerName.length > 0
+      ? a.playerName
+      : null;
+    return {
+      answer: textOf(a.answerText) || textOf(a.answer),
+      // OMITTED, NOT NULLED — see the doc-block. `isRedacted` treats a missing
+      // key and an empty string alike, so a redacted row can never render as
+      // an empty label or the string "null".
+      ...(name ? { playerName: name } : {}),
+      rank: Number.isFinite(a.rank) ? a.rank : null,
+      answerIndex: Number.isFinite(a.answerIndex) ? a.answerIndex : i,
+      // The report keeps the three placement tallies and the score apart; the
+      // dialogs want the same two numbers `GET /answers` gives them.
+      points: Number(a.totalScore ?? a.points) || 0,
+      votes: Number.isFinite(a.votes)
+        ? a.votes
+        : (Number(a.firstPlace) || 0) + (Number(a.secondPlace) || 0) + (Number(a.thirdPlace) || 0),
+    };
+  });
+}
+
+/**
+ * THE START OF AN ANSWER, for the row that offers to show the rest.
+ *
+ *   "so if each of the 3 has a number in a circle, the start of their answer,
+ *    their name and you click that number the full modal shows there answer."
+ *
+ * Cut on a word boundary rather than mid-word, because the row is read at a
+ * glance and a truncation that lands inside a word reads as a corrupted value
+ * rather than as a summary. An answer that already fits is returned UNCHANGED —
+ * no ellipsis — so a short response never looks truncated.
+ *
+ * The ellipsis is a single character, not three dots: three dots wrap.
+ */
+export function snippetOf(text, max = 90) {
+  const full = textOf(text);
+  if (full.length <= max) return full;
+  const cut = full.slice(0, max);
+  const space = cut.lastIndexOf(' ');
+  // A single unbroken 200-character string has no space to cut at; a hard cut
+  // is right there, and better than returning the whole wall of text.
+  return `${(space > max * 0.5 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+/**
+ * THE TOP THREE, which is what the owner asked to be able to open.
+ *
+ * `PODIUM_SIZE` rather than a literal 3, from `config/podium.js`, because it is
+ * the same three: *"a podium, not a leaderboard"*. The rows arrive already
+ * ranked by create-report (score, then first-place votes as the tiebreak), so
+ * this is a slice and never a second sort — re-sorting here could disagree with
+ * the `rank` printed on the row.
+ *
+ * Fewer than three responses yields fewer than three entries. A round nobody
+ * answered yields none, which is the case that must not throw.
+ */
+export function podiumAnswers(round) {
+  return ((round && round.answers) || []).slice(0, PODIUM_SIZE);
+}
+
+/**
+ * Did this round come back WITH its authors?
+ *
+ * Read off the rows rather than re-derived from the session settings, for the
+ * reason `answersFrom` gives: create-report decided it per round, and the row
+ * is that decision. Used to gate the score in the spotlight, because §5.6.4 —
+ * a score beside a response is attribution by arithmetic, so it goes wherever
+ * the names go.
+ *
+ * A round with no responses has nothing to attribute and answers `false`.
+ */
+export function roundIsAttributed(round) {
+  const rows = (round && round.answers) || [];
+  return rows.length > 0 && rows.every((row) => !isRedacted(row));
 }
 
 /**
@@ -97,7 +211,10 @@ export function roundsFrom(payload) {
         category: textOf(q.category),
         image: textOf(q.image) || null,
         school: textOf(q.school) || null,
-        answers: Array.isArray(round.answers) ? round.answers : [],
+        // Normalised here, not in the JSX: the report spells the text
+        // `answerText` and the rest of the app spells it `answer`. See
+        // answersFrom, and the defect it is named after.
+        answers: answersFrom(round),
         voteStats: round.voteStats || null,
         aiSummary: round.aiSummary || null,
         // Trivia rounds carry their options and the correct answer, and a past

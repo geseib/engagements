@@ -171,13 +171,29 @@ describe('the surface is paper, and stays paper until the section moves', () => 
     expect([...new Set(used)].filter((n) => !declared.has(n))).toEqual([]);
   });
 
-  test('nothing in the new blocks is declared below a 12px floor', () => {
-    // rejects: an 11px chip added later to make a dense row fit — RATIONALE §3
-    // derives 12px as the hard floor for one person at 24in, and it is the same
-    // rule the question sets screen is held to.
-    const block = CSS.slice(CSS.indexOf('BEFORE YOU SAVE'));
-    const sizes = [...block.matchAll(/font-size:\s*(\d+)px/g)].map((m) => Number(m[1]));
+  test('nothing in the WHOLE stylesheet is declared below a 12px floor', () => {
+    /*
+      rejects: an 11px chip added later to make a dense row fit — RATIONALE §3
+      derives 12px as the hard floor for one person at 24in, and it is the same
+      rule the question sets screen is held to.
+
+      IT USED TO READ ONLY THE BLOCK AFTER `BEFORE YOU SAVE`, and that is
+      exactly how the 11px it was written to prevent survived in this file:
+      `.variable-btn[title]:hover::after` — the variable tooltip, which carries
+      the longest sentences on the screen and is READ rather than glanced — sat
+      six hundred lines above the slice and was never looked at. A floor that
+      only applies to the newest third of a stylesheet is not a floor.
+    */
+    const sizes = [...CSS.matchAll(/font-size:\s*(\d+)px/g)].map((m) => Number(m[1]));
     expect(sizes.length).toBeGreaterThan(0);
     expect(sizes.filter((px) => px < 12)).toEqual([]);
+  });
+
+  test('the floor covers the tooltip specifically, not just the sheet in aggregate', () => {
+    // rejects: raising the tooltip and later reverting that one rule while the
+    // aggregate assertion above stays green because some other 12px arrived.
+    const tooltip = CSS.match(/\.pvi\s+\.variable-btn\[title\]:hover::after\s*\{([^}]*)\}/);
+    expect(tooltip).not.toBeNull();
+    expect(Number(tooltip[1].match(/font-size:\s*(\d+)px/)[1])).toBeGreaterThanOrEqual(12);
   });
 });

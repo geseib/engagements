@@ -420,19 +420,19 @@ const TEMPLATE_VARIABLES = [
     // no branch. It is the most useful variable there is for a call-and-answer
     // round with repeated sentiment, and it was hidden from one.
     name: 'uniqueAnswers',
-    description: 'The distinct answers given, with how many chose each',
+    description: 'The distinct answers, comma-separated. NO COUNTS, and silently TRUNCATED TO FIVE.',
     category: 'Answers',
     gameTypes: ALL_TYPES,
-    example: 'Ship it Friday (5), Wait for the audit (3)',
+    example: 'Ship it Friday, Wait for the audit, Ask legal first',
   },
   {
     // AUDIT: was ['poll', 'survey']. :1648, derived from uniqueAnswers, no
     // branch.
     name: 'answerCategories',
-    description: 'Responses grouped into themes',
+    description: 'NOT themes — a bare sentence counting the distinct responses. No grouping exists.',
     category: 'Answers',
     gameTypes: ALL_TYPES,
-    example: 'Speed-first (5), Risk-first (3)',
+    example: '7 unique responses across various themes',
   },
 
   // ---- VOTES ---------------------------------------------------------------
@@ -503,13 +503,33 @@ const TEMPLATE_VARIABLES = [
     example: '1. Ship it Friday (13 vote points), 2. Wait for the audit (8 vote points)',
   },
   {
-    // AUDIT: was ['call-and-answer']. :1577, same explicit trivia/non-trivia
-    // branch as voteTally.
+    /*
+      AUDIT: was ['call-and-answer']. :1577, same explicit trivia/non-trivia
+      branch as voteTally.
+
+      SECOND AUDIT — THE DESCRIPTION AND EXAMPLE WERE BOTH WRONG, and wrong in
+      the direction that matters. This entry said "Top 3 most-voted responses"
+      and gave "Alice's response (13 points)". On a CALL-AND-ANSWER round the
+      engine emits `${playerName}: ${score} vote points` (:1582) — a name and a
+      number, and NO RESPONSE TEXT AT ALL. Only the trivia arm (:1579) includes
+      the answer. Under anonymity the name degrades too, so the whole variable
+      renders as "a participant: 13 vote points" repeated three times.
+
+      This is the exact defect the catalogue exists to have audited out of it,
+      and it survived the game-type audit because that pass compared `gameTypes`
+      against the engine and took the prose on trust. A wrong tag renders empty
+      and is noticed; wrong PROSE sends an author to the wrong variable and the
+      prompt still produces confident output about nothing.
+
+      If you want the responses themselves, use {responsesText} (:1406, which is
+      `rank: player - "answer" (N vote points)`). That is the only variable that
+      carries the text of every response.
+    */
     name: 'topVotedAnswers',
-    description: 'Top 3 most-voted responses with their vote detail',
+    description: 'Top 3 by vote. TRIVIA: name, answer and points. Every other type: name and points ONLY — no response text (use {responsesText} for that).',
     category: 'Vote Tally',
     gameTypes: RANKED_TYPES,
-    example: "Alice's response (13 points), Bob's response (8 points)",
+    example: 'trivia — "Alice: Paris - 30 points" · call-and-answer — "Alice: 13 vote points"',
   },
   {
     // AUDIT: was ['call-and-answer']. :1706 reads firstPlace/secondPlace/

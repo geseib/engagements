@@ -191,7 +191,13 @@ docs/.doctrees/
 # MCP and Claude configuration
 .mcp.json
 .augment/
-.claude/
+# `.claude/*` and not `.claude/`, so the negations below can work. Git will not
+# descend into an excluded DIRECTORY, so `!.claude/skills/` under a bare
+# `.claude/` re-includes nothing — the same trap as the `*token*` line above.
+# Local state (settings.local.json, transcripts, scratch) stays ignored; the
+# checked-in design system does not.
+.claude/*
+!.claude/skills/
 
 # Lock files (optional - you may want to keep these)
 # package-lock.json

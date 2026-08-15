@@ -162,6 +162,7 @@ const editSet = require(path.join(REPO, 'lambda-functions/admin/edit-question-se
 const deleteSet = require(path.join(REPO, 'lambda-functions/admin/delete-question-set.js')).handler;
 const upload = require(path.join(REPO, 'lambda-functions/admin/upload-questions.js')).handler;
 const adminList = require(path.join(REPO, 'lambda-functions/admin/get-question-sets.js')).handler;
+const toggleQuickstart = require(path.join(REPO, 'lambda-functions/admin/toggle-quickstart.js')).handler;
 
 if (!process.env.DEBUG) { console.log = () => {}; console.warn = () => {}; console.error = () => {}; }
 const say = (...a) => process.stdout.write(a.join(' ') + '\n');
@@ -264,6 +265,11 @@ function reset() { store.clear(); log.length = 0; }
     ['GET', 'admin/download-template'],
     ['PUT', 'admin/edit-question-set/{setId}'],
     ['DELETE', 'admin/question-sets/{setId}'],
+    // Opened 2026-08-15 at the owner's request, and only safe because
+    // `toggle-quickstart.js` gained a `requireSetManager` guard in the same
+    // change. Section 3.6 is the half that makes this line defensible: without
+    // the row guard this entry hands every host every set's quickstart flag.
+    ['POST', 'admin/toggle-quickstart/{setId}'],
   ];
   for (const [method, p] of HOST_REACHABLE) {
     check(`${method} ${p} admits hosts and admins`, () =>
@@ -285,10 +291,11 @@ function reset() { store.clear(); log.length = 0; }
     ['GET', 'admin/question-sets/{setId}/versions'],
     ['DELETE', 'admin/question-sets/{setId}/versions/{version}'],
     ['POST', 'admin/question-sets/{setId}/versions/{version}/promote'],
-    // REJECTS: widening to the whole toggle/curation surface. These decide what
-    // the product offers everybody, not what one host owns.
+    // REJECTS: widening from quickstart to the whole toggle/curation surface.
+    // Quickstart moved to the host list above because it ADDS a set the host
+    // owns to one shelf; active/inactive can take any set OUT of every picker,
+    // it was not asked for, and its handler has no ownership guard at all.
     ['POST', 'admin/toggle-question-set/{setId}'],
-    ['POST', 'admin/toggle-quickstart/{setId}'],
     // REJECTS: adding the download route "while we are here". Not asked for.
     ['GET', 'admin/download-question-set/{setId}'],
     // REJECTS: adding the set-metadata drafter to HOST_ADMIN_ROUTES so that the
@@ -593,6 +600,109 @@ function reset() { store.clear(); log.length = 0; }
   });
   check('...and they can immediately edit it', () =>
     assert.strictEqual(res.statusCode, 200, res.body));
+
+  say('\n3.6b quickstart — the newest route on the host list');
+
+  /*
+    WHY THIS SECTION EXISTS AT ALL.
+
+    `POST admin/toggle-quickstart/{setId}` sat in section 1b's admins-only list
+    until 2026-08-15, excluded by name, on the grounds that quickstart is GLOBAL
+    curation: `QuickstartMenu.jsx:46` filters on `set.quickstart && set.active`
+    with no ownership term, so a flagged set shows on EVERY host's menu.
+
+    The owner asked for it on the host list — "host question set lists, should
+    allow quick starts easily marked by clicking a tag on list just like the
+    admin" — so section 1 now admits hosts. That is only defensible because the
+    handler gained a row guard in the same change. THIS is that half. Delete the
+    `requireSetManager` call from toggle-quickstart.js and section 1 alone would
+    still be green while any host could flag any set in the library.
+  */
+
+  reset();
+  seedSet('ivys', { owner: HOST });
+  seedSet('eighties');  // legacy, unowned -> admin-only by rule
+
+  const flip = (caller, setId, quickstart) => toggleQuickstart({
+    ...callerEvent(caller),
+    pathParameters: { setId },
+    body: JSON.stringify({ quickstart }),
+  });
+
+  res = await flip(HOST, 'ivys', true);
+  check('a host flags their OWN set', () =>
+    assert.strictEqual(res.statusCode, 200, res.body));
+  check('...and the flag actually landed', () =>
+    assert.strictEqual(metaOf('ivys').Quickstart, true));
+
+  // REJECTS: opening the route in authorizer.js without adding the row guard —
+  // the exact half-done change this section was written to make impossible.
+  res = await flip(OTHER_HOST, 'ivys', true);
+  check("a host flagging ANOTHER host's set is refused with 403", () =>
+    assert.strictEqual(res.statusCode, 403, res.body));
+
+  // REJECTS: a guard that refuses but writes anyway. `requireSetManager` returns
+  // a response the handler must RETURN, not merely evaluate.
+  reset();
+  seedSet('ivys', { owner: HOST });
+  seedSet('eighties');  // re-seeded: the reset above dropped it
+  await flip(OTHER_HOST, 'ivys', true);
+  check('...and nothing was written', () =>
+    assert.strictEqual(metaOf('ivys').Quickstart, undefined));
+
+  // REJECTS: reading an absent `createdBy` as "anyone may". Same decision as
+  // section 3.2: an unowned set is house content.
+  res = await flip(HOST, 'eighties', true);
+  check('a host flagging a LEGACY unowned set is refused with 403', () =>
+    assert.strictEqual(res.statusCode, 403, res.body));
+
+  // REJECTS: a guard so tight it locks admins out — the failure that makes the
+  // sensible next move "delete the guard".
+  res = await flip(ADMIN, 'eighties', true);
+  check('an admin flags a legacy set', () =>
+    assert.strictEqual(res.statusCode, 200, res.body));
+  res = await flip(ADMIN, 'ivys', false);
+  check("an admin unflags a host's set", () =>
+    assert.strictEqual(res.statusCode, 200, res.body));
+
+  // REJECTS: dropping the 404 in favour of a blind UpdateCommand, which would
+  // CREATE a SETS row for a set that does not exist — the upsert fault section
+  // 3.3 already caught once on edit.
+  res = await flip(ADMIN, 'ghost', true);
+  check('flagging a set that does not exist is 404, not an upsert', () =>
+    assert.strictEqual(res.statusCode, 404, res.body));
+  check('...and no row was manufactured', () =>
+    assert.strictEqual(metaOf('ghost'), undefined));
+
+  // REJECTS: writing whatever arrives. `{}` writes undefined and the string
+  // "false" is truthy, so both read back as flagged.
+  for (const bad of [undefined, 'true', 'false', 1, null]) {
+    res = await toggleQuickstart({
+      ...callerEvent(ADMIN),
+      pathParameters: { setId: 'ivys' },
+      body: JSON.stringify(bad === undefined ? {} : { quickstart: bad }),
+    });
+    check(`quickstart=${JSON.stringify(bad)} is refused as not a boolean`, () =>
+      assert.strictEqual(res.statusCode, 400, res.body));
+  }
+
+  /*
+    REJECTS: the `UpdatedAt` spelling this handler shipped with.
+
+    Every other writer uses lower-case `updatedAt`, and get-question-sets.js:60
+    reads `item.updatedAt || item.UpdatedAt` — preferring the lower-case one. So
+    on any set that had ever been edited, flagging quickstart wrote a SECOND
+    attribute the reader then ignored, and the Updated column did not move. The
+    seed carries a 2020 `updatedAt`, which is what makes this assertion able to
+    fail: a handler writing the capitalised name leaves the 2020 value in place.
+  */
+  reset();
+  seedSet('ivys', { owner: HOST });
+  await flip(HOST, 'ivys', true);
+  check('the toggle moves the canonical lower-case updatedAt', () =>
+    assert.notStrictEqual(metaOf('ivys').updatedAt, '2020-01-01T00:00:00.000Z'));
+  check('...and does not leave a capitalised twin behind', () =>
+    assert.strictEqual(metaOf('ivys').UpdatedAt, undefined));
 
   say('\n3.6 replace — an edit by another name');
 

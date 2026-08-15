@@ -41,13 +41,49 @@ import { gameTypeLabel, normalizeGameType } from '../config/gameTypes';
  * more than the tidiness of renaming its container.
  */
 
+/*
+  WHAT THE `categoryKey` / `categoryOptions` / `flagSummaryUsability` PROPS ARE FOR.
+
+  There were THREE prompt UIs (admin RATIONALE §9, "One prompt library"), and
+  AIGenerationPromptEditor was the third — a `.prompts-grid` of `.prompt-card`s
+  over the SAME `AIPROMPTS` table this panel reads. Pointing it here rather than
+  restyling it in place is the whole point of AUDIT §6.2 item 9.
+
+  The two record shapes are not identical, and the three props below are exactly
+  the differences, so the panel is told about them instead of being forked:
+
+  1. THE SECOND AXIS HAS TWO NAMES. Summary prompts carry `category`
+     (`lessons-learned`, `general`, …); generation rows written by
+     `populate-generation-prompts.js:502` carry `scenarioType` and no `category`
+     at all. Same column, different attribute — `categoryKey`.
+
+  2. GENERATION SCENARIOS HAVE LABELS, CATEGORIES DO NOT. `scenarioType` is a
+     slug (`amazon-principles`) with a written label (`Amazon Leadership
+     Principles`) the card grid never showed. `categoryOptions` therefore takes
+     `{ value, label }` as well as the plain strings AIPromptManager passes.
+
+  3. "NOT A SUMMARY PROMPT" IS INFORMATION ONLY WHERE IT CAN BE FALSE. The
+     backend sets `summaryPromptStatus: 'unusable'` on every generation-format
+     record (`get-ai-prompts.js:129-133`) — which is the point on the summary
+     library, and is true of literally every row on a list filtered to
+     `promptType=generation`. A chip on all N rows is not a warning, it is a
+     watermark, so that screen passes `flagSummaryUsability={false}`.
+
+  Everything else — the table, the two empty states, the drop-exits, the
+  chips — is shared, which is what made the audit item worth doing.
+*/
+
 /** Does this prompt survive a filter combination? One place, so the drop-counts
  *  below cannot drift from the list they describe. */
-export function matchesPromptFilters(prompt, { search = '', gameType = 'all', category = 'all', status = 'all' }) {
+export function matchesPromptFilters(
+  prompt,
+  { search = '', gameType = 'all', category = 'all', status = 'all' },
+  { categoryKey = 'category' } = {}
+) {
   if (gameType !== 'all' && normalizeGameType(prompt.gameType) !== normalizeGameType(gameType)) {
     return false;
   }
-  if (category !== 'all' && prompt.category !== category) return false;
+  if (category !== 'all' && prompt[categoryKey] !== category) return false;
   if (status !== 'all' && prompt.status !== status) return false;
 
   const needle = search.trim().toLowerCase();
@@ -70,6 +106,109 @@ function statusChipClass(status) {
   return 'plib-chip--warn';
 }
 
+/*
+  WHAT "DEACTIVATE" MEANS HERE, AND WHY IT IS NOT "ARCHIVE".
+
+  A question set's `active` is a boolean and its chip is a straight flip. A
+  prompt has THREE states, so the chip has to say which two it moves between:
+
+    active  ⇄  draft      this chip
+    → archived            the row's Archive action, which is a different
+                          endpoint (DELETE /admin/ai-prompts/{id}, a soft
+                          delete that stamps `archivedAt`) and a different
+                          intention — retirement, not "not right now".
+
+  The product had already made this call in words before it had a control for
+  it: the archive confirmation in AIPromptManager says, in shipped copy, "If the
+  aim is only to stop hosts choosing it, Draft does that and reads as a work in
+  progress rather than a retirement." Wiring the chip to `archived` would give
+  one outcome two controls sitting eight pixels apart, which the container rules
+  forbid; wiring it to `draft` is the one-click version of a thing the screen
+  already tells people to do the slow way.
+
+  BOTH DIRECTIONS ARE THE SAME ROUND TRIP — `PUT /admin/ai-prompts/{promptId}`
+  with `{ status }`, admins-only (auth/authorizer.js falls every other
+  `admin/*` route through to `['admins']`, and this route is not in
+  HOST_ADMIN_ROUTES).
+
+  An ARCHIVED row keeps a plain span. Not because archived is untouchable — the
+  editor's Status select can set it back to Active, which is what the archive
+  dialog points at — but because a two-state toggle cannot say which of the two
+  it would return to, and a chip that silently un-retires a prompt is worse than
+  one more click. Same for a status no vocabulary here recognises: we do not
+  know what its opposite is, so we do not offer one.
+*/
+export function nextStatusFor(status) {
+  if (status === 'active') return 'draft';
+  // A record written by a script with no status at all already READS as Draft
+  // (the label falls through below), so the chip has to agree with the label.
+  if (!status || status === 'draft') return 'active';
+  return null;
+}
+
+/** `['general', …]` and `[{ value, label }, …]` are both accepted, so the two
+ *  callers keep the shape each already has. */
+function asOption(option) {
+  return typeof option === 'string' ? { value: option, label: option } : option;
+}
+
+/**
+ * The status cell: a toggle where flipping it is a thing this mount can
+ * actually do, a label everywhere else.
+ *
+ * The affordance is gated three ways, and all three are real rows in the live
+ * library rather than defensive noise:
+ *
+ *  1. NO HANDLER — the generation library passes none. Nothing to click.
+ *  2. NO `promptId` — the rows `scripts/cull-ai-prompts.js` exists to sweep.
+ *     They already carry a "Broken record" chip beside this one; the update
+ *     route is keyed by promptId, so a click could only ever 500.
+ *  3. NO SECOND STATE — archived, or a status this vocabulary does not know.
+ *     See `nextStatusFor`.
+ *
+ * The chip keeps its own colour in every case (active green-ish, draft amber,
+ * archived muted): the three states still have to be distinguishable from each
+ * other, which is what an `--on`/`--off` pair alone could not say.
+ */
+function StatusChip({ prompt, onToggleStatus, busy }) {
+  const label = STATUS_LABEL[prompt.status] || prompt.status || 'Draft';
+  const className = `plib-chip ${statusChipClass(prompt.status)}`;
+  const next = onToggleStatus && prompt.promptId ? nextStatusFor(prompt.status) : null;
+
+  if (!next) {
+    return (
+      <span
+        className={className}
+        title={
+          prompt.status === 'archived'
+            ? 'Archived. Open the prompt and set its status back to Active to bring it back.'
+            : undefined
+        }
+      >
+        {label}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className={className}
+      aria-pressed={prompt.status === 'active'}
+      disabled={busy}
+      title={
+        next === 'draft'
+          ? 'Deactivate: set this prompt to Draft, so it stops being offered when a question set '
+            + 'picks a prompt. Nothing is deleted and one more click puts it back.'
+          : 'Activate: offer this prompt when a question set picks one.'
+      }
+      onClick={() => onToggleStatus(prompt, next)}
+    >
+      {label}
+    </button>
+  );
+}
+
 export default function PromptLibraryPanel({
   prompts = [],
   loading = false,
@@ -77,21 +216,66 @@ export default function PromptLibraryPanel({
   onFilterChange,
   /** The category options for the currently selected game type. Derived by the
    *  caller from the same table the editor uses; passing it keeps this
-   *  component free of that vocabulary. */
+   *  component free of that vocabulary. Strings or `{ value, label }`. */
   categoryOptions = [],
   gameTypeOptions = [],
+  /** Which attribute holds the second axis, and what it is called on screen.
+   *  See the header block — generation rows spell it `scenarioType`. */
+  categoryKey = 'category',
+  categoryHeading = 'Category',
+  categoryFilterAllLabel = 'All Categories',
+  /** Draw the "Not a summary prompt" chip. False on a list that is already
+   *  filtered to generation prompts, where it is true of every row. */
+  flagSummaryUsability = true,
+  /** The "nothing exists" copy. It has to say what a prompt IS, and the two
+   *  libraries hold different things. */
+  emptyHeading = 'No prompts yet',
+  emptyBody = 'A summary prompt is what Workie says after a round. Until one exists, every session'
+    + ' of every engagement type falls back to the shipped default for its type.',
   onEdit,
   onAdvise,
   onDelete,
   onCreate,
   onPopulateDefaults,
+  /** Flip a prompt between Active and Draft — `(prompt, nextStatus) => void`.
+   *  OPTIONAL, and the chip is a plain span without it: the generation library
+   *  (AIGenerationPromptEditor) mounts this same panel and has no status
+   *  round trip of its own, and design rule 2 is that a dead control is the one
+   *  people reach for first. See `nextStatusFor` for which two states. */
+  onToggleStatus,
+  /** The promptId whose status round trip is in flight, so its chip cannot be
+   *  clicked twice into two writes of two different values. */
+  busyPromptId = null,
+  /**
+   * Put a COPY of this prompt in the shared cross-tier archive —
+   * `(prompt) => void`. Distinct from `onDelete` in every way that matters:
+   * different route, different outcome, and the row survives it. See the long
+   * note at the row buttons.
+   *
+   * OPTIONAL, like `onToggleStatus` and for the same reason: not every mount of
+   * this panel has an export round trip to offer, and a dead control is the one
+   * people reach for first.
+   */
+  onCopyToArchive,
+  /** The promptId whose archive copy is in flight, so one click is one export. */
+  copyingPromptId = null,
 }) {
   const { search = '', gameType = 'all', category = 'all', status = 'all' } = filters || {};
 
   const shown = useMemo(
-    () => prompts.filter((p) => matchesPromptFilters(p, { search, gameType, category, status })),
-    [prompts, search, gameType, category, status]
+    () => prompts.filter(
+      (p) => matchesPromptFilters(p, { search, gameType, category, status }, { categoryKey })
+    ),
+    [prompts, search, gameType, category, status, categoryKey]
   );
+
+  const catOptions = useMemo(() => (categoryOptions || []).map(asOption), [categoryOptions]);
+  /* A row whose category is not in the currently offered list still has to
+     render, so the raw value is the fallback rather than a blank. */
+  const catLabel = (value) => {
+    const hit = catOptions.find((o) => o.value === value);
+    return (hit && hit.label) || value;
+  };
 
   /*
     THE EXITS FROM "NOTHING MATCHES" — QuestionSetsPanel's `drops`, same
@@ -108,7 +292,11 @@ export default function PromptLibraryPanel({
       candidates.push({ key: 'gameType', label: `Type: ${gameTypeLabel(gameType)}`, next: { ...base, gameType: 'all' } });
     }
     if (category !== 'all') {
-      candidates.push({ key: 'category', label: `Category: ${category}`, next: { ...base, category: 'all' } });
+      candidates.push({
+        key: 'category',
+        label: `${categoryHeading}: ${catLabel(category)}`,
+        next: { ...base, category: 'all' },
+      });
     }
     if (status !== 'all') {
       candidates.push({
@@ -118,9 +306,13 @@ export default function PromptLibraryPanel({
       });
     }
     return candidates
-      .map((c) => ({ ...c, count: prompts.filter((p) => matchesPromptFilters(p, c.next)).length }))
+      .map((c) => ({
+        ...c,
+        count: prompts.filter((p) => matchesPromptFilters(p, c.next, { categoryKey })).length,
+      }))
       .filter((c) => c.count > 0);
-  }, [prompts, search, gameType, category, status]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prompts, search, gameType, category, status, categoryKey, categoryHeading, catOptions]);
 
   const set = (patch) => onFilterChange && onFilterChange({ search, gameType, category, status, ...patch });
   const clearAll = () => set({ search: '', gameType: 'all', category: 'all', status: 'all' });
@@ -158,11 +350,11 @@ export default function PromptLibraryPanel({
             value={category}
             onChange={(e) => set({ category: e.target.value })}
             className="filter-select"
-            aria-label="Filter by category"
+            aria-label={`Filter by ${categoryHeading.toLowerCase()}`}
           >
-            <option value="all">All Categories</option>
-            {categoryOptions.map((c) => (
-              <option key={c} value={c}>{c}</option>
+            <option value="all">{categoryFilterAllLabel}</option>
+            {catOptions.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
             ))}
           </select>
 
@@ -193,22 +385,33 @@ export default function PromptLibraryPanel({
           </span>
         </div>
 
+        {/*
+          A CONTROL IS DRAWN ONLY WHERE IT DOES SOMETHING. Rule 2 of the design
+          system: "gate the affordance on the handler existing, never render one
+          that does nothing" — a dead button is the one people reach for first.
+          The generation library has no shipped-defaults installer of its own,
+          so it passes no `onPopulateDefaults` and no such button appears.
+        */}
         <div className="prompt-control-actions">
-          <button
-            className="btn-secondary"
-            type="button"
-            onClick={onPopulateDefaults}
-            disabled={loading}
-          >
-            <Icon name="Target" weight="duotone" size={16} color="var(--primary)" /> Populate Default Prompts
-          </button>
-          <button
-            className="btn-primary create-prompt-btn"
-            type="button"
-            onClick={onCreate}
-          >
-            <Icon name="Plus" weight="bold" size={16} color="currentColor" /> Create New Prompt
-          </button>
+          {onPopulateDefaults && (
+            <button
+              className="btn-secondary"
+              type="button"
+              onClick={onPopulateDefaults}
+              disabled={loading}
+            >
+              <Icon name="Target" weight="duotone" size={16} color="var(--primary)" /> Populate Default Prompts
+            </button>
+          )}
+          {onCreate && (
+            <button
+              className="btn-primary create-prompt-btn"
+              type="button"
+              onClick={onCreate}
+            >
+              <Icon name="Plus" weight="bold" size={16} color="currentColor" /> Create New Prompt
+            </button>
+          )}
         </div>
       </div>
 
@@ -222,18 +425,19 @@ export default function PromptLibraryPanel({
         */
         <div className="plib-empty" data-testid="plib-empty">
           <Icon name="Sparkle" weight="duotone" size={40} color="var(--muted)" />
-          <h3>No prompts yet</h3>
-          <p>
-            A summary prompt is what Workie says after a round. Until one exists, every session
-            of every engagement type falls back to the shipped default for its type.
-          </p>
+          <h3>{emptyHeading}</h3>
+          <p>{emptyBody}</p>
           <div className="plib-paths">
-            <button type="button" className="btn-primary" onClick={onCreate}>
-              <Icon name="Plus" weight="bold" size={16} color="currentColor" /> Write one
-            </button>
-            <button type="button" className="btn-secondary" onClick={onPopulateDefaults}>
-              <Icon name="Target" weight="duotone" size={16} color="var(--primary)" /> Install the shipped defaults
-            </button>
+            {onCreate && (
+              <button type="button" className="btn-primary" onClick={onCreate}>
+                <Icon name="Plus" weight="bold" size={16} color="currentColor" /> Write one
+              </button>
+            )}
+            {onPopulateDefaults && (
+              <button type="button" className="btn-secondary" onClick={onPopulateDefaults}>
+                <Icon name="Target" weight="duotone" size={16} color="var(--primary)" /> Install the shipped defaults
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -281,7 +485,7 @@ export default function PromptLibraryPanel({
             <tr>
               <th className="plib-col-name">Prompt</th>
               <th className="plib-col-type">Type</th>
-              <th className="plib-col-cat">Category</th>
+              <th className="plib-col-cat">{categoryHeading}</th>
               <th className="plib-col-state">State</th>
               <th className="plib-col-acts" />
             </tr>
@@ -305,12 +509,16 @@ export default function PromptLibraryPanel({
                     {gameTypeLabel(prompt.gameType)}
                   </span>
                 </td>
-                <td className="plib-cat">{prompt.category || '—'}</td>
+                <td className="plib-cat">
+                  {prompt[categoryKey] ? catLabel(prompt[categoryKey]) : '—'}
+                </td>
                 <td>
                   <div className="plib-states">
-                    <span className={`plib-chip ${statusChipClass(prompt.status)}`}>
-                      {STATUS_LABEL[prompt.status] || prompt.status || 'Draft'}
-                    </span>
+                    <StatusChip
+                      prompt={prompt}
+                      onToggleStatus={onToggleStatus}
+                      busy={Boolean(prompt.promptId) && prompt.promptId === busyPromptId}
+                    />
                     {prompt.isDefault && (
                       <span
                         className="plib-chip plib-chip--warn"
@@ -322,7 +530,7 @@ export default function PromptLibraryPanel({
                     {/* A generation-format prompt attached to a question set
                         does nothing at runtime — the summary engine rejects it
                         and silently uses the game-type default. */}
-                    {prompt.summaryPromptStatus === 'unusable' && (
+                    {flagSummaryUsability && prompt.summaryPromptStatus === 'unusable' && (
                       <span
                         className="plib-chip plib-chip--bad"
                         title={`Cannot be used as a summary prompt: ${prompt.summaryPromptDefect || 'wrong format'}`}
@@ -342,30 +550,80 @@ export default function PromptLibraryPanel({
                 </td>
                 <td>
                   <div className="plib-rowact">
-                    <button
-                      type="button"
-                      className="plib-btn"
-                      onClick={() => onEdit && onEdit(prompt)}
-                      title="Edit this prompt"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="plib-btn"
-                      onClick={() => onAdvise && onAdvise(prompt)}
-                      title="Ask the AI advisor about this prompt"
-                    >
-                      Advisor
-                    </button>
-                    <button
-                      type="button"
-                      className="plib-btn plib-btn--ghostdanger"
-                      onClick={() => onDelete && onDelete(prompt.promptId)}
-                      title="Archive this prompt"
-                    >
-                      Archive
-                    </button>
+                    {onEdit && (
+                      <button
+                        type="button"
+                        className="plib-btn"
+                        onClick={() => onEdit(prompt)}
+                        title="Edit this prompt"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {onAdvise && (
+                      <button
+                        type="button"
+                        className="plib-btn"
+                        onClick={() => onAdvise(prompt)}
+                        title="Ask the AI advisor about this prompt"
+                      >
+                        Advisor
+                      </button>
+                    )}
+                    {/*
+                      TWO DIFFERENT ARCHIVES, AND THIS ROW USED TO NAME THE
+                      WRONG ONE.
+
+                      The owner, having pressed the button below expecting a
+                      copy: *"the new archive button in the prompts admin list
+                      shouldnt take it out of the list, it should just put a
+                      copy in the archive"*.
+
+                      They are two unrelated things that were sharing one word:
+
+                        COPY TO ARCHIVE  POST admin/export-to-archive. Writes a
+                                         copy into the SHARED cross-tier archive
+                                         (engage2-archive) so another tier can
+                                         import it. The prompt is not touched:
+                                         same status, same row, still in the
+                                         list. This is the one that was missing
+                                         from the row and only existed on the
+                                         Archive panel, behind a checkbox list.
+
+                        RETIRE           DELETE admin/ai-prompts/{id}. A soft
+                                         delete that stamps `archivedAt`, sets
+                                         the status to `archived` and drops the
+                                         row out of every default filter.
+                                         Nothing is copied anywhere.
+
+                      The second one was labelled "Archive", so the button that
+                      REMOVED a prompt was the one whose name promised to keep
+                      it. Renamed to "Retire", which is the word the archive
+                      confirmation dialog already uses in its own copy.
+                    */}
+                    {onCopyToArchive && (
+                      <button
+                        type="button"
+                        className="plib-btn"
+                        onClick={() => onCopyToArchive(prompt)}
+                        disabled={copyingPromptId === prompt.promptId}
+                        data-testid={`plib-copy-archive-${prompt.promptId}`}
+                        title="Put a copy of this prompt in the shared archive, so another environment can import it. This prompt stays exactly as it is."
+                      >
+                        {copyingPromptId === prompt.promptId ? 'Copying…' : 'Copy to archive'}
+                      </button>
+                    )}
+                    {onDelete && (
+                      <button
+                        type="button"
+                        className="plib-btn plib-btn--ghostdanger"
+                        onClick={() => onDelete(prompt.promptId)}
+                        data-testid={`plib-retire-${prompt.promptId}`}
+                        title="Retire this prompt: it stops being offered and leaves this list. It is not copied to the archive."
+                      >
+                        Retire
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>

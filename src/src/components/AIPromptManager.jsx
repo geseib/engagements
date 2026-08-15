@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import './AIPromptManager.css';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType } from '../config/gameTypes';
@@ -8,6 +8,8 @@ import {
   extractBracketDirections,
 } from '../config/templateVariables';
 import Icon from './Icon';
+import Modal from './Modal';
+import StatusMessage from './StatusMessage';
 import PromptVariableInspector, { DEFAULT_ROOM_SIZE } from './PromptVariableInspector';
 import PromptAssembledPreview from './PromptAssembledPreview';
 import PromptPreflightPanel, { blocksSave } from './PromptPreflightPanel';
@@ -169,6 +171,44 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
 
   const [tagInput, setTagInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  /**
+   * WHAT WENT WRONG, ON THE SURFACE THE PERSON IS LOOKING AT.
+   *
+   * These three were `alert()`. An alert states the severity ("Failed to
+   * update prompt: …"), blocks the whole window, and leaves nothing behind
+   * when it is dismissed — so a failed save looked exactly like a save that
+   * had not been pressed yet, and the only record of it was in the console.
+   * The banner lives in the footer, beside the button that failed, and stays
+   * until the next attempt.
+   */
+  const [notice, setNotice] = useState('');
+
+  /**
+   * THE ONE WAY OUT, AND WHAT IT COSTS.
+   *
+   * Commit `4fd425d6` is the worked example: a dialog whose exits do not all
+   * route through one `requestClose` ends up with a Cancel that silently bins
+   * an afternoon's work and an X that does something else. This form is the
+   * tallest in the product, so "did I lose it?" is the expensive question.
+   *
+   * Dirty is measured against the working copy this editor OPENED with, not
+   * against a flag set by each handler — a flag has to be set in every place
+   * that writes, and `handleGenerateWithAI` and `insertVariable` both write.
+   */
+  const openedWith = useRef(null);
+  if (openedWith.current === null) openedWith.current = JSON.stringify(formData);
+  const isDirty = JSON.stringify(formData) !== openedWith.current;
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+
+  const requestClose = useCallback(() => {
+    if (!onCancel) return;
+    if (isDirty) {
+      setConfirmDiscard(true);
+      return;
+    }
+    onCancel();
+  }, [onCancel, isDirty]);
   /**
    * One textarea per half, and the half a click currently aims at.
    *
@@ -345,6 +385,7 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
     // save ships anyway. This is the gate.
     if (saveBlocked) return;
     setIsSaving(true);
+    setNotice('');
 
     try {
       const endpoint = isNew 
@@ -369,7 +410,12 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
       onSave(result);
     } catch (error) {
       console.error('Error saving prompt:', error);
-      alert(`Failed to ${isNew ? 'create' : 'update'} prompt: ${error.message}`);
+      // The consequence, not the severity: nothing was written, and the words
+      // on screen are the only copy of them.
+      setNotice(
+        `Nothing was saved — the ${isNew ? 'create' : 'update'} was refused (${error.message}). `
+        + 'Your text is still in this form and nowhere else; leave the dialog open and try again.'
+      );
     } finally {
       setIsSaving(false);
     }
@@ -389,11 +435,12 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
   // Magic wand AI generation handler
   const handleGenerateWithAI = async () => {
     if (!formData.gameType) {
-      alert('Please select a game type first');
+      setNotice('Please select an engagement type first — the generator writes against that type\'s variables, and with none chosen it has no list to write from.');
       return;
     }
 
     setIsGeneratingWithAI(true);
+    setNotice('');
     
     // Save current values for revert functionality
     setSavedInstructions(formData.instructions);
@@ -443,7 +490,9 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
 
     } catch (error) {
       console.error('Error generating AI prompt:', error);
-      alert('Failed to generate AI prompt: ' + error.message);
+      // Nothing in the form was touched, which is the fact worth stating: the
+      // old alert read like the generation had half-happened.
+      setNotice(`The generator wrote nothing (${error.message}). Both halves are exactly as you left them.`);
     } finally {
       setIsGeneratingWithAI(false);
     }
@@ -463,13 +512,39 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
   };
 
   return (
-    <div className="prompt-editor-overlay">
-      <div className="prompt-editor-modal">
-        <div className="prompt-editor-header">
-          <h2>{isNew ? 'Create New AI Prompt' : 'Edit AI Prompt'}</h2>
-          <button className="close-btn" onClick={onCancel}>×</button>
+    /*
+      THROUGH THE PRIMITIVE, NOT A HAND-ROLLED OVERLAY.
+      This was a bare `<div className="prompt-editor-overlay">`: no Escape, no
+      focus trap, no scroll lock, no `role="dialog"` and no accessible name —
+      on the tallest form in the product, where the page behind it scrolled
+      under your cursor while you typed. `Modal` owns all five.
+
+      `closeOnBackdrop={false}` and `closeOnEscape={() => !isDirty}` are the
+      same pair `QuestionSetEditor`'s container uses: a stray tap or a reflexive
+      Escape must not bin a half-written prompt. They are not a substitute for
+      an exit — there are two, the × and the Cancel, and both go through
+      `requestClose`.
+    */
+    <Modal
+      overlayClassName="pmgr-scrim"
+      contentClassName="pmgr-modal pmgr-modal--wide"
+      onClose={requestClose}
+      closeOnBackdrop={false}
+      closeOnEscape={() => !isDirty}
+      labelledBy="pmgr-editor-title"
+    >
+        <div className="pmgr-modal-head">
+          <h2 id="pmgr-editor-title">{isNew ? 'Create New AI Prompt' : 'Edit AI Prompt'}</h2>
+          <button
+            type="button"
+            className="pmgr-x"
+            onClick={requestClose}
+            aria-label="Close the prompt editor"
+          >
+            ×
+          </button>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="prompt-editor-form">
           <div className="form-group">
             <label>Prompt Name *</label>
@@ -865,7 +940,19 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
                 {report.blocking.length === 1 ? 'finding' : 'findings'} above.
               </p>
             )}
-            <button type="button" className="btn-secondary" onClick={onCancel}>
+            {notice && (
+              <div className="pmgr-notice" data-testid="pmgr-editor-notice">
+                <StatusMessage message={notice} tone="error" />
+              </div>
+            )}
+            {/* The bottom exit. Same handler as the ×, so there is no second
+                way out that skips the confirmation. */}
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={requestClose}
+              data-testid="pmgr-editor-cancel"
+            >
               Cancel
             </button>
             <button type="submit" className="btn-primary" disabled={isSaving || saveBlocked}>
@@ -873,8 +960,52 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+
+        {/*
+          CLOSING WITH AN UNSAVED WORKING COPY.
+
+          Rendered INSIDE this dialog's own scrim on purpose: `Modal` picks the
+          topmost dialog by DOM containment, so Escape here means "go back and
+          keep them" — the safe half of the choice — and cannot fall through to
+          the close it is guarding.
+        */}
+        {confirmDiscard && (
+          <Modal
+            overlayClassName="modal-overlay"
+            contentClassName="modal-content"
+            labelledBy="pmgr-discard-title"
+            onClose={() => setConfirmDiscard(false)}
+          >
+            <h3 id="pmgr-discard-title">
+              <Icon name="Warning" weight="fill" size={16} color="var(--primary)" />{' '}
+              This prompt has never been saved
+            </h3>
+            <p>
+              Everything typed into this form &mdash; both halves, the tags, the default
+              flag &mdash; exists in this browser tab and nowhere else. Closing throws it
+              away; there is no draft kept anywhere and no undo.
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setConfirmDiscard(false)}
+                data-testid="pmgr-discard-keep"
+              >
+                Go back and keep writing
+              </button>
+              <button
+                type="button"
+                className="btn-danger"
+                onClick={() => { setConfirmDiscard(false); onCancel(); }}
+                data-testid="pmgr-discard-confirm"
+              >
+                Close and lose what I typed
+              </button>
+            </div>
+          </Modal>
+        )}
+    </Modal>
   );
 }
 
@@ -883,6 +1014,7 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
   const [analysisType, setAnalysisType] = useState('improve');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState(null);
+  const [notice, setNotice] = useState('');
 
   const analysisTypes = [
     { value: 'improve', label: 'Improve Prompt', icon: 'Sparkle' },
@@ -893,6 +1025,7 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
   const runAnalysis = async () => {
     setIsAnalyzing(true);
     setAnalysis(null);
+    setNotice('');
 
     try {
       const response = await authFetch(`${API_BASE}admin/ai-prompt-advisor`, {
@@ -917,21 +1050,43 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
       setAnalysis(result.analysis);
     } catch (error) {
       console.error('Error analyzing prompt:', error);
-      alert('Failed to analyze prompt: ' + error.message);
+      // Nothing was changed and nothing was stored: the prompt is exactly as it
+      // was, and this reading simply did not happen.
+      setNotice(`No analysis was produced (${error.message}). The prompt itself is untouched — nothing here writes to it.`);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
   return (
-    <div className="prompt-advisor-overlay">
-      <div className="prompt-advisor-modal">
-        <div className="prompt-advisor-header">
-          <h2><Icon name="MagicWand" weight="duotone" size={16} color="var(--primary)" /> AI Prompt Advisor</h2>
-          <button className="close-btn" onClick={onClose}>×</button>
+    /*
+      THROUGH THE PRIMITIVE, for the same five reasons as the editor. The
+      backdrop is inert because an analysis takes a model call and several
+      seconds, and a stray click on the darkened page behind it threw the
+      result away with no way to get it back except paying for it again.
+    */
+    <Modal
+      overlayClassName="pmgr-scrim"
+      contentClassName="pmgr-modal"
+      onClose={onClose}
+      closeOnBackdrop={false}
+      labelledBy="pmgr-advisor-title"
+    >
+        <div className="pmgr-modal-head">
+          <h2 id="pmgr-advisor-title">
+            <Icon name="MagicWand" weight="duotone" size={16} color="var(--primary)" /> AI Prompt Advisor
+          </h2>
+          <button
+            type="button"
+            className="pmgr-x"
+            onClick={onClose}
+            aria-label="Close the prompt advisor"
+          >
+            ×
+          </button>
         </div>
 
-        <div className="prompt-advisor-content">
+        <div className="pmgr-advisor-body" data-testid="pmgr-advisor-body">
           <div className="prompt-info">
             <h3>{prompt.name}</h3>
             <div className="prompt-meta">
@@ -955,13 +1110,19 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
             ))}
           </div>
 
-          <button 
+          <button
             className="btn-primary analyze-btn"
             onClick={runAnalysis}
             disabled={isAnalyzing}
           >
             {isAnalyzing ? 'Analyzing...' : 'Run Analysis'}
           </button>
+
+          {notice && (
+            <div className="pmgr-notice" data-testid="pmgr-advisor-notice">
+              <StatusMessage message={notice} tone="error" />
+            </div>
+          )}
 
           {analysis && (
             <div className="analysis-results">
@@ -1081,8 +1242,31 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
             </div>
           )}
         </div>
-      </div>
-    </div>
+
+        {/*
+          THE BOTTOM EXIT THE ADVISOR NEVER HAD.
+
+          It had an × in the header and nothing else. An `improve` analysis
+          renders an improved prompt, a score, strengths, improvements,
+          alternative approaches and recommendations — several screens of it —
+          and the only way out was above all of them. Commit `4fd425d6` is the
+          same report about the set editor: a person who has finished reading
+          DOWN should not have to scroll back UP to leave.
+
+          It sits OUTSIDE the scrolling body, so it is on screen at every scroll
+          position rather than only at the end.
+        */}
+        <div className="form-actions">
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={onClose}
+            data-testid="pmgr-advisor-close"
+          >
+            Close
+          </button>
+        </div>
+    </Modal>
   );
 }
 
@@ -1109,12 +1293,37 @@ function AIPromptManager() {
   const [isCreating, setIsCreating] = useState(false);
   const [advisorPrompt, setAdvisorPrompt] = useState(null);
 
+  /*
+    THE FIVE `alert()`s AND TWO `window.confirm()`s THIS SCREEN USED TO RUN.
+
+    An `alert` is not a report. It blocks the window, states the severity
+    rather than the consequence, and leaves nothing behind — so "Failed to
+    load prompts" was dismissed into the library's "No prompts yet" poster,
+    which is the empty state that lies: an outage rendered as an empty
+    collection, with a Create button as the suggested next step.
+
+    `window.confirm` is worse for the two destructive paths, because its text
+    is one line with no formatting and no room to say WHAT breaks — so both
+    read "Are you sure?" and neither named the prompt, the sets pinned to it,
+    or the default it was about to demote.
+  */
+  const [notice, setNotice] = useState('');
+  const [pendingArchive, setPendingArchive] = useState(null);
+  /** The promptId whose copy-to-archive round trip is in flight, or null. */
+  const [copyingToArchiveId, setCopyingToArchiveId] = useState(null);
+  const [confirmPopulate, setConfirmPopulate] = useState(false);
+  /** The prompt whose status round trip is in flight, and the one default whose
+   *  deactivation is waiting to be confirmed. See the two blocks below. */
+  const [togglingId, setTogglingId] = useState(null);
+  const [pendingDraft, setPendingDraft] = useState(null);
+
   useEffect(() => {
     fetchPrompts();
   }, []);
 
   const fetchPrompts = async () => {
     setIsLoading(true);
+    setNotice('');
     try {
       const response = await authFetch(`${API_BASE}admin/ai-prompts?includeContent=true`);
       if (!response.ok) {
@@ -1136,16 +1345,90 @@ function AIPromptManager() {
       setPrompts(transformedPrompts);
     } catch (error) {
       console.error('Error fetching prompts:', error);
-      alert('Failed to load prompts: ' + error.message);
+      /*
+        THE LIST BELOW IS NOT EMPTY, IT IS UNKNOWN, and the banner has to say
+        so because the panel cannot: `PromptLibraryPanel` decides between its
+        two empty states from `prompts.length` and `loading` alone, so a failed
+        fetch renders "No prompts yet — create your first one", which is the
+        empty state that lies. Naming the outage above it is the part this
+        component can fix without touching that file (AUDIT §6.2 item 9 owns it).
+      */
+      setNotice(
+        `The prompt list could not be loaded (${error.message}). `
+        + 'Anything shown below is stale or empty because of that, not because there are no prompts — '
+        + 'do not create a replacement for something you cannot see.'
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDeletePrompt = async (promptId) => {
-    if (!window.confirm('Are you sure you want to archive this prompt?')) {
-      return;
+  /** The record behind the id the row hands back, for the dialog's copy. */
+  const archiveTarget = pendingArchive
+    ? prompts.find((p) => p.promptId === pendingArchive) || null
+    : null;
+
+  const handleDeletePrompt = (promptId) => setPendingArchive(promptId);
+
+  /**
+   * PUT A COPY IN THE SHARED ARCHIVE. The prompt is not changed and does not
+   * leave the list.
+   *
+   * This is `POST admin/export-to-archive` — the same route the Archive panel's
+   * checkbox-and-export flow uses, with one id in the array — and it is a
+   * DIFFERENT OPERATION from the row's Retire button next to it. See the note
+   * on the row buttons in PromptLibraryPanel.jsx for why both now exist and why
+   * the names changed.
+   *
+   * REPORTS THE PER-ITEM FAILURE, NOT JUST THE HTTP STATUS. `export-to-archive`
+   * answers 200 with `{ results: { successful, failed } }`, so an export that
+   * archived nothing still arrives as a success. That is exactly how the
+   * question-set export reported "export completed, 0 items exported" for a
+   * whole afternoon. The per-item `error` string is the one worth showing —
+   * for the em-dash failure it names the character and the code point.
+   *
+   * NO REFETCH. Nothing about the prompt changed, so re-reading the list would
+   * only make the screen flicker to prove it.
+   */
+  const copyPromptToArchive = async (prompt) => {
+    const promptId = prompt?.promptId;
+    if (!promptId) return;
+    setCopyingToArchiveId(promptId);
+    setNotice('');
+    try {
+      const response = await authFetch(`${API_BASE}admin/export-to-archive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selectedItems: [promptId], exportType: 'prompts' }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setNotice(`“${prompt.name}” was not copied to the archive: ${result.error || `HTTP ${response.status}`}. It is unchanged and still in this list.`);
+        return;
+      }
+      const failed = result?.results?.failed || [];
+      const succeeded = result?.results?.successful || [];
+      if (failed.length > 0) {
+        setNotice(`“${prompt.name}” was not copied to the archive: ${failed[0].error || 'the archive service refused it'} It is unchanged and still in this list.`);
+        return;
+      }
+      if (succeeded.length === 0) {
+        // 200 with neither list populated. Says so rather than claiming a copy
+        // that nothing in the response evidences.
+        setNotice(`The archive reported no error and no copy for “${prompt.name}”. Check the Archive tab before relying on it.`);
+        return;
+      }
+      setNotice(`“${prompt.name}” was copied to the shared archive. It is unchanged and still in this list.`);
+    } catch (error) {
+      setNotice(`“${prompt.name}” was not copied to the archive: ${error.message}. It is unchanged and still in this list.`);
+    } finally {
+      setCopyingToArchiveId(null);
     }
+  };
+
+  const archivePrompt = async (promptId) => {
+    setPendingArchive(null);
+    setNotice('');
 
     try {
       const response = await authFetch(`${API_BASE}admin/ai-prompts/${promptId}`, {
@@ -1159,8 +1442,79 @@ function AIPromptManager() {
       await fetchPrompts();
     } catch (error) {
       console.error('Error deleting prompt:', error);
-      alert('Failed to delete prompt: ' + error.message);
+      setNotice(`That prompt was not retired (${error.message}). It is still active and still in the list.`);
     }
+  };
+
+  /*
+    ACTIVATE / DEACTIVATE FROM THE LIST.
+
+    The owner asked for the question-set list's behaviour: click the status chip
+    and it changes. `AdminPage.handleToggleActive` is the arrangement copied
+    here, including the bit that is easy to get wrong — the local row is updated
+    AFTER the response, never optimistically. An optimistic flip that has to be
+    put back on failure spends the moment of the failure showing the wrong
+    answer, which on a screen about what the AI says to a room is exactly the
+    wrong place to be approximate.
+
+    ONE FIELD IS SENT. `PUT /admin/ai-prompts/{id}` treats `undefined` as "leave
+    alone" for every field, so `{ status }` moves the status and touches nothing
+    else — no name, no halves, no isDefault, no questionSetIds. That is also
+    what makes the S3 guard in that handler necessary; see its header.
+  */
+  const applyStatus = async (prompt, status) => {
+    setTogglingId(prompt.promptId);
+    setNotice('');
+
+    try {
+      const response = await authFetch(`${API_BASE}admin/ai-prompts/${prompt.promptId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.message || detail?.error || `HTTP ${response.status}`);
+      }
+
+      setPrompts((prev) => prev.map(
+        (p) => (p.promptId === prompt.promptId ? { ...p, status } : p)
+      ));
+    } catch (error) {
+      console.error('Error changing prompt status:', error);
+      // The consequence, not the severity: the row on screen is what is stored,
+      // because it was never moved. Nobody has to reload to find out.
+      setNotice(
+        `“${prompt.name}” was not changed (${error.message}). It is still `
+        + `${prompt.status === 'active' ? 'Active' : 'a Draft'}, which is what the row still says.`
+      );
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  /*
+    DEACTIVATING THE DEFAULT IS THE ONE CASE THAT NEEDS A SENTENCE FIRST — and
+    what it needs saying is the OPPOSITE of the obvious fear.
+
+    `findDefaultPromptId` (get-ai-summary.js:326-345) selects on `isDefault`
+    alone and never reads `status`. So a default set to Draft KEEPS RUNNING for
+    every set of its engagement type that has no prompt of its own. Drafting it
+    does exactly one thing: `AdminPage.js:238` filters the per-set prompt picker
+    to `status === 'active'`, so it stops being offered there.
+
+    That is a row that will read "Draft" while still being what the room hears,
+    and a screen that says the opposite of what the engine does is worth one
+    dialog. It is a WARNING, not a refusal: nothing breaks, and the honest exit
+    — make another prompt the default — is named rather than implied.
+  */
+  const handleToggleStatus = (prompt, status) => {
+    if (status === 'draft' && prompt.isDefault) {
+      setPendingDraft(prompt);
+      return;
+    }
+    applyStatus(prompt, status);
   };
 
   const handleSavePrompt = async (result) => {
@@ -1179,10 +1533,11 @@ function AIPromptManager() {
     }
   };
 
-  const handlePopulateDefaults = async () => {
-    if (!window.confirm('This will create default AI prompts for all categories. Existing prompts will be overwritten. Continue?')) {
-      return;
-    }
+  const handlePopulateDefaults = () => setConfirmPopulate(true);
+
+  const populateDefaults = async () => {
+    setConfirmPopulate(false);
+    setNotice('');
 
     try {
       setIsLoading(true);
@@ -1209,28 +1564,44 @@ function AIPromptManager() {
         if (skipped > 0) message += `${skipped} prompts were skipped. `;
         if (errors > 0) message += `${errors} errors occurred. `;
         
-        alert(message.trim());
-        await fetchPrompts(); // Refresh the list
+        await fetchPrompts(); // Refresh the list, which clears `notice`…
+        setNotice(message.trim()); // …so the outcome is set after it.
       } else {
         throw new Error(result.message || 'Unknown error');
       }
     } catch (error) {
       console.error('Error populating defaults:', error);
-      alert('Failed to populate default prompts: ' + error.message);
+      setNotice(
+        `The default prompts were not written (${error.message}). `
+        + 'Whether any of them landed before it stopped is not reported by the endpoint — reload and read the list before running it again.'
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="ai-prompt-manager">
-      <div className="prompt-manager-header">
+    /*
+      `.pmgr` IS THE SCOPE CLASS, and it replaced `.ai-prompt-manager` in the
+      same change as the stylesheet. Every selector in AIPromptManager.css is
+      now rooted at one of seven scope classes instead of declaring `.tag`,
+      `.form-group`, `.btn-primary` and thirty more at the whole application —
+      see that file's header, and __tests__/promptManagerScope.test.js.
+    */
+    <div className="pmgr">
+      <div className="pmgr-header">
         <h2><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI Prompt Management</h2>
-        <p className="section-description">
+        <p className="pmgr-lede">
           A summary prompt is what Workie says after a round. Each engagement type has one default;
           a question set can pin its own.
         </p>
       </div>
+
+      {notice && (
+        <div className="pmgr-status" data-testid="pmgr-notice">
+          <StatusMessage message={notice} />
+        </div>
+      )}
 
       {/*
         THE LIST IS A PURE COMPONENT NOW. Everything it decides — filtering,
@@ -1255,6 +1626,10 @@ function AIPromptManager() {
         onDelete={handleDeletePrompt}
         onCreate={() => setIsCreating(true)}
         onPopulateDefaults={handlePopulateDefaults}
+        onToggleStatus={handleToggleStatus}
+        busyPromptId={togglingId}
+        onCopyToArchive={copyPromptToArchive}
+        copyingPromptId={copyingToArchiveId}
       />
 
       {(editingPrompt || isCreating) && (
@@ -1275,6 +1650,229 @@ function AIPromptManager() {
           onClose={() => setAdvisorPrompt(null)}
           onApplyImprovedPrompt={handleApplyImprovedPrompt}
         />
+      )}
+
+      {/*
+        RETIRE A PROMPT.
+
+        Was `window.confirm('Are you sure you want to archive this prompt?')`,
+        which named neither the prompt nor anything that depends on it. The
+        three facts that decide this are all in hand before the click: whether
+        it is the default for its engagement type, how many question sets pin
+        it, and that Draft does the same job reversibly. RATIONALE §8: state
+        the consequence, count before you ask, and offer the reversible
+        neighbour.
+
+        SAYS "RETIRE" THROUGHOUT NOW, because "archive" was two things. The row
+        next to this one puts a COPY in the shared cross-tier archive and leaves
+        the prompt alone; this takes the prompt out of the list and copies it
+        nowhere. Sharing the word made the destructive one sound like the
+        preserving one, which is how it got pressed by mistake. The `pmgr-
+        archive-*` test ids are left alone deliberately — they are handles, not
+        copy, and renaming them would churn every test for no reader's benefit.
+      */}
+      {archiveTarget && (
+        <Modal
+          overlayClassName="modal-overlay"
+          contentClassName="modal-content"
+          labelledBy="pmgr-archive-title"
+          onClose={() => setPendingArchive(null)}
+        >
+          <h3 id="pmgr-archive-title">Retire “{archiveTarget.name}”?</h3>
+          <p>
+            Retiring takes it out of the pickers and out of this list. It is not deleted
+            &mdash; the record and its text stay, and it can be set back to Active from the
+            editor. It is <strong>not</strong> copied to the shared archive; that is the
+            &ldquo;Copy to archive&rdquo; button next to it, which leaves the prompt alone.
+          </p>
+          {archiveTarget.isDefault && (
+            /*
+              WHAT RETIRING A DEFAULT ACTUALLY DOES, which is not what this
+              paragraph used to claim.
+
+              It said retiring left the engagement type "with no default at
+              all, so every set of that type gets no summary". That is false,
+              and it is false in the direction that matters: `findDefaultPromptId`
+              (lambda-functions/game/get-ai-summary.js:326-345) selects on
+              `isDefault === true` and NEVER READS `status`. A retired default
+              keeps resolving and keeps running, word for word, in every room.
+
+              So the hazard is not an outage, it is a screen that lies: the
+              prompt reads as retired while the rooms still hear it. Told
+              plainly, with the one real effect (AdminPage.jsx:238 filters the
+              per-set picker to `status === 'active'`) and the actual exit.
+            */
+            <p data-testid="pmgr-archive-default">
+              <strong>
+                This is the default{' '}
+                {GAME_TYPE_LABELS[normalizeGameType(archiveTarget.gameType)] || ''} summary prompt,
+                and retiring it does not stop it running.
+              </strong>{' '}
+              The summary engine picks the default by its default flag and never looks at its
+              status, so every set of that type without a prompt of its own keeps getting this
+              one &mdash; it just stops being offered when you attach a prompt to a set. To
+              actually replace it, make another prompt of this type the default; that demotes
+              this one in the same save.
+            </p>
+          )}
+          {archiveTarget.questionSetIds && archiveTarget.questionSetIds.length > 0 && (
+            <p data-testid="pmgr-archive-pinned">
+              <strong>
+                {archiveTarget.questionSetIds.length}{' '}
+                {archiveTarget.questionSetIds.length === 1 ? 'question set pins' : 'question sets pin'}{' '}
+                this prompt.
+              </strong>{' '}
+              Those sets keep pointing at it, and what they get after this is decided by the
+              summary engine, not by this screen.
+            </p>
+          )}
+          <p>
+            If the aim is only to stop hosts choosing it, <strong>Draft</strong> does that and
+            reads as a work in progress rather than a retirement.
+          </p>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                const target = archiveTarget;
+                setPendingArchive(null);
+                setEditingPrompt(target);
+              }}
+              data-testid="pmgr-archive-draft"
+            >
+              Open it and set Draft instead
+            </button>
+            <button
+              type="button"
+              className="btn-danger"
+              onClick={() => archivePrompt(archiveTarget.promptId)}
+              data-testid="pmgr-archive-confirm"
+            >
+              Retire it
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/*
+        DEACTIVATE THE DEFAULT.
+
+        RATIONALE §8: state the consequence, not the severity. The consequence
+        here is unusual enough to be worth the dialog — the thing an admin
+        expects Draft to do to a default is the one thing it does NOT do. See
+        `handleToggleStatus` for the two file:line references this copy is
+        derived from; if either changes, this text is wrong and has to move
+        with it.
+
+        No confirmation on the way back to Active, and none on any non-default
+        prompt: those do what they look like they do.
+      */}
+      {pendingDraft && (
+        <Modal
+          overlayClassName="modal-overlay"
+          contentClassName="modal-content"
+          labelledBy="pmgr-draft-title"
+          onClose={() => setPendingDraft(null)}
+        >
+          <h3 id="pmgr-draft-title">Set “{pendingDraft.name}” to Draft?</h3>
+          <p data-testid="pmgr-draft-still-runs">
+            <strong>
+              This is the default{' '}
+              {GAME_TYPE_LABELS[normalizeGameType(pendingDraft.gameType)] || ''} summary prompt, and
+              Draft does not stop it running.
+            </strong>{' '}
+            The summary engine picks the default by its default flag alone and never looks at
+            status, so every{' '}
+            {GAME_TYPE_LABELS[normalizeGameType(pendingDraft.gameType)] || 'session'} set without a
+            prompt of its own keeps getting this one, word for word.
+          </p>
+          <p>
+            What changes is the picker: a question set choosing a prompt is only offered Active
+            ones, so this stops appearing there. The row will read Draft while the rooms keep
+            hearing it.
+          </p>
+          <p>
+            To actually retire it, open another prompt of this engagement type and make{' '}
+            <strong>that</strong> one the default — the same save demotes this one.
+          </p>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setPendingDraft(null)}
+              data-testid="pmgr-draft-cancel"
+            >
+              Leave it Active
+            </button>
+            <button
+              type="button"
+              className="btn-danger"
+              onClick={() => {
+                const target = pendingDraft;
+                setPendingDraft(null);
+                applyStatus(target, 'draft');
+              }}
+              data-testid="pmgr-draft-confirm"
+            >
+              Set it to Draft anyway
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/*
+        POPULATE DEFAULTS.
+
+        `populate-defaults.js:102` matches on `item.name === promptData.name`,
+        and this call sends `overwrite: true` — so the consequence is precise
+        and was worth writing down: same name, same id, different text. The old
+        one-liner said "Existing prompts will be overwritten", which reads as
+        "the ones I did not write".
+      */}
+      {confirmPopulate && (
+        <Modal
+          overlayClassName="modal-overlay"
+          contentClassName="modal-content"
+          labelledBy="pmgr-populate-title"
+          onClose={() => setConfirmPopulate(false)}
+        >
+          <h3 id="pmgr-populate-title">Rewrite the built-in prompts?</h3>
+          <p>
+            This writes the built-in prompt for every category. It matches on <strong>name</strong>:
+            any prompt here whose name matches a built-in is <strong>replaced by the built-in
+            text, keeping its id</strong> — so question sets pinned to it keep working and start
+            reading something different. Edits made to those prompts are not kept and there is
+            no undo.
+          </p>
+          <p>
+            One built-in per engagement type is flagged default, so whatever is default now is
+            demoted in the same run. Prompts you named anything else are untouched.
+          </p>
+          <p>
+            {prompts.length === 0
+              ? 'There are no prompts here yet, so this run can only create.'
+              : `${prompts.length} prompts exist here now. Which of them collide is decided by name inside the lambda and cannot be previewed from this screen.`}
+          </p>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setConfirmPopulate(false)}
+              data-testid="pmgr-populate-cancel"
+            >
+              Leave them as they are
+            </button>
+            <button
+              type="button"
+              className="btn-danger"
+              onClick={populateDefaults}
+              data-testid="pmgr-populate-confirm"
+            >
+              Write the built-in prompts
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );

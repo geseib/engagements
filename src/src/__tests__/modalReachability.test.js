@@ -50,6 +50,51 @@ function block(css, selector) {
 
 const overlay = () => block(GLOBAL_CSS, '.modal-overlay');
 
+/*
+ * NO COMPONENT STYLESHEET MAY REDECLARE THE GLOBAL SCRIM.
+ *
+ * THE FIFTH INSTANCE, and it hid from the very test written after the fourth.
+ * This file's header already says "reading only styles.css is how the fourth
+ * instance hid" — and then it read AIPromptManager.css for
+ * `.prompt-editor-overlay` ONLY. A verbatim redeclaration of `.modal-overlay`
+ * itself, in that same file, carrying the original broken shape
+ * (`align-items: center`, no `overflow-y`), was invisible to every assertion
+ * below, because they all read `GLOBAL_CSS`.
+ *
+ * It was inert only by luck: `index.jsx` imports `./App` before `./styles.css`,
+ * so the component sheet injects first and loses on equal specificity. Swapping
+ * two import lines would have re-broken every dialog in the product.
+ *
+ * So this asserts the ABSENCE of the global names anywhere but styles.css,
+ * rather than adding a sixth per-file check that the seventh instance would
+ * dodge in a file nobody remembered to list.
+ */
+describe('the global scrim is declared in exactly one place', () => {
+  const GLOBAL_NAMES = ['.modal-overlay', '.modal-content'];
+  const COMPONENT_CSS = fs.readdirSync(path.join(__dirname, '..', 'components'))
+    .filter((f) => f.endsWith('.css'))
+    .map((f) => ({ file: f, css: fs.readFileSync(path.join(__dirname, '..', 'components', f), 'utf8') }));
+
+  test('there is at least one component stylesheet to check', () => {
+    // rejects: the directory moving and this whole suite silently passing over
+    // an empty list, which is the shape a vacuous guard takes.
+    expect(COMPONENT_CSS.length).toBeGreaterThan(5);
+  });
+
+  for (const name of GLOBAL_NAMES) {
+    // rejects: any component sheet re-declaring a selector styles.css owns.
+    // Scoped uses (`.foo .modal-overlay`) are fine and are not matched — only a
+    // rule whose selector STARTS with the global name at the top level.
+    test(`no component stylesheet redeclares ${name}`, () => {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const offenders = COMPONENT_CSS
+        .filter(({ css }) => new RegExp(`(^|\\})\\s*${escaped}\\s*(,[^{]*)?\\{`, 'm').test(css))
+        .map(({ file }) => file);
+      expect(offenders).toEqual([]);
+    });
+  }
+});
+
 describe('a dialog taller than the screen stays reachable', () => {
   // rejects: the exact shape of the reported bug — a fixed, full-viewport scrim
   //          that clips its overflow. Without a scroll container the part of the
@@ -128,26 +173,82 @@ describe('the setup panel body actually scrolls', () => {
  * Eleven field groups plus the variable inspector, the preflight panel and the
  * assembled preview — and its scrim carried the same `align-items: center` with
  * no overflow that trapped the question dialog. Its Save button is the first
- * thing past the fold, and unlike the others this overlay has no Escape handler
- * to fall back on: it does not use the Modal primitive at all.
+ * thing past the fold.
+ *
+ * The scrim was `.prompt-editor-overlay, .prompt-advisor-overlay`, two bare
+ * names in a stylesheet that also declared `.tag`, `.form-group` and
+ * `.btn-primary` at the whole application. It is `.pmgr-scrim` now — one
+ * scrim, one scope, shared by both dialogs — and both dialogs render through
+ * `Modal`, so the Escape this block's header used to say they lacked is now
+ * theirs too. `__tests__/promptManagerScope.test.js` pins the scope; this pins
+ * the geometry, which is the half jsdom cannot see.
  *
  * This block exists in this file rather than a new one because it is the same
  * bug, and because the reason it survived three previous fixes is that the
  * checks only ever read styles.css.
  */
 describe('the prompt editor scrim is reachable too', () => {
-  const scrim = () => block(AIPM_CSS, '.prompt-editor-overlay,\n.prompt-advisor-overlay');
+  const scrim = () => block(AIPM_CSS, '.pmgr-scrim');
+  const card = () => block(AIPM_CSS, '.pmgr-modal');
 
   // rejects: the fourth recurrence of the centred-overflow trap, in the one
-  //          place where the form is tallest and there is no Escape key.
+  //          place where the form is tallest.
   test('it scrolls and does not centre with the flex container', () => {
     expect(scrim()).toMatch(/overflow-y:\s*auto/);
     expect(scrim()).not.toMatch(/align-items:\s*center/);
+    expect(scrim()).toMatch(/align-items:\s*flex-start/);
+  });
+
+  // rejects: a scrim with no breathing room, so the last row of a scrolled
+  //          card reads as clipped even when it is fully scrollable.
+  test('the scrim has padding', () => {
+    expect(scrim()).toMatch(/padding:\s*\S+/);
   });
 
   // rejects: dropping the auto margin, which would jam every short prompt
   //          dialog against the top edge.
   test('the card still centres itself while it fits', () => {
-    expect(AIPM_CSS).toMatch(/\.prompt-(editor|advisor)-overlay\s*>\s*\*[^{]*\{[^}]*margin:\s*auto/);
+    expect(AIPM_CSS).toMatch(/\.pmgr-scrim\s*>\s*\*[^{]*\{[^}]*margin:\s*auto/);
+  });
+
+  // rejects: removing the card's height cap. Without it the card is as tall as
+  //          the form and the scrim's own scroll is the only one — which works,
+  //          but takes the header and the footer off screen with it, and the
+  //          footer is where both exits are.
+  test('the card is capped, in dvh as well as vh', () => {
+    /*
+      COMMENTS STRIPPED FIRST, and the first cut of this test needed it: the
+      rule carries a comment explaining `90vh`, so `indexOf('90vh')` found the
+      PROSE, which sits above both declarations — the order check passed no
+      matter which way round the declarations were, and a mutation that swapped
+      them survived. A guard that reads its own explanation is not a guard.
+    */
+    const declarations = card().replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(declarations).toMatch(/max-height:\s*90vh/);
+    // rejects: `vh` alone. On iOS `vh` is the LARGE viewport, measured as if
+    // the browser toolbars were hidden, so a 90vh card overflows the screen it
+    // is actually on. `dvh` must come SECOND to win where it is supported.
+    expect(declarations).toMatch(/max-height:\s*90dvh/);
+    expect(declarations.indexOf('90dvh')).toBeGreaterThan(declarations.indexOf('90vh'));
+  });
+
+  // rejects: the `.setup-panel__body` bug, one component over. The editor's
+  //          form and the advisor's body are `flex: 1; overflow-y: auto` inside
+  //          a column flex card; a flex item's default `min-height: auto`
+  //          resolves to content height, so without this the overflow never
+  //          exists for `overflow-y` to act on and the footer is pushed out of
+  //          the card entirely.
+  test('the scrolling body can be compressed below its content', () => {
+    const body = block(AIPM_CSS, '.pmgr .prompt-editor-form,\n.pmgr-advisor-body');
+    expect(body).toMatch(/min-height:\s*0/);
+    expect(body).toMatch(/overflow-y:\s*auto/);
+  });
+
+  // rejects: letting the header or the footer shrink instead. They are what
+  //          the flex algorithm compresses while the body refuses to, and the
+  //          footer holds the bottom exit both dialogs now have.
+  test('the head and the footer are not what gets compressed', () => {
+    expect(block(AIPM_CSS, '.pmgr-modal-head')).toMatch(/flex:\s*none/);
+    expect(block(AIPM_CSS, '.pmgr .form-actions')).toMatch(/flex:\s*none/);
   });
 });

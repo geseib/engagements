@@ -109,9 +109,9 @@ function hasPermission(groups, requiredGroups) {
 // the mirror of the `path === 'games'` decision below: prefix matching in this
 // function has already been the wrong tool once, in both directions.
 //
-// Not included, deliberately: toggle-question-set and toggle-quickstart (global
-// curation — which sets the whole product offers), the AI generation routes
-// (they spend Bedrock budget), download-question-set, and every version route.
+// Not included, deliberately: toggle-question-set (global curation — which sets
+// the whole product offers), the AI generation routes (they spend Bedrock
+// budget), download-question-set, and every version route.
 const HOST_ADMIN_ROUTES = new Set([
   // The list. Authenticated, and the only projection carrying ownership, so a
   // host can see which sets are theirs.
@@ -124,6 +124,36 @@ const HOST_ADMIN_ROUTES = new Set([
   'PUT admin/edit-question-set/{setId}',
   // Delete a set. Ownership checked in the handler.
   'DELETE admin/question-sets/{setId}',
+  // The set's images: mint presigned upload URLs, and report which questions
+  // point at a file that is not there. Both are ownership-guarded by
+  // `requireSetManager` in their handlers, exactly like the two above — a host
+  // who builds a set with artwork has to be able to put the artwork somewhere,
+  // and to be told when a question is pointing at nothing.
+  //
+  // STILL EXACT PAIRS. `admin/question-sets/{setId}/media` and
+  // `admin/question-sets/{setId}/media/uploads` are two entries because they
+  // are two routes; a prefix match here would additionally open every version
+  // route, which is the mistake this list's header exists to prevent.
+  'POST admin/question-sets/{setId}/media/uploads',
+  'GET admin/question-sets/{setId}/media',
+  // Put a set on the quickstart shelf, or take it off. Ownership-guarded by
+  // `requireSetManager` in the handler, exactly like the four above.
+  //
+  // THIS ONE WAS ON THE "NOT INCLUDED" LIST UNTIL NOW, and the reason it was
+  // there is still true: `QuickstartMenu.jsx:46` filters on
+  // `set.quickstart && set.active` with no ownership term, so a flagged set
+  // shows on EVERY host's quickstart menu. What changed is not the blast
+  // radius, it is the row guard — `toggle-quickstart.js` had no ownership
+  // check of any kind when it was excluded, so opening the gate then would
+  // have let any host flag any set. With the guard in place a host reaches the
+  // route and then reaches only sets they created, which is the same bargain
+  // edit and delete already make. Requested by the owner: "host question set
+  // lists, should allow quick starts easily marked by clicking a tag".
+  //
+  // `toggle-question-set` (active/inactive) is deliberately still absent. It
+  // was not asked for, and unlike quickstart it can take a set OUT of every
+  // picker rather than adding it to one shelf.
+  'POST admin/toggle-quickstart/{setId}',
 ]);
 
 // Which groups a route requires. `path` is the route path without a leading

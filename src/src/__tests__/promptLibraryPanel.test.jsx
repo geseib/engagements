@@ -20,7 +20,7 @@ import React from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
-import PromptLibraryPanel, { matchesPromptFilters } from '../components/PromptLibraryPanel';
+import PromptLibraryPanel, { matchesPromptFilters, nextStatusFor } from '../components/PromptLibraryPanel';
 
 const ALL = { search: '', gameType: 'all', category: 'all', status: 'all' };
 
@@ -40,9 +40,17 @@ const PROMPTS = [
   },
 ];
 
-/** Render with a controlled filter object, the way AIPromptManager does. */
+/**
+ * Render with a controlled filter object, the way AIPromptManager does — and
+ * with the full set of callbacks, because AIPromptManager passes all five. The
+ * panel draws a control only where its handler exists (design rule 2), so the
+ * defaults here are what makes this the SUMMARY library's arrangement; the
+ * generation library's narrower one is asserted in
+ * aiGenerationPromptEditor.test.jsx by omitting them.
+ */
 function mount(props = {}) {
   const onFilterChange = jest.fn();
+  const onToggleStatus = jest.fn();
   const utils = render(
     <PromptLibraryPanel
       prompts={PROMPTS}
@@ -54,10 +62,16 @@ function mount(props = {}) {
         { value: 'poll', label: 'Poll' },
       ]}
       categoryOptions={['lessons-learned', 'general', 'opinion']}
+      onEdit={jest.fn()}
+      onAdvise={jest.fn()}
+      onDelete={jest.fn()}
+      onCreate={jest.fn()}
+      onPopulateDefaults={jest.fn()}
+      onToggleStatus={onToggleStatus}
       {...props}
     />
   );
-  return { ...utils, onFilterChange };
+  return { ...utils, onFilterChange, onToggleStatus };
 }
 
 describe('the list is a table, not a wall of cards', () => {
@@ -183,6 +197,26 @@ describe('filtering is a pure function, and it is the one the counts use', () =>
     expect(matchesPromptFilters(PROMPTS[0], { ...ALL, search: '80s' })).toBe(false);
   });
 
+  test('the second axis can live under another attribute name', () => {
+    /*
+      rejects: hard-coding `prompt.category`. AUDIT §6.2 item 9 points
+      AIGenerationPromptEditor at this panel, and generation rows written by
+      `populate-generation-prompts.js:502` carry `scenarioType` and no
+      `category` at all — a hard-coded read compares `undefined` to the slug,
+      matches nothing, and empties the table on every scenario choice.
+
+      Both halves are asserted: the named key matches, AND the default still
+      does not see it. A test that only checked the first would pass against
+      `prompt[categoryKey] || prompt.category`, which would silently make the
+      summary library filter on generation slugs too.
+    */
+    const genRow = { name: 'Lessons Learned Scenarios', scenarioType: 'lessons-learned' };
+    expect(
+      matchesPromptFilters(genRow, { ...ALL, category: 'lessons-learned' }, { categoryKey: 'scenarioType' })
+    ).toBe(true);
+    expect(matchesPromptFilters(genRow, { ...ALL, category: 'lessons-learned' })).toBe(false);
+  });
+
   test('a prompt with no description or tags does not throw the filter', () => {
     // rejects: `p.description.toLowerCase()` without the guard. Every field
     // except the name is optional on these records.
@@ -191,15 +225,252 @@ describe('filtering is a pure function, and it is the one the counts use', () =>
   });
 });
 
+describe('the category column is configurable, and its labels are used', () => {
+  test('a labelled option list names the column, the select and the exit', () => {
+    /*
+      rejects: printing the slug wherever the second axis appears. The
+      generation library's scenario slugs (`workplace-trivia`) have written
+      labels ("Workplace & Business") that its own create form uses, and the
+      card grid this panel replaced showed the slug in all three places. The
+      drop-exit is the one that matters most: an exit the reader cannot match
+      to the control they set is not an exit.
+    */
+    const rows = [{ promptId: 'g1', name: 'Workplace Trivia', scenarioType: 'workplace-trivia' }];
+    const panel = (filters) => (
+      <PromptLibraryPanel
+        prompts={rows}
+        filters={filters}
+        onFilterChange={jest.fn()}
+        categoryKey="scenarioType"
+        categoryHeading="Scenario"
+        categoryFilterAllLabel="All Scenario Types"
+        categoryOptions={[
+          { value: 'workplace-trivia', label: 'Workplace & Business' },
+          { value: 'no-such-scenario', label: 'Fun Facts' },
+        ]}
+      />
+    );
+    const { rerender } = render(panel(ALL));
+
+    expect(screen.getByRole('columnheader', { name: 'Scenario' })).toBeInTheDocument();
+    expect(document.querySelector('.plib-cat').textContent).toBe('Workplace & Business');
+
+    const select = screen.getByLabelText('Filter by scenario');
+    expect([...select.options].map((o) => o.textContent))
+      .toEqual(['All Scenario Types', 'Workplace & Business', 'Fun Facts']);
+
+    // Nothing matches `no-such-scenario`, so the exit is drawn — by its label.
+    rerender(panel({ ...ALL, category: 'no-such-scenario' }));
+    const exit = screen.getByText(/Scenario: Fun Facts/);
+    expect(exit.closest('button').textContent).toMatch(/1 prompt/);
+  });
+
+  test('plain strings still work, and a value off the list still renders', () => {
+    /*
+      rejects: requiring `{ value, label }`. AIPromptManager passes
+      `ALL_PROMPT_CATEGORIES`, a flat string array, and its rows must keep
+      rendering.
+
+      THE FIRST VERSION OF THIS TEST SURVIVED `asOption = (o) => o`. It read
+      only the CELLS, and a cell falls back to the raw value when the option
+      list has no match — which is exactly what a list of unconverted strings
+      produces, so the mutant rendered identically there. The select is where
+      the damage actually lands: `{c.label}` on a bare string is `undefined`,
+      i.e. a filter of blank options that all carry `value=""`. Both the select
+      and the cells are asserted now.
+    */
+    render(
+      <PromptLibraryPanel
+        prompts={[{ promptId: 'a', name: 'A', category: 'general' },
+          { promptId: 'b', name: 'B', category: 'not-offered' }]}
+        filters={ALL}
+        onFilterChange={jest.fn()}
+        categoryOptions={['general']}
+      />
+    );
+
+    const select = screen.getByLabelText('Filter by category');
+    expect([...select.options].map((o) => [o.value, o.textContent]))
+      .toEqual([['all', 'All Categories'], ['general', 'general']]);
+
+    // And the row whose category the narrowed list does not offer keeps it.
+    const cells = [...document.querySelectorAll('.plib-cat')].map((td) => td.textContent);
+    expect(cells).toEqual(['general', 'not-offered']);
+  });
+});
+
+/*
+  THE STATUS CHIP IS A CONTROL.
+
+  The owner's ask, verbatim: "to be able to click active or deactivate the
+  prompts in the admin screen, just like we can do with the questions sets."
+  The chip was a `<span>` — the status was visible, filterable, and changeable
+  only by opening the editor, changing a select and saving the whole form.
+
+  THE DECISION THESE TESTS PIN. A prompt has THREE states and a toggle has two,
+  so "deactivate" had to be defined rather than assumed. It is
+  `active ⇄ draft`. `archived` belongs to the Archive action already in the same
+  row — a different endpoint, a different intention, and giving one outcome two
+  controls is the thing the container rules forbid. The archive dialog on this
+  screen has said so in shipped copy since it was written: "If the aim is only
+  to stop hosts choosing it, Draft does that."
+*/
+describe('the status chip activates and deactivates', () => {
+  const rowFor = (container, name) => [...container.querySelectorAll('tbody tr')]
+    .find((r) => r.textContent.includes(name));
+
+  test('an active prompt offers a pressed toggle that sends draft', () => {
+    /*
+      rejects: the shipped `<span className={...}>{label}</span>` — the whole
+      defect. A span has no role, so `getByRole('button')` cannot find it and
+      no click can reach a handler.
+
+      rejects: sending `archived` instead of `draft`. That is the same click
+      as the Archive action three cells over, and it stamps `archivedAt` and
+      reads as retirement. The value on the wire is asserted, not just the fact
+      that something was sent.
+    */
+    const { container, onToggleStatus } = mount();
+    const row = rowFor(container, 'Lessons Learned');
+
+    const chip = within(row).getByRole('button', { name: 'Active' });
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(chip);
+    expect(onToggleStatus).toHaveBeenCalledTimes(1);
+    expect(onToggleStatus).toHaveBeenCalledWith(PROMPTS[0], 'draft');
+  });
+
+  test('a draft prompt offers an unpressed toggle that sends active', () => {
+    // rejects: a one-way control. Deactivating with no way back from the same
+    // place is a reduction with no recovery, which the rules call a deletion.
+    const { container, onToggleStatus } = mount();
+    const row = rowFor(container, 'VJ Trivia');
+
+    const chip = within(row).getByRole('button', { name: 'Draft' });
+    expect(chip).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(chip);
+    expect(onToggleStatus).toHaveBeenCalledWith(PROMPTS[1], 'active');
+  });
+
+  test('the three states stay three colours, so Draft is not Archived', () => {
+    /*
+      rejects: collapsing the chip to the question sets' `--on`/`--off` pair
+      because the toggle is boolean. It is not: `archived` is a third state
+      sitting in the same column, and painting Draft and Archived identically
+      makes the one that can be un-clicked indistinguishable from the one that
+      cannot.
+    */
+    const { container } = mount();
+    // The status chip is the first in the State cell — the type chip in the
+    // column before it is a different `.plib-chip`.
+    const chipIn = (name) => rowFor(container, name).querySelector('.plib-states > *');
+    expect(chipIn('Lessons Learned')).toHaveClass('plib-chip--on');
+    expect(chipIn('VJ Trivia')).toHaveClass('plib-chip--warn');
+    expect(chipIn('Legacy Generator')).toHaveClass('plib-chip--off');
+  });
+
+  test('an archived prompt is not a toggle, and says where its way back is', () => {
+    /*
+      rejects: `status !== 'active' ? 'active' : 'draft'`, which would make the
+      Archived chip a live control that silently un-retires a prompt — and
+      leave the reader guessing whether the click went to Active or Draft.
+
+      rejects, in the other direction: a chip that is dead but still LOOKS
+      clickable. It renders as a span, and it carries the exit the archive
+      dialog already promises ("it can be set back to Active from the editor")
+      rather than being a dead end.
+    */
+    const { container } = mount();
+    const row = rowFor(container, 'Legacy Generator');
+
+    expect(within(row).queryByRole('button', { name: 'Archived' })).toBeNull();
+    const chip = within(row).getByText('Archived');
+    expect(chip.tagName).toBe('SPAN');
+    expect(chip.title).toMatch(/set its status back to Active/i);
+  });
+
+  test('with no handler the chip is inert everywhere, not dead-looking', () => {
+    /*
+      rejects: rendering the affordance unconditionally. Design rule 2 — a dead
+      control is the one people reach for first — and this is not hypothetical:
+      AIGenerationPromptEditor mounts this same panel over the generation
+      prompts and passes no status round trip, so an ungated chip is a button
+      that does nothing on every row of that screen.
+    */
+    const { container } = mount({ onToggleStatus: undefined });
+    expect(container.querySelectorAll('.plib-states button')).toHaveLength(0);
+    // …and it is still the status chip that is missing its role, not the whole
+    // cell: `getByText` here would also match the status FILTER's <option>.
+    const chip = rowFor(container, 'Lessons Learned').querySelector('.plib-states > *');
+    expect(chip.tagName).toBe('SPAN');
+    expect(chip.textContent).toBe('Active');
+  });
+
+  test('a record with no promptId gets no toggle', () => {
+    /*
+      rejects: offering the control on the rows `scripts/cull-ai-prompts.js`
+      exists to sweep. The update route is `PUT /admin/ai-prompts/{promptId}`,
+      so a click on one of these can only ever produce a 4xx — and this panel
+      already draws a "Broken record" chip next to it saying as much.
+    */
+    const { container } = mount({
+      prompts: [{ name: 'Orphan', status: 'active', malformed: true }],
+    });
+    expect(container.querySelectorAll('.plib-states button')).toHaveLength(0);
+    expect(within(container).getByText('Broken record')).toBeInTheDocument();
+  });
+
+  test('the chip in flight is disabled, and only that one', () => {
+    /*
+      rejects: dropping `busyPromptId`. Two clicks on one chip are two PUTs of
+      two different values racing to the same row, and the loser wins — the
+      list would then show whichever came back last, which is not necessarily
+      what is stored.
+    */
+    const { container, onToggleStatus } = mount({ busyPromptId: 'p1' });
+
+    const busy = within(rowFor(container, 'Lessons Learned')).getByRole('button', { name: 'Active' });
+    expect(busy).toBeDisabled();
+    fireEvent.click(busy);
+    expect(onToggleStatus).not.toHaveBeenCalled();
+
+    // and the rest of the table is still live
+    fireEvent.click(within(rowFor(container, 'VJ Trivia')).getByRole('button', { name: 'Draft' }));
+    expect(onToggleStatus).toHaveBeenCalledWith(PROMPTS[1], 'active');
+  });
+
+  test('nextStatusFor names the pair, and refuses the states with no pair', () => {
+    // rejects: `status === 'active' ? 'draft' : 'active'`. A row written by a
+    // script with a status this screen does not know has no defined opposite,
+    // and guessing one writes a state nobody asked for.
+    expect(nextStatusFor('active')).toBe('draft');
+    expect(nextStatusFor('draft')).toBe('active');
+    expect(nextStatusFor('archived')).toBeNull();
+    expect(nextStatusFor('retired')).toBeNull();
+    // No status at all already READS as Draft in this table, so it has to
+    // behave as one — a chip labelled Draft that sends `draft` is a no-op.
+    expect(nextStatusFor(undefined)).toBe('active');
+  });
+});
+
 describe('the row actions reach the callbacks', () => {
-  test('edit, advisor and archive each hand back the right thing', () => {
-    // rejects: wiring Archive to the prompt object when handleDeletePrompt
-    // takes an id, which would send `[object Object]` into the DELETE URL and
-    // 404 quietly.
+  test('edit, advisor, copy and retire each hand back the right thing', () => {
+    /*
+      rejects: wiring Retire to the prompt object when handleDeletePrompt takes
+      an id, which would send `[object Object]` into the DELETE URL and 404
+      quietly — and the mirror mistake on the new button, which takes the whole
+      RECORD because it needs the name for its own banner.
+
+      The two are deliberately different shapes and this is the test that keeps
+      them from being swapped.
+    */
     const onEdit = jest.fn();
     const onAdvise = jest.fn();
     const onDelete = jest.fn();
-    const { container } = mount({ onEdit, onAdvise, onDelete });
+    const onCopyToArchive = jest.fn();
+    const { container } = mount({ onEdit, onAdvise, onDelete, onCopyToArchive });
     const row = container.querySelector('tbody tr');
 
     fireEvent.click(within(row).getByText('Edit'));
@@ -208,7 +479,56 @@ describe('the row actions reach the callbacks', () => {
     fireEvent.click(within(row).getByText('Advisor'));
     expect(onAdvise).toHaveBeenCalledWith(PROMPTS[0]);
 
-    fireEvent.click(within(row).getByText('Archive'));
+    fireEvent.click(within(row).getByText('Copy to archive'));
+    expect(onCopyToArchive).toHaveBeenCalledWith(PROMPTS[0]);
+
+    fireEvent.click(within(row).getByText('Retire'));
     expect(onDelete).toHaveBeenCalledWith('p1');
+  });
+
+  test('the copy button is absent without a handler, and never a dead control', () => {
+    /*
+      rejects: drawing "Copy to archive" unconditionally. The generation library
+      (AIGenerationPromptEditor) mounts this same panel and passes no export
+      round trip; a button there would look identical and do nothing. Design
+      rule 2 — a dead control is the one people reach for first.
+    */
+    const { container } = mount({ onDelete: jest.fn() });
+    const row = container.querySelector('tbody tr');
+    expect(within(row).queryByText('Copy to archive')).toBeNull();
+    expect(within(row).getByText('Retire')).toBeInTheDocument();
+  });
+
+  test('the destructive button does not say "archive"', () => {
+    /*
+      rejects: renaming Retire back. It sat next to nothing for months and read
+      fine; the moment a real copy-to-archive appeared beside it, the word on
+      the destructive control was the one promising to preserve. The owner
+      pressed it expecting a copy.
+    */
+    const { container } = mount({ onDelete: jest.fn(), onCopyToArchive: jest.fn() });
+    const row = container.querySelector('tbody tr');
+    const retire = within(row).getByTestId('plib-retire-p1');
+    expect(retire.textContent.toLowerCase()).not.toContain('archive');
+    expect(retire.getAttribute('title')).toMatch(/not copied to the archive/i);
+  });
+
+  test('a copy in flight cannot be clicked into a second copy', () => {
+    // rejects: dropping `copyingPromptId`, which turns a slow export into two.
+    const onCopyToArchive = jest.fn();
+    const { container } = mount({ onCopyToArchive, copyingPromptId: 'p1' });
+    const row = container.querySelector('tbody tr');
+    const copy = within(row).getByTestId('plib-copy-archive-p1');
+    expect(copy).toBeDisabled();
+    fireEvent.click(copy);
+    expect(onCopyToArchive).not.toHaveBeenCalled();
+  });
+
+  test('...and only THAT row is locked', () => {
+    // rejects: a single boolean `copying` flag, which freezes the whole table.
+    const { container } = mount({ onCopyToArchive: jest.fn(), copyingPromptId: 'p1' });
+    const rows = container.querySelectorAll('tbody tr');
+    expect(within(rows[0]).getByTestId('plib-copy-archive-p1')).toBeDisabled();
+    expect(within(rows[1]).getByTestId('plib-copy-archive-p2')).not.toBeDisabled();
   });
 });

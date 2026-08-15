@@ -196,8 +196,26 @@ for (const [key, value] of Object.entries(templateVars)) prompt = prompt.replace
 
 So variables in `instructions` substitute fine. No engine change is needed for the owner's model.
 
-**`{top3responses}` already exists** as **`{topVotedAnswers}`** — "Top 3 most-voted responses
-with their vote detail".
+> ## ⚠️ CORRECTED 2026-08-15 — THIS RECOMMENDED THE WRONG VARIABLE.
+>
+> It said `{top3responses}` already exists as `{topVotedAnswers}`, quoting the
+> catalogue's "Top 3 most-voted responses with their vote detail". **The
+> catalogue was wrong and so was this.** `get-ai-summary.js:1577-1583` branches
+> on game type: only the TRIVIA arm includes the answer text. For
+> call-and-answer — which is the round this whole section is about — it emits
+> `${playerName}: ${score} vote points`, a name and a number and nothing else.
+> Under anonymity even the name goes, leaving "a participant: 13 vote points"
+> three times. A prompt built on it would have summarised nothing, which is the
+> exact failure being debugged here.
+>
+> **Use `{responsesText}`** (`:1406`), the only variable carrying the text of
+> every response: `🥇 1st Place: Ada - "ship smaller" (13 vote points)`.
+> `{voteTally}` (`:1568`) is the other honest option — it does include
+> `answerText` on both arms, top five.
+>
+> The catalogue entry has been fixed in all three copies of
+> `template-variables.js`. Found while building the demo sets, by an agent that
+> read the engine instead of trusting the description.
 
 The corrected prompt, ready to paste into the editor's **General instructions**:
 
@@ -205,7 +223,7 @@ The corrected prompt, ready to paste into the editor's **General instructions**:
 HERE IS WHAT WAS ASKED AND SAID:
 Question:  {questionTitle}
 Detail:    {questionDetail}
-Responses: {topVotedAnswers}
+Responses: {responsesText}
 Standing:  {cumulativeScores}
 ```
 

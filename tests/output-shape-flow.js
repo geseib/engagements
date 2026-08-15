@@ -388,12 +388,30 @@ const TRIAD = ['## Summary', '## Discussion Questions', '## Next Steps'];
     assert(headings.some((h) => /real title/i.test(h)), 'no real-title section');
     assert(headings.some((h) => /trivia/i.test(h)), 'no trivia section');
   });
-  check('its template reads the reveal from {answerDetails}', () =>
-    assert(/\{answerDetails\}/.test(shipped.template),
+  // The body the ENGINE will assemble, not one named field. These two used to
+  // read `shipped.template` alone, which passed only while the defaults were
+  // single-field: the 2026-08-15 rewrite moved every prompt onto the two named
+  // halves and both assertions went green-to-red without the prompt losing
+  // anything. Mirror get-ai-summary.js:2168-2174 instead — template when there
+  // is one, otherwise instructions + outputFormat — so the check follows the
+  // prompt across a shape change and still fails if the reveal is dropped.
+  const shippedBody = shipped && (shipped.template
+    || [shipped.instructions, shipped.outputFormat].filter(Boolean).join('\n\n'));
+  check('its prompt body reads the reveal from {answerDetails}', () =>
+    assert(/\{answerDetails\}/.test(shippedBody),
       'the prompt cannot see the real title, so it cannot reveal it'));
   check('it tells the model not to invent a fact it was not given', () =>
-    assert(/guess|invent/i.test(shipped.template),
-      'a wrong fact read aloud to a room is worse than no fact'));
+    // A bare /guess|invent/ passes on the opening line "the room INVENTED titles
+    // for it", which is not a rule about anything — the check survived a
+    // mutation that deleted the actual instruction. What has to be present is a
+    // SUBSTITUTION rule: when the reveal is absent, do the safe thing INSTEAD OF
+    // supplying a fact. {answerDetails} resolves to the literal "No explanation
+    // provided" when the CSV carried no reveal (get-ai-summary.js:2096), so this
+    // sentence is the only thing standing between an empty column and a
+    // confident invented fact read out to a room.
+    assert(/\b(skip|omit|say)\b[^.\n]*\b(rather than|instead of)\b[^.\n]*\b(guess|invent)\w*/i
+      .test(shippedBody),
+    'a wrong fact read aloud to a room is worse than no fact'));
   check('it is usable as a summary prompt at all', () =>
     assert(shipped.template || (shipped.instructions && shipped.outputFormat),
       'fails the gate in game/prompt-shape.js and would silently fall back'));

@@ -31,6 +31,37 @@
  * the affordance lie. The narrower hazard the panel really does introduce --
  * SPACE landing on a focused button inside it -- is handled where it belongs,
  * by event target, in components/HostActionBar.jsx.
+ *
+ * ── THE TWO ANSWER DIALOGS, ADDED AFTER THEY ADVANCED A LIVE ROUND ─────────
+ *
+ * `spotlightOpen` and `pastRoundOpen` are here because their absence was a
+ * product-down bug, not a tidiness problem.
+ *
+ * `AnswerSpotlight` and `PastRound` both bind ArrowLeft/ArrowRight to step
+ * between answers, on `document`, and both call `preventDefault()` without
+ * `stopPropagation()`. `HostActionBar` binds ArrowRight to the PRIMARY ACTION
+ * on `window`. Bubble order is target -> document -> window, so the global
+ * handler runs AFTERWARDS and sees the very same keystroke. None of its own
+ * guards catch it: the event is not a repeat, and the target inside the dialog
+ * is a div or a button rather than an input.
+ *
+ * So a host who opened an answer to read it aloud and pressed -> for the next
+ * one ADVANCED THE ROUND. On RESULTS the spotlight then unmounted with the
+ * phase, so the dialog vanished mid-sentence and the AI summary appeared.
+ *
+ * `PastRound` is worse and is why this could not wait: it is mounted at page
+ * root rather than inside a phase branch, so it is open DURING a live
+ * ASK/VOTE/RESULTS. A host reviewing round two while the room is still
+ * answering could close answering, reveal results, or start the next question
+ * — depending only on which phase was running behind the dialog.
+ *
+ * A PER-DIALOG TERM IS THE NARROW FIX, and it is chosen over the general one
+ * deliberately. `Modal.jsx` already keeps a module-level stack of mounted
+ * dialogs and an `isTopmost()`; reading that here would fix these two and
+ * every future dialog at once. It is the better answer and it belongs in a
+ * later change: touching the modal primitive while several dialogs are being
+ * edited would put a shared-state refactor underneath work in flight. Recorded
+ * so the next reader knows the narrow fix was a sequencing decision.
  */
 export function shortcutsSuppressed({
   showConfirmModal = false,
@@ -39,10 +70,13 @@ export function shortcutsSuppressed({
   lessonExpanded = false,
   isLoadingData = false,
   qrMode = null,
+  spotlightOpen = false,
+  pastRoundOpen = false,
 } = {}) {
   return Boolean(
     showConfirmModal || showExpandedQR ||
-    showReportsModal || lessonExpanded || isLoadingData || qrMode === 'pinned'
+    showReportsModal || lessonExpanded || isLoadingData || qrMode === 'pinned' ||
+    spotlightOpen || pastRoundOpen
   );
 }
 

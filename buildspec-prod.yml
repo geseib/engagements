@@ -19,13 +19,43 @@ phases:
       - '[ -n "$GITHUB_TOKEN" ] && echo "Successfully retrieved GitHub token" || (echo "ERROR: Failed to retrieve GitHub token" && exit 1)'
       - export GITHUB_REPO="${GITHUB_REPO:-geseib/engagements}"
 
+      # GOOGLE OAUTH — ABSENT HERE UNTIL 2026-08-15, AND ITS ABSENCE BROKE PROD.
+      #
+      # This buildspec passed a hardcoded --parameter-overrides list with no
+      # Google parameters in it, so GoogleClientSecret fell to its "" default,
+      # template-clean.yaml:68 evaluated HasGoogleOAuth false, and :2520 wrote
+      # `SupportedIdentityProviders: [COGNITO]` — removing the console-configured
+      # Google provider from the prod app client. Cognito then answers a Google
+      # sign-in with "An error was encountered. Login option is not available."
+      #
+      # The template comment at :66-67 says test and prod "stay on
+      # console-configured providers". That is not what happens: the !If writes
+      # the provider list on EVERY deploy, so a console-configured provider
+      # survives exactly until the next one.
+      #
+      # Same lookup and same fallback as buildspec-test.yml. An empty value must
+      # never be passed as an explicit override — see the build phase.
+      - export GOOGLE_CLIENT_ID=$(aws ssm get-parameter --name "/$STACK_NAME/google/client-id" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || aws ssm get-parameter --name /engprod/google/client-id --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "")
+      - export GOOGLE_CLIENT_SECRET=$(aws ssm get-parameter --name "/$STACK_NAME/google/client-secret" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || aws ssm get-parameter --name /engprod/google/client-secret --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "")
+      - '[ -n "$GOOGLE_CLIENT_SECRET" ] && echo "Google OAuth credentials retrieved - Google sign-in enabled" || echo "WARNING: no Google params at /$STACK_NAME/google/* or /engprod/google/* - this deploy will leave Google sign-in DISABLED on prod"'
+
   build:
     commands:
       - echo "Building and deploying backend..."
       - echo "Building SAM application..."
       - sam build -t template-clean.yaml
       - echo "Deploying to AWS..."
-      - sam deploy --template-file .aws-sam/build/template.yaml --stack-name $STACK_NAME --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --parameter-overrides "Environment=$ENVIRONMENT" "StackName=$STACK_NAME" "DomainName=$DOMAIN_NAME" "HostedZoneId=$HOSTED_ZONE_ID" "GitHubToken=$GITHUB_TOKEN" "GitHubRepo=$GITHUB_REPO" --resolve-s3 --no-confirm-changeset --no-fail-on-empty-changeset
+      # CONDITIONAL APPEND, matching buildspec-dev.yml and buildspec-test.yml.
+      # Passing GoogleClientSecret="" is an explicit override to empty, which
+      # tears the Google provider off the app client. Omitting it is not the
+      # same thing as passing it empty — see the pre_build note above.
+      - PARAM_OVERRIDES="Environment=$ENVIRONMENT StackName=$STACK_NAME DomainName=$DOMAIN_NAME HostedZoneId=$HOSTED_ZONE_ID"
+      - '[ -n "$GITHUB_TOKEN" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES GitHubToken=$GITHUB_TOKEN" || echo "skipping GitHubToken (empty)"'
+      - '[ -n "$GITHUB_REPO" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES GitHubRepo=$GITHUB_REPO" || echo "skipping GitHubRepo (empty)"'
+      - '[ -n "$GOOGLE_CLIENT_ID" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES GoogleClientId=$GOOGLE_CLIENT_ID" || echo "skipping GoogleClientId (empty)"'
+      - '[ -n "$GOOGLE_CLIENT_SECRET" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES GoogleClientSecret=$GOOGLE_CLIENT_SECRET" || echo "skipping GoogleClientSecret (empty)"'
+      - echo "Parameter overrides:" $(echo "$PARAM_OVERRIDES" | sed -E 's/(GitHubToken|GoogleClientSecret)=[^ ]*/\1=***/g')
+      - sam deploy --template-file .aws-sam/build/template.yaml --stack-name $STACK_NAME --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --parameter-overrides $PARAM_OVERRIDES --resolve-s3 --no-confirm-changeset --no-fail-on-empty-changeset
 
       - echo "Building frontend..."
       - cd src

@@ -113,13 +113,32 @@ export default function QuestionSetDeleteDialog({
           size={20}
           color={finished ? 'var(--success)' : 'var(--danger-text)'}
         />
-        <div>
+        <div className="qsets-grow">
           <h2 id="qsets-del-title">{finished ? 'Question set deleted' : 'Delete this question set?'}</h2>
           <p className="qsets-dim">
             {name} · {gameTypeLabel(questionSet.engagementType)} · {questions} question
             {questions === 1 ? '' : 's'} in {categories} categor{categories === 1 ? 'y' : 'ies'}
           </p>
         </div>
+        {/*
+          THE `×` IN THE CORNER, HELD TO THE SAME GATE AS EVERY OTHER EXIT.
+          `dismissable` is stated once above and now spent four times — backdrop,
+          Escape, the footer button and this. An `×` that stayed live while the
+          other three were gated would be the same defect the gate was written
+          for: unmounting the only surface that can report the outcome of a
+          delete that is still in flight, or of one that has already happened.
+        */}
+        <button
+          type="button"
+          className="qs-dialog-close"
+          onClick={() => onCancel && onCancel()}
+          disabled={!dismissable()}
+          aria-label="Close"
+          title={busy ? 'Wait for the delete to finish' : 'Close'}
+          data-testid="qsets-del-close"
+        >
+          ×
+        </button>
       </header>
 
       <div className="qsets-modal-body">

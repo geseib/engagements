@@ -465,11 +465,34 @@ describe('carving a subset out', () => {
   });
 });
 
+/*
+ * ═══════════════════════════════════════════════════ GETTING BACK OUT ══
+ *
+ * The owner: *"there is no way to back out of 'edit question set' for the host
+ * (no x in upper right, or cancel bottom - add both. that should be pretty
+ * standard across our UX."*
+ *
+ * The editor had exactly one exit and it was in the WRONG PLACE: the Cancel
+ * beside Save Changes, at the foot of the FIRST of four panels. Scroll down to
+ * the Questions panel — which is the reason anyone opens this — and it is gone,
+ * and in the host's mount the scrim's backdrop is inert by design while Escape
+ * declines whenever there is unsaved work. So there were states with nothing on
+ * screen that led out.
+ *
+ * There are three exits now. Every one of them goes through the SAME rule the
+ * container's Escape gate follows: an unsaved working copy is asked about, never
+ * silently binned. The tests below are written in pairs for that reason — a way
+ * out that closes, and the same way out refusing to close quietly. A control
+ * that skipped the confirmation would pass half of a pair and fail the other.
+ *
+ * NO GEOMETRIC ASSERTIONS anywhere in here. jsdom computes no layout, so
+ * "the × is in the upper right" is unprovable and "the footer is below the
+ * Media panel" would pass against any DOM at all. What IS provable is that the
+ * controls exist, are named, sit where the document order puts them relative to
+ * the panels, and do what they claim.
+ */
 describe('closing the editor', () => {
-  it('asks before throwing away an unsaved working copy', async () => {
-    // rejects: a Cancel that closes straight away. The working copy lives in
-    // this tab and nowhere else, and Cancel is one click from the Save button.
-    mockApi();
+  const renderEditor = (props = {}) => {
     const onCancel = jest.fn();
     render(
       <QuestionSetEditor
@@ -478,18 +501,175 @@ describe('closing the editor', () => {
         onSaved={jest.fn()}
         onChanged={jest.fn()}
         onCancel={onCancel}
+        {...props}
       />
     );
+    return onCancel;
+  };
+
+  /** The Cancel that has always been here, beside Save Changes in Details. */
+  const detailsCancel = () =>
+    within(document.querySelector('.edit-form .form-actions')).getByRole('button', { name: /^Cancel$/ });
+
+  /** Make the Questions panel hold something that only exists in this tab. */
+  const dirty = () =>
+    fireEvent.click(within(rowFor('ARE WE SHIPPING')).getByRole('button', { name: /remove/i }));
+
+  it('asks before throwing away an unsaved working copy', async () => {
+    // rejects: a Cancel that closes straight away. The working copy lives in
+    // this tab and nowhere else, and Cancel is one click from the Save button.
+    mockApi();
+    const onCancel = renderEditor();
     await ready();
 
-    fireEvent.click(within(rowFor('ARE WE SHIPPING')).getByRole('button', { name: /remove/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^Cancel$/ }));
+    dirty();
+    fireEvent.click(detailsCancel());
 
     expect(await screen.findByText(/You have unsaved questions/i)).toBeInTheDocument();
     expect(onCancel).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: /Close and lose the changes/i }));
     expect(onCancel).toHaveBeenCalled();
+  });
+
+  it('draws a close control in the header and a Cancel in the footer', async () => {
+    // THE OWNER'S ASK, STATED AS TWO CONTROLS. rejects: shipping one of the two,
+    // and rejects an unnamed glyph — a bare `×` with no accessible name is
+    // invisible to anyone not using their eyes, which is the population this
+    // fix matters most to.
+    mockApi();
+    renderEditor();
+    await ready();
+
+    expect(screen.getByRole('button', { name: /close the editor/i })).toBeTruthy();
+    expect(screen.getByTestId('qs-editor-cancel')).toHaveTextContent('Cancel');
+  });
+
+  it('puts the footer after the last panel, not in the middle of the form', async () => {
+    // THE WHOLE POINT OF "cancel bottom", and the one part of it jsdom CAN see.
+    // Not geometry — DOCUMENT ORDER. The Details Cancel is a quarter of the way
+    // down and scrolls away; this one is past the Images panel, which is the
+    // last thing in the editor. rejects: adding a second Cancel next to the
+    // first and calling the report addressed.
+    //
+    // `media-panel` was `media-seam` until the panel was built: the seam was a
+    // placeholder section carrying "Image management is not wired up yet".
+    // The assertion is unchanged — the footer still has to come after the last
+    // panel, whatever that panel now contains.
+    mockApi();
+    renderEditor();
+    await ready();
+
+    const footer = screen.getByTestId('qs-editor-footer');
+    const media = screen.getByTestId('media-panel');
+    const questions = screen.getByTestId('questions-panel');
+    expect(media.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(questions.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('the header × closes the editor when there is nothing to lose', async () => {
+    mockApi();
+    const onCancel = renderEditor();
+    await ready();
+
+    fireEvent.click(screen.getByRole('button', { name: /close the editor/i }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/You have unsaved questions/i)).toBeNull();
+  });
+
+  it('the footer Cancel closes the editor when there is nothing to lose', async () => {
+    mockApi();
+    const onCancel = renderEditor();
+    await ready();
+
+    fireEvent.click(screen.getByTestId('qs-editor-cancel'));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/You have unsaved questions/i)).toBeNull();
+  });
+
+  it('the header × asks first when there IS something to lose', async () => {
+    // THE HALF THAT MAKES THE NEW CONTROL SAFE. `HostQuestionSetsDialog` gates
+    // Escape on `() => !editorDirty` precisely so one keypress cannot bin an
+    // afternoon; a `×` wired straight to `onCancel` would be that same keypress
+    // with a mouse. rejects: `onClick={onCancel}` on the new control.
+    mockApi();
+    const onCancel = renderEditor();
+    await ready();
+
+    dirty();
+    fireEvent.click(screen.getByRole('button', { name: /close the editor/i }));
+
+    expect(await screen.findByText(/You have unsaved questions/i)).toBeInTheDocument();
+    expect(onCancel).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /Close and lose the changes/i }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('the footer Cancel asks first when there IS something to lose', async () => {
+    // rejects: the same shortcut on the other new control. Two exits, one rule.
+    mockApi();
+    const onCancel = renderEditor();
+    await ready();
+
+    dirty();
+    fireEvent.click(screen.getByTestId('qs-editor-cancel'));
+
+    expect(await screen.findByText(/You have unsaved questions/i)).toBeInTheDocument();
+    expect(onCancel).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /Close and lose the changes/i }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('the confirmation is a real dialog, and Escape backs out of IT and no further', async () => {
+    // The confirmation used to be a raw `.modal-overlay` div: no role, no name,
+    // no focus trap, no Escape. It now stands between three exits and the only
+    // copy of somebody's questions, so it goes through the shared `Modal`.
+    //
+    // `Modal` answers the INNERMOST dialog by DOM containment, so Escape here
+    // means "go back and save them" — the safe half — and cannot reach past the
+    // confirmation to the close it is guarding. rejects: leaving the raw div
+    // (no Escape at all), and rejects an Escape that falls through and closes
+    // the editor anyway, which would make the guard decorative.
+    mockApi();
+    const onCancel = renderEditor();
+    await ready();
+
+    dirty();
+    fireEvent.click(screen.getByTestId('qs-editor-cancel'));
+
+    const confirm = await screen.findByRole('dialog', { name: /you have unsaved questions/i });
+    expect(confirm).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() =>
+      expect(screen.queryByText(/You have unsaved questions/i)).toBeNull());
+    expect(onCancel).not.toHaveBeenCalled();
+    // Still editing, working copy intact.
+    expect(screen.getByTestId('unsaved-bar')).toBeTruthy();
+  });
+
+  it('draws no exit at all when the container gave it nowhere to go', async () => {
+    // `onCancel` is optional. A `×` or a Cancel wired to nothing is worse than
+    // an absent one — it is the control people reach for FIRST, so a dead one
+    // reads as a frozen screen. rejects: rendering the pair unconditionally.
+    mockApi();
+    render(
+      <QuestionSetEditor
+        questionSet={SET}
+        availableSets={AVAILABLE_SETS}
+        onSaved={jest.fn()}
+        onChanged={jest.fn()}
+      />
+    );
+    await ready();
+
+    expect(screen.queryByRole('button', { name: /close the editor/i })).toBeNull();
+    expect(screen.queryByTestId('qs-editor-cancel')).toBeNull();
+    expect(document.querySelector('.edit-form .form-actions')).not.toBeNull();
+    expect(
+      within(document.querySelector('.edit-form .form-actions'))
+        .queryByRole('button', { name: /^Cancel$/ })
+    ).toBeNull();
   });
 });
 
