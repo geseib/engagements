@@ -178,12 +178,57 @@ exports.handler = async (event) => {
       assertTemplateVariablesExist(supplied);
     }
 
+    /*
+      NOT EVERY PROMPT HAS AN S3 OBJECT, AND THE ONES THAT DO NOT MUST NOT GROW ONE HERE.
+
+      `populate-generation-prompts.js:497` writes the whole generation prompt —
+      basePrompt, the four templates, defaultSettings — straight into the
+      DynamoDB row and never touches the bucket. Those rows carry no `s3Key`.
+      The guard above already knows that (it is gated on `s3Key` precisely so a
+      keyless row is not refused for having nothing to read), but everything
+      below it assumed a key existed anyway, and there were two ways that fell
+      over the moment a caller sent `{ status }` to a keyless row:
+
+        1. `newS3Key` stayed `undefined`, and `PutObjectCommand` rejects a
+           missing Key client-side. A plain 500 on a one-click state change.
+        2. Even past that, `s3Key = :s3Key` with an undefined value is dropped
+           by `removeUndefinedValues`, leaving the UpdateExpression referring to
+           a value that is not in ExpressionAttributeValues — a ValidationException.
+
+      Neither was reachable while the only screens sending a status-only PUT
+      were the summary library's chip (S3-backed rows, every one) and the editor
+      form. `tests/ai-prompt-status-update.js` said so in as many words: "what a
+      keyless row does past this point is not decided here… a shape no UI sends
+      to this route (the generation library passes no status handler)". The
+      generation library has one now, so it is decided here.
+
+      A row with no stored body has nothing to version and nothing to rebuild:
+      skip S3 entirely and let the DynamoDB write carry the change. Minting a
+      key for it would be worse than the crash — the object would be built from
+      `currentContent`, which is null, so the row would end up claiming stored
+      content that holds none of its actual prompt text.
+    */
+    const promptHasS3Body = Boolean(currentPrompt.s3Key) || promptBodySupplied;
+
+    /*
+      `version` is a NUMBER on every row create-ai-prompt.js writes and the
+      STRING '1.0.0' on every row populate-generation-prompts.js writes.
+      `'1.0.0' + 1` is the string `'1.0.01'`, which was then baked into a
+      filename and stored back on the row as its version. Coerced, with a
+      non-numeric version restarting at 1 rather than producing `NaN`.
+    */
+    const bumpedVersion = (Number.isFinite(Number(currentPrompt.version))
+      ? Number(currentPrompt.version)
+      : 0) + 1;
+
     let newVersion = currentPrompt.version;
     let newS3Key = currentPrompt.s3Key;
 
-    // If creating new version or if default prompt is being edited
-    if (createNewVersion || currentPrompt.isDefault) {
-      newVersion = currentPrompt.version + 1;
+    // If creating new version or if default prompt is being edited. A prompt
+    // whose body lives in S3 but which somehow has no key yet is versioned too,
+    // because otherwise there is nowhere to put the text this request supplied.
+    if (promptHasS3Body && (createNewVersion || currentPrompt.isDefault || !currentPrompt.s3Key)) {
+      newVersion = bumpedVersion;
       newS3Key = `prompts/${currentPrompt.gameType}/${promptId}/v${newVersion}.json`;
       console.log(`🔄 Creating new version: ${newVersion}`);
     }
@@ -222,20 +267,26 @@ exports.handler = async (event) => {
       }
     };
 
-    // Save updated content to S3
-    console.log(`💾 Saving updated content to S3: ${newS3Key}`);
-    await s3Client.send(new PutObjectCommand({
-      Bucket: aiPromptsBucket,
-      Key: newS3Key,
-      Body: JSON.stringify(updatedContent, null, 2),
-      ContentType: 'application/json',
-      Metadata: {
-        promptId: promptId,
-        gameType: currentPrompt.gameType,
-        version: newVersion.toString(),
-        status: updatedContent.status
-      }
-    }));
+    // Save updated content to S3 — only for prompts that keep a body there.
+    // See `promptHasS3Body`: a generation row's text is on the DynamoDB row, so
+    // there is no object to rewrite and no key to rewrite it at.
+    if (promptHasS3Body) {
+      console.log(`💾 Saving updated content to S3: ${newS3Key}`);
+      await s3Client.send(new PutObjectCommand({
+        Bucket: aiPromptsBucket,
+        Key: newS3Key,
+        Body: JSON.stringify(updatedContent, null, 2),
+        ContentType: 'application/json',
+        Metadata: {
+          promptId: promptId,
+          gameType: currentPrompt.gameType,
+          version: newVersion.toString(),
+          status: updatedContent.status
+        }
+      }));
+    } else {
+      console.log(`💾 ${promptId} keeps its body on the DynamoDB row; no S3 object to write.`);
+    }
 
     // Update DynamoDB metadata
     const updateExpression = [];
@@ -296,12 +347,24 @@ exports.handler = async (event) => {
     // Always update these fields
     updateExpression.push('updatedAt = :updatedAt');
     expressionAttributeValues[':updatedAt'] = timestamp;
-    
-    updateExpression.push('version = :version');
-    expressionAttributeValues[':version'] = newVersion;
-    
-    updateExpression.push('s3Key = :s3Key');
-    expressionAttributeValues[':s3Key'] = newS3Key;
+
+    /*
+      VERSION AND s3Key MOVE TOGETHER, AND ONLY WHEN THERE IS AN OBJECT BEHIND THEM.
+
+      For a keyless row both of these are `undefined`, and `undefined` is not a
+      no-op here: the document client is built with `removeUndefinedValues`, so
+      the value is dropped from ExpressionAttributeValues while `= :s3Key`
+      remains in the expression — DynamoDB then refuses the whole write with
+      "an expression attribute value used in expression is not defined". The
+      status change would fail with a message about an attribute nobody sent.
+    */
+    if (promptHasS3Body) {
+      updateExpression.push('version = :version');
+      expressionAttributeValues[':version'] = newVersion;
+
+      updateExpression.push('s3Key = :s3Key');
+      expressionAttributeValues[':s3Key'] = newS3Key;
+    }
 
     // Needed by the `REMOVE #ttl` clause below — `ttl` is a DynamoDB reserved word.
     expressionAttributeNames['#ttl'] = 'ttl';
