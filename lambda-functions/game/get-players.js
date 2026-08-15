@@ -1,8 +1,39 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
 
+const { currentRoundNumber } = require('./round-key');
+const { isRemoved } = require('./player-presence');
+const { publicHandoverState } = require('./handover');
+
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
+
+/**
+ * THE ROSTER, AND IT IS A PUBLIC ENDPOINT.
+ *
+ * `GET /games/{gameId}/players` carries no authorizer (template-clean.yaml:820)
+ * — the host's phone polls it, and so can anything else that knows the
+ * four-digit game id. Everything below is therefore an allow-list, and two
+ * fields in particular must never reach it:
+ *
+ *   ClientId              the secret `get-answers.js:247` accepts as proof of
+ *                         identity before returning a player's own answer text.
+ *   HandoverRequestedBy   the same kind of value, for whoever asked for a
+ *                         handover. `handover.js`'s `publicHandoverState` is
+ *                         the filter, and it is a named function so that "does
+ *                         the roster leak a capability?" is one assertion.
+ *
+ * Two things this projection reports that the underlying rows do not spell out:
+ *
+ *   `players` EXCLUDES REMOVED PLAYERS, and `stats` counts only what is in
+ *   `players`. That is the point of removal — see `player-presence.js` for
+ *   which counts drop them and which must keep them. They are returned
+ *   separately as `removedPlayers` so the host can see who left and put them
+ *   back, rather than vanishing from the only screen that could undo it.
+ *
+ *   `handover` says whether a name is unlocked and whether somebody has asked
+ *   for it. Booleans and a timestamp only.
+ */
 
 exports.handler = async (event) => {
   try {
@@ -36,7 +67,19 @@ exports.handler = async (event) => {
       Key: { PK: `GAME#${gameId}`, SK: 'STATE' }
     }));
 
-    const currentQuestionId = gameState.Item?.CurrentQuestionId;
+    // THE ROUND NUMBER, NOT THE SOURCE QUESTION ID.
+    //
+    // This read `gameState.Item?.CurrentQuestionId` and built
+    // `QUESTION#${that}#ANSWER#` out of it. `CurrentQuestionId` is the id of a
+    // question in a SET (`c005#001`, next-question.js:717); answers are filed
+    // under the padded ROUND (`QUESTION#001#ANSWER#Ada`,
+    // websocket/message.js:366). The two queries below therefore matched
+    // nothing in every session that has ever run, so `hasAnswered`/`hasVoted`
+    // were false for everybody and `readyCount` was 0 for ever. Owner: *"still
+    // to answer did not change when players have answered, although the count
+    // above stays accurate"* — the accurate count is get-game-state's, which
+    // derived this correctly. See round-key.js.
+    const currentRound = currentRoundNumber(gameState.Item);
     const currentGameState = gameState.Item?.State || 'CREATED';
 
     // Get all players for this game
@@ -77,14 +120,14 @@ exports.handler = async (event) => {
 
     // Get player readiness for current question if there is one
     let playerReadiness = {};
-    if (currentQuestionId) {
+    if (currentRound) {
       // Get all answers for current question
       const answersResult = await db.send(new QueryCommand({
         TableName: process.env.TABLE_NAME,
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
         ExpressionAttributeValues: {
           ':pk': `GAME#${gameId}`,
-          ':sk': `QUESTION#${currentQuestionId}#ANSWER#`
+          ':sk': `QUESTION#${currentRound}#ANSWER#`
         }
       }));
 
@@ -94,7 +137,7 @@ exports.handler = async (event) => {
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
         ExpressionAttributeValues: {
           ':pk': `GAME#${gameId}`,
-          ':sk': `QUESTION#${currentQuestionId}#VOTE#`
+          ':sk': `QUESTION#${currentRound}#VOTE#`
         }
       }));
 
@@ -115,8 +158,15 @@ exports.handler = async (event) => {
     console.log(`🧮 About to calculate scores for players:`, players.map(p => ({ name: p.PlayerName || p.playerName, currentScore: p.TotalScore })));
     const actualScores = await calculatePlayerScores(gameId, players.map(p => p.PlayerName || p.playerName));
     
+    // WHO IS STILL IN THE ROOM. Split before formatting so that everything
+    // downstream — the ranking, the stats, the percentage — is computed over
+    // the room as it is now, and a player the host removed cannot be waited on.
+    // `player-presence.js` records which counts drop them and which keep them.
+    const presentPlayers = players.filter(player => !isRemoved(player));
+    const departedPlayers = players.filter(player => isRemoved(player));
+
     // Format player data with enhanced information
-    const formattedPlayers = players.map(player => {
+    const formattedPlayers = presentPlayers.map(player => {
       const playerName = player.PlayerName || player.playerName;
       const totalScore = actualScores[playerName] || 0; // Use calculated score
       const readiness = playerReadiness[playerName] || { hasAnswered: false, hasVoted: false };
@@ -147,7 +197,10 @@ exports.handler = async (event) => {
           type: readinessType,
           hasAnswered: readiness.hasAnswered,
           hasVoted: readiness.hasVoted
-        }
+        },
+        // Booleans and a timestamp — never the requester's clientId. See the
+        // header of this file and of handover.js.
+        handover: publicHandoverState(player)
       };
     });
 
@@ -196,16 +249,42 @@ exports.handler = async (event) => {
     readinessStats.readyPercentage = readinessStats.totalPlayers > 0 ? 
       Math.round((readinessStats.readyCount / readinessStats.totalPlayers) * 100) : 0;
 
-    console.log(`✅ Returning ${formattedPlayers.length} players for game ${gameId} (${readinessStats.readyCount} ready)`);
+    // THE PEOPLE WHO LEFT, still carrying everything they did.
+    //
+    // Returned rather than dropped because the host's Players tab is the only
+    // place a removal can be undone, and a row you cannot see is a row you
+    // cannot put back. Their score is read from the same `PLAYER#…#SCORE`
+    // records as everyone else's — removal touches neither the score row nor a
+    // single answer or vote, and the report counts them (create-report.js:147).
+    // `actualScores` was already computed over EVERY player row above, present
+    // and departed alike, so this needs no second round of Gets.
+    const formattedDeparted = departedPlayers.map(player => {
+      const playerName = player.PlayerName || player.playerName;
+      return {
+        playerId: player.PlayerId || player.playerId,
+        playerName: playerName,
+        totalScore: actualScores[playerName] || 0,
+        joinedAt: player.JoinedAt || player.joinedAt || null,
+        removedAt: player.RemovedAt
+      };
+    }).sort((a, b) => a.playerName.localeCompare(b.playerName));
+
+    console.log(`✅ Returning ${formattedPlayers.length} players for game ${gameId} (${readinessStats.readyCount} ready, ${formattedDeparted.length} removed)`);
 
     return {
       statusCode: 200,
       body: JSON.stringify({
         gameId: gameId,
         players: formattedPlayers,
+        removedPlayers: formattedDeparted,
         stats: readinessStats,
         currentState: currentGameState,
-        currentQuestionId: currentQuestionId,
+        // The SOURCE question id, unchanged — it is what this field has always
+        // carried and what a `QUESTION#…#REF` row points at. `currentRound` is
+        // the padded round number, i.e. the thing the SKs above are built from;
+        // the two were conflated here and that was the readiness bug.
+        currentQuestionId: gameState.Item?.CurrentQuestionId,
+        currentRound: currentRound,
         timestamp: new Date().toISOString()
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }

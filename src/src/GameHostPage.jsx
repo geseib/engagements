@@ -103,6 +103,17 @@ function GameHostPage() {
   // and it is the correction to the defect this whole change is named after —
   // a finished session rendering the lobby.
   const [players, setPlayers] = useState([]);
+  /* THE PEOPLE THE HOST HAS REMOVED, held separately from `players` and not
+     merged back in anywhere.
+
+     That separation is what makes the feature safe in a 5,000-line component:
+     `players.length` appears a dozen times in here as the denominator of "N
+     answered", the LOBBY count, the "waiting for" copy and two confirm
+     dialogs. Because get-players.js filters the departed out of `players`
+     server-side, every one of those became a count of the room without being
+     touched. The only screen that needs the departed is the Players tab, and
+     it takes them as its own prop. */
+  const [removedPlayers, setRemovedPlayers] = useState([]);
   const [questions, setQuestions] = useState([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1);
   const [currentQuestionId, setCurrentQuestionId] = useState('');
@@ -719,6 +730,7 @@ function GameHostPage() {
     authorsRevealed: setAuthorsRevealed,
     nameWaitingWhenAnonymous: setNameWaitingWhenAnonymous,
     players: setPlayers,
+    removedPlayers: setRemovedPlayers,
     answers: setAnswers,
     playersWhoAnswered: setPlayersWhoAnswered,
     votes: setVotes,
@@ -1365,6 +1377,30 @@ Focus on actionable business strategy insights.`;
       fetchPlayers('websocket-leave');
     });
 
+    /* SOMEBODY IS LOCKED OUT OF THEIR OWN NAME AND IS ASKING FOR IT BACK.
+       Refetching is the whole handling: `get-players` carries the request as a
+       flag on the roster row, so the Players tab shows "asking to take this
+       name" beside the person's name the moment this lands. There is no toast
+       — the host is running a room, and the decision belongs where the two
+       buttons that answer it already are. */
+    webSocketClient.onMessage('handoverRequested', (data) => {
+      console.log('🔌 Handover requested notification:', data);
+      fetchPlayers('websocket-handover-request');
+    });
+
+    /* The host's OTHER device did the removing. Without these the phone and
+       the projector disagree about how many people are in the room, and
+       therefore about how many the round is waiting for. */
+    webSocketClient.onMessage('playerRemoved', (data) => {
+      console.log('🔌 Player removed notification:', data);
+      fetchPlayers('websocket-player-removed');
+    });
+
+    webSocketClient.onMessage('playerRestored', (data) => {
+      console.log('🔌 Player restored notification:', data);
+      fetchPlayers('websocket-player-restored');
+    });
+
     // Game state change handlers
     webSocketClient.onMessage('gameStateChanged', (data) => {
       console.log('🔌 Game state changed notification:', data);
@@ -1560,6 +1596,9 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('initialStateSync');
       webSocketClient.offMessage('playerJoined');
       webSocketClient.offMessage('playerLeft');
+      webSocketClient.offMessage('handoverRequested');
+      webSocketClient.offMessage('playerRemoved');
+      webSocketClient.offMessage('playerRestored');
       webSocketClient.offMessage('gameStateChanged');
       webSocketClient.offMessage('questionStarted');
       webSocketClient.offMessage('playerAnswered');
@@ -2119,8 +2158,80 @@ Focus on actionable business strategy insights.`;
       
       console.log('Transformed players:', transformedPlayers);
       setPlayers(transformedPlayers);
+
+      // WHO LEFT, kept apart. `players` above is the room, and every count in
+      // this file is drawn from it; these are for the Players tab, which is the
+      // only place a removal can be undone. `|| []` because a roster fetched
+      // from a backend that predates removal has no such key, and an undefined
+      // here would take the panel down.
+      setRemovedPlayers((json.removedPlayers || []).map(player => ({
+        ...player,
+        name: player.playerName,
+        score: player.totalScore || 0,
+      })));
     } catch (e) {
       console.error('fetchPlayers error', e);
+    }
+  };
+
+  /**
+   * Take somebody out of the live counts, or put them back.
+   *
+   * SOFT, ALWAYS. The endpoint sets or clears one `RemovedAt` attribute and
+   * deletes nothing — their answers, votes and points stay, and the session
+   * report still counts them (create-report.js:147). Owner: *"this should not
+   * eliminate any contribution they had made or points they had accumulated
+   * before leaving. they will still show up in the data and reports."*
+   *
+   * Host-gated, so it carries the ID token like every other host action here.
+   */
+  const setPlayerRemoved = async (name, removed) => {
+    try {
+      const res = await authFetch(
+        `${API_BASE}games/${gameId}/players/${encodeURIComponent(name)}/remove`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ removed }),
+        }
+      );
+      if (!res.ok) {
+        console.error(`setPlayerRemoved HTTP error: ${res.status}`);
+        return;
+      }
+      await fetchPlayers(removed ? 'after-remove-player' : 'after-restore-player');
+    } catch (e) {
+      console.error('setPlayerRemoved error', e);
+    }
+  };
+
+  /**
+   * Unlock a name for exactly one handover.
+   *
+   * `bindToRequester` when somebody has actually asked through the app — the
+   * grant then names them and nobody else can spend it. Open when the host is
+   * acting on something said out loud, which is the commoner case in a room.
+   * The requester's client id never reaches this page: the server reads it off
+   * its own row, because a client id is the secret get-answers.js accepts as
+   * proof of identity and GET /players is public.
+   */
+  const grantNameHandover = async (name, bindToRequester) => {
+    try {
+      const res = await authFetch(
+        `${API_BASE}games/${gameId}/players/${encodeURIComponent(name)}/handover`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bindToRequester: Boolean(bindToRequester) }),
+        }
+      );
+      if (!res.ok) {
+        console.error(`grantNameHandover HTTP error: ${res.status}`);
+        return;
+      }
+      await fetchPlayers('after-grant-handover');
+    } catch (e) {
+      console.error('grantNameHandover error', e);
     }
   };
 
@@ -5079,6 +5190,10 @@ Ready to engage? See you there!`;
           onClose={closeAllSidePanels}
           wsConnected={wsConnected}
           players={players}
+          removedPlayers={removedPlayers}
+          onRemovePlayer={(name) => setPlayerRemoved(name, true)}
+          onRestorePlayer={(name) => setPlayerRemoved(name, false)}
+          onGrantHandover={grantNameHandover}
           gameState={gameState}
           playersWhoAnswered={playersWhoAnswered}
           playersWhoVoted={playersWhoVoted}

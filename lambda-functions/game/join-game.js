@@ -2,6 +2,9 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 
+const { openSessionOr } = require('./session-gate');
+const { nowSeconds, handoverOpenFor } = require('./handover');
+
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
 const apigateway = new ApiGatewayManagementApiClient({
@@ -41,13 +44,43 @@ const apigateway = new ApiGatewayManagementApiClient({
  *              genuine collision, so do not guess: refuse, and let the client
  *              ASK ("are you rejoining, or a different Chris?"). An explicit
  *              `claimExisting` turns it into an adoption.
+ *   handover   an owned row that the HOST has unlocked for exactly one
+ *              exchange. The fifth case, and the only one that lets a browser
+ *              take a name a different browser provably holds — see below.
+ *
+ * ── THE FIFTH CASE ─────────────────────────────────────────────────────────
+ *
+ * `collision` is right and it is also a dead end: the person who genuinely
+ * swapped laptops is locked out of a name that is provably theirs, and no
+ * amount of evidence they can present changes that, because the whole premise
+ * is that the request carries no evidence. The only party who can tell "Chris
+ * on a new laptop" from "a second Chris" is the host, who can see the room.
+ *
+ * So the way out is a grant the host makes, and NOT anything the client can
+ * assert: `claimExisting` alone still yields `collision` (asserted in
+ * tests/join-name-collision.js, "claiming does not override an owned row"),
+ * because a client-asserted claim is precisely the silent merge this function
+ * exists to stop. `handoverOpen` comes from `handover.js` reading attributes
+ * only `grant-handover.js` — a host-authenticated route — can write.
+ *
+ * BOTH TERMS ARE REQUIRED, and neither is redundant:
+ *   `handoverOpen`  the host said yes.
+ *   `claimExisting` the PERSON said yes. Without it, an unlocked name would be
+ *                   taken by whoever typed it next, including the innocent
+ *                   third Chris who has no idea a handover is in flight.
+ *
+ * `handoverOpen` is read from a Get and is therefore ADVISORY — the grant is
+ * actually spent by a ConditionExpression on the write, exactly as `adopt` is.
+ * See the branch below.
  *
  * Exported for tests: this is the whole of the decision and it should be
  * assertable without a DynamoDB fake.
  */
-function classifyRejoin({ storedClientId, clientId, claimExisting }) {
+function classifyRejoin({ storedClientId, clientId, claimExisting, handoverOpen = false }) {
   if (storedClientId) {
-    return storedClientId === clientId ? 'reconnect' : 'collision';
+    if (storedClientId === clientId) return 'reconnect';
+    if (handoverOpen && clientId && claimExisting === true) return 'handover';
+    return 'collision';
   }
   if (!clientId) return 'legacy';
   return claimExisting === true ? 'adopt' : 'unverified';
@@ -101,72 +134,11 @@ exports.handler = async (event) => {
 
     console.log(`Player ${playerName} attempting to join game ${gameId}`);
 
-    // Check if game exists and is started
-    const gameCheck = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
-    }));
-
-    if (!gameCheck.Item) {
-      return {
-        statusCode: 404,
-        body: JSON.stringify({ error: 'Game not found' }),
-        headers: { 'Access-Control-Allow-Origin': '*' }
-      };
-    }
-
-    // Check if game has been started
-    if (!gameCheck.Item.Started) {
-      return {
-        statusCode: 403,
-        body: JSON.stringify({ 
-          error: 'Game not started',
-          message: 'This game has not been started yet. Please wait for the host to start the session.'
-        }),
-        headers: { 'Access-Control-Allow-Origin': '*' }
-      };
-    }
-
-    // Check game visibility and access code for private games
-    const gameMetadata = gameCheck.Item;
-    const gameVisibility = gameMetadata.Visibility || 'public';
-    
-    if (gameVisibility === 'private') {
-      const requiredAccessCode = gameMetadata.AccessCode;
-      
-      if (!requiredAccessCode) {
-        console.error(`Game ${gameId} is marked as private but has no access code`);
-        return {
-          statusCode: 500,
-          body: JSON.stringify({ error: 'Game configuration error' }),
-          headers: { 'Access-Control-Allow-Origin': '*' }
-        };
-      }
-      
-      if (!accessCode) {
-        return {
-          statusCode: 401,
-          body: JSON.stringify({ 
-            error: 'Access code required',
-            message: 'This is a private game. Please enter the access code to join.'
-          }),
-          headers: { 'Access-Control-Allow-Origin': '*' }
-        };
-      }
-      
-      if (accessCode !== requiredAccessCode) {
-        return {
-          statusCode: 403,
-          body: JSON.stringify({ 
-            error: 'Invalid access code',
-            message: 'The access code you entered is incorrect. Please try again.'
-          }),
-          headers: { 'Access-Control-Allow-Origin': '*' }
-        };
-      }
-      
-      console.log(`Player ${playerName} provided correct access code for private game ${gameId}`);
-    }
+    // Session exists, has started, and (if private) the code matches — in that
+    // order, because the name-in-use signal must sit behind the code gate or
+    // the refusal becomes a roster oracle. See session-gate.js.
+    const gate = await openSessionOr(db, process.env.TABLE_NAME, gameId, accessCode);
+    if (!gate.ok) return gate.response;
 
     // Use playerName directly as the player ID for simplicity
     const playerId = playerName;
@@ -184,7 +156,8 @@ exports.handler = async (event) => {
       const verdict = classifyRejoin({
         storedClientId: existingPlayer.Item.ClientId || null,
         clientId,
-        claimExisting
+        claimExisting,
+        handoverOpen: handoverOpenFor(existingPlayer.Item, clientId)
       });
 
       if (verdict === 'collision' || verdict === 'unverified') {
@@ -201,11 +174,14 @@ exports.handler = async (event) => {
         // Stamp this browser onto a row that predates identities. The condition
         // is what stops two simultaneous claimants both "adopting": the loser
         // falls through to a collision rather than silently sharing the row.
+        //
+        // `REMOVE RemovedAt` for the reason spelled out at the top of the
+        // reconnect branch below: a claim proves somebody is at the keyboard.
         try {
           await db.send(new UpdateCommand({
             TableName: process.env.TABLE_NAME,
             Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` },
-            UpdateExpression: 'SET ClientId = :cid',
+            UpdateExpression: 'SET ClientId = :cid REMOVE RemovedAt',
             ConditionExpression: 'attribute_not_exists(ClientId)',
             ExpressionAttributeValues: { ':cid': clientId }
           }));
@@ -216,6 +192,104 @@ exports.handler = async (event) => {
             return nameConflictResponse('NAME_TAKEN', playerName);
           }
           throw error;
+        }
+      }
+
+      if (verdict === 'handover') {
+        // SPENDING THE HOST'S GRANT, AND THE ONE-SHOT RULE IS THIS CONDITION.
+        //
+        // Owner's rule: *"the host can use the session players tab to unlock
+        // for 1 exchange of players for that name … if they need to do again,
+        // same routine."* So the grant must be consumed by the first successful
+        // claim and be gone for the second.
+        //
+        // ONE ITEM, ONE CONDITIONAL WRITE. Every clause `handoverOpenFor` read
+        // from the Get is re-checked here against the item as it is at write
+        // time, and the same statement REMOVEs the grant. Two browsers racing a
+        // single grant are serialised by DynamoDB: the first passes
+        // `attribute_exists(HandoverExpiresAt)` and deletes it, the second
+        // fails its condition and is told the name is taken. A read-then-write
+        // — "handoverOpen was true a moment ago, so write" — would let both in,
+        // which is why the grant lives on this row rather than one of its own
+        // (handover.js's header argues that at length).
+        //
+        // The three clauses:
+        //   attribute_exists   the grant has not already been spent
+        //   > :now             it has not lapsed (five-minute window)
+        //   ForClientId        a grant bound to the person who ASKED cannot be
+        //                      stolen by whoever types the name next
+        //
+        // The first is REDUNDANT and kept deliberately — mutation testing says
+        // so: deleting it changes no outcome, because a comparison against a
+        // non-existent attribute is false in DynamoDB, so `> :now` already
+        // implies existence. It stays because it is the clause that STATES the
+        // one-shot rule, and the clause that keeps the rule if the expiry
+        // window is ever widened, made optional, or moved. The other two are
+        // load-bearing and are proven so by the two mid-flight races in
+        // tests/name-handover.js §4 — which exist because dropping either one
+        // left every other test in that file green.
+        //
+        // `RemovedAt` goes too: taking over a name is somebody arriving.
+        try {
+          await db.send(new UpdateCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` },
+            UpdateExpression: 'SET ClientId = :cid REMOVE HandoverExpiresAt, HandoverForClientId, HandoverRequestedBy, HandoverRequestedAt, RemovedAt',
+            ConditionExpression: 'attribute_exists(HandoverExpiresAt) AND HandoverExpiresAt > :now AND (attribute_not_exists(HandoverForClientId) OR HandoverForClientId = :cid)',
+            ExpressionAttributeValues: { ':cid': clientId, ':now': nowSeconds() }
+          }));
+          console.log(`🤝 Handover spent: ${playerName} in game ${gameId} is now client ${clientId}`);
+        } catch (error) {
+          if (error.name === 'ConditionalCheckFailedException') {
+            // Lapsed between the read and the write, or a second claimant got
+            // there first. Either way there is no grant now, and the honest
+            // answer is the one the caller would have got without one.
+            console.log(`⛔ Handover for ${playerName} in game ${gameId} was already spent or has lapsed`);
+            return nameConflictResponse('NAME_TAKEN', playerName);
+          }
+          throw error;
+        }
+      }
+
+      // A JOIN UNDOES A REMOVAL, and this is a decision rather than a
+      // side-effect.
+      //
+      // The host removes people who have left. A removed row keeps its
+      // `ClientId`, so nothing stops that browser coming back — and it is worth
+      // being precise about what "coming back" costs here, because both answers
+      // are defensible:
+      //
+      //   leave them removed   the person is sat in the room typing an answer
+      //                        that no progress bar is waiting for. The host
+      //                        sees "3 of 4 answered" while four people answer,
+      //                        and NOTHING on any screen explains why. An
+      //                        inconsistency nobody can see is the worse bug.
+      //   un-remove them       the host's removal is undone by a browser. The
+      //                        host sees them reappear in the roster and can
+      //                        remove them again — one click, and the state on
+      //                        screen matches the room.
+      //
+      // The second. It fails visibly and it fails towards the truth: a join is
+      // an explicit act on this surface (the rejoin prompt is a tap; auto-join
+      // needs a name in the URL on a fresh page load), so a phone in a pocket
+      // does not quietly resurrect anybody.
+      //
+      // `adopt` and `handover` already cleared it inside their own conditional
+      // writes, so this covers `reconnect` and `legacy` — and it is CONDITIONAL
+      // on the attribute existing so that the overwhelmingly common reconnect
+      // stays a read-only path with no write at all.
+      if (existingPlayer.Item.RemovedAt && verdict !== 'adopt' && verdict !== 'handover') {
+        try {
+          await db.send(new UpdateCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` },
+            UpdateExpression: 'REMOVE RemovedAt',
+            ConditionExpression: 'attribute_exists(RemovedAt)'
+          }));
+          console.log(`↩️ ${playerName} rejoined game ${gameId} after being removed — back in the counts`);
+        } catch (error) {
+          // Somebody else already un-removed them. That is the desired state.
+          if (error.name !== 'ConditionalCheckFailedException') throw error;
         }
       }
 
