@@ -231,8 +231,8 @@ describe('the two destructive paths ask a question worth reading', () => {
   async function openArchive() {
     authFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ prompts: [PROMPT] }) });
     render(<AIPromptManager />);
-    fireEvent.click(await screen.findByTitle('Archive this prompt'));
-    return dialogNamed('Archive');
+    fireEvent.click(await screen.findByTestId(`plib-retire-${PROMPT.promptId}`));
+    return dialogNamed('Retire');
   }
 
   test('nothing is deleted before the question is answered', async () => {
@@ -268,7 +268,7 @@ describe('the two destructive paths ask a question worth reading', () => {
     expect(authFetch.mock.calls.some((c) => c[1] && c[1].method === 'DELETE')).toBe(false);
   });
 
-  test('confirming archives it', async () => {
+  test('confirming retires it', async () => {
     const dialog = await openArchive();
     fireEvent.click(within(dialog).getByTestId('pmgr-archive-confirm'));
     await waitFor(() =>
@@ -297,6 +297,153 @@ describe('the two destructive paths ask a question worth reading', () => {
     fireEvent.click(within(dialog).getByTestId('pmgr-populate-confirm'));
     await waitFor(() =>
       expect(authFetch.mock.calls.some((c) => c[1] && c[1].method === 'POST')).toBe(true));
+  });
+});
+
+/*
+  CLICKING THE CHIP ACTUALLY CHANGES THE PROMPT.
+
+  The panel's own tests pin what the chip sends its caller; these pin what the
+  caller does with it — the round trip, the one field on the wire, and the two
+  states the screen can end up in when it fails.
+
+  The default case is the interesting one and it is the reverse of the obvious
+  fear. `findDefaultPromptId` (get-ai-summary.js:326-345) selects on `isDefault`
+  alone and never reads `status`, so a default set to Draft KEEPS RUNNING for
+  every set of its engagement type. Drafting it only removes it from the
+  question-set prompt picker (AdminPage.js:238 keeps `status === 'active'`).
+  A row that reads Draft while the rooms still hear it is worth a sentence
+  first, so it warns — and warns with the true consequence, not the scary one.
+*/
+describe('the status chip changes the prompt', () => {
+  /** The library with one row in the given state, ready to click. */
+  async function listing(overrides = {}) {
+    const prompt = { ...PROMPT, ...overrides };
+    authFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ prompts: [prompt] }) });
+    render(<AIPromptManager />);
+    await screen.findByText('Lessons Learned');
+    return prompt;
+  }
+
+  /** Every PUT this test made, with its parsed body. */
+  const puts = () => authFetch.mock.calls
+    .filter((c) => c[1] && c[1].method === 'PUT')
+    .map((c) => ({ url: c[0], body: JSON.parse(c[1].body) }));
+
+  test('deactivating a plain prompt PUTs status and nothing else', async () => {
+    /*
+      rejects: sending the whole record back. `PUT /admin/ai-prompts/{id}`
+      treats every absent field as "leave alone", and re-sending a row built
+      from the LIST response — which carries no instructions or outputFormat
+      unless `includeContent` resolved them — would rewrite the prompt's text
+      with whatever the list happened to hold.
+
+      rejects: hitting the DELETE (archive) route, which is the same outcome as
+      the button three cells over.
+    */
+    await listing({ isDefault: false, status: 'active' });
+    fireEvent.click(screen.getByRole('button', { name: 'Active' }));
+
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    expect(puts()[0].url).toMatch(/admin\/ai-prompts\/p1$/);
+    expect(puts()[0].body).toEqual({ status: 'draft' });
+    expect(authFetch.mock.calls.some((c) => c[1] && c[1].method === 'DELETE')).toBe(false);
+  });
+
+  test('the row follows the write, and only after it lands', async () => {
+    /*
+      rejects: an optimistic flip. AdminPage's question-set toggle updates the
+      local row AFTER the response for a reason — an optimistic chip spends the
+      moment of a failure showing the wrong answer, and this column is the one
+      people read to find out what the AI will say to a room.
+    */
+    await listing({ isDefault: false, status: 'active' });
+
+    let settle;
+    authFetch.mockImplementationOnce(() => new Promise((resolve) => { settle = resolve; }));
+    fireEvent.click(screen.getByRole('button', { name: 'Active' }));
+
+    // In flight: still Active, and not clickable a second time.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Active' })).toBeDisabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Active' }));
+    expect(puts()).toHaveLength(1);
+
+    settle({ ok: true, json: async () => ({ status: 'updated' }) });
+    expect(await screen.findByRole('button', { name: 'Draft' })).toBeEnabled();
+  });
+
+  test('a refused change says so and leaves the row telling the truth', async () => {
+    /*
+      rejects: swallowing the failure, and rejects reverting a chip that was
+      never moved. The banner has to say WHICH state the prompt is still in,
+      because the row is the only other thing on screen making that claim.
+    */
+    await listing({ isDefault: false, status: 'active' });
+    authFetch.mockResolvedValueOnce({
+      ok: false, status: 500, json: async () => ({ message: 'stored content could not be read' }),
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Active' }));
+
+    const banner = await screen.findByTestId('pmgr-notice');
+    expect(banner.textContent).toMatch(/was not changed/);
+    expect(banner.textContent).toMatch(/stored content could not be read/);
+    expect(banner.textContent).toMatch(/still Active/);
+    expect(screen.getByRole('button', { name: 'Active' })).toBeInTheDocument();
+  });
+
+  test('deactivating the DEFAULT asks first, and nothing is written until it is answered', async () => {
+    // rejects: firing the PUT from the row and explaining afterwards.
+    await listing({ isDefault: true, status: 'active' });
+    fireEvent.click(screen.getByRole('button', { name: 'Active' }));
+
+    const dialog = dialogNamed('Set “Lessons Learned” to Draft');
+    expect(dialog).toBeTruthy();
+    expect(puts()).toHaveLength(0);
+  });
+
+  test('the default warning says Draft does NOT stop it running', async () => {
+    /*
+      rejects: the plausible copy — "this leaves the engagement type with no
+      default, so those sets get no summary". That is what archiving is
+      documented to do and it is NOT what drafting does: the resolver never
+      reads status, so the prompt keeps running and only leaves the picker.
+      Telling an admin the opposite of what the engine does is how they retire
+      a prompt, walk away, and hear it again in the next session.
+    */
+    await listing({ isDefault: true, status: 'active' });
+    fireEvent.click(screen.getByRole('button', { name: 'Active' }));
+
+    const warning = screen.getByTestId('pmgr-draft-still-runs');
+    expect(warning.textContent).toMatch(/does not stop it running/i);
+    expect(warning.textContent).toMatch(/never looks at status/i);
+    // And the real exit is named, so the dialog is not just a shrug.
+    const dialog = dialogNamed('Set “Lessons Learned” to Draft');
+    expect(dialog.textContent).toMatch(/make.*that.*one the default/i);
+  });
+
+  test('leaving it Active writes nothing; confirming writes the draft', async () => {
+    await listing({ isDefault: true, status: 'active' });
+    fireEvent.click(screen.getByRole('button', { name: 'Active' }));
+    fireEvent.click(screen.getByTestId('pmgr-draft-cancel'));
+    expect(puts()).toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Active' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Active' }));
+    fireEvent.click(screen.getByTestId('pmgr-draft-confirm'));
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    expect(puts()[0].body).toEqual({ status: 'draft' });
+  });
+
+  test('re-activating the default does not ask — only the deactivation is surprising', async () => {
+    // rejects: gating both directions on the dialog. Turning a prompt back on
+    // does exactly what it looks like, and a confirmation on a harmless action
+    // is what trains people to click through the one that matters.
+    await listing({ isDefault: true, status: 'draft' });
+    fireEvent.click(screen.getByRole('button', { name: 'Draft' }));
+
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    expect(puts()[0].body).toEqual({ status: 'active' });
+    expect(screen.queryByTestId('pmgr-draft-confirm')).toBeNull();
   });
 });
 
@@ -359,5 +506,159 @@ describe('failures are reported on the surface they happened to', () => {
     const banner = await screen.findByTestId('pmgr-editor-notice');
     expect(banner.textContent).toMatch(/wrote nothing/);
     expect(screen.getByTestId('prompt-input-textarea')).toHaveValue('mine');
+  });
+});
+
+/**
+ * TWO BUTTONS, TWO ARCHIVES, AND THE ROW USED TO OFFER ONLY THE WRONG ONE.
+ *
+ * The owner pressed the row's "Archive" expecting a copy and got a soft delete:
+ * *"the new archive button in the prompts admin list shouldnt take it out of
+ * the list, it should just put a copy in the archive"*.
+ *
+ * The two operations share no route, no verb and no outcome:
+ *
+ *   Copy to archive   POST admin/export-to-archive  -> a copy in the SHARED
+ *                                                      cross-tier archive. The
+ *                                                      prompt is untouched.
+ *   Retire            DELETE admin/ai-prompts/{id}  -> status archived, row
+ *                                                      gone, nothing copied.
+ *
+ * Everything below is about keeping them told apart, because the failure that
+ * prompted it was entirely a naming failure.
+ */
+describe('copy to archive is not retire', () => {
+  const seedList = () =>
+    authFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ prompts: [PROMPT] }) });
+
+  const exportCalls = () =>
+    authFetch.mock.calls.filter((c) => String(c[0]).includes('export-to-archive'));
+
+  async function clickCopy() {
+    fireEvent.click(await screen.findByTestId(`plib-copy-archive-${PROMPT.promptId}`));
+  }
+
+  test('it POSTs the export route with this one prompt, and no DELETE', async () => {
+    /*
+      rejects: wiring the new button to `onDelete` — the exact bug being fixed,
+      which from the outside looks like a working button.
+    */
+    seedList();
+    authFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ results: { successful: [{ id: PROMPT.promptId }], failed: [] } }),
+    });
+    render(<AIPromptManager />);
+    await clickCopy();
+
+    await waitFor(() => expect(exportCalls().length).toBe(1));
+    const [, init] = exportCalls()[0];
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({ selectedItems: ['p1'], exportType: 'prompts' });
+    // rejects: copying AND retiring, which would be the worst of both.
+    expect(authFetch.mock.calls.some((c) => c[1] && c[1].method === 'DELETE')).toBe(false);
+  });
+
+  test('it asks nothing first — a copy is not a destructive act', async () => {
+    // rejects: reusing the retire confirmation for the copy, which would train
+    // people to click through the dialog that does matter.
+    seedList();
+    authFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ results: { successful: [{ id: PROMPT.promptId }], failed: [] } }),
+    });
+    render(<AIPromptManager />);
+    await clickCopy();
+    await waitFor(() => expect(exportCalls().length).toBe(1));
+    expect(screen.queryAllByRole('dialog')).toHaveLength(0);
+  });
+
+  test('the row survives the copy', async () => {
+    // rejects: refetching into an empty list, or optimistically dropping the
+    // row. "shouldnt take it out of the list" is the whole request.
+    seedList();
+    authFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ results: { successful: [{ id: PROMPT.promptId }], failed: [] } }),
+    });
+    render(<AIPromptManager />);
+    await clickCopy();
+    await waitFor(() => expect(exportCalls().length).toBe(1));
+    expect(await screen.findByTestId(`plib-copy-archive-${PROMPT.promptId}`)).toBeInTheDocument();
+    expect(screen.getByText('Lessons Learned')).toBeInTheDocument();
+  });
+
+  test('a 200 carrying a per-item failure is reported as a failure', async () => {
+    /*
+      rejects: branching on `response.ok` alone. `export-to-archive` answers 200
+      with `{ results: { successful, failed } }`, so the em-dash failure — the
+      one that kept four trivia prompts out of the archive for a day — arrives
+      as a success with a populated `failed` array. Reporting that as "copied"
+      is how "export completed, 0 items exported" happened.
+    */
+    seedList();
+    authFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        results: { successful: [], failed: [{ id: 'p1', error: 'the title contains "—" (U+2014).' }] },
+      }),
+    });
+    render(<AIPromptManager />);
+    await clickCopy();
+    expect(await screen.findByText(/U\+2014/)).toBeInTheDocument();
+    expect(screen.queryByText(/was copied to the shared archive/)).not.toBeInTheDocument();
+  });
+
+  test('a 200 with neither list populated does not claim a copy', async () => {
+    // rejects: treating "no failures" as "succeeded". No evidence of a copy is
+    // not evidence of a copy.
+    seedList();
+    authFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ results: {} }) });
+    render(<AIPromptManager />);
+    await clickCopy();
+    expect(await screen.findByText(/no error and no copy/)).toBeInTheDocument();
+  });
+
+  test('a failed copy says the prompt is unchanged', async () => {
+    // rejects: a bare error string. After pressing a button whose old namesake
+    // deleted things, "what happened to my prompt" is the first question.
+    seedList();
+    authFetch.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ error: 'nope' }) });
+    render(<AIPromptManager />);
+    await clickCopy();
+    expect(await screen.findByText(/still in this list/)).toBeInTheDocument();
+  });
+
+  test('the two buttons do not share a word', async () => {
+    /*
+      rejects: leaving the destructive control labelled "Archive" beside a
+      control that genuinely archives. This is the assertion that fails if
+      anyone renames Retire back.
+    */
+    seedList();
+    render(<AIPromptManager />);
+    const retire = await screen.findByTestId(`plib-retire-${PROMPT.promptId}`);
+    const copy = screen.getByTestId(`plib-copy-archive-${PROMPT.promptId}`);
+    expect(retire.textContent).toBe('Retire');
+    expect(retire.textContent.toLowerCase()).not.toContain('archive');
+    expect(copy.textContent).toMatch(/Copy to archive/);
+    // ...and the destructive one still says, on hover, that it copies nothing.
+    expect(retire.getAttribute('title')).toMatch(/not copied to the archive/i);
+  });
+
+  test('the retire dialog no longer claims a retired default stops running', async () => {
+    /*
+      rejects: the shipped copy, "Archiving it leaves that engagement type with
+      no default at all, so every set of that type gets no summary". False:
+      `findDefaultPromptId` (game/get-ai-summary.js:326-345) selects on
+      `isDefault === true` and never reads `status`, so the prompt keeps running.
+      A warning that overstates is a warning people learn to disbelieve.
+    */
+    seedList();
+    render(<AIPromptManager />);
+    fireEvent.click(await screen.findByTestId(`plib-retire-${PROMPT.promptId}`));
+    const text = (await screen.findByTestId('pmgr-archive-default')).textContent;
+    expect(text).toMatch(/does not stop it running/i);
+    expect(text).not.toMatch(/no default at all/);
   });
 });

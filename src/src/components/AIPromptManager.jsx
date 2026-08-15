@@ -1309,6 +1309,8 @@ function AIPromptManager() {
   */
   const [notice, setNotice] = useState('');
   const [pendingArchive, setPendingArchive] = useState(null);
+  /** The promptId whose copy-to-archive round trip is in flight, or null. */
+  const [copyingToArchiveId, setCopyingToArchiveId] = useState(null);
   const [confirmPopulate, setConfirmPopulate] = useState(false);
   /** The prompt whose status round trip is in flight, and the one default whose
    *  deactivation is waiting to be confirmed. See the two blocks below. */
@@ -1368,6 +1370,62 @@ function AIPromptManager() {
 
   const handleDeletePrompt = (promptId) => setPendingArchive(promptId);
 
+  /**
+   * PUT A COPY IN THE SHARED ARCHIVE. The prompt is not changed and does not
+   * leave the list.
+   *
+   * This is `POST admin/export-to-archive` — the same route the Archive panel's
+   * checkbox-and-export flow uses, with one id in the array — and it is a
+   * DIFFERENT OPERATION from the row's Retire button next to it. See the note
+   * on the row buttons in PromptLibraryPanel.jsx for why both now exist and why
+   * the names changed.
+   *
+   * REPORTS THE PER-ITEM FAILURE, NOT JUST THE HTTP STATUS. `export-to-archive`
+   * answers 200 with `{ results: { successful, failed } }`, so an export that
+   * archived nothing still arrives as a success. That is exactly how the
+   * question-set export reported "export completed, 0 items exported" for a
+   * whole afternoon. The per-item `error` string is the one worth showing —
+   * for the em-dash failure it names the character and the code point.
+   *
+   * NO REFETCH. Nothing about the prompt changed, so re-reading the list would
+   * only make the screen flicker to prove it.
+   */
+  const copyPromptToArchive = async (prompt) => {
+    const promptId = prompt?.promptId;
+    if (!promptId) return;
+    setCopyingToArchiveId(promptId);
+    setNotice('');
+    try {
+      const response = await authFetch(`${API_BASE}admin/export-to-archive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selectedItems: [promptId], exportType: 'prompts' }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setNotice(`“${prompt.name}” was not copied to the archive: ${result.error || `HTTP ${response.status}`}. It is unchanged and still in this list.`);
+        return;
+      }
+      const failed = result?.results?.failed || [];
+      const succeeded = result?.results?.successful || [];
+      if (failed.length > 0) {
+        setNotice(`“${prompt.name}” was not copied to the archive: ${failed[0].error || 'the archive service refused it'} It is unchanged and still in this list.`);
+        return;
+      }
+      if (succeeded.length === 0) {
+        // 200 with neither list populated. Says so rather than claiming a copy
+        // that nothing in the response evidences.
+        setNotice(`The archive reported no error and no copy for “${prompt.name}”. Check the Archive tab before relying on it.`);
+        return;
+      }
+      setNotice(`“${prompt.name}” was copied to the shared archive. It is unchanged and still in this list.`);
+    } catch (error) {
+      setNotice(`“${prompt.name}” was not copied to the archive: ${error.message}. It is unchanged and still in this list.`);
+    } finally {
+      setCopyingToArchiveId(null);
+    }
+  };
+
   const archivePrompt = async (promptId) => {
     setPendingArchive(null);
     setNotice('');
@@ -1384,7 +1442,7 @@ function AIPromptManager() {
       await fetchPrompts();
     } catch (error) {
       console.error('Error deleting prompt:', error);
-      setNotice(`That prompt was not archived (${error.message}). It is still active and still in the list.`);
+      setNotice(`That prompt was not retired (${error.message}). It is still active and still in the list.`);
     }
   };
 
@@ -1570,6 +1628,8 @@ function AIPromptManager() {
         onPopulateDefaults={handlePopulateDefaults}
         onToggleStatus={handleToggleStatus}
         busyPromptId={togglingId}
+        onCopyToArchive={copyPromptToArchive}
+        copyingPromptId={copyingToArchiveId}
       />
 
       {(editingPrompt || isCreating) && (
@@ -1593,7 +1653,7 @@ function AIPromptManager() {
       )}
 
       {/*
-        ARCHIVE A PROMPT.
+        RETIRE A PROMPT.
 
         Was `window.confirm('Are you sure you want to archive this prompt?')`,
         which named neither the prompt nor anything that depends on it. The
@@ -1602,6 +1662,14 @@ function AIPromptManager() {
         it, and that Draft does the same job reversibly. RATIONALE §8: state
         the consequence, count before you ask, and offer the reversible
         neighbour.
+
+        SAYS "RETIRE" THROUGHOUT NOW, because "archive" was two things. The row
+        next to this one puts a COPY in the shared cross-tier archive and leaves
+        the prompt alone; this takes the prompt out of the list and copies it
+        nowhere. Sharing the word made the destructive one sound like the
+        preserving one, which is how it got pressed by mistake. The `pmgr-
+        archive-*` test ids are left alone deliberately — they are handles, not
+        copy, and renaming them would churn every test for no reader's benefit.
       */}
       {archiveTarget && (
         <Modal
@@ -1610,20 +1678,41 @@ function AIPromptManager() {
           labelledBy="pmgr-archive-title"
           onClose={() => setPendingArchive(null)}
         >
-          <h3 id="pmgr-archive-title">Archive “{archiveTarget.name}”?</h3>
+          <h3 id="pmgr-archive-title">Retire “{archiveTarget.name}”?</h3>
           <p>
-            Archiving takes it out of the pickers. It is not deleted &mdash; the record and
-            its text stay, and it can be set back to Active from the editor.
+            Retiring takes it out of the pickers and out of this list. It is not deleted
+            &mdash; the record and its text stay, and it can be set back to Active from the
+            editor. It is <strong>not</strong> copied to the shared archive; that is the
+            &ldquo;Copy to archive&rdquo; button next to it, which leaves the prompt alone.
           </p>
           {archiveTarget.isDefault && (
+            /*
+              WHAT RETIRING A DEFAULT ACTUALLY DOES, which is not what this
+              paragraph used to claim.
+
+              It said retiring left the engagement type "with no default at
+              all, so every set of that type gets no summary". That is false,
+              and it is false in the direction that matters: `findDefaultPromptId`
+              (lambda-functions/game/get-ai-summary.js:326-345) selects on
+              `isDefault === true` and NEVER READS `status`. A retired default
+              keeps resolving and keeps running, word for word, in every room.
+
+              So the hazard is not an outage, it is a screen that lies: the
+              prompt reads as retired while the rooms still hear it. Told
+              plainly, with the one real effect (AdminPage.jsx:238 filters the
+              per-set picker to `status === 'active'`) and the actual exit.
+            */
             <p data-testid="pmgr-archive-default">
               <strong>
                 This is the default{' '}
-                {GAME_TYPE_LABELS[normalizeGameType(archiveTarget.gameType)] || ''} summary prompt.
+                {GAME_TYPE_LABELS[normalizeGameType(archiveTarget.gameType)] || ''} summary prompt,
+                and retiring it does not stop it running.
               </strong>{' '}
-              Archiving it leaves that engagement type with no default at all, so every set
-              of that type without a prompt of its own gets no summary until another one is
-              made default.
+              The summary engine picks the default by its default flag and never looks at its
+              status, so every set of that type without a prompt of its own keeps getting this
+              one &mdash; it just stops being offered when you attach a prompt to a set. To
+              actually replace it, make another prompt of this type the default; that demotes
+              this one in the same save.
             </p>
           )}
           {archiveTarget.questionSetIds && archiveTarget.questionSetIds.length > 0 && (
@@ -1660,7 +1749,73 @@ function AIPromptManager() {
               onClick={() => archivePrompt(archiveTarget.promptId)}
               data-testid="pmgr-archive-confirm"
             >
-              Archive it
+              Retire it
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/*
+        DEACTIVATE THE DEFAULT.
+
+        RATIONALE §8: state the consequence, not the severity. The consequence
+        here is unusual enough to be worth the dialog — the thing an admin
+        expects Draft to do to a default is the one thing it does NOT do. See
+        `handleToggleStatus` for the two file:line references this copy is
+        derived from; if either changes, this text is wrong and has to move
+        with it.
+
+        No confirmation on the way back to Active, and none on any non-default
+        prompt: those do what they look like they do.
+      */}
+      {pendingDraft && (
+        <Modal
+          overlayClassName="modal-overlay"
+          contentClassName="modal-content"
+          labelledBy="pmgr-draft-title"
+          onClose={() => setPendingDraft(null)}
+        >
+          <h3 id="pmgr-draft-title">Set “{pendingDraft.name}” to Draft?</h3>
+          <p data-testid="pmgr-draft-still-runs">
+            <strong>
+              This is the default{' '}
+              {GAME_TYPE_LABELS[normalizeGameType(pendingDraft.gameType)] || ''} summary prompt, and
+              Draft does not stop it running.
+            </strong>{' '}
+            The summary engine picks the default by its default flag alone and never looks at
+            status, so every{' '}
+            {GAME_TYPE_LABELS[normalizeGameType(pendingDraft.gameType)] || 'session'} set without a
+            prompt of its own keeps getting this one, word for word.
+          </p>
+          <p>
+            What changes is the picker: a question set choosing a prompt is only offered Active
+            ones, so this stops appearing there. The row will read Draft while the rooms keep
+            hearing it.
+          </p>
+          <p>
+            To actually retire it, open another prompt of this engagement type and make{' '}
+            <strong>that</strong> one the default — the same save demotes this one.
+          </p>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setPendingDraft(null)}
+              data-testid="pmgr-draft-cancel"
+            >
+              Leave it Active
+            </button>
+            <button
+              type="button"
+              className="btn-danger"
+              onClick={() => {
+                const target = pendingDraft;
+                setPendingDraft(null);
+                applyStatus(target, 'draft');
+              }}
+              data-testid="pmgr-draft-confirm"
+            >
+              Set it to Draft anyway
             </button>
           </div>
         </Modal>

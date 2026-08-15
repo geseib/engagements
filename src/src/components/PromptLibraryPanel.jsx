@@ -246,6 +246,19 @@ export default function PromptLibraryPanel({
   /** The promptId whose status round trip is in flight, so its chip cannot be
    *  clicked twice into two writes of two different values. */
   busyPromptId = null,
+  /**
+   * Put a COPY of this prompt in the shared cross-tier archive —
+   * `(prompt) => void`. Distinct from `onDelete` in every way that matters:
+   * different route, different outcome, and the row survives it. See the long
+   * note at the row buttons.
+   *
+   * OPTIONAL, like `onToggleStatus` and for the same reason: not every mount of
+   * this panel has an export round trip to offer, and a dead control is the one
+   * people reach for first.
+   */
+  onCopyToArchive,
+  /** The promptId whose archive copy is in flight, so one click is one export. */
+  copyingPromptId = null,
 }) {
   const { search = '', gameType = 'all', category = 'all', status = 'all' } = filters || {};
 
@@ -557,14 +570,58 @@ export default function PromptLibraryPanel({
                         Advisor
                       </button>
                     )}
+                    {/*
+                      TWO DIFFERENT ARCHIVES, AND THIS ROW USED TO NAME THE
+                      WRONG ONE.
+
+                      The owner, having pressed the button below expecting a
+                      copy: *"the new archive button in the prompts admin list
+                      shouldnt take it out of the list, it should just put a
+                      copy in the archive"*.
+
+                      They are two unrelated things that were sharing one word:
+
+                        COPY TO ARCHIVE  POST admin/export-to-archive. Writes a
+                                         copy into the SHARED cross-tier archive
+                                         (engage2-archive) so another tier can
+                                         import it. The prompt is not touched:
+                                         same status, same row, still in the
+                                         list. This is the one that was missing
+                                         from the row and only existed on the
+                                         Archive panel, behind a checkbox list.
+
+                        RETIRE           DELETE admin/ai-prompts/{id}. A soft
+                                         delete that stamps `archivedAt`, sets
+                                         the status to `archived` and drops the
+                                         row out of every default filter.
+                                         Nothing is copied anywhere.
+
+                      The second one was labelled "Archive", so the button that
+                      REMOVED a prompt was the one whose name promised to keep
+                      it. Renamed to "Retire", which is the word the archive
+                      confirmation dialog already uses in its own copy.
+                    */}
+                    {onCopyToArchive && (
+                      <button
+                        type="button"
+                        className="plib-btn"
+                        onClick={() => onCopyToArchive(prompt)}
+                        disabled={copyingPromptId === prompt.promptId}
+                        data-testid={`plib-copy-archive-${prompt.promptId}`}
+                        title="Put a copy of this prompt in the shared archive, so another environment can import it. This prompt stays exactly as it is."
+                      >
+                        {copyingPromptId === prompt.promptId ? 'Copying…' : 'Copy to archive'}
+                      </button>
+                    )}
                     {onDelete && (
                       <button
                         type="button"
                         className="plib-btn plib-btn--ghostdanger"
                         onClick={() => onDelete(prompt.promptId)}
-                        title="Archive this prompt"
+                        data-testid={`plib-retire-${prompt.promptId}`}
+                        title="Retire this prompt: it stops being offered and leaves this list. It is not copied to the archive."
                       >
-                        Archive
+                        Retire
                       </button>
                     )}
                   </div>
