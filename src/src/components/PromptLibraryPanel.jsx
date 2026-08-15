@@ -73,6 +73,37 @@ import { gameTypeLabel, normalizeGameType } from '../config/gameTypes';
   chips — is shared, which is what made the audit item worth doing.
 */
 
+/*
+  `inactive` IS A REAL STATUS IN THE TABLE, WRITTEN BY SHIPPED CODE.
+
+  It is not in the vocabulary — the three are active | draft | archived, which
+  update-ai-prompt.js whitelists and which every filter compares exactly — but
+  `import-from-archive.js` wrote `status: 'inactive'` on every prompt it ever
+  imported, with the comment "Start inactive for review". Ten such rows are in
+  prod right now.
+
+  Folded onto `draft`, which is what its author meant: not retired, just not
+  being offered yet. Two symptoms the owner reported came from its absence —
+  "the prompt state tag is not clickable to make active" (the chip rendered as
+  a dead span, because `nextStatusFor` did not recognise the value and rightly
+  refused to guess an opposite), and the rows being invisible under every
+  filter option except "All".
+
+  Folding is safe for THIS value and would not be for an arbitrary unknown one:
+  the shipped comment beside the write says what it meant. Anything else still
+  falls through to a plain span, because we do not know what its opposite is.
+  The importer no longer writes `inactive`; this is for the rows already out
+  there, and it is what makes them fixable from the screen instead of only by
+  re-importing.
+*/
+const DRAFT_SYNONYMS = new Set(['draft', 'inactive']);
+
+/** One spelling for a status, so the chip, the label and the filter agree. */
+function canonicalStatus(status) {
+  if (!status) return 'draft';
+  return DRAFT_SYNONYMS.has(status) ? 'draft' : status;
+}
+
 /** Does this prompt survive a filter combination? One place, so the drop-counts
  *  below cannot drift from the list they describe. */
 export function matchesPromptFilters(
@@ -84,7 +115,12 @@ export function matchesPromptFilters(
     return false;
   }
   if (category !== 'all' && prompt[categoryKey] !== category) return false;
-  if (status !== 'all' && prompt.status !== status) return false;
+  // Filtered through the same synonym map the chip uses, so a row written with
+  // `inactive` by the old importer appears under Draft instead of under nothing.
+  // Without this the filter is a place rows go to disappear: the dropdown offers
+  // three statuses and the row holds a fourth, so it is invisible under every
+  // option except "All".
+  if (status !== 'all' && canonicalStatus(prompt.status) !== canonicalStatus(status)) return false;
 
   const needle = search.trim().toLowerCase();
   if (needle) {
@@ -96,7 +132,10 @@ export function matchesPromptFilters(
   return true;
 }
 
-const STATUS_LABEL = { active: 'Active', draft: 'Draft', archived: 'Archived' };
+// `inactive` reads as Draft rather than as the raw word, because that is what
+// it behaves as — see DRAFT_SYNONYMS. A chip that says "inactive" beside a
+// filter offering only Active/Draft/Archived is a row nobody can account for.
+const STATUS_LABEL = { active: 'Active', draft: 'Draft', archived: 'Archived', inactive: 'Draft' };
 
 /** The chip modifier for a status. Unknown statuses get the neutral chip rather
  *  than no chip, so a row written by a script is still legible. */
@@ -142,7 +181,7 @@ export function nextStatusFor(status) {
   if (status === 'active') return 'draft';
   // A record written by a script with no status at all already READS as Draft
   // (the label falls through below), so the chip has to agree with the label.
-  if (!status || status === 'draft') return 'active';
+  if (canonicalStatus(status) === 'draft') return 'active';
   return null;
 }
 
