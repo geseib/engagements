@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Icon from './Icon';
+import Modal from './Modal';
 import StatusMessage from './StatusMessage';
 import PromptShapePreview from './PromptShapePreview';
 import RoundKindPicker from './RoundKindPicker';
@@ -283,6 +284,39 @@ export default function QuestionSetEditor({
   useEffect(() => {
     if (onDirtyChange) onDirtyChange(questionsDirty);
   }, [questionsDirty, onDirtyChange]);
+
+  /*
+   * THE ONE WAY OUT, CALLED FROM THREE PLACES.
+   *
+   * Reported by the owner: *"there is no way to back out of 'edit question set'
+   * for the host (no x in upper right, or cancel bottom …)"*. This editor is
+   * mounted inside `HostQuestionSetsDialog`'s `Modal`, whose scrim is
+   * `closeOnBackdrop={false}` and whose Escape is `() => !editorDirty`. Its own
+   * only exit was the Cancel beside Save Changes — which sits in the FIRST of
+   * four panels, above the Questions panel, the Versions panel and the Media
+   * panel, inside a `.qsets-editor-frame` that is `max-height: 86vh;
+   * overflow: auto`. Scroll down to the questions, which is the whole reason a
+   * host opens this, and every exit in the product is off-screen at once: the
+   * Cancel has scrolled away, the backdrop is inert by design, and on a tablet
+   * there is no Escape key. That is the same trap
+   * `docs/…/modalReachability` and QuestionsPanel's own `×` were written for.
+   *
+   * So there are now three: the `×` in the header, the Cancel in the Details
+   * panel that was always here, and a Cancel in the editor's own footer. All
+   * three go through THIS function, and this function honours the same rule the
+   * container's Escape gate does — an unsaved working copy is confirmed before
+   * it is dropped, never silently binned. A second way out that skipped the
+   * confirmation would be a new way to lose an afternoon's work, which is
+   * exactly what the gate exists to prevent.
+   */
+  const requestClose = useCallback(() => {
+    if (!onCancel) return;
+    if (questionsDirty) {
+      setConfirmClose(true);
+      return;
+    }
+    onCancel();
+  }, [onCancel, questionsDirty]);
 
   /** Display name for a stored personaId, or a warning when it resolves to nothing. */
   const personaLabel = (id) => {
@@ -621,10 +655,34 @@ export default function QuestionSetEditor({
 
   return (
     <div className="admin-section edit-section qs-editor">
-      <h2>
-        <Icon name="PencilSimple" weight="bold" size={16} color="currentColor" />{' '}
-        Edit Question Set
-      </h2>
+      {/*
+        THE TITLE AND THE WAY OUT, ON ONE LINE — the same `.qs-dialog-head` /
+        `.qs-dialog-close` pair QuestionsPanel's question dialog already uses,
+        reused rather than re-invented so the two surfaces a host meets one
+        inside the other carry the identical control in the identical corner.
+
+        Drawn only when there is somewhere to go. `onCancel` is optional, and a
+        `×` that is wired to nothing is worse than no `×` — it is the control
+        people reach for first, so it must never be the one that does nothing.
+      */}
+      <div className="qs-dialog-head">
+        <h2>
+          <Icon name="PencilSimple" weight="bold" size={16} color="currentColor" />{' '}
+          Edit Question Set
+        </h2>
+        {onCancel && (
+          <button
+            type="button"
+            className="qs-dialog-close"
+            onClick={requestClose}
+            aria-label="Close the editor"
+            title="Close the editor"
+            data-testid="qs-editor-close"
+          >
+            ×
+          </button>
+        )}
+      </div>
       <p className="section-description">
         {currentSet.name || setId} · {gameTypeLabel(currentSet.engagementType)} ·{' '}
         {currentSet.totalQuestions || 0} questions in {currentSet.categoryCount || 0} categories
@@ -1057,12 +1115,15 @@ export default function QuestionSetEditor({
               <Icon name="FloppyDisk" weight="bold" size={16} color="currentColor" />{' '}
               {saveStatus === 'Saving...' ? 'Saving...' : 'Save Changes'}
             </button>
-            <button
-              className="btn-secondary"
-              onClick={() => (questionsDirty ? setConfirmClose(true) : onCancel && onCancel())}
-            >
-              Cancel
-            </button>
+            {/* Same gate as the other two exits: `onCancel` is optional, and a
+                Cancel wired to nothing is a control that reads as a frozen
+                screen. It used to render unconditionally and call
+                `onCancel && onCancel()`. */}
+            {onCancel && (
+              <button className="btn-secondary" onClick={requestClose}>
+                Cancel
+              </button>
+            )}
           </div>
 
           {saveStatus && (
@@ -1195,30 +1256,75 @@ export default function QuestionSetEditor({
         </p>
       </section>
 
+      {/*
+        THE BOTTOM OF THE EDITOR IS ALSO AN EXIT.
+
+        The owner asked for both this and the `×` above, and both because of
+        where the panels sit: the Details panel's Cancel is roughly a quarter of
+        the way down a four-panel form, so the moment you scroll to the
+        questions — the reason you opened the editor — there is nothing on
+        screen that gets you back. A person who has finished reading DOWN should
+        not have to scroll back UP to leave.
+
+        Deliberately a lone secondary. There is no second "Save Changes" here:
+        Details PUTs metadata and Questions POSTs a replace that manufactures a
+        version, so a footer Save would have to pick one of two different writes
+        and would be lying whichever it picked. It routes through
+        `requestClose`, so an unsaved working copy is still asked about.
+      */}
+      {onCancel && (
+        <div className="form-actions" data-testid="qs-editor-footer">
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={requestClose}
+            data-testid="qs-editor-cancel"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* Closing with an unsaved working copy. The Questions panel holds edits
           that exist nowhere but this browser tab, so closing the editor is the
           one click that can silently destroy an afternoon's work. */}
       {confirmClose && (
-        <div className="modal-overlay" onClick={() => setConfirmClose(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>
-              <Icon name="Warning" weight="fill" size={16} color="var(--primary)" />{' '}
-              You have unsaved questions
-            </h3>
-            <p>
-              The Questions panel has changes that have not been saved. Closing the editor
-              throws them away — there is no draft kept anywhere.
-            </p>
-            <div className="modal-actions">
-              <button className="btn-secondary" onClick={() => setConfirmClose(false)}>
-                Go back and save them
-              </button>
-              <button className="btn-danger" onClick={() => { setConfirmClose(false); if (onCancel) onCancel(); }}>
-                Close and lose the changes
-              </button>
-            </div>
+        /*
+          THROUGH THE PRIMITIVE, NOT A HAND-ROLLED OVERLAY. This was a raw
+          `.modal-overlay` div: no `role="dialog"`, no accessible name, no focus
+          trap, and — the part that matters here — no Escape. It is the dialog
+          that now stands between three separate exits and an afternoon of
+          unsaved questions, so it must not itself be a thing you can only leave
+          by aiming at the backdrop.
+
+          `Modal` answers the INNERMOST dialog by DOM containment, and this
+          renders inside the editor's own scrim, so Escape here means "go back
+          and save them" — the safe half of the choice — and cannot reach past
+          it to the close it is guarding.
+        */
+        <Modal
+          overlayClassName="modal-overlay"
+          contentClassName="modal-content"
+          labelledBy="qs-editor-confirm-close-title"
+          onClose={() => setConfirmClose(false)}
+        >
+          <h3 id="qs-editor-confirm-close-title">
+            <Icon name="Warning" weight="fill" size={16} color="var(--primary)" />{' '}
+            You have unsaved questions
+          </h3>
+          <p>
+            The Questions panel has changes that have not been saved. Closing the editor
+            throws them away — there is no draft kept anywhere.
+          </p>
+          <div className="modal-actions">
+            <button className="btn-secondary" onClick={() => setConfirmClose(false)}>
+              Go back and save them
+            </button>
+            <button className="btn-danger" onClick={() => { setConfirmClose(false); if (onCancel) onCancel(); }}>
+              Close and lose the changes
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Pinned-game delete confirmation. The ids matter: "some games are using

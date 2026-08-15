@@ -90,6 +90,13 @@ const IVY_QUESTIONS = {
 function mockApi({
   sets = HOST_VIEW, editStatus = 200, editBody = null, deleteStatus = 200, uploadStatus = 200,
   questions = IVY_QUESTIONS,
+  /**
+   * A DELETE that never settles, so the confirm dialog can be observed in its
+   * `deleting` phase. There is no other way to hold it there: every mocked
+   * response resolves on the microtask queue, and the phase this dialog's whole
+   * gate exists to protect is the one BETWEEN the request and the answer.
+   */
+  hangDelete = false,
 } = {}) {
   let listCalls = 0;
   // THE THREE ROUTES A HOST IS REFUSED, counted rather than left to throw.
@@ -128,6 +135,7 @@ function mockApi({
         : jsonResponse(editStatus, editBody || { error: 'This question set belongs to someone else. You can only change sets you created.' });
     }
     if (method === 'DELETE' && url.includes('/admin/question-sets/')) {
+      if (hangDelete) return new Promise(() => {});
       return deleteStatus === 200
         ? jsonResponse(200, { message: 'Question set "Ivy Retro" deleted successfully', itemsDeleted: 15 })
         : jsonResponse(deleteStatus, { error: 'This question set belongs to someone else. You can only change sets you created.' });
@@ -301,6 +309,49 @@ describe('a host sees their own sets, and only controls they can use', () => {
     await openDialog({}, { sets: HOST_VIEW.map((s) => ({ ...s, canManage: false })) });
     expect(screen.getByText(/you haven't made a question set yet/i)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /generate with ai/i })).toBeNull();
+  });
+});
+
+/* ------------------------------------------------- getting out of the shelf -- */
+
+/**
+ * THE SAME STANDARD ONE LEVEL UP. The owner's *"that should be pretty standard
+ * across our UX"* is what this block is for: the shelf is the container the
+ * editor opens from, and it had a text "Close" in the header and nothing at the
+ * bottom. `.qsets-modal` is `max-height: 86vh; overflow: auto` and its header
+ * does not stick, so with a shelf of sets and the New question set form open the
+ * only close control is scrolled off the top.
+ *
+ * Escape and the backdrop DO both work on this scrim — it gates neither — so
+ * this was never the trap the editor was. It is a consistency fix, and the
+ * tests say only what is true of it.
+ */
+describe('the shelf can be closed from the top and from the bottom', () => {
+  test('the header carries a named × rather than a differently-worded button', async () => {
+    // rejects: a bare `×` with no accessible name, and rejects the three-deep
+    // stack spelling its corner control three different ways — this dialog, the
+    // editor it opens, and the question dialog inside that all carry one now.
+    const onClose = jest.fn();
+    await openDialog({ onClose });
+    const close = screen.getByTestId('hqs-close');
+    expect(close).toHaveAccessibleName(/close your question sets/i);
+    fireEvent.click(close);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('and a Close at the bottom, after the list', async () => {
+    // DOCUMENT ORDER, not geometry — jsdom lays nothing out. The point is that
+    // the control is past the body a host scrolls through, not that it is N
+    // pixels down. rejects: adding a second control beside the first.
+    const onClose = jest.fn();
+    await openDialog({ onClose });
+    const footer = document.querySelector('.qsets-modal--wide > footer');
+    expect(footer).not.toBeNull();
+    const body = document.querySelector('.qsets-modal-body');
+    expect(body.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(within(footer).getByRole('button', { name: /^close$/i }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -478,6 +529,91 @@ describe('a host edits the questions in a set they own', () => {
     expect(screen.getByRole('dialog', { name: /your question sets/i })).toBeTruthy();
   });
 
+  /*
+   * ─────────────────────────────────────── THE OWNER'S REPORT, ON THIS MOUNT ──
+   *
+   * *"there is no way to back out of 'edit question set' for the host (no x in
+   * upper right, or cancel bottom - add both …"*
+   *
+   * This is the mount the report is about, and it is the worst of the two: the
+   * editor's scrim is `closeOnBackdrop={false}`, its Escape is
+   * `() => !editorDirty`, and the frame it renders in is
+   * `max-height: 86vh; overflow: auto`. Scroll to the Questions panel with an
+   * edit in hand and the backdrop is inert, Escape declines, the Details
+   * Cancel has scrolled off the top, and a tablet has no Escape key at all.
+   *
+   * The tests below assert the two controls the owner named exist ON THIS
+   * MOUNT — the host reaches the editor through a different container from the
+   * console, and a prop-gated control is exactly the kind that ships to one
+   * audience and not the other — and that they honour the same gate Escape
+   * does. Roles and names only; jsdom has no layout engine, so "upper right"
+   * is not assertable and is not asserted.
+   */
+  test('the editor a host opens carries both ways out', async () => {
+    // rejects: the reported state — an editor with no × and no bottom Cancel.
+    // rejects: adding them to the console mount only.
+    await openDialog();
+    await openEditor();
+    expect(screen.getByRole('button', { name: /close the editor/i })).toBeTruthy();
+    expect(screen.getByTestId('qs-editor-cancel')).toHaveTextContent('Cancel');
+  });
+
+  test('the × closes the editor and leaves the shelf standing', async () => {
+    // rejects: an × wired to the shelf's own onClose, which would drop the host
+    // all the way back to the create screen from a control that says "close the
+    // editor" — and rejects the Modal's Escape handling reaching past the
+    // editor to the dialog behind it.
+    const onClose = jest.fn();
+    await openDialog({ onClose });
+    await openEditor();
+
+    fireEvent.click(screen.getByRole('button', { name: /close the editor/i }));
+    await waitFor(() => expect(screen.queryByTestId('questions-panel')).toBeNull());
+    expect(screen.getByRole('dialog', { name: /your question sets/i })).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  test('the footer Cancel closes the editor and leaves the shelf standing', async () => {
+    const onClose = jest.fn();
+    await openDialog({ onClose });
+    await openEditor();
+
+    fireEvent.click(screen.getByTestId('qs-editor-cancel'));
+    await waitFor(() => expect(screen.queryByTestId('questions-panel')).toBeNull());
+    expect(screen.getByRole('dialog', { name: /your question sets/i })).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  test('both new exits obey the same gate Escape does', async () => {
+    // THE CONSTRAINT ON THE FIX. `closeOnEscape={() => !editorDirty}` exists so
+    // one keypress cannot bin a working copy that lives in this tab and nowhere
+    // else. A × or a Cancel wired straight to close would be that keypress with
+    // a mouse, and it would be reachable from a scroll position where the
+    // keyboard route is deliberately refused. rejects: exactly that.
+    await openDialog();
+    await openEditor();
+    fireEvent.click(within(screen.getByTestId('question-0')).getByRole('button', { name: /^edit$/i }));
+    const form = await screen.findByRole('dialog', { name: /^edit question$/i });
+    fireEvent.change(within(form).getByLabelText('Title *'), { target: { value: 'CHANGED' } });
+    fireEvent.click(within(form).getByRole('button', { name: /^done$/i }));
+    await screen.findByTestId('unsaved-bar');
+
+    for (const press of [
+      () => fireEvent.click(screen.getByRole('button', { name: /close the editor/i })),
+      () => fireEvent.click(screen.getByTestId('qs-editor-cancel')),
+    ]) {
+      press();
+      expect(await screen.findByText(/You have unsaved questions/i)).toBeInTheDocument();
+      expect(screen.getByTestId('questions-panel')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: /Go back and save them/i }));
+      await waitFor(() => expect(screen.queryByText(/You have unsaved questions/i)).toBeNull());
+    }
+
+    // Still editing, working copy intact, after four presses that each offered a
+    // way out and took none of them.
+    expect(screen.getByTestId('unsaved-bar')).toBeTruthy();
+  });
+
   test('Escape declines while an unsaved working copy is open', async () => {
     // THE WORK-LOSS GUARD. The Questions panel holds edits that exist nowhere
     // but this tab; the editor's own Cancel asks before dropping them, and
@@ -518,6 +654,53 @@ describe('delete', () => {
     fireEvent.click(within(rowFor('Ivy Retro')).getByRole('button', { name: /^delete$/i }));
     await screen.findByRole('dialog', { name: /delete this question set/i });
     expect(screen.queryByRole('button', { name: /deactivate it instead/i })).toBeNull();
+  });
+
+  /*
+   * THE CORNER CONTROL, AND THE GATE IT IS HELD TO.
+   *
+   * The confirm dialog is the third surface in this stack and was the last one
+   * without an ×. `dismissable` — `() => !busy && !finished` — was already
+   * spent on the backdrop, on Escape and on the footer button; the × makes it
+   * four, and it has to be four, because an in-flight delete that can be
+   * dismissed unmounts the only surface that can report its outcome. That is
+   * the exact defect this dialog was written to fix.
+   */
+  test('the confirm dialog carries an × held to the same gate as Escape', async () => {
+    const onClose = jest.fn();
+    await openDialog({ onClose });
+    fireEvent.click(within(rowFor('Ivy Retro')).getByRole('button', { name: /^delete$/i }));
+    const modal = await screen.findByRole('dialog', { name: /delete this question set/i });
+
+    const close = within(modal).getByTestId('qsets-del-close');
+    expect(close).toHaveAccessibleName('Close');
+    expect(close).not.toBeDisabled();
+
+    // rejects: an × wired to the shelf behind it. It cancels the delete and
+    // hands the host back the list they came from.
+    fireEvent.click(close);
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /delete this question set/i })).toBeNull());
+    expect(screen.getByRole('dialog', { name: /your question sets/i })).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  test('the × is dead while the delete is in flight, exactly as Escape is', async () => {
+    // rejects: leaving one exit live while the other three are gated — the
+    // inconsistency people find at the worst possible moment. The delete below
+    // never resolves, so the dialog stays in its `deleting` phase.
+    await openDialog({}, { hangDelete: true });
+    fireEvent.click(within(rowFor('Ivy Retro')).getByRole('button', { name: /^delete$/i }));
+    const modal = await screen.findByRole('dialog', { name: /delete this question set/i });
+    fireEvent.click(within(modal).getByRole('button', { name: /delete the set/i }));
+
+    await waitFor(() =>
+      expect(within(modal).getByRole('button', { name: /deleting/i })).toBeTruthy());
+    expect(within(modal).getByTestId('qsets-del-close')).toBeDisabled();
+
+    // And the keyboard route agrees, which is what "the same gate" means.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByRole('dialog', { name: /delete this question set/i })).toBeTruthy();
   });
 });
 
