@@ -2463,6 +2463,46 @@ Resources:
           RequireLowercase: true
           RequireNumbers: true
           RequireSymbols: true
+      # THE EMAIL A PERSON ACTUALLY RECEIVES.
+      #
+      # Reported: "even in test it is generic and there is nothing reference that
+      # it is for engage. it would be nice to use the domain and also a bit of
+      # info around what it really is for."
+      #
+      # There was no VerificationMessageTemplate here at all, so both pools sent
+      # Cognito's stock wording: a bare six-digit code, no product name, no
+      # domain, and nothing saying what the code unlocks. Someone who requested
+      # a reset an hour earlier could not tell it apart from a phishing attempt.
+      #
+      # ONE TEMPLATE COVERS BOTH JOURNEYS. With DefaultEmailOption
+      # CONFIRM_WITH_CODE, Cognito uses EmailMessage/EmailSubject for sign-up
+      # verification AND for forgot-password. {####} is the code and is the one
+      # token Cognito substitutes — it MUST appear in the body or the stack
+      # fails to deploy, which is the guardrail that stops a well-meaning
+      # rewrite from shipping an email with no code in it.
+      #
+      # The domain is interpolated rather than hardcoded so dev, test and prod
+      # each name themselves. `DomainName` defaults to "" — the !If keeps the
+      # sentence grammatical when it is unset rather than printing "at .".
+      VerificationMessageTemplate:
+        DefaultEmailOption: CONFIRM_WITH_CODE
+        EmailSubject: !Sub 'Your Engage verification code (${StackName})'
+        EmailMessage: !If
+          - HasDomain
+          - !Sub |
+              <p>Someone asked to verify an email address or reset a password for
+              <strong>Engage</strong> at <a href="https://${DomainName}">${DomainName}</a>.</p>
+              <p>Your code is <strong>{####}</strong></p>
+              <p>Enter it on the sign-in screen to finish. The code expires shortly.</p>
+              <p>If this wasn't you, no action is needed — the code is useless on its own
+              and nothing has changed on your account.</p>
+          - !Sub |
+              <p>Someone asked to verify an email address or reset a password for
+              <strong>Engage</strong> (${StackName}).</p>
+              <p>Your code is <strong>{####}</strong></p>
+              <p>Enter it on the sign-in screen to finish. The code expires shortly.</p>
+              <p>If this wasn't you, no action is needed — the code is useless on its own
+              and nothing has changed on your account.</p>
       # PostConfirmation trigger will be configured after deployment to avoid circular dependency
       UserPoolTags:
         Environment: !Ref Environment
