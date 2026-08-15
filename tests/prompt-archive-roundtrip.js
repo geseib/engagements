@@ -534,6 +534,100 @@ const importedRow = () => [...ddb.values()].find((i) => i.PK === 'AIPROMPTS' && 
     assert.strictEqual(legacyBody.outputFormat, '## Summary');
   });
 
+  // =========================================================================
+  say('\n8. THE SET-TO-PROMPT LINK, WHICH DID NOT CROSS ENVIRONMENTS AT ALL');
+
+  /*
+    A set row's `promptId` names the Workie that reads its rounds back to the
+    room. Prompt ids are minted PER TIER, so dev's names nothing in prod — and
+    the archive carried nothing about the prompt in the first place while the
+    importer passed a hardcoded `promptId: ''`.
+
+    Result on 2026-08-15: all thirteen sets in prod imported unlinked, the eight
+    demo sets among them, each silently falling back to the game-type default
+    despite having a prompt written specifically for it.
+
+    Carried as a NAME, in the tags, and re-resolved locally. Unit-level here;
+    the two handlers are wired to the same helper.
+  */
+  const link = require(path.join(REPO, 'lambda-functions/admin/shared/archive-prompt-link.js'));
+
+  // REJECTS: `split(':')[1]`. FOUR of the eight demo prompts have a colon in
+  // their own name, so that spelling truncates them to "Workie - Knowledge
+  // Organization" and the link silently stops matching.
+  check('a prompt name containing a colon survives the tag round trip', () => {
+    const name = 'Workie - Knowledge Organization: Make the Distinction Land';
+    assert.strictEqual(link.promptNameFromTags([link.promptLinkTag(name)]), name);
+  });
+
+  // REJECTS: emitting a tag for a set with no prompt, which would carry the
+  // empty string and match every unnamed row on the far side.
+  check('a set with no prompt gets no tag', () => {
+    assert.strictEqual(link.promptLinkTag(''), null);
+    assert.strictEqual(link.promptLinkTag(undefined), null);
+    assert.strictEqual(link.promptNameFromTags(['dev', 'trivia', 'questions:12']), '');
+  });
+
+  // REJECTS: reading the tag off a non-array, which is what a hand-made or
+  // older archive item looks like.
+  check('missing or malformed tags are not a crash', () => {
+    assert.strictEqual(link.promptNameFromTags(undefined), '');
+    assert.strictEqual(link.promptNameFromTags('prompt:x'), '');
+    assert.strictEqual(link.promptNameFromTags([null, 7]), '');
+  });
+
+  /*
+    REJECTS: matching on the raw name. `importPrompts` appends
+    " (Imported 2026-08-15)" on a rename, so the correct order — prompts first,
+    then sets — is exactly the case that breaks: the prompt is in the table
+    under a suffixed name and the set is looking for the bare one.
+  */
+  check('the suffix importPrompts adds does not break the match', () => {
+    const localPrompts = [{ promptId: 'local-1', name: 'Workie - The Verdict Board (Imported 2026-08-15)' }];
+    const { promptId, matched } = link.resolveLocalPromptId('Workie - The Verdict Board', localPrompts);
+    assert.strictEqual(matched, 1);
+    assert.strictEqual(promptId, 'local-1');
+  });
+
+  // REJECTS: an exact string compare. A name is typed by a human; the link
+  // should not turn on a capital letter or a double space.
+  check('case and whitespace do not decide the link', () => {
+    const localPrompts = [{ promptId: 'local-2', name: 'workie  -  the   verdict board' }];
+    assert.strictEqual(link.resolveLocalPromptId('Workie - The Verdict Board', localPrompts).promptId, 'local-2');
+  });
+
+  /*
+    REJECTS: linking to something when nothing matches — the outcome that
+    actually matters. An unlinked set falls back to the game-type default, which
+    is what it did before this existed; a WRONGLY linked set says another set's
+    words to a real room.
+  */
+  check('no match links nothing, rather than guessing', () => {
+    const { promptId, matched } = link.resolveLocalPromptId('Nobody Home', [
+      { promptId: 'a', name: 'Workie - The Verdict Board' },
+      { promptId: 'b', name: 'Trivia - Round Call' },
+    ]);
+    assert.strictEqual(promptId, '');
+    assert.strictEqual(matched, 0);
+  });
+
+  // REJECTS: silently taking the first of several without reporting it. Two
+  // prompts of one name is a real state of the library, and the caller logs it.
+  check('an ambiguous match is reported as ambiguous', () => {
+    const { promptId, matched } = link.resolveLocalPromptId('Twin', [
+      { promptId: 'first', name: 'Twin' }, { promptId: 'second', name: 'Twin' },
+    ]);
+    assert.strictEqual(matched, 2);
+    assert.strictEqual(promptId, 'first');
+  });
+
+  // REJECTS: an empty carried name matching an unnamed local row, which would
+  // link every set with no prompt to the first broken record in the table.
+  check('an empty name matches nothing, not the unnamed rows', () => {
+    assert.strictEqual(link.resolveLocalPromptId('', [{ promptId: 'x', name: '' }]).matched, 0);
+    assert.strictEqual(link.resolveLocalPromptId('   ', [{ promptId: 'x' }]).matched, 0);
+  });
+
   say(`\n${pass} passed, ${fail} failed`);
   global.fetch = realFetch;
   process.exit(fail ? 1 : 0);

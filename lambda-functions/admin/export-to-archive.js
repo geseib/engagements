@@ -3,6 +3,7 @@ const { DynamoDBDocumentClient, ScanCommand, QueryCommand, GetCommand, PutComman
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { resolvePartitionFromMeta } = require('./shared/set-version');
 const { inferPromptType } = require('./shared/prompt-shape');
+const { promptLinkTag } = require('./shared/archive-prompt-link');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient());
 const s3Client = new S3Client({});
@@ -221,7 +222,37 @@ async function exportQuestionSets(selectedIds, environment, results) {
       
       // Convert questions to CSV format for import compatibility
       const csvContent = convertQuestionsToCSV(questions, questionSet.engagementType);
-      
+
+      /*
+        CARRY THE PROMPT LINK, BY NAME.
+
+        The set row's `promptId` names the Workie that reads its rounds back to
+        the room, and it means nothing in another tier — ids are minted per
+        environment. Nothing about the prompt was in the archive item at all, so
+        every imported set arrived unlinked and fell back to the game-type
+        default. See shared/archive-prompt-link.js for why a name and not an id.
+
+        A missing prompt row is NOT a failure. The set is still worth archiving;
+        it just travels without a link, which is what it did before this existed.
+      */
+      let promptTag = null;
+      if (questionSet.promptId) {
+        try {
+          const linked = await db.send(new GetCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: 'AIPROMPTS', SK: `AIPROMPT#${questionSet.promptId}` }
+          }));
+          if (linked.Item && linked.Item.name) {
+            promptTag = promptLinkTag(linked.Item.name);
+            console.log(`🔗 ${setId} carries prompt link "${linked.Item.name}"`);
+          } else {
+            console.warn(`⚠️ ${setId}: promptId ${questionSet.promptId} names no prompt row; exporting unlinked`);
+          }
+        } catch (linkError) {
+          console.warn(`⚠️ ${setId}: could not read linked prompt: ${linkError.message}; exporting unlinked`);
+        }
+      }
+
       // Transform to archive format
       const archiveData = {
         title: `${questionSet.name} (${environment})`,
@@ -233,7 +264,8 @@ async function exportQuestionSets(selectedIds, environment, results) {
           environment,
           questionSet.engagementType || 'call-and-answer',
           `questions:${questions.length}`,
-          ...(questionSet.isAIGenerated ? ['ai-generated'] : [])
+          ...(questionSet.isAIGenerated ? ['ai-generated'] : []),
+          ...(promptTag ? [promptTag] : [])
         ]
       };
 
