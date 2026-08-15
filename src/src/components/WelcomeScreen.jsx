@@ -61,6 +61,7 @@ export default function WelcomeScreen({
   onQuickStart,
   onCreateEngagement,
   onViewHistory,
+  onQuestionSets,
   onSignOut,
 }) {
   const code = digitsOnly(continueGameId).slice(0, CODE_LENGTH);
@@ -185,13 +186,41 @@ export default function WelcomeScreen({
               </button>
             </form>
 
+            {/* THE TWO THINGS A HOST OWNS BETWEEN SESSIONS.
+                Question sets were reachable from exactly one place — the set
+                picker inside the create screen — so "fix the typo in the set I
+                made last week" meant starting an engagement you did not want.
+                It is the same <HostQuestionSetsDialog>; only the door is new.
+
+                Both are OUTLINED now. The history control was `wel-btn-quiet`:
+                muted text, no border, pulled 12px left to sit flush — which is
+                a link's appearance, and it was read as one.
+                *"the button for game histroy should be more obviousd that its a
+                button (doesnt need to be bigger though)"* — so the border and
+                the text colour change and the metrics do not. */}
             <div className="wel-aside-more">
-              <button type="button" className="wel-btn wel-btn-quiet" onClick={() => onViewHistory?.()}>
-                Game history
-              </button>
-              <p className="wel-meta">
-                Every session you have run, with its report — and anything you left part-way.
-              </p>
+              <p className="wel-kicker">Your library</p>
+
+              <div className="wel-links">
+                <div className="wel-link">
+                  <button type="button" className="wel-btn wel-btn-line" onClick={() => onQuestionSets?.()}>
+                    Question sets
+                  </button>
+                  <p className="wel-meta">
+                    Make one, rename one, or upload your own — the questions a session asks come
+                    from here.
+                  </p>
+                </div>
+
+                <div className="wel-link">
+                  <button type="button" className="wel-btn wel-btn-line" onClick={() => onViewHistory?.()}>
+                    Game history
+                  </button>
+                  <p className="wel-meta">
+                    Every session you have run, with its report — and anything you left part-way.
+                  </p>
+                </div>
+              </div>
             </div>
           </aside>
 

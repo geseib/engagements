@@ -28,6 +28,7 @@ function setup(props = {}) {
     onQuickStart: jest.fn(),
     onCreateEngagement: jest.fn(),
     onViewHistory: jest.fn(),
+    onQuestionSets: jest.fn(),
     onSignOut: jest.fn(),
     onContinue: jest.fn(),
     onContinueGameIdChange: jest.fn(),
@@ -38,7 +39,20 @@ function setup(props = {}) {
   return { ...utils, ...handlers };
 }
 
-describe('the four ways out of this screen', () => {
+/** Every declared rule in WelcomeScreen.css, as text. jsdom computes no layout,
+ *  so a class's appearance can only be asserted by reading what it declares. */
+const CSS = require('fs').readFileSync(
+  require('path').join(__dirname, '..', 'components', 'WelcomeScreen.css'),
+  'utf8'
+);
+
+function ruleFor(selector) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = CSS.match(new RegExp(`(^|\\n)${escaped}\\s*\\{([^}]*)\\}`));
+  return match ? match[2] : '';
+}
+
+describe('the five ways out of this screen', () => {
   // Each of these rejects the same failure in a different control: a button
   // that renders and is wired to nothing. That is not hypothetical here — the
   // whole screen is being rebuilt from scratch, so every handler is a fresh
@@ -65,6 +79,62 @@ describe('the four ways out of this screen', () => {
     const { onSignOut } = setup();
     fireEvent.click(screen.getByRole('button', { name: /sign out/i }));
     expect(onSignOut).toHaveBeenCalledTimes(1);
+  });
+
+  test('Question sets raises onQuestionSets', () => {
+    // rejects: the control shipping with no handler behind it. Until now the
+    // host's set shelf had exactly one door — the picker inside the create
+    // screen — so "fix the name on the set I made last week" meant starting an
+    // engagement you did not want and abandoning it.
+    const { onQuestionSets } = setup();
+    fireEvent.click(screen.getByRole('button', { name: /question sets/i }));
+    expect(onQuestionSets).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * *"the button for game histroy should be more obviousd that its a button
+ *  (doesnt need to be bigger though)"*
+ *
+ * Both halves are testable without a layout engine, because both are decided by
+ * what the class declares rather than by what it measures: a visible rule is the
+ * button-ness, and identical metrics are the not-bigger.
+ */
+describe('the library controls read as buttons', () => {
+  test('neither is the borderless link style any more', () => {
+    // rejects: leaving `wel-btn-quiet` on either control. That class is muted
+    // text on a transparent 2px border with a -12px pull to sit flush under the
+    // paragraph — which is how this file draws a text LINK, and it was read as
+    // one.
+    const { container } = setup();
+    for (const name of ['Question sets', 'Game history']) {
+      const button = screen.getByRole('button', { name });
+      expect(button.className).toContain('wel-btn-line');
+      expect(button.className).not.toContain('wel-btn-quiet');
+    }
+    expect(container.querySelector('.wel-aside-more .wel-btn-quiet')).toBeNull();
+  });
+
+  test('the style it carries declares a visible rule', () => {
+    // rejects: a class that exists but draws nothing — `.wel-btn` sets
+    // `border: 2px solid transparent`, so a `.wel-btn-line` that forgets to
+    // name a colour is invisible and every assertion above still passes.
+    const line = ruleFor('.wel-btn-line');
+    expect(line).toMatch(/border-color:\s*var\(--wel-rule-strong\)/);
+    expect(line).toMatch(/color:\s*var\(--text\)/);
+  });
+
+  test('and it is not one pixel bigger than the style it replaced', () => {
+    // rejects: reaching for size to make the control obvious, which is the one
+    // thing the owner ruled out. min-height, padding and font-size must match
+    // `.wel-btn-quiet` exactly; only the rule and the ink may differ.
+    const quiet = ruleFor('.wel-btn-quiet');
+    const line = ruleFor('.wel-btn-line');
+    const metric = (rule, prop) => (rule.match(new RegExp(`${prop}:\\s*([^;]+);`)) || [])[1];
+    for (const prop of ['min-height', 'padding', 'font-size']) {
+      expect(metric(line, prop)).toBe(metric(quiet, prop));
+      expect(metric(line, prop)).toBeTruthy();
+    }
   });
 });
 

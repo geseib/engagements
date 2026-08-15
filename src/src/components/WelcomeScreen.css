@@ -364,11 +364,38 @@
 }
 .wel-btn-quiet:hover { color: var(--text); }
 
+/* SAME SIZE AS QUIET, VISIBLY A BUTTON. The library controls were `wel-btn-quiet`
+   — muted text on nothing, pulled 12px left to sit flush with the paragraph
+   under it — which is exactly how a text link is drawn, and it read as one.
+   *"the button for game histroy should be more obviousd that its a button
+   (doesnt need to be bigger though)"*: so the box appears and the metrics stay.
+   min-height, padding and font-size are `wel-btn-quiet`'s to the pixel; what
+   changes is the rule and the text colour.
+
+   The border is 2px because `.wel-btn` reserves 2px of transparent border on
+   every control here — a 1px rule would shift the label half a pixel and make
+   these two sit differently from Continue directly above them. */
+.wel-btn-line {
+  width: auto;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-color: var(--wel-rule-strong);
+  color: var(--text);
+  font-weight: 700;
+  font-size: var(--wel-t-label);
+}
+.wel-btn-line:hover { border-color: var(--muted); background: var(--surface); }
+
 .wel-aside-more {
   margin-top: 26px;
   padding-top: 20px;
   border-top: 1px solid var(--wel-rule);
   max-width: 23rem;
 }
-.wel-aside-more .wel-btn-quiet { margin-left: -12px; }
-.wel-aside-more .wel-meta { margin-top: 4px; max-width: 34ch; }
+.wel-aside-more .wel-meta { margin-top: 6px; max-width: 34ch; }
+
+/* Two entries, each its own control and its own sentence. Stacked rather than
+   set side by side: this column is `minmax(16rem, 1fr)` at 900px, and two
+   outlined buttons on one line there would either wrap mid-label or force the
+   split's wide column narrower. */
+.wel-links { margin-top: 14px; display: grid; gap: 18px; }

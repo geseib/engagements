@@ -6,6 +6,7 @@ import IssueFab from './components/IssueFab';
 import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
 import WelcomeScreen from './components/WelcomeScreen';
+import HostQuestionSetsDialog from './components/HostQuestionSetsDialog';
 import WavelengthWordCloud from './components/WavelengthWordCloud';
 import Icon from './components/Icon';
 import SetImageBadge from './components/SetImageBadge';
@@ -405,6 +406,16 @@ function GameHostPage() {
   */
   const [pendingSetId, setPendingSetId] = useState('');
   const [showQuickstartMenu, setShowQuickstartMenu] = useState(false);
+  /*
+    THE HOST'S SET SHELF, REACHED WITHOUT STARTING A SESSION.
+
+    <HostQuestionSetsDialog> already existed, and had exactly one door: the set
+    picker inside the create screen. So a host who wanted to fix a name, upload
+    a set, or delete one had to begin an engagement they did not want and then
+    abandon it. Navigation state like the flags beside it, not a game value —
+    nothing here survives into a session.
+  */
+  const [showHostSets, setShowHostSets] = useState(false);
   const [eventTitle, setEventTitle] = useState('');
 
   // EVERY OTHER FIELD ON THE CREATE SCREEN LIVES IN <GameSetupDialog>.
@@ -3750,16 +3761,33 @@ Ready to engage? See you there!`;
   // time this renders. The dead ternary went with the markup.
   if (showWelcomeScreen) {
     return (
-      <WelcomeScreen
-        currentUser={currentUser}
-        continueGameId={continueGameId}
-        onContinueGameIdChange={setContinueGameId}
-        onContinue={handleContinueGame}
-        onQuickStart={() => setShowQuickstartMenu(true)}
-        onCreateEngagement={handleWelcomeNewGame}
-        onViewHistory={handleViewGameHistory}
-        onSignOut={handleSignOut}
-      />
+      <>
+        <WelcomeScreen
+          currentUser={currentUser}
+          continueGameId={continueGameId}
+          onContinueGameIdChange={setContinueGameId}
+          onContinue={handleContinueGame}
+          onQuickStart={() => setShowQuickstartMenu(true)}
+          onCreateEngagement={handleWelcomeNewGame}
+          onViewHistory={handleViewGameHistory}
+          onQuestionSets={() => setShowHostSets(true)}
+          onSignOut={handleSignOut}
+        />
+        {/* A SIBLING OF THE SCREEN, NOT A CHILD. `.wel-page` is
+            `position: fixed; inset: 0` with its own `data-theme="dark"`, so a
+            dialog nested inside it would inherit the dusk tokens under
+            `.qsets--onlight`'s white card and scroll with the page behind it.
+            The scrim is fixed and z-index 10001, which is above everything the
+            welcome screen paints, so a sibling lands exactly where it should.
+
+            NO `onSetsChanged`. That prop exists so the create screen's picker
+            can offer a set the moment it is made; here there is no picker on
+            screen, and the page re-reads `questionSets` when the create dialog
+            opens. */}
+        {showHostSets && (
+          <HostQuestionSetsDialog onClose={() => setShowHostSets(false)} />
+        )}
+      </>
     );
   }
 

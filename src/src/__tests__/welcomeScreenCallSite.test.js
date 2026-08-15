@@ -48,6 +48,31 @@ describe('the page actually mounts the extracted screen', () => {
     expect(host).toMatch(/onContinueGameIdChange=\{setContinueGameId\}/);
   });
 
+  test('the question-sets door opens the dialog that already exists', () => {
+    // rejects: three separate ways this feature ships broken and silent.
+    //
+    //   - a handler with no dialog behind it. The component renders the button
+    //     whether or not anything is passed, so an unwired prop is a control
+    //     that does nothing and says nothing.
+    //   - a second copy of the shelf. `HostQuestionSetsDialog` is the surface
+    //     the create screen already opens; a new one here would be two lists of
+    //     the same sets diverging.
+    //   - the dialog nested INSIDE <WelcomeScreen>. `.wel-page` is fixed, full
+    //     bleed and carries `data-theme="dark"`, so a white `.qsets--onlight`
+    //     card inside it inherits the dusk tokens its own scope is there to
+    //     override.
+    expect(host).toMatch(/import\s+HostQuestionSetsDialog\s+from\s+'\.\/components\/HostQuestionSetsDialog'/);
+    expect(host).toMatch(/onQuestionSets=\{\(\) => setShowHostSets\(true\)\}/);
+    expect(host).toMatch(/showHostSets && \(\s*<HostQuestionSetsDialog/);
+
+    // A SIBLING, NOT A CHILD — asserted by position: the mount is after the
+    // screen's own closing tag, not between it and one.
+    const welcome = host.indexOf('<WelcomeScreen');
+    const dialog = host.indexOf('<HostQuestionSetsDialog onClose');
+    expect(dialog).toBeGreaterThan(welcome);
+    expect(host.slice(welcome, dialog)).toContain('/>');
+  });
+
   test('it renders before <Stage>, where the one identity block belongs', () => {
     // rejects: moving the screen below the stage, which is the ordering
     // setupPanelCallSite.test.js reads to prove the surviving name-and-badge
