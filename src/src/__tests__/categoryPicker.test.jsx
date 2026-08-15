@@ -233,6 +233,29 @@ describe('+ New category, created in place', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
+  /*
+    THE TRAP THIS CONTROL WAS BUILT TO PREVENT, AND USED TO WALK INTO ANYWAY.
+
+    The filter above already ignores case, so typing "strategy" offers
+    "Strategy · 1". But the commit check was `c.name === name`, byte-exact — so
+    an owner who ignored the offer and pressed `+ New category` created a
+    second category with no warning of any kind. Back when the importer was
+    case-sensitive too, that really was a second bit position; now it would be
+    a name that silently changed spelling under them.
+  */
+  test('creating a name that differs only by case reuses the existing category', () => {
+    const onChange = jest.fn();
+    render(<Harness rows={rows} onChange={onChange} />);
+    openList();
+    fireEvent.click(newRow());
+    fireEvent.change(screen.getByLabelText('New category name'), { target: { value: 'strategy' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add category' }));
+
+    // rejects: handing back "strategy". The EXISTING spelling wins, matching
+    // the importer, which keeps the first spelling it saw.
+    expect(onChange).toHaveBeenCalledWith('Strategy');
+  });
+
   test('Enter in the inline row commits it', () => {
     const onChange = jest.fn();
     render(<Harness rows={rows} onChange={onChange} />);

@@ -437,9 +437,27 @@ exports.handler = async (event) => {
       };
     }
 
-    // Parse questions with mapped columns
+    /*
+      CATEGORY IDENTITY IS CASE-INSENSITIVE. A category is a BIT, and there are 24.
+
+      This used to be `new Set()` of raw trimmed strings, deduped by
+      SameValueZero — so `World Series` and `world series` were two categories
+      holding two of the twenty-four bit positions. Found in live data: one set
+      had every one of its four categories spelled two ways and was consuming
+      eight bits; the Amazon leadership set split `Learn and Be Curious` from
+      `Learn and be Curious` on a single capital letter.
+
+      The wasted bits are the smaller half. The host's category picker drew the
+      two spellings as TWO TOGGLES, so switching off "History" left the
+      questions filed under "history" still in play — which presents as "I
+      disabled a category and its questions still came up".
+
+      FIRST SPELLING WINS, because bit order is already first-appearance order
+      and one rule is better than two. The map is folded-key -> the spelling
+      that got there first.
+    */
     const questions = [];
-    const categories = new Set();
+    const categoriesByKey = new Map();
     const skippedRows = [];
     // Rows whose RoundKind cell is not one of the five. Collected rather than
     // thrown at the first one so the author is told about ALL of them in a
@@ -452,6 +470,36 @@ exports.handler = async (event) => {
     // literal `"`, so stripping quotes a second time silently deletes quote
     // characters that are part of the author's text (e.g. THE "RIGHT" CALL).
     const cell = (values, idx) => (idx >= 0 ? (values[idx] ?? '').trim() : '');
+
+    /*
+      The identity of a category, for dedup only — never for display.
+
+      `toLowerCase()` rather than `toLocaleLowerCase()`: this runs in Lambda,
+      whose locale is not the author's, and a locale-sensitive fold would make
+      the same CSV allocate different bits depending on where it was uploaded
+      from. The Turkish dotless-i is the standard example.
+
+      Inner whitespace is collapsed as well as trimmed. `Name  That Team` and
+      `Name That Team` are a typo apart and nobody means them as two categories,
+      and the same argument that justifies folding case justifies this.
+    */
+    const categoryKey = (name) => String(name ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+    /*
+      The spelling this set will store for a category, given any spelling of it.
+      Returns '' for a blank category, which callers already treat as "no
+      category" and drop.
+
+      REGISTERING AND CANONICALISING ARE THE SAME OPERATION on purpose. The
+      first row to mention a category both claims its bit and fixes its
+      spelling, so there is no window in which a later row could disagree.
+    */
+    const canonicalCategory = (name) => {
+      const key = categoryKey(name);
+      if (!key) return '';
+      if (!categoriesByKey.has(key)) categoriesByKey.set(key, String(name).trim());
+      return categoriesByKey.get(key);
+    };
 
     for (let i = 1; i < rows.length; i++) {
       const values = rows[i];
@@ -496,7 +544,23 @@ exports.handler = async (event) => {
           const baseQuestion = {
             Title: title,
             Detail: finalQuestionDetail, // For trivia, this should be the question detail/explanation
-            Category: category,
+            /*
+              THE CANONICAL SPELLING, NOT THE ROW'S — and this is the half of
+              the case fix that matters most.
+
+              Folding only at the point where bits are allocated would leave
+              the CATEGORY# row saying `World Series` while question rows still
+              said `world series`, and the readers downstream cannot fold:
+              `game/next-question.js:580` matches a question to its bit with
+              `===`, and `admin/get-question-set-questions.js:57` filters
+              SERVER-SIDE with a DynamoDB `#category = :category`, which has no
+              case-insensitive comparator at all.
+
+              Writing the canonical spelling onto the row makes the stored data
+              internally consistent, so all thirty-odd byte-exact comparisons
+              across both tiers become correct without being touched.
+            */
+            Category: canonicalCategory(category),
             School: school,
             // A bare CSV filename becomes the set-scoped media key
             // `sets/<setId>/<filename>`; absolute URLs and /-rooted repo assets
@@ -554,8 +618,10 @@ exports.handler = async (event) => {
             baseQuestion.AllowMultiple = cell(values, allowMultipleIndex).toLowerCase() === 'true';
           }
 
+          // No `categories.add(category)` here any more: canonicalCategory()
+          // registered it while building the row above, which is the only way
+          // to guarantee the bit and the stored spelling are decided together.
           questions.push(baseQuestion);
-          categories.add(category);
 
           console.log(`  ✅ Question ${questionCount}: ${category} - ${title.substring(0, 50)}...`);
           if (engagementType === 'call-and-answer' && finalQuestionDetail.length > 200) {
@@ -598,7 +664,7 @@ exports.handler = async (event) => {
       };
     }
 
-    console.log(`✅ Successfully parsed ${questions.length} questions in ${categories.size} categories`);
+    console.log(`✅ Successfully parsed ${questions.length} questions in ${categoriesByKey.size} categories`);
 
     // Everything above this line is validation. Nothing has been written yet,
     // and nothing below writes anything the live set can see until the single
@@ -698,7 +764,7 @@ exports.handler = async (event) => {
       // The set this one was forked from, when it was. Provenance only.
       ...(sourceSetIdMeta ? { sourceSetId: sourceSetIdMeta } : {}),
       questionCount: questions.length,
-      categoryCount: categories.size,
+      categoryCount: categoriesByKey.size,
       active: isAIGenerated ? false : true,  // AI-generated content starts as inactive
       createdAt: new Date().toISOString(),
       // WHO MADE IT — `createdBy` (Cognito sub) plus `createdByName` for
@@ -723,12 +789,17 @@ exports.handler = async (event) => {
       hasImages: questions.some((q) => (q.Image || '').trim().length > 0)
     };
 
-    // Build the category rows
-    const categoryItems = Array.from(categories).map((categoryName, idx) => ({
+    // Build the category rows. `Map` preserves insertion order, so `idx` is
+    // still first-appearance order and still the bit index — the ordering
+    // contract is unchanged by the case fix.
+    const categoryNames = Array.from(categoriesByKey.values());
+    const categoryItems = categoryNames.map((categoryName, idx) => ({
       PK: contentPk,
       SK: `CATEGORY#c${String(idx + 1).padStart(3, '0')}`,
       Name: categoryName,
       Description: `${categoryName} questions`,
+      // `===` is still correct, and now for a reason rather than by luck: every
+      // question row above carries the canonical spelling.
       QuestionCount: questions.filter(q => q.Category === categoryName).length
     }));
 
@@ -737,7 +808,7 @@ exports.handler = async (event) => {
 
     // Create a mapping of category names to category IDs
     const categoryNameToId = {};
-    Array.from(categories).forEach((categoryName, categoryIndex) => {
+    categoryNames.forEach((categoryName, categoryIndex) => {
       categoryNameToId[categoryName] = `c${String(categoryIndex + 1).padStart(3, '0')}`;
     });
 
@@ -877,7 +948,7 @@ exports.handler = async (event) => {
         version: targetVersion,
         createdAt: new Date().toISOString(),
         questionCount: questions.length,
-        categoryCount: categories.size,
+        categoryCount: categoriesByKey.size,
         sourceFile: fileName,
         note: versionNote
       };
@@ -913,7 +984,7 @@ exports.handler = async (event) => {
             ':seed': seed,
             ':entry': [versionEntry],
             ':qc': questions.length,
-            ':cc': categories.size,
+            ':cc': categoriesByKey.size,
             ':hi': setMetadataItem.hasImages,
             ':src': fileName,
             ':now': versionEntry.createdAt,
@@ -945,7 +1016,7 @@ exports.handler = async (event) => {
     console.log(isReplace
       ? `✅ Replaced question set "${setName}" — now on v${targetVersion}`
       : `✅ Successfully created question set "${setName}"`);
-    console.log(`📊 Final stats: ${questions.length} questions, ${categories.size} categories`);
+    console.log(`📊 Final stats: ${questions.length} questions, ${categoriesByKey.size} categories`);
 
     return {
       statusCode: 200,
@@ -958,15 +1029,15 @@ exports.handler = async (event) => {
         replaced: isReplace,
         snapshottedLegacyRows: snapshotted || undefined,
         questionCount: questions.length,
-        categoryCount: categories.size,
+        categoryCount: categoriesByKey.size,
         // Rows the importer could not use. Reported so an import that quietly
         // drops half a file is visible instead of looking like a clean success.
         skippedRowCount: skippedRows.length,
         skippedRows: skippedRows.slice(0, 50),
         message: isReplace
-          ? `Replaced question set "${setName}" with ${questions.length} questions across ${categories.size} categories (now version ${targetVersion})`
+          ? `Replaced question set "${setName}" with ${questions.length} questions across ${categoriesByKey.size} categories (now version ${targetVersion})`
             + (skippedRows.length ? ` (${skippedRows.length} row(s) skipped)` : '')
-          : `Successfully created question set "${setName}" with ${questions.length} questions across ${categories.size} categories`
+          : `Successfully created question set "${setName}" with ${questions.length} questions across ${categoriesByKey.size} categories`
             + (skippedRows.length ? ` (${skippedRows.length} row(s) skipped)` : '')
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }

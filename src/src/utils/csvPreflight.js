@@ -249,6 +249,8 @@ export function preflight(text, engagementType, meta = {}) {
      importer walks them: `values.length < 2` first, then Title + Category. */
 
   const categories = [];
+  // Folded identities behind `categories`, which keeps the display spellings.
+  const categoryKeys = new Set();
   let importedCount = 0;
   const bareImages = [];
   let triviaWithoutAnswer = 0;
@@ -281,7 +283,15 @@ export function preflight(text, engagementType, meta = {}) {
 
     importedCount += 1;
     if (!firstImported) firstImported = row;
-    if (!categories.includes(category)) categories.push(category);
+    // FOLDED, like the importer's `categoryKey()`. This count is what the
+    // preflight reports back as "N categories", and reporting eight for a CSV
+    // the importer will collapse to four is exactly the kind of preview lie
+    // this file exists to prevent.
+    const categoryFold = category.trim().replace(/\s+/g, ' ').toLowerCase();
+    if (!categoryKeys.has(categoryFold)) {
+      categoryKeys.add(categoryFold);
+      categories.push(category);
+    }
 
     const image = cell(row, col.image);
     if (image && !/^https?:\/\//i.test(image) && !image.startsWith('/')) {

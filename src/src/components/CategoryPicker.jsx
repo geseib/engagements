@@ -6,6 +6,7 @@ import {
   categoryIdForPosition,
   deriveCategories,
   normalizeCategoryName,
+  categoryKey,
   splitByReachability,
 } from '../utils/questionCategories';
 import './CategoryPicker.css';
@@ -205,12 +206,20 @@ export default function CategoryPicker({
     // Re-asked at commit time and not trusted to the disabled row: reusing an
     // existing name is always allowed, even over the cap, and only a genuinely
     // new one costs a bit position.
-    const isNew = !categories.some((c) => c.name === name);
+    // FOLDED — and this closes the trap this control was built to prevent.
+    // The filter above already ignores case, so typing "strategy" offers
+    // "Strategy · 12"; a host who ignores that and presses + New category used
+    // to get a silent duplicate holding a second bit, with no warning anywhere.
+    const isNew = !categories.some((c) => categoryKey(c.name) === categoryKey(name));
     if (isNew && !canAdd) {
       setCreateError(capRefusal);
       return;
     }
-    choose(name);
+    // The EXISTING spelling wins when one exists, so choosing "strategy" from
+    // a set that stores "Strategy" stores "Strategy" — matching the importer,
+    // which keeps the first spelling it saw.
+    const existing = categories.find((c) => categoryKey(c.name) === categoryKey(name));
+    choose(existing ? existing.name : name);
   }, [draftName, categories, canAdd, capRefusal, choose]);
 
   const cancelCreating = useCallback(() => {

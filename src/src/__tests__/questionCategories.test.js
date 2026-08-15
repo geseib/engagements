@@ -147,17 +147,38 @@ describe('deriveCategories — counts and what the importer will actually accept
     expect(normalizeCategoryName(null)).toBe('');
   });
 
-  // rejects: "helpfully" lower-casing category names to merge Strategy with
-  // strategy. The importer does NOT — its Set holds raw trimmed strings and
-  // :731 counts with `===` — so folding case here under-reports by one position
-  // and every category after the pair would be shown on the wrong bit. This is
-  // arguably a backend defect; agreeing with it is still the correct behaviour
-  // for a preview.
-  test('case is significant, because it is significant to the importer', () => {
+  /*
+    THIS TEST USED TO ASSERT THE OPPOSITE, ON PURPOSE, AND IT WAS RIGHT TO.
+
+    While the importer deduped with a raw-string `Set`, `Strategy` and
+    `strategy` really did take two of the twenty-four bits, and folding case
+    here would have made the preview under-report what Save was about to do.
+    The old comment called it "arguably a backend defect"; live data settled the
+    argument — one set had all four of its categories spelled two ways and was
+    spending eight bits on four, and the host's picker drew each pair as two
+    toggles, so switching one off left half that category's questions in play.
+
+    `upload-questions.js` now folds, so this folds. The rule this file obeys is
+    unchanged: agree with the importer.
+  */
+  test('case and inner spacing do not make a second category', () => {
+    // rejects: reverting either side to raw-string dedup. Three spellings, one
+    // bit, and the count proves all three rows landed on it rather than two
+    // being dropped.
     const rows = [row('Strategy', 's1'), row('strategy', 's2'), row('STRATEGY', 's3')];
     const derived = deriveCategories(rows);
-    expect(names(derived)).toEqual(['Strategy', 'strategy', 'STRATEGY']);
-    expect(derived.map((c) => c.count)).toEqual([1, 1, 1]);
+    expect(names(derived)).toEqual(['Strategy']);
+    expect(derived.map((c) => c.count)).toEqual([3]);
+  });
+
+  // rejects: folding case but not inner whitespace, which would leave
+  // `Name  That Team` and `Name That Team` — one stray keystroke apart — still
+  // holding two bits.
+  test('the FIRST spelling seen is the one kept, and inner runs of space collapse', () => {
+    const rows = [row('Name  That Team', 'q1'), row('name that team', 'q2')];
+    const derived = deriveCategories(rows);
+    expect(names(derived)).toEqual(['Name  That Team']);
+    expect(derived.map((c) => c.count)).toEqual([2]);
   });
 
   // rejects: letting a blank or whitespace-only category through as a category
@@ -445,6 +466,7 @@ async function importedCategories(rows, engagementType = 'call-and-answer') {
     throw new Error(`importer returned ${response.statusCode}: ${response.body}`);
   }
 
+  importedCategories.lastWritten = written;
   return written
     .filter((item) => String(item.SK).startsWith('CATEGORY#'))
     .map((item) => ({
@@ -493,6 +515,45 @@ describe('agreement with the REAL upload-questions.js handler', () => {
 
     expect(fromHandler.length).toBeGreaterThan(0);
     expect(fromUtil).toEqual(fromHandler);
+  });
+
+  /*
+    THE HALF OF THE CASE FIX THAT IS EASY TO MISS.
+
+    Folding only where bits are allocated would leave the CATEGORY# row saying
+    `World Series` while question rows still said `world series` — and the
+    readers downstream cannot fold. `game/next-question.js:580` matches a
+    question to its bit with `===`, and `admin/get-question-set-questions.js:57`
+    filters SERVER-SIDE with a DynamoDB `#category = :category`, which has no
+    case-insensitive comparator at all. Half the questions would become
+    invisible to both.
+
+    So the importer writes the canonical spelling onto every row, and that is
+    what makes the thirty-odd byte-exact comparisons across both tiers correct
+    without any of them being touched.
+  */
+  test('every question row is stored under the canonical spelling', async () => {
+    const rows = [
+      row('World Series', 'ws1'),
+      row('world series', 'ws2'),
+      row('WORLD  SERIES', 'ws3'),
+    ];
+    const cats = await importedCategories(rows);
+    const questionRows = importedCategories.lastWritten
+      .filter((item) => String(item.SK).startsWith('QUESTION#'));
+
+    // One bit, named by the first spelling seen.
+    expect(cats.map((c) => c.name)).toEqual(['World Series']);
+    expect(cats.map((c) => c.count)).toEqual([3]);
+
+    // rejects: leaving each row's own spelling in place. All three must carry
+    // the canonical one, or the DynamoDB filter misses two of them.
+    expect(questionRows).toHaveLength(3);
+    expect([...new Set(questionRows.map((q) => q.Category))]).toEqual(['World Series']);
+
+    // rejects: the category id drifting off the canonical name — every row
+    // must sit under c001, not one row per spelling.
+    expect([...new Set(questionRows.map((q) => String(q.SK).split('#')[1]))]).toEqual(['c001']);
   });
 
   // rejects: a divergence that only shows up at scale — specifically an id

@@ -51,16 +51,22 @@
  * about what Save will produce, and that is the one failure mode a preview must
  * not have. Verified behaviours mirrored here:
  *
- *   - **Trimmed.** `upload-questions.js:453` reads every cell through
+ *   - **Trimmed.** `upload-questions.js:454` reads every cell through
  *     `(values[idx] ?? '').trim()`, so `" Strategy"` and `"Strategy"` are one
  *     category.
- *   - **Case- and punctuation-SENSITIVE.** The Set holds raw trimmed strings
- *     and `:731` counts with `q.Category === categoryName`, so `Strategy` and
- *     `strategy` are **two** categories occupying **two** bit positions. That
- *     is very likely a latent defect; it is not this module's to fix, and
- *     folding case here would under-report positions the backend will really
- *     allocate. `utils/csvPreflight.js:284` already independently mirrors the
- *     same case-sensitive first-appearance rule.
+ *   - **Case-INSENSITIVE, and inner whitespace collapsed**, matching
+ *     `upload-questions.js`'s `categoryKey()`. `Strategy` and `strategy` are
+ *     ONE category holding ONE bit, and the FIRST spelling to appear is the
+ *     one stored and displayed.
+ *
+ *     This paragraph used to say the opposite, and said it deliberately: the
+ *     importer really was case-sensitive, so `Strategy` and `strategy` took two
+ *     of the twenty-four bits, and folding here would have under-reported what
+ *     Save was about to do. That defect was found in live data — one set had
+ *     all four of its categories spelled two ways and was spending eight bits
+ *     on four categories, and the host's picker drew each pair as two separate
+ *     toggles, so switching a category off left half its questions in play.
+ *     The importer was fixed; this mirror follows it, as it always has.
  *   - **A row needs BOTH Category and Title.** `:493` is `if (title &&
  *     category)`, and only inside that branch does `:558` register the
  *     category. A row with a category and no title is skipped, contributes no
@@ -93,13 +99,30 @@
 export const MAX_MASKABLE_CATEGORIES = 24;
 
 /**
- * A cell as the importer reads it: `upload-questions.js:453`. Trim only —
- * deliberately no case folding, no collapsing of inner whitespace, no
- * punctuation stripping, because the importer's `Set` does none of those and
- * this module's whole contract is to predict what the importer will do.
+ * A cell as the importer reads it: `upload-questions.js:454`. Trim only.
+ *
+ * This is the DISPLAY spelling — what gets stored and shown. It is not what
+ * decides whether two cells are the same category; `categoryKey` below is.
  */
 export function normalizeCategoryName(value) {
   return String(value ?? '').trim();
+}
+
+/**
+ * The IDENTITY of a category, for dedup only — never for display.
+ *
+ * Must stay character-for-character identical to `categoryKey()` in
+ * `lambda-functions/admin/upload-questions.js`. If the two ever disagree, this
+ * module predicts a different number of bit positions than Save allocates,
+ * which is the single thing a preview must never do.
+ *
+ * `toLowerCase()` and not `toLocaleLowerCase()`: the backend twin runs in
+ * Lambda under a locale that is not the author's, and a locale-sensitive fold
+ * would let the same CSV allocate different bits depending on where it was
+ * uploaded from.
+ */
+export function categoryKey(value) {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
 /**
@@ -139,19 +162,24 @@ export function deriveCategories(rows) {
   const order = [];
   const counts = new Map();
 
+  // Keyed by IDENTITY, ordered and displayed by the FIRST spelling seen — the
+  // same two-value arrangement `canonicalCategory()` uses in the importer.
+  const displayFor = new Map();
+
   for (const row of (rows || [])) {
     if (!rowWouldImport(row)) continue;
-    const name = normalizeCategoryName(row.category);
-    if (!counts.has(name)) {
-      order.push(name);
-      counts.set(name, 0);
+    const key = categoryKey(row.category);
+    if (!counts.has(key)) {
+      order.push(key);
+      counts.set(key, 0);
+      displayFor.set(key, normalizeCategoryName(row.category));
     }
-    counts.set(name, counts.get(name) + 1);
+    counts.set(key, counts.get(key) + 1);
   }
 
-  return order.map((name, position) => ({
-    name,
-    count: counts.get(name),
+  return order.map((key, position) => ({
+    name: displayFor.get(key),
+    count: counts.get(key),
     position,
     categoryId: categoryIdForPosition(position),
     reachable: isReachablePosition(position),
@@ -205,29 +233,43 @@ export function canAddCategory(categoriesOrRows) {
  *   consequence worth a warning of its own.
  */
 export function comparePositions(beforeRows, afterRows) {
-  const before = new Map(asDerived(beforeRows).map((c) => [c.name, c]));
-  const after = new Map(asDerived(afterRows).map((c) => [c.name, c]));
+  /*
+    KEYED BY IDENTITY, NOT BY THE DISPLAYED SPELLING.
+
+    Both sides are canonical within themselves, but not necessarily as each
+    other: the displayed name is whichever spelling appeared FIRST, so deleting
+    the one row that said `Strategy` promotes `strategy` to be the display name
+    of the very same bit. Keyed by name, that reads as one category dropped and
+    a different one added at the same position — a spurious "bits changed
+    meaning" warning about an edit that moved nothing.
+  */
+  const before = new Map(asDerived(beforeRows).map((c) => [categoryKey(c.name), c]));
+  const after = new Map(asDerived(afterRows).map((c) => [categoryKey(c.name), c]));
 
   const moved = [];
   const evicted = [];
   const admitted = [];
   const dropped = [];
 
-  for (const [name, was] of before) {
-    const now = after.get(name);
+  // Matched on `key`, but REPORTED with the spelling the reader will see on
+  // screen — the after-side's where the category survives, the before-side's
+  // where it is gone.
+  for (const [key, was] of before) {
+    const now = after.get(key);
     if (!now) {
-      dropped.push({ name, position: was.position });
+      dropped.push({ name: was.name, position: was.position });
       continue;
     }
+    const name = now.name;
     if (now.position !== was.position) moved.push({ name, from: was.position, to: now.position });
     if (was.reachable && !now.reachable) evicted.push({ name, from: was.position, to: now.position });
     if (!was.reachable && now.reachable) admitted.push({ name, from: was.position, to: now.position });
   }
 
   const added = [];
-  for (const [name, now] of after) {
-    if (!before.has(name)) {
-      added.push({ name, position: now.position, reachable: now.reachable });
+  for (const [key, now] of after) {
+    if (!before.has(key)) {
+      added.push({ name: now.name, position: now.position, reachable: now.reachable });
     }
   }
 
@@ -270,8 +312,10 @@ export function safeInsertIndexForNewCategory(rows) {
  */
 export function safeInsertIndex(rows, categoryName) {
   const appearances = firstAppearances(rows);
-  const name = normalizeCategoryName(categoryName);
-  const position = appearances.findIndex((c) => c.name === name);
+  // Folded: the caller hands us whatever the author typed, which need not be
+  // the spelling this set already stores for that category.
+  const key = categoryKey(categoryName);
+  const position = appearances.findIndex((c) => categoryKey(c.name) === key);
 
   if (position === -1) return safeInsertIndexForNewCategory(rows);
   if (position === 0) return 0;
@@ -289,8 +333,9 @@ function firstAppearances(rows) {
   (rows || []).forEach((row, index) => {
     if (!rowWouldImport(row)) return;
     const name = normalizeCategoryName(row.category);
-    if (seen.has(name)) return;
-    seen.add(name);
+    const key = categoryKey(row.category);
+    if (seen.has(key)) return;
+    seen.add(key);
     appearances.push({ name, index });
   });
   return appearances;
@@ -315,7 +360,10 @@ export function addQuestionImpact(rows, { category, insertIndex } = {}) {
   const list = rows || [];
   const name = normalizeCategoryName(category);
   const existing = deriveCategories(list);
-  const isNew = !existing.some((c) => c.name === name);
+  // Folded, so typing `strategy` into a set that already stores `Strategy` is
+  // correctly reported as an EXISTING category rather than a new bit.
+  const key = categoryKey(category);
+  const isNew = !existing.some((c) => categoryKey(c.name) === key);
 
   const at = Number.isInteger(insertIndex)
     ? Math.max(0, Math.min(insertIndex, list.length))
@@ -328,7 +376,7 @@ export function addQuestionImpact(rows, { category, insertIndex } = {}) {
   hypothetical.splice(at, 0, { category: name, title: '(new question)', removed: false });
 
   const impact = comparePositions(list, hypothetical);
-  const after = deriveCategories(hypothetical).find((c) => c.name === name) || null;
+  const after = deriveCategories(hypothetical).find((c) => categoryKey(c.name) === key) || null;
 
   return {
     name,
