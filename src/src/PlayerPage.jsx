@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import webSocketClient from './WebSocketClient';
-import IssueFab from './components/IssueFab';
 import Icon from './components/Icon';
 import RankIcon, { rankLabel, VOTE_POSITIONS } from './components/RankIcon';
 import { gameTypeMeta } from './config/gameTypes';
@@ -12,8 +11,83 @@ import {
 import JoinNameCollision from './components/JoinNameCollision';
 import AnswerSpotlight from './components/AnswerSpotlight';
 import { getClientId, classifyJoinFailure } from './components/joinResult';
+import './components/PlayerSurface.css';
 
 const API_BASE = window.API_BASE;
+
+/**
+ * THE LOOK-UP CUE — the same sentence shape, in the same position, in every
+ * WATCH and REST state.
+ *
+ * RATIONALE §2.2. The stage may never name a person, and taking that rule
+ * seriously hands you the whole split: anything person-specific belongs on the
+ * phone, anything room-wide belongs on the stage, and neither repeats the
+ * other. This is where the phone says which is which. It replaces
+ * "Check the main screen for detailed results and AI insights!", which appeared
+ * in exactly one branch and read as an apology for a missing feature.
+ *
+ * OPEN-QUESTIONS §1 IS THE ASSUMPTION THIS RESTS ON, and it is the single
+ * biggest unknown in the design: there is no signal anywhere in the payload for
+ * "this participant is remote and cannot see a shared screen", and no way to
+ * infer one. The stated assumption is that everyone can see one, and that the
+ * cue degrades to a harmless sentence for anybody who cannot. That assumption
+ * is honoured here rather than answered.
+ */
+const LookUpCue = ({ children }) => (
+  <div className="plr-lookup">
+    <svg
+      width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+    >
+      <path d="M12 20V5" /><path d="M6 11l6-6 6 6" /><path d="M4 3h16" />
+    </svg>
+    <div>{children}</div>
+  </div>
+);
+
+/**
+ * THE SHELL: bar, stage, dock. Three regions, and the dock is OUTSIDE the
+ * scrolling region rather than pinned over it.
+ *
+ * That is what makes "scrolling to read is fine, scrolling to act is not"
+ * (RATIONALE §5.2) structural rather than editorial: the primary action cannot
+ * be pushed below the fold because it is not in the thing that scrolls. It is
+ * also not `position: fixed`, which on iOS Safari interacts badly with the
+ * collapsing URL bar and with the soft keyboard.
+ *
+ * `dock` IS OMITTED, NOT DISABLED, IN REST AND WATCH (§2.2). If there is
+ * nothing to do there must be nothing that looks pressable, and a design that
+ * renders a greyed bar has already lost that argument. Declared at module scope
+ * so React keeps one element identity across renders — a component defined
+ * inside PlayerPage would remount its whole subtree on every keystroke and take
+ * the focused textarea with it.
+ */
+const PlayerShell = ({
+  phase, volume, ctx, category, who, online = true, banner,
+  centre = false, dock = null, children,
+}) => (
+  <div className="plr" data-theme="dark" data-phase={phase} data-volume={volume}>
+    {banner}
+    <header className="plr-bar">
+      <div className="plr-strip" />
+      <div className="plr-line">
+        <span className="plr-ctx">{ctx}</span>
+        {category && <span className="plr-cat">{category}</span>}
+        <span className="plr-spacer" />
+        {who && (
+          <span className="plr-who">
+            <span className={`plr-dot${online ? '' : ' plr-dot--off'}`} />
+            {who}
+          </span>
+        )}
+      </div>
+    </header>
+    <main className={`plr-stage${centre ? ' plr-stage--centre' : ''}`}>
+      {children}
+    </main>
+    {dock && <footer className="plr-dock">{dock}</footer>}
+  </div>
+);
 
 // `fetchQuestionSetInstruction` runs on every question, and the only endpoint
 // that carries a set's customInstruction/roundNoun is the FULL /question-sets
@@ -166,8 +240,20 @@ function PlayerPage() {
   */
   const hasVotedRef = useRef(false);
   useEffect(() => { hasVotedRef.current = hasVoted; }, [hasVoted]);
+  /*
+    THE COMPOSER HAS FOCUS, WHICH IS THE ONLY PROXY FOR "THE KEYBOARD IS UP"
+    that any browser reliably offers.
+
+    This used to open `mobile-input-overlay`: a full-screen textarea that
+    covered the question, so a player composing an answer could not see what
+    they were answering — and it carried three submit affordances at once. It
+    now drives the one reduction in the design instead (RATIONALE §5.3): the
+    question folds to three lines and pins itself above the composer, WITH a
+    control that opens it again. A reduction the reader can undo is a fold, not
+    a deletion; silent clipping is as forbidden here as it is on the stage.
+  */
   const [isAnswerInputFocused, setIsAnswerInputFocused] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(false);
+  const [showFullQuestion, setShowFullQuestion] = useState(false);
   const [gameIdFromUrl, setGameIdFromUrl] = useState(false);
   const [lastVoteInteraction, setLastVoteInteraction] = useState(0);
   const [isUserVoting, setIsUserVoting] = useState(false);
@@ -176,6 +262,22 @@ function PlayerPage() {
   // A join the server refused because the name is already answering in this
   // session: { kind: 'name-taken' | 'name-unverified', playerName, message }.
   const [joinCollision, setJoinCollision] = useState(null);
+  /*
+    WHY THE JOIN REFUSAL IS STATE AND NOT AN `alert()`.
+
+    Five of the eleven alert() calls in this file were on the join path. A
+    native alert on a phone is a modal system dialog that looks like a browser
+    error: it cannot be styled, it cannot be associated with the field it refers
+    to, and it gave ONE undifferentiated message for a wrong code, an ended
+    session, a full session and a network failure — four failures with four
+    different remedies (INVENTORY §2).
+
+    It is amber rather than red, which is unusual for an error and is argued in
+    RATIONALE §4.2: red on this surface means destructive, only, and the
+    alternative is inventing a sixth colour for the one screen a participant
+    sees before they have any context at all.
+  */
+  const [joinError, setJoinError] = useState(null);
   const [votingMode, setVotingMode] = useState('quick'); // 'quick' or 'detailed'
   /*
     Which response is being read in full, or null. An index into `answers`.
@@ -213,11 +315,6 @@ function PlayerPage() {
   const voteRoundRef = useRef(null);
   const [results, setResults] = useState(null);
 
-  // Game end modal state
-  const [showGameEndModal, setShowGameEndModal] = useState(false);
-  const [reportAvailable, setReportAvailable] = useState(false);
-  const [reportUrl, setReportUrl] = useState(null);
-
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
   const [useWebSocket, setUseWebSocket] = useState(true); // Always use WebSocket
@@ -245,17 +342,16 @@ function PlayerPage() {
     return true;
   };
 
-  // Detect desktop screens to prevent mobile overlay behavior
-  useEffect(() => {
-    const checkScreenSize = () => {
-      setIsDesktop(window.innerWidth >= 768);
-    };
-    
-    checkScreenSize();
-    window.addEventListener('resize', checkScreenSize);
-    
-    return () => window.removeEventListener('resize', checkScreenSize);
-  }, []);
+  /*
+    THE RESIZE LISTENER IS GONE WITH THE OVERLAY IT SERVED.
+
+    `isDesktop` existed for one purpose: to decide whether focusing the composer
+    should open the full-screen `mobile-input-overlay`. The overlay is cut, so
+    the width probe has nothing left to decide. Layout that depends on width is
+    a media query in `components/PlayerSurface.css`, where it belongs — a
+    JavaScript breakpoint and a CSS breakpoint are two sources of truth for one
+    fact, and they drift.
+  */
 
   useEffect(() => {
     // 🔗 PLAYER: Get game ID from URL params (optional)
@@ -404,7 +500,10 @@ function PlayerPage() {
       return;
     }
 
-    if (!quiet) alert(failure.message);
+    // On the join form rather than in a system dialog. `quiet` still means
+    // quiet: an unattended auto-join off a shared URL must not ambush somebody
+    // with "the host hasn't started yet" the instant the page loads.
+    if (!quiet) setJoinError(failure.message);
   };
 
   // 🔄 Attempt to automatically join the game
@@ -606,11 +705,27 @@ function PlayerPage() {
       }
     });
 
-    // Game ended handler
+    /*
+      GAME ENDED — a state, not a modal.
+
+      This used to raise a dismissible "Game Complete!" dialog whose primary
+      action was Download Report, hitting the ADMIN endpoint
+      `admin/reports/{gameId}` — an authenticated admin route offered to an
+      unauthenticated member of the public, which usually 404s and then explains
+      itself in an italic aside. Dismiss it and `isWaitingState('ENDED')` is
+      true, so the player was left permanently on "Waiting for the game to
+      start…" for a session that had finished (INVENTORY §7.2).
+
+      `applyGameState('ENDED')` ranks above everything and already ran; all that
+      was missing was a branch for it BEFORE `isWaitingState`, which used to
+      swallow it. OPEN-QUESTIONS §7 is the assumption behind cutting the
+      download rather than fixing it: participants get nothing here, and the
+      host shares a link if they publish one. A participant-scoped endpoint
+      would be a different design.
+    */
     webSocketClient.onMessage('gameEnded', (data) => {
       console.log('🔌 Player received game ended notification:', data);
       applyGameState('ENDED');
-      setShowGameEndModal(true);
     });
 
     // Connect as player - WebSocket is required
@@ -987,8 +1102,22 @@ function PlayerPage() {
       if (stateData.currentQuestionData) {
         setCurrentQuestion(stateData.currentQuestionData);
         console.log(`✅ PLAYER: Question data loaded: ${stateData.currentQuestionData.title}`);
+      } else {
+        /*
+          THE LATE ARRIVAL, AND THE ONLY REASON THE BALLOT CAN NAME ITS QUESTION.
+
+          `/state` carries `currentQuestionData` only sometimes. A player who
+          joins at round three goes CREATED → VOTE#003 without ever passing
+          through ASK, so `currentQuestion` is null and there is nothing to
+          render above the ballot — which is INVENTORY §5's MISSING row: six
+          answers to a question nobody showed them. `/question?role=player`
+          answers it and is already deployed; this is one extra GET on the one
+          path that has no question in hand.
+        */
+        console.log('📋 PLAYER: No question in the state payload — fetching it for the ballot');
+        await fetchCurrentQuestion(questionNumber);
       }
-      
+
       // Get answers for voting
       const paddedQuestionNumber = String(questionNumber).padStart(3, '0');
       const answersRes = await fetch(`${API_BASE}games/${gameId}/answers?role=player&questionId=${paddedQuestionNumber}`);
@@ -1256,6 +1385,7 @@ function PlayerPage() {
     e.preventDefault();
     if (!nameInput.trim() || !gameId) return;
 
+    setJoinError(null);
     const trimmed = nameInput.trim();
     const result = await performJoin(gameId, trimmed, {
       accessCode: accessCodeInput.trim() || null
@@ -1282,7 +1412,8 @@ function PlayerPage() {
   const handleAccessCodeSubmit = async (e) => {
     e.preventDefault();
     if (!accessCodeInput.trim()) return;
-    
+
+    setJoinError(null);
     const trimmed = nameInput.trim();
     const result = await performJoin(gameId, trimmed, {
       accessCode: accessCodeInput.trim()
@@ -1518,38 +1649,14 @@ function PlayerPage() {
     }
   };
 
-  // Check for report availability and handle download
-  const checkAndDownloadReport = async () => {
-    try {
-      console.log('📊 PLAYER: Checking for report availability...');
-      const response = await fetch(`${API_BASE}admin/reports/${gameId}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.downloadUrl) {
-          console.log('📊 PLAYER: Report available, opening download...');
-          setReportAvailable(true);
-          setReportUrl(data.downloadUrl);
-          // Open the report in a new tab
-          window.open(data.downloadUrl, '_blank');
-        } else {
-          console.log('📊 PLAYER: Report not yet available');
-          setReportAvailable(false);
-        }
-      } else {
-        console.log('📊 PLAYER: Report not available (404)');
-        setReportAvailable(false);
-      }
-    } catch (error) {
-      console.error('📊 PLAYER: Error checking report:', error);
-      setReportAvailable(false);
-    }
-  };
-
-  // Close game end modal
-  const closeGameEndModal = () => {
-    setShowGameEndModal(false);
-  };
+  /*
+    `checkAndDownloadReport` AND `closeGameEndModal` ARE GONE with the dialog
+    that was their only call site. The download aimed an unauthenticated
+    participant at `admin/reports/{gameId}`, an admin route, and handled its
+    usual 404 with an italic apology. OPEN-QUESTIONS §7 records the assumption:
+    if participants should get a summary it needs a participant-scoped endpoint,
+    which is a product decision rather than a design one.
+  */
 
   // B2: rejoin prompt handlers
   //
@@ -1623,14 +1730,36 @@ function PlayerPage() {
     setRejoinPrompt(null);
   };
 
-  // Detailed voting component
-  const DetailedVotingMode = ({ answers, votes, onVoteChange, onSubmitVotes, playerName, requiredVotes, mySubmittedAnswer }) => {
+  /*
+    THE CARD BALLOT — one card per response, the number, the text, and the rank
+    buttons in the row itself.
+
+    NOTHING HERE REORDERS, FILTERS, SORTS OR REINDEXES (RATIONALE §6.2).
+    `Response N` is 1-based, absolute, in array order, and matches
+    `displayLabelFor` in config/anonymity.js exactly. Vote indices map to array
+    position, so a reorder between VOTE and RESULTS would already be
+    misattributing votes; stable numbers across the whole ballot are what let a
+    host say "six and eleven" and be understood by forty people at once. Every
+    alternative — sorting by length so short answers are not skipped, floating
+    your own to the bottom, hiding duplicates — breaks the room's shared
+    reference.
+
+    THE SUBMIT IS NOT IN HERE. It lives in the dock, outside the scrolling
+    region, so the primary action cannot be scrolled off a long ballot — and so
+    that both ballots offer exactly one of it.
+
+    NO GESTURES (§8.4). Drag-to-rank is the obvious "nicer" ballot and it is
+    wrong here: undiscoverable, two-handed in practice, it fights the scroll
+    container it lives in, and it is unusable with a screen reader or a switch
+    device. Three buttons are boring and work for everybody.
+  */
+  const DetailedVotingMode = ({ answers, votes, onVoteChange, requiredVotes, mySubmittedAnswer }) => {
     const handleVoteClick = (answerIndex, position) => {
       // Track interaction to prevent polling interference
       setLastVoteInteraction(Date.now());
       setIsUserVoting(true);
       setTimeout(() => setIsUserVoting(false), 3000);
-      
+
       // Pressing the rank this answer already holds takes it off the ballot;
       // pressing any other rank MOVES it there, and handleVoteChange vacates
       // the old one. Same `rankHolding` the badge and the quick options read.
@@ -1644,83 +1773,113 @@ function PlayerPage() {
     const ownIdx = ownAnswerIndex(answers, mySubmittedAnswer);
 
     return (
-      <div className="detailed-voting">
-        <div className="detailed-answers">
-          {answers.map((answer, idx) => {
-            // The SAME rule the quick ballot's options read. This was a private
-            // `getVotePosition` here and an inline `Object.values(votes)
-            // .includes(...)` over there — two answers to one question, which is
-            // how the two ballots came to disagree about what a pick means.
-            const currentPosition = rankHolding(votes, idx);
-            const isOwn = idx === ownIdx;
+      <div className="plr-ballot">
+        {answers.map((answer, idx) => {
+          // The SAME rule the quick ballot's options read. This was a private
+          // `getVotePosition` here and an inline `Object.values(votes)
+          // .includes(...)` over there — two answers to one question, which is
+          // how the two ballots came to disagree about what a pick means.
+          const currentPosition = rankHolding(votes, idx);
+          const isOwn = idx === ownIdx;
 
-            return (
-              <div key={idx} className={`detailed-answer-card ${isOwn ? 'own-answer' : ''}`}>
-                {/* THE TEXT OPENS; THE VOTE BUTTONS DO NOT.
-
-                    Scoped to `.answer-content` rather than the whole card on
-                    purpose. The card also holds the three rank buttons, and a
-                    click handler on the card would fire behind every one of
-                    them — so ranking an answer would also open a dialog over
-                    the ballot the player is trying to fill in. This is a
-                    ballot, not a results wall: reading has to be the secondary
-                    gesture. */}
-                <div
-                  className="answer-content is-openable"
-                  role="button"
-                  tabIndex={0}
-                  aria-label="Read this response in full"
-                  onClick={() => setSpotlightIndex(idx)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setSpotlightIndex(idx);
-                    }
-                  }}
-                >
-                  <div className="answer-text">"{answer.answer}"</div>
-                  <div className="answer-author">- {displayLabelFor(answer, idx)}{isOwn ? ' (Yours)' : ''}</div>
-                </div>
-
-                <div className="vote-buttons">
-                  {['first', 'second', 'third'].slice(0, requiredVotes).map(position => {
-                    const isSelected = currentPosition === position;
-                    const rank = VOTE_POSITIONS[position];
-
-                    return (
-                      <button
-                        key={position}
-                        className={`vote-btn-detailed ${isSelected ? 'selected' : ''}`}
-                        onClick={() => handleVoteClick(idx, position)}
-                        aria-pressed={isSelected}
-                        aria-label={`Vote this answer ${rankLabel(rank)}`}
-                        title={rankLabel(rank)}
-                      >
-                        <RankIcon rank={rank} size={26} />
-                      </button>
-                    );
-                  })}
-                </div>
+          return (
+            <article key={idx} className={`plr-resp${isOwn ? ' plr-resp--own' : ''}`}>
+              <div className="plr-rhead">
+                <span className="plr-rid">{displayLabelFor(answer, idx)}</span>
+                {/* YOUR OWN ROW IS MARKED AND REMAINS RANKABLE.
+                    `ownAnswerIndex` matches on submitted text, which is correct
+                    and is not a leak. Whether a player SHOULD be able to rank
+                    themselves is a product question, not a design one:
+                    OPEN-QUESTIONS §2 leaves it rankable because
+                    `requiredRanks = min(3, answers.length)` counts your own row,
+                    so in a room of three the submit becomes unreachable the
+                    moment self-voting is blocked. */}
+                {isOwn && <span className="plr-flag plr-flag--mine">Yours</span>}
               </div>
-            );
-          })}
-        </div>
-        
-        <div className="detailed-vote-submit">
-          <div className="vote-progress">
-            Voted: {Object.values(votes).filter(v => v !== '').length} of {requiredVotes}
-          </div>
-          <button 
-            onClick={onSubmitVotes}
-            className="btn-primary btn-large"
-            disabled={Object.values(votes).filter(v => v !== '').length < requiredVotes}
-          >
-            Submit Votes
-          </button>
-        </div>
+
+              {/* THE TEXT OPENS; THE RANK BUTTONS DO NOT.
+                  A click handler on the whole card would fire behind every one
+                  of the three rank buttons, so ranking an answer would also
+                  open a dialog over the ballot the player is filling in. This
+                  is a ballot, not a results wall: reading is the secondary
+                  gesture. */}
+              <div
+                className="plr-rtxt plr-rtxt--clamp"
+                role="button"
+                tabIndex={0}
+                aria-label="Read this response in full"
+                onClick={() => setSpotlightIndex(idx)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSpotlightIndex(idx);
+                  }
+                }}
+              >
+                {answer.answer}
+              </div>
+              {/* A REDUCTION WITH NO RECOVERY IS A DELETION. The clamp above is
+                  five lines of CSS; this is the control that undoes it, and it
+                  is muted and underlined rather than amber, because expanding a
+                  response is not the task — ranking it is. */}
+              <button
+                type="button"
+                className="plr-more"
+                onClick={() => setSpotlightIndex(idx)}
+              >
+                Show all ↓
+              </button>
+
+              <div className="plr-ranks">
+                {['first', 'second', 'third'].slice(0, requiredVotes).map(position => {
+                  const isSelected = currentPosition === position;
+                  const rank = VOTE_POSITIONS[position];
+
+                  return (
+                    <button
+                      key={position}
+                      type="button"
+                      className="plr-rk"
+                      onClick={() => handleVoteClick(idx, position)}
+                      aria-pressed={isSelected}
+                      aria-label={`Vote this answer ${rankLabel(rank)}`}
+                      title={rankLabel(rank)}
+                    >
+                      <RankIcon rank={rank} size={18} />{' '}
+                      {rankLabel(rank)}
+                    </button>
+                  );
+                })}
+              </div>
+            </article>
+          );
+        })}
       </div>
     );
   };
+
+  /*
+    THE BALLOT SLOT BAR, in the dock. `Response N` again — never a truncation of
+    the response text, which would be a second, shorter, differently-worded
+    statement of a row the player can already see.
+  */
+  const BallotSlots = ({ votes, answers, requiredVotes }) => (
+    <div className="plr-slots" aria-label="Your ballot so far">
+      {['first', 'second', 'third'].slice(0, requiredVotes).map((position) => {
+        const picked = votes[position];
+        const idx = picked === '' ? null : parseInt(picked, 10);
+        const filled = idx !== null && Number.isFinite(idx) && answers[idx];
+        return (
+          <div key={position} className={`plr-slot${filled ? ' plr-slot--filled' : ''}`}>
+            <span className="plr-sk">{rankLabel(VOTE_POSITIONS[position])}</span>
+            <span className="plr-sv">
+              {filled ? displayLabelFor(answers[idx], idx) : '—'}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   // The name is already answering in this session. Shown ahead of everything
   // else on the join side: it is the only screen that tells the second Chris
@@ -1728,135 +1887,202 @@ function PlayerPage() {
   // them into the first Chris and said "Reconnected".
   if (!joined && joinCollision) {
     return (
-      <div className="player-outer-container-full">
-        <div className="player-container">
-          <div className="join-screen">
-            <JoinNameCollision
-              kind={joinCollision.kind}
-              playerName={joinCollision.playerName}
-              message={joinCollision.message}
-              onRejoinAnyway={handleCollisionRejoin}
-              onUseAnotherName={handleCollisionRename}
-            />
-          </div>
-        </div>
-      </div>
+      <PlayerShell phase="join" volume="act" ctx="Join a session">
+        <JoinNameCollision
+          kind={joinCollision.kind}
+          playerName={joinCollision.playerName}
+          message={joinCollision.message}
+          onRejoinAnyway={handleCollisionRejoin}
+          onUseAnotherName={handleCollisionRename}
+        />
+      </PlayerShell>
     );
   }
 
-  // Rejoin prompt (B2) — shown before the join screen when a saved identity is
-  // detected, replacing the previous silent auto-join.
+  /*
+    Rejoin prompt (B2) — shown before the join screen when a saved identity is
+    detected, replacing the previous silent auto-join.
+
+    ACT, INCLUDING THE DEAD ENDS. The volume model begins at join-success
+    (RATIONALE §10.1): before a player is in a session there is no stage to
+    compete with, no room looking up, and no shared surface — the phone IS the
+    entire product. That boundary was not stated until the design's own audit
+    failed a WATCH screen for having a button on it, three times, once per
+    device profile, and the failure was right.
+  */
   if (!joined && rejoinPrompt) {
     return (
-      <div className="player-outer-container-full">
-        <div className="player-container">
-          <div className="join-screen">
-            <h1>Welcome back!</h1>
-            <div className="game-info">
-              <p>Rejoin game <strong>{rejoinPrompt.gameId}</strong> as <strong>{rejoinPrompt.name}</strong>?</p>
-            </div>
-            <div className="join-form">
-              <button type="button" className="btn-primary btn-large" onClick={handleRejoinConfirm}>
-                Rejoin as {rejoinPrompt.name}
-              </button>
-              <button type="button" className="btn-secondary btn-large" onClick={handleRejoinDecline}>
-                Join as someone else
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <PlayerShell
+        phase="join"
+        volume="act"
+        ctx="Welcome back"
+        dock={(
+          <>
+            <button type="button" className="plr-btn" onClick={handleRejoinConfirm}>
+              Rejoin as {rejoinPrompt.name}
+            </button>
+            <button type="button" className="plr-btn plr-btn--ghost" onClick={handleRejoinDecline}>
+              Join as someone else
+            </button>
+          </>
+        )}
+      >
+        <h1 className="plr-h1">Welcome back.</h1>
+        <p className="plr-lede plr-muted">
+          This phone joined session <strong>{rejoinPrompt.gameId}</strong> as{' '}
+          <strong>{rejoinPrompt.name}</strong>. Rejoining brings your answers and your score
+          back with you.
+        </p>
+      </PlayerShell>
     );
   }
 
-  // Join screen
+  // Join screen.
+  //
+  // The parallax hero is gone from both this screen and the joined one: three
+  // cross-origin .webp layers, loading="eager", at the top of the DOM, above
+  // the question, on the smallest screen and the slowest connection in the
+  // building. The player knows what app they are in — they scanned its QR code.
   if (!joined) {
-    return (
-      <div className="player-outer-container-full">
-        <div className="player-container">
-          <div className="parallax">
-            <section className="parallax__header player-parallax">
-              <div className="parallax__visuals">
-                <div className="parallax__black-line-overflow"></div>
-                <div data-parallax-layers className="parallax__layers">
-                  <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795be09b462b2e8ebf71_osmo-parallax-layer-3.webp" loading="eager" width="800" data-parallax-layer="1" alt="" className="parallax__layer-img" />
-                  <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" width="800" data-parallax-layer="2" alt="" className="parallax__layer-img" />
-                  <div data-parallax-layer="3" className="parallax__layer-title">
-                    <h2 className="parallax__title">Engagements</h2>
-                  </div>
-                  <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" width="800" data-parallax-layer="4" alt="" className="parallax__layer-img" />
-                </div>
-                <div className="parallax__fade"></div>
-              </div>
-            </section>
-          </div>
-          
-          <div className="join-screen">
-            <h1>Join Engagements</h1>
-            {gameId && (
-              <div className="game-info">
-                <p>Game ID: <strong>{gameId}</strong></p>
-                <p className="reconnect-hint">
-                  <Icon name="Lightbulb" weight="duotone" size={16} color="var(--primary)" /> Save this URL to easily reconnect later!
+    if (needsAccessCode) {
+      return (
+        <PlayerShell
+          phase="join"
+          volume="act"
+          ctx="Private session"
+          dock={(
+            <>
+              <button type="submit" form="plr-access-form" className="plr-btn">
+                Join Game
+              </button>
+              <button
+                type="button"
+                className="plr-btn plr-btn--ghost"
+                onClick={() => {
+                  setNeedsAccessCode(false);
+                  setAccessCodeInput('');
+                  setJoinError(null);
+                  // The name is NOT cleared. Declining a private session used to
+                  // throw away a name that had already been typed and accepted,
+                  // which is a deletion offered as a way back (INVENTORY §2).
+                }}
+              >
+                Back
+              </button>
+            </>
+          )}
+        >
+          <h1 className="plr-h1 plr-h1--primary">This session is private.</h1>
+          <p className="plr-lede plr-muted">
+            The host has an access code for it. Ask them, or read it off the main screen.
+          </p>
+          <form id="plr-access-form" onSubmit={handleAccessCodeSubmit}>
+            <div className="plr-field">
+              <label className="plr-lab" htmlFor="plr-access">Access code</label>
+              <input
+                id="plr-access"
+                type="text"
+                value={accessCodeInput}
+                onChange={(e) => setAccessCodeInput(e.target.value)}
+                placeholder="Enter Access Code"
+                className={`plr-inp${joinError ? ' plr-inp--bad' : ''}`}
+                required
+              />
+              {joinError && (
+                <p className="plr-err" role="alert">
+                  <Icon name="WarningCircle" weight="bold" size={16} />
+                  {joinError}
                 </p>
-              </div>
-            )}
-            {needsAccessCode ? (
-              <div className="access-code-form">
-                <h3><Icon name="Lock" weight="duotone" size={20} color="var(--primary)" />Private Game</h3>
-                <p>This game requires an access code to join.</p>
-                <form onSubmit={handleAccessCodeSubmit} className="join-form">
-                  <input
-                    type="text"
-                    value={accessCodeInput}
-                    onChange={(e) => setAccessCodeInput(e.target.value)}
-                    placeholder="Enter Access Code"
-                    className="input-field"
-                    required
-                  />
-                  <button type="submit" className="btn-primary btn-large">
-                    Join Game
-                  </button>
-                  <button 
-                    type="button" 
-                    className="btn-secondary btn-large"
-                    onClick={() => {
-                      setNeedsAccessCode(false);
-                      setAccessCodeInput('');
-                      setNameInput('');
-                    }}
-                  >
-                    Back
-                  </button>
-                </form>
-              </div>
-            ) : (
-              <form onSubmit={handleJoinGame} className="join-form">
-                <input
-                  type="text"
-                  value={gameId}
-                  onChange={(e) => setGameId(e.target.value)}
-                  placeholder="Game ID"
-                  className="input-field"
-                  required
-                  readOnly={gameIdFromUrl} // Make read-only if game ID came from URL
-                />
-                <input
-                  type="text"
-                  value={nameInput}
-                  onChange={(e) => setNameInput(e.target.value)}
-                  placeholder="Your Name"
-                  className="input-field"
-                  required
-                />
-                <button type="submit" className="btn-primary btn-large">
-                  Join Game
-                </button>
-              </form>
-            )}
+              )}
+            </div>
+            {/* Enables implicit submission from the field itself. The reachable
+                submit is in the dock, where a thumb can get to it. */}
+            <input type="submit" hidden aria-hidden="true" tabIndex={-1} />
+          </form>
+        </PlayerShell>
+      );
+    }
+
+    return (
+      <PlayerShell
+        phase="join"
+        volume="act"
+        ctx="Join a session"
+        dock={(
+          <>
+            <button type="submit" form="plr-join-form" className="plr-btn">
+              Join Game
+            </button>
+            <p className="plr-note plr-note--after">
+              No account, nothing to install. Keep this page open — the same code and name
+              will bring you back.
+            </p>
+          </>
+        )}
+      >
+        <h1 className="plr-h1">Join the session.</h1>
+        <p className="plr-lede plr-muted">Type the four digits on the main screen.</p>
+
+        <form id="plr-join-form" onSubmit={handleJoinGame}>
+          <div className="plr-field">
+            <label className="plr-lab" htmlFor="plr-code">Session code</label>
+            <input
+              id="plr-code"
+              type="text"
+              value={gameId}
+              onChange={(e) => setGameId(e.target.value)}
+              placeholder="Game ID"
+              className={`plr-inp plr-inp--code${joinError ? ' plr-inp--bad' : ''}`}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              aria-describedby="plr-code-help"
+              required
+              readOnly={gameIdFromUrl}
+            />
+            <p className="plr-help" id="plr-code-help">
+              {gameIdFromUrl
+                ? 'Read from the link you followed. Nothing to type.'
+                : 'Four digits. Not case-sensitive, because there are no letters.'}
+            </p>
           </div>
-        </div>
-      </div>
+
+          <div className="plr-field">
+            <label className="plr-lab" htmlFor="plr-name">Your name</label>
+            <input
+              id="plr-name"
+              type="text"
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              placeholder="Your Name"
+              className="plr-inp"
+              aria-describedby="plr-name-help"
+              required
+            />
+            {/* CONSENT AT THE MOMENT THE NAME IS TYPED, not at the ballot
+                (RATIONALE §6.3). Telling somebody at the ballot that their
+                answer was unattributed is telling them after they wrote it. */}
+            <p className="plr-help" id="plr-name-help">
+              Used for the scoreboard and to get you back in if you lose this page. On rounds
+              where the room votes, your name is <b>not</b> shown next to your answer until
+              voting closes.
+            </p>
+          </div>
+
+          {/* AMBER, NOT RED, and it names what to do rather than what went
+              wrong (§4.2). Four failures used to share one alert() with one
+              undifferentiated sentence; the server still returns a single error
+              string for wrong code / ended / full, which RATIONALE §11.8 names
+              as the smallest backend fix worth making. */}
+          {joinError && (
+            <p className="plr-err" role="alert">
+              <Icon name="WarningCircle" weight="bold" size={16} />
+              {joinError}
+            </p>
+          )}
+
+          <input type="submit" hidden aria-hidden="true" tabIndex={-1} />
+        </form>
+      </PlayerShell>
     );
   }
 
@@ -1864,837 +2090,919 @@ function PlayerPage() {
   // per render so both voting modes below mark the same row.
   const ownAnswerIdx = ownAnswerIndex(answers, mySubmittedAnswer);
 
-  return (
-    <div className="player-outer-container-full">
-      <div className="player-info-external">
-        <span className="player-name"><Icon name="UserCircle" weight="fill" size={16} /> {playerName}</span>
-        <span className="game-id">Game: {gameId}</span>
-        {currentQuestion && roundNumberOf(currentQuestion, gameState) !== null && (
-          <span className="round-number">
-            {resolveRoundNoun(currentQuestion, gameType, setRoundNoun)}{' '}
-            {roundNumberOf(currentQuestion, gameState)}
-          </span>
-        )}
-        <span 
-          className={`websocket-indicator ${wsConnected ? 'connected' : 'disconnected'}`}
-          onClick={() => window.location.reload()}
-          style={{ cursor: 'pointer' }}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') window.location.reload(); }}
-          title={wsConnected ? 'Live connection is healthy — tap to reload' : 'Not connected — tap to reload'}
-        >
-          <Icon
-            name={wsConnected ? 'Broadcast' : 'WifiSlash'}
-            weight="bold"
-            size={14}
-            color={wsConnected ? 'var(--success)' : 'var(--danger)'}
-          />{' '}
-          {wsConnected ? 'Connected' : 'Not Connected'}
-        </span>
+  /* ======================================================================
+     THE JOINED SURFACE.
+
+     One shell, one set of chrome values, and exactly one of the branches
+     below fills it. Written as an assignment rather than a tree of `&&`
+     because the VOLUME (RATIONALE §2.2) is a property of the whole screen —
+     ACT gets a dock and the one amber idea, REST and WATCH get neither — and
+     a design where three branches each decide that independently is a design
+     where the fourth one forgets.
+     ====================================================================== */
+
+  const roundNo = roundNumberOf(currentQuestion, gameState);
+  const roundNoun = resolveRoundNoun(currentQuestion, gameType, setRoundNoun);
+  const position = roundNo !== null ? `${roundNoun} ${roundNo}` : null;
+  const category = currentQuestion?.field || currentQuestion?.category || null;
+  const requiredVotes = Math.min(3, answers.length);
+  const filledVotes = Object.values(votes).filter((v) => v !== '').length;
+  const instruction = getPlayerInstructionText(customInstruction, currentQuestion, gameType);
+
+  /*
+    THE OFFLINE BANNER replaces a status chip whose click handler was
+    `window.location.reload()` — offered as the remedy for a bad connection to a
+    player who may be mid-sentence in a textarea whose contents live in React
+    state and nowhere else. The one moment that control was most likely to be
+    pressed was the one moment it destroyed work, and its own tooltip invited
+    it: "Live connection is healthy — tap to reload".
+
+    THE COPY IS NOT THE COPY THE DESIGN ASKS FOR, DELIBERATELY. RATIONALE §7
+    writes "Your text is safe on this phone and will send as soon as you are
+    back", and then says the sentence must not ship before the localStorage
+    draft that makes it true (§11.7). That draft does not exist yet, so the
+    banner says only what is currently true. A reassurance the software cannot
+    keep is worse than no banner.
+
+    Amber, never red: being offline is not destructive.
+  */
+  const offlineBanner = !wsConnected ? (
+    <div className="plr-banner" role="status">
+      <Icon name="WifiSlash" weight="bold" size={16} />
+      <div>
+        <b>Offline.</b> Reconnecting. This page catches up on its own when the connection
+        comes back — you do not need to refresh it, and refreshing would lose anything you
+        have typed but not sent.
       </div>
-      
-      {rejoinedPlayer && (
-        <div className="rejoin-notification" role="status">
-          <Icon name="ArrowsClockwise" weight="bold" size={16} color="var(--success)" /> Welcome back! Your previous game state has been restored.
-        </div>
-      )}
-      
-      <div className="player-container">
-        <div className="parallax">
-          <section className="parallax__header player-parallax">
-            <div className="parallax__visuals">
-              <div className="parallax__black-line-overflow"></div>
-              <div data-parallax-layers className="parallax__layers">
-                <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795be09b462b2e8ebf71_osmo-parallax-layer-3.webp" loading="eager" width="800" data-parallax-layer="1" alt="" className="parallax__layer-img" />
-                <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795b4d5ac529e7d3a562_osmo-parallax-layer-2.webp" loading="eager" width="800" data-parallax-layer="2" alt="" className="parallax__layer-img" />
-                <div data-parallax-layer="3" className="parallax__layer-title">
-                  <h2 className="parallax__title">Engagements</h2>
-                </div>
-                <img src="https://cdn.prod.website-files.com/671752cd4027f01b1b8f1c7f/6717795bb5aceca85011ad83_osmo-parallax-layer-1.webp" loading="eager" width="800" data-parallax-layer="4" alt="" className="parallax__layer-img" />
-              </div>
-              <div className="parallax__fade"></div>
-            </div>
-          </section>
-        </div>
+    </div>
+  ) : null;
 
-      <div className="game-content">
-        {isWaitingState(gameState) && (
-          <div className="waiting-screen">
-            <h2><Icon name="CheckCircle" weight="duotone" size={28} color="var(--success)" />You're in!</h2>
-            <p>Waiting for the game to start&hellip;</p>
-            <div className="status-indicator">
-              <div className="pulse"></div>
-              <span>Ready to play</span>
-            </div>
-            {/* The setup screen's Event Details, on the screen it promises them
-                on. Rendered only when there is something to render — the field
-                is optional, and an empty labelled box on every lobby would be
-                worse than the silence it replaces. */}
-            {engagementInfo.trim() && (
-              <div className="session-brief">
-                <h3>About this session</h3>
-                <p>{engagementInfo}</p>
-              </div>
-            )}
+  let phase = 'quiet';
+  let volume = 'rest';
+  let ctx = position || 'In the session';
+  let barCategory = null;
+  let centre = false;
+  let dock = null;
+  let body = null;
+
+  /* ---------------------------------------------------------------- ENDED --
+     BEFORE `isWaitingState`, which used to swallow it: `isWaitingState` is
+     true for anything that is not ASK#/VOTE#/RESULTS#, so a finished session
+     rendered "✅ You're in! / Waiting for the game to start… / ● Ready to
+     play" and left the player there permanently (INVENTORY §7.2). */
+  if (gameState === 'ENDED') {
+    volume = 'watch';
+    ctx = 'Session complete';
+    centre = true;
+    body = (
+      <>
+        <p className="plr-lab">That&apos;s a wrap</p>
+        <h1 className="plr-h1">Thanks for playing, {playerName}.</h1>
+
+        <hr className="plr-sep" />
+        <div className="plr-stat">
+          <span className="plr-k">Final score</span>
+          <span className="plr-v">{playerScoreInfo?.totalScore ?? playerScore}</span>
+        </div>
+        {playerScoreInfo?.rankDisplay && (
+          <div className="plr-stat">
+            <span className="plr-k">Final standing</span>
+            <span className="plr-v">
+              {playerScoreInfo.rankDisplay} of {playerScoreInfo.totalPlayers}
+            </span>
           </div>
         )}
 
-        {gameState.startsWith('ASK#') && currentQuestion && (
-          <div className="question-screen">
-            <div className="question-header">
-              <div className="field-badge">
-                {currentQuestion.field || currentQuestion.category}
-              </div>
-              {currentQuestion.school && (
-                <div className="school-name">{currentQuestion.school}</div>
-              )}
-            </div>
-            {gameType === 'call-and-answer' && currentQuestion.image ? (
-              /* "Art Title" round: the artwork is the prompt, so lead with the title
-                 and show the piece. Detail is normally blank so it does not spoil it. */
-              <>
-                <div className="lesson-title">
-                  {currentQuestion.title || currentQuestion.question}
-                </div>
-                <img
-                  src={currentQuestion.image}
-                  alt={currentQuestion.title || 'Artwork'}
-                  className="artwork-image"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                />
-                {currentQuestion.detail && (
-                  <div className="lesson-detail">
-                    {currentQuestion.detail}
-                  </div>
-                )}
-              </>
-            ) : gameType === 'call-and-answer' ? (
-              <>
-                {/* Only show subtitle if title is different from detail and title is reasonably short */}
-                {currentQuestion.title &&
-                 currentQuestion.title !== (currentQuestion.detail || currentQuestion.question) &&
-                 currentQuestion.title.length < 100 && (
-                  <div className="lesson-subtitle">
-                    {currentQuestion.title}
-                  </div>
-                )}
-                <div className="lesson-title">
-                  {currentQuestion.detail || currentQuestion.question}
-                </div>
-              </>
-            ) : gameType === 'trivia' ? (
-              <>
-                <div className="lesson-title">
-                  {currentQuestion.title || currentQuestion.question}
-                </div>
-                {currentQuestion.questionDetail && (
-                  <div className="lesson-detail">
-                    {currentQuestion.questionDetail}
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="lesson-title">
-                {currentQuestion.title || currentQuestion.question}
-              </div>
-            )}
-            {gameType === 'wavelength' && (currentQuestion.topic || currentQuestion.detail) && (
-              <div className="wavelength-topic lesson-detail">
-                {currentQuestion.topic
-                  ? (<><strong>Topic:</strong> {currentQuestion.topic}</>)
-                  : currentQuestion.detail}
-              </div>
-            )}
-            <div className="application-prompt">
-              <strong>{getPlayerInstructionText(customInstruction, currentQuestion, gameType)}</strong>
-            </div>
-            
-            {!hasAnswered ? (
-              gameType === 'trivia' ? (
-                <>
-                  <div className="trivia-answer-options">
-                    {['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF']
-                      .filter(key => currentQuestion[key])
-                      .map((key, index) => {
-                        const optionLetter = String.fromCharCode(65 + index);
-                        const isSelected = selectedTriviaAnswer === optionLetter;
-                        return (
-                          <div
-                            key={key}
-                            className={`category-item trivia-option ${isSelected ? 'active' : ''}`}
-                            onClick={() => setSelectedTriviaAnswer(optionLetter)}
-                          >
-                            <span className="category-name">
-                              <span className="option-letter">{optionLetter}.</span> {currentQuestion[key]}
-                            </span>
-                          </div>
-                        );
-                      })}
-                  </div>
-                  
-                  <div className="trivia-submit-container">
-                    <button 
-                      className="btn-primary btn-large"
-                      onClick={() => handleSubmitAnswer(null, selectedTriviaAnswer)}
-                      disabled={!selectedTriviaAnswer}
-                    >
-                      Submit Answer
-                    </button>
-                  </div>
-                </>
-              ) : gameType === 'wavelength' ? (
-                <>
-                  <div className="wavelength-input-grid">
-                    {wavelengthWords.map((word, index) => (
-                      <div key={index} className="wavelength-word-input">
-                        <label className="word-label">Word {index + 1}</label>
-                        <input
-                          type="text"
-                          value={word}
-                          onChange={(e) => {
-                            const newWords = [...wavelengthWords];
-                            newWords[index] = e.target.value;
-                            setWavelengthWords(newWords);
-                          }}
-                          placeholder={`Word ${index + 1}`}
-                          className="word-input"
-                          maxLength="50"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  
-                  <div className="wavelength-submit-container">
-                    <button 
-                      className="btn-primary btn-large"
-                      onClick={handleSubmitAnswer}
-                      disabled={wavelengthWords.filter(word => word.trim()).length === 0}
-                    >
-                      Submit Words ({wavelengthWords.filter(word => word.trim()).length}/10)
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  {isAnswerInputFocused && !isDesktop && (
-                    <div className="mobile-input-overlay" onClick={() => setIsAnswerInputFocused(false)}>
-                      <div className="mobile-input-container" onClick={(e) => e.stopPropagation()}>
-                        <button 
-                          className="mobile-minimize-btn mobile-minimize-left"
-                          onClick={() => setIsAnswerInputFocused(false)}
-                          type="button"
-                          aria-label="Close the full-screen editor"
-                          title="Close editor"
-                        >
-                          <Icon name="ArrowDown" weight="bold" size={20} />
-                        </button>
-                        <button
-                          className="mobile-submit-btn-top"
-                          onClick={handleSubmitAnswer}
-                          type="button"
-                          disabled={!answerInput.trim()}
-                          aria-label="Submit answer"
-                          title="Submit answer"
-                        >
-                          <Icon name="Airplane" weight="fill" size={20} />
-                        </button>
-                        <form onSubmit={handleSubmitAnswer} className="mobile-answer-form">
-                          <textarea
-                            value={answerInput}
-                            onChange={(e) => setAnswerInput(e.target.value)}
-                            placeholder={getPlayerInstructionText(customInstruction, currentQuestion, gameType)}
-                            className="mobile-answer-input"
-                            rows={12}
-                            required
-                            autoFocus
-                            spellCheck={true}
-                            autoComplete="on"
-                            autoCorrect="on"
-                            autoCapitalize="sentences"
-                          />
-                          <button type="submit" className="btn-primary btn-large mobile-submit-btn">
-                            Submit Answer
-                          </button>
-                        </form>
-                      </div>
-                    </div>
-                  )}
-                <form onSubmit={handleSubmitAnswer} className="answer-form">
-                  <textarea
-                    value={answerInput}
-                    onChange={(e) => setAnswerInput(e.target.value)}
-                    onFocus={() => !isDesktop && setIsAnswerInputFocused(true)}
-                    placeholder={getPlayerInstructionText(customInstruction, currentQuestion, gameType)}
-                    className="answer-input"
-                    rows={isDesktop ? 6 : 4}
-                    required
-                    spellCheck={true}
-                    autoComplete="on"
-                    autoCorrect="on"
-                    autoCapitalize="sentences"
-                  />
-                  <button type="submit" className="btn-primary btn-large">
-                    Submit Answer
-                  </button>
-                </form>
-                </>
-              )
-            ) : (
-              <div className="answer-submitted">
-                <h3>
-                  <Icon name="CheckCircle" weight="duotone" size={24} color="var(--success)" />
-                  {/* Art Title rounds are call-and-answer with an image, so the
-                      image check sits after the real game types and before the
-                      generic call-and-answer wording. */}
-                  {gameType === 'trivia' ? 'Answer Submitted!' :
-                   gameType === 'wavelength' ? 'Words Submitted!' :
-                   gameType === 'poll' ? 'Response Submitted!' :
-                   currentQuestion?.image ? 'Title Submitted!' : 'Application Submitted!'}
-                </h3>
-                <p>Waiting for other players&hellip;</p>
-              </div>
-            )}
-          </div>
-        )}
+        <LookUpCue>
+          The room summary — the top responses, and what the host wants everyone to take
+          away — is on the main screen.
+        </LookUpCue>
+        <p className="plr-help" style={{ marginTop: '18px' }}>
+          You can close this page. If your host publishes a session summary, they will share
+          the link themselves.
+        </p>
+      </>
+    );
 
-        {/*
-          `|| hasVoted` IS THE OTHER HALF OF THE TAB-SWITCH REPORT, and it is a
-          blank screen rather than a reset one.
+  /* ------------------------------------------------------------------ ASK -- */
+  } else if (gameState.startsWith('ASK#') && currentQuestion) {
+    barCategory = category;
+    ctx = position || 'This round';
 
-          `answers.length > 0` alone is right for the BALLOT — there is nothing
-          to rank until the responses are in. It is wrong for the confirmation
-          underneath it, because `loadVotingData` returns early once it learns
-          this player has already voted and never loads the answers on that
-          path. During the session that is invisible: the ballot was on screen a
-          moment ago, so `answers` is still populated. Come back to the tab and
-          the resync takes the early return with an empty `answers`, so this
-          whole block renders nothing at all and a player who has voted is shown
-          neither their ballot nor "Votes Submitted!".
+    /* THE QUESTION, BY GAME TYPE. Poll and survey used to fall into an `else`
+       that rendered `title` only, so a poll question's `detail` — the
+       background context that makes it answerable — was never shown to a
+       single player. Two of five shipped game types had no ASK design at all
+       (INVENTORY §4). */
+    const isArtwork = gameType === 'call-and-answer' && !!currentQuestion.image;
+    const headline = isArtwork
+      ? (currentQuestion.title || currentQuestion.question)
+      : gameType === 'call-and-answer'
+        // `|| title` is the fallback the shipped chain lacked: a call-and-answer
+        // question carrying only a `title` rendered an empty prompt and pushed
+        // the real one into a "subtitle" beneath it.
+        ? (currentQuestion.detail || currentQuestion.question || currentQuestion.title)
+        : (currentQuestion.title || currentQuestion.question);
+    // Compared against the RESOLVED headline rather than against `detail ||
+    // question`, so it can never restate the line directly above it.
+    const subtitle = gameType === 'call-and-answer'
+      && currentQuestion.title
+      && currentQuestion.title !== headline
+      && currentQuestion.title.length < 100
+      ? currentQuestion.title
+      : null;
+    const detail = isArtwork
+      ? currentQuestion.detail
+      : gameType === 'call-and-answer'
+        ? null
+        : gameType === 'trivia'
+          ? currentQuestion.questionDetail
+          : gameType === 'wavelength'
+            ? null
+            : currentQuestion.detail;           // poll and survey — the missing branch
 
-          The ballot markup below stays behind `!hasVoted`, so it never renders
-          against an empty list.
-        */}
-        {gameState.startsWith('VOTE#') && (answers.length > 0 || hasVoted) && (
-          <div className="voting-screen">
-            <h2>
-              <Icon name="ListChecks" weight="duotone" size={26} color="var(--primary)" />
-              {currentQuestion?.image ? 'Vote for the Best Title'
-                : gameType === 'poll' ? 'Vote for the Best Response'
-                : 'Vote for the Best Applications'}
-            </h2>
-            <p>
-              {currentQuestion?.image
-                ? 'Which title best captures this masterpiece?'
-                : gameType === 'poll'
-                  ? 'Which response best captures where the room should land?'
-                  : 'Which applications would be most valuable for teams to implement?'}
-            </p>
+    /* THE ONE REDUCTION, AND IT IS REVERSIBLE (§5.3). With a soft keyboard up
+       there are roughly 430 usable pixels; a nine-line question and a composer
+       cannot both have them. Focus is the trigger because no browser reliably
+       reports the keyboard's height. The control that undoes it is rendered
+       with it, always — a fold, not a deletion. */
+    const folded = isAnswerInputFocused && !showFullQuestion;
 
-            {currentQuestion?.image && (
+    const questionBlock = (
+      <>
+        {subtitle && !folded && <p className="plr-lab">{subtitle}</p>}
+        <p className={`plr-q${folded ? ' plr-q--fold' : ''}`}>{headline}</p>
+        {folded ? (
+          <button
+            type="button"
+            className="plr-more"
+            onClick={() => setShowFullQuestion(true)}
+          >
+            Show the whole question ↓
+          </button>
+        ) : (
+          <>
+            {isArtwork && (
               <img
                 src={currentQuestion.image}
                 alt={currentQuestion.title || 'Artwork'}
-                className="artwork-image artwork-image-voting"
+                className="plr-artwork"
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
             )}
-
-
-            {!hasVoted ? (
-              <>
-                {/* Voting Mode Toggle */}
-                <div className="voting-mode-toggle">
-                  <button 
-                    className={`mode-btn ${votingMode === 'quick' ? 'active' : ''}`}
-                    onClick={() => setVotingMode('quick')}
-                  >
-                    Quick Vote
-                  </button>
-                  <button 
-                    className={`mode-btn ${votingMode === 'detailed' ? 'active' : ''}`}
-                    onClick={() => setVotingMode('detailed')}
-                  >
-                    Detailed Vote
-                  </button>
-                </div>
-                
-                {votingMode === 'quick' ? (
-                  <>
-                    <div className="voting-positions">
-                    {['first', 'second', 'third'].slice(0, Math.min(3, answers.length)).map((position, posIndex) => (
-                      <div key={position} className="vote-position">
-                        <label className="position-label">
-                          <RankIcon rank={VOTE_POSITIONS[position]} size={18} />{' '}
-                          {rankLabel(VOTE_POSITIONS[position])}:
-                        </label>
-                        <select 
-                          value={votes[position]} 
-                          onChange={(e) => handleVoteChange(position, e.target.value)}
-                          className="vote-select"
-                        >
-                          <option value="">Pick player...</option>
-                          {answers.map((answer, idx) => {
-                            /*
-                              NOTHING IS DISABLED HERE, AND THAT IS THE FIX.
-
-                                "the quick view method does not allow for you to
-                                 switch votes ... i like how the detailed voted
-                                 kicks out the choice anywhere else when you pick
-                                 it, make that work for the quick vote."
-
-                              This option used to carry `disabled={isSelected &&
-                              !isCurrentSelection}` — an answer already ranked in
-                              another slot could not be picked here. The kick-out
-                              in `handleVoteChange` has always existed, but a
-                              browser will not let you choose a disabled option,
-                              so on the quick ballot it was unreachable code. To
-                              move an answer from 2nd to 1st the player had to
-                              find the 2nd select, empty it by hand, then come
-                              back — which is not "switching a vote", it is a
-                              puzzle. The detailed cards never had the guard,
-                              which is exactly why one path worked.
-
-                              THE LOST AFFORDANCE IS REPLACED, NOT DROPPED.
-                              `disabled` was also the only signal that an answer
-                              was spoken for, and a select gives us no styling to
-                              lean on, so the option says WHERE it currently
-                              sits. That text is the accessible name, so it is
-                              announced rather than merely seen — and it is the
-                              detailed view's `aria-pressed` said in words.
-                            */
-                            const heldRank = rankHolding(votes, idx);
-                            const isCurrentSelection = heldRank === position;
-                            const isOwn = idx === ownAnswerIdx;
-
-                            // Truncate long answers for dropdown display
-                            const truncatedAnswer = answer.answer.length > 20
-                              ? answer.answer.substring(0, 20) + '...'
-                              : answer.answer;
-
-                            return (
-                              <option
-                                key={idx}
-                                value={idx}
-                                title={answer.answer} // Full answer on hover
-                              >
-                                "{truncatedAnswer}" - {displayLabelFor(answer, idx)}{isOwn ? ' (Yours)' : ''}
-                                {heldRank && !isCurrentSelection
-                                  ? ` — currently ${rankLabel(VOTE_POSITIONS[heldRank])}`
-                                  : ''}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  <div className="vote-submit">
-                    <button 
-                      onClick={handleSubmitVotes}
-                      className="btn-primary btn-large"
-                      disabled={Object.values(votes).filter(v => v !== '').length < Math.min(3, answers.length)}
-                    >
-                      Submit Votes
-                    </button>
-                  </div>
-                  </>
-                ) : (
-                  <DetailedVotingMode
-                    answers={answers}
-                    votes={votes}
-                    onVoteChange={handleVoteChange}
-                    onSubmitVotes={handleSubmitVotes}
-                    playerName={playerName}
-                    requiredVotes={Math.min(3, answers.length)}
-                    mySubmittedAnswer={mySubmittedAnswer}
-                  />
-                )}
-              </>
-            ) : (
-              <div className="vote-submitted">
-                <h3><Icon name="CheckCircle" weight="duotone" size={24} color="var(--success)" />Votes Submitted!</h3>
-                <p>Waiting for results&hellip;</p>
-              </div>
+            {detail && <p className="plr-detail plr-muted">{detail}</p>}
+            {gameType === 'wavelength' && (currentQuestion.topic || currentQuestion.detail) && (
+              <p className="plr-detail plr-muted">
+                {currentQuestion.topic
+                  ? (<><b>Topic:</b> {currentQuestion.topic}</>)
+                  : currentQuestion.detail}
+              </p>
             )}
-          </div>
+          </>
         )}
+      </>
+    );
 
-        {gameState.startsWith('RESULTS#') && (
-          <div className="results-screen">
-            <h2>
-              <Icon name={gameTypeMeta(gameType).icon} weight="duotone" size={26} color="var(--primary)" />
-              {resolveRoundNoun(currentQuestion, gameType, setRoundNoun)}{' '}
-              {parseInt(gameState.split('#')[1])} Results
-            </h2>
-            
-            {gameType === 'trivia' ? (
-              <div className="trivia-player-results">
-                <div className="trivia-question-recap">
-                  <h3>{currentQuestion?.questionDetail || currentQuestion?.title}</h3>
+    /* THE RESOLVED INSTRUCTION. The host stage cut this on the grounds that
+       "every player already has it on their own phone at arm's length", which
+       is exactly what makes it load-bearing here. It is stated ONCE, as
+       content — never again as placeholder text, which vanishes on the first
+       keystroke, i.e. is present exactly while it is not needed. */
+    const taskBlock = instruction ? (
+      <div className="plr-task">
+        <p className="plr-lab">Your task</p>
+        <p>{instruction}</p>
+      </div>
+    ) : null;
+
+    if (!hasAnswered) {
+      volume = 'act';
+      phase = 'ask';
+
+      if (gameType === 'trivia') {
+        const keys = ['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF']
+          .filter((key) => currentQuestion[key]);
+        body = (
+          <>
+            {questionBlock}
+            {taskBlock}
+            {/* WAS `<div className="category-item trivia-option" onClick=...>` —
+                the admin category picker's class, on a div with no role, no
+                tabIndex and no aria-checked: not reachable by keyboard and not
+                announced as selectable. */}
+            <div className="plr-opts" role="radiogroup" aria-label="Answer options">
+              {keys.map((key, index) => {
+                const optionLetter = String.fromCharCode(65 + index);
+                const isSelected = selectedTriviaAnswer === optionLetter;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    className={`plr-opt trivia-option${isSelected ? ' active' : ''}`}
+                    onClick={() => setSelectedTriviaAnswer(optionLetter)}
+                  >
+                    <span className="plr-k">{optionLetter}</span>
+                    <span>{currentQuestion[key]}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        );
+        dock = (
+          <>
+            <p className="plr-note">
+              {selectedTriviaAnswer
+                ? `${selectedTriviaAnswer} selected. You can change it until you submit.`
+                : 'Choose an answer. You can change it until you submit.'}
+            </p>
+            <button
+              type="button"
+              className="plr-btn"
+              onClick={() => handleSubmitAnswer(null, selectedTriviaAnswer)}
+              disabled={!selectedTriviaAnswer}
+            >
+              Submit Answer
+            </button>
+          </>
+        );
+      } else if (gameType === 'wavelength') {
+        const wordCount = wavelengthWords.filter((w) => w.trim()).length;
+        body = (
+          <>
+            {questionBlock}
+            {taskBlock}
+            {/* TEN STACKED INPUTS, EACH WITH A `Word N` LABEL *AND* A `Word N`
+                PLACEHOLDER — twenty strings for ten values, ~900px of form on a
+                375px phone. The labels stay (a placeholder is not a label) and
+                the duplicate placeholder goes. */}
+            <div className="plr-words-form">
+              {wavelengthWords.map((word, index) => (
+                <div key={index} className="plr-field">
+                  <label className="plr-lab" htmlFor={`plr-word-${index}`}>
+                    Word {index + 1}
+                  </label>
+                  <input
+                    id={`plr-word-${index}`}
+                    type="text"
+                    value={word}
+                    onChange={(e) => {
+                      const newWords = [...wavelengthWords];
+                      newWords[index] = e.target.value;
+                      setWavelengthWords(newWords);
+                    }}
+                    className="plr-inp"
+                    maxLength="50"
+                  />
                 </div>
-                
-                <div className="trivia-options-results">
-                  {['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF']
-                    .filter(key => currentQuestion?.[key])
-                    .map((key, index) => {
-                      const optionLetter = String.fromCharCode(65 + index);
-                      const optionId = `Option${optionLetter}`;
-                      // Handle different correct answer formats (OptionA vs actual text)
-                      const rawCorrectAnswer = currentQuestion?.correctAnswer;
-                      let correctAnswers = Array.isArray(rawCorrectAnswer) ? rawCorrectAnswer : [rawCorrectAnswer];
-                      
-                      // Filter out null/undefined values
-                      correctAnswers = correctAnswers.filter(ans => ans != null);
-                      
-                      // Comprehensive correct answer checking
-                      let isCorrect = false;
-                      
-                      // Check all possible formats
-                      for (const correctAns of correctAnswers) {
-                        if (!correctAns) continue;
-                        
-                        // Direct matches
-                        if (correctAns === optionId || // "OptionA"
-                            correctAns === optionLetter || // "A"  
-                            correctAns === currentQuestion?.[key]) { // actual option text
-                          isCorrect = true;
-                          break;
-                        }
-                        
-                        // Handle "OptionA" format - convert to actual text and compare
-                        if (typeof correctAns === 'string' && correctAns.startsWith('Option')) {
-                          const correctLetter = correctAns.replace('Option', '');
-                          const correctOptionKey = `option${correctLetter}`;
-                          if (correctOptionKey === key || correctLetter === optionLetter) {
-                            isCorrect = true;
-                            break;
-                          }
-                        }
-                        
-                        // Handle letter format - convert to option key and compare  
-                        if (typeof correctAns === 'string' && correctAns.length === 1 && correctAns.match(/[A-F]/)) {
-                          const correctOptionKey = `option${correctAns}`;
-                          if (correctOptionKey === key || correctAns === optionLetter) {
-                            isCorrect = true;
-                            break;
-                          }
-                        }
-                      }
-                      
-                      // Find player's answer from the answers array (check both name formats)
-                      const playerAnswer = answers.find(answer => 
-                        answer.name === playerName || answer.playerName === playerName || answer.player === playerName
-                      );
-                      
-                      // Player's answer can be in different formats: "A", "Option A", or the actual option text
-                      const playerAnswerValue = playerAnswer?.answer;
-                      const isPlayerChoice = playerAnswerValue === optionLetter || 
-                                           playerAnswerValue === optionId || 
-                                           playerAnswerValue === currentQuestion?.[key];
-                      
-                      // Debug logging for answer highlighting
-                      console.log(`🎯 OPTION ${optionLetter} DEBUG:`);
-                      console.log(`  key: "${key}", optionLetter: "${optionLetter}", optionId: "${optionId}"`);
-                      console.log(`  Option Value: "${currentQuestion?.[key]}"`);
-                      console.log(`  currentQuestion object:`, currentQuestion);
-                      console.log(`  Raw correct answer: ${JSON.stringify(rawCorrectAnswer)}`);
-                      console.log(`  Processed correct answers: ${JSON.stringify(correctAnswers)}`);
-                      console.log(`  isCorrect calculation result: ${isCorrect}`);
-                      console.log(`  Player answer value: "${playerAnswerValue}"`);
-                      console.log(`  Player answer object:`, playerAnswer);
-                      console.log(`  isPlayerChoice: ${isPlayerChoice}`);
-                      console.log(`  Classes to apply: isCorrect=${isCorrect}, isPlayerChoice=${isPlayerChoice}, !isCorrect=${!isCorrect}`);
-                      console.log(`  Will add player-wrong? ${isPlayerChoice && !isCorrect}`);
-                      console.log(`  Will add player-correct? ${isPlayerChoice && isCorrect}`);
-                      
-                      let className = 'category-item trivia-result-option';
-                      
-                      // Add correct/incorrect base classes
-                      if (isCorrect) {
-                        className += ' correct';
-                        console.log(`  ✅ Adding 'correct' class to option ${optionLetter}`);
-                      } else {
-                        className += ' incorrect';
-                        console.log(`  ⚪ Adding 'incorrect' class to option ${optionLetter}`);
-                      }
-                      
-                      // Add player-specific classes (these should have higher specificity)
-                      if (isPlayerChoice && !isCorrect) {
-                        className += ' player-wrong';
-                        console.log(`  ❌ Adding 'player-wrong' class to option ${optionLetter} (player's wrong answer)`);
-                      }
-                      if (isPlayerChoice && isCorrect) {
-                        className += ' player-correct';
-                        console.log(`  🎯 Adding 'player-correct' class to option ${optionLetter} (player's correct answer)`);
-                      }
-                      
-                      console.log(`  Final className: "${className}"`);
-                      console.log(`  ---`);
-                      
+              ))}
+            </div>
+          </>
+        );
+        dock = (
+          <>
+            <p className="plr-note">
+              {wordCount} of 10 added. Any number is fine — one is a valid answer.
+            </p>
+            <button
+              type="button"
+              className="plr-btn"
+              onClick={handleSubmitAnswer}
+              disabled={wordCount === 0}
+            >
+              Submit Words ({wordCount}/10)
+            </button>
+          </>
+        );
+      } else {
+        /* CALL-AND-ANSWER, POLL, SURVEY, ARTWORK.
+
+           `mobile-input-overlay` is gone: a full-screen textarea that covered
+           the question, so a player composing an answer could not see what they
+           were answering — carrying THREE submit affordances at once (an
+           airplane icon, a button inside its form, and the form beneath it once
+           dismissed). The question folds instead. */
+        body = (
+          <>
+            {questionBlock}
+            {taskBlock}
+            <form id="plr-answer-form" onSubmit={handleSubmitAnswer}>
+              <label className="plr-lab" htmlFor="plr-answer">Your response</label>
+              <textarea
+                id="plr-answer"
+                value={answerInput}
+                onChange={(e) => setAnswerInput(e.target.value)}
+                onFocus={() => setIsAnswerInputFocused(true)}
+                onBlur={() => setIsAnswerInputFocused(false)}
+                className="plr-inp plr-inp--area"
+                aria-describedby="plr-answer-help"
+                required
+                spellCheck={true}
+                autoComplete="on"
+                autoCorrect="on"
+                autoCapitalize="sentences"
+              />
+              <p className="plr-count">{answerInput.trim().length} characters</p>
+              {/* CONSENT NEXT TO THE THING BEING WRITTEN (§6.3). The word
+                  "anonymous" does not appear anywhere on this surface: a room of
+                  twelve where somebody writes in their own voice about their own
+                  team is not anonymous in any cryptographic sense, and saying so
+                  would be a promise the software cannot keep. */}
+              <p className="plr-help" id="plr-answer-help">
+                The room will see this response and vote on it. Your name is not attached to
+                it until voting closes.
+              </p>
+              <input type="submit" hidden aria-hidden="true" tabIndex={-1} />
+            </form>
+          </>
+        );
+        dock = (
+          <button type="submit" form="plr-answer-form" className="plr-btn" disabled={!answerInput.trim()}>
+            Submit Answer
+          </button>
+        );
+      }
+    } else {
+      /* THE RECEIPT (§6.5). `handleSubmitAnswer` clears `answerInput`,
+         `selectedTriviaAnswer` and `wavelengthWords` on send, so the only
+         surviving record of what a player wrote was `mySubmittedAnswer` — which
+         existed solely to find their own ballot row and was never displayed. A
+         player who can see what they wrote can follow along when the host reads
+         response four aloud. A player who cannot is guessing, and somebody
+         guessing whether the room is discussing their idea is not participating
+         in the discussion. */
+      volume = 'rest';
+      const submittedLetter = gameType === 'trivia' ? mySubmittedAnswer : null;
+      const submittedOption = submittedLetter
+        ? currentQuestion[`option${submittedLetter}`]
+        : null;
+      const submittedWords = gameType === 'wavelength' && mySubmittedAnswer
+        ? mySubmittedAnswer.split(',').map((w) => w.trim()).filter(Boolean)
+        : null;
+
+      body = (
+        <>
+          <p className="plr-lab plr-lab--good">Submitted</p>
+          <h1 className="plr-h1 plr-h1--primary">
+            {gameType === 'trivia' ? 'Answer Submitted!'
+              : gameType === 'wavelength' ? 'Words Submitted!'
+                : gameType === 'poll' ? 'Response Submitted!'
+                  : currentQuestion?.image ? 'Title Submitted!' : 'Application Submitted!'}
+          </h1>
+
+          {submittedWords ? (
+            <div className="plr-chips">
+              {submittedWords.map((word, i) => (
+                <span key={i} className="plr-chip">{word}</span>
+              ))}
+            </div>
+          ) : (submittedLetter || mySubmittedAnswer) ? (
+            <div className="plr-card plr-card--good">
+              <p className="plr-lab">What you sent</p>
+              <p className="plr-quote">
+                {submittedLetter
+                  ? `${submittedLetter}. ${submittedOption || ''}`.trim()
+                  : mySubmittedAnswer}
+              </p>
+            </div>
+          ) : null}
+
+          <p className="plr-help">
+            This is locked for the round. If this page reloads, it comes back.
+          </p>
+
+          <LookUpCue>
+            {gameType === 'trivia'
+              ? 'The room’s answers go up on the main screen when the round closes.'
+              : 'The host will bring every response up on the main screen when the round closes, without names.'}
+          </LookUpCue>
+        </>
+      );
+    }
+
+  /* ----------------------------------------------------------------- VOTE -- */
+  } else if (gameState.startsWith('VOTE#')) {
+    ctx = position ? `Voting · ${position}` : 'Voting';
+
+    if (hasVoted) {
+      /* `|| hasVoted` IS THE OTHER HALF OF THE TAB-SWITCH REPORT, and it used
+         to be a blank page rather than a reset one. `answers.length > 0` alone
+         is right for the BALLOT — there is nothing to rank until the responses
+         are in — and wrong for the confirmation underneath it, because
+         `loadVotingData` returns early once it learns this player has already
+         voted and never loads the answers on that path. */
+      volume = 'rest';
+      const ranked = ['first', 'second', 'third']
+        .map((slot) => ({ slot, idx: votes[slot] === '' ? null : parseInt(votes[slot], 10) }))
+        .filter(({ idx }) => idx !== null && Number.isFinite(idx) && answers[idx]);
+
+      body = (
+        <>
+          <p className="plr-lab plr-lab--good">Submitted</p>
+          <h1 className="plr-h1 plr-h1--primary">Votes Submitted!</h1>
+
+          {ranked.length > 0 && (
+            <div className="plr-card plr-card--good">
+              <p className="plr-lab">Your ballot</p>
+              {ranked.map(({ slot, idx }) => (
+                <div key={slot} className="plr-stat">
+                  <span className="plr-k">{rankLabel(VOTE_POSITIONS[slot])}</span>
+                  <span className="plr-v">{displayLabelFor(answers[idx], idx)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <p className="plr-help">
+            This is locked for the round. If this page reloads, it comes back.
+          </p>
+          <LookUpCue>
+            Who wrote what, and how the room ranked them, goes up on the main screen when
+            voting closes.
+          </LookUpCue>
+        </>
+      );
+    } else if (answers.length > 0) {
+      volume = 'act';
+      phase = 'vote';
+
+      /* THE QUESTION BEING VOTED ON, WHICH THIS SCREEN HAS NEVER RENDERED.
+         `currentQuestion` is loaded and simply never used in this branch, so a
+         player who joined at round three — or who has been discussing something
+         else for two minutes — ranks six answers to a question the phone will
+         not show them (INVENTORY §5). */
+      const votedQuestion = currentQuestion?.image
+        ? (currentQuestion.title || currentQuestion.question)
+        : (currentQuestion?.detail || currentQuestion?.title || currentQuestion?.question);
+
+      body = (
+        <>
+          <h1 className="plr-h1 plr-h1--primary">
+            Rank your top {requiredVotes === 1 ? 'one' : requiredVotes === 2 ? 'two' : 'three'}.
+          </h1>
+          {votedQuestion && <p className="plr-detail plr-muted">{votedQuestion}</p>}
+          {currentQuestion?.image && (
+            <img
+              src={currentQuestion.image}
+              alt={currentQuestion.title || 'Artwork'}
+              className="plr-artwork"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+          )}
+
+          {/* THE ROOM-FACING SENTENCE, VERBATIM, ABOVE THE BALLOT, EVERY TIME,
+              NOT DISMISSIBLE — and the qualifier is not a footnote (§6.3). It
+              is the difference between a true statement and an overclaim, and
+              the product has to be able to say the true one out loud. Before
+              this, rows were labelled `Response 1…N` and nothing anywhere said
+              why, which reads as a bug or as the app having lost the names. */}
+          <p className="plr-anon">
+            <b>Nobody sees who wrote what — the host included — until voting closes.</b>{' '}
+            This hides names, not identities.
+          </p>
+
+          {/* TWO BALLOTS SURVIVE, WHICH IS A DEPARTURE FROM RATIONALE §6.1.
+              §6.1 deletes Quick Vote outright; `__tests__/voteSwitching.test.jsx`
+              (commit a4bd7127, today) pins the fix that made a vote switchable
+              at all and drives the quick ballot's three selects with user-event.
+              Deleting the mode deletes the regression test for a defect the
+              owner reported this morning, so both are restyled instead. See the
+              report. */}
+          <div className="plr-modes" role="group" aria-label="How to rank">
+            <button
+              type="button"
+              className="plr-mode"
+              aria-pressed={votingMode === 'quick'}
+              onClick={() => setVotingMode('quick')}
+            >
+              Quick Vote
+            </button>
+            <button
+              type="button"
+              className="plr-mode"
+              aria-pressed={votingMode === 'detailed'}
+              onClick={() => setVotingMode('detailed')}
+            >
+              Detailed Vote
+            </button>
+          </div>
+
+          {votingMode === 'quick' ? (
+            <div className="plr-quick">
+              {['first', 'second', 'third'].slice(0, requiredVotes).map((slot) => (
+                <div key={slot} className="plr-vpos">
+                  <label className="plr-lab" htmlFor={`plr-rank-${slot}`}>
+                    <RankIcon rank={VOTE_POSITIONS[slot]} size={18} />{' '}
+                    {rankLabel(VOTE_POSITIONS[slot])}
+                  </label>
+                  <select
+                    id={`plr-rank-${slot}`}
+                    value={votes[slot]}
+                    onChange={(e) => handleVoteChange(slot, e.target.value)}
+                    className="plr-select"
+                  >
+                    <option value="">Choose a response…</option>
+                    {answers.map((answer, idx) => {
+                      /*
+                        NOTHING IS DISABLED HERE, AND THAT IS THE FIX.
+
+                          "the quick view method does not allow for you to
+                           switch votes ... i like how the detailed voted kicks
+                           out the choice anywhere else when you pick it, make
+                           that work for the quick vote."
+
+                        This option used to carry `disabled={isSelected &&
+                        !isCurrentSelection}`, so an answer already ranked in
+                        another slot could not be picked here. The kick-out in
+                        `handleVoteChange` has always existed, but a browser will
+                        not let you choose a disabled option, so on this ballot
+                        it was unreachable code.
+
+                        THE LOST AFFORDANCE IS REPLACED, NOT DROPPED. `disabled`
+                        was also the only signal that an answer was spoken for,
+                        and a select gives no styling to lean on, so the option
+                        says WHERE it currently sits — text which IS the
+                        accessible name, so it is announced rather than merely
+                        seen.
+                      */
+                      const heldRank = rankHolding(votes, idx);
+                      const isCurrentSelection = heldRank === slot;
+                      const isOwn = idx === ownAnswerIdx;
+
+                      /* THE NUMBER COMES FIRST because it is the handle a
+                         facilitator reads aloud — on the shipped ballot it was
+                         invisible until the wheel was open. 20 characters
+                         (roughly three words of something somebody spent a
+                         minute writing) is now 72, with the remainder in the
+                         card ballot rather than in a `title` a phone cannot
+                         show. */
+                      const truncated = answer.answer.length > 72
+                        ? `${answer.answer.substring(0, 72)}…`
+                        : answer.answer;
+
                       return (
-                        <div key={key} className={className}>
-                          <span className="category-name">
-                            <span className="option-letter">{optionLetter}.</span> {currentQuestion[key]}
-                            {isCorrect && <span className="correct-indicator"> <Icon name="CheckCircle" weight="fill" size={16} color="var(--success)" /></span>}
-                            {isPlayerChoice && !isCorrect && <span className="wrong-indicator"> <Icon name="XCircle" weight="fill" size={16} color="var(--danger)" /></span>}
-                            {isPlayerChoice && <span className="your-choice"> (Your Choice)</span>}
-                          </span>
-                        </div>
+                        <option key={idx} value={idx} title={answer.answer}>
+                          {displayLabelFor(answer, idx)}{isOwn ? ' (Yours)' : ''} — “{truncated}”
+                          {heldRank && !isCurrentSelection
+                            ? ` — currently ${rankLabel(VOTE_POSITIONS[heldRank])}`
+                            : ''}
+                        </option>
                       );
                     })}
+                  </select>
                 </div>
-                
-                <div className="player-results-summary">
-                  {playerScoreInfo?.roundScore > 0 && (
-                    <div className="round-score">
-                      <span className="score-label">This Round:</span>
-                      <span className="score-value">+{playerScoreInfo.roundScore} points</span>
-                      {(() => {
-                        // Find player's answer to show speed bonus breakdown
-                        const playerAnswer = answers.find(answer => 
-                          answer.name === playerName || answer.playerName === playerName || answer.player === playerName
-                        );
-                        if (playerAnswer && playerAnswer.speedBonus > 0) {
-                          return (
-                            <div className="speed-bonus-info">
-                              <small>
-                                ({playerAnswer.basePoints} base + {playerAnswer.speedBonus} speed bonus)
-                                <span className="speed-icon"> <Icon name="Lightning" weight="fill" size={13} color="var(--primary)" /></span>
-                              </small>
-                            </div>
-                          );
-                        }
-                        return null;
-                      })()}
-                    </div>
-                  )}
-                  <div className="player-total-score">
-                    <span className="score-label">Total Score:</span>
-                    <span className="score-value">{playerScoreInfo?.totalScore || playerScore} points</span>
-                  </div>
-                  {playerScoreInfo?.rankDisplay && (
-                    <div className="player-ranking">
-                      <span className="ranking-label">Ranking:</span>
-                      <span className="ranking-value">{playerScoreInfo.rankDisplay} out of {playerScoreInfo.totalPlayers} players</span>
-                    </div>
-                  )}
-                  
-                  {playerRanking && playerScore > 0 && (
-                    <div className="player-ranking">
-                      <span className="ranking-label">Your Ranking:</span>
-                      <span className="ranking-value">
-                        <RankIcon rank={playerRanking.rank} size={18} />{' '}
-                        {playerRanking.rank} of {playerRanking.total}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : gameType === 'wavelength' ? (
-              <div className="wavelength-results">
-                <div className="wavelength-question-recap">
-                  <h3>{currentQuestion?.title}</h3>
-                  {(currentQuestion?.topic || currentQuestion?.detail) && (
-                    <div className="wavelength-topic-display">
-                      {currentQuestion.topic
-                        ? (<><strong>Topic:</strong> {currentQuestion.topic}</>)
-                        : currentQuestion.detail}
-                    </div>
-                  )}
-                </div>
-                
-                <div className="wavelength-common-words">
-                  <h4><Icon name="Handshake" weight="duotone" size={20} color="var(--primary)" />Common Words</h4>
-                  {answers && answers.length > 0 ? (
-                    <div className="common-words-display">
-                      {(() => {
-                        // Process answers to find common words
-                        const allWords = [];
-                        const wordCounts = {};
-                        
-                        answers.forEach(answer => {
-                          if (answer.answer) {
-                            const words = answer.answer.split(',').map(w => w.trim().toLowerCase()).filter(w => w);
-                            allWords.push(...words);
-                            words.forEach(word => {
-                              wordCounts[word] = (wordCounts[word] || 0) + 1;
-                            });
-                          }
-                        });
-                        
-                        // Find words mentioned by 2+ players
-                        const commonWords = Object.entries(wordCounts)
-                          .filter(([word, count]) => count > 1)
-                          .sort((a, b) => b[1] - a[1]);
-                        
-                        if (commonWords.length === 0) {
-                          return <p className="no-common-words">No common words found — everyone had unique responses.</p>;
-                        }
-                        
-                        return (
-                          <div className="common-words-list">
-                            {commonWords.map(([word, count]) => (
-                              <div key={word} className="common-word-item">
-                                <span className="word">{word}</span>
-                                <span className="count">({count} {count === 1 ? 'player' : 'players'})</span>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  ) : (
-                    <p>No responses to display</p>
-                  )}
-                </div>
-                
-                <div className="wavelength-your-words">
-                  <h4><Icon name="NotePencil" weight="duotone" size={20} color="var(--primary)" />Your Words</h4>
-                  {(() => {
-                    const playerAnswer = answers.find(answer => 
-                      answer.name === playerName || answer.playerName === playerName || answer.player === playerName
-                    );
-                    
-                    if (playerAnswer && playerAnswer.answer) {
-                      const words = playerAnswer.answer.split(',').map(w => w.trim()).filter(w => w);
-                      return (
-                        <div className="player-words-display">
-                          {words.map((word, index) => (
-                            <span key={index} className="player-word">{word}</span>
-                          ))}
-                        </div>
-                      );
-                    }
-                    
-                    return <p>No words submitted</p>;
-                  })()}
-                </div>
-                
-                <div className="wavelength-stats">
-                  <div className="stat-item">
-                    <span className="stat-label">Total Responses:</span>
-                    <span className="stat-value">{answers?.length || 0}</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="stat-label">Unique Words:</span>
-                    <span className="stat-value">
-                      {(() => {
-                        const allWords = new Set();
-                        answers?.forEach(answer => {
-                          if (answer.answer) {
-                            answer.answer.split(',').forEach(word => {
-                              const cleaned = word.trim().toLowerCase();
-                              if (cleaned) allWords.add(cleaned);
-                            });
-                          }
-                        });
-                        return allWords.size;
-                      })()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="call-and-answer-results">
-                <div className="player-results-summary">
-                  {playerScoreInfo ? (
-                    <>
-                      <div className="player-ranking-display">
-                        <span className="ranking-main">{playerScoreInfo.rankDisplay}</span>
-                        <span className="ranking-detail">out of {playerScoreInfo.totalPlayers} players</span>
-                      </div>
-                      
-                      <div className="player-scores-breakdown">
-                        <div className="round-score">
-                          <span className="score-label">This Round:</span>
-                          <span className="score-value">+{playerScoreInfo.roundScore} points</span>
-                        </div>
-                        <div className="total-score">
-                          <span className="score-label">Total Score:</span>
-                          <span className="score-value">{playerScoreInfo.totalScore} points</span>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="player-total-score">
-                        <span className="score-label">Total Score:</span>
-                        <span className="score-value">{playerScore} points</span>
-                      </div>
-                      
-                      {playerRanking && playerScore > 0 && (
-                        <div className="player-ranking">
-                          <span className="ranking-label">Your Ranking:</span>
-                          <span className="ranking-value">
-                            <RankIcon rank={playerRanking.rank} size={18} />{' '}
-                            {playerRanking.rank} of {playerRanking.total}
-                          </span>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-                
-                <div className="results-message">
-                  <p>Check the main screen for detailed results and AI insights!</p>
-                </div>
-              </div>
-            )}
-            
-            <div className="status-indicator">
-              <div className="pulse"></div>
-              <span>Ready for next question</span>
+              ))}
             </div>
+          ) : (
+            <DetailedVotingMode
+              answers={answers}
+              votes={votes}
+              onVoteChange={handleVoteChange}
+              requiredVotes={requiredVotes}
+              mySubmittedAnswer={mySubmittedAnswer}
+            />
+          )}
+        </>
+      );
+
+      dock = (
+        <>
+          <BallotSlots votes={votes} answers={answers} requiredVotes={requiredVotes} />
+          {/* THE VALIDATION IS ON THE BUTTON, NOT IN AN alert(). "Please select
+              answers for all 3 positions." was a modal system dialog standing in
+              for a form that could simply say what is missing. */}
+          <button
+            type="button"
+            className="plr-btn"
+            onClick={handleSubmitVotes}
+            disabled={filledVotes < requiredVotes}
+          >
+            {filledVotes < requiredVotes
+              ? `Pick ${requiredVotes - filledVotes} more to submit`
+              : 'Submit Votes'}
+          </button>
+        </>
+      );
+    } else {
+      volume = 'rest';
+      body = (
+        <>
+          <p className="plr-lab">Voting</p>
+          <h1 className="plr-h1 plr-h1--primary">The responses are coming up.</h1>
+          <p className="plr-lede plr-muted">
+            This page will change on its own when the ballot is ready — you do not need to
+            refresh it.
+          </p>
+        </>
+      );
+    }
+
+  /* -------------------------------------------------------------- RESULTS -- */
+  } else if (gameState.startsWith('RESULTS#')) {
+    volume = 'watch';
+    ctx = position ? `${position} · Results` : 'Results';
+
+    /* THE PERSONAL HALF ONLY. The stage may never name a person, so the
+       distribution of answers, the word cloud, the winning responses, the AI
+       prompts and the leaderboard are room-wide and live there; which option
+       YOU picked, what YOUR response earned and where YOU stand are
+       person-specific and the stage cannot show them without breaking its own
+       rule (§2.2). Neither surface is a smaller copy of the other. */
+    const standing = playerScoreInfo?.rankDisplay
+      ? `${playerScoreInfo.rankDisplay} of ${playerScoreInfo.totalPlayers}`
+      : null;
+
+    const scoreRows = (
+      <>
+        <hr className="plr-sep" />
+        {/* `playerScoreInfo?.roundScore > 0` used to hide this line entirely
+            when the round scored nothing, so the most common case for a wrong
+            answer was silence where the explanation should be. It states +0. */}
+        <div className="plr-stat">
+          <span className="plr-k">This round</span>
+          <span className="plr-v">+{playerScoreInfo?.roundScore ?? 0}</span>
+        </div>
+        <div className="plr-stat">
+          <span className="plr-k">Total</span>
+          <span className="plr-v">{playerScoreInfo?.totalScore ?? playerScore}</span>
+        </div>
+        {standing && (
+          <div className="plr-stat">
+            <span className="plr-k">Standing</span>
+            <span className="plr-v">{standing}</span>
           </div>
         )}
-      </div>
-      </div>
+      </>
+    );
 
-      {/* Game End Modal */}
-      {showGameEndModal && (
-        <div className="modal-overlay" onClick={closeGameEndModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3><Icon name="FlagCheckered" weight="duotone" size={24} color="var(--primary)" />Game Complete!</h3>
-            <p>All questions have been completed. Thank you for playing!</p>
-            <div className="modal-actions">
-              <button 
-                className="btn-primary" 
-                onClick={() => {
-                  closeGameEndModal();
-                  checkAndDownloadReport();
-                }}
-              >
-                Download Report
-              </button>
-              <button 
-                className="btn-secondary" 
-                onClick={closeGameEndModal}
-              >
-                Close
-              </button>
+    if (gameType === 'trivia') {
+      const keys = ['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF']
+        .filter((key) => currentQuestion?.[key]);
+
+      /* THE FIVE-SPELLING CORRECT-ANSWER MATCH survives unchanged in substance:
+         the payload's `correctAnswer` may be "OptionA", "A", the option text, or
+         an array of any of those. That is a data problem wearing a UI costume
+         and it is not this change's to fix — but the 13 console.log lines it
+         emitted PER OPTION PER RENDER are gone. */
+      const isCorrectKey = (key, index) => {
+        const optionLetter = String.fromCharCode(65 + index);
+        const optionId = `Option${optionLetter}`;
+        const raw = currentQuestion?.correctAnswer;
+        const candidates = (Array.isArray(raw) ? raw : [raw]).filter((a) => a != null);
+        return candidates.some((correctAns) => {
+          if (!correctAns) return false;
+          if (correctAns === optionId
+            || correctAns === optionLetter
+            || correctAns === currentQuestion?.[key]) return true;
+          if (typeof correctAns === 'string' && correctAns.startsWith('Option')) {
+            const letter = correctAns.replace('Option', '');
+            if (`option${letter}` === key || letter === optionLetter) return true;
+          }
+          if (typeof correctAns === 'string' && correctAns.length === 1 && /[A-F]/.test(correctAns)) {
+            if (`option${correctAns}` === key || correctAns === optionLetter) return true;
+          }
+          return false;
+        });
+      };
+
+      const playerAnswer = answers.find((answer) => (
+        answer.name === playerName || answer.playerName === playerName || answer.player === playerName
+      ));
+      const playerAnswerValue = playerAnswer?.answer ?? mySubmittedAnswer;
+
+      const rows = keys.map((key, index) => {
+        const optionLetter = String.fromCharCode(65 + index);
+        const optionId = `Option${optionLetter}`;
+        return {
+          key,
+          letter: optionLetter,
+          text: currentQuestion[key],
+          correct: isCorrectKey(key, index),
+          mine: playerAnswerValue === optionLetter
+            || playerAnswerValue === optionId
+            || playerAnswerValue === currentQuestion[key],
+        };
+      });
+
+      const mine = rows.find((r) => r.mine);
+      const correct = rows.find((r) => r.correct);
+      const gotIt = !!(mine && mine.correct);
+
+      /* TWO ROWS, NOT SIX. Re-rendering every option is more than "did I get it
+         right" needs, and the whole distribution is the room's result — it is on
+         the main screen. */
+      const shown = [];
+      if (mine && !gotIt) shown.push({ ...mine, flag: 'Your answer' });
+      if (correct) shown.push({ ...correct, flag: gotIt ? 'Correct · yours' : 'Correct' });
+
+      body = (
+        <>
+          <p className="plr-lab">You answered</p>
+          <h1 className="plr-h1 plr-h1--primary">
+            {mine ? `${mine.letter}. ` : ''}
+            {mine ? (gotIt ? 'Correct.' : 'Not this time.') : 'No answer recorded.'}
+          </h1>
+
+          {/* A WRONG ANSWER IS NOT RED (§4.2). Red means destructive, only. The
+              shipped screen used --danger plus a 16px ✗, which is a semantic
+              error AND colour doing the work alone. The wrong row is muted and
+              carries the WORDS "Your answer"; the correct row carries a 2px
+              --success rule and the WORD "Correct". */}
+          {shown.map((row) => (
+            <div
+              key={row.key}
+              className={`plr-row${row.correct ? ' plr-row--correct' : ''}${row.mine && !row.correct ? ' plr-row--mine' : ''}`}
+            >
+              <span className="plr-k">{row.letter}</span>
+              <span>{row.text}</span>
+              <span className="plr-tail">
+                <span className={`plr-flag${row.correct ? ' plr-flag--ok' : ''}`}>{row.flag}</span>
+              </span>
             </div>
-            {!reportAvailable && (
-              <div className="report-status">
-                <p><em>If the report isn't ready yet, please ask the host to generate it.</em></p>
+          ))}
+
+          {scoreRows}
+          <LookUpCue>
+            How the whole room answered, and why{correct ? ` ${correct.letter}` : ''}, is on
+            the main screen.
+          </LookUpCue>
+        </>
+      );
+
+    } else if (gameType === 'wavelength') {
+      const playerAnswer = answers.find((answer) => (
+        answer.name === playerName || answer.playerName === playerName || answer.player === playerName
+      ));
+      const words = (playerAnswer?.answer || mySubmittedAnswer || '')
+        .split(',').map((w) => w.trim()).filter(Boolean);
+
+      /* THE COMMON-WORDS LIST AND THE STATS BLOCK ARE CUT. The first is the
+         word cloud re-derived on the phone, in a list, while the cloud itself is
+         on the projector; the second is session telemetry rendered to
+         participants. One small dataset was stated three ways on the smallest
+         screen in the building. */
+      body = (
+        <>
+          <p className="plr-lab">Your words</p>
+          <h1 className="plr-h1 plr-h1--primary">
+            {words.length ? `You sent ${words.length}.` : 'No words recorded.'}
+          </h1>
+          {words.length > 0 && (
+            <div className="plr-words">
+              {words.map((word, i) => <span key={i} className="plr-word">{word}</span>)}
+            </div>
+          )}
+          {scoreRows}
+          <LookUpCue>
+            What the room shared — the cloud, and the words more than one of you reached
+            for — is on the main screen.
+          </LookUpCue>
+        </>
+      );
+
+    } else {
+      /* CALL-AND-ANSWER, POLL, SURVEY.
+
+         WHICH NUMBERED RESPONSE WAS YOURS is the payoff of the entire anonymity
+         feature and the phone did not mention it: the player saw a rank and a
+         score and never learned which row was theirs. The number is the same one
+         the ballot used, which is safe because vote indices map to array
+         position — a reorder between VOTE and RESULTS would already be
+         misattributing votes (§11.9).
+
+         OPEN-QUESTIONS §3: a poll still shows a score, because that is what the
+         code does. If a poll should not be scored, its results screen loses
+         three of its four rows and needs a different personal payoff, which is
+         a new design rather than a change here. */
+      const myRow = ownAnswerIdx !== null && ownAnswerIdx !== undefined && answers[ownAnswerIdx]
+        ? answers[ownAnswerIdx]
+        : null;
+
+      body = (
+        <>
+          <p className="plr-lab">Yours was</p>
+          <h1 className="plr-h1">
+            {myRow ? displayLabelFor(myRow, ownAnswerIdx) : 'Your response'}
+          </h1>
+          {(mySubmittedAnswer || myRow?.answer) && (
+            <div className="plr-card">
+              <p className="plr-quote">{mySubmittedAnswer || myRow.answer}</p>
+            </div>
+          )}
+          {scoreRows}
+          <LookUpCue>
+            Names are on the main screen now. The top responses and the discussion prompts
+            are up there too — <b>this page will not repeat them</b>.
+          </LookUpCue>
+        </>
+      );
+    }
+
+  /* --------------------------------------------- LOBBY / BETWEEN ROUNDS -- */
+  } else {
+    volume = 'rest';
+    centre = true;
+
+    /* `lastRankRef.current > 0` ALREADY DISTINGUISHES "a round has happened"
+       from "nothing has happened", with no new fetch (§11.2). Without it the
+       longest and most valuable part of a session — the discussion between
+       rounds — told every participant the game had not started. */
+    const betweenRounds = lastRankRef.current > 0;
+
+    body = betweenRounds ? (
+      <>
+        <p className="plr-lab">The round is closed</p>
+        <h1 className="plr-h1 plr-h1--primary">Nothing to do here.</h1>
+        <p className="plr-lede plr-muted">
+          The next round starts when the host is ready. This page will change on its own —
+          you do not need to refresh it.
+        </p>
+        {(playerScoreInfo || playerScore > 0) && (
+          <>
+            <hr className="plr-sep" />
+            <div className="plr-stat">
+              <span className="plr-k">Your total</span>
+              <span className="plr-v">{playerScoreInfo?.totalScore ?? playerScore}</span>
+            </div>
+            {playerScoreInfo?.rankDisplay && (
+              <div className="plr-stat">
+                <span className="plr-k">Standing</span>
+                <span className="plr-v">
+                  {playerScoreInfo.rankDisplay} of {playerScoreInfo.totalPlayers}
+                </span>
               </div>
             )}
+          </>
+        )}
+        <LookUpCue>
+          The discussion is on the main screen. <b>Join in</b> — this is the part the
+          session is actually for.
+        </LookUpCue>
+      </>
+    ) : (
+      <>
+        <p className="plr-lab">You&apos;re in</p>
+        <h1 className="plr-h1 plr-h1--primary">Joined as {playerName}.</h1>
+        {/* ONE STATEMENT OF "NOTHING IS HAPPENING", NOT THREE. The lobby said it
+            as a heading, as a paragraph AND as an animated status pill — and the
+            only moving element on the screen was the one that meant "do
+            nothing", in the peripheral vision of a room that is supposed to be
+            listening to somebody. */}
+        <p className="plr-lede plr-muted">
+          Waiting for the game to start. The host will begin the first round.
+        </p>
+
+        {engagementInfo.trim() && (
+          <div className="plr-card">
+            <p className="plr-lab">About this session</p>
+            <p className="plr-quote">{engagementInfo}</p>
           </div>
+        )}
+
+        <div className="plr-card">
+          <p className="plr-lab">If you lose this page</p>
+          <p className="plr-quote">
+            Go back to the join screen, enter <b>{gameId}</b> and the same name. Your
+            answers and your score come back with you.
+          </p>
         </div>
-      )}
+
+        <LookUpCue>
+          Everything the room shares — the questions, the results, the discussion — is on
+          the main screen. This page is only ever <b>your</b> half.
+        </LookUpCue>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <PlayerShell
+        phase={phase}
+        volume={volume}
+        ctx={ctx}
+        category={barCategory}
+        who={playerName}
+        online={wsConnected}
+        banner={offlineBanner}
+        centre={centre}
+        dock={dock}
+      >
+        {body}
+      </PlayerShell>
 
       {/* Reading one response in full.
 
-          MOUNTED ONCE, AT THE PAGE ROOT, rather than inside the voting view —
+          MOUNTED ONCE, OUTSIDE THE SHELL, rather than inside the voting view —
           `answers` is page state and the same list is on screen during VOTE and
           during RESULTS, so one mount serves both phases and there is one piece
           of open/closed state rather than two that can disagree.
 
           `displayLabelFor`, not `stageLabelFor`: on a player's own device the
           row decides. The server has already redacted what this player may not
-          see, and there is no projector here for a session setting to protect.
-          That is the same call the cards behind it make. */}
+          see, and there is no projector here for a session setting to protect. */}
       <AnswerSpotlight
         answers={answers}
         index={spotlightIndex}
@@ -2703,10 +3011,7 @@ function PlayerPage() {
         labelFor={displayLabelFor}
         title="Response"
       />
-
-      {/* GitHub Issue Reporting FAB */}
-      <IssueFab context="player" gameId={gameId} />
-    </div>
+    </>
   );
 }
 
