@@ -205,7 +205,7 @@ This is the concrete reason for the standing rule against `./deployall`,
 
 ### Password reset on dev needs a native account, and there isn't one
 
-`google.seib@gmail.com` exists in **both** dev pools only as `Google_1139562…`, status
+`george.seib@gmail.com` exists in **both** dev pools only as `Google_1139562…`, status
 `EXTERNAL_PROVIDER` — a federated identity with no password. `ForgotPassword` on it cannot send
 anything, and because `PreventUserExistenceErrors` is **ENABLED** on the app client, Cognito
 still answers with a masked `CodeDeliveryDetails` as if it had. A silent no-op that reports
