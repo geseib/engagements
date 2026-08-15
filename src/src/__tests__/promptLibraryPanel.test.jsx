@@ -408,18 +408,41 @@ describe('the status chip activates and deactivates', () => {
     expect(chip.textContent).toBe('Active');
   });
 
-  test('a record with no promptId gets no toggle', () => {
+  test('a broken record gets no toggle, in the shape the API really returns', () => {
     /*
       rejects: offering the control on the rows `scripts/cull-ai-prompts.js`
-      exists to sweep. The update route is `PUT /admin/ai-prompts/{promptId}`,
-      so a click on one of these can only ever produce a 4xx — and this panel
-      already draws a "Broken record" chip next to it saying as much.
+      exists to sweep — the ones with no `promptId` ATTRIBUTE, which is what
+      makes attaching one write a dangling reference into a question set. This
+      panel already draws a "Broken record" chip next to the status saying so,
+      and a screen that has just called a row broken should not also offer to
+      configure it.
+
+      THE FIXTURE CARRIES A promptId ON PURPOSE, AND THAT IS THE WHOLE POINT.
+      It used to be `{ name, status, malformed: true }` with no id at all — a
+      shape the API never produces. `get-ai-prompts.js:118` SYNTHESIZES an id
+      from the SK for exactly these rows and sets `malformed: true` beside it,
+      so the panel's old `prompt.promptId` gate never fired against real data
+      and this test passed on a fixture instead of on the contract. Nothing
+      noticed until the generation library, whose rows come straight from
+      `decorate()`, passed a status handler.
     */
     const { container } = mount({
-      prompts: [{ name: 'Orphan', status: 'active', malformed: true }],
+      prompts: [{
+        // Exactly what decorate() emits for a row with no promptId attribute.
+        SK: 'AIPROMPT#gen-poll-feedback-polls',
+        promptId: 'gen-poll-feedback-polls',
+        malformed: true,
+        name: 'Orphan',
+        status: 'active',
+      }],
     });
-    expect(container.querySelectorAll('.plib-states button')).toHaveLength(0);
+    const states = container.querySelector('.plib-states');
+    expect(states.querySelectorAll('button')).toHaveLength(0);
     expect(within(container).getByText('Broken record')).toBeInTheDocument();
+    // And the status is still SHOWN, as a label — a row you cannot act on is
+    // not a row whose state you are not allowed to know. Scoped to the cell
+    // because the status FILTER also offers the word "Active".
+    expect(within(states).getByText('Active')).toBeInTheDocument();
   });
 
   test('the chip in flight is disabled, and only that one', () => {

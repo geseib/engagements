@@ -93,10 +93,14 @@ function respondWith(prompts) {
 /** Mount and wait out the one fetch the component fires on mount. */
 async function mount(prompts = PROMPTS) {
   respondWith(prompts);
-  const onClose = jest.fn();
-  const utils = render(<AIGenerationPromptEditor onClose={onClose} />);
+  const utils = render(<AIGenerationPromptEditor />);
   await waitFor(() => expect(screen.queryByText('Loading prompts...')).toBeNull());
-  return { ...utils, onClose };
+  return utils;
+}
+
+/** The status chip in a row — the only `plib-chip` that is ever a button. */
+function statusControl(name) {
+  return within(rowFor(name)).getByRole('button', { name: /^(Active|Draft|Archived)$/ });
 }
 
 /** The row whose first cell carries this name. */
@@ -277,6 +281,208 @@ describe('the filters the card grid could not offer', () => {
 
     expect(screen.getAllByRole('row')).toHaveLength(2);
     expect(rowFor('Lessons Learned Scenarios')).toBeTruthy();
+  });
+});
+
+/*
+  ============================================================================
+  THE STATUS CHIP, WHICH IS A BUTTON HERE NOW.
+
+  The owner: *"the question set generator need to have the active button as
+  well"*. The chip existed; `PromptLibraryPanel` rendered it as a plain span
+  because this screen passed no `onToggleStatus`, which is design rule 2 — a
+  dead control is the one people reach for first — not an oversight.
+
+  EVERY TEST BELOW FAILS AGAINST THE SHIPPED SCREEN, where the chip was a
+  `<span>` with no role and no handler.
+
+  AND THE ROUTE IS REACHABLE, which is not a UI fact and is not asserted here:
+  `PUT admin/ai-prompts/{promptId}` is absent from HOST_ADMIN_ROUTES in
+  auth/authorizer.js, so `requiredGroupsForRoute` falls it through to
+  `path.startsWith('admin') -> ['admins']`, and this console is admins-only.
+  What these rows send it — a status-only body against a record with NO `s3Key`
+  — is asserted end-to-end in tests/ai-prompt-status-update.js section 4,
+  because it used to be a 500.
+  ============================================================================
+*/
+describe('the status chip flips Active and Draft', () => {
+  /** The response every PUT below gets unless a test says otherwise. */
+  function respondToToggle(put = { ok: true, json: () => Promise.resolve({}) }) {
+    global.fetch.mockImplementation((url, init) => {
+      if (init && init.method === 'PUT') return Promise.resolve(put);
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ prompts: PROMPTS }) });
+    });
+  }
+
+  test('an Active row offers a control that says what it would do', async () => {
+    /*
+      rejects: the shipped `<span className="plib-chip">`. A span has no role,
+      so `getByRole('button')` cannot find it — and `aria-pressed` is what says
+      this is a two-state control rather than a link to somewhere.
+    */
+    await mount();
+    respondToToggle();
+
+    const chip = statusControl('Lessons Learned Scenarios');
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
+    expect(chip.title).toMatch(/Deactivate/);
+    expect(statusControl('Workplace Trivia')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('clicking it PUTs one field to that prompt, and nothing else', async () => {
+    /*
+      rejects: sending the whole row back. Every field this route receives as
+      `undefined` is left alone; a resent record would rewrite name, isDefault
+      and questionSetIds from a list projection that may not carry them — and
+      would defeat the S3 guard in update-ai-prompt.js, which distinguishes a
+      status-only write precisely by its emptiness.
+    */
+    await mount();
+    respondToToggle();
+
+    fireEvent.click(statusControl('Lessons Learned Scenarios'));
+
+    await waitFor(() => expect(
+      global.fetch.mock.calls.some(([, init]) => init && init.method === 'PUT')
+    ).toBe(true));
+
+    const [url, init] = global.fetch.mock.calls.find(([, i]) => i && i.method === 'PUT');
+    expect(url).toMatch(/admin\/ai-prompts\/gen-call-and-answer-lessons-learned$/);
+    expect(JSON.parse(init.body)).toEqual({ status: 'draft' });
+  });
+
+  test('the row moves AFTER the response, never before it', async () => {
+    /*
+      rejects: an optimistic flip. The pending fetch is held open here, so the
+      chip is asserted mid-flight: it must still read Active, and it must be
+      disabled — one click is one write, and a chip that can be clicked twice
+      sends two writes of two different values whose order nothing controls.
+    */
+    await mount();
+    let release;
+    global.fetch.mockImplementation((url, init) => {
+      if (init && init.method === 'PUT') {
+        return new Promise((resolve) => {
+          release = () => resolve({ ok: true, json: () => Promise.resolve({}) });
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ prompts: PROMPTS }) });
+    });
+
+    fireEvent.click(statusControl('Lessons Learned Scenarios'));
+
+    await waitFor(() => expect(statusControl('Lessons Learned Scenarios')).toBeDisabled());
+    expect(statusControl('Lessons Learned Scenarios')).toHaveTextContent('Active');
+    expect(statusControl('Lessons Learned Scenarios')).toHaveAttribute('aria-pressed', 'true');
+
+    release();
+    await waitFor(() => expect(statusControl('Lessons Learned Scenarios')).toHaveTextContent('Draft'));
+    expect(statusControl('Lessons Learned Scenarios')).toHaveAttribute('aria-pressed', 'false');
+    expect(statusControl('Lessons Learned Scenarios')).not.toBeDisabled();
+  });
+
+  test('only the clicked row is locked while its write is in flight', async () => {
+    // rejects: a boolean `busy` instead of a promptId. Locking the whole table
+    // for one row's round trip is a different, larger claim than the one the
+    // in-flight state is making.
+    await mount();
+    global.fetch.mockImplementation((url, init) => {
+      if (init && init.method === 'PUT') return new Promise(() => {});
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ prompts: PROMPTS }) });
+    });
+
+    fireEvent.click(statusControl('Lessons Learned Scenarios'));
+
+    await waitFor(() => expect(statusControl('Lessons Learned Scenarios')).toBeDisabled());
+    expect(statusControl('Workplace Trivia')).not.toBeDisabled();
+  });
+
+  test('a refusal keeps the row where it was and repeats the server sentence', async () => {
+    /*
+      rejects: swallowing the failure, and rejects inventing a local message.
+      The handler's own refusals are specific ("its stored content ... could not
+      be read", "status must be one of ...") and a generic "Something went
+      wrong" throws that away. It also has to say what the row on screen now
+      means, or the only way to find out is a reload.
+    */
+    await mount();
+    respondToToggle({
+      ok: false,
+      status: 500,
+      json: () => Promise.resolve({ message: 'Cannot apply a partial update to gen-x: nothing was changed.' }),
+    });
+
+    fireEvent.click(statusControl('Lessons Learned Scenarios'));
+
+    const notice = await screen.findByTestId('pgen-notice');
+    expect(notice).toHaveTextContent('Cannot apply a partial update to gen-x');
+    expect(notice).toHaveTextContent(/still Active/);
+    expect(statusControl('Lessons Learned Scenarios')).toHaveTextContent('Active');
+    expect(statusControl('Lessons Learned Scenarios')).not.toBeDisabled();
+  });
+
+  test('a row with no promptId of its own gets a label, not a control', async () => {
+    /*
+      rejects: gating the chip on the handler alone. `Feedback Polls` is
+      `malformed` — the id in the projection was synthesized from the SK by
+      get-ai-prompts.js and there is no such attribute on the record — so the
+      route keyed by promptId could only ever fail. The row already carries a
+      "Broken record" chip saying so; offering a button beside it would be the
+      screen contradicting itself.
+    */
+    await mount();
+    const row = rowFor('Feedback Polls');
+    expect(within(row).getByText(/Broken record/)).toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: 'Active' })).toBeNull();
+    expect(within(row).getByText('Active')).toBeInTheDocument();
+  });
+
+  test('the panel keeps drawing only the actions this screen has handlers for', async () => {
+    // rejects: "it has a status handler now, give it the whole action set". The
+    // gate is per-prop and stays that way; this screen still has no advisor, no
+    // delete, no export and no defaults installer.
+    await mount();
+    expect(screen.queryByText('Advisor')).toBeNull();
+    expect(screen.queryByText('Retire')).toBeNull();
+    expect(screen.queryByText('Copy to archive')).toBeNull();
+  });
+});
+
+describe('it is a place in the console, not an overlay over it', () => {
+  test('it renders no scrim, no modal card and no close button of its own', () => {
+    /*
+      rejects: the shipped shell — `.ai-prompt-editor-modal` fixed over the
+      whole viewport, holding `.modal-overlay > .modal-content.large-modal` with
+      no Escape, no focus trap, no `role="dialog"`, and a backdrop click that
+      discarded a half-typed fourteen-field form without asking. AUDIT section 5
+      counts that scrim as the fifth appearance of the centred-overflow trap.
+
+      Asserted on the SOURCE rather than the DOM because two of the three are
+      absences of class names, and jsdom resolves no CSS: what matters is that
+      this component no longer asks for the global `.modal-overlay` rules at
+      all.
+    */
+    const src = require('fs').readFileSync(
+      require('path').join(__dirname, '..', 'components', 'AIGenerationPromptEditor.jsx'),
+      'utf8'
+    ).replace(/\/\*[\s\S]*?\*\//g, '');
+
+    expect(src).not.toMatch(/className="modal-overlay"/);
+    expect(src).not.toMatch(/large-modal/);
+    expect(src).not.toMatch(/className="close-button"/);
+    expect(src).toMatch(/className="pgen"/);
+  });
+
+  test('and it draws no exit, because the section owns the one both libraries share', async () => {
+    /*
+      rejects: giving this place a Back or Close of its own. The owner's
+      complaint was that the two prompt libraries were REACHED differently; two
+      separately-authored exits is the same defect one step later. `.padm-back`
+      is rendered once by AdminPage for whichever library is open.
+    */
+    await mount();
+    expect(screen.queryByRole('button', { name: /^(Close|Back|Prompts)$/ })).toBeNull();
+    expect(screen.queryByText(/AI Generation Prompt Editor/)).toBeNull();
   });
 });
 

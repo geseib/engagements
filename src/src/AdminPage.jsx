@@ -67,6 +67,14 @@ const ADMIN_SECTIONS = [
     icon: 'Sparkle',
     title: 'Prompts',
     subtitle: 'Generation prompts build questions; analysis prompts are what Workie says afterwards.',
+    // Converted to dusk in the same change that repainted AIPromptManager.css.
+    // The two halves are not separable: this flip alone puts `--pc-ink #1a1a1a`
+    // on `--bg #0F1A2E` at 1.3:1, and the repaint alone puts #F4EDE4 on the
+    // light field at 1.2:1. __tests__/promptEditorPalette.test.js asserts both
+    // ends, which is why the assertion it used to make — "the section still
+    // carries no contentTheme" — had to be rewritten in this change too.
+    // AUDIT §6.2 items 11-15.
+    contentTheme: 'dark',
   },
   {
     id: 'archive',
@@ -212,11 +220,24 @@ function AdminPage() {
   // Upload section expand/collapse
   const [isUploadSectionExpanded, setIsUploadSectionExpanded] = useState(false);
 
-  // AI Generation Prompt Editor
-  const [showGenerationPromptEditor, setShowGenerationPromptEditor] = useState(false);
-  
-  // AI Analysis Prompts (Workie) - toggle for showing existing AIPromptManager
-  const [showAnalysisPrompts, setShowAnalysisPrompts] = useState(false);
+  /*
+    WHICH PROMPT LIBRARY IS OPEN — `null`, `'generation'` or `'analysis'`.
+
+    ONE PIECE OF STATE REPLACED TWO, AND THAT IS THE FIX. It was
+    `showGenerationPromptEditor` (a full-screen overlay rendered in the
+    top-level fragment beside <IssueFab>, outside every section) and
+    `showAnalysisPrompts` (an inline expander below a card in the section). The
+    owner: *"the way you get to the Question set AI generator prompts and the
+    Engagement results prompts on the prompt admin screen is slightly
+    different. they should be the same."* They were reached differently because
+    they were STORED differently, so making them the same means one variable
+    with three values, not two booleans that happen to be styled alike.
+
+    A single value also makes the two mutually exclusive for free. With two
+    booleans it was possible — and easy — to have the analysis list expanded
+    underneath while the generation overlay covered it.
+  */
+  const [promptLibrary, setPromptLibrary] = useState(null);
 
   const defaultInstructions = "How would you apply this concept in your current role or organization? Consider the specific challenges and opportunities in your context.";
 
@@ -999,75 +1020,109 @@ function AdminPage() {
           <>
           {/* Tab Content */}
           {activeTab === 'prompts' && (
-            <div className="tab-content">
-              {/* AI Prompt Management Section */}
-              <div className="admin-section">
-                <h2><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI Prompt Management</h2>
-                
-                {/* Two distinct sections for different prompt types */}
-                <div className="prompt-type-sections">
-                  {/* Question Set Generator Prompts */}
-                  <div className="prompt-section generation-prompts">
-                    <div className="section-header">
-                      <h3><Icon name="NotePencil" weight="bold" size={16} color="currentColor" /> Question Set Generator AI Prompts</h3>
-                      <div className="section-header-right">
-                        <HelpButton section="ai-prompts" variant="inline" size="small" tooltip="Help: AI Prompts Management" />
-                        <span className="section-icon"><Icon name="Buildings" weight="bold" size={16} color="currentColor" /></span>
-                      </div>
-                    </div>
-                    <p className="section-description">
-                      These prompts control how AI generates new content for your engagement sessions.
-                      They define templates for creating scenarios, trivia questions, polls, and wavelength topics.
-                    </p>
-                    <button
-                      className="btn-primary"
-                      onClick={() => setShowGenerationPromptEditor(true)}
-                    >
-                      <Icon name="Gear" weight="bold" size={16} color="currentColor" /> Manage Generation Prompts
-                    </button>
-                    <div className="prompt-examples">
-                      <small>Examples: Lessons Learned, Interview Prep, General Knowledge Trivia, Opinion Polls</small>
-                    </div>
-                  </div>
+            /*
+              THE PROMPTS SECTION: A CHOOSER, AND TWO PLACES IT LEADS TO.
 
-                  {/* Results Analysis Prompts (Workie) */}
-                  <div className="prompt-section analysis-prompts">
-                    <div className="section-header">
-                      <h3><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> Engagement Results AI Analysis (Workie)</h3>
-                      <div className="section-header-right">
-                        <HelpButton section="ai-prompts" variant="inline" size="small" tooltip="Help: AI Prompts Management" />
-                        <span className="section-icon">
-                          <img src="/workie.png" alt="Workie" className="workie-icon-small" />
-                        </span>
-                      </div>
-                    </div>
-                    <p className="section-description">
-                      These prompts control how Workie analyzes player responses during sessions.
-                      They help generate strategic insights, identify patterns, and provide recommendations.
-                    </p>
+              No `.tab-content` wrapper and no `.admin-section` card — the same
+              two removals the Users and Question sets tabs already made, for the
+              same two reasons. `.tab-content` carries a 500px min-height and a
+              fade-in written for the paper tabs; `.admin-section` is a white
+              card, which on a dusk work field is the "why are these the only
+              things that are on a light background" the owner asked about.
+              AUDIT §6.2 item 14.
+
+              WHAT REPLACED THE TWO ENTRANCES. Both libraries used to be reached
+              from a card here, and neither of them the same way: Generation
+              opened a fixed-position overlay rendered outside this section
+              entirely, Analysis toggled a third panel open UNDERNEATH the two
+              cards. Now each tile replaces this chooser with its library, and
+              `.padm-back` brings you back — one entrance shape, one exit,
+              whichever library you are in. That is also what the container rule
+              asks for: a list plus its editor is a place in the console, not a
+              section appended below another section (RATIONALE §2).
+            */
+            <div className="padm">
+              {promptLibrary === null && (
+                <ul className="padm-choose">
+                  <li>
                     <button
-                      className="btn-secondary"
-                      onClick={() => setShowAnalysisPrompts(!showAnalysisPrompts)}
+                      type="button"
+                      className="padm-card"
+                      onClick={() => setPromptLibrary('generation')}
                     >
-                      <Icon name="MagnifyingGlass" weight="bold" size={16} color="currentColor" /> {showAnalysisPrompts ? 'Hide' : 'Manage'} Analysis Prompts
+                      <span className="padm-card-h">
+                        <Icon name="NotePencil" weight="bold" size={18} color="var(--primary)" />
+                        Question set generator prompts
+                      </span>
+                      <span className="padm-card-b">
+                        The instruction the AI is given when it writes a new question set.
+                        One per engagement type and scenario — lessons learned, interview
+                        prep, general knowledge trivia, opinion polls.
+                      </span>
+                      {/*
+                        NO COUNT ON THIS TILE, and that is a decision rather than
+                        an omission. This console has never fetched the
+                        generation prompts before the library opens, and a
+                        number it cannot know is worse than no number: "0
+                        prompts" over a library holding eleven of them is the
+                        empty state that lies, one screen earlier.
+                      */}
+                      <span className="padm-card-n">Open the library</span>
                     </button>
-                    <div className="prompt-examples">
-                      <small>Examples: Team Dynamics Analysis, Innovation Insights, Consensus Patterns</small>
+                    <div className="padm-card-aside">
+                      <HelpButton section="ai-prompts" variant="inline" size="small" tooltip="Help: AI Prompts Management" />
                     </div>
-                  </div>
-                </div>
-                
-                {/* Show Analysis Prompts (AIPromptManager) when toggled */}
-                {showAnalysisPrompts && (
-                  <div className="analysis-prompts-section">
-                    <h3><Icon name="MagnifyingGlass" weight="bold" size={16} color="currentColor" /> Engagement Results Analysis Prompts (Workie)</h3>
-                    <p className="section-description">
-                      These prompts control how Workie analyzes and summarizes player responses to generate strategic insights.
-                    </p>
-                    <AIPromptManager />
-                  </div>
-                )}
-              </div>
+                  </li>
+
+                  <li>
+                    <button
+                      type="button"
+                      className="padm-card"
+                      onClick={() => setPromptLibrary('analysis')}
+                    >
+                      <span className="padm-card-h">
+                        {/* Workie's own face, not a Phosphor glyph. It is the
+                            mascot the owner names this library by ("what Workie
+                            says"), and it is the one thing on this screen that
+                            is recognised rather than read. `.workie-icon-small`
+                            is styles.css:6602 and this is now its only caller. */}
+                        <img src="/workie.png" alt="" className="workie-icon-small" />
+                        Engagement results prompts
+                      </span>
+                      <span className="padm-card-b">
+                        What Workie says after a round. Each engagement type has one default;
+                        a question set can pin its own.
+                      </span>
+                      <span className="padm-card-n">Open the library</span>
+                    </button>
+                    <div className="padm-card-aside">
+                      <HelpButton section="ai-prompts" variant="inline" size="small" tooltip="Help: AI Prompts Management" />
+                    </div>
+                  </li>
+                </ul>
+              )}
+
+              {promptLibrary !== null && (
+                <>
+                  {/*
+                    ONE BACK CONTROL FOR BOTH LIBRARIES, rendered here rather
+                    than inside each of them. Two copies is how the two
+                    entrances drifted apart in the first place; one element with
+                    one handler cannot.
+                  */}
+                  <button
+                    type="button"
+                    className="padm-back"
+                    onClick={() => setPromptLibrary(null)}
+                  >
+                    <Icon name="CaretLeft" weight="bold" size={13} color="currentColor" />
+                    Prompts
+                  </button>
+
+                  {promptLibrary === 'generation' && <AIGenerationPromptEditor />}
+                  {promptLibrary === 'analysis' && <AIPromptManager />}
+                </>
+              )}
             </div>
           )}
 
@@ -1279,12 +1334,15 @@ function AdminPage() {
         />
       )}
 
-      {/* AI Generation Prompt Editor Modal */}
-      {showGenerationPromptEditor && (
-        <AIGenerationPromptEditor
-          onClose={() => setShowGenerationPromptEditor(false)}
-        />
-      )}
+      {/*
+        AIGenerationPromptEditor USED TO BE MOUNTED HERE, in the top-level
+        fragment beside <IssueFab> — outside AdminShell, outside the work body,
+        outside the section it belonged to and outside the console's theme. That
+        placement is why it had to be a fixed-position overlay, why it inherited
+        `data-theme="light"` from <html> while the section around it went dusk,
+        and half of why the two prompt libraries were reached differently. It is
+        rendered inside the prompts section now; see the `.padm` block above.
+      */}
 
       {/* GitHub Issue Reporting FAB */}
       <IssueFab context="admin" />

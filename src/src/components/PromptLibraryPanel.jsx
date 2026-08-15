@@ -198,10 +198,28 @@ function asOption(option) {
  * The affordance is gated three ways, and all three are real rows in the live
  * library rather than defensive noise:
  *
- *  1. NO HANDLER — the generation library passes none. Nothing to click.
- *  2. NO `promptId` — the rows `scripts/cull-ai-prompts.js` exists to sweep.
- *     They already carry a "Broken record" chip beside this one; the update
- *     route is keyed by promptId, so a click could only ever 500.
+ *  1. NO HANDLER — a mount with no status round trip. Nothing to click. Both
+ *     shipped mounts pass one today; the gate stays because the next one may
+ *     not, and a chip that looks pressable and is not is worse than a label.
+ *  2. A BROKEN RECORD — the rows `cull-ai-prompts.js` exists to sweep, which
+ *     already carry a "Broken record" chip beside this one.
+ *
+ *     GATED ON `malformed`, NOT ON `promptId`, AND THAT IS A FIX. It used to
+ *     read `prompt.promptId`, with the reasoning that "the update route is
+ *     keyed by promptId, so a click could only ever 500". Both halves were
+ *     wrong against the shape the API really returns: `get-ai-prompts.js:118`
+ *     SYNTHESIZES a promptId from the SK for exactly these rows and marks them
+ *     `malformed: true`, so the id is never missing and the gate never fired —
+ *     and because the id is derived from the SK it resolves, so the PUT would
+ *     have succeeded rather than 500ing.
+ *
+ *     The intent was right and only the test for it was wrong, so the intent is
+ *     what is kept: this row has no `promptId` ATTRIBUTE, which is what makes
+ *     attaching it to a question set write a dangling reference, and a screen
+ *     that has just called a row broken should not also offer to configure it.
+ *     `promptLibraryPanel.test.js`'s fixture happened to carry neither field,
+ *     which is why nothing caught this until the generation library — whose
+ *     rows all come straight from `decorate()` — passed a handler.
  *  3. NO SECOND STATE — archived, or a status this vocabulary does not know.
  *     See `nextStatusFor`.
  *
@@ -212,7 +230,8 @@ function asOption(option) {
 function StatusChip({ prompt, onToggleStatus, busy }) {
   const label = STATUS_LABEL[prompt.status] || prompt.status || 'Draft';
   const className = `plib-chip ${statusChipClass(prompt.status)}`;
-  const next = onToggleStatus && prompt.promptId ? nextStatusFor(prompt.status) : null;
+  const usable = Boolean(prompt.promptId) && !prompt.malformed;
+  const next = onToggleStatus && usable ? nextStatusFor(prompt.status) : null;
 
   if (!next) {
     return (
@@ -277,10 +296,16 @@ export default function PromptLibraryPanel({
   onCreate,
   onPopulateDefaults,
   /** Flip a prompt between Active and Draft — `(prompt, nextStatus) => void`.
-   *  OPTIONAL, and the chip is a plain span without it: the generation library
-   *  (AIGenerationPromptEditor) mounts this same panel and has no status
-   *  round trip of its own, and design rule 2 is that a dead control is the one
-   *  people reach for first. See `nextStatusFor` for which two states. */
+   *  See `nextStatusFor` for which two states, and `StatusChip` for the three
+   *  ways the affordance is gated.
+   *
+   *  STILL OPTIONAL, AND THE CHIP IS STILL A PLAIN SPAN WITHOUT IT. Both live
+   *  mounts pass one now — the generation library was the example this comment
+   *  used to give and it gained the handler when the owner asked for it ("the
+   *  question set generator need to have the active button as well") — but the
+   *  gate is the point, not the caller list: design rule 2 is that a dead
+   *  control is the one people reach for first, so a third mount without a
+   *  status round trip must still get a label rather than a button. */
   onToggleStatus,
   /** The promptId whose status round trip is in flight, so its chip cannot be
    *  clicked twice into two writes of two different values. */
@@ -533,7 +558,11 @@ export default function PromptLibraryPanel({
             {shown.map((prompt) => (
               <tr key={prompt.promptId || prompt.name}>
                 <td>
-                  <span className="plib-nm">{prompt.name}</span>
+                  {/* `title=` because `.plib-nm` ellipsizes under
+                      `table-layout: fixed`: a reduction with no recovery is a
+                      deletion (hard rule 7). The full name is one hover away
+                      and, unlike the visible text, is what a page search finds. */}
+                  <span className="plib-nm" title={prompt.name}>{prompt.name}</span>
                   {prompt.description && <span className="plib-sub">{prompt.description}</span>}
                   {prompt.tags && prompt.tags.length > 0 && (
                     <span className="plib-tags">
