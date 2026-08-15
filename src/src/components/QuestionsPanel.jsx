@@ -4,6 +4,7 @@ import Modal from './Modal';
 import StatusMessage from './StatusMessage';
 import QuestionPullDialog from './QuestionPullDialog';
 import CategoryPicker from './CategoryPicker';
+import QuestionImageField from './QuestionImageField';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType } from '../config/gameTypes';
 import { ROUND_KIND_IDS, ROUND_KINDS, roundKindApplies } from '../config/roundKinds';
@@ -1076,6 +1077,7 @@ export default function QuestionsPanel({
             rows={rows}
             siblings={siblings}
             siblingCategory={draftCategory}
+            setId={setId}
             /* `null`, not `{ ...disabled }`: QuestionForm already guards every
                AI element on `ai &&`, so withholding the object removes the
                toggle, the brief panel and the provenance line together. A
@@ -1259,6 +1261,7 @@ function QuestionForm({
   rows = [],
   siblings = [],
   siblingCategory = '',
+  setId = '',
   ai,
 }) {
   const set = (field) => (e) => onChange({ ...draft, [field]: e.target.value });
@@ -1485,6 +1488,26 @@ function QuestionForm({
           <label htmlFor={id('school')}>School / source</label>
           <input id={id('school')} className="form-input" value={draft.school} onChange={set('school')} />
         </div>
+      </div>
+
+      {/*
+        THE PICTURE. Editable at last: `image` round-tripped through `toRow`,
+        `rowsToCsv` and `toMediaKey` the whole time, and `applyGenerated`
+        carefully protected it from the AI drafter — but no form anywhere could
+        set it, so the only way to give a question a picture was to edit a CSV
+        by hand and re-upload the set.
+
+        Its own row, full width, because the value is a file name or a URL and
+        both are long enough that a half-width field truncates them.
+      */}
+      <div className="form-group">
+        <label htmlFor={id('image')}>Picture</label>
+        <QuestionImageField
+          setId={setId}
+          inputId={id('image')}
+          value={draft.image}
+          onChange={(next) => onChange({ ...draft, image: next })}
+        />
       </div>
 
       <div className="qs-form-grid">
