@@ -50,6 +50,51 @@ function block(css, selector) {
 
 const overlay = () => block(GLOBAL_CSS, '.modal-overlay');
 
+/*
+ * NO COMPONENT STYLESHEET MAY REDECLARE THE GLOBAL SCRIM.
+ *
+ * THE FIFTH INSTANCE, and it hid from the very test written after the fourth.
+ * This file's header already says "reading only styles.css is how the fourth
+ * instance hid" — and then it read AIPromptManager.css for
+ * `.prompt-editor-overlay` ONLY. A verbatim redeclaration of `.modal-overlay`
+ * itself, in that same file, carrying the original broken shape
+ * (`align-items: center`, no `overflow-y`), was invisible to every assertion
+ * below, because they all read `GLOBAL_CSS`.
+ *
+ * It was inert only by luck: `index.jsx` imports `./App` before `./styles.css`,
+ * so the component sheet injects first and loses on equal specificity. Swapping
+ * two import lines would have re-broken every dialog in the product.
+ *
+ * So this asserts the ABSENCE of the global names anywhere but styles.css,
+ * rather than adding a sixth per-file check that the seventh instance would
+ * dodge in a file nobody remembered to list.
+ */
+describe('the global scrim is declared in exactly one place', () => {
+  const GLOBAL_NAMES = ['.modal-overlay', '.modal-content'];
+  const COMPONENT_CSS = fs.readdirSync(path.join(__dirname, '..', 'components'))
+    .filter((f) => f.endsWith('.css'))
+    .map((f) => ({ file: f, css: fs.readFileSync(path.join(__dirname, '..', 'components', f), 'utf8') }));
+
+  test('there is at least one component stylesheet to check', () => {
+    // rejects: the directory moving and this whole suite silently passing over
+    // an empty list, which is the shape a vacuous guard takes.
+    expect(COMPONENT_CSS.length).toBeGreaterThan(5);
+  });
+
+  for (const name of GLOBAL_NAMES) {
+    // rejects: any component sheet re-declaring a selector styles.css owns.
+    // Scoped uses (`.foo .modal-overlay`) are fine and are not matched — only a
+    // rule whose selector STARTS with the global name at the top level.
+    test(`no component stylesheet redeclares ${name}`, () => {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const offenders = COMPONENT_CSS
+        .filter(({ css }) => new RegExp(`(^|\\})\\s*${escaped}\\s*(,[^{]*)?\\{`, 'm').test(css))
+        .map(({ file }) => file);
+      expect(offenders).toEqual([]);
+    });
+  }
+});
+
 describe('a dialog taller than the screen stays reachable', () => {
   // rejects: the exact shape of the reported bug — a fixed, full-viewport scrim
   //          that clips its overflow. Without a scroll container the part of the

@@ -1091,29 +1091,32 @@
   z-index: 1000;
 }
 
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  z-index: 1000;
-}
+/*
+  `.modal-overlay` AND `.modal-content` ARE DELETED FROM THIS FILE, NOT MOVED.
 
-.modal-content {
-  background: white;
-  border-radius: 8px;
-  width: 100%;
-  max-height: 90vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
+  They were verbatim redeclarations of two GLOBAL selectors that styles.css
+  already owns (:5561 and :5583) — and this copy carried the OLD, BROKEN shape:
+  `align-items: center` with no `overflow-y`, which is the exact fault
+  __tests__/modalReachability.test.js exists to prevent, in the exact selector
+  it guards. `.modal-content` here also had `overflow: hidden`, which clips
+  instead of scrolling.
+
+  IT WAS LOSING ONLY BY IMPORT ORDER. index.jsx imports `./App` before
+  `./styles.css`, so the component stylesheet injects first and the global one
+  wins on equal specificity. Swapping those two lines — a change nobody would
+  think to test — would have silently re-broken every `.modal-overlay` dialog
+  in the product, on every screen, back to a dialog taller than the viewport
+  with its footer unreachable and no Escape key on a tablet.
+
+  Nothing rendered them: AIPromptManager.jsx uses neither class. They were dead
+  weight aimed at the whole app.
+
+  This is the FIFTH instance of this fault. modalReachability's own header says
+  "reading only styles.css is how the fourth instance hid" — and it then read
+  this file for `.prompt-editor-overlay` only, so a redeclaration of the global
+  selector was still invisible. The test now scans every component stylesheet
+  for the global names themselves.
+*/
 
 .large-modal {
   max-width: 1200px !important;
