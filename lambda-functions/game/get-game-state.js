@@ -1,6 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { resolveSetPartition } = require('./set-version');
+const { isPresent } = require('./player-presence');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -338,8 +339,15 @@ exports.handler = async (event) => {
           }
         });
         
-        const uniquePlayers = Array.from(playerMap.values());
-        console.log(`✅ Game state voting progress: ${uniquePlayers.length} unique players after deduplication`);
+        // WHO IS STILL IN THE ROOM — the denominator of "3 of 4 have voted".
+        //
+        // A player the host removed because they left must not be voted for by
+        // nobody forever: the round would never read as complete and the host
+        // would sit waiting on an empty chair. `player-presence.js` records
+        // which counts drop them and which (the report, the AI summary) must
+        // not — this is a live number, so it drops them.
+        const uniquePlayers = Array.from(playerMap.values()).filter(isPresent);
+        console.log(`✅ Game state voting progress: ${uniquePlayers.length} unique players still in the room after deduplication`);
 
         response.votingProgress = {
           votesReceived: votesResult.Items?.length || 0,
@@ -392,8 +400,10 @@ exports.handler = async (event) => {
           }
         });
         
-        const uniquePlayers = Array.from(playerMap.values());
-        console.log(`✅ Game state answer progress: ${uniquePlayers.length} unique players after deduplication`);
+        // Removed players drop out here too, for the same reason as the voting
+        // denominator twenty lines up. See player-presence.js.
+        const uniquePlayers = Array.from(playerMap.values()).filter(isPresent);
+        console.log(`✅ Game state answer progress: ${uniquePlayers.length} unique players still in the room after deduplication`);
 
         response.answerProgress = {
           answersReceived: answersResult.Items?.length || 0,
