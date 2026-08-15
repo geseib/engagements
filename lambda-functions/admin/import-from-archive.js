@@ -1,7 +1,11 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, BatchWriteCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { normalizeGameType, DEFAULT_GAME_TYPE } = require('./shared/game-types');
+const { inferPromptType } = require('./shared/prompt-shape');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient());
+const s3Client = new S3Client({});
 
 // Archive service configuration
 const ARCHIVE_SERVICE_URL = process.env.ARCHIVE_SERVICE_URL || 'https://archive.seibtribe.us';
@@ -260,6 +264,92 @@ async function importPrompts(selectedArchiveIds, environment, conflictResolution
         });
       }
 
+      /*
+        A PROMPT IS A TWO-STORE RECORD, AND THIS ONLY EVER WROTE ONE OF THEM.
+
+        create-ai-prompt.js writes the body to AI_PROMPTS_BUCKET at
+        `prompts/{gameType}/{promptId}/v{n}.json` and points the DynamoDB row's
+        `s3Key` at it. Every reader follows that pointer — export-to-archive.js
+        does, and get-ai-summary.js resolves a template through it.
+
+        This function wrote no S3 object and no `s3Key`. It put the text inline
+        as `systemPrompt`/`userPrompt`, two attributes nothing in the product
+        reads. So an imported prompt was bodyless to every consumer: it appeared
+        in the library, could be attached to a question set, and produced
+        nothing — falling back to the game-type default with no error anywhere.
+
+        Four smaller faults in the same object, each independently enough to
+        make the row wrong:
+
+          status: 'inactive'   Not in the vocabulary. It is active | draft |
+                               archived (update-ai-prompt.js whitelists exactly
+                               those; get-ai-prompts.js and the library filter
+                               compare exact strings). 'inactive' matches no
+                               filter, so an imported prompt was invisible in
+                               the console that was supposed to review it.
+                               `draft` is the state this was reaching for.
+
+          'callandanswer'      An ALIAS, not a canonical id. shared/game-types.js
+                               canonicalises it to 'call-and-answer'; the
+                               per-set picker compares exact strings. Routed
+                               through normalizeGameType now.
+
+          variables: []        The export writes an object. Defaulting to an
+                               array put two types in one attribute.
+
+          no promptType        So the console could not tell an analysis prompt
+                               from a generation one, which is the distinction
+                               shared/prompt-shape.js exists to keep.
+      */
+      const timestamp = new Date().toISOString();
+      const gameType = normalizeGameType(metadata.gameType) || DEFAULT_GAME_TYPE;
+      const promptType = metadata.promptType || inferPromptType(prompt);
+
+      // Everything the archive carried, minus the three legacy aliases the
+      // exporter adds for old importers — they are duplicates of instructions
+      // and outputFormat, and writing them back would put two copies of the
+      // same text in the body.
+      const { systemPrompt, userPrompt, ...bodyFields } = prompt;
+      const promptBody = {
+        ...bodyFields,
+        id: newPromptId,
+        version: 1,
+        name: finalName,
+        gameType,
+        promptType,
+        isDefault: false,
+        status: 'draft',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        // Preserved rather than dropped: an archive whose body predates the
+        // structured fields carries its text ONLY in these two.
+        ...(bodyFields.instructions === undefined && systemPrompt ? { instructions: systemPrompt } : {}),
+        ...(bodyFields.outputFormat === undefined && userPrompt ? { outputFormat: userPrompt } : {}),
+      };
+
+      if (!process.env.AI_PROMPTS_BUCKET) {
+        throw new Error(
+          'AI_PROMPTS_BUCKET is not set on the import function, so the prompt body cannot be stored. '
+          + 'This is a deployment fault, not a problem with this archive item. Redeploy with '
+          + 'AI_PROMPTS_BUCKET and an S3 write policy (template-clean.yaml, AdminImportFromArchiveFunction).'
+        );
+      }
+
+      const s3Key = `prompts/${gameType}/${newPromptId}/v1.json`;
+      console.log(`💾 Writing imported prompt body to s3://${process.env.AI_PROMPTS_BUCKET}/${s3Key}`);
+      await s3Client.send(new PutObjectCommand({
+        Bucket: process.env.AI_PROMPTS_BUCKET,
+        Key: s3Key,
+        Body: JSON.stringify(promptBody, null, 2),
+        ContentType: 'application/json',
+        Metadata: {
+          promptId: newPromptId,
+          gameType,
+          version: '1',
+          status: 'draft'
+        }
+      }));
+
       // Create AI prompt record
       const promptRecord = {
         PK: 'AIPROMPTS',
@@ -267,19 +357,38 @@ async function importPrompts(selectedArchiveIds, environment, conflictResolution
         promptId: newPromptId,
         name: finalName,
         description: metadata.description ? `${metadata.description} (Imported from archive)` : 'Imported from archive',
-        gameType: metadata.gameType || 'callandanswer',
+        gameType,
+        promptType,
         category: metadata.category || 'imported',
-        status: 'inactive', // Start inactive for review
+        // Draft, not 'inactive': see the note above. Deliberately not `active` —
+        // an import is somebody else's text arriving in this environment and it
+        // should be read before a room hears it.
+        status: 'draft',
         isDefault: false, // Never import as default
-        systemPrompt: prompt.systemPrompt,
-        userPrompt: prompt.userPrompt,
-        variables: prompt.variables || [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        // The SHAPE FIELDS ON THE ROW, mirroring create-ai-prompt.js. The
+        // console's list reads promptType and the usability chip off the row
+        // without fetching the body, so a row missing these reads as broken.
+        ...(promptBody.scenario && { scenario: promptBody.scenario }),
+        ...(promptBody.scenarioType && { scenarioType: promptBody.scenarioType }),
+        ...(promptBody.basePrompt && { basePrompt: promptBody.basePrompt }),
+        ...(promptBody.contextTemplate && { contextTemplate: promptBody.contextTemplate }),
+        ...(promptBody.audienceTemplate && { audienceTemplate: promptBody.audienceTemplate }),
+        ...(promptBody.categoryTemplate && { categoryTemplate: promptBody.categoryTemplate }),
+        ...(promptBody.outputFormat && { outputFormat: promptBody.outputFormat }),
+        ...(promptBody.outputSections && { outputSections: promptBody.outputSections }),
+        ...(promptBody.defaultSettings && { defaultSettings: promptBody.defaultSettings }),
+        questionSetIds: [],
+        tags: Array.isArray(promptBody.tags) ? promptBody.tags : [],
+        s3Key,
+        version: 1,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        // NO `ttl`. Same reason create-ai-prompt.js records: the table expires
+        // on `ttl`, and prompts are configuration rather than session data.
         importedFrom: {
           archiveId: archiveId,
           originalId: metadata.promptId,
-          importedAt: new Date().toISOString(),
+          importedAt: timestamp,
           sourceEnvironment: metadata.sourceEnvironment || 'unknown'
         }
       };

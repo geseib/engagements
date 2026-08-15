@@ -2,6 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, ScanCommand, QueryCommand, GetCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { resolvePartitionFromMeta } = require('./shared/set-version');
+const { inferPromptType } = require('./shared/prompt-shape');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient());
 const s3Client = new S3Client({});
@@ -358,6 +359,35 @@ async function exportPrompts(selectedIds, environment, results) {
         would reject valid prompts. What is never valid is having no body at all.
       */
       let promptContent;
+      /*
+        THE MISCONFIGURATION THAT MADE EVERY ARCHIVED PROMPT EMPTY, NAMED.
+
+        This function had no AI_PROMPTS_BUCKET and no S3 read policy at all
+        (template-clean.yaml, both added alongside this check), so the body
+        fetch below failed on every prompt and the old catch turned that into
+        `promptContent = {}` and a 200. Nine prompts reached the shared archive
+        with instructions, outputFormat, template and scenario all '' — a
+        backup of nothing, reported as nine successes.
+
+        Checked SEPARATELY from the fetch, and before it, because the two
+        failures need different sentences: an unreadable body is a broken
+        record and the operator can go look at it, whereas an unset bucket is a
+        deployment fault that would otherwise be reported once per prompt as if
+        each prompt were individually at fault.
+      */
+      if (!process.env.AI_PROMPTS_BUCKET) {
+        console.error('❌ AI_PROMPTS_BUCKET is not set on this function; prompt bodies cannot be read');
+        results.failed.push({
+          id: promptId,
+          name: prompt.name,
+          step: 'config',
+          error: 'AI_PROMPTS_BUCKET is not set on the export function, so no prompt body can be read. '
+            + 'This is a deployment fault, not a problem with this prompt: every prompt in this run will '
+            + 'fail the same way. Redeploy with AI_PROMPTS_BUCKET and an S3 read policy on the AI prompts '
+            + 'bucket (template-clean.yaml, AdminExportToArchiveFunction).'
+        });
+        continue;
+      }
       if (!prompt.s3Key) {
         console.warn(`⚠️ ${promptId}: pointer row carries no s3Key; refusing to archive a bodyless prompt`);
         results.failed.push({
@@ -410,18 +440,41 @@ async function exportPrompts(selectedIds, environment, results) {
             category: prompt.category,
             status: prompt.status,
             isDefault: prompt.isDefault,
+            // The SHAPE, carried explicitly. `inferPromptType` reads it back
+            // from the body, but a reader of the archive file should not have
+            // to re-derive which of two incompatible kinds of prompt this is.
+            promptType: prompt.promptType || inferPromptType(promptContent),
+            version: prompt.version,
             createdAt: prompt.createdAt,
             updatedAt: prompt.updatedAt
           },
+          /*
+            THE WHOLE BODY, VERBATIM — NOT FIVE HAND-PICKED FIELDS.
+
+            This used to copy exactly instructions, outputFormat, template and
+            scenario. Those are the ANALYSIS shape. A GENERATION prompt (the 22
+            `gen-*` rows, written by AIGenerationPromptEditor) keeps its text in
+            basePrompt, contextTemplate, audienceTemplate, categoryTemplate and
+            outputSections — none of which were in that list. So a generation
+            prompt archived as four empty strings and reported success, which is
+            the same data-loss shape as the dropped CSV columns fixed twice
+            before in this area.
+
+            An allow-list is the wrong tool here. The two shapes are documented
+            in shared/prompt-shape.js and a third is possible; every time a
+            field is added to create-ai-prompt.js this list would silently start
+            losing it again, with no test able to notice because the export
+            would still be a success. Copying the body wholesale cannot go stale.
+
+            The three legacy aliases stay, AFTER the spread so they can never
+            shadow a real field. Archives written before this change carry only
+            systemPrompt/userPrompt, and an importer that has not been updated
+            still reads them.
+          */
           prompt: {
-            // Use actual S3 content structure
-            instructions: promptContent.instructions || '',
-            outputFormat: promptContent.outputFormat || '',
-            template: promptContent.template || '',
-            scenario: promptContent.scenario || '',
-            // Legacy field mappings for backward compatibility
-            systemPrompt: promptContent.instructions || '',
-            userPrompt: promptContent.outputFormat || '',
+            ...promptContent,
+            systemPrompt: promptContent.systemPrompt || promptContent.instructions || '',
+            userPrompt: promptContent.userPrompt || promptContent.outputFormat || '',
             variables: promptContent.variables || {}
           }
         }, null, 2),
