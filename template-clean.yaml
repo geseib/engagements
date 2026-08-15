@@ -945,6 +945,128 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # ── THE NAME HANDOVER: ONE ASKS, THE OTHER GRANTS ────────────────────────
+  #
+  # A player refused with NAME_TAKEN can ask the host to hand the name over;
+  # the host grants it for exactly one exchange. The two routes are one path
+  # segment apart and have OPPOSITE auth, which is the design and not an
+  # oversight — see the header of each handler.
+
+  RequestHandoverFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-request-handover'
+      CodeUri: lambda-functions/game/
+      Handler: request-handover.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      # DERIVED FROM THE CALLS THE HANDLER MAKES, not copied from its neighbour.
+      #   session-gate.js  GetCommand      -> Read
+      #   the ask itself   UpdateCommand   -> Write
+      #   host-notify.js   QueryCommand    -> Read
+      #                    DeleteCommand   -> ONLY in Crud; Read+Write does NOT
+      #                    grant DeleteItem (commit 5ac19a6b), and the 410-Gone
+      #                    cleanup of a dead host connection needs it.
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+      Events:
+        RequestHandoverEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/players/{playerName}/handover-request
+            Method: POST
+            # DELIBERATELY NO AUTHORIZER, and it is the one route in this pair
+            # that must not have one. The caller is by definition somebody who
+            # is NOT in the session — they were just refused a name — so they
+            # hold no token and own no row. Gating this would mean the only
+            # people who can ask for a handover are hosts and admins, i.e.
+            # nobody who ever needs to.
+            #
+            # It grants nothing: it records "somebody asked" and pings the host.
+            # It clears the same gates a join clears first (started; access code
+            # for a private session), and answers identically whether or not the
+            # name exists, so it is not a roster probe.
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  GrantHandoverFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-grant-handover'
+      CodeUri: lambda-functions/game/
+      Handler: grant-handover.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      # GetCommand + UpdateCommand. No websocket send: the person waiting for
+      # this has no socket yet (a player's socket opens only after a join
+      # succeeds), so there is nobody to push to and the client asks again.
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+        - DynamoDBWritePolicy:
+            TableName: !Ref GameTable
+      Events:
+        GrantHandoverEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/players/{playerName}/handover
+            Method: POST
+            # HOST ONLY, exactly like /reveal-authors and /stage-beat above and
+            # for their reason: every participant knows the four-digit game id,
+            # so on a public route this would be a button any phone in the room
+            # could press to take another person's answers and score.
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  RemovePlayerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-remove-player'
+      CodeUri: lambda-functions/game/
+      Handler: remove-player.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      # A SOFT removal: one Get, one Update that sets or removes a single
+      # `RemovedAt` attribute. The handler contains no DeleteCommand at all and
+      # must never grow one — nothing about a removal may erase an answer, a
+      # vote or a score row. `host-notify.js` needs Query, and DeleteItem for
+      # the 410-Gone connection cleanup, which is why this is Crud rather than
+      # Read+Write: SAM's DynamoDBWritePolicy does NOT include DeleteItem
+      # (commit 5ac19a6b).
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+      Events:
+        RemovePlayerEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/players/{playerName}/remove
+            Method: POST
+            # HOST ONLY. Same reason as the grant above.
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   SubmitVoteFunction:
     Type: AWS::Serverless::Function
     Properties:

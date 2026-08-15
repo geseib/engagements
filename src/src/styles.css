@@ -663,7 +663,7 @@ body {
    at higher specificity. Dark grey on dark navy: the labels were unreadable.
    Excluding it here restores the FAB's own white-on-dark-text design rather
    than fighting it with another override. */
-.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.issue-fab-main):not(.issue-fab-option) {
+.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.issue-fab-main):not(.issue-fab-option) {
   font: inherit;
   font-weight: 600;
   padding: 8px 12px;
@@ -751,7 +751,7 @@ body {
 .setup-roster { list-style: none; margin: 0; padding: 0; }
 .setup-roster__row {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto auto;
+  grid-template-columns: 24px minmax(0, 1fr) auto auto auto;
   gap: 10px;
   align-items: center;
   padding: 7px 0;
@@ -762,6 +762,71 @@ body {
 .setup-roster__rank { color: #B6C2D4; font-weight: 700; }
 .setup-roster__name { min-width: 0; overflow-wrap: anywhere; }
 .setup-roster__score { color: #B6C2D4; font-weight: 600; white-space: nowrap; }
+
+/* THE HOST'S TWO DECISIONS ABOUT ONE PERSON: hand the name over, or take them
+   out of the counts.
+
+   `margin-left: auto` on the group and NEVER `justify-content: flex-end` on the
+   row — flex-end pushes an overflow towards the START of the line, which in a
+   clipped container is the unreachable end (the rule
+   `__tests__/rowActionsReachable.test.js` was written for, after
+   QuestionSetsPanel made the same mistake). `flex-wrap` so a long name and two
+   buttons stack instead of shearing.
+
+   The row grid gains a fifth track for this. `minmax(0, 1fr)` on the name is
+   what keeps the buttons on screen when somebody types their full name in. */
+.setup-roster__acts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+/* SMALL, BECAUSE IT SITS IN A 36px ROW, and excluded from the panel's generic
+   button rule above so this is the whole declaration rather than an override
+   fighting it on specificity. Still at the 12px floor — never below. */
+.setup-roster__act {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid rgba(155, 168, 190, 0.3);
+  color: #B6C2D4;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.setup-roster__act:hover { border-color: var(--primary); color: var(--primary); }
+.setup-roster__act:disabled { opacity: 0.5; cursor: default; }
+
+/* THE STATE, SPELLED OUT. "asking to take this name" and "unlocked for one
+   handover" are words rather than a colour or a dot, because this panel is read
+   on a projector that has lifted the black point and by hosts who cannot rely on
+   hue — the same reasoning `.setup-cat__state` above already applies to the
+   category chips. Amber, because it is the one thing in the row asking to be
+   acted on, and RATIONALE §4.3 spends amber on the task. */
+.setup-roster__flag {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+/* WHO LEFT. Dimmed and struck through — two signals, because opacity alone
+   reads as "loading" on a projector. They keep their score in full so the row
+   cannot be read as "removing someone zeroed them". */
+.setup-roster__row--gone {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  opacity: 0.65;
+}
+.setup-roster__row--gone .setup-roster__name { text-decoration: line-through; }
+
+/* A second heading inside one tab needs air above it; the first must not get
+   any, or the tab opens with a gap. */
+.setup-h--after { margin-top: 18px; }
 
 /* --- Categories ---------------------------------------------------------- */
 .setup-cats { display: flex; flex-wrap: wrap; gap: 7px; }

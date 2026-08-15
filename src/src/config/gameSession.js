@@ -104,6 +104,11 @@ export function initialGameSession() {
 
     // --- the room ------------------------------------------------------
     players: [],
+    // WHO LEFT. Kept out of `players` by get-players.js, so every count the
+    // page derives from `players.length` is a count of the room rather than of
+    // the session's history. Per-game like the roster itself: a removal from
+    // the last session must not follow the host into the next one.
+    removedPlayers: [],
     answers: [],
     playersWhoAnswered: [],
     votes: [],

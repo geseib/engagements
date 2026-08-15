@@ -220,3 +220,86 @@ describe('nothing on the host screen says "Console"', () => {
     expect(panel.toLowerCase()).not.toContain('console');
   });
 });
+
+/**
+ * THE HOST'S CONTROL OVER WHO IS IN THE ROOM.
+ *
+ * Both features land in the Players tab and both are host-gated routes, so the
+ * hazards here are the ones source assertions are actually good at: a handler
+ * defined and never passed, a fetch that forgets to carry the token, and a
+ * refresh that never happens so the panel shows yesterday's roster.
+ */
+describe('the panel can remove a player and hand over a name', () => {
+  test('the page passes both features into the panel', () => {
+    // rejects: the panel growing the props and the page never filling them.
+    // The defaults are no-ops, so a forgotten prop is a button that does
+    // nothing rather than a crash — the exact failure this stream exists for.
+    expect(host).toMatch(/<SessionSetupPanel[\s\S]{0,4000}?removedPlayers=\{removedPlayers\}/);
+    expect(host).toMatch(/<SessionSetupPanel[\s\S]{0,4000}?onRemovePlayer=\{/);
+    expect(host).toMatch(/<SessionSetupPanel[\s\S]{0,4000}?onRestorePlayer=\{/);
+    expect(host).toMatch(/<SessionSetupPanel[\s\S]{0,4000}?onGrantHandover=\{grantNameHandover\}/);
+  });
+
+  test('remove and restore are one explicit call, never a toggle', () => {
+    // rejects: `onRemovePlayer={() => setPlayerRemoved(name)}` with the flag
+    // derived from a roster that may be stale — a host double-tapping would
+    // then put somebody back into the room.
+    expect(host).toMatch(/onRemovePlayer=\{\(name\) => setPlayerRemoved\(name, true\)\}/);
+    expect(host).toMatch(/onRestorePlayer=\{\(name\) => setPlayerRemoved\(name, false\)\}/);
+  });
+
+  test('both host actions carry the token', () => {
+    // rejects: plain `fetch` on a route that declares CognitoAuthorizer, which
+    // 401s in production and nowhere else. /reveal-authors and /stage-beat
+    // already make this mistake impossible to repeat quietly.
+    const removal = host.slice(host.indexOf('const setPlayerRemoved'));
+    expect(removal.slice(0, 600)).toMatch(/authFetch\(/);
+    const handover = host.slice(host.indexOf('const grantNameHandover'));
+    expect(handover.slice(0, 600)).toMatch(/authFetch\(/);
+    // ...and the name is escaped, because a player name is user input and it
+    // is a path segment here.
+    expect(removal.slice(0, 600)).toMatch(/encodeURIComponent\(name\)/);
+    expect(handover.slice(0, 600)).toMatch(/encodeURIComponent\(name\)/);
+  });
+
+  test('every host action refreshes the roster it just changed', () => {
+    // rejects: the panel still showing the person in the room after Remove,
+    // or "asking to take this name" after the grant. Nothing pushes this back
+    // to the tab that made the call.
+    const removal = host.slice(host.indexOf('const setPlayerRemoved'));
+    expect(removal.slice(0, 900)).toMatch(/fetchPlayers\(/);
+    const handover = host.slice(host.indexOf('const grantNameHandover'));
+    expect(handover.slice(0, 900)).toMatch(/fetchPlayers\(/);
+  });
+
+  test('the ask arrives over the socket and is unsubscribed with the rest', () => {
+    // rejects: a host who never learns somebody is locked out, and a listener
+    // that outlives the game it belongs to.
+    expect(host).toMatch(/onMessage\('handoverRequested'/);
+    expect(host).toMatch(/offMessage\('handoverRequested'\)/);
+    // The host's OTHER device did the removing — without these, a phone and a
+    // projector disagree about how many people the round is waiting for.
+    expect(host).toMatch(/onMessage\('playerRemoved'/);
+    expect(host).toMatch(/offMessage\('playerRemoved'\)/);
+    expect(host).toMatch(/onMessage\('playerRestored'/);
+    expect(host).toMatch(/offMessage\('playerRestored'\)/);
+  });
+
+  test('the departed are kept out of `players`, not merged back in', () => {
+    // THE LOAD-BEARING SEPARATION. `players.length` is the denominator of
+    // every count in this file; get-players.js filters the departed out
+    // server-side, so those counts became counts of the ROOM without being
+    // touched. A merge here would silently undo all of it.
+    expect(host).toMatch(/setRemovedPlayers\(\(json\.removedPlayers \|\| \[\]\)/);
+    expect(host).not.toMatch(/setPlayers\(\[[^\]]*removedPlayers/);
+  });
+
+  test('the roster reset clears the departed too', () => {
+    // rejects: a removal from the last session following the host into the
+    // next one. gameSession.js and its setter map must agree, and
+    // gameSession.test.js fails if they drift.
+    const session = stripComments(fs.readFileSync(src('config', 'gameSession.js'), 'utf8'));
+    expect(session).toMatch(/removedPlayers:\s*\[\]/);
+    expect(host).toMatch(/removedPlayers:\s*setRemovedPlayers/);
+  });
+});

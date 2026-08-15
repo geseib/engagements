@@ -270,6 +270,9 @@ function PlayerPage() {
   // A join the server refused because the name is already answering in this
   // session: { kind: 'name-taken' | 'name-unverified', playerName, message }.
   const [joinCollision, setJoinCollision] = useState(null);
+  /* In flight, so the ask and the take-over cannot be double-tapped into two
+     requests — the second of which would spend a grant the first already had. */
+  const [handoverBusy, setHandoverBusy] = useState(false);
   /*
     WHY THE JOIN REFUSAL IS STATE AND NOT AN `alert()`.
 
@@ -503,7 +506,12 @@ function PlayerPage() {
       setJoinCollision({
         kind: failure.kind,
         playerName: failure.playerName || name,
-        message: failure.message
+        message: failure.message,
+        // A FRESH refusal starts the handover flow over. Carrying a stale
+        // `asked` across a new join attempt would offer "Take over the name"
+        // to somebody who has not asked anybody anything — the two-step is the
+        // guard, so it must not survive the screen being re-entered.
+        handoverStage: 'idle'
       });
       return;
     }
@@ -1729,6 +1737,71 @@ function PlayerPage() {
     setPlayerName('');
   };
 
+  /**
+   * "Ask the host to let me take this name."
+   *
+   * The escape hatch from NAME_TAKEN, and it deliberately does not take
+   * anything: it records the ask and pings the host's Players tab. The host
+   * decides, because the host is the only party who can tell "Chris on a new
+   * laptop" from "a second Chris" — owner: *"they need the choice though
+   * because they may have just mistakenly picked the same name."*
+   *
+   * The route carries no authorizer, and must not: the caller is by definition
+   * somebody who is NOT in the session.
+   */
+  const handleRequestHandover = async () => {
+    if (!joinCollision) return;
+    const name = joinCollision.playerName;
+    setHandoverBusy(true);
+    try {
+      await fetch(`${API_BASE}games/${gameId}/players/${encodeURIComponent(name)}/handover-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: getClientId(gameId), accessCode: accessCodeInput.trim() || null }),
+      });
+    } catch (error) {
+      // A failed ask is not a dead end — the host can unlock without being
+      // asked through the app at all, which is the commoner case in a real
+      // room. So advance to `asked` either way and let the person try.
+      console.error('PLAYER: handover request failed:', error);
+    }
+    setHandoverBusy(false);
+    setJoinCollision((current) => (current ? { ...current, handoverStage: 'asked' } : current));
+  };
+
+  /**
+   * "The host said go ahead."
+   *
+   * A retry of the join carrying `claimExisting`. NOT a takeover: the server
+   * refuses it outright unless the host has opened a one-shot grant on this
+   * name, and spends the grant in a conditional write so two people racing one
+   * grant cannot both get in (join-game.js's `handover` branch).
+   *
+   * A refusal is not an error screen — it is "not yet", which is the only
+   * reading a person on a blocked screen can act on.
+   */
+  const handleTakeOverName = async () => {
+    if (!joinCollision) return;
+    const name = joinCollision.playerName;
+    setHandoverBusy(true);
+    const result = await performJoin(gameId, name, {
+      accessCode: accessCodeInput.trim() || null,
+      claimExisting: true,
+    });
+    setHandoverBusy(false);
+
+    if (result.ok) {
+      enterSession(gameId, name, result.data);
+      return;
+    }
+
+    if (result.failure.kind === 'name-taken' || result.failure.kind === 'name-unverified') {
+      setJoinCollision((current) => (current ? { ...current, handoverStage: 'refused' } : current));
+      return;
+    }
+    applyJoinFailure(result.failure, name);
+  };
+
   const handleRejoinDecline = () => {
     if (!rejoinPrompt) return;
     console.log(`🙅 PLAYER: Declining rejoin — joining as someone else`);
@@ -1908,8 +1981,15 @@ function PlayerPage() {
           <JoinNameCollisionActions
             kind={joinCollision.kind}
             playerName={joinCollision.playerName}
+            /* ONE STAGE, READ BY BOTH HALVES. The note in the stage and the
+               label in the dock describe the same step, so they come from the
+               same value rather than from two conditions that can drift. */
+            handoverStage={joinCollision.handoverStage || 'idle'}
+            busy={handoverBusy}
             onRejoinAnyway={handleCollisionRejoin}
             onUseAnotherName={handleCollisionRename}
+            onRequestHandover={handleRequestHandover}
+            onTakeOver={handleTakeOverName}
           />
         )}
       >
@@ -1917,6 +1997,7 @@ function PlayerPage() {
           kind={joinCollision.kind}
           playerName={joinCollision.playerName}
           message={joinCollision.message}
+          handoverStage={joinCollision.handoverStage || 'idle'}
         />
       </PlayerShell>
     );
