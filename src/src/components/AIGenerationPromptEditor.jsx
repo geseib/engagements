@@ -1,22 +1,76 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import './AIPromptManager.css';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType } from '../config/gameTypes';
 import Icon from './Icon';
+import PromptLibraryPanel from './PromptLibraryPanel';
 
 const API_BASE = window.API_BASE;
 
+/*
+  THE THIRD PROMPT UI IS GONE — AUDIT §6.2 item 9, admin RATIONALE §9.
+
+  This screen used to draw its own `.prompts-grid` of `.prompt-card`s: one card
+  per generation prompt carrying name, status, description, game type, scenario
+  type, tags and an Edit button. That is the wall of cards the sets screen threw
+  out (RATIONALE §4, design rule 7 — "Lists are tables, not cards"), and it was
+  the THIRD list UI over the one `AIPROMPTS` table, with its own status-badge
+  scheme and its own game-type list.
+
+  It now mounts `PromptLibraryPanel`, the same table the summary library uses.
+  Nothing the cards showed was dropped:
+
+    card                       →  table
+    ------------------------------------------------------------------
+    <h4>{name}</h4>            →  .plib-nm, the first column
+    .prompt-description        →  .plib-sub, under the name
+    .status-badge {status}     →  the State column's status chip
+    .game-type                 →  the Type column, through gameTypeLabel()
+    .scenario-type (raw slug)  →  the Scenario column, through its LABEL
+    .default-badge             →  the Default chip, which now says what it costs
+    .tag                       →  .plib-tag, under the name
+    Edit                       →  the row's Edit action
+
+  And four things arrive that the card grid never had: a search box, a second
+  empty state for "your filters exclude everything", one-click exits from each
+  filter that is costing rows, and a "Broken record" chip for the rows
+  `populate-generation-prompts.js` wrote with no `promptId`
+  (`get-ai-prompts.js:118-119`) — which are exactly the rows that write a
+  dangling reference into a question set when picked.
+
+  WHAT THE PANEL HAD TO BE TOLD, and why it is props rather than a fork: these
+  records spell the second axis `scenarioType`, not `category`, and their
+  scenario slugs have written labels; and `summaryPromptStatus: 'unusable'` is
+  true of every row on a list filtered to generation prompts, so its chip is
+  suppressed here. See the header block in PromptLibraryPanel.jsx.
+*/
+
+/** Canonical dashed ids, the vocabulary `config/gameTypes.js` and
+ *  AIPromptManager already use. `survey` is absent because no generation
+ *  prompt is written for it — the create form offers the same four. */
+const GAME_TYPE_OPTIONS = [
+  { value: 'call-and-answer', label: 'Call & Answer' },
+  { value: 'trivia', label: 'Trivia' },
+  { value: 'poll', label: 'Polls' },
+  { value: 'wavelength', label: 'Wavelength' }
+];
+
 function AIGenerationPromptEditor({ onClose }) {
   const [prompts, setPrompts] = useState([]);
-  const [filteredPrompts, setFilteredPrompts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedPrompt, setSelectedPrompt] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  /*
+    `category` is the panel's name for the second filter axis; on these records
+    it holds a `scenarioType` slug, which is what `categoryKey` tells the panel.
+    No `promptType` key: the fetch below pins it to `generation` server-side, so
+    carrying it in the filter object made it look adjustable when it is not.
+  */
   const [filters, setFilters] = useState({
-    promptType: 'generation',
+    search: '',
     gameType: 'all',
-    scenarioType: 'all',
+    category: 'all',
     status: 'all'
   });
 
@@ -82,13 +136,28 @@ function AIGenerationPromptEditor({ onClose }) {
     ]
   };
 
+  /*
+    THE SCENARIO OPTIONS FOR THE CURRENT GAME TYPE. Derived here, from the same
+    table the create form uses, so the panel stays free of this vocabulary —
+    the arrangement AIPromptManager already uses for its categories.
+
+    With no game type chosen the union is offered rather than nothing: the old
+    grid's scenario select was EMPTY unless a game type was picked first, so
+    "show me every lessons-learned prompt" was two steps or none.
+  */
+  const scenarioOptions = useMemo(() => {
+    const lists = filters.gameType === 'all'
+      ? Object.values(scenarioTypeOptions)
+      : [scenarioTypeOptions[normalizeGameType(filters.gameType)] || []];
+    const seen = new Map();
+    lists.flat().forEach((o) => { if (!seen.has(o.value)) seen.set(o.value, o); });
+    return [...seen.values()];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.gameType]);
+
   useEffect(() => {
     fetchPrompts();
   }, []);
-
-  useEffect(() => {
-    applyFilters();
-  }, [prompts, filters]);
 
   const fetchPrompts = async () => {
     try {
@@ -118,27 +187,14 @@ function AIGenerationPromptEditor({ onClose }) {
     }
   };
 
-  const applyFilters = () => {
-    let filtered = [...prompts];
-
-    if (filters.gameType !== 'all') {
-      // Legacy rows still spell this `callandanswer` / `polls`; the backend now
-      // returns a normalized gameType but normalize here too so this list is
-      // correct even against an older API response.
-      const wanted = normalizeGameType(filters.gameType);
-      filtered = filtered.filter(prompt => normalizeGameType(prompt.gameType) === wanted);
-    }
-
-    if (filters.scenarioType !== 'all') {
-      filtered = filtered.filter(prompt => prompt.scenarioType === filters.scenarioType);
-    }
-
-    if (filters.status !== 'all') {
-      filtered = filtered.filter(prompt => prompt.status === filters.status);
-    }
-
-    setFilteredPrompts(filtered);
-  };
+  /*
+    THE FILTER IS `matchesPromptFilters` NOW, not a private copy of it. The
+    local one had to normalize game types by hand for the same reason the
+    shared one does — legacy rows spell it `callandanswer` / `polls` — and a
+    second implementation is a second place for that to be forgotten. It is
+    also the function the drop-exit counts are computed from, so the counts
+    cannot disagree with the list they describe.
+  */
 
   const handleSavePrompt = async () => {
     try {
@@ -259,96 +315,37 @@ function AIGenerationPromptEditor({ onClose }) {
 
           <div className="modal-body">
             {!isEditing && !isCreating && (
-              <>
-                {/* Filters */}
-                <div className="filters-section">
-                  <div className="filter-row">
-                    <label>
-                      Game Type:
-                      <select
-                        value={filters.gameType}
-                        onChange={(e) => setFilters({ ...filters, gameType: e.target.value })}
-                      >
-                        <option value="all">All Game Types</option>
-                        <option value="call-and-answer">Call & Answer</option>
-                        <option value="trivia">Trivia</option>
-                        <option value="poll">Polls</option>
-                        <option value="wavelength">Wavelength</option>
-                      </select>
-                    </label>
-                    
-                    <label>
-                      Scenario Type:
-                      <select
-                        value={filters.scenarioType}
-                        onChange={(e) => setFilters({ ...filters, scenarioType: e.target.value })}
-                      >
-                        <option value="all">All Scenario Types</option>
-                        {filters.gameType !== 'all' && scenarioTypeOptions[filters.gameType]?.map(option => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </label>
+              /*
+                The filter controls come with the panel — the three selects and
+                the search box are one arrangement, and splitting them across
+                two components is how the old grid ended up with a scenario
+                select that was empty until a game type was chosen.
 
-                    <label>
-                      Status:
-                      <select
-                        value={filters.status}
-                        onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                      >
-                        <option value="all">All Statuses</option>
-                        <option value="active">Active</option>
-                        <option value="draft">Draft</option>
-                        <option value="archived">Archived</option>
-                      </select>
-                    </label>
-
-                    <button className="btn-primary" onClick={handleCreateNew}>
-                      <Icon name="Plus" weight="bold" size={16} color="currentColor" /> Create New Prompt
-                    </button>
-                  </div>
-                </div>
-
-                {/* Prompts List */}
-                <div className="prompts-list">
-                  <h3>Generation Prompts ({filteredPrompts.length})</h3>
-                  {filteredPrompts.length === 0 ? (
-                    <p>No prompts found matching the current filters.</p>
-                  ) : (
-                    <div className="prompts-grid">
-                      {filteredPrompts.map((prompt) => (
-                        <div key={prompt.SK} className="prompt-card">
-                          <div className="prompt-header">
-                            <h4>{prompt.name}</h4>
-                            <span className={`status-badge ${prompt.status}`}>
-                              {prompt.status}
-                            </span>
-                          </div>
-                          <p className="prompt-description">{prompt.description}</p>
-                          <div className="prompt-meta">
-                            <span className="game-type">{prompt.gameType}</span>
-                            <span className="scenario-type">{prompt.scenarioType}</span>
-                            {prompt.isDefault && <span className="default-badge">Default</span>}
-                          </div>
-                          <div className="prompt-tags">
-                            {prompt.tags?.map((tag, index) => (
-                              <span key={index} className="tag">{tag}</span>
-                            ))}
-                          </div>
-                          <div className="prompt-actions">
-                            <button 
-                              className="btn-secondary"
-                              onClick={() => handleEditPrompt(prompt)}
-                            >
-                              Edit
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </>
+                No `onAdvise`, no `onDelete`, no `onPopulateDefaults`: this
+                screen has never had an advisor, a delete endpoint wired up or a
+                defaults installer, and the panel draws only the controls whose
+                handler exists (design rule 2).
+              */
+              <PromptLibraryPanel
+                prompts={prompts}
+                loading={loading}
+                filters={filters}
+                onFilterChange={setFilters}
+                gameTypeOptions={GAME_TYPE_OPTIONS}
+                categoryOptions={scenarioOptions}
+                categoryKey="scenarioType"
+                categoryHeading="Scenario"
+                categoryFilterAllLabel="All Scenario Types"
+                flagSummaryUsability={false}
+                emptyHeading="No generation prompts yet"
+                emptyBody={
+                  'A generation prompt is the instruction the AI is given when it writes a new '
+                  + 'question set. Until one exists for an engagement type and scenario, the '
+                  + 'builder falls back to the template compiled into the code.'
+                }
+                onEdit={handleEditPrompt}
+                onCreate={handleCreateNew}
+              />
             )}
 
             {/* Edit/Create Form */}

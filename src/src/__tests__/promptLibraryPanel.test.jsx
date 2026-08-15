@@ -40,7 +40,14 @@ const PROMPTS = [
   },
 ];
 
-/** Render with a controlled filter object, the way AIPromptManager does. */
+/**
+ * Render with a controlled filter object, the way AIPromptManager does — and
+ * with the full set of callbacks, because AIPromptManager passes all five. The
+ * panel draws a control only where its handler exists (design rule 2), so the
+ * defaults here are what makes this the SUMMARY library's arrangement; the
+ * generation library's narrower one is asserted in
+ * aiGenerationPromptEditor.test.jsx by omitting them.
+ */
 function mount(props = {}) {
   const onFilterChange = jest.fn();
   const utils = render(
@@ -54,6 +61,11 @@ function mount(props = {}) {
         { value: 'poll', label: 'Poll' },
       ]}
       categoryOptions={['lessons-learned', 'general', 'opinion']}
+      onEdit={jest.fn()}
+      onAdvise={jest.fn()}
+      onDelete={jest.fn()}
+      onCreate={jest.fn()}
+      onPopulateDefaults={jest.fn()}
       {...props}
     />
   );
@@ -183,11 +195,105 @@ describe('filtering is a pure function, and it is the one the counts use', () =>
     expect(matchesPromptFilters(PROMPTS[0], { ...ALL, search: '80s' })).toBe(false);
   });
 
+  test('the second axis can live under another attribute name', () => {
+    /*
+      rejects: hard-coding `prompt.category`. AUDIT §6.2 item 9 points
+      AIGenerationPromptEditor at this panel, and generation rows written by
+      `populate-generation-prompts.js:502` carry `scenarioType` and no
+      `category` at all — a hard-coded read compares `undefined` to the slug,
+      matches nothing, and empties the table on every scenario choice.
+
+      Both halves are asserted: the named key matches, AND the default still
+      does not see it. A test that only checked the first would pass against
+      `prompt[categoryKey] || prompt.category`, which would silently make the
+      summary library filter on generation slugs too.
+    */
+    const genRow = { name: 'Lessons Learned Scenarios', scenarioType: 'lessons-learned' };
+    expect(
+      matchesPromptFilters(genRow, { ...ALL, category: 'lessons-learned' }, { categoryKey: 'scenarioType' })
+    ).toBe(true);
+    expect(matchesPromptFilters(genRow, { ...ALL, category: 'lessons-learned' })).toBe(false);
+  });
+
   test('a prompt with no description or tags does not throw the filter', () => {
     // rejects: `p.description.toLowerCase()` without the guard. Every field
     // except the name is optional on these records.
     expect(() => matchesPromptFilters({ name: 'bare' }, { ...ALL, search: 'x' })).not.toThrow();
     expect(matchesPromptFilters({ name: 'bare' }, { ...ALL, search: 'bare' })).toBe(true);
+  });
+});
+
+describe('the category column is configurable, and its labels are used', () => {
+  test('a labelled option list names the column, the select and the exit', () => {
+    /*
+      rejects: printing the slug wherever the second axis appears. The
+      generation library's scenario slugs (`workplace-trivia`) have written
+      labels ("Workplace & Business") that its own create form uses, and the
+      card grid this panel replaced showed the slug in all three places. The
+      drop-exit is the one that matters most: an exit the reader cannot match
+      to the control they set is not an exit.
+    */
+    const rows = [{ promptId: 'g1', name: 'Workplace Trivia', scenarioType: 'workplace-trivia' }];
+    const panel = (filters) => (
+      <PromptLibraryPanel
+        prompts={rows}
+        filters={filters}
+        onFilterChange={jest.fn()}
+        categoryKey="scenarioType"
+        categoryHeading="Scenario"
+        categoryFilterAllLabel="All Scenario Types"
+        categoryOptions={[
+          { value: 'workplace-trivia', label: 'Workplace & Business' },
+          { value: 'no-such-scenario', label: 'Fun Facts' },
+        ]}
+      />
+    );
+    const { rerender } = render(panel(ALL));
+
+    expect(screen.getByRole('columnheader', { name: 'Scenario' })).toBeInTheDocument();
+    expect(document.querySelector('.plib-cat').textContent).toBe('Workplace & Business');
+
+    const select = screen.getByLabelText('Filter by scenario');
+    expect([...select.options].map((o) => o.textContent))
+      .toEqual(['All Scenario Types', 'Workplace & Business', 'Fun Facts']);
+
+    // Nothing matches `no-such-scenario`, so the exit is drawn — by its label.
+    rerender(panel({ ...ALL, category: 'no-such-scenario' }));
+    const exit = screen.getByText(/Scenario: Fun Facts/);
+    expect(exit.closest('button').textContent).toMatch(/1 prompt/);
+  });
+
+  test('plain strings still work, and a value off the list still renders', () => {
+    /*
+      rejects: requiring `{ value, label }`. AIPromptManager passes
+      `ALL_PROMPT_CATEGORIES`, a flat string array, and its rows must keep
+      rendering.
+
+      THE FIRST VERSION OF THIS TEST SURVIVED `asOption = (o) => o`. It read
+      only the CELLS, and a cell falls back to the raw value when the option
+      list has no match — which is exactly what a list of unconverted strings
+      produces, so the mutant rendered identically there. The select is where
+      the damage actually lands: `{c.label}` on a bare string is `undefined`,
+      i.e. a filter of blank options that all carry `value=""`. Both the select
+      and the cells are asserted now.
+    */
+    render(
+      <PromptLibraryPanel
+        prompts={[{ promptId: 'a', name: 'A', category: 'general' },
+          { promptId: 'b', name: 'B', category: 'not-offered' }]}
+        filters={ALL}
+        onFilterChange={jest.fn()}
+        categoryOptions={['general']}
+      />
+    );
+
+    const select = screen.getByLabelText('Filter by category');
+    expect([...select.options].map((o) => [o.value, o.textContent]))
+      .toEqual([['all', 'All Categories'], ['general', 'general']]);
+
+    // And the row whose category the narrowed list does not offer keeps it.
+    const cells = [...document.querySelectorAll('.plib-cat')].map((td) => td.textContent);
+    expect(cells).toEqual(['general', 'not-offered']);
   });
 });
 
