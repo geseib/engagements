@@ -96,15 +96,61 @@ export default function PastRound({
   // document, so without this one press would step the response AND the round
   // underneath it — and the round change then closes the response, so the host
   // sees the dialog vanish and the round jump from a single arrow press.
+  /*
+    HOW MANY RESPONSES THIS ROUND HAS, read before the early return below so
+    the digit shortcut can clamp against it. `rounds[index]` is only safe to
+    index when `open`, which is exactly what that guard checks.
+  */
+  const answerCount = open ? (rounds[index]?.answers?.length || 0) : 0;
+
   useEffect(() => {
     if (!open || spotlight !== null) return undefined;
     const onKey = (e) => {
+      /*
+        NEVER STEAL A KEYSTROKE THAT IS BEING TYPED. This dialog has no text
+        field today, but the Regenerate control and any later addition make
+        that a matter of timing rather than of design. A digit handler bound on
+        `document` is the classic way a "1" stops appearing in an input.
+      */
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      // A modified press is somebody else's shortcut — browser tab switching is
+      // Cmd/Ctrl+digit on every platform this runs on.
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
       if (e.key === 'ArrowRight') { e.preventDefault(); move(1); }
       if (e.key === 'ArrowLeft') { e.preventDefault(); move(-1); }
+
+      /*
+        1-9 OPENS THAT RESPONSE — the fast path, not the only path.
+
+        The owner: *"there are numbers next to the players responses, that is
+        meant for the host to press that number… what if there are 10 ppl, cant
+        press the 10 key."* Both halves are addressed, in different places:
+        this makes the numbers behave the way they already LOOK, and the
+        arrow-key stepping inside AnswerSpotlight is what reaches the tenth
+        response and beyond.
+
+        NINE IS THE CEILING AND THAT IS DELIBERATE. There is no tenth digit, so
+        a two-key "10" would need a timeout to tell 1-then-0 from 1-then-stop —
+        which makes pressing "1" feel broken for the length of that timeout, on
+        the most common press. The arrows already cover the tail without
+        inventing a mode.
+
+        Clamped against `answerCount`, so pressing 7 in a five-response round
+        does nothing rather than opening an empty dialog.
+      */
+      if (e.key >= '1' && e.key <= '9') {
+        const wanted = Number(e.key) - 1;
+        if (wanted < answerCount) {
+          e.preventDefault();
+          setSpotlight(wanted);
+        }
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, spotlight, move]);
+  }, [open, spotlight, move, answerCount]);
 
   if (!open) return null;
 
@@ -244,6 +290,14 @@ export default function PastRound({
             labelFor={displayLabelFor}
             showPoints={roundIsAttributed(round)}
             closeOnKey
+            /*
+              THE REVIEW DIALOG IS THE ONE PLACE A DIGIT ADDRESSES A RESPONSE.
+              With `closeOnKey` on, a digit would otherwise dismiss — so reading
+              #1 and wanting #3 would cost two presses, the first of which looks
+              like the shortcut not working. The live stage passes no `onJump`
+              and keeps "any key takes you back".
+            */
+            onJump={setSpotlight}
             title={`Round ${round.ordinal} response`}
           />
         </section>

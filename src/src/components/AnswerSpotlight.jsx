@@ -112,6 +112,26 @@ export default function AnswerSpotlight({
    * Empty by default — the host and `PastRound` keep exactly what they had.
    */
   surfaceClassName = '',
+  /**
+   * Jump straight to a response by its position — `(zeroBasedIndex) => void`.
+   *
+   * OPT-IN, AND THAT IS THE WHOLE POINT. When this is passed, the digits 1-9
+   * stop dismissing and start jumping. When it is absent — the host's live
+   * results stage, the player's own surface — nothing changes and a digit
+   * still takes you back, exactly as `dismissesOnKey` documents.
+   *
+   * The review dialog passes it because there the number IS the address of a
+   * response: the owner reads the badges as "press that number and bring up the
+   * full answer for that person". Without this, reading #1 and wanting #3 costs
+   * two presses — one to dismiss, one to open — and the first of them looks
+   * like the shortcut failing.
+   *
+   * On the live stage the opposite rule is right and stays: that screen faces a
+   * room, "any key takes you back" is the owner's own wording for it, and a
+   * stray digit from a clicker should not silently swap which answer a room is
+   * reading.
+   */
+  onJump = null,
 }) {
   const total = answers.length;
   const open = Number.isInteger(index) && index >= 0 && index < total;
@@ -133,6 +153,36 @@ export default function AnswerSpotlight({
     const onKey = (e) => {
       if (e.key === 'ArrowRight') { e.preventDefault(); move(1); }
       if (e.key === 'ArrowLeft') { e.preventDefault(); move(-1); }
+
+      /*
+        A DIGIT JUMPS, BUT ONLY WHERE A CALLER ASKED FOR IT (`onJump`).
+
+        THIS IS NOT THE DOUBLED GUARD THE NOTE BELOW WARNS ABOUT. That warning
+        is about restating something `dismissesOnKey` already decides — delete
+        either copy and behaviour is unchanged, so neither can be tested. This
+        is the opposite: `dismissesOnKey` is a pure predicate that knows nothing
+        about props, and it lists digits as dismissing. Deleting THIS branch
+        changes what a digit does wherever `onJump` is passed, and a test holds
+        it in place.
+
+        Bounded by `total` so a digit past the end of a short round does
+        nothing at all rather than dismissing — pressing 7 in a four-response
+        round must not close the dialog, or the ceiling becomes invisible.
+        Modifiers and typed input are left alone for the reasons
+        `dismissesOnKey` already gives.
+      */
+      if (onJump && !e.metaKey && !e.ctrlKey && !e.altKey && e.key >= '1' && e.key <= '9') {
+        const t = e.target;
+        if (!(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable))) {
+          const wanted = Number(e.key) - 1;
+          if (wanted < total) {
+            e.preventDefault();
+            onJump(wanted);
+          }
+          return;
+        }
+      }
+
       /*
         "any key takes you back" — but only the keys that mean it. The
         exclusions and the reasoning are in `dismissesOnKey` above.
@@ -151,7 +201,7 @@ export default function AnswerSpotlight({
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, move, closeOnKey, onClose]);
+  }, [open, move, closeOnKey, onClose, onJump, total]);
 
   if (!open) return null;
 

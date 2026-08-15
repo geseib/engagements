@@ -514,6 +514,119 @@ describe('opening one response in full', () => {
     ]);
   });
 
+  /*
+    THE DIGIT SHORTCUT, AND ITS CEILING.
+
+    The owner read the number badges as keyboard hints — *"that is meant for the
+    host to press that number and bring up the full answer for that person"* —
+    which is not what they were. They were click-only. Now they behave the way
+    they already looked.
+
+    NINE IS THE CEILING BY DESIGN, and the owner named the reason themselves:
+    *"what if there are 10 ppl, cant press the 10 key."* There is no tenth digit,
+    and a two-key "10" would need a timeout to tell 1-then-0 from 1-and-done —
+    making the most common press feel broken for the length of it. Reaching the
+    tenth response is the arrow stepping inside AnswerSpotlight, which already
+    existed; these tests pin the boundary between the two.
+  */
+  test('pressing 1-9 opens that response', () => {
+    const { container } = mount();
+    fireEvent.keyDown(document, { key: '3' });
+    const dialog = container.querySelector('.answer-spotlight');
+    expect(dialog).toBeTruthy();
+    expect(dialog.textContent).toContain('Third');
+    expect(dialog.textContent).toContain('Katherine');
+    expect(screen.getByText('3 of 4')).toBeInTheDocument();
+  });
+
+  test('a digit past the end of the round leaves the round dialog fully live', () => {
+    /*
+      rejects: `setSpotlight(Number(key) - 1)` UNCLAMPED.
+
+      The missing dialog is not the assertion that matters, and testing only
+      that would prove nothing — AnswerSpotlight has its own bounds check
+      (`index < total`), so an out-of-range index renders nothing either way.
+      What differs is the STATE left behind: `spotlight` would hold 6 instead
+      of null, and this dialog goes deliberately silent on the arrow keys
+      whenever a response is open. So an unclamped 7 would quietly cost the
+      host their round stepping, with nothing on screen to explain it.
+    */
+    const { container, onIndex } = mount();
+    fireEvent.keyDown(document, { key: '7' });
+    expect(container.querySelector('.answer-spotlight')).toBeNull();
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+    expect(onIndex).toHaveBeenCalledWith(1);
+  });
+
+  test('a modified digit is left to the browser', () => {
+    // rejects: binding the bare key. Cmd/Ctrl+2 switches browser tab on every
+    // platform this runs on; stealing it is worse than not having the shortcut.
+    const { container } = mount();
+    fireEvent.keyDown(document, { key: '2', metaKey: true });
+    fireEvent.keyDown(document, { key: '2', ctrlKey: true });
+    expect(container.querySelector('.answer-spotlight')).toBeNull();
+  });
+
+  test('a digit typed into a field is not a shortcut', () => {
+    /*
+      rejects: a document-level digit handler with no target guard — the classic
+      way a "1" stops appearing in an input. There is no text field in this
+      dialog today, so this asserts the GUARD rather than a current screen: the
+      day one is added, the shortcut must not eat its keystrokes.
+    */
+    const { container } = mount();
+    const field = document.createElement('input');
+    document.body.appendChild(field);
+    fireEvent.keyDown(field, { key: '2' });
+    expect(container.querySelector('.answer-spotlight')).toBeNull();
+    document.body.removeChild(field);
+  });
+
+  test('digits are silent while a response is already open', () => {
+    /*
+      rejects: leaving the digit handler live under the spotlight. Both dialogs
+      bind on `document`, so one press would swap the response underneath the
+      open one — the same class of bug the arrow-key guard in this effect
+      already documents.
+    */
+    const { container } = mount();
+    fireEvent.keyDown(document, { key: '1' });
+    expect(container.querySelector('.answer-spotlight').textContent).toContain('Ada');
+    fireEvent.keyDown(document, { key: '3' });
+    // JUMPED, not dismissed-then-reopened. `closeOnKey` is on here, so without
+    // `onJump` this press would have closed the dialog and the host would have
+    // had to press 3 again — the first press looking like the shortcut failing.
+    const open3 = container.querySelector('.answer-spotlight');
+    expect(open3).toBeTruthy();
+    expect(open3.textContent).toContain('Katherine');
+    expect(screen.getByText('3 of 4')).toBeInTheDocument();
+  });
+
+  test('a digit past the end does not dismiss the open response either', () => {
+    /*
+      rejects: jumping without the bounds check. An unbounded digit falls
+      through to `dismissesOnKey`, which closes — so pressing 7 in a
+      four-response round would shut the dialog instead of doing nothing, and
+      the ceiling would be invisible rather than inert.
+    */
+    const { container } = mount();
+    fireEvent.keyDown(document, { key: '2' });
+    expect(container.querySelector('.answer-spotlight').textContent).toContain('Grace');
+    fireEvent.keyDown(document, { key: '7' });
+    expect(container.querySelector('.answer-spotlight')).toBeTruthy();
+    expect(container.querySelector('.answer-spotlight').textContent).toContain('Grace');
+  });
+
+  test('a letter still takes you back, as it always did', () => {
+    // rejects: the jump branch swallowing every key. `closeOnKey` is the
+    // owner's "any key takes you back"; only digits were carved out of it.
+    const { container } = mount();
+    fireEvent.keyDown(document, { key: '2' });
+    expect(container.querySelector('.answer-spotlight')).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'k' });
+    expect(container.querySelector('.answer-spotlight')).toBeNull();
+  });
+
   // rejects: the row printing the whole response, which is the "brief bar" the
   //          owner said they liked; and printing NOTHING, which is the defect
   //          being fixed. It shows the start, and the start only.
