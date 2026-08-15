@@ -1,14 +1,36 @@
 # Resume
 
-> ## ⚠️ SUPERSEDED IN PART — read `docs/handoff/2026-08-11-session-handoff.md` FIRST.
+> ## ⚠️ SUPERSEDED IN PART — read `docs/handoff/2026-08-14-session-handoff.md` FIRST,
+> ## then `2026-08-11-session-handoff.md`.
 >
-> `dev` is now at **`91bf76c9`**, deployed. §2 (games list), §3's poll CSV bug, §5 (dead AI
-> prompts), §10 (name collision + rejoin), §12's Tier 0 and §13 (the remote) are **DONE**, plus
-> the `?role=host` access-code leak and the two player-state bugs reported after this file was
-> written. The **Landmines** and **Deployment** sections below are still current and still the
-> best part of this document. **One correction: the backend aggregation recipe in Baselines is
-> wrong** — `grep -E '^[0-9]+ failed'` matches nothing, because the count is never line-initial.
-> The replacement is in the newer handoff.
+> **`dev` is at `e8c167d1`; `test` is at `733997f3`. Both deployed and Succeeded.**
+>
+> ### THE FRONTEND TEST BASELINE IN THIS FILE IS WRONG AND WILL MISLEAD YOU
+>
+> Everywhere below (and in the 2026-08-11 handoff) that says to expect **"5 failed suites / 31
+> failed"** and treat it as acceptable: **that is no longer true.** As of `94bb4f32` the frontend
+> is **111 suites, 2537 passed, 0 failed**. The five suites that had never run — `AdminPage`,
+> `App`, `GameHostPage`, `PlayerPage`, `WebSocketClient` — now run. **Any failure is a real
+> failure.**
+>
+> Related and equally important: **the pipeline now runs `npm run lint` and `npm test` before
+> `npm run build`, on all three tiers.** Before that it ran neither. If a push seems not to land,
+> check the pipeline before assuming a cache problem.
+>
+> ### Do not repeat the claim that `GameHostPage` cannot be mounted in jsdom
+>
+> It always could. Its suite failed on one unmocked `AuthProvider`. That claim — which appears in
+> code comments and in older handoffs — is what justified testing the largest file in the product
+> by reading it as text, while three blank-page bugs shipped past. See the 2026-08-14 handoff.
+>
+> ### Still true from the earlier banner
+>
+> §2 (games list), §3's poll CSV bug, §5 (dead AI prompts), §10 (name collision + rejoin), §12's
+> Tier 0 and §13 (the remote) are **DONE**, plus the `?role=host` access-code leak and the two
+> player-state bugs reported after this file was written. The **Landmines** and **Deployment**
+> sections below are still current and still the best part of this document. **The backend
+> aggregation recipe in Baselines is wrong** — `grep -E '^[0-9]+ failed'` matches nothing,
+> because the count is never line-initial. The replacement is in the 2026-08-11 handoff.
 
 After `/clear`, paste the block below.
 
