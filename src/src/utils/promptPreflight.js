@@ -911,9 +911,34 @@ export function preflightPrompt(input = {}) {
     "nearly right" — `[Summary of ...]` — are prose to the model, not slots the
     engine fills, and that distinction is exactly what the author missed.
   */
+  /*
+    WHICH VARIABLES ACTUALLY CARRY THE ROOM'S ANSWERS.
+
+    This list decides whether a summary prompt is blocked, so a name that does
+    not belong here is a false accusation and a name missing from it is a
+    prompt that ships receiving nothing. Both errors were present.
+
+    REMOVED — `answerCount`, `topAnswer`, `winningAnswer` are NOT VARIABLES.
+    They appear in neither the catalogue nor get-ai-summary.js; nothing has
+    ever substituted them. Three of the eight tokens that could clear this
+    rule were names of nothing, so a prompt could satisfy "you receive the
+    answers" with a token that renders as literal braces on a projector.
+
+    ADDED — `playerResponses`, `playerAnswers` and `wavelengthWords` all
+    resolve in the engine (:2102, :2103, :1927). Their absence blocked all
+    nineteen shipped default prompts, which had been receiving their answers
+    through `{playerResponses}` the whole time. The rule was right that the
+    defaults were wrong-shaped; it was wrong about why.
+
+    `uniqueAnswers` STAYS, but it is the weakest member and the catalogue now
+    says so: :1645 truncates to five distinct answers and carries no counts.
+    It clears this rule while handing a room of thirty five bare strings.
+    Prefer `responsesText`.
+  */
   const ANSWER_TOKENS = [
-    'responsesText', 'triviaResponses', 'uniqueAnswers', 'answerCount',
-    'voteTally', 'votingBreakdown', 'topAnswer', 'winningAnswer',
+    'responsesText', 'triviaResponses', 'uniqueAnswers',
+    'voteTally', 'votingBreakdown',
+    'playerResponses', 'playerAnswers', 'wavelengthWords',
   ];
   const namesAnAnswer = variables.some((v) => ANSWER_TOKENS.includes(v.name));
   /*

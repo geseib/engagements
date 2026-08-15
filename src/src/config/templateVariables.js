@@ -420,19 +420,19 @@ const TEMPLATE_VARIABLES = [
     // no branch. It is the most useful variable there is for a call-and-answer
     // round with repeated sentiment, and it was hidden from one.
     name: 'uniqueAnswers',
-    description: 'The distinct answers given, with how many chose each',
+    description: 'The distinct answers, comma-separated. NO COUNTS, and silently TRUNCATED TO FIVE.',
     category: 'Answers',
     gameTypes: ALL_TYPES,
-    example: 'Ship it Friday (5), Wait for the audit (3)',
+    example: 'Ship it Friday, Wait for the audit, Ask legal first',
   },
   {
     // AUDIT: was ['poll', 'survey']. :1648, derived from uniqueAnswers, no
     // branch.
     name: 'answerCategories',
-    description: 'Responses grouped into themes',
+    description: 'NOT themes — a bare sentence counting the distinct responses. No grouping exists.',
     category: 'Answers',
     gameTypes: ALL_TYPES,
-    example: 'Speed-first (5), Risk-first (3)',
+    example: '7 unique responses across various themes',
   },
 
   // ---- VOTES ---------------------------------------------------------------
