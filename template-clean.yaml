@@ -61,10 +61,25 @@ Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
   HasSecondaryDomain: !Not [!Equals [!Ref SecondaryDomainName, ""]]
   IsProd: !Equals [!Ref Environment, "prod"]
-  # True when the deploy passes Google credentials (dev's deploy script
-  # fetches them from /engdev/google/* SSM params). Test/prod CI does not
-  # pass them yet and stays on console-configured providers; before enabling
-  # there, delete the console-created provider so CFN can own it.
+  # True when the deploy passes Google credentials, fetched from
+  # /<stack>/google/* SSM parameters by all three buildspecs.
+  #
+  # ⚠️ WHEN THIS IS FALSE, GOOGLE SIGN-IN IS REMOVED. Not "left alone" —
+  # REMOVED. :2520 writes `SupportedIdentityProviders: [COGNITO]` on every
+  # deploy, so a provider configured by hand in the Cognito console survives
+  # only until the next deploy of that tier.
+  #
+  # This comment used to say test and prod "stay on console-configured
+  # providers", and that sentence was false in a way that cost a production
+  # outage on 2026-08-15: buildspec-prod.yml passed a hardcoded override list
+  # with no Google parameters, the secret fell to its "" default, and the first
+  # prod deploy in 197 commits stripped Google from the app client. Cognito
+  # answers such a sign-in with "An error was encountered. Login option is not
+  # available. Please try another one."
+  #
+  # All three buildspecs now fetch the credentials and CONDITIONALLY APPEND
+  # them, because passing GoogleClientSecret="" is an explicit override to
+  # empty and is not the same as omitting the parameter.
   HasGoogleOAuth: !Not [!Equals [!Ref GoogleClientSecret, ""]]
 
 Globals:
