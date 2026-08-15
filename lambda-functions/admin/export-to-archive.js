@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, ScanCommand, GetCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, ScanCommand, QueryCommand, GetCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { resolvePartitionFromMeta } = require('./shared/set-version');
 
@@ -116,17 +116,66 @@ async function exportQuestionSets(selectedIds, environment, results) {
       // `SET#<id>` partition after a replace would archive the superseded copy.
       const resolvedSet = resolvePartitionFromMeta(setId, questionSet, null);
 
-      // Get all questions for this set
-      const questionsResponse = await db.send(new ScanCommand({
-        TableName: process.env.TABLE_NAME,
-        FilterExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
-        ExpressionAttributeValues: {
-          ':pk': resolvedSet.pk,
-          ':skPrefix': 'QUESTION#'
-        }
-      }));
+      /*
+        QUERY, PAGINATED — AND IT WAS A SCAN, WHICH SILENTLY EXPORTED NOTHING.
 
-      const questions = questionsResponse.Items || [];
+        Reported: "its wasnt in archive when you did it, and when i retryed
+        archive, it says export completed, 0 items exported."
+
+        This was a ScanCommand with `FilterExpression: 'PK = :pk AND
+        begins_with(SK, :skPrefix)'` and no pagination. A Scan reads ONE 1 MB
+        page of the whole table and applies the filter AFTER reading, so a set
+        whose QUESTION# rows fall outside that first page comes back with zero
+        items. `convertQuestionsToCSV` then returns '' (see :364-366), and the
+        archive service refuses the upload with
+
+            400 "Title, content, and contentType are required"
+
+        — an error that names three fields and points at none of the cause.
+
+        The failure is by TABLE POSITION, which is the worst shape a bug can
+        have: it is perfectly reproducible for one set, looks like corrupt data
+        for that set specifically, and moves to a different set the moment the
+        table grows. On 2026-08-15 it took out exactly one of eight demo sets
+        (`readyornot`) while a direct Query on the same partition returned all
+        twelve of its questions.
+
+        A Query on the partition key reads only that partition and needs no
+        filter at all. The pagination loop is not optional either: one Query
+        page is also capped at 1 MB, so a large set would truncate silently —
+        the same class of bug one size down.
+      */
+      const questions = [];
+      let lastKey;
+      do {
+        const page = await db.send(new QueryCommand({
+          TableName: process.env.TABLE_NAME,
+          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+          ExpressionAttributeValues: {
+            ':pk': resolvedSet.pk,
+            ':skPrefix': 'QUESTION#'
+          },
+          ExclusiveStartKey: lastKey
+        }));
+        questions.push(...(page.Items || []));
+        lastKey = page.LastEvaluatedKey;
+      } while (lastKey);
+
+      /*
+        AN EMPTY SET IS NOW A NAMED FAILURE, NOT A 400 FROM THREE HOPS AWAY.
+        The archive's own message cannot say which field was empty or why, and
+        that is what made this look like bad data rather than a bad read.
+      */
+      if (questions.length === 0) {
+        console.warn(`⚠️ ${setId}: query returned no questions; refusing to archive an empty set`);
+        results.failed.push({
+          id: setId,
+          error: `No questions found in partition ${resolvedSet.pk}. The set metadata says `
+            + `${questionSet.questionCount ?? 'an unknown number of'} questions, so this is a read `
+            + `problem, not an empty set.`
+        });
+        continue;
+      }
       
       // Convert questions to CSV format for import compatibility
       const csvContent = convertQuestionsToCSV(questions, questionSet.engagementType);
