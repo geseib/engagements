@@ -504,6 +504,113 @@ describe('the ballot', () => {
       expect(within(card).getByRole('button', { name: /Show all/i })).toBeInTheDocument();
     });
   });
+
+  /* rejects: the reading view reverting to a paper island.
+              `Show all ↓` opens `AnswerSpotlight`, which belongs to the host's
+              results wall and is painted out of the `styles.css` monolith. It
+              was mounted as a SIBLING of the shell — outside `.plr`, therefore
+              outside the data-theme="dark" this surface re-declares and outside
+              every --plr-* token — so it opened a WHITE card with
+              #F6A94C-on-#FFFFFF Previous/Next buttons at 1.96:1 over a dusk
+              ballot. Containment is the whole fix: an undefined custom property
+              invalidates the whole declaration, so `.plr-spot` outside `.plr`
+              would drop §10 of the stylesheet on the floor silently, in the
+              bundle only, where no test can see it. Document containment is a
+              relationship jsdom genuinely models. */
+  test('reading one response in full happens inside the surface, in its palette', async () => {
+    const server = makeServer({ state: 'CREATED' });
+    installFetch(server);
+    await reachBallot(server);
+
+    fireEvent.click(screen.getByRole('button', { name: /Detailed Vote/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Show all/i })[0]);
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveClass('answer-spotlight', 'plr-spot');
+    expect(shell().contains(dialog)).toBe(true);
+    // ...and after the dock, not inside the region that scrolls. A dialog
+    // nested in `.plr-stage` is a dialog inside the thing it covers.
+    expect(stage().contains(dialog)).toBe(false);
+  });
+
+  /* rejects: the re-tint being applied to the host's copy too. `PastRound` and
+              the host results wall render the same component on paper and must
+              not move; the class is opt-in, from the caller, because only the
+              caller knows which polarity it is on. */
+  test('the re-tint is the player\'s alone', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '');       // prose is not a call site
+    // Opt-in, and off by default: an unspecified caller gets exactly the
+    // markup it had.
+    expect(src('components', 'AnswerSpotlight.jsx')).toMatch(/surfaceClassName\s*=\s*''/);
+    // The other two callers are paper and stay paper.
+    expect(src('components', 'PastRound.jsx')).not.toMatch(/surfaceClassName/);
+    expect(src('GameHostPage.jsx')).not.toMatch(/surfaceClassName/);
+  });
+});
+
+describe('the join refusal', () => {
+  /* The second Chris. The refusal used to render its heading, its sentence and
+     two `.btn-primary`/`.btn-secondary` buttons into the middle of `.plr-stage`
+     — the one scrolling region — from a stylesheet whose own header described a
+     white `.join-screen` container that had been deleted. Its explanatory
+     sentence was `color: #444`: 1.79:1 on `--bg #0F1A2E`, which is not "low
+     contrast", it is not there. */
+  async function refuse(code) {
+    const server = makeServer({ state: 'CREATED' });
+    server.handle = ((inner) => (url, options) => {
+      if ((options?.method || 'GET') === 'POST' && url.includes(`games/${GAME}/players`)) {
+        return {
+          ok: false,
+          status: 409,
+          body: { code, playerName: ME, message: 'Someone here is already answering as that name.' },
+        };
+      }
+      return inner(url, options);
+    })(server.handle);
+
+    global.fetch.mockImplementation((url, options) => {
+      const { ok, status, body } = server.handle(String(url), options);
+      return Promise.resolve({ ok, status: status || (ok ? 200 : 500), json: async () => body });
+    });
+
+    await join();
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+  }
+
+  // rejects: the ways out drifting back into the scrolling region. Every other
+  //          ACT state on this surface puts its actions in the dock, which is a
+  //          SIBLING of the stage — that is what makes "scrolling to read is
+  //          fine, scrolling to act is not" structural. The one screen where a
+  //          player is already stuck was the one screen that broke it.
+  test('the refusal is in the stage and its ways out are in the dock', async () => {
+    await refuse('NAME_UNVERIFIED');
+
+    expect(stage().contains(screen.getByRole('alert'))).toBe(true);
+    const buttons = within(dock()).getAllByRole('button');
+    expect(buttons.map((b) => b.textContent.trim())).toEqual([
+      `Yes — rejoin as ${ME}`,
+      `No — I'm a different ${ME}`,
+    ]);
+    // Nothing pressable is left behind in the stage: two places for one
+    // decision is how a player answers the question twice.
+    expect(within(stage()).queryAllByRole('button')).toEqual([]);
+  });
+
+  // rejects: the monolith's paper buttons coming back onto a dusk shell.
+  test('the ways out wear the dock vocabulary, not the global one', async () => {
+    await refuse('NAME_TAKEN');
+
+    const [only] = within(dock()).getAllByRole('button');
+    expect(only).toHaveClass('plr-btn');
+    expect(only.className).not.toMatch(/btn-primary|btn-secondary|btn-large/);
+    // NAME_TAKEN still offers exactly one way out, and it is not "join as
+    // them" — that missing button is the silent merge this screen exists to
+    // stop, and moving the buttons must not have quietly restored it.
+    expect(within(dock()).getAllByRole('button')).toHaveLength(1);
+  });
 });
 
 describe('results shows the personal half and points at the room for the rest', () => {

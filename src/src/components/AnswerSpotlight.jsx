@@ -103,6 +103,15 @@ export default function AnswerSpotlight({
    * because that is what the owner asked for there.
    */
   closeOnKey = false,
+  /**
+   * Appended to the dialog box, so a surface with its own palette can re-tint
+   * this one instead of forking it. `PlayerPage` passes `plr-spot`: the player's
+   * device is dusk and `styles.css` paints `.answer-spotlight` for the host's
+   * paper theme, right down to a `.btn-secondary` that is #F6A94C on #FFFFFF.
+   * Only the caller knows which polarity it is on, so only the caller says.
+   * Empty by default — the host and `PastRound` keep exactly what they had.
+   */
+  surfaceClassName = '',
 }) {
   const total = answers.length;
   const open = Number.isInteger(index) && index >= 0 && index < total;
@@ -152,7 +161,7 @@ export default function AnswerSpotlight({
   return (
     <Modal
       overlayClassName="modal-overlay answer-spotlight__scrim"
-      contentClassName="answer-spotlight"
+      contentClassName={`answer-spotlight${surfaceClassName ? ` ${surfaceClassName}` : ''}`}
       onClose={onClose}
       closeOnBackdrop
       closeOnEscape

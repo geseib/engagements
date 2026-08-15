@@ -215,7 +215,15 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
     await switchAwayAndBack();
 
     expect(submitButton()).not.toBeDisabled();
-    expect(screen.getByText(/Paris/).closest('.trivia-option')).toHaveClass('active');
+    // ASSERTED ON `aria-checked`, NOT ON A CLASS. This read
+    // `.closest('.trivia-option')).toHaveClass('active')` — two class names the
+    // player surface carried only because this line named them. Neither has
+    // painted anything since the option became a radio button
+    // (styles.css:6839 records `.trivia-option` losing its rules), so the
+    // assertion was pinning dead paint while the state a screen reader
+    // announces — and the state `.plr-opt[aria-checked="true"]` actually
+    // renders from — went unguarded.
+    expect(screen.getByText(/Paris/).closest('[role="radio"]')).toHaveAttribute('aria-checked', 'true');
   });
 
   // The reset still has to happen when it should, or the fix above would just
@@ -276,7 +284,7 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
     await waitFor(() => {
       expect(screen.getByText(/What is the capital of Spain/i)).toBeInTheDocument();
     });
-    expect(screen.getByText(/Madrid/).closest('.trivia-option')).not.toHaveClass('active');
+    expect(screen.getByText(/Madrid/).closest('[role="radio"]')).toHaveAttribute('aria-checked', 'false');
     expect(submitButton()).toBeDisabled();
   });
 

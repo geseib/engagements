@@ -7,6 +7,16 @@
  * server tell a returning player from a namesake, and the reading of the
  * server's refusal.
  *
+ * THE REFUSAL IS TWO EXPORTS NOW, and the tests follow the seam. The body
+ * (heading + sentence) renders into `.plr-stage`; the actions render into
+ * `.plr-dock`, which sits outside the one scrolling region so the player is
+ * never asked to scroll to get unstuck — every other ACT state on this surface
+ * already worked that way, and this was the exception. The button contracts
+ * below are unchanged; they are simply asserted on the export that renders the
+ * buttons. That the two halves are wired into the same shell, in that order, is
+ * asserted where it can only be true or false in situ:
+ * `playerSurface.test.jsx` › "the join refusal".
+ *
  * The behaviours pinned, and what breaks each:
  *   - NAME_TAKEN offers no way through. Add a "continue anyway" button and the
  *     first assertion fails — that button is the silent merge, restored.
@@ -20,7 +30,7 @@
  */
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import JoinNameCollision from '../components/JoinNameCollision';
+import JoinNameCollision, { JoinNameCollisionActions } from '../components/JoinNameCollision';
 import { getClientId, clientIdStorageKey, classifyJoinFailure } from '../components/joinResult';
 
 const memoryStorage = () => {
@@ -36,13 +46,19 @@ const memoryStorage = () => {
 describe('JoinNameCollision', () => {
   it('refuses a taken name without offering a way to take it anyway', () => {
     render(
-      <JoinNameCollision
-        kind="name-taken"
-        playerName="Chris"
-        message='Someone in this session is already answering as "Chris".'
-        onRejoinAnyway={() => {}}
-        onUseAnotherName={() => {}}
-      />
+      <>
+        <JoinNameCollision
+          kind="name-taken"
+          playerName="Chris"
+          message='Someone in this session is already answering as "Chris".'
+        />
+        <JoinNameCollisionActions
+          kind="name-taken"
+          playerName="Chris"
+          onRejoinAnyway={() => {}}
+          onUseAnotherName={() => {}}
+        />
+      </>
     );
 
     expect(screen.getByText('That name is taken.')).toBeInTheDocument();
@@ -56,14 +72,48 @@ describe('JoinNameCollision', () => {
     expect(buttons[0]).toHaveTextContent('Pick a different name');
   });
 
+  it('dresses the ways out as this surface dresses every other primary action', () => {
+    // They were `.btn-primary`/`.btn-secondary`/`.btn-large` from the
+    // `styles.css` monolith — paper-theme buttons on a dusk shell, next to a
+    // sentence painted #444 at 1.79:1 on --bg. The dock vocabulary is
+    // `.plr-btn`, and the second choice is the ghost, exactly as the rejoin
+    // prompt renders the same pair of choices.
+    render(
+      <JoinNameCollisionActions
+        kind="name-unverified"
+        playerName="Chris"
+        onRejoinAnyway={() => {}}
+        onUseAnotherName={() => {}}
+      />
+    );
+
+    const [yes, no] = screen.getAllByRole('button');
+    expect(yes).toHaveClass('plr-btn');
+    expect(yes).not.toHaveClass('plr-btn--ghost');
+    expect(no).toHaveClass('plr-btn', 'plr-btn--ghost');
+    for (const button of screen.getAllByRole('button')) {
+      expect(button.className).not.toMatch(/btn-primary|btn-secondary|btn-large/);
+    }
+  });
+
+  it('states the refusal at the ladder, not at a viewport-keyed clamp', () => {
+    // The heading was `clamp(1.3rem, 6vw, 1.9rem)` in a stylesheet of its own —
+    // a fourth ladder on a surface RATIONALE §3.3 gives exactly three literal
+    // ones, keyed to a `.join-screen` container that no longer exists.
+    render(
+      <JoinNameCollision kind="name-taken" playerName="Chris" message="taken" />
+    );
+    const heading = screen.getByText('That name is taken.');
+    expect(heading).toHaveClass('plr-h1', 'plr-h1--primary');
+    expect(screen.getByText('taken')).toHaveClass('plr-lede', 'plr-muted');
+  });
+
   it('announces the refusal rather than leaving it to be noticed', () => {
     const { container } = render(
       <JoinNameCollision
         kind="name-taken"
         playerName="Chris"
         message="taken"
-        onRejoinAnyway={() => {}}
-        onUseAnotherName={() => {}}
       />
     );
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
@@ -71,13 +121,19 @@ describe('JoinNameCollision', () => {
 
   it('asks the ambiguous case instead of guessing', () => {
     render(
-      <JoinNameCollision
-        kind="name-unverified"
-        playerName="Chris"
-        message="If that was you on another device, rejoin."
-        onRejoinAnyway={() => {}}
-        onUseAnotherName={() => {}}
-      />
+      <>
+        <JoinNameCollision
+          kind="name-unverified"
+          playerName="Chris"
+          message="If that was you on another device, rejoin."
+        />
+        <JoinNameCollisionActions
+          kind="name-unverified"
+          playerName="Chris"
+          onRejoinAnyway={() => {}}
+          onUseAnotherName={() => {}}
+        />
+      </>
     );
 
     expect(screen.getByText('Are you the Chris already here?')).toBeInTheDocument();
@@ -88,10 +144,9 @@ describe('JoinNameCollision', () => {
     const onRejoinAnyway = jest.fn();
     const onUseAnotherName = jest.fn();
     render(
-      <JoinNameCollision
+      <JoinNameCollisionActions
         kind="name-unverified"
         playerName="Chris"
-        message="…"
         onRejoinAnyway={onRejoinAnyway}
         onUseAnotherName={onUseAnotherName}
       />

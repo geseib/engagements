@@ -309,9 +309,91 @@ const roots = () => {
   return [...out];
 };
 
+/** Every string literal in a snippet of JS, template interpolations included.
+ *  A regex cannot do this: `plr-q${folded ? ' plr-q--fold' : ''}` is one
+ *  attribute holding three literals, and pairing quote characters off against
+ *  each other reads the ternary's operators as class names. */
+function stringLiterals(src) {
+  const out = [];
+  let i = 0;
+  while (i < src.length) {
+    const quote = src[i];
+    if (quote !== "'" && quote !== '"' && quote !== '`') { i += 1; continue; }
+    i += 1;
+    let buffer = '';
+    while (i < src.length && src[i] !== quote) {
+      if (src[i] === '\\') { i += 2; continue; }
+      if (quote === '`' && src[i] === '$' && src[i + 1] === '{') {
+        let depth = 0;
+        const start = i + 1;
+        for (; i < src.length; i += 1) {
+          if (src[i] === '{') depth += 1;
+          else if (src[i] === '}') { depth -= 1; if (depth === 0) break; }
+        }
+        out.push(...stringLiterals(src.slice(start + 1, i)));
+        i += 1;
+        continue;
+      }
+      buffer += src[i];
+      i += 1;
+    }
+    out.push(buffer);
+    i += 1;
+  }
+  return out;
+}
+
 describe('the .plr namespace', () => {
   test('every selector is rooted at the scope class', () => {
     expect(roots().filter((n) => !n.startsWith('plr'))).toEqual([]);
+  });
+
+  /* THE OTHER HALF OF THE NAMESPACE, AND IT IS IN THE MARKUP.
+     The two assertions around this one read stylesheets, which catches a rule
+     that escapes the scope. Neither catches the reverse — a class from the
+     monolith riding INTO the scope on an element — and that is how the surface
+     actually decayed: `plr-opt trivia-option active` sat on every trivia option
+     after the conversion, and `.btn-primary btn-large` on the join refusal,
+     because a stylesheet test has nothing to say about a string in a JSX
+     attribute. Both were paper-theme globals on a dusk shell.
+
+     Names arriving through a PROP are out of scope here on purpose:
+     `surfaceClassName="plr-spot"` is how the player re-tints the host's
+     spotlight, and the spotlight's own class names belong to styles.css. What
+     this pins is that no element the player's page renders ITSELF resolves
+     against the monolith. */
+  test('the markup carries no class from outside the scope either', () => {
+    const jsx = PLR_JSX
+      .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '')   // {/* … */} — prose names classes
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/[^\n]*/g, '');
+    /* Read the whole className expression, brace-balanced, then take every
+       string literal inside it. A regex that stops at the first quote gets the
+       ternaries wrong — `plr-q${folded ? ' plr-q--fold' : ''}` is one attribute
+       with three literals in it, and half a dozen of this page's classes are
+       written that way. */
+    const names = new Set();
+    for (let i = jsx.indexOf('className='); i >= 0; i = jsx.indexOf('className=', i + 1)) {
+      let j = i + 'className='.length;
+      let expression;
+      if (jsx[j] === '{') {
+        let depth = 0;
+        const start = j;
+        for (; j < jsx.length; j += 1) {
+          if (jsx[j] === '{') depth += 1;
+          else if (jsx[j] === '}') { depth -= 1; if (depth === 0) break; }
+        }
+        expression = jsx.slice(start, j + 1);
+      } else {
+        const quote = jsx[j];
+        expression = jsx.slice(j, jsx.indexOf(quote, j + 1) + 1);
+      }
+      for (const lit of stringLiterals(expression)) {
+        for (const name of lit.split(/\s+/)) if (name) names.add(name);
+      }
+    }
+    expect(names.size).toBeGreaterThan(20);          // the extractor still works
+    expect([...names].filter((n) => !/^plr(-|$)/.test(n))).toEqual([]);
   });
 
   test('styles.css declares nothing in this scope', () => {
@@ -478,6 +560,99 @@ describe('the shell is what makes "scroll to read, never to act" structural', ()
     expect(block(CSS, '.plr')).toMatch(/--plr-tap:\s*44px/);
     // The rank row is the tightest in the design and carries its 8px gap.
     expect(block(CSS, '.plr-ranks')).toMatch(/gap:\s*8px/);
+  });
+});
+
+/* ==========================================================================
+   7b. THE SPOTLIGHT, RE-TINTED RATHER THAN FORKED
+   ==========================================================================
+   `Show all ↓` opens `components/AnswerSpotlight.jsx` — the HOST's dialog,
+   shared with `PastRound`, painted from the styles.css monolith for the paper
+   theme. Mounted beside the shell it rendered a white card with
+   #F6A94C-on-#FFFFFF Previous/Next buttons over a dusk ballot.
+
+   Two halves, and both are needed. The premises below read styles.css, so an
+   override cannot quietly go vacuous when somebody fixes the global sheet; the
+   overrides read PlayerSurface.css, so the fix cannot quietly be reverted. */
+
+describe('the spotlight is dressed by this surface, not by the monolith', () => {
+  const SPOT = (() => {
+    const i = GLOBAL_CSS.indexOf('.answer-spotlight {');
+    if (i < 0) throw new Error('no .answer-spotlight in styles.css — renamed?');
+    return GLOBAL_CSS.slice(i, GLOBAL_CSS.indexOf('.cards .card.is-openable', i));
+  })();
+
+  test('the premises: styles.css really does hardcode paper into it', () => {
+    // If any of these three stops being true, the matching override below is
+    // dead weight and should go — but it must be REMOVED deliberately, not
+    // left sitting there asserting nothing.
+    expect(SPOT).toMatch(/border-top:\s*1px solid rgba\(0,\s*0,\s*0,\s*0?\.1\)/);
+    expect(SPOT).toMatch(/background:\s*rgba\(0,\s*0,\s*0,\s*0?\.07\)/);
+    // #F6A94C on #FFFFFF is 1.96:1 — the one pairing SKILL §1 rules out
+    // outright. This is what the nav buttons inherit.
+    const btn = GLOBAL_CSS.slice(GLOBAL_CSS.indexOf('.btn-secondary {'));
+    expect(btn.slice(0, btn.indexOf('}'))).toMatch(/background:\s*white/);
+    expect(ratio(parseHex(T.primary), [255, 255, 255])).toBeLessThan(AA);
+  });
+
+  test('every one of them is restated in a token this surface measures', () => {
+    for (const sel of [
+      '.plr-spot .answer-spotlight__meta',
+      '.plr-spot .answer-spotlight__close:hover',
+      '.plr-spot .answer-spotlight__nav .btn-secondary',
+    ]) {
+      expect(block(CSS, sel)).toMatch(/var\(--(plr-)?[a-z0-9-]+\)/);
+    }
+    expect(block(CSS, '.plr-spot .answer-spotlight__meta')).toMatch(/border-top:\s*1px solid var\(--plr-rule\)/);
+    const nav = block(CSS, '.plr-spot .answer-spotlight__nav .btn-secondary');
+    expect(nav).toMatch(/background:\s*transparent/);
+    expect(nav).toMatch(/color:\s*var\(--text\)/);
+    // A dead end says so. styles.css declares no disabled state at all, so
+    // Previous on the first response looked identical to a live control.
+    expect(block(CSS, '.plr-spot .answer-spotlight__nav .btn-secondary[disabled]'))
+      .toMatch(/color:\s*var\(--plr-muted\)/);
+  });
+
+  test('a bare opacity is replaced by a colour, because an opacity cannot be measured', () => {
+    // `opacity: .65` and `.7` were tuned against white; on --surface they
+    // composite to something no token table shows, which is precisely the
+    // failure SKILL §4 names. --plr-muted on a card is measured in §1 above.
+    expect(SPOT).toMatch(/opacity:\s*0?\.65/);
+    for (const sel of [
+      '.plr-spot .answer-spotlight__count',
+      '.plr-spot .answer-spotlight__tally small',
+    ]) {
+      expect(block(CSS, sel)).toMatch(/color:\s*var\(--plr-muted\)/);
+      expect(block(CSS, sel)).toMatch(/opacity:\s*1\b/);
+    }
+  });
+
+  test('the response is read at a rung of this ladder, not at a fourth one', () => {
+    // styles.css sizes it `clamp(1.15rem, 2.4vw, 1.75rem)` — a viewport-keyed
+    // ladder, on a surface RATIONALE §3.3 gives exactly three literal ones.
+    expect(SPOT).toMatch(/font-size:\s*clamp\(/);
+    expect(block(CSS, '.plr-spot .answer-spotlight__text'))
+      .toMatch(/font-size:\s*var\(--plr-t-secondary\)/);
+  });
+
+  /* THE ONE THING NO RENDERED TEST CAN CATCH. The dialog is
+     `position: fixed` and lives INSIDE `.plr`, which is `overflow: hidden`. A
+     fixed element is clipped by an ancestor's overflow only when that ancestor
+     is its containing block — which needs `transform`, `filter`, `perspective`,
+     `backdrop-filter`, `contain` or `will-change`. None of those exist on this
+     surface today. The day one is added for a "polish" pass, the spotlight
+     disappears on a device and every assertion in this repo still passes,
+     because jsdom computes no layout at all. */
+  test('no ancestor of the dialog may become its containing block', () => {
+    for (const sel of ['.plr', '.plr-stage', '.plr-dock']) {
+      const rule = block(CSS, sel);
+      expect(rule).not.toMatch(/(^|[\s;])transform:/);
+      expect(rule).not.toMatch(/(^|[\s;])filter:/);
+      expect(rule).not.toMatch(/(^|[\s;])backdrop-filter:/);
+      expect(rule).not.toMatch(/(^|[\s;])perspective:/);
+      expect(rule).not.toMatch(/(^|[\s;])contain:/);
+      expect(rule).not.toMatch(/(^|[\s;])will-change:/);
+    }
   });
 });
 

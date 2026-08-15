@@ -8,7 +8,7 @@ import { displayLabelFor, ownAnswerIndex } from './config/anonymity';
 import {
   participationUrl, participationFrom, nextParticipation,
 } from './utils/playerParticipation';
-import JoinNameCollision from './components/JoinNameCollision';
+import JoinNameCollision, { JoinNameCollisionActions } from './components/JoinNameCollision';
 import AnswerSpotlight from './components/AnswerSpotlight';
 import { getClientId, classifyJoinFailure } from './components/joinResult';
 import './components/PlayerSurface.css';
@@ -64,7 +64,7 @@ const LookUpCue = ({ children }) => (
  */
 const PlayerShell = ({
   phase, volume, ctx, category, who, online = true, banner,
-  centre = false, dock = null, children,
+  centre = false, dock = null, after = null, children,
 }) => (
   <div className="plr" data-theme="dark" data-phase={phase} data-volume={volume}>
     {banner}
@@ -86,6 +86,14 @@ const PlayerShell = ({
       {children}
     </main>
     {dock && <footer className="plr-dock">{dock}</footer>}
+    {/* OVERLAYS, INSIDE THE SCOPE RATHER THAN BESIDE IT.
+        A dialog rendered as a sibling of this shell is outside `.plr`, so it
+        inherits the data-theme="light" that public/index.html puts on <html>
+        and resolves none of the --plr-* tokens — which is how the spotlight
+        came to open a white card with 1.96:1 buttons over a dusk ballot. It is
+        NOT part of `children`: children land in `.plr-stage`, the scrolling
+        region, and a dialog does not belong inside the thing it covers. */}
+    {after}
   </div>
 );
 
@@ -1887,13 +1895,28 @@ function PlayerPage() {
   // them into the first Chris and said "Reconnected".
   if (!joined && joinCollision) {
     return (
-      <PlayerShell phase="join" volume="act" ctx="Join a session">
+      <PlayerShell
+        phase="join"
+        volume="act"
+        ctx="Join a session"
+        /* The refusal's two ways out belong in the dock, exactly as the rejoin
+           prompt's do twenty lines below. They rendered inside `.plr-stage`
+           until now, which is the one screen on this surface where a player is
+           already stuck being the one screen that asked them to scroll to get
+           unstuck. */
+        dock={(
+          <JoinNameCollisionActions
+            kind={joinCollision.kind}
+            playerName={joinCollision.playerName}
+            onRejoinAnyway={handleCollisionRejoin}
+            onUseAnotherName={handleCollisionRename}
+          />
+        )}
+      >
         <JoinNameCollision
           kind={joinCollision.kind}
           playerName={joinCollision.playerName}
           message={joinCollision.message}
-          onRejoinAnyway={handleCollisionRejoin}
-          onUseAnotherName={handleCollisionRename}
         />
       </PlayerShell>
     );
@@ -2300,7 +2323,17 @@ function PlayerPage() {
                     type="button"
                     role="radio"
                     aria-checked={isSelected}
-                    className={`plr-opt trivia-option${isSelected ? ' active' : ''}`}
+                    /* `trivia-option` and `active` are gone. They were the last
+                       two globals left on this surface and BOTH were already
+                       dead paint: styles.css:6839 records that `.trivia-option`
+                       lost its rules ("now using .category-item styling"), and
+                       the only surviving selectors need `.category-item`
+                       alongside it, which this element has never had. What
+                       actually paints a chosen option is
+                       `.plr-opt[aria-checked="true"]` — the same attribute a
+                       screen reader announces, so the visual state and the
+                       announced state cannot drift apart. */
+                    className="plr-opt"
                     onClick={() => setSelectedTriviaAnswer(optionLetter)}
                   >
                     <span className="plr-k">{optionLetter}</span>
@@ -2978,40 +3011,51 @@ function PlayerPage() {
   }
 
   return (
-    <>
-      <PlayerShell
-        phase={phase}
-        volume={volume}
-        ctx={ctx}
-        category={barCategory}
-        who={playerName}
-        online={wsConnected}
-        banner={offlineBanner}
-        centre={centre}
-        dock={dock}
-      >
-        {body}
-      </PlayerShell>
+    <PlayerShell
+      phase={phase}
+      volume={volume}
+      ctx={ctx}
+      category={barCategory}
+      who={playerName}
+      online={wsConnected}
+      banner={offlineBanner}
+      centre={centre}
+      dock={dock}
+      /* Reading one response in full.
 
-      {/* Reading one response in full.
+         MOUNTED ONCE, ONCE PER PAGE rather than once per view — `answers` is
+         page state and the same list is on screen during VOTE and during
+         RESULTS, so one mount serves both phases and there is one piece of
+         open/closed state rather than two that can disagree.
 
-          MOUNTED ONCE, OUTSIDE THE SHELL, rather than inside the voting view —
-          `answers` is page state and the same list is on screen during VOTE and
-          during RESULTS, so one mount serves both phases and there is one piece
-          of open/closed state rather than two that can disagree.
+         IT USED TO BE A SIBLING OF THE SHELL, which put it outside `.plr` and
+         therefore outside both the dusk theme and every --plr-* token: a white
+         card with #F6A94C-on-white Previous/Next buttons at 1.96:1, opening
+         over a dusk ballot. `after` renders it inside the scope and after the
+         dock, so `surfaceClassName` below has tokens to reach for.
 
-          `displayLabelFor`, not `stageLabelFor`: on a player's own device the
-          row decides. The server has already redacted what this player may not
-          see, and there is no projector here for a session setting to protect. */}
-      <AnswerSpotlight
-        answers={answers}
-        index={spotlightIndex}
-        onIndex={setSpotlightIndex}
-        onClose={() => setSpotlightIndex(null)}
-        labelFor={displayLabelFor}
-        title="Response"
-      />
-    </>
+         `surfaceClassName` RE-TINTS RATHER THAN FORKS. The dialog is the host's
+         and `PastRound` uses it too; §10 of PlayerSurface.css re-points the
+         handful of values styles.css hardcodes, the way `.qsets--onlight` does
+         for the other polarity, so neither of the other two callers moves.
+
+         `displayLabelFor`, not `stageLabelFor`: on a player's own device the
+         row decides. The server has already redacted what this player may not
+         see, and there is no projector here for a session setting to protect. */
+      after={(
+        <AnswerSpotlight
+          answers={answers}
+          index={spotlightIndex}
+          onIndex={setSpotlightIndex}
+          onClose={() => setSpotlightIndex(null)}
+          labelFor={displayLabelFor}
+          title="Response"
+          surfaceClassName="plr-spot"
+        />
+      )}
+    >
+      {body}
+    </PlayerShell>
   );
 }
 
