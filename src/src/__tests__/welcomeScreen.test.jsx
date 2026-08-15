@@ -196,6 +196,28 @@ describe('the one identity block in the product', () => {
     expect(screen.getByText('Administrator')).toBeInTheDocument();
   });
 
+  test('an admin gets a way into the console', () => {
+    // rejects: the one-directional link this screen shipped with. AdminShell
+    // has carried a "Host ↗" link since it was written and nothing on the host
+    // side pointed at /admin, so the only way in was to type the URL — on the
+    // screen that prints an "Administrator" badge at you.
+    //
+    // Asserted as a LINK with an href, not as a button: middle-click and
+    // "open in new tab" are the reason it is an anchor, and an onClick
+    // handler would pass this if it were a <button>.
+    setup();
+    const link = screen.getByRole('link', { name: /admin console/i });
+    expect(link.getAttribute('href')).toBe('/admin');
+  });
+
+  test('a host who is not an admin is not offered the console', () => {
+    // rejects: rendering it unconditionally. The route is admin-gated in
+    // App.jsx and again in the authorizer, so this would not be an escalation
+    // — it would be an invitation to an Access Denied screen.
+    setup({ currentUser: host });
+    expect(screen.queryByRole('link', { name: /admin console/i })).not.toBeInTheDocument();
+  });
+
   test('a host without the admins group is named and not badged', () => {
     // rejects: printing the badge unconditionally, which tells every host they
     // are an administrator.

@@ -333,6 +333,10 @@
   border: 2px solid transparent;
   background: transparent;
   color: var(--text);
+  /* An <a> wears this class too — the Admin console link in the account
+     corner. Colour is an author declaration and already beats the UA's
+     `a:link`, but the underline is not overridden unless it is named. */
+  text-decoration: none;
   /* At 375 the identity row wraps to its own line and "Sign out" broke across
      two, which then squeezed the name to "Dana Whitfi…". The label is two
      words; it never needs to wrap. */

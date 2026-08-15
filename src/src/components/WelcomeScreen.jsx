@@ -96,6 +96,26 @@ export default function WelcomeScreen({
             <div className="wel-who">
               <span className="wel-who-name">{currentUser.attributes?.name || 'Signed in'}</span>
               {isAdmin && <span className="wel-badge">Administrator</span>}
+              {/* THE LINK BACK, WHICH ONLY EXISTED IN ONE DIRECTION.
+                  AdminShell has carried a "Host ↗" link since it was written;
+                  nothing anywhere on the host side pointed at /admin, so the
+                  only way in was to type the URL — on the very screen that
+                  prints an "Administrator" badge at you.
+
+                  IN PLACE, not a new tab, and that is the opposite of the
+                  console's choice for a reason. Its Host link opens a tab
+                  because a second host page is a second host WebSocket, which
+                  evicts the projector. There is no session to evict here: this
+                  screen renders only when no game is open.
+
+                  A real <a href>, so middle-click and "open in new tab" work.
+                  App.jsx routes on pathname, so this is a page load either way
+                  and an onClick would only take that choice away. */}
+              {isAdmin && (
+                <a className="wel-btn wel-btn-quiet" href="/admin">
+                  Admin console
+                </a>
+              )}
               <button type="button" className="wel-btn wel-btn-quiet" onClick={() => onSignOut?.()}>
                 Sign out
               </button>
