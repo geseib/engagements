@@ -179,8 +179,22 @@ export default function HostQuestionSetsDialog({
             as your administrator left it.
           </p>
         </div>
-        <button type="button" className="qsets-btn qsets-btn--sm" onClick={() => onClose && onClose()}>
-          Close
+        {/*
+          THE SAME `×` IN THE SAME CORNER as the editor this dialog opens and as
+          QuestionsPanel's question dialog inside that. It replaced a text
+          "Close" button, which was the only surface in this three-deep stack
+          spelling the control differently — and the corner is where people look
+          first, so it is the one that has to be predictable.
+        */}
+        <button
+          type="button"
+          className="qs-dialog-close"
+          onClick={() => onClose && onClose()}
+          aria-label="Close your question sets"
+          title="Close your question sets"
+          data-testid="hqs-close"
+        >
+          ×
         </button>
       </header>
 
@@ -458,6 +472,22 @@ export default function HostQuestionSetsDialog({
           />
         )}
       </div>
+
+      {/*
+        THE WAY OUT AT THE BOTTOM TOO. `.qsets-modal` is `max-height: 86vh;
+        overflow: auto` and its header does not stick, so a host with a shelf of
+        sets and the New question set form open has scrolled the header — and
+        with it the only close control — off the top. Escape and the backdrop
+        both still work here (this scrim gates neither), but neither is
+        discoverable and neither exists on a tablet. `.qsets-modal footer`
+        already carries the layout; it was simply never used on this dialog.
+      */}
+      <footer>
+        <span className="qsets-grow" />
+        <button type="button" className="qsets-btn" onClick={() => onClose && onClose()}>
+          Close
+        </button>
+      </footer>
 
       {editingQuestions && (
         /*

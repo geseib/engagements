@@ -1,8 +1,13 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Modal from './Modal';
 import Icon from './Icon';
+import AnswerSpotlight from './AnswerSpotlight';
+import MarkdownRenderer from './MarkdownRenderer';
 import { step, canStep, positionLabel } from '../utils/stepIndex';
-import { hasSummary } from '../config/sessionHistory';
+import {
+  hasSummary, snippetOf, podiumAnswers, roundIsAttributed,
+} from '../config/sessionHistory';
+import { displayLabelFor } from '../config/anonymity';
 
 /**
  * ONE ROUND THAT ALREADY HAPPENED — the question, what the room said, and what
@@ -25,6 +30,34 @@ import { hasSummary } from '../config/sessionHistory';
  * THE QUESTION IS SHOWN, not just the results, because the owner asked for it
  * and because a results screen with no question on it is unreadable a quarter
  * of an hour later.
+ *
+ * ── WHO WROTE WHAT, AND WHY THIS DIALOG DOES NOT ASK THE CALLER ────────────
+ *
+ * Reported: *"the responses are just listed anonymous, and they should not."*
+ *
+ * This used to take a `labelFor` prop, and the host page passed it
+ * `stageLabelFor(…, { authorsHidden: authorsHiddenNow({ gameType,
+ * anonymousUntilReveal, authorsRevealed }) })` — the same expression the live
+ * RESULTS cards use. That is the right question for the round IN PLAY and the
+ * wrong one for a round that finished: `authorsRevealed` on the host page
+ * tracks the CURRENT round, so while round four sat in ASK, rounds one through
+ * three — long since closed, revealed, and delivered WITH their authors —
+ * were all relabelled "Response 1, 2, 3". A per-round fact answered with a
+ * whole-session flag.
+ *
+ * THE ROW IS THE ANSWER. `create-report.js` decides this per round, through the
+ * same `isHidden()` gate as `GET /answers`, and OMITS `playerName` from the
+ * rounds that are still hidden (create-report.js:332-354). Entering RESULTS
+ * sets `AuthorsRevealed` by itself (get-results.js:207), so every round that
+ * finished arrives attributed and only a round abandoned mid-vote does not.
+ * `displayLabelFor` is `config/anonymity.js`'s reader for exactly that case —
+ * *"decides from the row alone, which is right for a payload the server
+ * redacted"* — so this asks it and nothing else. Re-deriving the judgement at
+ * the call site is the mistake `config/sessionHistory.js`'s header names, and
+ * taking a prop for it here was that mistake wearing a parameter.
+ *
+ * It is display-only either way: nothing here can print a name the server did
+ * not send.
  */
 export default function PastRound({
   rounds = [],
@@ -35,11 +68,21 @@ export default function PastRound({
   onRegenerate,
   /** Round numbers currently regenerating, so the button can say so. */
   regenerating = [],
-  /** How to label an author. Passed in so anonymity is decided in one place. */
-  labelFor = (a) => a.playerName || 'Anonymous',
 }) {
   const total = rounds.length;
   const open = Number.isInteger(index) && index >= 0 && index < total;
+
+  /*
+    WHICH RESPONSE IS OPEN ON TOP OF THIS ONE. `null` is closed.
+
+    Held here rather than on the page because it is meaningless outside this
+    dialog, and cleared whenever the round changes: stepping from round 3 to
+    round 4 with response 5 open would otherwise show round 4's fifth response
+    with no indication anything had moved — or, on a shorter round, nothing at
+    all.
+  */
+  const [spotlight, setSpotlight] = useState(null);
+  useEffect(() => { setSpotlight(null); }, [index]);
 
   const move = useCallback((delta) => {
     const next = step(index, delta, total);
@@ -48,15 +91,20 @@ export default function PastRound({
 
   // Same clicker keys as the answer spotlight, for the same reason. Escape is
   // <Modal>'s and is deliberately not handled twice.
+  //
+  // SILENT WHILE A RESPONSE IS OPEN. Both dialogs bind Left/Right on the
+  // document, so without this one press would step the response AND the round
+  // underneath it — and the round change then closes the response, so the host
+  // sees the dialog vanish and the round jump from a single arrow press.
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open || spotlight !== null) return undefined;
     const onKey = (e) => {
       if (e.key === 'ArrowRight') { e.preventDefault(); move(1); }
       if (e.key === 'ArrowLeft') { e.preventDefault(); move(-1); }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, move]);
+  }, [open, spotlight, move]);
 
   if (!open) return null;
 
@@ -64,6 +112,7 @@ export default function PastRound({
   const busy = regenerating.includes(round.number);
   const summary = round.aiSummary || {};
   const showSummary = hasSummary(round);
+  const podium = podiumAnswers(round);
 
   return (
     <Modal
@@ -114,38 +163,142 @@ export default function PastRound({
                failed, which sends the host looking for a bug. */
             <p className="past-round__empty">Nobody responded to this round.</p>
           ) : (
+            /*
+              THE BRIEF BAR, AND A WAY INTO THE WHOLE THING.
+
+                "i do like the brief bar of the answers, but i think we need an
+                 easy way to review these in detail. so if each of the 3 has a
+                 number in a circle, the start of their answer, their name and
+                 you click that number the full modal shows there answer."
+
+              So the row keeps its shape — number, opening words, author — and
+              the number becomes the control. The top three carry the circle the
+              owner described (`is-podium`; it is a circle in the stylesheet,
+              which jsdom cannot see and does not test).
+
+              EVERY ROW IS CLICKABLE, not only the three. The circle marks the
+              three the owner singled out, but a row shows a SNIPPET now, so a
+              fourth-place response with no way to open it would be a response
+              nobody can read — a worse defect than the one being fixed. The
+              three are emphasised; none are stranded.
+
+              A BUTTON, NOT A CLICKABLE SPAN. It has to be reachable by Tab and
+              operable by Enter and Space, and the accessible name has to say
+              which response it opens and whose it is — the ordinal alone reads
+              as "1" to a screen reader, which names nothing.
+
+              THE NUMBER SHOWN IS THE PLACEMENT; THE THING OPENED IS THE ROW.
+              Those are two different numbers and ties are where they diverge:
+              create-report gives equal scores equal ranks (1, 1, 3), so two
+              circles both read "1". The handler therefore closes over the ROW'S
+              OWN POSITION `i` — never over the number printed on it — because
+              `round.answers[i]` is by construction the response this row is
+              drawn from. A lookup keyed on the badge would open the first of
+              two tied responses from either circle. The accessible name states
+              the position and the author for the same reason: those two are
+              unique per row where the placement is not. (The live grid in
+              GameHostPage has the same split — it prints `answer.placement` and
+              opens `answerPage.offset + i`.)
+            */
             <ol className="past-round__answers">
-              {round.answers.map((answer, i) => (
-                <li key={i} className={answer.rank === 1 ? 'is-lead' : ''}>
-                  <span className="past-round__rank">{answer.rank || '·'}</span>
-                  <span className="past-round__answer">{answer.answer}</span>
-                  <span className="past-round__who">{labelFor(answer, i)}</span>
-                </li>
-              ))}
+              {round.answers.map((answer, i) => {
+                const who = displayLabelFor(answer, i);
+                return (
+                  <li key={i} className={answer.rank === 1 ? 'is-lead' : ''}>
+                    <button
+                      type="button"
+                      className={`past-round__rank${i < podium.length ? ' is-podium' : ''}`}
+                      onClick={() => setSpotlight(i)}
+                      aria-label={`Read response ${i + 1} in full, by ${who}`}
+                    >
+                      {answer.rank || i + 1}
+                    </button>
+                    <span className="past-round__answer">{answer.answer}</span>
+                    <span className="past-round__who">{who}</span>
+                  </li>
+                );
+              })}
             </ol>
           )}
+
+          {/*
+            THE FULL RESPONSE, reusing the dialog the RESULTS stage already
+            uses rather than building a second one — same clamped pager
+            (`utils/stepIndex.js`), same X, same backdrop, same scroll contract.
+
+            `closeOnKey` is the owner's *"any key takes you back to the review
+            overview page for the question they were looking at"*. It comes
+            back to THIS round because this dialog never unmounted: the
+            spotlight renders inside it, <Modal> picks the innermost dialog by
+            DOM containment, and dismissing it leaves `index` untouched.
+
+            `showPoints` follows the names (§5.6.4 — a score beside a response
+            is attribution by arithmetic), and `roundIsAttributed` reads that
+            off the rows for the same reason the label does.
+          */}
+          <AnswerSpotlight
+            answers={round.answers}
+            index={spotlight}
+            onIndex={setSpotlight}
+            onClose={() => setSpotlight(null)}
+            labelFor={displayLabelFor}
+            showPoints={roundIsAttributed(round)}
+            closeOnKey
+            title={`Round ${round.ordinal} response`}
+          />
         </section>
 
-        {/* WHAT THE AI MADE OF IT. */}
+        {/*
+          WHAT THE AI MADE OF IT — AS MARKDOWN, WHICH IS WHAT IT IS.
+
+            "also the workie section in the rounds review modal isnt formatted
+             from md instead the md sysbols just show like ** ."
+
+          Every one of these fields is model output, and `personas.js`'s output
+          contract tells the model it may write markdown — so a `<p>{text}</p>`
+          prints the asterisks. `MarkdownRenderer` is the one renderer allowed
+          to draw it (it escapes the source before inserting any markup of its
+          own), and this is the third surface to reach for it after the stage's
+          Field Notes and the session report.
+
+          THE SAME TWO PATHS THE SESSION REPORT USES, deliberately, so the two
+          cannot disagree about one summary: `markdownResponse` when the model
+          wrote a whole document, and the structured fields when it did not.
+          The list items go through it too — they routinely arrive as
+          "**Lead phrase**: detail", which is the exact shape the owner saw the
+          asterisks on.
+        */}
         <section className="past-round__summary">
           <h4>AI summary</h4>
           {showSummary ? (
             <>
-              {summary.summaryText && <p>{summary.summaryText}</p>}
-              {Array.isArray(summary.discussionQuestions) && summary.discussionQuestions.length > 0 && (
+              {summary.markdownResponse ? (
+                <MarkdownRenderer content={summary.markdownResponse} className="past-round__md" />
+              ) : (
                 <>
-                  <h5>Discussion</h5>
-                  <ul>
-                    {summary.discussionQuestions.map((q, i) => <li key={i}>{q}</li>)}
-                  </ul>
-                </>
-              )}
-              {Array.isArray(summary.nextSteps) && summary.nextSteps.length > 0 && (
-                <>
-                  <h5>Next steps</h5>
-                  <ul>
-                    {summary.nextSteps.map((s, i) => <li key={i}>{s}</li>)}
-                  </ul>
+                  {summary.summaryText && (
+                    <MarkdownRenderer content={summary.summaryText} className="past-round__md" />
+                  )}
+                  {Array.isArray(summary.discussionQuestions) && summary.discussionQuestions.length > 0 && (
+                    <>
+                      <h5>Discussion</h5>
+                      <ul>
+                        {summary.discussionQuestions.map((q, i) => (
+                          <li key={i}><MarkdownRenderer content={q} className="past-round__md" /></li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                  {Array.isArray(summary.nextSteps) && summary.nextSteps.length > 0 && (
+                    <>
+                      <h5>Next steps</h5>
+                      <ul>
+                        {summary.nextSteps.map((s, i) => (
+                          <li key={i}><MarkdownRenderer content={s} className="past-round__md" /></li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
                 </>
               )}
               {summary.personaName && (

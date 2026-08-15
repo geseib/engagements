@@ -79,6 +79,33 @@ const calculatePlayerRankings = (players) => {
 const getPlayerInstructionText = (customInstruction, currentQuestion, gameType) =>
   resolveInstruction(currentQuestion, customInstruction, gameType);
 
+/**
+ * WHICH RANK CURRENTLY HOLDS THIS ANSWER — the one rule both ballots read.
+ *
+ * `votes` is a single object, `{ first, second, third }`, holding BALLOT INDICES
+ * AS STRINGS (the `<option value>` a select hands back). The quick ballot and
+ * the detailed ballot are that one object rendered twice, and this is the
+ * question each of them asks of it. It used to be asked twice, differently: the
+ * detailed view had a private `getVotePosition`, and the quick view re-derived
+ * it inline with `Object.values(votes).includes(...)` — which answers "is it
+ * ranked?" but not "where?", and so could not annotate anything or agree with
+ * the other view about it.
+ *
+ * `String(answerIndex)` because callers hold the index as a number (the map
+ * index) while `votes` holds it as a string. `0 === '0'` is false, and that
+ * mismatch would silently mean "answer 0 is never ranked anywhere".
+ *
+ * No "and the slot is not empty" guard, though an empty slot holds '' and every
+ * caller passes a real ballot index: `String(idx)` is never '', so such a guard
+ * can never change an answer. It was written, a mutation removing it survived
+ * the whole suite, and it was deleted rather than covered — an unreachable
+ * clause reads as a protection that is not there.
+ */
+const RANK_SLOTS = ['first', 'second', 'third'];
+
+export const rankHolding = (votes, answerIndex) =>
+  RANK_SLOTS.find((slot) => votes[slot] === String(answerIndex)) || null;
+
 // Which round the player is on. The payload spells this three different ways
 // depending on which endpoint answered (get-question sends lessonNumber +
 // questionNumber + id, get-game-state sends id, and the results-reconstruction
@@ -1342,17 +1369,44 @@ function PlayerPage() {
     // Clear user voting flag after a longer delay to prevent state resets
     setTimeout(() => setIsUserVoting(false), 3000);
 
+    /*
+      THE KICK-OUT, which is the whole of ranked voting: one answer holds at
+      most one rank, so picking it somewhere new vacates wherever it was.
+
+      `picked` is normalised to a string because the two ballots hand this in
+      differently — a select gives `e.target.value` (already a string), the
+      detailed cards give the map index (a number) — and `votes` is compared by
+      identity. An index arriving as a number would match nothing and leave a
+      duplicate behind.
+
+      TWO THINGS THIS DELIBERATELY DOES NOT SPECIAL-CASE, because a clause no
+      test can kill is a clause nobody can trust:
+
+        CLEARING. Picking "Pick player..." makes `picked` the empty string, so
+        the sweep matches only ranks that are ALREADY empty and writes '' over
+        ''. A guard around it would be unreachable.
+
+        THE RANK BEING SET. The sweep may blank `position` itself, and the
+        assignment on the next line puts the value straight back. `pos !==
+        position` here would likewise never change an outcome — it was written,
+        and a mutation removing it survived the whole suite, which is how it was
+        caught.
+
+      The equality test IS load-bearing: drop it and every pick wipes the ballot.
+    */
+    const picked = answerIndex === null || answerIndex === undefined
+      ? ''
+      : String(answerIndex);
+
     const newVotes = { ...votes };
-    
-    // Clear this answer from other positions if it's already selected
+
     Object.keys(newVotes).forEach(pos => {
-      if (newVotes[pos] === answerIndex && pos !== position) {
+      if (newVotes[pos] === picked) {
         newVotes[pos] = '';
       }
     });
-    
-    // Set the new vote - answerIndex comes as string from select onChange
-    newVotes[position] = answerIndex;
+
+    newVotes[position] = picked;
     setVotes(newVotes);
     
     // Save partial vote to server immediately after vote change
@@ -1577,19 +1631,14 @@ function PlayerPage() {
       setIsUserVoting(true);
       setTimeout(() => setIsUserVoting(false), 3000);
       
-      // If this position is already assigned to this answer, remove it
-      if (votes[position] === answerIndex.toString()) {
+      // Pressing the rank this answer already holds takes it off the ballot;
+      // pressing any other rank MOVES it there, and handleVoteChange vacates
+      // the old one. Same `rankHolding` the badge and the quick options read.
+      if (rankHolding(votes, answerIndex) === position) {
         onVoteChange(position, ''); // Remove vote
       } else {
-        onVoteChange(position, answerIndex.toString()); // Assign vote (will automatically clear from other positions)
+        onVoteChange(position, answerIndex); // Assign vote (clears it from wherever it was)
       }
-    };
-
-    const getVotePosition = (answerIndex) => {
-      if (votes.first === answerIndex.toString()) return 'first';
-      if (votes.second === answerIndex.toString()) return 'second';
-      if (votes.third === answerIndex.toString()) return 'third';
-      return null;
     };
 
     const ownIdx = ownAnswerIndex(answers, mySubmittedAnswer);
@@ -1598,7 +1647,11 @@ function PlayerPage() {
       <div className="detailed-voting">
         <div className="detailed-answers">
           {answers.map((answer, idx) => {
-            const currentPosition = getVotePosition(idx);
+            // The SAME rule the quick ballot's options read. This was a private
+            // `getVotePosition` here and an inline `Object.values(votes)
+            // .includes(...)` over there — two answers to one question, which is
+            // how the two ballots came to disagree about what a pick means.
+            const currentPosition = rankHolding(votes, idx);
             const isOwn = idx === ownIdx;
 
             return (
@@ -2182,9 +2235,36 @@ function PlayerPage() {
                         >
                           <option value="">Pick player...</option>
                           {answers.map((answer, idx) => {
-                            const isSelected = Object.values(votes).includes(idx.toString());
-                            const isCurrentSelection = votes[position] === idx.toString();
-                            const shouldDisable = isSelected && !isCurrentSelection;
+                            /*
+                              NOTHING IS DISABLED HERE, AND THAT IS THE FIX.
+
+                                "the quick view method does not allow for you to
+                                 switch votes ... i like how the detailed voted
+                                 kicks out the choice anywhere else when you pick
+                                 it, make that work for the quick vote."
+
+                              This option used to carry `disabled={isSelected &&
+                              !isCurrentSelection}` — an answer already ranked in
+                              another slot could not be picked here. The kick-out
+                              in `handleVoteChange` has always existed, but a
+                              browser will not let you choose a disabled option,
+                              so on the quick ballot it was unreachable code. To
+                              move an answer from 2nd to 1st the player had to
+                              find the 2nd select, empty it by hand, then come
+                              back — which is not "switching a vote", it is a
+                              puzzle. The detailed cards never had the guard,
+                              which is exactly why one path worked.
+
+                              THE LOST AFFORDANCE IS REPLACED, NOT DROPPED.
+                              `disabled` was also the only signal that an answer
+                              was spoken for, and a select gives us no styling to
+                              lean on, so the option says WHERE it currently
+                              sits. That text is the accessible name, so it is
+                              announced rather than merely seen — and it is the
+                              detailed view's `aria-pressed` said in words.
+                            */
+                            const heldRank = rankHolding(votes, idx);
+                            const isCurrentSelection = heldRank === position;
                             const isOwn = idx === ownAnswerIdx;
 
                             // Truncate long answers for dropdown display
@@ -2196,10 +2276,12 @@ function PlayerPage() {
                               <option
                                 key={idx}
                                 value={idx}
-                                disabled={shouldDisable}
                                 title={answer.answer} // Full answer on hover
                               >
                                 "{truncatedAnswer}" - {displayLabelFor(answer, idx)}{isOwn ? ' (Yours)' : ''}
+                                {heldRank && !isCurrentSelection
+                                  ? ` — currently ${rankLabel(VOTE_POSITIONS[heldRank])}`
+                                  : ''}
                               </option>
                             );
                           })}
