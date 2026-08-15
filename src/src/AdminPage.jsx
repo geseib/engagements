@@ -20,6 +20,9 @@ import QuestionSetDeleteDialog from './components/QuestionSetDeleteDialog';
 import QuestionSetUploadPanel from './components/QuestionSetUploadPanel';
 import AdminShell from './components/AdminShell';
 import { describeEnvironment } from './utils/adminEnvironment';
+import {
+  SECTION_PARAM, sectionFromSearch, searchForSection, searchMatchesSection,
+} from './config/adminSection';
 import { tagsToCsvCell } from './utils/tags';
 import { csvRow, buildCsv, optionsToCsvCell, allowMultipleToCsvCell } from './utils/csv';
 
@@ -96,6 +99,13 @@ const ADMIN_SECTION_BY_ID = Object.fromEntries(
   [...ADMIN_SECTIONS, ...ADMIN_FOOT_SECTIONS].map((section) => [section.id, section])
 );
 
+/* Derived from the section lists rather than written out again: a section added
+   above must become linkable by existing, not by somebody remembering a second
+   list. `sectionFromSearch` validates against this, so an id that is not here
+   falls back instead of rendering an empty work area. */
+const ADMIN_SECTION_IDS = Object.keys(ADMIN_SECTION_BY_ID);
+const DEFAULT_ADMIN_SECTION = 'questionsets';
+
 function AdminPage() {
   console.log('🔧 AdminPage component loading with AI builders...');
 
@@ -152,9 +162,21 @@ function AdminPage() {
   // Edit mode
   const [editMode, setEditMode] = useState(false);
   
-  // Which place is open. Question sets, not AI Prompts: RATIONALE.md §9 —
-  // every other screen in this console is downstream of a question set.
-  const [activeTab, setActiveTab] = useState('questionsets');
+  /*
+    Which place is open. Question sets, not AI Prompts: RATIONALE.md §9 — every
+    other screen in this console is downstream of a question set.
+
+    SEEDED FROM THE URL, not from the constant. `useState`'s argument is the
+    INITIAL value, so this reads the address bar once, on mount, and the state
+    owns it from then on — which is what makes a reload land where you were and
+    a pasted /admin?section=users open Users. `config/adminSection.js` carries
+    the argument for the parameter and for validating it.
+  */
+  const [activeTab, setActiveTab] = useState(() => sectionFromSearch(
+    typeof window !== 'undefined' ? window.location.search : '',
+    ADMIN_SECTION_IDS,
+    DEFAULT_ADMIN_SECTION,
+  ));
   // The set being edited. Every field of the editor itself now lives in
   // components/QuestionSetEditor.jsx — this page only decides which set is open
   // and shows the confirmation after the editor closes.
@@ -273,6 +295,12 @@ function AdminPage() {
   /**
    * Leaving for another section leaves the detail place too. A place you can
    * still be inside while looking at Users is not a place.
+   *
+   * AND IT IS WRITTEN TO THE ADDRESS BAR. `pushState`, so Back returns to the
+   * section you came from instead of leaving the console — see the header of
+   * config/adminSection.js for why this is a query parameter and not a path
+   * segment. pushState does not fire popstate, so the listener below cannot
+   * loop with this.
    */
   const handleNavigate = (sectionId) => {
     if (sectionId !== activeTab) {
@@ -280,7 +308,65 @@ function AdminPage() {
       setEditingSetId('');
     }
     setActiveTab(sectionId);
+    if (typeof window !== 'undefined' && window.history?.pushState) {
+      const search = searchForSection(window.location.search, sectionId, DEFAULT_ADMIN_SECTION);
+      window.history.pushState({ [SECTION_PARAM]: sectionId }, '', `${window.location.pathname}${search}`);
+    }
   };
+
+  /*
+    BACK AND FORWARD, and the one line that makes them real.
+
+    pushState alone changes the URL and nothing else: press Back and the address
+    bar returns to the previous section while the screen stays where it was —
+    which is worse than no history at all, because now the URL is lying. The
+    browser announces that move as `popstate` and nothing else; this is the only
+    place that hears it.
+
+    Read from `window.location`, not from `event.state`. A history entry created
+    before this code shipped, or by anything else on the page, has a null state,
+    and the URL is the thing that is always right.
+
+    The detail place closes on the way, for the same reason handleNavigate closes
+    it: being inside a set editor while the screen says Users is not a place.
+  */
+  useEffect(() => {
+    const onPop = () => {
+      const next = sectionFromSearch(
+        window.location.search, ADMIN_SECTION_IDS, DEFAULT_ADMIN_SECTION,
+      );
+      setActiveTab((current) => {
+        if (current !== next) {
+          setEditMode(false);
+          setEditingSetId('');
+        }
+        return next;
+      });
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  /*
+    CANONICALISE ON ARRIVAL, with replaceState so no history entry is spent.
+
+    Three URLs mean the landing section: /admin, /admin?section=questionsets, and
+    /admin?section=anything-unrecognised. The first is the one that gets written.
+    Without this, a bookmark of the second would make Back require two presses to
+    leave a screen it never visibly changed, and the third would leave the
+    address bar naming a section that is not on screen.
+  */
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.history?.replaceState) return;
+    if (searchMatchesSection(window.location.search, activeTab, DEFAULT_ADMIN_SECTION)) return;
+    const search = searchForSection(window.location.search, activeTab, DEFAULT_ADMIN_SECTION);
+    window.history.replaceState(
+      { [SECTION_PARAM]: activeTab }, '', `${window.location.pathname}${search}`,
+    );
+    // Mount only: after this, handleNavigate owns the URL. Re-running on
+    // activeTab would replace the entry pushState just created and delete the
+    // history this feature exists to build.
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCancelEdit = () => {
     setEditMode(false);
