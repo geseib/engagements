@@ -432,6 +432,12 @@ export default function HostQuestionSetsDialog({
             asking.
           */
           <QuestionSetUploadPanel
+            /* Unconditional here: this only renders when `creating` is true,
+               which only a press can make it. The dialog body is the scroller
+               (`.qsets-modal` is `overflow: auto`, `max-height: 86vh`), and a
+               host with several sets plus the house shelf above them has the
+               same off-screen form the console had. */
+            scrollIntoViewOnMount
             engagementType={newSetType}
             onEngagementTypeChange={setNewSetType}
             showAIBuilder={false}

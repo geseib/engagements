@@ -1012,6 +1012,11 @@ function AdminPage() {
             >
               {(isCreateOpen || questionSets.length === 0) && (
                 <QuestionSetUploadPanel
+                  /* Only when the person PRESSED something. The condition above
+                     also renders this panel on arrival when the library is
+                     empty, and scrolling then would move the page in response
+                     to nothing. */
+                  scrollIntoViewOnMount={isCreateOpen}
                   engagementType={engagementType}
                   onEngagementTypeChange={setEngagementType}
                   availablePrompts={availablePrompts}

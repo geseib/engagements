@@ -138,6 +138,17 @@ describe('Q6 — one engagement-type control', () => {
   });
 });
 
+describe('the console scrolls to the create form only when it was asked to', () => {
+  test('the flag is bound to the press, not to the render condition', () => {
+    // The panel is mounted by `isCreateOpen || questionSets.length === 0`, so
+    // `scrollIntoViewOnMount` and the mount condition are NOT the same
+    // predicate. rejects: passing it bare, which yanks the page on arrival for
+    // every admin whose library is empty — a scroll in response to nothing they
+    // did. The literal `={isCreateOpen}` is the whole assertion.
+    expect(page).toMatch(/scrollIntoViewOnMount=\{isCreateOpen\}/);
+  });
+});
+
 describe('Q5 — the hand-rolled CSV parse left this file', () => {
   test('the naive header split is gone', () => {
     // `lines[0].split(',').map(h => h.replace(/"/g, '').trim())` mis-parses any

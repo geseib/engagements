@@ -542,6 +542,44 @@ describe('create', () => {
     expect(screen.queryByLabelText(/AI context instructions/i)).toBeNull();
   });
 
+  /**
+   *   "you click new but the list is so long that it is not obvious that it
+   *    opened a section for new question set, could it scroll the page down to
+   *    that?"
+   *
+   * The form appends BELOW the list — the host's own sets, then the house shelf
+   * — inside a body that is `max-height: 86vh; overflow: auto`. With enough rows
+   * the new section lands off the bottom and nothing on screen moves, so the
+   * button reads as dead.
+   *
+   * NO GEOMETRIC ASSERTION IS POSSIBLE. jsdom has no layout engine and no
+   * `scrollIntoView` at all, so "did the page move?" cannot be asked; every
+   * offset is 0 and would pass unconditionally. What CAN be asserted is that
+   * the component asks — and that it asks the right element.
+   */
+  test('opening the form takes the host to it', async () => {
+    const scrollIntoView = jest.fn();
+    // jsdom does not implement it, so this is a definition rather than a spy.
+    // Restored by hand below: `jest.restoreAllMocks` does not remove it.
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      await openDialog();
+      fireEvent.click(screen.getByRole('button', { name: /new question set/i }));
+
+      // rejects: the panel mounting silently below the fold.
+      expect(scrollIntoView).toHaveBeenCalled();
+      const target = scrollIntoView.mock.instances[0];
+      expect(target.textContent).toBe('New question set');
+
+      // rejects: scrolling and leaving the caret on the button forty rows up.
+      // A keyboard or screen-reader host is told nothing by a scroll, and would
+      // tab through the entire list to reach a form that is already open.
+      expect(document.activeElement).toBe(target);
+    } finally {
+      delete Element.prototype.scrollIntoView;
+    }
+  });
+
   test('the template download stays, because it is how a host starts', async () => {
     // rejects: switching off the whole Create section along with the builders.
     // `GET /admin/download-template` is on the host route list precisely so this

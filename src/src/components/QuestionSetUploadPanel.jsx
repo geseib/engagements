@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Icon from './Icon';
 import PromptShapePreview from './PromptShapePreview';
 import { authFetch } from '../auth/authFetch';
@@ -91,6 +91,23 @@ export default function QuestionSetUploadPanel({
   /** Heading and lead-in, so the host's copy is not the console's copy. */
   heading = 'New question set',
   intro = null,
+  /**
+   * TAKE THE PERSON TO THE FORM THEY JUST ASKED FOR.
+   *
+   *   "you click new but the list is so long that it is not obvious that it
+   *    opened a section for new question set, could it scroll the page down to
+   *    that?"
+   *
+   * This panel renders BELOW the set list in both places it is mounted, and
+   * forty-one rows is taller than a screen — so pressing New appended a form
+   * off the bottom of the viewport and nothing moved. The button looked dead.
+   *
+   * Off by default, and passed explicitly by the two call sites, because the
+   * console ALSO renders this panel unconditionally when the library is empty
+   * (`isCreateOpen || questionSets.length === 0`). Scrolling on that path would
+   * yank the page on arrival in response to nothing the person did.
+   */
+  scrollIntoViewOnMount = false,
 }) {
   const [file, setFile] = useState(null);
   const [report, setReport] = useState(null);
@@ -102,6 +119,36 @@ export default function QuestionSetUploadPanel({
   const [showDefaultInstructions, setShowDefaultInstructions] = useState(false);
   const [status, setStatus] = useState(null); // { text, tone }
   const [isUploading, setIsUploading] = useState(false);
+
+  /*
+    SCROLL AND MOVE FOCUS, NOT ONE OR THE OTHER.
+
+    Scrolling answers "where did it go?" for somebody watching the screen. It
+    answers nothing for somebody on a keyboard or a screen reader, whose caret
+    is still on the New button forty rows up — they would tab through the whole
+    list to reach a form that is already open. Focus is what actually tells
+    those two the form arrived, and it makes the scroll redundant for them.
+
+    The heading, not the first input: an input steals the announcement and a
+    focused file picker is a strange place to be dropped. `tabIndex={-1}` makes
+    the h3 programmatically focusable without adding a tab stop.
+
+    `scrollIntoView` is GUARDED because jsdom does not implement it — unguarded,
+    every test that mounts this panel would throw rather than fail on an
+    assertion, which is a worse failure to read. `block: 'nearest'` so the host
+    dialog scrolls its own body the minimum distance instead of jumping the
+    panel to the top of a modal that is only 86vh tall.
+  */
+  const headingRef = useRef(null);
+  useEffect(() => {
+    if (!scrollIntoViewOnMount) return;
+    const node = headingRef.current;
+    if (!node) return;
+    if (typeof node.scrollIntoView === 'function') {
+      node.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    node.focus({ preventScroll: true });
+  }, [scrollIntoViewOnMount]);
 
   const playable = isPlayableGameType(engagementType);
   const promptChoices = selectableSummaryPrompts(availablePrompts, engagementType);
@@ -220,7 +267,7 @@ export default function QuestionSetUploadPanel({
 
   return (
     <div className="qsets qsets-panel">
-      <h3>{heading}</h3>
+      <h3 ref={headingRef} tabIndex={-1}>{heading}</h3>
       <p>
         {intro || (
           <>
