@@ -165,6 +165,30 @@ Resources:
       CodeUri: lambda-functions/archive/
       Handler: delete-archive.handler
       Policies:
+        # READ IS NOT OPTIONAL HERE, AND LEAVING IT OUT BROKE DELETE IN PRODUCTION.
+        #
+        # `delete-archive.js` does a GetItem BEFORE the delete, to read `S3Key`
+        # off the row so it can remove the object as well as the record. Without
+        # read, every call fails at that first line with
+        #
+        #     AccessDeniedException: ... not authorized to perform:
+        #     dynamodb:GetItem on resource: .../engage2-archive
+        #
+        # and the handler's catch answers a flat 500 "Failed to delete archive
+        # item" that names neither the action nor the table.
+        #
+        # HOW THIS GOT LOST. This template was reconstructed into the repo on
+        # 2026-07-02, a year after the stack was created, and the reconstruction
+        # dropped this one policy. The live stack still had it — deletes worked —
+        # until the template was applied on 2026-08-15, which silently removed a
+        # permission from a running service. Nothing failed at deploy time; the
+        # first symptom was a 500 an hour later.
+        #
+        # The lesson for the next person comparing this file to a live stack:
+        # matching RESOURCE NAMES and runtimes is not a safety check. Diff the
+        # Policies too. That omission is precisely how this shipped.
+        - DynamoDBReadPolicy:
+            TableName: !Ref ArchiveTable
         - DynamoDBWritePolicy:
             TableName: !Ref ArchiveTable
         - S3CrudPolicy:
