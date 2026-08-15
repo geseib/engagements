@@ -523,5 +523,62 @@ check('the catalogue requires nothing, so the copies stay portable', () => {
     'a require() here would resolve to a different path in each of the three bundles');
 });
 
+// === 8. The PROSE must not promise what the engine does not emit ==========
+/*
+  THE DEFECT THIS EXISTS FOR, and it shipped.
+
+  `topVotedAnswers` was described as "Top 3 most-voted responses with their vote
+  detail", with the example "Alice's response (13 points)". Both were false for
+  every game type except trivia: get-ai-summary.js branches, and the non-trivia
+  arm emits `${playerName}: ${score} vote points` — a name and a number, no
+  response text at all. Under anonymity the name degrades too.
+
+  It survived the whole game-type audit because that pass checked `gameTypes`
+  against the engine and took the DESCRIPTION on trust. That asymmetry is the
+  point: a wrong tag renders empty and somebody notices, while wrong prose sends
+  an author to the wrong variable and the prompt still produces confident output
+  about nothing. A handoff doc recommended it for exactly the round it cannot
+  serve.
+
+  So this reads the engine, not the catalogue's opinion of the engine.
+*/
+check('topVotedAnswers does not claim to carry response text it never emits', () => {
+  const engine = fs.readFileSync(
+    path.join(REPO, 'lambda-functions', 'game', 'get-ai-summary.js'), 'utf8');
+
+  // The non-trivia arm of topAnswers_formatted, which becomes topVotedAnswers.
+  const at = engine.indexOf('const topAnswers_formatted');
+  assert(at > -1, 'topAnswers_formatted has moved; re-point this assertion');
+  const branch = engine.slice(at, at + 400);
+  /*
+    THE NON-TRIVIA ARM IS THE SECOND `topAnswers.map(`, NOT "everything after
+    the first colon". My first version sliced on `indexOf(':')`, which lands
+    inside the template literal `${a.playerName}: ${a.answer}` in the TRIVIA
+    arm — so it read the trivia branch, found `a.answer`, and reported that the
+    engine had started carrying response text. A test that cannot tell the two
+    arms apart is worse than none here, because its failure message tells you
+    to delete the assertion.
+  */
+  const firstMap = branch.indexOf('topAnswers.map(');
+  const secondMap = branch.indexOf('topAnswers.map(', firstMap + 1);
+  assert(secondMap > -1, 'topAnswers_formatted is no longer a two-arm ternary; re-point this');
+  const nonTrivia = branch.slice(secondMap);
+
+  const carriesText = /a\.answer\b|answerText/.test(nonTrivia);
+  const entry = TEMPLATE_VARIABLES.find((v) => v.name === 'topVotedAnswers');
+  assert(entry, 'topVotedAnswers is gone from the catalogue');
+
+  if (!carriesText) {
+    // rejects: restoring prose that implies the responses themselves are here.
+    const says = `${entry.description} ${entry.example || ''}`;
+    assert(/no response text|name and points/i.test(says),
+      'the engine emits no response text on the non-trivia path, so the description '
+      + 'must say so plainly. Use {responsesText} for the text of every response.');
+  } else {
+    assert.fail('the engine now DOES carry answer text on the non-trivia path — '
+      + 'update the catalogue description and delete this branch.');
+  }
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
