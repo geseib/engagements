@@ -11499,7 +11499,7 @@ body {
   display: grid;
   grid-template-columns: 28px 1fr auto;
   gap: 10px;
-  align-items: baseline;
+  align-items: center;
   padding: 8px 10px;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.04);
@@ -11509,9 +11509,55 @@ body {
   background: rgba(74, 124, 247, 0.12);
 }
 
+/* THE NUMBER IN A CIRCLE, and the control that opens the whole response.
+   "so if each of the 3 has a number in a circle, the start of their answer,
+   their name and you click that number the full modal shows there answer."
+   A <button> so it is reachable by Tab and operable by Enter/Space; the round
+   shape and the emphasis on the top three are the only parts that are purely
+   visual, and jsdom can assert neither, so the behaviour is what the tests
+   pin. */
 .past-round__rank {
   font-weight: 700;
   opacity: 0.7;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.past-round__rank:hover,
+.past-round__rank:focus-visible {
+  opacity: 1;
+  border-color: var(--primary, #4a7cf7);
+}
+
+/* The three the owner asked to be able to open. Filled rather than outlined,
+   so the podium reads at a glance from the same circle. */
+.past-round__rank.is-podium {
+  opacity: 1;
+  border-color: transparent;
+  background: var(--primary, #4a7cf7);
+  color: #fff;
+}
+
+/* The AI summary is markdown now, and its blocks must not inherit the
+   paragraph margins of the surrounding dialog. */
+.past-round__md > :first-child {
+  margin-top: 0;
+}
+
+.past-round__md > :last-child {
+  margin-bottom: 0;
 }
 
 .past-round__answer {

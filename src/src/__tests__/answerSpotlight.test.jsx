@@ -14,7 +14,7 @@
  */
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import AnswerSpotlight from '../components/AnswerSpotlight';
+import AnswerSpotlight, { dismissesOnKey } from '../components/AnswerSpotlight';
 import { openAt, step, canStep, positionLabel, pageOf } from '../utils/answerSpotlight';
 
 describe('stepping through answers the screen cannot hold', () => {
@@ -189,6 +189,104 @@ describe('the dialog itself', () => {
 
     mount({ showPoints: true });
     expect(screen.getByText('+1')).toBeInTheDocument();
+  });
+
+  /*
+    "any key takes you back to the review overview page for the question they
+     were looking at."
+
+    Asked for by the owner about the PAST-ROUND review, and it is opt-in here
+    for that reason. On the live RESULTS stage the host is running the room
+    from this dialog with a clicker in their hand; a stray keypress closing it
+    mid-sentence would be a new defect shipped alongside a fix.
+  */
+  // rejects: turning any-key dismissal on for every caller. The stage spotlight
+  //          must survive a keypress.
+  test('a keypress does not close it unless the caller asked', () => {
+    const { onClose } = mount();
+    fireEvent.keyDown(document, { key: 'k' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  // rejects: wiring the prop and never reading it.
+  test('with closeOnKey, a keypress closes it', () => {
+    const { onClose } = mount({ closeOnKey: true });
+    fireEvent.keyDown(document, { key: 'k' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // rejects: any-key dismissal eating the pager. Left and Right are this
+  //          dialog's own controls and already mean something.
+  test('with closeOnKey, the arrows still step rather than close', () => {
+    const { onClose, onIndex } = mount({ closeOnKey: true });
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+    expect(onIndex).toHaveBeenCalledWith(2);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+/*
+ * WHICH KEYS ACTUALLY MEAN "I AM DONE READING".
+ *
+ * A literal any-key handler swallows Tab, every screen-reader chord and every
+ * scrolling key — in a dialog that exists precisely because its contents are
+ * too long to read in place. The exclusions are the feature; they are unit
+ * tested here so the reasoning is pinned somewhere smaller than a mounted
+ * dialog.
+ */
+describe('the keys that dismiss, and the ones that must not', () => {
+  // rejects: narrowing the rule to a hand-picked list, which would leave the
+  //          owner's "any key" not working for most keys.
+  test('ordinary keys dismiss', () => {
+    for (const key of ['k', 'K', '7', 'Enter', 'Backspace', '.', 'F5']) {
+      expect(dismissesOnKey({ key })).toBe(true);
+    }
+  });
+
+  // rejects: breaking the focus trap. Tab is how a keyboard user reaches the
+  //          X and the pager, and <Modal> traps it deliberately.
+  test('Tab is left to the focus trap', () => {
+    expect(dismissesOnKey({ key: 'Tab' })).toBe(false);
+    expect(dismissesOnKey({ key: 'Tab', shiftKey: true })).toBe(false);
+  });
+
+  // rejects: closing twice. <Modal> owns Escape; a second handler for one key
+  //          is how a dialog closes the thing behind it as well.
+  test('Escape is left to the modal', () => {
+    expect(dismissesOnKey({ key: 'Escape' })).toBe(false);
+  });
+
+  // rejects: dismissing on the first half of a chord. Screen readers hold
+  //          modifiers down, and a bare Shift press is never an instruction.
+  test('bare modifiers and chords do not dismiss', () => {
+    for (const key of ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Dead']) {
+      expect(dismissesOnKey({ key })).toBe(false);
+    }
+    expect(dismissesOnKey({ key: 'c', ctrlKey: true })).toBe(false);
+    expect(dismissesOnKey({ key: 'c', metaKey: true })).toBe(false);
+    expect(dismissesOnKey({ key: 'f', altKey: true })).toBe(false);
+  });
+
+  // rejects: making a long answer unreadable without a mouse. These keys are
+  //          how the scroll container this dialog is built around is scrolled.
+  test('the reading keys do not dismiss', () => {
+    for (const key of ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']) {
+      expect(dismissesOnKey({ key })).toBe(false);
+    }
+  });
+
+  // rejects: a rule that becomes a trap the day someone adds an input to this
+  //          dialog — typing "n" would dismiss what was being annotated.
+  test('typing into a field dismisses nothing', () => {
+    expect(dismissesOnKey({ key: 'n', target: { tagName: 'INPUT' } })).toBe(false);
+    expect(dismissesOnKey({ key: 'n', target: { tagName: 'TEXTAREA' } })).toBe(false);
+    expect(dismissesOnKey({ key: 'n', target: { isContentEditable: true } })).toBe(false);
+    expect(dismissesOnKey({ key: 'n', target: { tagName: 'DIV' } })).toBe(true);
+  });
+
+  test('a malformed event dismisses nothing', () => {
+    expect(dismissesOnKey(null)).toBe(false);
+    expect(dismissesOnKey({})).toBe(false);
   });
 });
 

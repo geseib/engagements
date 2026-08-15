@@ -4072,9 +4072,23 @@ Ready to engage? See you there!`;
   // watch the affordance blink out while looking at a working button. The
   // hazard that IS real is narrower: SPACE landing on a focused button inside
   // the panel. HostActionBar handles that by event target, not by geometry.
+  /*
+    `spotlightOpen` / `pastRoundOpen` — see the argument in utils/hostOverlays.js.
+
+    Both dialogs step between answers with ArrowLeft/ArrowRight on `document`
+    and neither stops propagation, so without these two terms the SAME
+    keystroke also reached HostActionBar's window listener and advanced the
+    live round out from under the host who was reading an answer aloud.
+
+    Derived from the index state rather than a separate boolean, so the flag
+    cannot drift from what is actually mounted: both dialogs render on
+    `index !== null` and nothing else.
+  */
   const anyOverlayOpen = shortcutsSuppressed({
     showConfirmModal, showExpandedQR,
     showReportsModal, lessonExpanded, isLoadingData, qrMode,
+    spotlightOpen: spotlightIndex !== null,
+    pastRoundOpen: pastRoundIndex !== null,
   });
 
   const runHostAction = (action) => {
@@ -5267,11 +5281,22 @@ Ready to engage? See you there!`;
         onClose={() => setPastRoundIndex(null)}
         onRegenerate={regenerateRoundSummary}
         regenerating={regeneratingRounds}
-        labelFor={(answer, idx) => stageLabelFor(answer, idx, {
-          authorsHidden: authorsHiddenNow({
-            gameType: currentGameType, anonymousUntilReveal, authorsRevealed,
-          }),
-        })}
+        /*
+          NO `labelFor`. This prop is what hid the names in the rounds review,
+          and removing it is the fix rather than correcting the expression.
+
+          It answered a PER-ROUND question with a whole-session flag:
+          `authorsRevealed` tracks the round currently in play, so while round
+          four sat in ASK, rounds one to three were relabelled "Response 1, 2,
+          3" — with their authors sitting unread in the payload the whole time.
+
+          `POST /report` has already made this decision per round, through the
+          same gate `GET /answers` uses, and encodes it by OMITTING playerName.
+          PastRound now reads that with `displayLabelFor`, which decides from
+          the row alone. Passing a second opinion in from here was the "two
+          implementations of one anonymity rule" that config/sessionHistory.js
+          warns about in its header.
+        */
       />
 
     </div>

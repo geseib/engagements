@@ -19,6 +19,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import PastRound from '../components/PastRound';
 import {
   roundsFrom, roundSubtitle, hasSummary, indexOfRound,
+  answersFrom, snippetOf, podiumAnswers, roundIsAttributed,
 } from '../config/sessionHistory';
 
 /**
@@ -50,6 +51,36 @@ const q = (number, extra = {}) => ({
   answers: extra.answers || [],
   voteStats: extra.voteStats || null,
   aiSummary: extra.aiSummary ?? null,
+});
+
+/**
+ * ONE RANKED ANSWER ROW, IN THE SHAPE create-report.js ACTUALLY BUILDS ONE.
+ *
+ * THE SECOND HALF OF THE SAME MISTAKE THE ENVELOPE COMMENT ABOVE DESCRIBES.
+ * The answer rows in this file used to be written `{ answer, playerName, rank }`
+ * — invented from `PastRound`'s JSX, not copied from the handler. create-report
+ * emits `answerText`, `totalScore` and the three placement tallies
+ * (create-report.js:384-415); nothing on that route has ever written `answer`.
+ * So `PastRound` rendered `answer.answer` for every past round, printed
+ * nothing, and the suite stayed green: *"the actual answers are not there"*.
+ *
+ * `playerName` is OMITTED, never nulled, on a round whose authors are still
+ * hidden — create-report.js:344-354 spells that rule out — so `hidden()` below
+ * omits the key rather than passing undefined.
+ */
+const answerRow = ({
+  text, name, rank = 1, score = 3, first = 1, second = 0, third = 0, index = 0,
+}) => ({
+  answerIndex: index,
+  ...(name === undefined ? {} : { playerName: name }),
+  answerText: text,
+  totalScore: score,
+  firstPlace: first,
+  secondPlace: second,
+  thirdPlace: third,
+  voteBreakdown: `${first} first, ${second} second, ${third} third`,
+  rank,
+  rankDisplay: rank === 1 ? '🥇 1st Place' : `${rank}th Place`,
 });
 
 describe('turning a report into a list of rounds', () => {
@@ -157,11 +188,117 @@ describe('turning a report into a list of rounds', () => {
   });
 });
 
+/*
+ * THE ANSWER ROWS, WHICH THE ROUNDS TAB HAS NEVER ONCE RENDERED.
+ *
+ * `POST /report` speaks a different dialect from `GET /answers`, and every
+ * dialog in this product was written against the second one.
+ */
+describe('the answers a round came back with', () => {
+  // rejects: THE REPORTED DEFECT — "the actual answers are not there".
+  //          create-report writes the text as `answerText`; the dialogs read
+  //          `answer`. Nothing on that route has ever written `answer`.
+  test('the report’s answerText becomes the answer the dialogs read', () => {
+    const [row] = answersFrom({ answers: [answerRow({ text: 'We should ship it', name: 'Ada' })] });
+    expect(row.answer).toBe('We should ship it');
+    expect(row.playerName).toBe('Ada');
+  });
+
+  // rejects: hard-coding the report's spelling and breaking the live payload,
+  //          whose rows carry `answer` instead. One normaliser, both routes.
+  test('a live `answer` row still normalises', () => {
+    const [row] = answersFrom({ answers: [{ answer: 'From /answers', playerName: 'Grace', points: 2, votes: 1 }] });
+    expect(row.answer).toBe('From /answers');
+    expect(row.points).toBe(2);
+    expect(row.votes).toBe(1);
+  });
+
+  // rejects: nulling or defaulting the author of a round the server redacted.
+  //          The omit-don't-null rule is what lets config/anonymity.js answer
+  //          the label question from the row; a `playerName: null` would make
+  //          every redacted row indistinguishable from a bug.
+  test('a redacted row keeps no author key at all', () => {
+    const [row] = answersFrom({ answers: [answerRow({ text: 'Unattributed' })] });
+    expect(row).not.toHaveProperty('playerName');
+    expect(row.answer).toBe('Unattributed');
+  });
+
+  // rejects: losing the placement tallies. The spotlight prints "+3" and "2
+  //          votes", and the report keeps those apart as totalScore and three
+  //          placement counts.
+  test('the score and the vote count survive the shape change', () => {
+    const [row] = answersFrom({
+      answers: [answerRow({ text: 'x', name: 'Ada', score: 5, first: 1, second: 1, third: 2 })],
+    });
+    expect(row.points).toBe(5);
+    expect(row.votes).toBe(4);
+  });
+
+  test('a round with no answers is an empty list, not a throw', () => {
+    expect(answersFrom(null)).toEqual([]);
+    expect(answersFrom({})).toEqual([]);
+  });
+
+  // rejects: an ellipsis on an answer that already fits, which makes a
+  //          complete response read as a truncated one.
+  test('a short answer is not truncated', () => {
+    expect(snippetOf('Short and complete.')).toBe('Short and complete.');
+  });
+
+  // rejects: cutting mid-word, which reads as a corrupted value rather than as
+  //          an opening.
+  test('a long answer is cut at a word boundary and marked', () => {
+    // The 30th character lands INSIDE "boundaries", which is the whole point:
+    // a fixture whose hard cut happens to fall on a space cannot tell a
+    // word-boundary cut from a blind one, and the first version of this test
+    // was exactly that fixture.
+    const long = 'we should test the word boundaries properly and then stop';
+    expect(long[30]).not.toBe(' ');
+    const cut = snippetOf(long, 30);
+    expect(cut).toBe('we should test the word…');
+    expect(cut.endsWith('…')).toBe(true);
+  });
+
+  // rejects: returning the whole wall of text when there is no space to cut
+  //          at — a pasted URL or a 200-character unbroken string.
+  test('an unbroken string is still cut', () => {
+    const cut = snippetOf('x'.repeat(200), 30);
+    expect(cut.length).toBe(31);
+  });
+
+  // rejects: offering more than the three the owner asked for, or re-sorting
+  //          rows create-report already ranked.
+  test('the podium is the first three, in the order they arrived', () => {
+    const answers = ['a', 'b', 'c', 'd'].map((t, i) => answerRow({ text: t, name: t, rank: i + 1, index: i }));
+    const round = { answers: answersFrom({ answers }) };
+    expect(podiumAnswers(round).map((r) => r.answer)).toEqual(['a', 'b', 'c']);
+    expect(podiumAnswers({ answers: [] })).toEqual([]);
+  });
+
+  // rejects: printing a score beside a response on a round whose authors are
+  //          still hidden (§5.6.4 — the scores go wherever the names go), and
+  //          claiming a round with no responses is attributed.
+  test('a round is attributed only when every row carries its author', () => {
+    expect(roundIsAttributed({ answers: answersFrom({ answers: [answerRow({ text: 'x', name: 'Ada' })] }) })).toBe(true);
+    expect(roundIsAttributed({ answers: answersFrom({ answers: [answerRow({ text: 'x' })] }) })).toBe(false);
+    expect(roundIsAttributed({ answers: [] })).toBe(false);
+    // EVERY row, not some. One row without an author is a round that cannot
+    // carry scores — and a single-row fixture cannot tell the two apart, which
+    // is how the first version of this assertion survived being mutated.
+    expect(roundIsAttributed({
+      answers: answersFrom({ answers: [answerRow({ text: 'x', name: 'Ada' }), answerRow({ text: 'y' })] }),
+    })).toBe(false);
+  });
+});
+
 describe('reopening one round', () => {
   const rounds = roundsFrom(report([
     q('1', {
       questionData: { title: 'First question', detail: 'Some context' },
-      answers: [{ answer: 'A good answer', playerName: 'Ada', rank: 1 }],
+      answers: [
+        answerRow({ text: 'A good answer', name: 'Ada', rank: 1, score: 3, index: 0 }),
+        answerRow({ text: 'A second answer', name: 'Grace', rank: 2, score: 1, first: 0, second: 1, index: 1 }),
+      ],
       aiSummary: { summaryText: 'The room agreed.', discussionQuestions: ['And then?'] },
     }),
     q('2', { questionData: { title: 'Second question' }, answers: [] }),
@@ -267,13 +404,330 @@ describe('reopening one round', () => {
     expect(onRegenerate).not.toHaveBeenCalled();
   });
 
-  // rejects: the dialog deciding anonymity for itself. Three sites re-deriving
-  //          that predicate is what hid the names and the podium for a whole
-  //          session; this one takes the caller's answer.
-  test('the author label is the caller’s to decide', () => {
-    mount({ labelFor: () => 'Response 1' });
+  /*
+    WHO WROTE WHAT.
+
+    THE PREDICATE MOVED, AND THAT IS THE FIX. This dialog used to take a
+    `labelFor` prop, and the host page passed it the CURRENT round's
+    `authorsHiddenNow(...)`. Every past round was therefore relabelled by
+    whether the round in play had been revealed — so during round four's ASK,
+    rounds one to three showed "Response 1, 2, 3" with their authors sitting
+    unread in the payload. The owner reported it as "the responses are just
+    listed anonymous, and they should not".
+
+    create-report.js decides this PER ROUND, through the same isHidden() gate
+    as GET /answers, and omits `playerName` from the rounds that are still
+    hidden. So the row is the decision, and `displayLabelFor` — anonymity.js's
+    reader for a payload the server redacted — is the only thing asked.
+  */
+  // rejects: THE REPORTED DEFECT. A round that came back attributed must print
+  //          its authors, whatever the round in play is doing.
+  test('a round that came back with its authors shows them', () => {
+    mount();
+    expect(screen.getByText('Ada')).toBeInTheDocument();
+    expect(screen.getByText('Grace')).toBeInTheDocument();
+  });
+
+  // rejects: "fixing" the above by printing names the server did not send.
+  //          A round abandoned mid-vote arrives redacted and must stay so.
+  test('a round the server redacted stays redacted', () => {
+    const hiddenRounds = roundsFrom(report([q('1', {
+      answers: [answerRow({ text: 'Unattributed answer', rank: 1 })],
+    })]));
+    render(
+      <PastRound rounds={hiddenRounds} index={0} onIndex={jest.fn()} onClose={jest.fn()} onRegenerate={jest.fn()} />,
+    );
     expect(screen.getByText('Response 1')).toBeInTheDocument();
-    expect(screen.queryByText('Ada')).not.toBeInTheDocument();
+    expect(screen.queryByText(/anonymous/i)).not.toBeInTheDocument();
+  });
+});
+
+/*
+ * READING ONE RESPONSE PROPERLY, FROM A ROUND THAT ALREADY HAPPENED.
+ *
+ *   "i do like the brief bar of the answers, but i think we need an easy way to
+ *    review these in detail. so if each of the 3 has a number in a circle, the
+ *    start of their answer, their name and you click that number the full modal
+ *    shows there answer. any key takes you back to the review overview page for
+ *    the question they were looking at."
+ *
+ * jsdom has no layout engine, so "a number in a circle" cannot be tested as
+ * geometry — the circle is a stylesheet fact. What CAN be tested is everything
+ * the sentence actually promises: the number is a control, it names whose
+ * response it opens, pressing it shows the full text, and a keypress comes back
+ * to the same round.
+ */
+describe('opening one response in full', () => {
+  const long = `${'A deliberately long response that will not fit in the row. '.repeat(4)}Final clause.`;
+  const rounds = roundsFrom(report([
+    q('1', {
+      questionData: { title: 'First question' },
+      answers: [
+        answerRow({ text: long, name: 'Ada', rank: 1, score: 3, index: 0 }),
+        answerRow({ text: 'Second', name: 'Grace', rank: 2, score: 2, first: 0, second: 1, index: 1 }),
+        answerRow({ text: 'Third', name: 'Katherine', rank: 3, score: 1, first: 0, third: 1, index: 2 }),
+        answerRow({ text: 'Fourth', name: 'Hedy', rank: 4, score: 0, first: 0, index: 3 }),
+      ],
+    }),
+    // ROUND TWO HAS RESPONSES OF ITS OWN, and that is load-bearing: with an
+    // empty round two, a spotlight left open across the step closes itself
+    // because there is nothing at that index — so the test passed with the
+    // reset deleted. It has to be able to show the WRONG response to prove the
+    // reset is what closes it.
+    q('2', {
+      questionData: { title: 'Second question' },
+      answers: [
+        answerRow({ text: 'A response from the NEXT round', name: 'Lise', rank: 1, index: 0 }),
+        answerRow({ text: 'Another from the next round', name: 'Chien', rank: 2, index: 1 }),
+      ],
+    }),
+  ]));
+
+  function mount(props = {}) {
+    const onIndex = jest.fn();
+    const onClose = jest.fn();
+    const utils = render(
+      <PastRound
+        rounds={rounds}
+        index={0}
+        onIndex={onIndex}
+        onClose={onClose}
+        onRegenerate={jest.fn()}
+        {...props}
+      />,
+    );
+    return { ...utils, onIndex, onClose };
+  }
+
+  const openers = () => screen.getAllByRole('button', { name: /read response .* in full/i });
+
+  // rejects: rendering the number as inert text. "you click that number" — so
+  //          it has to BE a control, reachable by Tab and operable by Enter.
+  test('each response’s number is a control that names what it opens', () => {
+    mount();
+    const names = openers().map((b) => b.getAttribute('aria-label'));
+    expect(names).toEqual([
+      'Read response 1 in full, by Ada',
+      'Read response 2 in full, by Grace',
+      'Read response 3 in full, by Katherine',
+      'Read response 4 in full, by Hedy',
+    ]);
+  });
+
+  // rejects: the row printing the whole response, which is the "brief bar" the
+  //          owner said they liked; and printing NOTHING, which is the defect
+  //          being fixed. It shows the start, and the start only.
+  test('the row shows the start of the answer, not all of it', () => {
+    const { container } = mount();
+    const bar = container.querySelector('.past-round__answer').textContent;
+    expect(bar.startsWith('A deliberately long response')).toBe(true);
+    expect(bar.endsWith('…')).toBe(true);
+    expect(bar).not.toContain('Final clause.');
+  });
+
+  // rejects: dropping the emphasis the owner asked for on the top three — and
+  //          equally, marking every row, which would make the mark meaningless.
+  test('exactly the top three carry the podium mark', () => {
+    const { container } = mount();
+    expect(container.querySelectorAll('.past-round__rank.is-podium')).toHaveLength(3);
+    expect(container.querySelectorAll('.past-round__rank')).toHaveLength(4);
+  });
+
+  // rejects: THE POINT OF THE FEATURE. Clicking the number must show the full
+  //          text, which the row deliberately does not.
+  test('clicking the number opens the whole response', () => {
+    const { container } = mount();
+    expect(container.querySelector('.answer-spotlight')).toBeNull();
+    fireEvent.click(openers()[0]);
+    const dialog = container.querySelector('.answer-spotlight');
+    expect(dialog).toBeTruthy();
+    expect(dialog.textContent).toContain('Final clause.');
+    expect(dialog.textContent).toContain('Ada');
+  });
+
+  // rejects: opening the wrong response, which on a redacted-adjacent surface
+  //          means showing a room somebody else's words under this name.
+  test('it opens the response whose number was pressed', () => {
+    const { container } = mount();
+    fireEvent.click(openers()[2]);
+    const dialog = container.querySelector('.answer-spotlight');
+    expect(dialog.textContent).toContain('Third');
+    expect(dialog.textContent).toContain('Katherine');
+    expect(screen.getByText('3 of 4')).toBeInTheDocument();
+  });
+
+  /*
+    TIES ARE WHERE THE BADGE AND THE ROW DISAGREE. create-report gives equal
+    scores equal ranks (1, 1, 3), so two circles both read "1". A handler keyed
+    on the number printed on the circle would open the first of the two from
+    either one — the wrong person's words under the other's name.
+  */
+  // rejects: opening by the displayed placement instead of by the row.
+  test('two responses tied at rank 1 open their own answers', () => {
+    const tied = roundsFrom(report([q('1', {
+      answers: [
+        answerRow({ text: 'Tied first', name: 'Ada', rank: 1, score: 3, index: 0 }),
+        answerRow({ text: 'Tied second', name: 'Grace', rank: 1, score: 3, index: 1 }),
+        answerRow({ text: 'Behind them', name: 'Katherine', rank: 3, score: 1, index: 2 }),
+      ],
+    })]));
+    const { container } = render(
+      <PastRound rounds={tied} index={0} onIndex={jest.fn()} onClose={jest.fn()} onRegenerate={jest.fn()} />,
+    );
+    // Both circles really do print the same number — that is the premise.
+    const circles = Array.from(container.querySelectorAll('.past-round__rank'));
+    expect(circles.map((b) => b.textContent)).toEqual(['1', '1', '3']);
+
+    fireEvent.click(circles[1]);
+    const dialog = container.querySelector('.answer-spotlight');
+    expect(dialog.textContent).toContain('Tied second');
+    expect(dialog.textContent).toContain('Grace');
+    expect(dialog.textContent).not.toContain('Tied first');
+  });
+
+  // rejects: THE OWNER'S "any key takes you back". Back to the ROUND, not out
+  //          of the review — `onClose` (which closes the round) must not fire,
+  //          and `onIndex` (which would move to another round) must not either.
+  test('a keypress returns to the round it was opened from', () => {
+    const { container, onClose, onIndex } = mount();
+    fireEvent.click(openers()[0]);
+    fireEvent.keyDown(document, { key: 'k' });
+    expect(container.querySelector('.answer-spotlight')).toBeNull();
+    expect(container.querySelector('.past-round')).toBeTruthy();
+    expect(screen.getByText('First question')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onIndex).not.toHaveBeenCalled();
+  });
+
+  // rejects: a literal any-key handler. Tab is how a keyboard user reaches the
+  //          dialog's own controls and <Modal> traps it on purpose; swallowing
+  //          it makes the dialog unusable without a mouse.
+  test('Tab does not dismiss it', () => {
+    const { container } = mount();
+    fireEvent.click(openers()[0]);
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(container.querySelector('.answer-spotlight')).toBeTruthy();
+  });
+
+  // rejects: dismissing on the keys that READ the thing. This dialog exists
+  //          because the answer is too long for the row, and these are how a
+  //          keyboard-only user scrolls it.
+  test('the scrolling keys do not dismiss it', () => {
+    const { container } = mount();
+    fireEvent.click(openers()[0]);
+    for (const key of ['ArrowDown', 'ArrowUp', 'PageDown', 'Home', 'End', ' ']) {
+      fireEvent.keyDown(document, { key });
+      expect(container.querySelector('.answer-spotlight')).toBeTruthy();
+    }
+  });
+
+  // rejects: closing under a screen-reader command or Ctrl+C, both of which
+  //          are chords by construction.
+  test('a chord does not dismiss it', () => {
+    const { container } = mount();
+    fireEvent.click(openers()[0]);
+    fireEvent.keyDown(document, { key: 'c', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 'Shift' });
+    expect(container.querySelector('.answer-spotlight')).toBeTruthy();
+  });
+
+  // rejects: both dialogs answering one arrow press — the response steps AND
+  //          the round underneath it changes, which then closes the response.
+  //          One press, two moves, and the host sees the dialog vanish.
+  test('the arrows step the response, never the round beneath it', () => {
+    const { container, onIndex } = mount();
+    fireEvent.click(openers()[0]);
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+    expect(onIndex).not.toHaveBeenCalled();
+    expect(container.querySelector('.answer-spotlight').textContent).toContain('Second');
+  });
+
+  // rejects: keeping the response open across a round change, which would show
+  //          round two's fifth response with nothing saying anything moved.
+  test('changing round closes whatever response was open', () => {
+    const { container, rerender } = mount();
+    fireEvent.click(openers()[0]);
+    expect(container.querySelector('.answer-spotlight')).toBeTruthy();
+    rerender(
+      <PastRound rounds={rounds} index={1} onIndex={jest.fn()} onClose={jest.fn()} onRegenerate={jest.fn()} />,
+    );
+    // Round two HAS a response at that index, so a stale spotlight would open
+    // it rather than closing itself — which is what makes this assertion mean
+    // anything. See the fixture note above.
+    expect(container.querySelector('.answer-spotlight')).toBeNull();
+    expect(screen.getByText('Second question')).toBeInTheDocument();
+  });
+
+  // rejects: a score beside a response on a round whose authors the server
+  //          withheld. §5.6.4 — the scores go wherever the names go.
+  test('the score appears only on an attributed round', () => {
+    const shown = mount();
+    fireEvent.click(openers()[0]);
+    expect(screen.getByText('+3')).toBeInTheDocument();
+    shown.unmount();
+
+    const hiddenRounds = roundsFrom(report([q('1', {
+      answers: [answerRow({ text: 'Unattributed', rank: 1, score: 3 })],
+    })]));
+    const { container } = render(
+      <PastRound rounds={hiddenRounds} index={0} onIndex={jest.fn()} onClose={jest.fn()} onRegenerate={jest.fn()} />,
+    );
+    fireEvent.click(openers()[0]);
+    expect(container.querySelector('.answer-spotlight')).toBeTruthy();
+    expect(screen.queryByText('+3')).not.toBeInTheDocument();
+  });
+});
+
+/*
+ * THE WORKIE SECTION IS MARKDOWN.
+ *
+ *   "also the workie section in the rounds review modal isnt formatted from md
+ *    instead the md sysbols just show like ** ."
+ *
+ * Every field here is model output and personas.js's output contract tells the
+ * model it may write markdown. A <p>{text}</p> prints the asterisks.
+ */
+describe('the AI summary renders as markdown', () => {
+  const mountWith = (aiSummary) => {
+    const rounds = roundsFrom(report([q('1', { aiSummary })]));
+    return render(
+      <PastRound rounds={rounds} index={0} onIndex={jest.fn()} onClose={jest.fn()} onRegenerate={jest.fn()} />,
+    );
+  };
+
+  // rejects: THE REPORTED DEFECT, in the field the owner was looking at.
+  test('bold in the summary text is bold, not asterisks', () => {
+    const { container } = mountWith({ summaryText: 'The room **agreed** on scope.' });
+    expect(container.querySelector('.past-round__summary strong')).toHaveTextContent('agreed');
+    expect(container.querySelector('.past-round__summary').textContent).not.toContain('**');
+  });
+
+  // rejects: fixing the paragraph and leaving the lists raw. They arrive as
+  //          "**Lead phrase**: detail", which is the exact shape the asterisks
+  //          were seen on.
+  test('the discussion and next-step items are markdown too', () => {
+    const { container } = mountWith({
+      summaryText: 'Plain.',
+      discussionQuestions: ['**Scope**: what did we cut?'],
+      nextSteps: ['**Owner**: Ada'],
+    });
+    const bolds = Array.from(container.querySelectorAll('.past-round__summary strong'))
+      .map((el) => el.textContent);
+    expect(bolds).toEqual(expect.arrayContaining(['Scope', 'Owner']));
+    expect(container.querySelector('.past-round__summary').textContent).not.toContain('**');
+  });
+
+  // rejects: ignoring the whole-document field, which is the one the session
+  //          report prefers — so one summary would render two different ways
+  //          in two places.
+  test('a whole markdown document is preferred when there is one', () => {
+    const { container } = mountWith({
+      summaryText: 'The structured fallback.',
+      markdownResponse: '## What we heard\n\nThe room **agreed**.',
+    });
+    expect(container.querySelector('.past-round__summary h3')).toHaveTextContent('What we heard');
+    expect(container.querySelector('.past-round__summary').textContent)
+      .not.toContain('The structured fallback.');
   });
 });
 
