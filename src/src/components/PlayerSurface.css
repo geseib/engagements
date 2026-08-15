@@ -1,0 +1,1076 @@
+/* PlayerSurface.css — the participant's own device.
+ *
+ * WHAT THIS IS. The one stylesheet `PlayerPage.jsx` owns. Before it existed the
+ * player's screen declared no theme, imported no stylesheet of its own, and
+ * resolved 184 class names against the shared `styles.css` — most of them
+ * borrowed from the host stage or the admin category picker. That is the defect
+ * `docs/design/player-redesign/INVENTORY.md` §1 names: the screen "was assembled
+ * from whatever the host screen had lying around, and then it stopped."
+ *
+ * WHERE IT DERIVES FROM. `docs/design/player-redesign/RATIONALE.md`, which is a
+ * decided design, not a proposal. The section numbers below are that file's.
+ * The 23 mockups in the same directory are the reference rendering; this sheet
+ * is their CSS re-cut under one scope class, with `styles.css` tokens
+ * substituted for the mockups' inlined copies of them.
+ *
+ * THE SCOPE CLASS IS `.plr`, and no other stylesheet in this repo declares it
+ * (asserted, both directions, in `__tests__/playerSurfacePalette.test.js`). The
+ * root element also carries `data-theme="dark"`: `public/index.html` puts
+ * `data-theme="light"` on <html>, so a surface that does not re-declare dusk
+ * paints #F4EDE4 body copy on white at 1.2:1.
+ *
+ * PHONE AND LAPTOP ARE BOTH PRIMARY (the owner's words). RATIONALE §3.3 derives
+ * one literal ladder per context from the same five angular sizes — 42/30/24/20/16
+ * arcminutes — at three viewing distances. They are declared as three literal
+ * ladders at three breakpoints and NEVER as a multiplier: the host stage shipped
+ * a `--k` multiplier declared on the same element it multiplied, which
+ * substituted against that element's own value of 1 and rendered all four
+ * display profiles identically.
+ *
+ * WIDTH IS A POOR PROXY FOR DISTANCE and RATIONALE §3.5 says so out loud. The
+ * ladder is in `rem`, so the reader's own browser text-size control is the real
+ * adjustment (WCAG 1.4.4). The px figures in the comments are the values at a
+ * 16px root, which is what the derivation produced.
+ *
+ * MEASURED CONTRAST, all composited up the real ancestor chain by
+ * `__tests__/playerSurfacePalette.test.js` rather than eyeballed here. There is
+ * no black-lift model on this surface (RATIONALE §4.1): a phone is a
+ * direct-view emissive panel, so the measured number is the number. The
+ * headline pairings:
+ *
+ *   --text #F4EDE4      on --bg #0F1A2E            14.97:1
+ *   --plr-muted #B6C2D4 on --bg                    10.55:1
+ *   --plr-muted         on --surface #1B2942        8.83:1
+ *   --primary #F6A94C   on --bg                     8.86:1
+ *   --bg                on --primary (dock button)   8.86:1
+ *   --plr-success-text  on --bg                      9.30:1
+ *
+ * TWO HEX LITERALS ARE DELIBERATE and both are named in the palette test:
+ *
+ *   --plr-muted #B6C2D4    NOT styles.css's shipped --muted #9BA8BE.
+ *     RATIONALE §4.1 measured both, found #9BA8BE passes here too (6.1:1
+ *     unlifted), and kept the lighter tint anyway so the room's surface and the
+ *     phone's surface cannot drift onto two different body-text greys. That was
+ *     an explicit choice, not an oversight, and components/RootPage.css:23 makes
+ *     the same one as --entry-muted.
+ *   --plr-success-text #6FD0A4   styles.css has never declared a --success-text,
+ *     so every screen in this repo redeclares one locally (--qsets-success-text,
+ *     --sp-success-text). Using --success #4FB286 for the "Correct" flag would
+ *     TECHNICALLY clear AA on --surface-2 — 4.54:1, which is 0.04 above the bar
+ *     — and a mutation swapping it in survived the first cut of the palette
+ *     test, which is how that overclaim was found. The reason it is not used is
+ *     margin, not compliance: RATIONALE §3.4 already buys two or three
+ *     arcminutes on this surface for glare, an angled screen and a one-handed
+ *     grip at the back of a room, and a green flag reading "Correct" that sits
+ *     0.04 above the threshold has no such allowance. #6FD0A4 is 6.34:1 there.
+ *     The palette test asserts the MARGIN, not just AA, so the swap now fails.
+ *
+ * WHAT GREEN IN THE TESTS MEANS. jsdom has no layout engine: it computes no
+ * heights, resolves no custom properties across files, and returns zeroes from
+ * every getBoundingClientRect. The palette test does arithmetic on this file
+ * read as TEXT. Treat it as "the contract has not been reverted", never as
+ * "this works on a phone". Audit checks A1-A4 (no sideways scroll, the page
+ * itself never scrolls, the dock is on screen at rest, every target is 44x44)
+ * are geometric and CANNOT be proved here — only on a device.
+ */
+
+/* ==========================================================================
+   0. TOKENS AND THE THREE LADDERS
+   ========================================================================== */
+
+.plr {
+  /* --- local colour, prefixed. An undefined custom property invalidates the
+         WHOLE declaration, so nothing here reaches for a token declared in a
+         stylesheet that merely happens to be in the bundle. --- */
+  --plr-muted: #B6C2D4;
+  --plr-success-text: #6FD0A4;
+  --plr-rule: rgba(182, 194, 212, .20);
+  --plr-rule-strong: rgba(182, 194, 212, .34);
+  --plr-amber-tint: rgba(246, 169, 76, .11);
+  --plr-amber-edge: rgba(246, 169, 76, .45);
+  --plr-amber-banner: rgba(246, 169, 76, .13);
+  --plr-good-edge: rgba(111, 208, 164, .45);
+
+  /* The 4px phase strip. Set per PHASE, not per volume — it is the whole of
+     the "the phone interrupts" mechanism in RATIONALE §2.3, and it is
+     deliberately weak: no sound, no vibration. Forty phones buzzing in unison
+     is an attack on a room, and the Vibration API does not exist in iOS Safari
+     anyway, so a design leaning on it would be unbuildable on the majority
+     device. */
+  --plr-phase: var(--plr-rule);
+
+  /* --- PHONE ladder. ~14in from the eye, ~142 CSS ppi (RATIONALE §3.3). --- */
+  --plr-t-hero: 2.125rem;       /* 34px — 42' — one object owns the screen   */
+  --plr-t-primary: 1.5rem;      /* 24px — 30' — the question                 */
+  --plr-t-secondary: 1.1875rem; /* 19px — 24' — answers, options, buttons    */
+  --plr-t-body: 1rem;           /* 16px — 20' — detail, instructions, inputs */
+  --plr-t-meta: 0.8125rem;      /* 13px — 16' — labels. The floor.           */
+
+  /* THE FLOOR HERE IS NOT ANGULAR, and RATIONALE §3.4 defends the departure.
+     Run the stage's angular floor (8.3' at 25ft) for a phone and you get
+     6.7px, which is nonsense as a design floor. Three platform facts set it
+     instead and the largest wins: iOS zooms the page when a focused input is
+     under 16px (so every input is --plr-t-secondary, 19px, and never smaller);
+     glare and a one-handed grip at the back of a room are worth two or three
+     arcminutes; and 13px is where a label stops being a rung and starts being
+     a way of hiding content. 13 / 15 / 17 per context. */
+
+  --plr-tap: 44px;
+  --plr-pad: 18px;
+  --plr-measure: 32ch;
+  /* A WIDE WINDOW IS ABSORBED BY THE GUTTER, NOT THE CONTENT (§5.1). A phone
+     layout stretched to 1280px is not a laptop design; it is a phone design
+     nobody stopped. */
+  --plr-gut: var(--plr-pad);
+
+  display: flex;
+  flex-direction: column;
+  /* dvh before vh: on iOS `vh` is the LARGE viewport, measured as if the
+     toolbars were hidden, so a vh-sized shell puts its own dock under the
+     browser chrome. */
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: var(--plr-t-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+.plr *,
+.plr *::before,
+.plr *::after {
+  box-sizing: border-box;
+}
+
+/* --- TABLET. ~18in, ~132 CSS ppi. Floor 15px. --- */
+@media (min-width: 768px) {
+  .plr {
+    --plr-t-hero: 2.5rem;         /* 40px */
+    --plr-t-primary: 1.75rem;     /* 28px */
+    --plr-t-secondary: 1.375rem;  /* 22px */
+    --plr-t-body: 1.1875rem;      /* 19px */
+    --plr-t-meta: 0.9375rem;      /* 15px */
+    --plr-pad: 28px;
+    --plr-measure: 40ch;
+    --plr-gut: clamp(28px, calc((100% - 620px) / 2), 30%);
+  }
+}
+
+/* --- LAPTOP. ~24in, ~110 CSS ppi. Floor 17px. This is the second of the two
+       contexts the owner named, and it is a different ladder rather than the
+       phone's stretched: 45/32/26/21/17 hold the same 42/30/24/20/16 arcminutes
+       at 24in that the phone's 34/24/19/16/13 hold at 14in. --- */
+@media (min-width: 1200px) {
+  .plr {
+    --plr-t-hero: 2.8125rem;      /* 45px */
+    --plr-t-primary: 2rem;        /* 32px */
+    --plr-t-secondary: 1.625rem;  /* 26px */
+    --plr-t-body: 1.3125rem;      /* 21px */
+    --plr-t-meta: 1.0625rem;      /* 17px */
+    --plr-pad: 36px;
+    --plr-measure: 46ch;
+    --plr-gut: clamp(36px, calc((100% - 660px) / 2), 34%);
+  }
+}
+
+/* ==========================================================================
+   1. VOLUME — three of them, set by the state machine, never by the player
+   ==========================================================================
+   RATIONALE §2.2. ACT: the phone is the only place the task can be done, so it
+   gets the dock and the one amber idea. REST: the task is done — no dock at
+   all, not a disabled one, because if there is nothing to do there must be
+   nothing that looks pressable. WATCH: the shared screen is the show and the
+   phone carries only what is personal and therefore cannot be on the stage.
+
+   The absence of the dock is STRUCTURAL: `PlayerPage.jsx` renders no `.plr-dock`
+   element in REST or WATCH. There is nothing here to hide, which is the only
+   version of this rule that survives contact with a future feature request. */
+
+.plr[data-phase="ask"] { --plr-phase: var(--primary); }
+.plr[data-phase="vote"] { --plr-phase: var(--secondary); }
+.plr[data-phase="join"] { --plr-phase: var(--plr-muted); }
+
+/* ==========================================================================
+   2. THE SHELL — bar / stage / dock
+   ========================================================================== */
+
+.plr-bar {
+  flex: none;
+  border-bottom: 1px solid var(--plr-rule);
+}
+
+.plr-strip {
+  height: 4px;
+  background: var(--plr-phase);
+}
+
+.plr-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px var(--plr-gut);
+  font-size: var(--plr-t-meta);
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--plr-muted);
+}
+
+/* A SINGLE TEXT NODE WITH min-width:0. `text-overflow` on a flex container with
+   span children is inert and the text is silently cut instead — the host stage
+   had to fix this twice before its ellipsis actually rendered. */
+.plr-ctx {
+  display: block;
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ORDERED HORIZONTAL SACRIFICE. The category goes first and goes WHOLE rather
+   than shrinking to an unreadable stub — it is on the shared screen anyway.
+   The round position and your own name are never sacrificed. */
+.plr-cat {
+  flex: 0 1 auto;
+  min-width: 9ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--plr-muted);
+  opacity: .82;
+}
+
+.plr-cat::before {
+  content: "\00b7";
+  margin-right: 9px;
+  opacity: .7;
+}
+
+@media (max-width: 767px) {
+  .plr-cat { display: none; }
+}
+
+.plr-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.plr-who {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 11ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--plr-muted);
+}
+
+.plr-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+/* Offline is AMBER, never red: being offline is not destructive, and red on
+   this surface means destructive only (RATIONALE §4.2). */
+.plr-dot.plr-dot--off { background: var(--primary); }
+
+.plr-banner {
+  flex: none;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 11px var(--plr-gut);
+  background: var(--plr-amber-banner);
+  border-bottom: 1px solid var(--plr-amber-edge);
+  font-size: var(--plr-t-meta);
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.plr-banner b { font-weight: 700; }
+
+/* THE ONLY SCROLLING REGION IN THE SURFACE.
+   The host stage must never scroll; this one may, and the two positions are the
+   same position: *scrolling to READ is fine, scrolling to ACT is not*
+   (RATIONALE §5.2). On a projector nobody can scroll, so read and act collapse
+   and the only safe rule is never. Here the reader has the scrollbar in their
+   hand. Scrolling to ACT stays forbidden and the shell makes it structurally
+   impossible, because the dock is outside this element. */
+.plr-stage {
+  flex: 1;
+  /* Without min-height:0 a flex item's default min-height:auto resolves to
+     content height, the overflow never exists, and overflow-y has nothing to
+     act on — the shipped setup panel's "broken" button was exactly this. */
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 20px var(--plr-gut) 28px;
+}
+
+.plr-stage.plr-stage--centre {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* THE DOCK IS A FLEX ROW, NOT position:fixed (§5.1). A grid or flex row has no
+   fold. `position: fixed` on iOS Safari interacts badly with the collapsing URL
+   bar and with the soft keyboard, which is how a primary action ends up
+   underneath the browser chrome at the exact moment it is needed. */
+.plr-dock {
+  flex: none;
+  border-top: 1px solid var(--plr-rule);
+  background: var(--bg);
+  padding: 12px var(--plr-gut) calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+.plr-note {
+  margin: 0 0 9px;
+  font-size: var(--plr-t-meta);
+  line-height: 1.4;
+  color: var(--plr-muted);
+}
+
+.plr-note--after { margin: 10px 0 0; }
+
+/* ==========================================================================
+   3. TYPE
+   ========================================================================== */
+
+.plr-h1 {
+  margin: 0 0 12px;
+  max-width: var(--plr-measure);
+  font-size: var(--plr-t-hero);
+  line-height: 1.06;
+  font-weight: 800;
+  letter-spacing: -.02em;
+}
+
+.plr-h1--primary { font-size: var(--plr-t-primary); }
+
+.plr-q {
+  margin: 0 0 12px;
+  max-width: var(--plr-measure);
+  font-size: var(--plr-t-primary);
+  line-height: 1.24;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+
+/* THE ONE REDUCTION IN THE DESIGN, AND IT IS RECOVERABLE (§5.3).
+   With a soft keyboard up there are roughly 430 usable pixels and a nine-line
+   question and a composer cannot both have them. On focus the question
+   condenses to three lines at body size and says so, with a control that opens
+   it again. A truncation the reader can undo is a fold, not a deletion — which
+   is the distinction that makes this legal here and illegal on the stage, where
+   the reader cannot act. Silent clipping is as forbidden here as it is there. */
+.plr-q--fold {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: var(--plr-t-body);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.plr-detail {
+  margin: 0 0 18px;
+  max-width: var(--plr-measure);
+  font-size: var(--plr-t-body);
+  line-height: 1.5;
+}
+
+.plr-lede {
+  margin: 0 0 16px;
+  max-width: var(--plr-measure);
+  font-size: var(--plr-t-secondary);
+  line-height: 1.4;
+}
+
+.plr-lab {
+  margin: 0 0 7px;
+  font-size: var(--plr-t-meta);
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--plr-muted);
+}
+
+.plr-lab--good { color: var(--plr-success-text); }
+
+.plr-muted { color: var(--plr-muted); }
+
+.plr-help {
+  margin: 8px 0 0;
+  max-width: var(--plr-measure);
+  font-size: var(--plr-t-meta);
+  line-height: 1.45;
+  color: var(--plr-muted);
+}
+
+.plr-count {
+  margin: 7px 0 0;
+  font-size: var(--plr-t-meta);
+  color: var(--plr-muted);
+  text-align: right;
+}
+
+.plr-sep {
+  border: 0;
+  border-top: 1px solid var(--plr-rule);
+  margin: 22px 0;
+}
+
+/* The resolved instruction. The host stage cut this on the grounds that "every
+   player already has it on their own phone at arm's length", which is what
+   makes it load-bearing here. */
+.plr-task {
+  margin: 0 0 20px;
+  max-width: var(--plr-measure);
+  padding-left: 13px;
+  border-left: 2px solid var(--plr-rule);
+}
+
+.plr-task p {
+  margin: 0;
+  font-size: var(--plr-t-body);
+  line-height: 1.45;
+}
+
+/* ==========================================================================
+   4. THE LOOK-UP CUE
+   ==========================================================================
+   RATIONALE §2.2. The stage must never name a person (host spec §7.15), and
+   taking that seriously hands you the whole content split: anything
+   person-specific belongs on the phone, anything room-wide belongs on the
+   stage, neither repeats the other. This element is where the phone says so.
+   It replaces "Check the main screen for detailed results and AI insights!",
+   which read as an apology for a missing feature; this is a statement of where
+   a thing lives, in every WATCH state, in the same position. */
+
+.plr-lookup {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  margin: 26px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--plr-rule);
+  max-width: var(--plr-measure);
+  font-size: var(--plr-t-body);
+  line-height: 1.45;
+  color: var(--plr-muted);
+}
+
+.plr-lookup svg { flex: none; margin-top: 2px; }
+
+.plr-lookup b { color: var(--text); font-weight: 600; }
+
+/* A stat row has already drawn a rule; do not draw a second one 26px under it. */
+.plr-stat + .plr-lookup { border-top: 0; padding-top: 4px; }
+
+/* ==========================================================================
+   5. CONTROLS
+   ========================================================================== */
+
+.plr-btn {
+  display: block;
+  width: 100%;
+  min-height: 56px;
+  padding: 15px 16px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--primary);
+  color: var(--bg);
+  font-family: inherit;
+  font-size: var(--plr-t-secondary);
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -.01em;
+  text-align: center;
+  cursor: pointer;
+}
+
+/* A DISABLED PRIMARY SPENDS NO AMBER. It is still the primary action and still
+   the last element in the document; it simply says what is missing. */
+.plr-btn[disabled] {
+  background: transparent;
+  border: 1px solid var(--plr-rule-strong);
+  color: var(--plr-muted);
+  font-weight: 700;
+  cursor: default;
+}
+
+.plr-btn.plr-btn--ghost {
+  background: transparent;
+  border: 1px solid var(--plr-rule-strong);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.plr-btn + .plr-btn { margin-top: 10px; }
+
+.plr-btn:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.plr-field { margin: 0 0 20px; }
+
+/* EVERY INPUT RENDERS AT --plr-t-secondary (19px on a phone) AND NEVER SMALLER.
+   iOS Safari zooms the page when a focused input is under 16px, which jumps the
+   layout on focus and loses the player their place. This is the same rule the
+   admin console states as "inputs render at body, never at label", arrived at
+   from a different constraint. */
+.plr-inp {
+  display: block;
+  width: 100%;
+  min-height: 56px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--plr-rule-strong);
+  border-radius: 12px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--plr-t-secondary);
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.plr-inp::placeholder { color: var(--plr-muted); opacity: .75; }
+
+.plr-inp:focus { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* A FORM ERROR IS NOT RED (§4.2). Amber, an icon, and a sentence that names
+   both plausible causes of a four-digit typo. Amber for an error is unusual and
+   the alternative is either breaking the token rule or inventing a sixth colour
+   for the one screen a participant sees before they have any context. */
+.plr-inp.plr-inp--bad {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.plr-inp--code {
+  min-height: 80px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--plr-t-hero);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: .3em;
+  text-indent: .3em;
+  text-align: center;
+}
+
+.plr-inp--area {
+  min-height: 148px;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.plr-err {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 9px 0 0;
+  max-width: var(--plr-measure);
+  font-size: var(--plr-t-meta);
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--primary);
+}
+
+.plr-err svg { flex: none; margin-top: 1px; }
+
+/* ==========================================================================
+   6. TRIVIA OPTIONS
+   ==========================================================================
+   These were `<div className="category-item trivia-option" onClick=...>` — the
+   admin category picker's class, on a div with no role, no tabIndex and no
+   aria-checked, unreachable by keyboard and unannounced as selectable. They are
+   radios now, in a radiogroup, and they are buttons so a browser gives them
+   focus and Space/Enter for free. */
+
+.plr-opts { margin: 0 0 4px; }
+
+.plr-opt {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  width: 100%;
+  min-height: var(--plr-tap);
+  margin: 0 0 10px;
+  padding: 13px 14px;
+  border: 1px solid var(--plr-rule-strong);
+  border-radius: 13px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--plr-t-secondary);
+  font-weight: 400;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plr-opt .plr-k {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--plr-rule-strong);
+  border-radius: 9px;
+  font-size: var(--plr-t-meta);
+  font-weight: 800;
+  line-height: 1;
+  color: var(--plr-muted);
+}
+
+/* ONE AMBER IDEA PER VIEW, not one amber object (§4.3). A selected option and
+   the Submit it just enabled are not two ideas; they are one idea in two
+   places, and separating them by colour would make the causal link LESS
+   legible. Nothing decorative is ever amber, and REST and WATCH spend none. */
+.plr-opt[aria-checked="true"] {
+  border-color: var(--primary);
+  background: var(--plr-amber-tint);
+}
+
+.plr-opt[aria-checked="true"] .plr-k {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--bg);
+}
+
+.plr-opt:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* ==========================================================================
+   7. CARDS, RECEIPTS, STATS
+   ==========================================================================
+   THE RECEIPT (§6.5) is why `.plr-card` exists. `handleSubmitAnswer` clears the
+   composer on send, so the only surviving record of what a player wrote was
+   `mySubmittedAnswer` — which existed solely to find their own ballot row and
+   was never displayed. A player who can see what they wrote can follow along
+   when the host reads response four aloud; a player who cannot is guessing, and
+   somebody guessing whether the room is discussing their idea is not
+   participating in the discussion. */
+
+.plr-card {
+  margin: 0 0 14px;
+  padding: 15px;
+  border: 1px solid var(--plr-rule-strong);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.plr-card.plr-card--good { border-color: var(--plr-good-edge); }
+
+.plr-quote {
+  margin: 0;
+  font-size: var(--plr-t-secondary);
+  line-height: 1.4;
+}
+
+.plr-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 14px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--plr-rule);
+}
+
+.plr-stat:last-of-type { border-bottom: 0; }
+
+.plr-stat .plr-k {
+  font-size: var(--plr-t-meta);
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--plr-muted);
+}
+
+.plr-stat .plr-v {
+  font-size: var(--plr-t-secondary);
+  font-weight: 700;
+  text-align: right;
+}
+
+.plr-stat .plr-v.plr-v--big {
+  font-size: var(--plr-t-hero);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -.02em;
+}
+
+.plr-flag {
+  display: inline-block;
+  padding: 3px 8px;
+  border: 1px solid var(--plr-rule-strong);
+  border-radius: 6px;
+  font-size: var(--plr-t-meta);
+  font-weight: 800;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--plr-muted);
+}
+
+.plr-flag.plr-flag--ok {
+  color: var(--plr-success-text);
+  border-color: var(--plr-good-edge);
+}
+
+.plr-flag.plr-flag--mine {
+  color: var(--primary);
+  border-color: var(--plr-amber-edge);
+}
+
+.plr-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin: 14px 0 0;
+}
+
+.plr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--plr-tap);
+  padding: 8px 14px;
+  border: 1px solid var(--plr-rule-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: var(--plr-t-body);
+  line-height: 1.2;
+}
+
+/* ==========================================================================
+   8. THE BALLOT
+   ==========================================================================
+   The one screen that is genuinely the player's own — the host has nothing like
+   it.
+
+   POSITIONAL NUMBERING IS LOAD-BEARING AND IS NEVER TOUCHED (§6.2). `Response N`
+   is 1-based, absolute, in array order, and matches `displayLabelFor` in
+   config/anonymity.js exactly. The design never reorders, filters, sorts or
+   reindexes a ballot — not by length, not to put your own last, not to hide an
+   empty one. Vote indices map to array position, and stable numbers across the
+   whole ballot are what let a host say "six and eleven" and be understood by
+   forty people at once. There is no CSS here that could reorder anything, and
+   that is deliberate: no `order`, no `flex-direction: column-reverse`, no
+   `:nth-child` that moves a row. */
+
+.plr-anon {
+  margin: 0 0 18px;
+  max-width: var(--plr-measure);
+  padding: 2px 0 2px 13px;
+  border-left: 2px solid var(--plr-rule-strong);
+  font-size: var(--plr-t-meta);
+  line-height: 1.5;
+  color: var(--plr-muted);
+}
+
+.plr-anon b { color: var(--text); font-weight: 600; }
+
+.plr-ballot { margin: 0; }
+
+.plr-resp {
+  margin: 0 0 12px;
+  padding: 13px 14px 12px;
+  border: 1px solid var(--plr-rule-strong);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.plr-resp.plr-resp--own { border-color: var(--plr-good-edge); }
+
+.plr-rhead {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 8px;
+}
+
+.plr-rid {
+  font-size: var(--plr-t-meta);
+  font-weight: 800;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  color: var(--plr-muted);
+}
+
+.plr-rtxt {
+  margin: 0 0 12px;
+  font-size: var(--plr-t-secondary);
+  line-height: 1.38;
+}
+
+.plr-rtxt.plr-rtxt--clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* `Show all` IS NOT AMBER, and the first draft of the vote mockup failed on
+   exactly this: three amber objects, one of which was a disclosure triangle.
+   Expanding a response is not the task; ranking it is. */
+.plr-more {
+  display: block;
+  margin: -10px 0 6px;
+  padding: 8px 0;
+  min-height: var(--plr-tap);
+  border: 0;
+  background: none;
+  color: var(--plr-muted);
+  font-family: inherit;
+  font-size: var(--plr-t-meta);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+/* NO GESTURE IS REQUIRED FOR ANYTHING (§8.4). Drag-to-rank is the obvious
+   "nicer" ballot and it is wrong here: undiscoverable, two-handed in practice,
+   it fights the scroll container it lives inside, and it is unusable with a
+   screen reader or a switch device. Three buttons are boring and work for
+   everybody. The three rank buttons are the tightest row in the design and
+   carry an 8px gap at every context. */
+.plr-ranks { display: flex; gap: 8px; }
+
+.plr-rk {
+  flex: 1;
+  min-height: var(--plr-tap);
+  border: 1px solid var(--plr-rule-strong);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--plr-muted);
+  font-family: inherit;
+  font-size: var(--plr-t-meta);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: .07em;
+  cursor: pointer;
+}
+
+.plr-rk[aria-pressed="true"] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--bg);
+}
+
+.plr-rk:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* The slot bar lives in the dock, so the ballot you are filling in and the
+   ballot you have filled in are never in two places you must scroll between. */
+.plr-slots { display: flex; gap: 8px; margin: 0 0 11px; }
+
+.plr-slot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: var(--plr-tap);
+  padding: 6px 9px;
+  border: 1px dashed var(--plr-rule-strong);
+  border-radius: 11px;
+}
+
+.plr-slot.plr-slot--filled {
+  border-style: solid;
+  background: var(--surface);
+}
+
+.plr-slot .plr-sk {
+  font-size: var(--plr-t-meta);
+  font-weight: 800;
+  letter-spacing: .09em;
+  line-height: 1.25;
+  color: var(--plr-muted);
+}
+
+.plr-slot .plr-sv {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--plr-t-meta);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+/* --- the quick ballot ---------------------------------------------------
+   Two ballots survive here rather than one, and that is a DEPARTURE from
+   RATIONALE §6.1, which deletes Quick Vote outright. `__tests__/voteSwitching
+   .test.jsx` (commit a4bd7127, today) drives the quick ballot's three selects
+   with user-event and pins the fix that made a vote switchable at all, so
+   deleting the mode would delete the regression test for a defect the owner
+   reported this morning. Restyled rather than removed; see the report. */
+
+.plr-quick { margin: 0; }
+
+.plr-words-form { margin: 0; }
+
+.plr-vpos { margin: 0 0 14px; }
+
+.plr-vpos .plr-lab { display: flex; align-items: center; gap: 6px; }
+
+.plr-select {
+  display: block;
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 14px;
+  border: 1px solid var(--plr-rule-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--plr-t-secondary);
+  line-height: 1.35;
+}
+
+.plr-select:focus { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.plr-modes {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.plr-mode {
+  flex: 1;
+  min-height: var(--plr-tap);
+  padding: 10px 12px;
+  border: 1px solid var(--plr-rule-strong);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--plr-muted);
+  font-family: inherit;
+  font-size: var(--plr-t-meta);
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+/* The mode toggle is a view control, not the task, so its selected state is a
+   surface fill rather than the one amber idea the ballot already spends. */
+.plr-mode[aria-pressed="true"] {
+  background: var(--surface-2);
+  border-color: var(--plr-rule-strong);
+  color: var(--text);
+}
+
+.plr-mode:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* ==========================================================================
+   9. RESULTS ROWS
+   ==========================================================================
+   A WRONG TRIVIA ANSWER IS NOT RED (§4.2). Red means destructive, only. The
+   shipped screen used --danger plus a 16px cross, which is both a semantic
+   error and colour doing the work alone. A wrong row is --plr-muted and carries
+   the WORDS "Your answer"; the correct row carries a 2px --success rule and the
+   WORD "Correct". */
+
+.plr-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 0 0 10px;
+  padding: 13px 14px;
+  border: 1px solid var(--plr-rule-strong);
+  border-radius: 13px;
+  background: var(--surface);
+  font-size: var(--plr-t-secondary);
+  line-height: 1.35;
+}
+
+.plr-row .plr-k {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--plr-rule-strong);
+  border-radius: 9px;
+  font-size: var(--plr-t-meta);
+  font-weight: 800;
+  line-height: 1;
+  color: var(--plr-muted);
+}
+
+.plr-row.plr-row--correct {
+  border-color: var(--success);
+  border-width: 2px;
+  padding: 12px 13px;
+}
+
+.plr-row.plr-row--correct .plr-k {
+  border-color: var(--success);
+  color: var(--plr-success-text);
+}
+
+.plr-row.plr-row--mine { background: var(--surface-2); }
+
+/* NEVER flex-end INSIDE A CLIPPED ROW. Flex-end overflows toward the START,
+   where a hidden overflow is unreachable by any scroll, drag or resize — that
+   is how the console's Edit and Rename buttons were clipped on their left edge.
+   margin-left:auto right-aligns while it fits and collapses to zero when it
+   does not. */
+.plr-row .plr-tail {
+  flex: none;
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-end;
+}
+
+.plr-words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin: 12px 0 0;
+}
+
+.plr-word {
+  padding: 7px 13px;
+  border: 1px solid var(--plr-rule-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: var(--plr-t-body);
+  line-height: 1.2;
+}
+
+.plr-artwork {
+  display: block;
+  width: 100%;
+  max-width: var(--plr-measure);
+  height: auto;
+  margin: 0 0 16px;
+  border: 1px solid var(--plr-rule);
+  border-radius: 14px;
+}
+
+/* NO MOTION ANYWHERE ON THIS SURFACE (§9.11), AND THAT IS WHY THIS FILE ENDS
+   HERE. The screen it replaced animated a pulsing dot that meant "wait" —
+   motion in the peripheral vision of forty people who are supposed to be
+   listening to somebody. There is no @keyframes, no `animation`, no
+   `transition` and no `scroll-behavior: smooth` in this stylesheet, and
+   `__tests__/playerSurfacePalette.test.js` fails the day one arrives. */

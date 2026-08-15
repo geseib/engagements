@@ -41,13 +41,49 @@ import { gameTypeLabel, normalizeGameType } from '../config/gameTypes';
  * more than the tidiness of renaming its container.
  */
 
+/*
+  WHAT THE `categoryKey` / `categoryOptions` / `flagSummaryUsability` PROPS ARE FOR.
+
+  There were THREE prompt UIs (admin RATIONALE §9, "One prompt library"), and
+  AIGenerationPromptEditor was the third — a `.prompts-grid` of `.prompt-card`s
+  over the SAME `AIPROMPTS` table this panel reads. Pointing it here rather than
+  restyling it in place is the whole point of AUDIT §6.2 item 9.
+
+  The two record shapes are not identical, and the three props below are exactly
+  the differences, so the panel is told about them instead of being forked:
+
+  1. THE SECOND AXIS HAS TWO NAMES. Summary prompts carry `category`
+     (`lessons-learned`, `general`, …); generation rows written by
+     `populate-generation-prompts.js:502` carry `scenarioType` and no `category`
+     at all. Same column, different attribute — `categoryKey`.
+
+  2. GENERATION SCENARIOS HAVE LABELS, CATEGORIES DO NOT. `scenarioType` is a
+     slug (`amazon-principles`) with a written label (`Amazon Leadership
+     Principles`) the card grid never showed. `categoryOptions` therefore takes
+     `{ value, label }` as well as the plain strings AIPromptManager passes.
+
+  3. "NOT A SUMMARY PROMPT" IS INFORMATION ONLY WHERE IT CAN BE FALSE. The
+     backend sets `summaryPromptStatus: 'unusable'` on every generation-format
+     record (`get-ai-prompts.js:129-133`) — which is the point on the summary
+     library, and is true of literally every row on a list filtered to
+     `promptType=generation`. A chip on all N rows is not a warning, it is a
+     watermark, so that screen passes `flagSummaryUsability={false}`.
+
+  Everything else — the table, the two empty states, the drop-exits, the
+  chips — is shared, which is what made the audit item worth doing.
+*/
+
 /** Does this prompt survive a filter combination? One place, so the drop-counts
  *  below cannot drift from the list they describe. */
-export function matchesPromptFilters(prompt, { search = '', gameType = 'all', category = 'all', status = 'all' }) {
+export function matchesPromptFilters(
+  prompt,
+  { search = '', gameType = 'all', category = 'all', status = 'all' },
+  { categoryKey = 'category' } = {}
+) {
   if (gameType !== 'all' && normalizeGameType(prompt.gameType) !== normalizeGameType(gameType)) {
     return false;
   }
-  if (category !== 'all' && prompt.category !== category) return false;
+  if (category !== 'all' && prompt[categoryKey] !== category) return false;
   if (status !== 'all' && prompt.status !== status) return false;
 
   const needle = search.trim().toLowerCase();
@@ -70,6 +106,12 @@ function statusChipClass(status) {
   return 'plib-chip--warn';
 }
 
+/** `['general', …]` and `[{ value, label }, …]` are both accepted, so the two
+ *  callers keep the shape each already has. */
+function asOption(option) {
+  return typeof option === 'string' ? { value: option, label: option } : option;
+}
+
 export default function PromptLibraryPanel({
   prompts = [],
   loading = false,
@@ -77,9 +119,22 @@ export default function PromptLibraryPanel({
   onFilterChange,
   /** The category options for the currently selected game type. Derived by the
    *  caller from the same table the editor uses; passing it keeps this
-   *  component free of that vocabulary. */
+   *  component free of that vocabulary. Strings or `{ value, label }`. */
   categoryOptions = [],
   gameTypeOptions = [],
+  /** Which attribute holds the second axis, and what it is called on screen.
+   *  See the header block — generation rows spell it `scenarioType`. */
+  categoryKey = 'category',
+  categoryHeading = 'Category',
+  categoryFilterAllLabel = 'All Categories',
+  /** Draw the "Not a summary prompt" chip. False on a list that is already
+   *  filtered to generation prompts, where it is true of every row. */
+  flagSummaryUsability = true,
+  /** The "nothing exists" copy. It has to say what a prompt IS, and the two
+   *  libraries hold different things. */
+  emptyHeading = 'No prompts yet',
+  emptyBody = 'A summary prompt is what Workie says after a round. Until one exists, every session'
+    + ' of every engagement type falls back to the shipped default for its type.',
   onEdit,
   onAdvise,
   onDelete,
@@ -89,9 +144,19 @@ export default function PromptLibraryPanel({
   const { search = '', gameType = 'all', category = 'all', status = 'all' } = filters || {};
 
   const shown = useMemo(
-    () => prompts.filter((p) => matchesPromptFilters(p, { search, gameType, category, status })),
-    [prompts, search, gameType, category, status]
+    () => prompts.filter(
+      (p) => matchesPromptFilters(p, { search, gameType, category, status }, { categoryKey })
+    ),
+    [prompts, search, gameType, category, status, categoryKey]
   );
+
+  const catOptions = useMemo(() => (categoryOptions || []).map(asOption), [categoryOptions]);
+  /* A row whose category is not in the currently offered list still has to
+     render, so the raw value is the fallback rather than a blank. */
+  const catLabel = (value) => {
+    const hit = catOptions.find((o) => o.value === value);
+    return (hit && hit.label) || value;
+  };
 
   /*
     THE EXITS FROM "NOTHING MATCHES" — QuestionSetsPanel's `drops`, same
@@ -108,7 +173,11 @@ export default function PromptLibraryPanel({
       candidates.push({ key: 'gameType', label: `Type: ${gameTypeLabel(gameType)}`, next: { ...base, gameType: 'all' } });
     }
     if (category !== 'all') {
-      candidates.push({ key: 'category', label: `Category: ${category}`, next: { ...base, category: 'all' } });
+      candidates.push({
+        key: 'category',
+        label: `${categoryHeading}: ${catLabel(category)}`,
+        next: { ...base, category: 'all' },
+      });
     }
     if (status !== 'all') {
       candidates.push({
@@ -118,9 +187,13 @@ export default function PromptLibraryPanel({
       });
     }
     return candidates
-      .map((c) => ({ ...c, count: prompts.filter((p) => matchesPromptFilters(p, c.next)).length }))
+      .map((c) => ({
+        ...c,
+        count: prompts.filter((p) => matchesPromptFilters(p, c.next, { categoryKey })).length,
+      }))
       .filter((c) => c.count > 0);
-  }, [prompts, search, gameType, category, status]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prompts, search, gameType, category, status, categoryKey, categoryHeading, catOptions]);
 
   const set = (patch) => onFilterChange && onFilterChange({ search, gameType, category, status, ...patch });
   const clearAll = () => set({ search: '', gameType: 'all', category: 'all', status: 'all' });
@@ -158,11 +231,11 @@ export default function PromptLibraryPanel({
             value={category}
             onChange={(e) => set({ category: e.target.value })}
             className="filter-select"
-            aria-label="Filter by category"
+            aria-label={`Filter by ${categoryHeading.toLowerCase()}`}
           >
-            <option value="all">All Categories</option>
-            {categoryOptions.map((c) => (
-              <option key={c} value={c}>{c}</option>
+            <option value="all">{categoryFilterAllLabel}</option>
+            {catOptions.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
             ))}
           </select>
 
@@ -193,22 +266,33 @@ export default function PromptLibraryPanel({
           </span>
         </div>
 
+        {/*
+          A CONTROL IS DRAWN ONLY WHERE IT DOES SOMETHING. Rule 2 of the design
+          system: "gate the affordance on the handler existing, never render one
+          that does nothing" — a dead button is the one people reach for first.
+          The generation library has no shipped-defaults installer of its own,
+          so it passes no `onPopulateDefaults` and no such button appears.
+        */}
         <div className="prompt-control-actions">
-          <button
-            className="btn-secondary"
-            type="button"
-            onClick={onPopulateDefaults}
-            disabled={loading}
-          >
-            <Icon name="Target" weight="duotone" size={16} color="var(--primary)" /> Populate Default Prompts
-          </button>
-          <button
-            className="btn-primary create-prompt-btn"
-            type="button"
-            onClick={onCreate}
-          >
-            <Icon name="Plus" weight="bold" size={16} color="currentColor" /> Create New Prompt
-          </button>
+          {onPopulateDefaults && (
+            <button
+              className="btn-secondary"
+              type="button"
+              onClick={onPopulateDefaults}
+              disabled={loading}
+            >
+              <Icon name="Target" weight="duotone" size={16} color="var(--primary)" /> Populate Default Prompts
+            </button>
+          )}
+          {onCreate && (
+            <button
+              className="btn-primary create-prompt-btn"
+              type="button"
+              onClick={onCreate}
+            >
+              <Icon name="Plus" weight="bold" size={16} color="currentColor" /> Create New Prompt
+            </button>
+          )}
         </div>
       </div>
 
@@ -222,18 +306,19 @@ export default function PromptLibraryPanel({
         */
         <div className="plib-empty" data-testid="plib-empty">
           <Icon name="Sparkle" weight="duotone" size={40} color="var(--muted)" />
-          <h3>No prompts yet</h3>
-          <p>
-            A summary prompt is what Workie says after a round. Until one exists, every session
-            of every engagement type falls back to the shipped default for its type.
-          </p>
+          <h3>{emptyHeading}</h3>
+          <p>{emptyBody}</p>
           <div className="plib-paths">
-            <button type="button" className="btn-primary" onClick={onCreate}>
-              <Icon name="Plus" weight="bold" size={16} color="currentColor" /> Write one
-            </button>
-            <button type="button" className="btn-secondary" onClick={onPopulateDefaults}>
-              <Icon name="Target" weight="duotone" size={16} color="var(--primary)" /> Install the shipped defaults
-            </button>
+            {onCreate && (
+              <button type="button" className="btn-primary" onClick={onCreate}>
+                <Icon name="Plus" weight="bold" size={16} color="currentColor" /> Write one
+              </button>
+            )}
+            {onPopulateDefaults && (
+              <button type="button" className="btn-secondary" onClick={onPopulateDefaults}>
+                <Icon name="Target" weight="duotone" size={16} color="var(--primary)" /> Install the shipped defaults
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -281,7 +366,7 @@ export default function PromptLibraryPanel({
             <tr>
               <th className="plib-col-name">Prompt</th>
               <th className="plib-col-type">Type</th>
-              <th className="plib-col-cat">Category</th>
+              <th className="plib-col-cat">{categoryHeading}</th>
               <th className="plib-col-state">State</th>
               <th className="plib-col-acts" />
             </tr>
@@ -305,7 +390,9 @@ export default function PromptLibraryPanel({
                     {gameTypeLabel(prompt.gameType)}
                   </span>
                 </td>
-                <td className="plib-cat">{prompt.category || '—'}</td>
+                <td className="plib-cat">
+                  {prompt[categoryKey] ? catLabel(prompt[categoryKey]) : '—'}
+                </td>
                 <td>
                   <div className="plib-states">
                     <span className={`plib-chip ${statusChipClass(prompt.status)}`}>
@@ -322,7 +409,7 @@ export default function PromptLibraryPanel({
                     {/* A generation-format prompt attached to a question set
                         does nothing at runtime — the summary engine rejects it
                         and silently uses the game-type default. */}
-                    {prompt.summaryPromptStatus === 'unusable' && (
+                    {flagSummaryUsability && prompt.summaryPromptStatus === 'unusable' && (
                       <span
                         className="plib-chip plib-chip--bad"
                         title={`Cannot be used as a summary prompt: ${prompt.summaryPromptDefect || 'wrong format'}`}
@@ -342,30 +429,36 @@ export default function PromptLibraryPanel({
                 </td>
                 <td>
                   <div className="plib-rowact">
-                    <button
-                      type="button"
-                      className="plib-btn"
-                      onClick={() => onEdit && onEdit(prompt)}
-                      title="Edit this prompt"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="plib-btn"
-                      onClick={() => onAdvise && onAdvise(prompt)}
-                      title="Ask the AI advisor about this prompt"
-                    >
-                      Advisor
-                    </button>
-                    <button
-                      type="button"
-                      className="plib-btn plib-btn--ghostdanger"
-                      onClick={() => onDelete && onDelete(prompt.promptId)}
-                      title="Archive this prompt"
-                    >
-                      Archive
-                    </button>
+                    {onEdit && (
+                      <button
+                        type="button"
+                        className="plib-btn"
+                        onClick={() => onEdit(prompt)}
+                        title="Edit this prompt"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {onAdvise && (
+                      <button
+                        type="button"
+                        className="plib-btn"
+                        onClick={() => onAdvise(prompt)}
+                        title="Ask the AI advisor about this prompt"
+                      >
+                        Advisor
+                      </button>
+                    )}
+                    {onDelete && (
+                      <button
+                        type="button"
+                        className="plib-btn plib-btn--ghostdanger"
+                        onClick={() => onDelete(prompt.promptId)}
+                        title="Archive this prompt"
+                      >
+                        Archive
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>

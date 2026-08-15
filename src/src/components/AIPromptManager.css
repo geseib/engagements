@@ -1,350 +1,67 @@
-/* AI Prompt Manager Styles */
+/* ============================================================================
+   THE PROMPT ADMIN SURFACE — section, library, editor dialog, advisor dialog.
 
-.ai-prompt-manager {
-  padding: 20px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  margin-bottom: 30px;
-}
+   WHAT CHANGED, AND WHY THE SELECTORS ALL MOVED.
 
-.prompt-manager-header {
-  margin-bottom: 24px;
-}
+   This file used to declare thirty-odd BARE class names — `.btn-primary`,
+   `.btn-secondary`, `.status-badge`, `.form-group`, `.form-actions`, `.tag`,
+   `.empty-state`, `.loading-spinner`, `.modal-header`, `.modal-body`,
+   `.close-button`, `.search-input` — aimed at the whole application. Every one
+   of them painted screens this file has never heard of, and which of the two
+   declarations won was decided by webpack's injection order, not by anybody.
+   `.modal-overlay` and `.modal-content` were the fifth instance of that fault
+   and are already gone (`__tests__/modalReachability.test.js` now fails if any
+   component stylesheet redeclares them). This pass finishes the job.
 
-.prompt-manager-header h2 {
-  margin: 0 0 8px 0;
-  color: #1a1a1a;
-}
+   EVERY selector below is rooted at one of seven scope classes, and
+   `__tests__/promptManagerScope.test.js` fails on an eighth:
 
-.section-description {
-  color: #666;
-  margin: 0;
-}
+     .pmgr                   AIPromptManager.jsx — the section and both dialogs
+     .plib                   PromptLibraryPanel.jsx — the table and its controls
+     .pvi                    PromptVariableInspector.jsx
+     .ppf                    PromptPreflightPanel.jsx
+     .pap                    PromptAssembledPreview.jsx
+     .ai-prompt-editor-modal AIGenerationPromptEditor.jsx  (see below)
+     .prompt-type-sections   AdminPage.jsx's prompts tab   (see below)
 
-/* Controls and Filters */
-.prompt-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-  gap: 16px;
-  flex-wrap: wrap;
-}
+   THE LAST TWO ARE NOT THIS FILE'S TO NAME, and that is worth stating rather
+   than hiding. `AIGenerationPromptEditor.jsx` imports this stylesheet and
+   AdminPage.jsx renders the prompt-type cards; both files are owned by other
+   changes in flight. Their rules are rooted at their own component roots so
+   they cannot leak either, and they collapse into `.pmgr` — or move to their
+   own stylesheets — the day those files can be touched. AUDIT.md §6.2 items 9
+   and 14.
 
-.prompt-filters {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  flex: 1;
-}
+   ONE GLOBAL SURVIVES ON PURPOSE. `.form-group input[type="text"] / textarea /
+   select` is the ONLY rule in the product that gives a form control its width,
+   padding and border: `styles.css` has no bare `input` rule and declares
+   nothing for `.form-group`'s children. Eighteen components rely on it —
+   QuestionSetEditor, GameSetupDialog, QuestionsPanel, ArchivePanel,
+   RoundKindPicker, QuestionPullDialog and every builder. Scoping it here would
+   strip the borders off half the forms in the product to tidy up a prompt
+   screen. It belongs in `styles.css`, which is outside this change's file set,
+   so it stays here, alone, named, and pinned by a test that fails if a second
+   global joins it.
 
-.filter-select {
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  background: white;
-  font-size: 14px;
-  min-width: 140px;
-}
+   THIS SURFACE IS STILL PAPER, ON PURPOSE. `AdminPage.jsx` gives the prompts
+   section no `contentTheme`, so AdminShell paints it light — the question sets
+   and users tabs each converted their theme and their markup in one change, and
+   this file cannot: AdminPage.jsx is owned elsewhere this pass. Painting dusk
+   markup onto the light field would be the exact 1.4:1 failure
+   __tests__/questionSetsPalette.test.js exists to prevent, so every colour here
+   is measured against white and #f8f9fa instead. When the section is converted,
+   these blocks convert with it. Measured, on white:
 
-.search-input {
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  background: white;
-  font-size: 14px;
-  min-width: 200px;
-  flex: 1;
-  max-width: 300px;
-}
+     --pc-ink        #1a1a1a   16.1:1   body copy
+     --pc-muted      #5c6470    6.5:1   notes, labels
+     --pc-stop       #a3160f    7.1:1   blocking tier
+     --pc-silent     #7a3d00    7.7:1   the silent tier — the loud one
+     --pc-link       #0b5fb0    6.0:1   tokens
+   ========================================================================== */
 
-.prompt-control-actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.create-prompt-btn {
-  padding: 10px 20px;
-  background: #2e7d32;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.create-prompt-btn:hover {
-  background: #1b5e20;
-}
-
-/* Prompts Grid */
-.prompts-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 20px;
-}
-
-.prompt-card {
-  background: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 20px;
-  transition: box-shadow 0.2s;
-}
-
-.prompt-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.prompt-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 12px;
-}
-
-.prompt-card-header h3 {
-  margin: 0;
-  font-size: 18px;
-  color: #1a1a1a;
-  flex: 1;
-  padding-right: 12px;
-}
-
-/* Status Badges */
-.status-badge {
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 500;
-  text-transform: uppercase;
-}
-
-.status-active {
-  background: #e8f5e9;
-  color: #2e7d32;
-}
-
-.status-draft {
-  background: #fff3e0;
-  color: #ef6c00;
-}
-
-.status-archived {
-  background: #f5f5f5;
-  color: #757575;
-}
-
-/* Meta Badges */
-.prompt-card-meta {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-
-.game-type-badge,
-.category-badge,
-.default-badge,
-.warning-badge {
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-/* A prompt the summary engine cannot actually run (generation format), or a
-   record with no promptId. Both look fine until you attach them. */
-.warning-badge {
-  background: #fdecea;
-  color: #b3261e;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.game-type-badge {
-  background: #e3f2fd;
-  color: #1976d2;
-}
-
-.category-badge {
-  background: #f3e5f5;
-  color: #7b1fa2;
-}
-
-.default-badge {
-  background: #fff8e1;
-  color: #f57c00;
-}
-
-.prompt-description {
-  color: #666;
-  font-size: 14px;
-  margin: 0 0 12px 0;
-  line-height: 1.5;
-}
-
-/* Tags */
-.prompt-tags {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
-.tag {
-  padding: 4px 8px;
-  background: #f0f0f0;
-  border-radius: 4px;
-  font-size: 12px;
-  color: #555;
-}
-
-/* Card Actions */
-.prompt-card-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  border-top: 1px solid #f0f0f0;
-  padding-top: 12px;
-}
-
-.btn-icon {
-  padding: 6px 10px;
-  background: none;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 16px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-icon:hover {
-  background: #f5f5f5;
-  border-color: #bbb;
-}
-
-.btn-icon.delete:hover {
-  background: #ffebee;
-  border-color: #ef5350;
-}
-
-/* Empty and Loading States */
-.empty-state,
-.loading-state {
-  grid-column: 1 / -1;
-  text-align: center;
-  padding: 60px 20px;
-  color: #666;
-}
-
-/* Prompt Editor Modal
-
-   THE FOURTH PLACE THIS EXACT TRAP APPEARED.
-
-   `align-items: center` on a fixed, full-viewport flex scrim with no
-   `overflow-y` centres a too-tall card, which means it overflows the top AND
-   the bottom at once and a scroll container can only ever reach one of them.
-   Already fixed in `.modal-overlay` (styles.css), `.qsets-rowact` on the
-   horizontal axis, and `.setup-panel__body`. This one matters most: the prompt
-   editor is the tallest form in the product — eleven field groups plus the
-   variable inspector, the preflight panel and the assembled preview — so its
-   Save button is the first thing to go past the fold, and this overlay has no
-   Escape handler to fall back on either.
-
-   `align-items: flex-start` plus `margin: auto` on the card centres it while it
-   fits and yields to the scroll once it does not. */
-.prompt-editor-overlay,
-.prompt-advisor-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  z-index: 1000;
-  padding: 20px;
-}
-
-.prompt-editor-overlay > *,
-.prompt-advisor-overlay > * {
-  margin: auto;
-}
-
-.prompt-editor-modal,
-.prompt-advisor-modal {
-  background: white;
-  border-radius: 8px;
-  max-width: 800px;
-  width: 100%;
-  max-height: 90vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.prompt-editor-header,
-.prompt-advisor-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.prompt-editor-header h2,
-.prompt-advisor-header h2 {
-  margin: 0;
-  font-size: 24px;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  color: #666;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: background 0.2s;
-}
-
-.close-btn:hover {
-  background: #f0f0f0;
-}
-
-/* Editor Form */
-.prompt-editor-form {
-  padding: 20px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.form-group {
-  margin-bottom: 20px;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 500;
-  color: #333;
-}
+/* ============================================================================
+   THE ONE TRANSITIONAL GLOBAL. Read the header before adding a second.
+   ========================================================================== */
 
 .form-group input[type="text"],
 .form-group textarea,
@@ -370,44 +87,332 @@
   line-height: 1.5;
 }
 
-.form-help {
+/* ============================================================================
+   .pmgr — the section itself, and the token block every scope below reads.
+   ========================================================================== */
+
+/*
+  ONE DECLARATION, THREE ROOTS, AND THE SECOND AND THIRD ARE NOT OPTIONAL.
+
+  There used to be two identical copies of this block — one on the section, one
+  on the editor modal — with a comment asking whoever changed one to remember
+  the other. Three selectors on ONE rule cannot drift; three copies can.
+
+  WHY IT IS NOT JUST `.pmgr`. `PromptLibraryPanel` is mounted in two places
+  now: inside `.pmgr`, and inside `.ai-prompt-editor-modal` — which
+  `AdminPage.jsx:1283` renders in the top-level fragment beside `<IssueFab>`,
+  OUTSIDE every section, so it is not a descendant of `.pmgr` and inherits
+  nothing from it. An undefined custom property invalidates the WHOLE
+  declaration rather than just the value, so a `.plib` reached that way would
+  lose its rules, its focus outline and every chip colour — including the
+  "Broken record" chip, which is the one that warns about a dangling
+  reference — and nothing would error. `.plib` carries them so the panel is
+  mountable anywhere; `.ai-prompt-editor-modal` carries them so anything else
+  that overlay grows is covered too.
+
+  Everything else — `.pvi`, `.ppf`, `.pap`, the halves, the readouts — renders
+  only inside the summary editor, which IS a DOM descendant of `.pmgr` because
+  `Modal` does not portal.
+
+  `__tests__/promptManagerScope.test.js` derives the required selector list from
+  the JSX rather than trusting this comment: every root that mounts
+  `<PromptLibraryPanel>` must appear here.
+*/
+.pmgr,
+.plib,
+.ai-prompt-editor-modal {
+  --pc-ink: #1a1a1a;
+  --pc-muted: #5c6470;
+  --pc-rule: #dfe3e8;
+  --pc-stop: #a3160f;
+  --pc-silent: #7a3d00;
+  --pc-link: #0b5fb0;
+  --pc-paper: #f8f9fa;
+  --pc-tint-stop: rgba(163, 22, 15, .07);
+  --pc-tint-silent: rgba(122, 61, 0, .10);
+  --pc-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --pc-row-h: 36px;
+}
+
+.pmgr {
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 30px;
+}
+
+.pmgr-header {
+  margin-bottom: 24px;
+}
+
+.pmgr-header h2 {
+  margin: 0 0 8px 0;
+  color: var(--pc-ink);
+}
+
+/* Was `.section-description`, a bare global that `styles.css:4774` already
+   owns and already won. Renamed rather than scoped so the section keeps a lede
+   of its own measured colour instead of one it inherited by accident. */
+.pmgr-lede {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--pc-muted);
+}
+
+/* ---------------------------------------------------------- status strip -- */
+
+/* Failures used to arrive as `alert()`. An alert states the severity, blocks
+   the screen, and leaves nothing behind — so a list that failed to load was
+   dismissed into an empty state that read "No prompts yet", which is the
+   "empty state that lies" the honesty rules name. These are banners on the
+   surface the failure is about, and they stay until the thing is retried. */
+.pmgr-status {
+  margin: 0 0 16px;
+}
+
+/* ============================================================================
+   .plib — the library table's controls. The table itself is further down.
+   ========================================================================== */
+
+.plib .prompt-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.plib .prompt-filters {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.plib .filter-select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  font-size: 14px;
+  min-width: 140px;
+}
+
+.plib .search-input {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  font-size: 14px;
+  min-width: 200px;
+  flex: 1;
+  max-width: 300px;
+}
+
+.plib .prompt-control-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.plib .create-prompt-btn {
+  padding: 10px 20px;
+  background: #2e7d32;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.plib .create-prompt-btn:hover {
+  background: #1b5e20;
+}
+
+.plib .loading-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--pc-muted);
+}
+
+/* ============================================================================
+   .pmgr — the two dialogs.
+
+   THE FOURTH PLACE THE CENTRED-OVERFLOW TRAP APPEARED.
+
+   `align-items: center` on a fixed, full-viewport flex scrim with no
+   `overflow-y` centres a too-tall card, which means it overflows the top AND
+   the bottom at once and a scroll container can only ever reach one of them.
+   This one matters most: the prompt editor is the tallest form in the product
+   — eleven field groups plus the variable inspector, the preflight panel and
+   the assembled preview — so its Save button is the first thing to go past the
+   fold.
+
+   `align-items: flex-start` plus `margin: auto` on the card centres it while it
+   fits and yields to the scroll once it does not. Pinned by
+   `__tests__/modalReachability.test.js`.
+   ========================================================================== */
+
+.pmgr-scrim {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.pmgr-scrim > * {
+  margin: auto;
+}
+
+.pmgr-modal {
+  background: white;
+  border-radius: 8px;
+  max-width: 800px;
+  width: 100%;
+  /* `vh` first as the fallback, then `dvh` so a supporting browser takes it:
+     on iOS `vh` is the LARGE viewport, measured as if the toolbars were
+     hidden, so a `90vh` card is taller than the screen it is actually on. */
+  max-height: 90vh;
+  max-height: 90dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* THE WIDTH MODIFIER THAT REPLACED `.large-modal`.
+
+   `.large-modal { max-width: 1200px !important; width: 95% !important; }` was a
+   bare global carrying two `!important`s, plus a second copy of itself at
+   higher specificity three lines below — the shape a rule takes when nobody can
+   work out why it is not applying. A modifier on the scope's own modal class
+   needs neither: it is one selector, one specificity, no override war. */
+.pmgr-modal--wide {
+  /* The editor carries a preview of the assembled prompt beside the fields it
+     is assembled from. At 800px the preview is a column of two-word lines,
+     which is not a preview. */
+  max-width: 1080px;
+}
+
+.pmgr-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+  flex: none;
+}
+
+.pmgr-modal-head h2 {
+  margin: 0;
+  font-size: 24px;
+  color: var(--pc-ink);
+}
+
+.pmgr-x {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.pmgr-x:hover {
+  background: #f0f0f0;
+}
+
+/* The scrolling body of each dialog. `min-height: 0` because a flex item's
+   default `min-height: auto` resolves to its content height, which is how the
+   setup panel's Switch-game button became unreachable: the overflow never
+   existed for `overflow-y` to act on. */
+.pmgr .prompt-editor-form,
+.pmgr-advisor-body {
+  padding: 20px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+/* The footer, in BOTH dialogs. The advisor had an X and nothing else below
+   several screens of analysis; it now carries the same bottom exit the editor
+   does, outside the scroll region so it cannot scroll away. */
+.pmgr .form-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 20px;
+  border-top: 1px solid #e0e0e0;
+  flex: none;
+}
+
+/* ------------------------------------------------------------ editor form -- */
+
+.pmgr .form-group {
+  margin-bottom: 20px;
+}
+
+.pmgr .form-help {
   display: block;
   margin-top: 4px;
   font-size: 12px;
-  color: #666;
+  color: var(--pc-muted);
 }
 
 /* Author-time variable warning. Deliberately not styled as an error state on
    the field itself — the save handler is the gate; this is a heads-up while
    there is still a cursor in the box. */
-.unknown-variable-warning {
+.pmgr .unknown-variable-warning {
   margin-top: 8px;
   padding: 10px 12px;
   font-size: 13px;
   line-height: 1.5;
   border-radius: 6px;
-  border: 1px solid var(--danger, #b3261e);
-  background: rgba(179, 38, 30, 0.08);
-  color: var(--danger-text, #8c1d18);
+  border: 1px solid var(--pc-stop);
+  background: var(--pc-tint-stop);
+  color: var(--pc-stop);
 }
 
-.form-row {
+/* Two, not three: Category and Scenario left this form on the owner's call. */
+.pmgr .form-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
 }
 
-/* Tag Input */
-.tag-input-container {
+/* --------------------------------------------------------------- tagging -- */
+
+.pmgr .tag-input-container {
   display: flex;
   gap: 8px;
 }
 
-.tag-input-container input {
+.pmgr .tag-input-container input {
   flex: 1;
 }
 
-.btn-add-tag {
+.pmgr .btn-add-tag {
   padding: 10px 16px;
   background: #f0f0f0;
   border: 1px solid #ddd;
@@ -417,18 +422,29 @@
   transition: background 0.2s;
 }
 
-.btn-add-tag:hover {
+.pmgr .btn-add-tag:hover {
   background: #e0e0e0;
 }
 
-.tags-list {
+.pmgr .tags-list,
+.ai-prompt-editor-modal .tags-list {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
   margin-top: 8px;
 }
 
-.tags-list .tag {
+.pmgr .tag,
+.ai-prompt-editor-modal .tag {
+  padding: 4px 8px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #555;
+}
+
+.pmgr .tags-list .tag,
+.ai-prompt-editor-modal .tags-list .tag {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -438,7 +454,8 @@
   border-radius: 4px;
 }
 
-.tags-list .tag button {
+.pmgr .tags-list .tag button,
+.ai-prompt-editor-modal .tags-list .tag button {
   background: none;
   border: none;
   cursor: pointer;
@@ -448,98 +465,49 @@
   color: #1976d2;
 }
 
-/* Checkbox */
-.checkbox-group label {
+.pmgr .checkbox-group label {
   display: flex;
   align-items: center;
   font-weight: normal;
   cursor: pointer;
 }
 
-.checkbox-group input[type="checkbox"] {
+.pmgr .checkbox-group input[type="checkbox"] {
   margin-right: 8px;
 }
 
-/* Form Actions */
-.form-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  padding: 20px;
-  border-top: 1px solid #e0e0e0;
-}
+/* ------------------------------------------------------------- the advisor -- */
 
-.btn-primary,
-.btn-secondary {
-  padding: 10px 20px;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: none;
-}
-
-.btn-primary {
-  background: #2196f3;
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #1976d2;
-}
-
-.btn-primary:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: white;
-  color: #333;
-  border: 1px solid #ddd;
-}
-
-.btn-secondary:hover {
-  background: #f5f5f5;
-}
-
-/* AI Advisor Modal */
-.prompt-advisor-content {
-  padding: 20px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.prompt-info {
+.pmgr .prompt-info {
   margin-bottom: 24px;
 }
 
-.prompt-info h3 {
+.pmgr .prompt-info h3 {
   margin: 0 0 8px 0;
 }
 
-.prompt-meta {
+.pmgr .prompt-meta {
   display: flex;
   gap: 8px;
+  margin-bottom: 8px;
 }
 
-.prompt-meta .badge {
+.pmgr .prompt-meta .badge {
   padding: 4px 8px;
   background: #f0f0f0;
   border-radius: 4px;
   font-size: 12px;
+  color: #666;
 }
 
-/* Analysis Types */
-.analysis-types {
+.pmgr .analysis-types {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   margin-bottom: 24px;
 }
 
-.analysis-type-option {
+.pmgr .analysis-type-option {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -551,59 +519,58 @@
   position: relative;
 }
 
-.analysis-type-option:hover {
+.pmgr .analysis-type-option:hover {
   border-color: #2196f3;
   background: #f8f9fa;
 }
 
-.analysis-type-option.selected {
+.pmgr .analysis-type-option.selected {
   border-color: #2196f3;
   background: #e3f2fd;
 }
 
-.analysis-type-option input {
+.pmgr .analysis-type-option input {
   position: absolute;
   opacity: 0;
 }
 
-.type-icon {
+.pmgr .type-icon {
   font-size: 24px;
   margin-bottom: 8px;
 }
 
-.type-label {
+.pmgr .type-label {
   font-size: 14px;
   font-weight: 500;
 }
 
-.analyze-btn {
+.pmgr .analyze-btn {
   width: 100%;
   padding: 12px;
   font-size: 16px;
 }
 
-/* Analysis Results */
-.analysis-results {
+.pmgr .analysis-results {
   margin-top: 24px;
 }
 
-.result-section {
+.pmgr .result-section {
   margin-bottom: 24px;
   padding: 16px;
-  background: #f8f9fa;
+  background: var(--pc-paper);
   border-radius: 8px;
 }
 
-.result-section h4 {
+.pmgr .result-section h4 {
   margin: 0 0 12px 0;
   font-size: 16px;
 }
 
-.improved-prompt {
+.pmgr .improved-prompt {
   position: relative;
 }
 
-.improved-prompt pre {
+.pmgr .improved-prompt pre {
   background: white;
   border: 1px solid #e0e0e0;
   padding: 16px;
@@ -615,372 +582,7 @@
   margin: 0 0 12px 0;
 }
 
-.copy-btn {
-  width: 100%;
-}
-
-/* Score Display */
-.score-display {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.score-value {
-  font-size: 32px;
-  font-weight: bold;
-  color: #2196f3;
-}
-
-.score-bar {
-  flex: 1;
-  height: 20px;
-  background: #e0e0e0;
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.score-fill {
-  height: 100%;
-  background: #2196f3;
-  transition: width 0.5s ease;
-}
-
-/* Analysis Lists */
-.analysis-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.analysis-list li {
-  padding: 8px 0;
-  padding-left: 24px;
-  position: relative;
-}
-
-.analysis-list li:before {
-  content: '✓';
-  position: absolute;
-  left: 0;
-  color: #2e7d32;
-}
-
-/* Improvements List */
-.improvements-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.improvement-item {
-  padding: 16px;
-  background: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  border-left: 4px solid #e0e0e0;
-}
-
-.improvement-item.priority-high {
-  border-left-color: #f44336;
-}
-
-.improvement-item.priority-medium {
-  border-left-color: #ff9800;
-}
-
-.improvement-item.priority-low {
-  border-left-color: #4caf50;
-}
-
-.improvement-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.improvement-category {
-  font-weight: 500;
-  color: #1976d2;
-}
-
-.improvement-priority {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  text-transform: uppercase;
-}
-
-.priority-high .improvement-priority {
-  background: #ffebee;
-  color: #c62828;
-}
-
-.priority-medium .improvement-priority {
-  background: #fff3e0;
-  color: #ef6c00;
-}
-
-.priority-low .improvement-priority {
-  background: #e8f5e9;
-  color: #2e7d32;
-}
-
-.improvement-issue {
-  margin: 0 0 8px 0;
-  color: #666;
-}
-
-.improvement-suggestion {
-  margin: 0 0 8px 0;
-  font-weight: 500;
-}
-
-.improvement-example {
-  background: #f8f9fa;
-  padding: 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  margin: 0;
-}
-
-/* Alternative Approaches */
-.alternative-approach {
-  padding: 16px;
-  background: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  margin-bottom: 12px;
-}
-
-.alternative-approach h5 {
-  margin: 0 0 8px 0;
-  color: #1976d2;
-}
-
-.alternative-approach p {
-  margin: 0 0 12px 0;
-  color: #666;
-}
-
-.approach-details {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.pros,
-.cons {
-  font-size: 14px;
-}
-
-.pros strong,
-.cons strong {
-  display: block;
-  margin-bottom: 4px;
-  color: #333;
-}
-
-.pros ul,
-.cons ul {
-  margin: 0;
-  padding-left: 20px;
-}
-
-.pros li,
-.cons li {
-  color: #666;
-  margin-bottom: 4px;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .prompt-controls {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .prompt-filters {
-    flex-direction: column;
-  }
-
-  .filter-select,
-  .search-input {
-    width: 100%;
-    max-width: none;
-  }
-
-  .prompts-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .form-row {
-    grid-template-columns: 1fr;
-  }
-
-  .analysis-types {
-    grid-template-columns: 1fr;
-  }
-
-  .approach-details {
-    grid-template-columns: 1fr;
-  }
-}
-/* Template Editor with Variables Panel */
-.template-group {
-  margin-bottom: 24px;
-}
-
-.template-editor-container {
-  display: flex;
-  gap: 16px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  overflow: hidden;
-  background: white;
-}
-
-.template-variables-panel {
-  width: 320px;
-  background: #f8f9fa;
-  padding: 16px;
-  border-right: 1px solid #e0e0e0;
-  overflow-y: auto;
-  max-height: 400px;
-}
-
-.template-variables-panel h4 {
-  margin: 0 0 12px 0;
-  color: #333;
-  font-size: 16px;
-}
-
-.variables-help {
-  font-size: 12px;
-  color: #666;
-  margin: 0 0 16px 0;
-}
-
-.variable-category {
-  margin-bottom: 20px;
-  padding: 12px;
-  background: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
-
-.variable-category .category-header {
-  margin: 0 0 12px 0;
-  color: #333;
-  font-size: 14px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 8px 12px;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  border-radius: 4px;
-  border-left: 4px solid #0066cc;
-  text-align: center;
-}
-
-.category-variables {
-  display: grid;
-  gap: 6px;
-}
-
-.variable-btn {
-  display: block;
-  width: 100%;
-  margin-bottom: 4px;
-  padding: 6px 8px;
-  background: white;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 12px;
-  font-family: 'Courier New', monospace;
-  color: #0066cc;
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.2s ease;
-}
-
-.variable-btn:hover:not(:disabled) {
-  background: #0066cc;
-  color: white;
-  border-color: #0066cc;
-}
-
-.variable-btn:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-/* Game type availability styles */
-.variable-btn.variable-unavailable {
-  background: #f5f5f5;
-  color: #999;
-  border-color: #ddd;
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.variable-btn.variable-unavailable:hover {
-  background: #f5f5f5;
-  color: #999;
-  border-color: #ddd;
-}
-
-.variable-btn.variable-trivia-only {
-  border-left: 3px solid #ff9800;
-}
-
-.variable-btn.variable-callanswer-only {
-  border-left: 3px solid #4caf50;
-}
-
-/* Enhanced tooltips for variable buttons */
-.variable-btn[title]:hover::after {
-  content: attr(title);
-  position: absolute;
-  left: 100%;
-  top: 0;
-  margin-left: 10px;
-  padding: 8px 12px;
-  background: #333;
-  color: white;
-  border-radius: 6px;
-  font-size: 11px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  white-space: pre-line;
-  z-index: 1000;
-  max-width: 300px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-  pointer-events: none;
-}
-
-.template-textarea-container {
-  flex: 1;
-  position: relative;
-}
-
-.template-textarea-container textarea {
-  width: 100%;
-  height: 400px;
-  padding: 16px;
-  border: none;
-  resize: vertical;
-  font-family: 'Courier New', monospace;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.template-textarea-container textarea:focus {
-  outline: none;
-  box-shadow: inset 0 0 0 2px #0066cc;
-}
-
-/* Improved Prompt Actions */
-.improved-prompt-actions {
+.pmgr .improved-prompt-actions {
   display: flex;
   gap: 8px;
   margin-top: 12px;
@@ -988,7 +590,7 @@
   border-top: 1px solid #e0e0e0;
 }
 
-.apply-btn {
+.pmgr .apply-btn {
   background: #4caf50;
   color: white;
   border: none;
@@ -999,11 +601,11 @@
   transition: background-color 0.2s ease;
 }
 
-.apply-btn:hover {
+.pmgr .apply-btn:hover {
   background: #45a049;
 }
 
-.copy-btn {
+.pmgr .copy-btn {
   background: #6c757d;
   color: white;
   border: none;
@@ -1012,27 +614,235 @@
   cursor: pointer;
   font-size: 14px;
   transition: background-color 0.2s ease;
+  width: 100%;
 }
 
-.copy-btn:hover {
+.pmgr .copy-btn:hover {
   background: #5a6268;
 }
 
-/* Magic Wand Feature Styles */
-.label-with-actions {
+.pmgr .score-display {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.pmgr .score-value {
+  font-size: 32px;
+  font-weight: bold;
+  color: #2196f3;
+}
+
+.pmgr .score-bar {
+  flex: 1;
+  height: 20px;
+  background: #e0e0e0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.pmgr .score-fill {
+  height: 100%;
+  background: #2196f3;
+  transition: width 0.5s ease;
+}
+
+.pmgr .analysis-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.pmgr .analysis-list li {
+  padding: 8px 0;
+  padding-left: 24px;
+  position: relative;
+}
+
+.pmgr .analysis-list li:before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  color: #2e7d32;
+}
+
+.pmgr .improvements-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pmgr .improvement-item {
+  padding: 16px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  border-left: 4px solid #e0e0e0;
+}
+
+.pmgr .improvement-item.priority-high {
+  border-left-color: #f44336;
+}
+
+.pmgr .improvement-item.priority-medium {
+  border-left-color: #ff9800;
+}
+
+.pmgr .improvement-item.priority-low {
+  border-left-color: #4caf50;
+}
+
+.pmgr .improvement-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.pmgr .improvement-category {
+  font-weight: 500;
+  color: #1976d2;
+}
+
+.pmgr .improvement-priority {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.pmgr .priority-high .improvement-priority {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.pmgr .priority-medium .improvement-priority {
+  background: #fff3e0;
+  color: #ef6c00;
+}
+
+.pmgr .priority-low .improvement-priority {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.pmgr .improvement-issue {
+  margin: 0 0 8px 0;
+  color: var(--pc-muted);
+}
+
+.pmgr .improvement-suggestion {
+  margin: 0 0 8px 0;
+  font-weight: 500;
+}
+
+.pmgr .improvement-example {
+  background: var(--pc-paper);
+  padding: 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin: 0;
+}
+
+.pmgr .alternative-approach {
+  padding: 16px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+
+.pmgr .alternative-approach h5 {
+  margin: 0 0 8px 0;
+  color: #1976d2;
+}
+
+.pmgr .alternative-approach p {
+  margin: 0 0 12px 0;
+  color: var(--pc-muted);
+}
+
+.pmgr .approach-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.pmgr .pros,
+.pmgr .cons {
+  font-size: 14px;
+}
+
+.pmgr .pros strong,
+.pmgr .cons strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #333;
+}
+
+.pmgr .pros ul,
+.pmgr .cons ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.pmgr .pros li,
+.pmgr .cons li {
+  color: var(--pc-muted);
+  margin-bottom: 4px;
+}
+
+/* -------------------------------------------------- the template textarea -- */
+
+.pmgr .template-group {
+  margin-bottom: 24px;
+}
+
+.pmgr .template-editor-container {
+  display: flex;
+  gap: 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+}
+
+.pmgr .template-textarea-container {
+  flex: 1;
+  position: relative;
+}
+
+.pmgr .template-textarea-container textarea {
+  width: 100%;
+  height: 400px;
+  padding: 16px;
+  border: none;
+  resize: vertical;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pmgr .template-textarea-container textarea:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px #0066cc;
+}
+
+/* --------------------------------------------------------- the magic wand -- */
+
+.pmgr .label-with-actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
 }
 
-.magic-wand-actions {
+.pmgr .magic-wand-actions {
   display: flex;
   gap: 8px;
   align-items: center;
 }
 
-.magic-wand-btn {
+.pmgr .magic-wand-btn {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1048,20 +858,20 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.magic-wand-btn:hover:not(:disabled) {
+.pmgr .magic-wand-btn:hover:not(:disabled) {
   background: linear-gradient(135deg, var(--primary-deep) 0%, #6b46c1 100%);
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
-.magic-wand-btn:disabled {
+.pmgr .magic-wand-btn:disabled {
   background: #ccc;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
 }
 
-.revert-btn {
+.pmgr .revert-btn {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1076,12 +886,21 @@
   transition: all 0.2s ease;
 }
 
-.revert-btn:hover {
+.pmgr .revert-btn:hover {
   background: #ff5252;
   transform: translateY(-1px);
 }
 
-/* AI Generation Prompt Editor Specific Styles */
+/* ============================================================================
+   .ai-prompt-editor-modal — the GENERATION prompt editor.
+
+   Not this file's component and not this change's file: `AdminPage.jsx` renders
+   it outside `.pmgr`, and `AIGenerationPromptEditor.jsx` imports this
+   stylesheet. Every rule it needs is rooted at its own component root so
+   nothing leaks, which is the whole point; giving it its own stylesheet means
+   editing its import line, and AUDIT.md §6.2 item 9 owns that file.
+   ========================================================================== */
+
 .ai-prompt-editor-modal {
   position: fixed;
   top: 0;
@@ -1105,33 +924,19 @@
   `./styles.css`, so the component stylesheet injects first and the global one
   wins on equal specificity. Swapping those two lines — a change nobody would
   think to test — would have silently re-broken every `.modal-overlay` dialog
-  in the product, on every screen, back to a dialog taller than the viewport
-  with its footer unreachable and no Escape key on a tablet.
+  in the product, on every screen.
 
-  Nothing rendered them: AIPromptManager.jsx uses neither class. They were dead
-  weight aimed at the whole app.
-
-  This is the FIFTH instance of this fault. modalReachability's own header says
-  "reading only styles.css is how the fourth instance hid" — and it then read
-  this file for `.prompt-editor-overlay` only, so a redeclaration of the global
-  selector was still invisible. The test now scans every component stylesheet
-  for the global names themselves.
+  The width below is what `.large-modal` used to say with two `!important`s and
+  a duplicate rule. Rooted at the component, it beats the global `.modal-content`
+  on specificity alone.
 */
-
-.large-modal {
-  max-width: 1200px !important;
-  width: 95% !important;
+.ai-prompt-editor-modal .modal-content {
+  max-width: 1200px;
+  width: 95%;
   min-width: 800px;
 }
 
-/* Ensure AI Generation Prompt Editor modal is wide enough */
-.ai-prompt-editor-modal .modal-content.large-modal {
-  max-width: 1200px !important;
-  width: 95% !important;
-  min-width: 800px;
-}
-
-.modal-header {
+.ai-prompt-editor-modal .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1139,12 +944,12 @@
   border-bottom: 1px solid #e0e0e0;
 }
 
-.modal-header h2 {
+.ai-prompt-editor-modal .modal-header h2 {
   margin: 0;
   font-size: 24px;
 }
 
-.close-button {
+.ai-prompt-editor-modal .close-button {
   background: none;
   border: none;
   font-size: 24px;
@@ -1160,107 +965,55 @@
   transition: background 0.2s;
 }
 
-.close-button:hover {
+.ai-prompt-editor-modal .close-button:hover {
   background: #f0f0f0;
 }
 
-.modal-body {
+.ai-prompt-editor-modal .modal-body {
   padding: 20px;
   overflow-y: auto;
   flex: 1;
 }
 
-.filters-section {
-  margin-bottom: 24px;
-  padding: 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
-}
+/*
+  THE CARD GRID IS GONE FROM HERE TOO. `.filters-section`, `.filter-row`,
+  `.prompts-list`, `.prompts-grid`, `.prompt-card`, `.prompt-header`,
+  `.prompt-description`, `.prompt-meta`, `.default-badge`, `.prompt-tags` and
+  `.prompt-actions` styled the third prompt list in the product; that component
+  mounts `PromptLibraryPanel` now (AUDIT §6.2 item 9), so the rules were
+  orphaned the moment it did. `__tests__/promptManagerScope.test.js` fails on a
+  selector nothing renders, which is what caught them.
+*/
 
-.filter-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr auto;
-  gap: 16px;
-  align-items: end;
-}
-
-.filter-row label {
+.ai-prompt-editor-modal .form-actions {
   display: flex;
-  flex-direction: column;
-  font-weight: 500;
-  color: #333;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 20px;
+  border-top: 1px solid #e0e0e0;
 }
 
-.filter-row select {
-  margin-top: 4px;
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 14px;
+.ai-prompt-editor-modal .form-group {
+  margin-bottom: 20px;
 }
 
-.prompts-list h3 {
-  margin: 0 0 16px 0;
-  color: #1a1a1a;
-}
-
-.prompt-card {
-  background: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 16px;
-}
-
-.prompt-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.prompt-header h4 {
-  margin: 0;
-  font-size: 16px;
-  color: #1a1a1a;
-}
-
-.prompt-meta {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.prompt-meta span {
-  padding: 2px 8px;
-  background: #f0f0f0;
-  border-radius: 4px;
-  font-size: 12px;
-  color: #666;
-}
-
-.prompt-actions {
-  margin-top: 12px;
-  text-align: right;
-}
-
-.form-grid {
+.ai-prompt-editor-modal .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
 
-.form-grid .full-width {
+.ai-prompt-editor-modal .form-grid .full-width {
   grid-column: 1 / -1;
 }
 
-.tags-input {
+.ai-prompt-editor-modal .tags-input {
   display: flex;
   gap: 8px;
   margin-bottom: 8px;
 }
 
-.tags-input input {
+.ai-prompt-editor-modal .tags-input input {
   flex: 1;
   padding: 8px 12px;
   border: 1px solid #ddd;
@@ -1268,7 +1021,7 @@
   font-size: 14px;
 }
 
-.tags-input button {
+.ai-prompt-editor-modal .tags-input button {
   padding: 8px 16px;
   background: #f0f0f0;
   border: 1px solid #ddd;
@@ -1277,13 +1030,22 @@
   font-size: 14px;
 }
 
-.loading-spinner {
+.ai-prompt-editor-modal .loading-spinner {
   text-align: center;
   padding: 40px;
   color: #666;
 }
 
-/* AI Prompt Management Sections Layout */
+/* ============================================================================
+   .prompt-type-sections — the two cards on AdminPage's prompts tab.
+
+   AdminPage.jsx renders these and AUDIT.md §6.2 item 14 removes them, along
+   with the `.admin-section` card they sit in, when the section converts to
+   dusk. Until then they are rooted at the outer card so they cannot leak; the
+   `.section-header` inside used to be a bare global two clicks from
+   `styles.css`'s own.
+   ========================================================================== */
+
 .prompt-type-sections {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1291,14 +1053,14 @@
   margin-bottom: 32px;
 }
 
-.prompt-section {
+.prompt-type-sections .prompt-section {
   background: white;
   border: 1px solid #e0e0e0;
   border-radius: 8px;
   padding: 20px;
 }
 
-.prompt-section .section-header {
+.prompt-type-sections .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1307,25 +1069,18 @@
   border-bottom: 1px solid #f0f0f0;
 }
 
-.prompt-section .section-header h3 {
+.prompt-type-sections .section-header h3 {
   margin: 0;
   font-size: 18px;
   color: #1a1a1a;
 }
 
-.prompt-section .section-header-right {
+.prompt-type-sections .section-header-right {
   display: flex;
   gap: 8px;
   align-items: center;
 }
 
-/* Responsive layout for sections */
-@media (max-width: 1024px) {
-  .prompt-type-sections {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-}
 /* ============================================================================
    BEFORE YOU SAVE — the preflight panel, the assembled preview and the
    variable inspector.
@@ -1334,57 +1089,103 @@
    editor with the variables in a right-hand rail, unavailable variables greyed
    rather than hidden, and a stated consequence above the fold.
 
-   THIS SURFACE IS STILL PAPER, ON PURPOSE. `AdminPage.jsx` gives the prompts
-   section no `contentTheme`, so AdminShell paints it light — the question sets
-   and users tabs each converted their theme and their markup in one change, and
-   this file cannot: AdminPage.jsx is owned elsewhere this pass. Painting dusk
-   markup onto the light field would be the exact 1.4:1 failure
-   __tests__/questionSetsPalette.test.js exists to prevent, so every colour below
-   is measured against white and #f8f9fa instead. When the section is converted,
-   these blocks convert with it. Measured, on white:
-
-     --pc-ink        #1a1a1a   16.1:1   body copy
-     --pc-muted      #5c6470    6.5:1    notes, labels
-     --pc-stop       #a3160f    7.1:1    blocking tier
-     --pc-silent     #7a3d00    7.7:1    the silent tier — the loud one
-     --pc-link       #0b5fb0    6.0:1    tokens
+   These blocks were already scoped and already measured; this pass moved the
+   handful of selectors that reached outside their own prefix (`.ppf` under
+   `.prompt-check-group`, `.pvi` under `.template-variables-panel`) so that the
+   scope class is the FIRST thing in every selector, and changed nothing else.
    ========================================================================== */
-
-.prompt-editor-modal {
-  /* The editor now carries a preview of the assembled prompt beside the
-     fields it is assembled from. At 800px the preview is a column of two-word
-     lines, which is not a preview. */
-  max-width: 1080px;
-
-  --pc-ink: #1a1a1a;
-  --pc-muted: #5c6470;
-  --pc-rule: #dfe3e8;
-  --pc-stop: #a3160f;
-  --pc-silent: #7a3d00;
-  --pc-link: #0b5fb0;
-  --pc-paper: #f8f9fa;
-  --pc-tint-stop: rgba(163, 22, 15, .07);
-  --pc-tint-silent: rgba(122, 61, 0, .10);
-  --pc-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-}
 
 /* ---------------------------------------------------------- the inspector -- */
 
-.template-variables-panel.pvi {
+.pvi.template-variables-panel {
   /* Mockup 19 puts the variables in a RIGHT-hand rail beside the editor, and
      the shipped palette was on the left. The JSX order was swapped rather than
      `order:` applied, so reading order and tab order still match what is drawn
      — a visual/DOM mismatch here would tab through 50 variables before
      reaching the field they insert into. Hence the border moves side too. */
   width: 360px;
-  max-height: 520px;
+  background: var(--pc-paper);
+  padding: 16px;
   border-right: 0;
   border-left: 1px solid #e0e0e0;
+  overflow-y: auto;
+  max-height: 520px;
 }
 
 .pvi-head h4 { margin: 0 0 4px; font-size: 16px; color: var(--pc-ink); }
 .pvi-sub { margin: 0 0 14px; font-size: 12px; line-height: 1.5; color: var(--pc-muted); }
 .pvi-unsafe-count { color: var(--pc-silent); }
+
+.pvi .variable-category {
+  margin-bottom: 20px;
+  padding: 12px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.pvi .variable-category .category-header {
+  margin: 0 0 12px 0;
+  color: #333;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  border-radius: 4px;
+  border-left: 4px solid #0066cc;
+  text-align: center;
+}
+
+.pvi .variable-btn {
+  display: block;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 6px 8px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'Courier New', monospace;
+  color: #0066cc;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.pvi .variable-btn:hover:not(:disabled) {
+  background: #0066cc;
+  color: white;
+  border-color: #0066cc;
+}
+
+.pvi .variable-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* The tooltip was 11px. RATIONALE §3 derives 12px as the hard floor for one
+   person at 24in, and a tooltip is read, not glanced — it was the smallest
+   type in the product carrying the longest sentences. */
+.pvi .variable-btn[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  left: 100%;
+  top: 0;
+  margin-left: 10px;
+  padding: 8px 12px;
+  background: #333;
+  color: white;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  white-space: pre-line;
+  z-index: 1000;
+  max-width: 300px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
 
 .pvi-group { margin-bottom: 14px; }
 .pvi-group > .category-header {
@@ -1470,7 +1271,7 @@
 
 /* ------------------------------------------------------------- preflight -- */
 
-.prompt-check-group .ppf { display: grid; gap: 10px; }
+.ppf { display: grid; gap: 10px; }
 
 .ppf-tier {
   border: 1px solid var(--pc-rule);
@@ -1660,8 +1461,8 @@
 
 /* ------------------------------------------------------- default + save --- */
 
-.default-blast-note { margin: 5px 0 0; font-size: 13px; line-height: 1.5; color: var(--pc-muted); }
-.default-blast-warning {
+.pmgr .default-blast-note { margin: 5px 0 0; font-size: 13px; line-height: 1.5; color: var(--pc-muted); }
+.pmgr .default-blast-warning {
   margin-top: 9px;
   padding: 11px 13px;
   border: 1px solid var(--pc-silent);
@@ -1672,9 +1473,9 @@
   line-height: 1.55;
   color: var(--pc-ink);
 }
-.default-blast-warning strong { color: var(--pc-silent); }
+.pmgr .default-blast-warning strong { color: var(--pc-silent); }
 
-.save-blocked-note {
+.pmgr .save-blocked-note {
   margin: 0 auto 0 0;
   font-size: 13px;
   font-weight: 700;
@@ -1688,65 +1489,34 @@
    QuestionSetsPanel.css: a 36px table row instead of a card wall, chips with a
    stated meaning, two distinct empty states, and a 12px type floor.
 
-   IT IS PAPER, NOT DUSK, AND THAT IS DELIBERATE — see the header of the block
-   above. `AdminPage.jsx` gives the prompts section no `contentTheme`, so
-   AdminShell paints it light; converting these blocks to the dusk palette
-   without moving the section is #F4EDE4 on white, the same 1.2:1 failure
-   __tests__/questionSetsPalette.test.js exists to prevent, in the other
-   direction. So this screen matches the sets screen's STRUCTURE and its
-   discipline, measured against white and #f8f9fa rather than against #0F1A2E.
-   __tests__/promptEditorPalette.test.js holds both halves of that.
+   IT IS PAPER, NOT DUSK, AND THAT IS DELIBERATE — see the file header.
 
    Every colour is one of the six --pc-* tokens already measured on white.
    Nothing here reaches for a global token: an undefined custom property
    invalidates the whole declaration, not just the value.
    ========================================================================== */
 
-.ai-prompt-manager {
-  /* The same block the modal declares, hoisted to the section, because the
-     library table lives outside the modal and the two must not drift. Values
-     are identical by construction — change one, change both. */
-  --pc-ink: #1a1a1a;
-  --pc-muted: #5c6470;
-  --pc-rule: #dfe3e8;
-  --pc-stop: #a3160f;
-  --pc-silent: #7a3d00;
-  --pc-link: #0b5fb0;
-  --pc-paper: #f8f9fa;
-  --pc-tint-stop: rgba(163, 22, 15, .07);
-  --pc-tint-silent: rgba(122, 61, 0, .10);
-  --pc-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --pc-row-h: 36px;
-}
-
 /* ------------------------------------------------- the build area (grid) --- */
 
-.prompt-build {
+.pmgr .prompt-build {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
   gap: 16px;
   align-items: start;
   margin-bottom: 24px;
 }
-.prompt-build-halves { min-width: 0; }
-.prompt-build-rail { position: sticky; top: 0; }
-.prompt-build-rail .template-variables-panel.pvi {
+.pmgr .prompt-build-halves { min-width: 0; }
+.pmgr .prompt-build-rail { position: sticky; top: 0; }
+.pmgr .prompt-build-rail .pvi.template-variables-panel {
   width: 100%;
   border: 1px solid var(--pc-rule);
   border-radius: 8px;
   max-height: 640px;
 }
 
-/* One column below the point where a 360px rail leaves the halves narrower
-   than the answer text they will hold. */
-@media (max-width: 1000px) {
-  .prompt-build { grid-template-columns: minmax(0, 1fr); }
-  .prompt-build-rail { position: static; }
-}
-
 /* ------------------------------------------------------- the convention --- */
 
-.prompt-convention {
+.pmgr .prompt-convention {
   margin: 0 0 18px;
   padding: 13px 15px;
   border: 1px solid var(--pc-rule);
@@ -1754,14 +1524,14 @@
   border-radius: 6px;
   background: var(--pc-paper);
 }
-.prompt-convention h4 {
+.pmgr .prompt-convention h4 {
   margin: 0 0 9px;
   font-size: 13px;
   font-weight: 700;
   color: var(--pc-ink);
 }
-.prompt-convention ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
-.prompt-convention li {
+.pmgr .prompt-convention ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+.pmgr .prompt-convention li {
   display: grid;
   grid-template-columns: 96px minmax(0, 1fr);
   gap: 10px;
@@ -1770,39 +1540,39 @@
   line-height: 1.5;
   color: var(--pc-muted);
 }
-.prompt-convention code {
+.pmgr .prompt-convention code {
   font-family: var(--pc-mono);
   font-size: 12px;
   padding: 2px 6px;
   border-radius: 4px;
   justify-self: start;
 }
-.prompt-convention .pc-brace { color: var(--pc-link); background: rgba(11, 95, 176, .09); }
-.prompt-convention .pc-bracket { color: var(--pc-silent); background: var(--pc-tint-silent); }
-.prompt-convention strong { color: var(--pc-ink); }
+.pmgr .prompt-convention .pc-brace { color: var(--pc-link); background: rgba(11, 95, 176, .09); }
+.pmgr .prompt-convention .pc-bracket { color: var(--pc-silent); background: var(--pc-tint-silent); }
+.pmgr .prompt-convention strong { color: var(--pc-ink); }
 
 /* ------------------------------------------------------------- the halves -- */
 
-.prompt-half { margin-bottom: 22px; }
-.prompt-half > label {
+.pmgr .prompt-half { margin-bottom: 22px; }
+.pmgr .prompt-half > label {
   font-size: 15px;
   font-weight: 700;
   letter-spacing: .01em;
   color: var(--pc-ink);
 }
-.prompt-half-lede {
+.pmgr .prompt-half-lede {
   margin: 3px 0 9px;
   font-size: 13px;
   line-height: 1.55;
   color: var(--pc-muted);
 }
-.prompt-half-lede code,
-.prompt-half .form-help code {
+.pmgr .prompt-half-lede code,
+.pmgr .prompt-half .form-help code {
   font-family: var(--pc-mono);
   font-size: 12px;
   color: var(--pc-link);
 }
-.prompt-half--given textarea {
+.pmgr .prompt-half--given textarea {
   width: 100%;
   min-height: 150px;
   padding: 13px;
@@ -1814,7 +1584,7 @@
   color: var(--pc-ink);
   resize: vertical;
 }
-.prompt-half--given textarea:focus {
+.pmgr .prompt-half--given textarea:focus {
   outline: none;
   border-color: var(--pc-link);
   box-shadow: 0 0 0 2px rgba(11, 95, 176, .18);
@@ -1822,7 +1592,7 @@
 
 /* -------------------------------------------- what each half is carrying --- */
 
-.prompt-readout {
+.pmgr .prompt-readout {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -1836,9 +1606,9 @@
   line-height: 1.6;
   color: var(--pc-muted);
 }
-.prompt-readout-l { font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
-.prompt-readout-v { display: flex; flex-wrap: wrap; gap: 5px; }
-.prompt-readout-v code {
+.pmgr .prompt-readout-l { font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
+.pmgr .prompt-readout-v { display: flex; flex-wrap: wrap; gap: 5px; }
+.pmgr .prompt-readout-v code {
   font-family: var(--pc-mono);
   font-size: 12px;
   padding: 1px 5px;
@@ -1846,12 +1616,12 @@
   color: var(--pc-link);
   background: rgba(11, 95, 176, .08);
 }
-.prompt-readout-v em { font-style: normal; }
+.pmgr .prompt-readout-v em { font-style: normal; }
 
 /* The empty case is the defect, so it is the loud one. It is the SILENT tier's
    colour, not the blocking tier's: the preflight below blocks the save, and two
    things painted stop-red for one finding reads as two findings. */
-.prompt-readout--none {
+.pmgr .prompt-readout--none {
   display: block;
   border-color: var(--pc-silent);
   border-left-width: 6px;
@@ -1859,7 +1629,7 @@
   font-size: 13px;
   color: var(--pc-ink);
 }
-.prompt-readout--none strong { color: var(--pc-silent); }
+.pmgr .prompt-readout--none strong { color: var(--pc-silent); }
 
 /* ---------------------------------------- the inspector's added affordances -- */
 
@@ -2032,3 +1802,50 @@
 }
 .plib-drop:hover { border-color: var(--pc-link); color: var(--pc-link); }
 .plib-drop em { font-style: normal; color: var(--pc-muted); }
+
+/* ============================================================================
+   RESPONSIVE. Every rule inside is rooted at its scope, same as above.
+   ========================================================================== */
+
+/* One column below the point where a 360px rail leaves the halves narrower
+   than the answer text they will hold. */
+@media (max-width: 1000px) {
+  .pmgr .prompt-build { grid-template-columns: minmax(0, 1fr); }
+  .pmgr .prompt-build-rail { position: static; }
+}
+
+@media (max-width: 1024px) {
+  .prompt-type-sections {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .plib .prompt-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .plib .prompt-filters {
+    flex-direction: column;
+  }
+
+  .plib .filter-select,
+  .plib .search-input {
+    width: 100%;
+    max-width: none;
+  }
+
+  .pmgr .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .pmgr .analysis-types {
+    grid-template-columns: 1fr;
+  }
+
+  .pmgr .approach-details {
+    grid-template-columns: 1fr;
+  }
+}
