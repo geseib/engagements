@@ -2096,6 +2096,31 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     answerDetails: question.answerDetails || 'No explanation provided',
     difficulty: question.difficulty || 'medium',
     questionExplanation: question.answerDetails || question.detail || '',
+    /*
+      THE SAME FIELD UNDER THE NAME IT IS ACTUALLY USED FOR.
+
+      `AnswerDetails` is stored for every engagement type
+      (upload-questions.js:588-601) and is carried by NO player or host payload,
+      so it is the one place a question author can put something the room must
+      not see until they have answered — the real title of a painting, the
+      outcome a case study actually had, why the answer was right.
+
+      It kept being missed because the NAME says "trivia footnote". The art
+      round's prompt promised a reveal in prose and never inserted a tag, and
+      the room was told the real title would be revealed and then was not.
+
+      An alias, deliberately, and not a rename: renaming would break every
+      prompt already using {answerDetails} and every CSV column header, for a
+      readability gain. Both names resolve to the same string, so a prompt may
+      use whichever reads better in its sentence.
+
+      EMPTY STRING, NOT 'No explanation provided', when there is nothing. The
+      literal above is a trivia-era default that reads as prose inside a
+      sentence built around a reveal — "the real title is No explanation
+      provided". An empty tag leaves the sentence short, which is recoverable;
+      a confident wrong sentence is not.
+    */
+    reveal: question.answerDetails || '',
     
     // ANSWERS
     playerAnswers: playerAnswers,

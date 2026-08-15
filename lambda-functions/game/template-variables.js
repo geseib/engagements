@@ -324,14 +324,65 @@ const TEMPLATE_VARIABLES = [
     example: 'A) Artificial Intelligence, B) Machine Learning, C) Deep Learning, D) Neural Networks',
   },
   {
-    // :2071 reads `question.answerDetails` with no branch, but only the trivia
-    // CSV carries that column (upload-questions.js) — every other type resolves
-    // it to the literal 'No explanation provided'.
-    name: 'answerDetails',
-    description: "The question author's background note explaining the answer",
+    /*
+      THE FINDABLE NAME FOR THE FIELD ABOVE. Same string, different word.
+
+      `answerDetails` reads as "why the trivia answer was right", so nobody
+      writing a call-and-answer prompt reached for it — which is how an art
+      round ended up promising a reveal it never made. Added as an ALIAS rather
+      than a rename: renaming breaks every prompt already using
+      {answerDetails} and every CSV header that carries the column, and buys
+      only readability.
+
+      Populated at get-ai-summary.js beside `answerDetails`, and empty rather
+      than 'No explanation provided' when the author left it blank — see the
+      note there for why a confident wrong sentence is worse than a short one.
+    */
+    name: 'reveal',
+    description: 'The same withheld note as {answerDetails}, under the name it is usually '
+      + 'wanted for. Empty when the author left it blank.',
     category: 'Question Info',
-    gameTypes: ['trivia'],
-    example: 'Machine Learning is a subset of AI that focuses on learning from data...',
+    gameTypes: ALL_TYPES,
+    example: 'Real title: The Starry Night, Vincent van Gogh, 1889, Museum of Modern Art, New York.',
+  },
+  {
+    /*
+      THE WITHHELD REVEAL — and the tag that stopped anyone finding it.
+
+      This said `gameTypes: ['trivia']`, with a comment claiming "only the
+      trivia CSV carries that column". That was true once and is not now:
+      upload-questions.js:588-601 LIFTED the trivia gate for AnswerDetails, and
+      says why in its own words — "the teaser lives in Title, the artist in
+      School, and Detail must stay blank because Detail is shown to players and
+      would spoil the round before anyone answers."
+
+      So the column is stored for every type, and get-ai-summary.js:2096 reads
+      `question.answerDetails` with NO game-type branch. By this file's own rule
+      — a type belongs here when a real round of that type substitutes the
+      variable with information about THAT round — it belongs to all five.
+
+      WHAT THE STALE TAG COST. `variablesToOffer()` filters the editor's
+      variable panel by `gameTypes`, so {answerDetails} was never offered while
+      writing a call-and-answer prompt. The art round's prompt therefore
+      PROMISED the reveal in prose and never inserted the tag, and the room was
+      told the real title would be revealed and then was not. The gate
+      (`assertTemplateVariablesExist`) checks catalogue membership rather than
+      type, so nothing rejected the prompt — it simply had nothing to say.
+
+      THIS IS THE GENERAL "DON'T SPOIL IT" FIELD, not a trivia footnote, and the
+      description now says so. It is carried by no player or host payload and
+      read only at RESULTS, which is exactly the property a reveal needs: the
+      real title of a painting, the outcome a case study actually had, the
+      punchline. The name is narrower than the job — see the `reveal` alias
+      below, which exists so the pattern is findable without a migration.
+    */
+    name: 'answerDetails',
+    description: 'Withheld until results: the author\'s reveal for this question — '
+      + 'the real answer and why, the actual title, the outcome. Never shown to players '
+      + 'while they answer, so it is safe to put the spoiler here.',
+    category: 'Question Info',
+    gameTypes: ALL_TYPES,
+    example: 'Real title: Mona Lisa (La Gioconda), Leonardo da Vinci, c. 1503-1519, Louvre, Paris.',
   },
   {
     // :2072, same reasoning as answerDetails — the default is 'medium' for a

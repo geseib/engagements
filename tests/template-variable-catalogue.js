@@ -668,5 +668,70 @@ check('every ANSWER_TOKEN is a variable that actually resolves', () => {
     + 'a prompt can satisfy the blocking rule with one and receive nothing.');
 });
 
+/* ==========================================================================
+   THE WITHHELD REVEAL, AND THE TAG THAT HID IT
+   ==========================================================================
+
+   Reported on the art round: "the AI mentions that the real name would be
+   revealed. i think that is data in the question set but it is not revealed."
+
+   The data was there and the plumbing was right. `AnswerDetails` is stored for
+   every engagement type (upload-questions.js:588-601 lifted the trivia gate)
+   and is carried by NO player or host payload, which is exactly the property a
+   reveal needs. get-ai-summary.js reads it with no game-type branch.
+
+   What was wrong was ONE TAG in this catalogue: `gameTypes: ['trivia']`, left
+   behind when the importer's gate was lifted. `variablesToOffer()` filters the
+   editor's variable panel by that field, so {answerDetails} was never offered
+   while writing a call-and-answer prompt — the author described the reveal in
+   prose and never inserted the tag.
+
+   Nothing failed. The usage gate checks catalogue MEMBERSHIP, not type, so the
+   prompt saved cleanly and simply had nothing to say. That is this file's
+   stated failure mode one level up: "a variable that resolves to nothing does
+   not error, does not warn, and does not leave visible braces."
+*/
+
+check('the reveal field is offered for every type that can carry it', () => {
+  // rejects: the stale `gameTypes: ['trivia']`. This is the assertion that
+  // would have caught the original defect, and it fails against it.
+  for (const name of ['answerDetails', 'reveal']) {
+    const v = TEMPLATE_VARIABLES.find((x) => x.name === name);
+    assert.ok(v, `${name} is not in the catalogue`);
+    assert.deepStrictEqual(
+      [...v.gameTypes].sort(),
+      ['call-and-answer', 'poll', 'survey', 'trivia', 'wavelength'],
+      `${name} is tagged for fewer types than upload-questions.js stores it for`
+    );
+  }
+});
+
+check('{reveal} is a real substitution, not a name in a list', () => {
+  /*
+    rejects: advertising an alias the engine never assigns — which would put a
+    findable name in the picker that silently resolves to nothing, the exact
+    shape of the bug being fixed. Read from get-ai-summary's source, the same
+    way every other assertion in this file establishes reality.
+  */
+  const src = fs.readFileSync(
+    path.join(REPO, 'lambda-functions', 'game', 'get-ai-summary.js'), 'utf8');
+  assert.match(src, /\breveal:\s*question\.answerDetails/,
+    'get-ai-summary does not assign `reveal`, so the catalogue is advertising nothing');
+});
+
+check('{reveal} is empty rather than prose when the author left it blank', () => {
+  /*
+    rejects: `question.answerDetails || 'No explanation provided'` for the alias.
+    That literal is a trivia-era default and reads as prose inside a sentence
+    built around a reveal — "the real title is No explanation provided". A short
+    sentence is recoverable; a confident wrong one is not.
+  */
+  const src = fs.readFileSync(
+    path.join(REPO, 'lambda-functions', 'game', 'get-ai-summary.js'), 'utf8');
+  const line = src.split('\n').find((l) => /\breveal:\s*question\.answerDetails/.test(l));
+  assert.ok(line, 'no `reveal` assignment found');
+  assert.doesNotMatch(line, /No explanation provided/);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
