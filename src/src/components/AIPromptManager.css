@@ -1755,6 +1755,15 @@
 .plib-chip--off { color: var(--pc-muted); }
 .plib-chip--warn { color: var(--pc-silent); border-color: var(--pc-silent); background: var(--pc-tint-silent); }
 .plib-chip--bad { color: var(--pc-stop); border-color: var(--pc-stop); background: var(--pc-tint-stop); }
+/* Chips that are toggles, not labels: the status chip flips Active ⇄ Draft.
+   `button.qsets-chip` (QuestionSetsPanel.css:329-331) is the same rule for the
+   same reason — 24px is the tap-target floor audit A5 holds a clickable chip
+   to, and a 12px chip with 2px padding is 20. No opacity on :disabled: the text
+   is measured against `--pc-paper` at full strength in the palette test, and a
+   translucent chip is a contrast claim nothing checks. The cursor says it. */
+button.plib-chip { cursor: pointer; min-height: 24px; }
+button.plib-chip:hover:not(:disabled) { background: var(--pc-paper); }
+button.plib-chip:disabled { cursor: progress; }
 
 .plib-rowact { display: flex; gap: 6px; justify-content: flex-end; }
 .plib-btn {

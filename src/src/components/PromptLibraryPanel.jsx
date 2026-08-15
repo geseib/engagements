@@ -106,10 +106,107 @@ function statusChipClass(status) {
   return 'plib-chip--warn';
 }
 
+/*
+  WHAT "DEACTIVATE" MEANS HERE, AND WHY IT IS NOT "ARCHIVE".
+
+  A question set's `active` is a boolean and its chip is a straight flip. A
+  prompt has THREE states, so the chip has to say which two it moves between:
+
+    active  ⇄  draft      this chip
+    → archived            the row's Archive action, which is a different
+                          endpoint (DELETE /admin/ai-prompts/{id}, a soft
+                          delete that stamps `archivedAt`) and a different
+                          intention — retirement, not "not right now".
+
+  The product had already made this call in words before it had a control for
+  it: the archive confirmation in AIPromptManager says, in shipped copy, "If the
+  aim is only to stop hosts choosing it, Draft does that and reads as a work in
+  progress rather than a retirement." Wiring the chip to `archived` would give
+  one outcome two controls sitting eight pixels apart, which the container rules
+  forbid; wiring it to `draft` is the one-click version of a thing the screen
+  already tells people to do the slow way.
+
+  BOTH DIRECTIONS ARE THE SAME ROUND TRIP — `PUT /admin/ai-prompts/{promptId}`
+  with `{ status }`, admins-only (auth/authorizer.js falls every other
+  `admin/*` route through to `['admins']`, and this route is not in
+  HOST_ADMIN_ROUTES).
+
+  An ARCHIVED row keeps a plain span. Not because archived is untouchable — the
+  editor's Status select can set it back to Active, which is what the archive
+  dialog points at — but because a two-state toggle cannot say which of the two
+  it would return to, and a chip that silently un-retires a prompt is worse than
+  one more click. Same for a status no vocabulary here recognises: we do not
+  know what its opposite is, so we do not offer one.
+*/
+export function nextStatusFor(status) {
+  if (status === 'active') return 'draft';
+  // A record written by a script with no status at all already READS as Draft
+  // (the label falls through below), so the chip has to agree with the label.
+  if (!status || status === 'draft') return 'active';
+  return null;
+}
+
 /** `['general', …]` and `[{ value, label }, …]` are both accepted, so the two
  *  callers keep the shape each already has. */
 function asOption(option) {
   return typeof option === 'string' ? { value: option, label: option } : option;
+}
+
+/**
+ * The status cell: a toggle where flipping it is a thing this mount can
+ * actually do, a label everywhere else.
+ *
+ * The affordance is gated three ways, and all three are real rows in the live
+ * library rather than defensive noise:
+ *
+ *  1. NO HANDLER — the generation library passes none. Nothing to click.
+ *  2. NO `promptId` — the rows `scripts/cull-ai-prompts.js` exists to sweep.
+ *     They already carry a "Broken record" chip beside this one; the update
+ *     route is keyed by promptId, so a click could only ever 500.
+ *  3. NO SECOND STATE — archived, or a status this vocabulary does not know.
+ *     See `nextStatusFor`.
+ *
+ * The chip keeps its own colour in every case (active green-ish, draft amber,
+ * archived muted): the three states still have to be distinguishable from each
+ * other, which is what an `--on`/`--off` pair alone could not say.
+ */
+function StatusChip({ prompt, onToggleStatus, busy }) {
+  const label = STATUS_LABEL[prompt.status] || prompt.status || 'Draft';
+  const className = `plib-chip ${statusChipClass(prompt.status)}`;
+  const next = onToggleStatus && prompt.promptId ? nextStatusFor(prompt.status) : null;
+
+  if (!next) {
+    return (
+      <span
+        className={className}
+        title={
+          prompt.status === 'archived'
+            ? 'Archived. Open the prompt and set its status back to Active to bring it back.'
+            : undefined
+        }
+      >
+        {label}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className={className}
+      aria-pressed={prompt.status === 'active'}
+      disabled={busy}
+      title={
+        next === 'draft'
+          ? 'Deactivate: set this prompt to Draft, so it stops being offered when a question set '
+            + 'picks a prompt. Nothing is deleted and one more click puts it back.'
+          : 'Activate: offer this prompt when a question set picks one.'
+      }
+      onClick={() => onToggleStatus(prompt, next)}
+    >
+      {label}
+    </button>
+  );
 }
 
 export default function PromptLibraryPanel({
@@ -140,6 +237,15 @@ export default function PromptLibraryPanel({
   onDelete,
   onCreate,
   onPopulateDefaults,
+  /** Flip a prompt between Active and Draft — `(prompt, nextStatus) => void`.
+   *  OPTIONAL, and the chip is a plain span without it: the generation library
+   *  (AIGenerationPromptEditor) mounts this same panel and has no status
+   *  round trip of its own, and design rule 2 is that a dead control is the one
+   *  people reach for first. See `nextStatusFor` for which two states. */
+  onToggleStatus,
+  /** The promptId whose status round trip is in flight, so its chip cannot be
+   *  clicked twice into two writes of two different values. */
+  busyPromptId = null,
 }) {
   const { search = '', gameType = 'all', category = 'all', status = 'all' } = filters || {};
 
@@ -395,9 +501,11 @@ export default function PromptLibraryPanel({
                 </td>
                 <td>
                   <div className="plib-states">
-                    <span className={`plib-chip ${statusChipClass(prompt.status)}`}>
-                      {STATUS_LABEL[prompt.status] || prompt.status || 'Draft'}
-                    </span>
+                    <StatusChip
+                      prompt={prompt}
+                      onToggleStatus={onToggleStatus}
+                      busy={Boolean(prompt.promptId) && prompt.promptId === busyPromptId}
+                    />
                     {prompt.isDefault && (
                       <span
                         className="plib-chip plib-chip--warn"

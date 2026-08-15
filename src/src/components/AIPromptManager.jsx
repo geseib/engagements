@@ -1310,6 +1310,10 @@ function AIPromptManager() {
   const [notice, setNotice] = useState('');
   const [pendingArchive, setPendingArchive] = useState(null);
   const [confirmPopulate, setConfirmPopulate] = useState(false);
+  /** The prompt whose status round trip is in flight, and the one default whose
+   *  deactivation is waiting to be confirmed. See the two blocks below. */
+  const [togglingId, setTogglingId] = useState(null);
+  const [pendingDraft, setPendingDraft] = useState(null);
 
   useEffect(() => {
     fetchPrompts();
@@ -1382,6 +1386,77 @@ function AIPromptManager() {
       console.error('Error deleting prompt:', error);
       setNotice(`That prompt was not archived (${error.message}). It is still active and still in the list.`);
     }
+  };
+
+  /*
+    ACTIVATE / DEACTIVATE FROM THE LIST.
+
+    The owner asked for the question-set list's behaviour: click the status chip
+    and it changes. `AdminPage.handleToggleActive` is the arrangement copied
+    here, including the bit that is easy to get wrong — the local row is updated
+    AFTER the response, never optimistically. An optimistic flip that has to be
+    put back on failure spends the moment of the failure showing the wrong
+    answer, which on a screen about what the AI says to a room is exactly the
+    wrong place to be approximate.
+
+    ONE FIELD IS SENT. `PUT /admin/ai-prompts/{id}` treats `undefined` as "leave
+    alone" for every field, so `{ status }` moves the status and touches nothing
+    else — no name, no halves, no isDefault, no questionSetIds. That is also
+    what makes the S3 guard in that handler necessary; see its header.
+  */
+  const applyStatus = async (prompt, status) => {
+    setTogglingId(prompt.promptId);
+    setNotice('');
+
+    try {
+      const response = await authFetch(`${API_BASE}admin/ai-prompts/${prompt.promptId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.message || detail?.error || `HTTP ${response.status}`);
+      }
+
+      setPrompts((prev) => prev.map(
+        (p) => (p.promptId === prompt.promptId ? { ...p, status } : p)
+      ));
+    } catch (error) {
+      console.error('Error changing prompt status:', error);
+      // The consequence, not the severity: the row on screen is what is stored,
+      // because it was never moved. Nobody has to reload to find out.
+      setNotice(
+        `“${prompt.name}” was not changed (${error.message}). It is still `
+        + `${prompt.status === 'active' ? 'Active' : 'a Draft'}, which is what the row still says.`
+      );
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  /*
+    DEACTIVATING THE DEFAULT IS THE ONE CASE THAT NEEDS A SENTENCE FIRST — and
+    what it needs saying is the OPPOSITE of the obvious fear.
+
+    `findDefaultPromptId` (get-ai-summary.js:326-345) selects on `isDefault`
+    alone and never reads `status`. So a default set to Draft KEEPS RUNNING for
+    every set of its engagement type that has no prompt of its own. Drafting it
+    does exactly one thing: `AdminPage.js:238` filters the per-set prompt picker
+    to `status === 'active'`, so it stops being offered there.
+
+    That is a row that will read "Draft" while still being what the room hears,
+    and a screen that says the opposite of what the engine does is worth one
+    dialog. It is a WARNING, not a refusal: nothing breaks, and the honest exit
+    — make another prompt the default — is named rather than implied.
+  */
+  const handleToggleStatus = (prompt, status) => {
+    if (status === 'draft' && prompt.isDefault) {
+      setPendingDraft(prompt);
+      return;
+    }
+    applyStatus(prompt, status);
   };
 
   const handleSavePrompt = async (result) => {
@@ -1493,6 +1568,8 @@ function AIPromptManager() {
         onDelete={handleDeletePrompt}
         onCreate={() => setIsCreating(true)}
         onPopulateDefaults={handlePopulateDefaults}
+        onToggleStatus={handleToggleStatus}
+        busyPromptId={togglingId}
       />
 
       {(editingPrompt || isCreating) && (
