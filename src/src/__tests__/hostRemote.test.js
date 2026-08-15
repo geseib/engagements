@@ -9,6 +9,8 @@ import {
   phaseSummary,
   waitingOn,
   fieldNotesFrom,
+  rosterListing,
+  remotePanelTabs,
   ACTIONS,
   TYPES_WITH_NO_VOTE_AT_RUNTIME,
 } from '../config/hostRemote';
@@ -498,6 +500,135 @@ describe('phaseSummary', () => {
       const summary = phaseSummary(payload);
       expect(summary.headline).toBe('Waiting…');
       expect(summary.detail).toBe('No game state yet');
+    }
+  });
+});
+
+/* ------------------------------------------------- the session panel's data */
+
+describe('remotePanelTabs', () => {
+  // Rejects: renaming the rounds tab's id on this surface. The desktop panel
+  // calls it `history` (config/setupPanel.js:32) and labels it `Rounds`; two
+  // surfaces showing one list under two internal names is how they drift.
+  it('uses the desktop panel\'s ids', () => {
+    expect(remotePanelTabs().map((t) => t.id)).toEqual(['players', 'history', 'questions']);
+    expect(remotePanelTabs().map((t) => t.label)).toEqual(['Players', 'Rounds', 'Questions']);
+  });
+
+  // Rejects: adding Settings "for parity". Everything in the desktop's fourth
+  // tab is already on the remote's round view — the join QR, the categories,
+  // the big-screen pad and Switch game — one tap away and visible without
+  // opening anything.
+  it('offers exactly the three lists the owner named', () => {
+    expect(remotePanelTabs()).toHaveLength(3);
+    expect(remotePanelTabs().some((t) => t.id === 'settings')).toBe(false);
+  });
+});
+
+describe('rosterListing', () => {
+  const person = (playerName, extra = {}) => ({
+    playerName, totalScore: 0, isConnected: true,
+    readiness: { isReady: false, type: 'none', hasAnswered: false, hasVoted: false },
+    ...extra,
+  });
+
+  // THE REPORTED DEFECT: *"it no longer list the players that joined in the
+  // beginning"*. The roster array has been in the remote's memory since
+  // pollRoster stopped discarding it, and nothing read it outside ASK/VOTE.
+  it('names everyone who has joined, before a round has been dealt', () => {
+    const listing = rosterListing({ players: [person('Ada'), person('Dana')] }, 'STARTED');
+    expect(listing.rows.map((r) => r.name)).toEqual(['Ada', 'Dana']);
+    expect(listing.heading).toBe('Already joined · 2 players');
+  });
+
+  // Rejects: labelling the lobby list with a waiting caption, or the running
+  // list with the lobby's. RoomMeter.jsx makes the same distinction and for the
+  // same reason — a joined list under a waiting heading is an accusation — and
+  // `kind` is what a test can hold on to when the copy changes.
+  it('says which SET the list is, in the data rather than in the copy', () => {
+    const players = [person('Ada')];
+    expect(rosterListing({ players }, 'CREATED').kind).toBe('joined');
+    expect(rosterListing({ players }, 'STARTED').kind).toBe('joined');
+    expect(rosterListing({ players }, 'ASK#001').kind).toBe('everyone');
+    expect(rosterListing({ players }, 'RESULTS#001').kind).toBe('everyone');
+    expect(rosterListing({ players }, 'ENDED').kind).toBe('everyone');
+  });
+
+  // A state poll that has not landed yet reads as UNKNOWN, and the roster poll
+  // can land first. Nothing has been asked of anyone in either case.
+  it('treats an unreadable state as the lobby rather than as a running round', () => {
+    expect(rosterListing({ players: [person('Ada')] }, undefined).kind).toBe('joined');
+    expect(rosterListing({ players: [person('Ada')] }, 'garbage').rows[0].done).toBeNull();
+  });
+
+  // Rejects: reading `isReady`. get-players computes that per phase and returns
+  // literally `true` for everyone during RESULTS, so a tick keyed off it is
+  // right in one phase by accident and wrong in the rest.
+  it('ticks who has ANSWERED during ASK and who has VOTED during VOTE', () => {
+    const players = [
+      person('Ada', { readiness: { hasAnswered: true, hasVoted: false, isReady: true } }),
+      person('Dana', { readiness: { hasAnswered: false, hasVoted: true, isReady: true } }),
+    ];
+    const asking = rosterListing({ players }, 'ASK#002').rows;
+    expect(asking.find((r) => r.name === 'Ada').done).toBe(true);
+    expect(asking.find((r) => r.name === 'Dana').done).toBe(false);
+
+    const voting = rosterListing({ players }, 'VOTE#002').rows;
+    expect(voting.find((r) => r.name === 'Ada').done).toBe(false);
+    expect(voting.find((r) => r.name === 'Dana').done).toBe(true);
+  });
+
+  // Rejects: a permanently pending timer beside every name on a screen where
+  // nobody is being waited for.
+  it('has no tick at all outside ASK and VOTE', () => {
+    for (const state of ['CREATED', 'STARTED', 'RESULTS#002', 'ENDED']) {
+      expect(rosterListing({ players: [person('Ada')] }, state).rows[0].done).toBeNull();
+    }
+  });
+
+  // Rejects: recomputing the ranking here. `config/setupPanel.js:rosterRows` is
+  // the desktop session tab's own function; "the same menu as the main screen"
+  // has to mean the same order and the same ranks or the two disagree in front
+  // of a room. Equal scores share a rank and the next rank skips.
+  it('sorts by score and ranks the way the desktop session tab does', () => {
+    const listing = rosterListing({
+      players: [
+        person('Low', { totalScore: 1 }),
+        person('High', { totalScore: 9 }),
+        person('Tie', { totalScore: 9 }),
+      ],
+    }, 'RESULTS#002');
+    expect(listing.rows.map((r) => [r.name, r.rank, r.score])).toEqual([
+      ['High', 1, 9], ['Tie', 1, 9], ['Low', 3, 1],
+    ]);
+  });
+
+  // `totalScore` is get-players' spelling; the host page keeps `score`. One
+  // adapter has to serve either payload or the phone shows everyone on zero.
+  it('reads either spelling of the score', () => {
+    expect(rosterListing({ players: [{ playerName: 'Ada', totalScore: 4 }] }, 'ENDED').rows[0].score)
+      .toBe(4);
+    expect(rosterListing({ players: [{ playerName: 'Ada', score: 7 }] }, 'ENDED').rows[0].score)
+      .toBe(7);
+  });
+
+  // Rejects: passing nameless rows through. `rosterRows` would print them as
+  // "Unknown Player" — a ghost in a count the host cannot account for.
+  it('drops rows with no name rather than inventing one', () => {
+    const listing = rosterListing({
+      players: [person('Ada'), { totalScore: 3 }, null, 'nope'],
+    }, 'STARTED');
+    expect(listing.rows.map((r) => r.name)).toEqual(['Ada']);
+    expect(listing.heading).toBe('Already joined · 1 player');
+  });
+
+  // A remote that white-screens mid-session is worse than one that says the
+  // room is empty. Every one of these is a real half-loaded poll.
+  it('never throws on a payload that has not arrived', () => {
+    for (const payload of [undefined, null, {}, 'nope', { players: null }, { players: 'no' }]) {
+      expect(() => rosterListing(payload, 'ASK#001')).not.toThrow();
+      expect(rosterListing(payload, 'ASK#001').rows).toEqual([]);
+      expect(rosterListing(payload, 'ASK#001').heading).toBe('Nobody has joined yet');
     }
   });
 });

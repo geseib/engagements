@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
 import './HostRemote.css';
 import Icon from './components/Icon';
-import RemoteQuestionBrowser from './components/RemoteQuestionBrowser';
+import RemoteSessionPanel from './components/RemoteSessionPanel';
 import RemoteCategoryList from './components/RemoteCategoryList';
 import { authFetch } from './auth/authFetch';
 import { categoryRows } from './config/setupPanel';
@@ -114,8 +114,20 @@ function HostRemote() {
   const [screenOpen, setScreenOpen] = useState(false);
   const [hostWindow, setHostWindow] = useState(null);
 
-  // 17-remote.html's second phone, and the Categories disclosure under Session.
-  const [browsing, setBrowsing] = useState(false);
+  /**
+   * WHICH LIST IS OPEN, or null for the round view.
+   *
+   *   *"it would be nice if it had the same menu as the main screen with
+   *    listing the players, the rounds, the questions."*
+   *
+   * One piece of state for all three, because they are one place: opening the
+   * panel on Players and switching to Questions must not be two navigations,
+   * and the way back must be the same control whichever list you ended up on.
+   * It replaces the old `browsing` boolean, which could only ever say
+   * "questions" — see RemoteSessionPanel for where that screen's bar and dock
+   * went, and why.
+   */
+  const [panelTab, setPanelTab] = useState(null);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [categories, setCategories] = useState([]);
   const [togglingCategory, setTogglingCategory] = useState(false);
@@ -424,7 +436,7 @@ function HostRemote() {
       // Back to the round, the way the stage panel closes itself before the
       // question lands: the host chose, and the next thing they need is the
       // progress meter, not the list they just left.
-      setBrowsing(false);
+      setPanelTab(null);
       setNotice(row.title ? `Now asking: ${row.title}` : 'Question selected.');
 
       setCooling(true);
@@ -497,7 +509,7 @@ function HostRemote() {
 
   if (!gameId) {
     return (
-      <div className="hr hr--entry">
+      <div className="hr hr--entry" data-theme="dark">
         <div className="hr-entry-card">
           <Icon name="DeviceMobile" weight="duotone" size={40} color="var(--primary)" />
           <h1>Host Remote</h1>
@@ -524,27 +536,47 @@ function HostRemote() {
     );
   }
 
-  // The second phone in 17-remote.html — a whole screen, not a sheet over the
-  // round. Choosing is a task with its own dock ("Back to the round"), and the
-  // status card behind it is exactly what the host is NOT looking at while they
-  // read four options.
-  if (browsing) {
-    return (
-      <RemoteQuestionBrowser
-        gameId={gameId}
-        setId={setId}
-        unaskedCount={unaskedCount}
-        connected={connected}
-        busy={!!busyAction || cooling}
-        onAsk={askSpecific}
-        onClose={() => setBrowsing(false)}
-      />
-    );
-  }
-
   return (
-    <div className="hr">
+    /*
+      THE REMOTE HAS BEEN PAINTING PAPER, and nothing said so.
+
+      `public/index.html:2` is `<html lang="en" data-theme="light">`, and
+      `styles.css:58-66` re-points `--bg`, `--surface`, `--surface-2`, `--text`
+      and `--muted` under that selector. `:root` IS `html`, so the paper block
+      wins on specificity and every token this stylesheet reads resolved to the
+      LIGHT value — a cream #FBF7F1 field with navy text — on a surface whose
+      own header comment says it is held "in a dim room, glancing down between
+      sentences". Two things were quietly wrong beyond the glare: `#1B2942` is
+      hard-coded as the label on the amber buttons because it is the DUSK
+      surface colour, and `var(--success-text, var(--success))` in the question
+      browser fell back to `--success` #4FB286, which is 2.65:1 on white — the
+      CORRECT flag, the one fact that surface exists to carry.
+
+      `[data-theme="dark"]` (styles.css:69-76) is the mechanism for exactly
+      this: a container opting back into dusk under a paper ancestor. Same
+      one-line fix `PlayerPage.jsx:69` carries, for the same defect —
+      `docs/design/AUDIT.md` citation 5.
+    */
+    <div className="hr" data-theme="dark">
       <header className="hr-bar">
+        {/* THE WAY BACK, AND IT IS NOT IN THE DOCK.
+
+            The question browser used to be a whole screen whose dock said "Back
+            to the round" — which meant that for as long as the host was reading
+            four options, the advance was gone. Three lists would have made that
+            trade three times as often, so getting back lives up here in the
+            sticky bar, where it cannot scroll away either, and the dock below
+            goes on carrying the one control that moves the session. */}
+        {panelTab && (
+          <button
+            className="hr-back"
+            type="button"
+            aria-label="Back to the round"
+            onClick={() => setPanelTab(null)}
+          >
+            <Icon name="ArrowLeft" weight="bold" size={20} color="currentColor" />
+          </button>
+        )}
         <div className="hr-bar-id">
           <span className="hr-bar-code">{gameId}</span>
           {title && <span className="hr-bar-title">{title}</span>}
@@ -561,281 +593,328 @@ function HostRemote() {
       </header>
 
       <main className="hr-body">
-        <section className="hr-status" aria-live="polite">
-          <p className="hr-status-kicker">{summary.detail}</p>
-          <h1 className="hr-status-phase">{summary.headline}</h1>
+        {panelTab ? (
+          /* THE THREE LISTS. Rendered INSIDE the body rather than instead of
+             the whole screen, which is what keeps the bar above and the dock
+             below on the page — see RemoteSessionPanel for the argument. */
+          <RemoteSessionPanel
+            gameId={gameId}
+            setId={setId}
+            initialTab={panelTab}
+            roster={roster}
+            state={snapshot?.state}
+            round={round}
+            unaskedCount={unaskedCount}
+            busy={!!busyAction || cooling}
+            onAsk={askSpecific}
+          />
+        ) : (
+          <>
+            <section className="hr-status" aria-live="polite">
+              <p className="hr-status-kicker">{summary.detail}</p>
+              <h1 className="hr-status-phase">{summary.headline}</h1>
 
-          {progress.applicable ? (
-            <div className={`hr-progress ${progress.allIn ? 'is-complete' : ''}`}>
-              <div
-                className="hr-meter"
-                role="progressbar"
-                aria-valuenow={progress.received}
-                aria-valuemin={0}
-                aria-valuemax={progress.total}
-                aria-label={progress.label}
-              >
-                <span
-                  className="hr-meter-fill"
-                  style={{ width: `${progress.total ? (progress.received / progress.total) * 100 : 0}%` }}
-                />
-              </div>
-              {/* The number, not a spinner. "12 of 14 answered" is what tells a
-                  host standing in front of a room whether to move on. */}
-              <p className="hr-progress-count">{progress.label}</p>
-              {progress.allIn && (
-                <p className="hr-allin">
-                  <Icon name="CheckCircle" weight="fill" size={18} color="var(--success)" />
-                  Everyone is in
-                </p>
-              )}
-            </div>
-          ) : (
-            <p className="hr-roster">
-              <Icon name="UsersThree" weight="bold" size={18} color="var(--muted)" />
-              {rosterCount === null ? 'Counting the room…'
-                : `${rosterCount} ${rosterCount === 1 ? 'player' : 'players'} in the room`}
-            </p>
-          )}
-        </section>
-
-        {/* WHO THE ROOM IS WAITING FOR — 17-remote.html's `Still to vote`
-            block, names and all.
-
-            This is the one surface allowed to name people, and the note below
-            is the argument for why, printed where the person holding the phone
-            can read it rather than buried in a spec. Kept out of the list once
-            everybody is in: an empty heading is noise. */}
-        {waiting.applicable && waiting.names.length > 0 && (
-          <section className="hr-wait" role="group" aria-label={waiting.heading}>
-            <h2 className="hr-wait-heading">{waiting.heading}</h2>
-            <div className="hr-wait-names">
-              {waiting.names.map((name) => (
-                <span className="hr-wait-name" key={name}>{name}</span>
-              ))}
-            </div>
-            <p className="hr-wait-private">
-              <b>Private</b> Who has not acted yet is a different fact from who wrote what.
-              This list is safe to hold during an anonymous round; authorship is not, so it is
-              not here either — the server has not sent it to anyone.
-            </p>
-          </section>
-        )}
-
-        {/* WHAT WE HEARD — 09-field-notes.html, reflowed to one phone column.
-            The eyebrow, the lead, the numbered points, and the line that says
-            where the rest of it lives. */}
-        {onFieldNotes && (
-          <section className="hr-notes" aria-label="What we heard">
-            <p className="hr-notes-kicker">What we heard</p>
-            {!notes.ready ? (
-              <p className="hr-notes-waiting">Workie is reading the responses…</p>
-            ) : (
-              <>
-                {notes.lead && <p className="hr-notes-lead">{notes.lead}</p>}
-                {(notes.topics.length > 0 || notes.nextSteps.length > 0) && (
-                  <ol className="hr-notes-list">
-                    {notes.topics.map((topic, idx) => (
-                      <li key={`t${idx}`}><b>{idx + 1}</b><span>{topic}</span></li>
-                    ))}
-                    {notes.nextSteps.map((step, idx) => (
-                      <li key={`n${idx}`}><b>→</b><span>{step}</span></li>
-                    ))}
-                  </ol>
-                )}
-                <p className="hr-notes-foot">
-                  Full notes, next steps and every response are in the session report.
-                </p>
-              </>
-            )}
-          </section>
-        )}
-
-        {error && (
-          <p className="hr-flash hr-flash--error" role="alert">
-            <Icon name="Warning" weight="fill" size={18} color="currentColor" />
-            {error}
-          </p>
-        )}
-        {notice && !error && (
-          <p className="hr-flash hr-flash--notice" role="status">
-            <Icon name="Info" weight="fill" size={18} color="currentColor" />
-            {notice}
-          </p>
-        )}
-
-        {/* THIS ROUND — 17-remote.html's first card of controls.
-            Two things the mockup draws are not here, and both absences are
-            deliberate:
-
-            `Timer 2:00`. There is no timer anywhere in this product — no
-            countdown in any handler, no duration on any round record, nothing
-            for a phone button to start or stop. Drawing one is a feature
-            request, not a control to wire, and a button that does nothing is
-            worse on this surface than on any other.
-
-            `Expand on stage` is the host page's `setLessonExpanded(true)`,
-            which is pure client state on the projector with no server
-            representation and no REMOTE_COMMAND case to reach it. It needs one
-            line in GameHostPage.jsx, which this change may not touch. */}
-        <section className="hr-card" aria-label="This round">
-          <h2 className="hr-card-heading">This round</h2>
-          <div className="hr-grid">
-            <button
-              className="hr-btn hr-btn--ghost"
-              type="button"
-              disabled={!setId}
-              onClick={() => setBrowsing(true)}
-            >
-              <Icon name="MagnifyingGlass" weight="bold" size={18} color="currentColor" />
-              Choose next question
-            </button>
-
-            {/* Skip keeps its own confirmation. It is the only control here
-                that can lose a round outright — and unlike an ordinary advance
-                it is NOT idempotent server-side: `action: 'skip'` bypasses the
-                "already asking a question" guard in next-question.js.
-
-                Rendered only while there IS a round to abandon (ASK / VOTE);
-                skipAction() returns null everywhere else, and a permanently
-                greyed button on the results screen would be a control that
-                never means anything. */}
-            {skip && (
-              <button
-                className={`hr-btn hr-btn--danger ${armedAction === 'skip' ? 'is-armed' : ''}`}
-                type="button"
-                disabled={blocked}
-                onClick={onSkip}
-              >
-                <Icon name="SkipForward" weight="bold" size={18} color="currentColor" />
-                {armedAction === 'skip' ? 'Tap again to skip' : 'Skip round'}
-              </button>
-            )}
-          </div>
-        </section>
-
-        {/* SESSION — 17-remote.html's second card.
-
-            `Session report` is absent, and for a different reason than the
-            timer: the report DOES exist. `POST games/{id}/report` returns it and
-            the stage's ENDED primary opens it — but the thing that renders it,
-            `GameReport`, is declared inside GameHostPage.jsx and not exported,
-            so there is nothing here to reuse. Reaching it needs a change to a
-            file outside this one.
-
-            `Big screen` is not in the mockup and stays anyway. The scroll and
-            full-screen controls are shipped and working, and a mockup that did
-            not draw them is not an instruction to delete them. */}
-        <section className="hr-card" aria-label="Session">
-          <h2 className="hr-card-heading">Session</h2>
-          <div className="hr-grid">
-            <button
-              className="hr-btn hr-btn--ghost"
-              type="button"
-              aria-expanded={categoriesOpen}
-              disabled={!setId}
-              onClick={() => setCategoriesOpen((open) => !open)}
-            >
-              <Icon name="Folder" weight="bold" size={18} color="currentColor" />
-              Categories
-            </button>
-
-            <button
-              className="hr-btn hr-btn--ghost"
-              type="button"
-              aria-expanded={joinOpen}
-              onClick={() => setJoinOpen((open) => !open)}
-            >
-              <Icon name="UsersThree" weight="bold" size={18} color="currentColor" />
-              Join code
-            </button>
-
-            <button
-              className="hr-btn hr-btn--ghost"
-              type="button"
-              aria-expanded={screenOpen}
-              onClick={() => setScreenOpen((open) => !open)}
-            >
-              <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
-              Big screen
-            </button>
-
-            <button
-              className="hr-btn hr-btn--ghost"
-              type="button"
-              onClick={() => { setGameId(''); setGameIdDraft(''); setSnapshot(null); }}
-            >
-              <Icon name="ArrowsClockwise" weight="bold" size={18} color="currentColor" />
-              Switch game
-            </button>
-          </div>
-
-          {categoriesOpen && (
-            <div className="hr-card-panel">
-              <RemoteCategoryList
-                rows={catRows}
-                live={categoriesLive}
-                busy={togglingCategory}
-                onToggle={toggleCategory}
-              />
-            </div>
-          )}
-
-          {joinOpen && (
-            <div className="hr-join">
-              <div className="hr-qr"><QRCode value={playerJoinUrl} size={168} level="M" includeMargin /></div>
-              <code className="hr-join-url">{playerJoinUrl}</code>
-              <button
-                className="hr-btn hr-btn--ghost"
-                type="button"
-                onClick={() => {
-                  navigator.clipboard?.writeText(playerJoinUrl)
-                    .then(() => setNotice('Join link copied.'))
-                    .catch(() => setError('Could not copy the link.'));
-                }}
-              >
-                <Icon name="ClipboardText" weight="bold" size={18} color="currentColor" />Copy link
-              </button>
-            </div>
-          )}
-
-          {screenOpen && (
-            <div className="hr-card-panel">
-              {displayLinked ? (
-                <div className="hr-grid">
-                  <button className="hr-btn hr-btn--ghost" type="button" onClick={() => sendToHostPage('SCROLL_TO_TOP')}>
-                    <Icon name="ArrowUp" weight="bold" size={18} color="currentColor" />Top
-                  </button>
-                  <button className="hr-btn hr-btn--ghost" type="button" onClick={() => sendToHostPage('SCROLL_TO_RESULTS')}>
-                    <Icon name="ChartBar" weight="bold" size={18} color="currentColor" />Results
-                  </button>
-                  <button className="hr-btn hr-btn--ghost" type="button" onClick={() => sendToHostPage('SCROLL_TO_BOTTOM')}>
-                    <Icon name="ArrowDown" weight="bold" size={18} color="currentColor" />Bottom
-                  </button>
-                  <button className="hr-btn hr-btn--ghost" type="button" onClick={() => sendToHostPage('TOGGLE_BIG_SCREEN')}>
-                    <Icon name="Monitor" weight="bold" size={18} color="currentColor" />Full screen
-                  </button>
+              {progress.applicable ? (
+                <div className={`hr-progress ${progress.allIn ? 'is-complete' : ''}`}>
+                  <div
+                    className="hr-meter"
+                    role="progressbar"
+                    aria-valuenow={progress.received}
+                    aria-valuemin={0}
+                    aria-valuemax={progress.total}
+                    aria-label={progress.label}
+                  >
+                    <span
+                      className="hr-meter-fill"
+                      style={{ width: `${progress.total ? (progress.received / progress.total) * 100 : 0}%` }}
+                    />
+                  </div>
+                  {/* The number, not a spinner. "12 of 14 answered" is what tells a
+                      host standing in front of a room whether to move on. */}
+                  <p className="hr-progress-count">{progress.label}</p>
+                  {progress.allIn && (
+                    <p className="hr-allin">
+                      <Icon name="CheckCircle" weight="fill" size={18} color="var(--success)" />
+                      Everyone is in
+                    </p>
+                  )}
                 </div>
               ) : (
-                <>
-                  <button className="hr-btn hr-btn--ghost" type="button" onClick={openHostPage}>
-                    <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
-                    Open the big screen
-                  </button>
-                  {/* Honest about the limit rather than showing dead buttons:
-                      scrolling and full-screen are display-only, they have no
-                      server representation, and a window handle cannot be
-                      obtained for a page this remote did not open. The round
-                      controls above need none of this. */}
-                  <p className="hr-hint">
-                    Scroll and full-screen only reach a big screen opened from this remote.
-                    Moving the session forward works either way.
-                  </p>
-                </>
+                <p className="hr-roster">
+                  <Icon name="UsersThree" weight="bold" size={18} color="var(--muted)" />
+                  {rosterCount === null ? 'Counting the room…'
+                    : `${rosterCount} ${rosterCount === 1 ? 'player' : 'players'} in the room`}
+                </p>
               )}
-            </div>
-          )}
-        </section>
+            </section>
+
+            {/* WHO THE ROOM IS WAITING FOR — 17-remote.html's `Still to vote`
+                block, names and all.
+
+                This is the one surface allowed to name people, and the note below
+                is the argument for why, printed where the person holding the phone
+                can read it rather than buried in a spec. Kept out of the list once
+                everybody is in: an empty heading is noise. */}
+            {waiting.applicable && waiting.names.length > 0 && (
+              <section className="hr-wait" role="group" aria-label={waiting.heading}>
+                <h2 className="hr-wait-heading">{waiting.heading}</h2>
+                <div className="hr-wait-names">
+                  {waiting.names.map((name) => (
+                    <span className="hr-wait-name" key={name}>{name}</span>
+                  ))}
+                </div>
+                <p className="hr-wait-private">
+                  <b>Private</b> Who has not acted yet is a different fact from who wrote what.
+                  This list is safe to hold during an anonymous round; authorship is not, so it is
+                  not here either — the server has not sent it to anyone.
+                </p>
+              </section>
+            )}
+
+            {/* WHAT WE HEARD — 09-field-notes.html, reflowed to one phone column.
+                The eyebrow, the lead, the numbered points, and the line that says
+                where the rest of it lives. */}
+            {onFieldNotes && (
+              <section className="hr-notes" aria-label="What we heard">
+                <p className="hr-notes-kicker">What we heard</p>
+                {!notes.ready ? (
+                  <p className="hr-notes-waiting">Workie is reading the responses…</p>
+                ) : (
+                  <>
+                    {notes.lead && <p className="hr-notes-lead">{notes.lead}</p>}
+                    {(notes.topics.length > 0 || notes.nextSteps.length > 0) && (
+                      <ol className="hr-notes-list">
+                        {notes.topics.map((topic, idx) => (
+                          <li key={`t${idx}`}><b>{idx + 1}</b><span>{topic}</span></li>
+                        ))}
+                        {notes.nextSteps.map((step, idx) => (
+                          <li key={`n${idx}`}><b>→</b><span>{step}</span></li>
+                        ))}
+                      </ol>
+                    )}
+                    <p className="hr-notes-foot">
+                      Full notes, next steps and every response are in the session report.
+                    </p>
+                  </>
+                )}
+              </section>
+            )}
+
+            {error && (
+              <p className="hr-flash hr-flash--error" role="alert">
+                <Icon name="Warning" weight="fill" size={18} color="currentColor" />
+                {error}
+              </p>
+            )}
+            {notice && !error && (
+              <p className="hr-flash hr-flash--notice" role="status">
+                <Icon name="Info" weight="fill" size={18} color="currentColor" />
+                {notice}
+              </p>
+            )}
+
+            {/* THIS ROUND — 17-remote.html's first card of controls.
+                Two things the mockup draws are not here, and both absences are
+                deliberate:
+
+                `Timer 2:00`. There is no timer anywhere in this product — no
+                countdown in any handler, no duration on any round record, nothing
+                for a phone button to start or stop. Drawing one is a feature
+                request, not a control to wire, and a button that does nothing is
+                worse on this surface than on any other.
+
+                `Expand on stage` is the host page's `setLessonExpanded(true)`,
+                which is pure client state on the projector with no server
+                representation and no REMOTE_COMMAND case to reach it. It needs one
+                line in GameHostPage.jsx, which this change may not touch. */}
+            <section className="hr-card" aria-label="This round">
+              <h2 className="hr-card-heading">This round</h2>
+              <div className="hr-grid">
+                <button
+                  className="hr-btn hr-btn--ghost"
+                  type="button"
+                  disabled={!setId}
+                  onClick={() => setPanelTab('questions')}
+                >
+                  <Icon name="MagnifyingGlass" weight="bold" size={18} color="currentColor" />
+                  Choose next question
+                </button>
+
+                {/* Skip keeps its own confirmation. It is the only control here
+                    that can lose a round outright — and unlike an ordinary advance
+                    it is NOT idempotent server-side: `action: 'skip'` bypasses the
+                    "already asking a question" guard in next-question.js.
+
+                    Rendered only while there IS a round to abandon (ASK / VOTE);
+                    skipAction() returns null everywhere else, and a permanently
+                    greyed button on the results screen would be a control that
+                    never means anything. */}
+                {skip && (
+                  <button
+                    className={`hr-btn hr-btn--danger ${armedAction === 'skip' ? 'is-armed' : ''}`}
+                    type="button"
+                    disabled={blocked}
+                    onClick={onSkip}
+                  >
+                    <Icon name="SkipForward" weight="bold" size={18} color="currentColor" />
+                    {armedAction === 'skip' ? 'Tap again to skip' : 'Skip round'}
+                  </button>
+                )}
+              </div>
+            </section>
+
+            {/* SESSION — 17-remote.html's second card.
+
+                `Session report` is absent, and for a different reason than the
+                timer: the report DOES exist. `POST games/{id}/report` returns it and
+                the stage's ENDED primary opens it — but the thing that renders it,
+                `GameReport`, is declared inside GameHostPage.jsx and not exported,
+                so there is nothing here to reuse. Reaching it needs a change to a
+                file outside this one.
+
+                `Big screen` is not in the mockup and stays anyway. The scroll and
+                full-screen controls are shipped and working, and a mockup that did
+                not draw them is not an instruction to delete them. */}
+            <section className="hr-card" aria-label="Session">
+              <h2 className="hr-card-heading">Session</h2>
+              <div className="hr-grid">
+                {/* THE WAY IN TO THE THREE LISTS.
+
+                    First in the card, because it is the only control here that
+                    answers a question the host has DURING a round — who is in
+                    the room, what have we already asked — rather than one that
+                    changes a setting. `Choose next question` above opens the
+                    same panel on its third tab; two doors into one place, each
+                    named for what the host came for, is the shape the desktop
+                    already has (its dock button and its per-category
+                    magnifier). */}
+                <button
+                  className="hr-btn hr-btn--ghost"
+                  type="button"
+                  onClick={() => setPanelTab('players')}
+                >
+                  <Icon name="UsersThree" weight="bold" size={18} color="currentColor" />
+                  Players &amp; rounds
+                </button>
+
+                <button
+                  className="hr-btn hr-btn--ghost"
+                  type="button"
+                  aria-expanded={categoriesOpen}
+                  disabled={!setId}
+                  onClick={() => setCategoriesOpen((open) => !open)}
+                >
+                  <Icon name="Folder" weight="bold" size={18} color="currentColor" />
+                  Categories
+                </button>
+
+                <button
+                  className="hr-btn hr-btn--ghost"
+                  type="button"
+                  aria-expanded={joinOpen}
+                  onClick={() => setJoinOpen((open) => !open)}
+                >
+                  {/* LinkSimple, not UsersThree: `Players & rounds` above now
+                      owns that glyph, and two buttons in one grid wearing the
+                      same icon is the fastest way to make a dim-room glance
+                      land on the wrong one. `LinkSimple` rather than a QR
+                      glyph because `components/Icon.jsx` maps a fixed set and
+                      an unmapped name falls back to `Circle` SILENTLY — adding
+                      to that map is a change to a shared file this work does
+                      not own, and the panel behind this button is a link as
+                      much as a code. */}
+                  <Icon name="LinkSimple" weight="bold" size={18} color="currentColor" />
+                  Join code
+                </button>
+
+                <button
+                  className="hr-btn hr-btn--ghost"
+                  type="button"
+                  aria-expanded={screenOpen}
+                  onClick={() => setScreenOpen((open) => !open)}
+                >
+                  <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
+                  Big screen
+                </button>
+
+                <button
+                  className="hr-btn hr-btn--ghost"
+                  type="button"
+                  onClick={() => { setGameId(''); setGameIdDraft(''); setSnapshot(null); }}
+                >
+                  <Icon name="ArrowsClockwise" weight="bold" size={18} color="currentColor" />
+                  Switch game
+                </button>
+              </div>
+
+              {categoriesOpen && (
+                <div className="hr-card-panel">
+                  <RemoteCategoryList
+                    rows={catRows}
+                    live={categoriesLive}
+                    busy={togglingCategory}
+                    onToggle={toggleCategory}
+                  />
+                </div>
+              )}
+
+              {joinOpen && (
+                <div className="hr-join">
+                  <div className="hr-qr"><QRCode value={playerJoinUrl} size={168} level="M" includeMargin /></div>
+                  <code className="hr-join-url">{playerJoinUrl}</code>
+                  <button
+                    className="hr-btn hr-btn--ghost"
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(playerJoinUrl)
+                        .then(() => setNotice('Join link copied.'))
+                        .catch(() => setError('Could not copy the link.'));
+                    }}
+                  >
+                    <Icon name="ClipboardText" weight="bold" size={18} color="currentColor" />Copy link
+                  </button>
+                </div>
+              )}
+
+              {screenOpen && (
+                <div className="hr-card-panel">
+                  {displayLinked ? (
+                    <div className="hr-grid">
+                      <button className="hr-btn hr-btn--ghost" type="button" onClick={() => sendToHostPage('SCROLL_TO_TOP')}>
+                        <Icon name="ArrowUp" weight="bold" size={18} color="currentColor" />Top
+                      </button>
+                      <button className="hr-btn hr-btn--ghost" type="button" onClick={() => sendToHostPage('SCROLL_TO_RESULTS')}>
+                        <Icon name="ChartBar" weight="bold" size={18} color="currentColor" />Results
+                      </button>
+                      <button className="hr-btn hr-btn--ghost" type="button" onClick={() => sendToHostPage('SCROLL_TO_BOTTOM')}>
+                        <Icon name="ArrowDown" weight="bold" size={18} color="currentColor" />Bottom
+                      </button>
+                      <button className="hr-btn hr-btn--ghost" type="button" onClick={() => sendToHostPage('TOGGLE_BIG_SCREEN')}>
+                        <Icon name="Monitor" weight="bold" size={18} color="currentColor" />Full screen
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <button className="hr-btn hr-btn--ghost" type="button" onClick={openHostPage}>
+                        <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
+                        Open the big screen
+                      </button>
+                      {/* Honest about the limit rather than showing dead buttons:
+                          scrolling and full-screen are display-only, they have no
+                          server representation, and a window handle cannot be
+                          obtained for a page this remote did not open. The round
+                          controls above need none of this. */}
+                      <p className="hr-hint">
+                        Scroll and full-screen only reach a big screen opened from this remote.
+                        Moving the session forward works either way.
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+            </section>
+          </>
+        )}
       </main>
 
       {/* The one control that matters, pinned in the thumb arc. */}

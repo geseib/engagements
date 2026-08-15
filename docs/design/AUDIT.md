@@ -146,7 +146,7 @@ is scoped, themed and tested with it. It was listed here as `ok .join-` / theme
 | Create engagement | `components/GameSetupDialog.jsx` + `styles.css:2643` | part | FAIL | part | part | ok (Modal) | **FAIL⁹** | part | ok `gameSetupDialog.test.jsx` |
 | Quickstart menu | `components/QuickstartMenu.jsx` + `styles.css` | part | part | ok `:195` | part | FAIL⁷ | part | n/a | ok `quickstartMenu.test.jsx` |
 | Host question-set shelf | `components/HostQuestionSetsDialog.jsx` | ok `.qsets--onlight` | ok | ok | ok | ok | ok `:193` + footer | ok | ok `hostQuestionSetsPalette` |
-| Host remote (phone) | `HostRemote.{jsx,css}`, `RemoteCategoryList`, `RemoteQuestionBrowser` | ok `.hr-/.hrc-/.hrq-` | ok | ok | ok | ok | — | n/a — no palette test | part `hostRemote*.test` |
+| Host remote (phone) | `HostRemote.{jsx,css}`, `RemoteCategoryList`, `RemoteQuestionBrowser`, `RemoteSessionPanel` | ok `.hr-/.hrc-/.hrq-/.hrs-` | ok | ok `HostRemote.jsx`³⁰ | ok — one phone ladder, **not** a stage profile³¹ | ok | ok³² | part³⁰ — no palette test; every pairing is a measured `styles.css` token | ok `hostRemote`, `hostRemoteScreen`, `hostRemoteBrowser`, `hostRemoteSession` |
 | Game report | `components/GameReport.{jsx,css}` | ok `.report-` | part | ok `:208` paper by design | ok | part | part | n/a | part `gameReport.test.jsx` |
 
 ### Admin console
@@ -308,6 +308,34 @@ is scoped, themed and tested with it. It was listed here as `ok .join-` / theme
     `.qsets--onlight` move, in the other polarity. **The host and `PastRound` are
     unchanged and still carry every defect above**; fixing them means fixing
     `styles.css`, which is citation 4's problem.
+30. **Was**: theme "ok" and contrast "n/a". Both were wrong, and for one reason.
+    `HostRemote.jsx` never declared `data-theme`, so under
+    `public/index.html:2`'s `<html data-theme="light">` — and `:root` **is**
+    `html`, so `styles.css:58-66` wins on specificity — every token the remote
+    reads resolved to the PAPER value. A surface whose own stylesheet header says
+    it is held "in a dim room, glancing down between sentences" was rendering a
+    cream `#FBF7F1` field with navy text. Two consequences past the glare: `.hr-btn--primary`
+    and `.hr-primary` hard-code `color: #1B2942` for their label because that is the
+    **dusk** surface colour, and `RemoteQuestionBrowser.css:94,106` reads
+    `var(--success-text, var(--success))` — there has never been a global
+    `--success-text` (see the skill's §6), so it fell back to `--success` `#4FB286`,
+    **2.65:1 on white**, on the CORRECT flag, which is the single fact that surface
+    exists to carry. Identical defect and identical one-line fix to citation 5:
+    `<div className="hr" data-theme="dark">`, on both the entry card and the
+    session view, asserted in `hostRemoteSession.test.jsx`. Contrast is now `part`
+    rather than `n/a`: with dusk restored every pairing in use is a token already
+    measured in the skill's table, but no `*Palette.test.js` composites them here.
+31. The remote deliberately does **not** use `config/displayProfile.js`. Those four
+    profiles are the STAGE's, derived for a room reading from 2–30ft; the closest,
+    Table, is a laptop at 3ft with a 16px floor. The remote follows the entry/welcome
+    pattern instead — one ladder, `clamp()` against the viewport
+    (`tokens-and-type.md` §4.3). `hostRemoteSession.test.jsx` fails if a `--L-*`
+    ladder or a `.d-*` class ever appears in `RemoteSessionPanel.css`.
+32. Exits were `—` when the remote had no dialog. It now has three lists behind one
+    panel, and the way back is `.hr-back` in the sticky bar rather than in the dock —
+    so the primary action stays in the thumb arc while a list is open, which the old
+    full-screen question browser did not manage. Pinned in `hostRemoteSession.test.jsx`
+    by document order, not by geometry.
 
 ---
 

@@ -54,10 +54,44 @@
   border-bottom: var(--hairline, 1px solid rgba(155, 168, 190, .18));
 }
 
+/*
+ * THE WAY OUT OF A LIST, AND IT LIVES IN THE BAR.
+ *
+ * The question browser used to be a whole screen whose DOCK said "Back to the
+ * round", which spent the thumb arc — the one place the primary action is
+ * guaranteed reachable — on navigation. Three lists (players, rounds,
+ * questions) would have made that trade three times as often, so getting back
+ * moved up here into the sticky bar and the dock kept the advance.
+ *
+ * 44px square, which is the floor for a control pressed one-handed while
+ * walking; `flex: none` so a long session title can never squeeze it.
+ */
+.hr-back {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin-left: -10px; /* optical: the glyph sits on the gutter, not inside it */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.hr-back:active { background: color-mix(in srgb, var(--muted) 20%, transparent); }
+
 .hr-bar-id {
   display: flex;
   align-items: baseline;
   gap: 8px;
+  /* Takes the slack so the live chip stays pinned right whether or not the back
+     button is there; without it `space-between` would centre this block the
+     moment a third child appears, and the code would jump sideways on every
+     entry into a list. */
+  flex: 1;
   min-width: 0; /* lets the title truncate instead of widening the bar */
 }
 

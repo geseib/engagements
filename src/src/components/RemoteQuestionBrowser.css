@@ -9,6 +9,29 @@
  * Measured at 390x844.
  */
 
+/*
+ * IT OWNS ITS OWN COLUMN NOW. This used to render as a direct child of
+ * `.hr-body`, which supplied the flex column and the 16px gap; it is a tab pane
+ * inside `RemoteSessionPanel` today, so the rhythm has to come from here or
+ * every card in the list stacks flush against the next.
+ */
+.hrq {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* The set's name and its unasked count — the `.hr-status-kicker` treatment,
+   without the status card that used to carry it. */
+.hrq-kicker {
+  margin: 0;
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .hrq-search {
   display: flex;
   align-items: center;
