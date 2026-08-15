@@ -88,6 +88,8 @@ export default function HostQuestionSetsDialog({
   // editor is holding an unsaved working copy.
   const [editingQuestions, setEditingQuestions] = useState(null);
   const [editorDirty, setEditorDirty] = useState(false);
+  /** The id of the set whose quickstart flag is currently in flight, or null. */
+  const [quickstartBusy, setQuickstartBusy] = useState(null);
 
   const load = useCallback(async (announce) => {
     setLoading(true);
@@ -131,6 +133,58 @@ export default function HostQuestionSetsDialog({
   */
   const house = sets.filter((set) => !set.canManage);
   const theirs = house.length;
+
+  /**
+   * Put one of the host's own sets on the quickstart shelf, or take it off.
+   *
+   * THE SAME CHIP THE CONSOLE HAS, on the same route, drawn only on `mine`.
+   * The owner: *"host question set lists, should allow quick starts easily
+   * marked by clicking a tag on list just like the admin"*. House rows do not
+   * get one for the reason Rename and Delete are absent from them — that would
+   * be authority over somebody else's row, and `requireSetManager` in
+   * `admin/toggle-quickstart.js` would refuse it.
+   *
+   * RELOADS RATHER THAN PATCHING STATE. `AdminPage.handleToggleQuickstart`
+   * updates its local array optimistically; this does not, because the write
+   * also moves `updatedAt` and this dialog is the thing that reports a set's
+   * state back to the create screen through `onSetsChanged`. One refetch keeps
+   * the shelf, the picker and the timestamp telling the same story.
+   */
+  const toggleQuickstart = async (set) => {
+    const next = !set.quickstart;
+    setQuickstartBusy(set.id);
+    try {
+      const response = await authFetch(
+        adminApiUrl(`admin/toggle-quickstart/${encodeURIComponent(set.id)}`),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ quickstart: next }),
+        }
+      );
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        // The SERVER's sentence, for the reason saveEdit gives: if this list and
+        // the API disagree about who owns the set, the API is the one that
+        // decided.
+        setQuickstartBusy(null);
+        setNotice({
+          text: result.error || `Could not change quickstart (HTTP ${response.status}).`,
+          tone: 'error',
+        });
+        return;
+      }
+      setQuickstartBusy(null);
+      await load(
+        next
+          ? `“${set.name}” now appears on the quickstart menu.`
+          : `“${set.name}” no longer appears on the quickstart menu.`
+      );
+    } catch (e) {
+      setQuickstartBusy(null);
+      setNotice({ text: `Could not change quickstart: ${e.message}`, tone: 'error' });
+    }
+  };
 
   const saveEdit = async () => {
     const target = sets.find((set) => set.id === editing.id);
@@ -252,6 +306,7 @@ export default function HostQuestionSetsDialog({
                 <th className="qsets-col-set">Set</th>
                 <th className="qsets-col-type">Format</th>
                 <th className="qsets-col-qs">Qs</th>
+                <th className="qsets-col-state">Shelf</th>
                 <th className="qsets-col-acts" />
               </tr>
             </thead>
@@ -259,7 +314,7 @@ export default function HostQuestionSetsDialog({
               {mine.map((set) => (
                 editing && editing.id === set.id ? (
                   <tr key={set.id}>
-                    <td colSpan={4}>
+                    <td colSpan={5}>
                       <div className="qsets-field">
                         <label htmlFor={`hqs-name-${set.id}`}>Name</label>
                         <input
@@ -315,6 +370,44 @@ export default function HostQuestionSetsDialog({
                       <span className="qsets-chip qsets-chip--type">{gameTypeLabel(set.engagementType)}</span>
                     </td>
                     <td className="qsets-num">{set.totalQuestions ?? 0}</td>
+                    <td>
+                      <div className="qsets-states">
+                        {/*
+                          A CHIP THAT IS A BUTTON, exactly as in the console's
+                          list — same class, same lightning bolt, same fill-vs-
+                          regular weight carrying the state.
+
+                          THE TITLE CHANGES WHEN THE SET IS INACTIVE, and that
+                          is not decoration. QuickstartMenu filters on
+                          `quickstart && active`, so flagging a set the picker
+                          is not offering does nothing visible anywhere. The
+                          host would flip the chip, watch it light up, and find
+                          the set still missing from the menu with no
+                          explanation on screen.
+                        */}
+                        <button
+                          type="button"
+                          className={`qsets-chip ${set.quickstart ? 'qsets-chip--warn' : 'qsets-chip--off'}`}
+                          onClick={() => toggleQuickstart(set)}
+                          disabled={quickstartBusy === set.id}
+                          aria-pressed={Boolean(set.quickstart)}
+                          data-testid={`hqs-quickstart-${set.id}`}
+                          title={
+                            set.active
+                              ? `Click to ${set.quickstart ? 'remove this set from' : 'offer this set on'} the quickstart menu`
+                              : 'This set is not offered in the picker, so it stays off the quickstart menu until it is'
+                          }
+                        >
+                          <Icon
+                            name="Lightning"
+                            weight={set.quickstart ? 'fill' : 'regular'}
+                            size={12}
+                            color="currentColor"
+                          />
+                          Quickstart
+                        </button>
+                      </div>
+                    </td>
                     <td>
                       <div className="qsets-rowact">
                         {/*

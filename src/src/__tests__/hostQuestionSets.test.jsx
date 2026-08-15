@@ -97,6 +97,8 @@ function mockApi({
    * gate exists to protect is the one BETWEEN the request and the answer.
    */
   hangDelete = false,
+  /** The quickstart route's answer, so the 403 path can be driven too. */
+  quickstartStatus = 200,
 } = {}) {
   let listCalls = 0;
   // THE THREE ROUTES A HOST IS REFUSED, counted rather than left to throw.
@@ -151,6 +153,13 @@ function mockApi({
           : { message: 'Successfully created question set "Fresh"' })
         : jsonResponse(uploadStatus, { error: 'nope' });
     }
+    if (method === 'POST' && url.includes('/admin/toggle-quickstart/')) {
+      return quickstartStatus === 200
+        ? jsonResponse(200, { success: true, quickstart: JSON.parse(options.body || '{}').quickstart })
+        : jsonResponse(quickstartStatus, {
+          error: 'This question set belongs to someone else. You can only change sets you created.',
+        });
+    }
     if (method === 'GET' && url.includes('/admin/download-template')) {
       return jsonResponse(200, { filename: 'caa-template.csv', content: 'Category,Title' });
     }
@@ -162,6 +171,9 @@ function mockApi({
     uploads: () => authFetch.mock.calls
       .filter(([url, opt]) => opt?.method === 'POST' && url.includes('/admin/upload-questions'))
       .map(([, opt]) => JSON.parse(opt.body)),
+    quickstartCalls: () => authFetch.mock.calls
+      .filter(([url]) => String(url).includes('/admin/toggle-quickstart/'))
+      .map(([url, opt]) => ({ url, body: JSON.parse(opt.body || '{}') })),
   };
 }
 
@@ -888,5 +900,90 @@ describe('the entry point is the create-engagement screen', () => {
 
     const picker = document.getElementById('gsd-set');
     expect(within(picker).queryByText(/Retired Set/)).toBeNull();
+  });
+});
+
+/**
+ * THE QUICKSTART CHIP ON THE HOST'S OWN SHELF.
+ *
+ * The owner: *"host question set lists, should allow quick starts easily marked
+ * by clicking a tag on list just like the admin"*.
+ *
+ * `POST admin/toggle-quickstart/{setId}` was excluded from `HOST_ADMIN_ROUTES`
+ * by name until this change, on the grounds that quickstart is global curation.
+ * That is still true of the SHELF — `QuickstartMenu.jsx:46` filters on
+ * `quickstart && active` with no ownership term, so a flagged set shows on every
+ * host's menu — and it is the row guard, not the gate, that makes opening it
+ * safe. The refusal itself is asserted against the real handler and the real
+ * authorizer in `tests/question-set-ownership.js` §1 and §3.6b, with no UI
+ * involved. What is asserted HERE is only what this dialog draws and sends.
+ */
+describe('a host puts their own set on the quickstart shelf', () => {
+  const SETS = [
+    { ...HOST_VIEW[0], quickstart: false },
+    ...HOST_VIEW.slice(1),
+  ];
+
+  test('the chip is a button, not a label', async () => {
+    // rejects: shipping a plain span, which is the state before this change.
+    await openDialog({}, { sets: SETS });
+    const chip = screen.getByTestId('hqs-quickstart-ivy-retro');
+    expect(chip.tagName).toBe('BUTTON');
+    expect(chip).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('...and it reports the state it is actually in', async () => {
+    // rejects: hardcoding aria-pressed, which makes the control lie to anyone
+    // who cannot see the fill weight on the bolt.
+    await openDialog({}, { sets: [{ ...HOST_VIEW[0], quickstart: true }, ...HOST_VIEW.slice(1)] });
+    expect(screen.getByTestId('hqs-quickstart-ivy-retro')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('no chip on a house row', async () => {
+    /*
+      rejects: drawing it on every row. `requireSetManager` would 403 a house
+      set, and the whole premise of this dialog's header comment is that a
+      control never appears for an action the API would refuse. The house table
+      offers Copy-and-edit precisely because that one needs no permission over
+      the original.
+    */
+    await openDialog({}, { sets: SETS });
+    expect(screen.queryByTestId('hqs-quickstart-eighties')).toBeNull();
+    expect(screen.getByTestId('house-eighties')).toBeInTheDocument();
+  });
+
+  test('clicking it POSTs the flipped value to that set', async () => {
+    // rejects: sending the CURRENT value, which makes the chip a no-op that
+    // still returns 200 and still looks like it worked.
+    const { quickstartCalls } = await openDialog({}, { sets: SETS });
+    fireEvent.click(screen.getByTestId('hqs-quickstart-ivy-retro'));
+    await waitFor(() => expect(quickstartCalls().length).toBe(1));
+    expect(quickstartCalls()[0].url).toContain('/admin/toggle-quickstart/ivy-retro');
+    expect(quickstartCalls()[0].body).toEqual({ quickstart: true });
+  });
+
+  test('a refusal shows the SERVER sentence, not a local guess', async () => {
+    /*
+      rejects: inventing local copy. If this list and the API disagree about who
+      owns a set, the API is the one that decided — the same rule saveEdit
+      already follows.
+    */
+    await openDialog({}, { sets: SETS, quickstartStatus: 403 });
+    fireEvent.click(screen.getByTestId('hqs-quickstart-ivy-retro'));
+    expect(await screen.findByText(/belongs to someone else/i)).toBeInTheDocument();
+  });
+
+  test('the title explains why flagging an inactive set does nothing', async () => {
+    /*
+      rejects: one static title. QuickstartMenu needs `quickstart && active`, so
+      on an inactive set the chip lights up and the menu stays empty — a host
+      would flip it, see it change, and find nothing, with no explanation on
+      screen.
+    */
+    await openDialog({}, {
+      sets: [{ ...HOST_VIEW[0], quickstart: false, active: false }, ...HOST_VIEW.slice(1)],
+    });
+    expect(screen.getByTestId('hqs-quickstart-ivy-retro').getAttribute('title'))
+      .toMatch(/not offered in the picker/i);
   });
 });
