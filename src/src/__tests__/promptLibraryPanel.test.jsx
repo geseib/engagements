@@ -453,6 +453,64 @@ describe('the status chip activates and deactivates', () => {
     // behave as one — a chip labelled Draft that sends `draft` is a no-op.
     expect(nextStatusFor(undefined)).toBe('active');
   });
+
+  /*
+    `inactive` IS THE ONE UNKNOWN STATUS THAT GETS A PAIR, AND IT EARNED IT.
+
+    `import-from-archive.js` wrote `status: 'inactive'` on every prompt it ever
+    imported, commented "Start inactive for review" — ten such rows are in prod
+    now. It is not in the vocabulary, so the chip refused to guess an opposite
+    and rendered a dead span. That is the owner's report: "the prompt state tag
+    is not clickable to make active".
+
+    Folded onto `draft` because the shipped comment beside the write says that
+    is what it meant. Nothing else is folded.
+  */
+  test("'inactive' is treated as Draft, so those rows are clickable again", () => {
+    // rejects: leaving `inactive` to fall through to null, which is what made
+    // the prod rows unfixable from the screen.
+    expect(nextStatusFor('inactive')).toBe('active');
+  });
+
+  test('...and the fold is narrow — no other unknown status gets a pair', () => {
+    /*
+      rejects: "unknown means draft", which would hand every future typo and
+      every state some later feature introduces a button that silently rewrites
+      it to active.
+    */
+    for (const unknown of ['retired', 'pending', 'disabled', 'ACTIVE', 'Draft', 'live']) {
+      expect(nextStatusFor(unknown)).toBeNull();
+    }
+  });
+
+  test("an 'inactive' row reads as Draft and is a real button", () => {
+    // rejects: folding it in nextStatusFor but leaving STATUS_LABEL alone, which
+    // shows the raw word "inactive" beside a filter that offers three others.
+    const onToggleStatus = jest.fn();
+    const imported = {
+      promptId: 'imp1', name: 'Imported Prompt', gameType: 'trivia',
+      category: 'general', status: 'inactive',
+    };
+    const { container } = mount({ prompts: [imported], onToggleStatus });
+    const chip = within(rowFor(container, 'Imported Prompt')).getByRole('button', { name: 'Draft' });
+    fireEvent.click(chip);
+    expect(onToggleStatus).toHaveBeenCalledWith(imported, 'active');
+  });
+
+  test("an 'inactive' row is findable under the Draft filter", () => {
+    /*
+      rejects: folding the chip but not the filter. The dropdown offers
+      Active/Draft/Archived and the row holds a fourth value, so before this it
+      was invisible under every option except "All" — a filter that is a place
+      rows go to disappear.
+    */
+    const imported = { promptId: 'imp1', name: 'Imported', status: 'inactive', gameType: 'trivia' };
+    expect(matchesPromptFilters(imported, { ...ALL, status: 'draft' })).toBe(true);
+    expect(matchesPromptFilters(imported, { ...ALL, status: 'active' })).toBe(false);
+    expect(matchesPromptFilters(imported, { ...ALL, status: 'archived' })).toBe(false);
+    // and a genuinely-draft row is unaffected
+    expect(matchesPromptFilters(PROMPTS[1], { ...ALL, status: 'draft' })).toBe(true);
+  });
 });
 
 describe('the row actions reach the callbacks', () => {

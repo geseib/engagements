@@ -1,8 +1,9 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand, BatchWriteCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, PutCommand, BatchWriteCommand, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { normalizeGameType, DEFAULT_GAME_TYPE } = require('./shared/game-types');
 const { inferPromptType } = require('./shared/prompt-shape');
+const { promptNameFromTags, resolveLocalPromptId } = require('./shared/archive-prompt-link');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient());
 const s3Client = new S3Client({});
@@ -145,6 +146,48 @@ async function importQuestionSets(selectedArchiveIds, environment, conflictResol
         sourceEnvironment: extractSourceEnvironment(archiveItem.Tags || [])
       };
       
+      /*
+        RE-LINK THE SET TO ITS PROMPT, BY NAME.
+
+        This passed a hardcoded `promptId: ''`, and the exporter carried nothing
+        about the prompt anyway — so every set imported into another tier
+        arrived unlinked and silently fell back to the game-type default. On
+        2026-08-15 that was all thirteen sets in prod, including the eight demo
+        sets, each of which has a Workie written specifically for it.
+
+        Matched on NAME because ids are minted per tier and dev's means nothing
+        here. See shared/archive-prompt-link.js for how that degrades: no match
+        imports unlinked exactly as before, two matches take the first and say
+        so, and neither writes a WRONG link — a set pointed at somebody else's
+        prompt would say the wrong things to a real room.
+
+        IMPORT PROMPTS BEFORE SETS. The resolution happens now, against what is
+        in the table now; a set imported first stays unlinked even if its prompt
+        arrives a minute later. The note below is logged so that ordering is
+        discoverable from a run rather than only from this comment.
+      */
+      const wantedPromptName = promptNameFromTags(archiveItem.Tags);
+      let linkedPromptId = '';
+      if (wantedPromptName) {
+        const local = await db.send(new QueryCommand({
+          TableName: process.env.TABLE_NAME,
+          KeyConditionExpression: 'PK = :pk',
+          ExpressionAttributeValues: { ':pk': 'AIPROMPTS' },
+        }));
+        const { promptId, matched } = resolveLocalPromptId(wantedPromptName, local.Items || []);
+        linkedPromptId = promptId;
+        if (matched === 0) {
+          console.warn(
+            `⚠️ ${archiveId}: no local prompt named "${wantedPromptName}" — importing unlinked. `
+            + `Import the prompts first, then re-import this set (or attach it by hand).`
+          );
+        } else if (matched > 1) {
+          console.warn(`⚠️ ${archiveId}: ${matched} local prompts named "${wantedPromptName}"; linked the first (${promptId}).`);
+        } else {
+          console.log(`🔗 ${archiveId}: linked to local prompt ${promptId} ("${wantedPromptName}")`);
+        }
+      }
+
       // Use existing CSV upload logic by creating a synthetic upload request
       const uploadHandler = require('./upload-questions');
       
@@ -161,7 +204,7 @@ async function importQuestionSets(selectedArchiveIds, environment, conflictResol
           customDescription: `${metadata.description} (Imported from ${metadata.sourceEnvironment || 'archive'})`,
           customInstructions: '',
           aiContextInstructions: '',
-          promptId: '',
+          promptId: linkedPromptId,
           engagementType: metadata.engagementType || 'call-and-answer',
           isAIGenerated: false
         })
