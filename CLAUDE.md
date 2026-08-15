@@ -163,11 +163,56 @@ curl -X DELETE https://api.dev.domain.com/admin/clear-all-games
 ```
 
 ## Environment URLs
-| Environment | API | Frontend |
-|------------|-----|----------|
-| Dev | https://r4c24mqku1.execute-api.us-east-1.amazonaws.com/dev | https://eng.dev.seibtribe.us |
-| Test | https://api.test.seibtribe.us | https://eng.test.seibtribe.us |
-| Prod | https://api.seibtribe.us | https://eng.seibtribe.us |
+
+## **🚨 `eng.dev.seibtribe.us` IS NOT THE DEV SITE. `engage.dev.seibtribe.us` IS. 🚨**
+
+Every URL previously in this table was wrong, and the dev one wrongly named the **retired
+`engdev` stack**. Read from live AWS on 2026-08-15 — CloudFront aliases, the S3 origin behind
+each, and the `config.js` each site actually loads. Re-derive rather than trust this table:
+
+```bash
+aws cloudfront list-distributions \
+  --query 'DistributionList.Items[].{Alias:Aliases.Items[0],Origin:Origins.Items[0].DomainName}' --output table
+aws s3 cp s3://engagedev-web/config.js -      # what the dev site is really pointed at
+```
+
+| Environment | Frontend | API | Cognito pool | Bucket |
+|---|---|---|---|---|
+| **dev** | https://engage.dev.seibtribe.us | `https://ouv6fztlig.execute-api.us-east-1.amazonaws.com/dev/` | `us-east-1_7VC2YyGnU` | `engagedev-web` |
+| **test** | https://engage.test.seibtribe.us | `https://69abatw833.execute-api.us-east-1.amazonaws.com/test/` | `us-east-1_JKKUmbQte` | `engagetest-web` |
+| **prod** | https://engage.seibtribe.us | `https://tlx3bee2sa.execute-api.us-east-1.amazonaws.com/prod/` | `us-east-1_N08nHLohH` | `engageprod-web` |
+
+`api.test.seibtribe.us`, `api.seibtribe.us`, `eng.test.seibtribe.us` and `eng.seibtribe.us`
+resolve to nothing — there is no CloudFront alias or API custom domain for any of them.
+
+### The dead twin, and the two days it cost
+
+| | `eng.dev.seibtribe.us` | `engage.dev.seibtribe.us` |
+|---|---|---|
+| bucket | `engdev-web` | `engagedev-web` |
+| last built | **2026-07-02** | every dev deploy |
+| pipeline | **none** | `engagecicd-pipeline-dev` |
+| Cognito pool | `us-east-1_ow22HbCT0` (`engdev-users`) | `us-east-1_7VC2YyGnU` (`engagedev-users`) |
+
+`eng.dev.seibtribe.us` is the off-pipeline `engdev` stack this file already says is being
+retired — but the table above sent everyone to it anyway. It is frozen at a July 2 bundle, so
+**every change shipped since then is invisible there** and the site reads as "the deploy did
+nothing". Its bundle even carries the **test** pool id, baked in at build time.
+
+This is the concrete reason for the standing rule against `./deployall`,
+`./scripts/deploy-clean.sh` and `./scripts/deploy-frontend-eng.sh`: they publish to
+`engdev-web`, which is the dead twin.
+
+### Password reset on dev needs a native account, and there isn't one
+
+`google.seib@gmail.com` exists in **both** dev pools only as `Google_1139562…`, status
+`EXTERNAL_PROVIDER` — a federated identity with no password. `ForgotPassword` on it cannot send
+anything, and because `PreventUserExistenceErrors` is **ENABLED** on the app client, Cognito
+still answers with a masked `CodeDeliveryDetails` as if it had. A silent no-op that reports
+success is what made this look like an SES fault for two sessions; it never was. All three
+pools are plain `COGNITO_DEFAULT` and identically configured.
+
+Sign in with **Google** instead — that identity is already in the `admins` group on dev.
 
 ## Authentication System
 - **AWS Cognito** for user authentication and authorization
