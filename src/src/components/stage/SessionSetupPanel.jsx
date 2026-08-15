@@ -645,6 +645,27 @@ export default function SessionSetupPanel({
               aria-labelledby="setup-tab-history"
             >
               {/*
+                THE SESSION REPORT, AT THE TOP OF THE ROUNDS IT REPORTS ON.
+
+                The owner: *"i would like to [move] the report button to the
+                rounds page, at the top. as it fits well with that section."*
+
+                It used to sit under "Display" in the Settings tab, between the
+                display-profile select and the join links — filed with the
+                plumbing, three items away from the only list on this screen it
+                describes. The report IS the rounds, read end to end, so it
+                belongs above them.
+
+                ABOVE THE LIST RATHER THAN BESIDE THE TAB, because the list is
+                what it summarises and a host scanning rounds is exactly the
+                host who wants the whole thing. It stays a single row so it
+                cannot be mistaken for one of the rounds beneath it.
+              */}
+              <div className="setup-row setup-history__actions">
+                <button type="button" onClick={onViewReports}>Session report</button>
+              </div>
+
+              {/*
                 THE ROUNDS PLAYED SO FAR. The list is one half of what the owner
                 asked for; the arrows inside <PastRound> are the other.
 
@@ -770,9 +791,9 @@ export default function SessionSetupPanel({
                   ))}
                 </select>
               </label>
-              <div className="setup-row">
-                <button type="button" onClick={onViewReports}>Session report</button>
-              </div>
+              {/* "Session report" moved to the top of the Rounds tab, above the
+                  list it summarises. It was filed here with the display profile
+                  and the join links — plumbing — which is not what it is. */}
 
               <h3 className="setup-h">Players join at</h3>
               <p className="setup-url">{playUrl}</p>
