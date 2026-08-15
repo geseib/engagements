@@ -76,15 +76,29 @@ const rootOf = (selector) => {
 /**
  * The seven roots, and who owns each. An eighth fails the test below, which is
  * the point: this list is the file's contract, not a description of it.
+ *
+ * TWO OF THEM WERE RENAMED WHEN THE SECTION CONVERTED TO DUSK, and the names
+ * were the honest part of that change rather than tidying:
+ *
+ *   `ai-prompt-editor-modal` → `pgen`.  It named a fixed-position, full-viewport
+ *   overlay that AdminPage rendered OUTSIDE every section. The generation
+ *   library is a place in the work area now, mounted beside `.pmgr` and reached
+ *   the same way, so a scope called "modal" would be describing something that
+ *   no longer exists (AUDIT §6.2 items 9 and 16).
+ *
+ *   `prompt-type-sections` → `padm`.  It named two cards inside an
+ *   `.admin-section` white card inside a `.tab-content` wrapper. Both wrappers
+ *   are gone (item 14) and the scope now owns the section itself: the chooser
+ *   AND the one back control both libraries share.
  */
 const SCOPES = {
-  pmgr: 'AIPromptManager.jsx — the section, both dialogs, the editor form',
+  padm: 'AdminPage.jsx — the prompts section: the chooser and the back control',
+  pmgr: 'AIPromptManager.jsx — the analysis library, both dialogs, the editor form',
+  pgen: 'AIGenerationPromptEditor.jsx — the generation library and its editor form',
   plib: 'PromptLibraryPanel.jsx — the table, its controls and its empty states',
   pvi: 'PromptVariableInspector.jsx',
   ppf: 'PromptPreflightPanel.jsx',
   pap: 'PromptAssembledPreview.jsx',
-  'ai-prompt-editor-modal': 'AIGenerationPromptEditor.jsx — imports this sheet from outside .pmgr',
-  'prompt-type-sections': "AdminPage.jsx — the two cards on the prompts tab",
 };
 
 /**
@@ -139,11 +153,19 @@ describe('every selector is rooted at a declared scope', () => {
     }
   });
 
-  test('styles.css declares nothing in the .pmgr scope', () => {
-    // The other half of the namespace rule: rooting everything at `.pmgr` is
-    // only protection if `.pmgr*` belongs to this file alone. `.qs` is the
-    // prefix that bit once already.
-    const collisions = [...stripped(GLOBAL_CSS).matchAll(/\.(pmgr[\w-]*)/g)].map((m) => m[1]);
+  test('styles.css declares nothing in ANY of the seven scopes', () => {
+    /*
+      The other half of the namespace rule: rooting everything at `.pmgr` is
+      only protection if `.pmgr*` belongs to this file alone. `.qs` is the
+      prefix that bit once already — styles.css declared `.qs-empty` as grey
+      italic, and a whole dark empty state rendered in it with nothing failing.
+
+      DERIVED FROM `SCOPES`, not typed: two new prefixes arrived in this change
+      (`.padm`, `.pgen`) and a hand-written list would have checked the old
+      five and passed.
+    */
+    const collisions = Object.keys(SCOPES).flatMap((scope) =>
+      [...stripped(GLOBAL_CSS).matchAll(new RegExp(`\\.(${scope}[\\w-]*)`, 'g'))].map((m) => m[1]));
     expect([...new Set(collisions)]).toEqual([]);
     // And the premise, so this cannot quietly become vacuous: the name it
     // REPLACED is one styles.css has opinions about.
@@ -205,8 +227,8 @@ describe('nothing was orphaned by the rename', () => {
     expect(owner('PromptVariableInspector.jsx')).toMatch(/\bpvi\b/);
     expect(owner('PromptPreflightPanel.jsx')).toMatch(/\bppf\b/);
     expect(owner('PromptAssembledPreview.jsx')).toMatch(/\bpap\b/);
-    expect(owner('AIGenerationPromptEditor.jsx')).toMatch(/className="ai-prompt-editor-modal"/);
-    expect(owner('AdminPage.jsx')).toMatch(/className="prompt-type-sections"/);
+    expect(owner('AIGenerationPromptEditor.jsx')).toMatch(/className="pgen"/);
+    expect(owner('AdminPage.jsx')).toMatch(/className="padm"/);
   });
 
   /**
@@ -227,7 +249,7 @@ describe('nothing was orphaned by the rename', () => {
    */
   const ROOT_OF_FILE = {
     'components/AIPromptManager.jsx': '.pmgr',
-    'components/AIGenerationPromptEditor.jsx': '.ai-prompt-editor-modal',
+    'components/AIGenerationPromptEditor.jsx': '.pgen',
   };
   const mountsTheLibrary = () =>
     CONSUMERS.filter(([name, src]) => ROOT_OF_FILE[name] && /<PromptLibraryPanel/.test(src))
@@ -259,7 +281,8 @@ describe('nothing was orphaned by the rename', () => {
     // gets only half of them — the same invalidation, harder to spot.
     const { body } = tokenRule();
     for (const token of ['--pc-ink', '--pc-muted', '--pc-rule', '--pc-stop', '--pc-silent',
-      '--pc-link', '--pc-paper', '--pc-mono', '--pc-row-h']) {
+      '--pc-link', '--pc-paper', '--pc-card', '--pc-field', '--pc-go', '--pc-mono',
+      '--pc-row-h', '--pc-t-body']) {
       expect(body).toContain(`${token}:`);
     }
   });

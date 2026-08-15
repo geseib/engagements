@@ -1589,8 +1589,13 @@ function AIPromptManager() {
       see that file's header, and __tests__/promptManagerScope.test.js.
     */
     <div className="pmgr">
+      {/* The heading names WHICH library this is, in the words the chooser tile
+          used to get here — not the section, which AdminShell's work head
+          already titles "Prompts". `.pgen-header` is the same block on the
+          generation side, styled by one rule, so the two places open the same
+          way as well as being reached the same way. */}
       <div className="pmgr-header">
-        <h2><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI Prompt Management</h2>
+        <h2><Icon name="Sparkle" weight="duotone" size={18} color="var(--primary)" /> Engagement results prompts</h2>
         <p className="pmgr-lede">
           A summary prompt is what Workie says after a round. Each engagement type has one default;
           a question set can pin its own.
