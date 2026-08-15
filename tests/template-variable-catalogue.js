@@ -260,6 +260,199 @@ check('variableCategoriesForGameType drops headers with nothing under them', () 
     'categories must come back in the declared order');
 });
 
+// === 4b. THE 2026-08-15 METADATA AUDIT ====================================
+/*
+  WHAT THESE PIN, AND WHY THEY ARE HERE RATHER THAN IN A DOC.
+
+  Every `gameTypes` list in the catalogue is a claim about get-ai-summary.js:
+  "a real round of this type substitutes this variable with something about
+  that round". A wrong claim does not error — the key exists on every path, so
+  the token is substituted with '' and the sentence built around it silently
+  loses its content. That is the same mechanism, one level up, as the live
+  summary that read "I notice you haven't provided the [Summary of the core
+  idea/response being analyzed] yet".
+
+  So each check below re-derives its claim from the HANDLER SOURCE rather than
+  restating the catalogue. A check that only compared the catalogue to itself
+  would pass for any pair of consistent lies, which is exactly the fixture
+  failure this repo has already shipped twice.
+*/
+const summarySource = fs.readFileSync(
+  path.join(REPO, 'lambda-functions', 'game', 'get-ai-summary.js'), 'utf8');
+
+const typesFor = (name) => (TEMPLATE_VARIABLES.find((v) => v.name === name) || {}).gameTypes || [];
+
+check('the always-empty variables are exactly the ones hardcoded to \'\' in the handler', () => {
+  /*
+    Derived, not listed. Any `name: '',` at the top level of the templateVars
+    literal is a variable that cannot carry anything on any path — and the
+    catalogue must mark precisely those, no more and no fewer.
+
+    rejects: marking a variable alwaysEmpty because it looks useless, and the
+    opposite — restoring participationRate or votingParticipation to the
+    insertable palette without restoring a real figure behind them. Both were
+    100% by construction and were read aloud to the room (:1530-1551).
+  */
+  const literal = summarySource.slice(summarySource.indexOf('const templateVars = {'));
+  const end = literal.indexOf('\n  };');
+  const hardcodedEmpty = [...literal.slice(0, end).matchAll(/^\s{4}([A-Za-z_$][\w$]*):\s*''\s*,/gm)]
+    .map((m) => m[1]).sort();
+  const marked = TEMPLATE_VARIABLES.filter((v) => v.alwaysEmpty).map((v) => v.name).sort();
+  assert.deepStrictEqual(marked, hardcodedEmpty,
+    `the handler hardcodes [${hardcodedEmpty}] to the empty string; the catalogue marks [${marked}]`);
+  assert(marked.length > 0, 'the parser found nothing — every assertion here would be vacuous');
+});
+
+check('an always-empty variable is offered by no game type, and still resolves', () => {
+  // rejects: deleting them outright. A token with no key at all survives the
+  // substitution loop and lands on a projector as literal {participationRate};
+  // a live prompt already using one must keep rendering blank, not braces.
+  for (const v of TEMPLATE_VARIABLES.filter((x) => x.alwaysEmpty)) {
+    assert(isKnownTemplateVariable(v.name), `${v.name} must stay resolvable`);
+    for (const t of ['call-and-answer', 'trivia', 'poll', 'wavelength', 'survey']) {
+      assert(!variablesForGameType(t).some((x) => x.name === v.name),
+        `${v.name} is offered for ${t}, where it carries nothing`);
+    }
+  }
+});
+
+check('pollOptions is offered to polls and NOT to surveys', () => {
+  /*
+    The audit's clearest single correction. `pollOptions` was tagged
+    ['poll','survey']; its only assignment is inside
+    `gameType === 'polls' || gameType === 'poll'`, so a survey round leaves it
+    at the '' it was initialised to.
+
+    rejects: putting survey back on that entry. Also asserts the branch it
+    depends on still reads that way — if the handler ever adds survey to the
+    condition, this test is where the catalogue gets told.
+  */
+  assert(summarySource.includes("gameType === 'polls' || gameType === 'poll'"),
+    'the poll branch condition has changed; re-derive pollOptions before trusting its tag');
+  assert.deepStrictEqual(typesFor('pollOptions'), ['poll']);
+});
+
+check('triviaResponses is offered to polls too, because the poll branch assigns it', () => {
+  // rejects: trusting the NAME. It is assigned twice — once in the trivia
+  // branch and once in the poll branch, where it formats as "option: n votes".
+  // Tagging it trivia-only left a poll author with no per-option distribution.
+  const assignments = [...summarySource.matchAll(/^\s*triviaResponses = /gm)].length;
+  assert.strictEqual(assignments, 2,
+    `expected two assignments to triviaResponses (trivia and poll); found ${assignments}`);
+  assert.deepStrictEqual(typesFor('triviaResponses').sort(), ['poll', 'trivia']);
+});
+
+check('the ballot-derived variables exclude the two types that never store a vote', () => {
+  /*
+    :803 gates the whole tally loop on `gameType !== 'trivia' && !== 'wavelength'`,
+    so firstPlace/secondPlace/thirdPlace are zero for those two and every figure
+    built from them is a row of zeroes.
+
+    rejects: re-adding trivia to votingBreakdown or voteCount, which is the tag
+    they carried before poll and survey were even considered.
+  */
+  assert(/gameType !== 'trivia' && gameType !== 'wavelength'/.test(summarySource),
+    'the vote-loop guard has changed; re-derive the ballot variables');
+  for (const name of ['voteCount', 'votingBreakdown', 'votingPattern', 'activeParticipants']) {
+    const types = typesFor(name);
+    assert(!types.includes('trivia'), `${name} must not be offered to trivia`);
+    assert(!types.includes('wavelength'), `${name} must not be offered to wavelength`);
+    assert(types.includes('poll'), `${name} must be offered to polls, which do vote`);
+  }
+});
+
+check('scoringSystem is not offered to trivia, whose points come from somewhere else', () => {
+  /*
+    The correction that runs the other way: it was advertised to trivia and
+    actively misinforms there. :1703 builds it from ScoringConfig's first/
+    second/third-place VOTE ranks; a trivia round awards `answer.PointsEarned`
+    (base + speed bonus) and never consults that config. So a trivia prompt
+    naming it told the model a scoring scheme the round did not use.
+
+    rejects: restoring trivia here on the grounds that trivia "has scores".
+  */
+  assert(summarySource.includes('PointsEarned || answer.pointsEarned'),
+    'trivia scoring no longer reads PointsEarned; re-derive scoringSystem');
+  assert(!typesFor('scoringSystem').includes('trivia'));
+});
+
+check('the score variables exclude wavelength alone, which writes no player score row', () => {
+  // rejects: leaving the old SCORED_TYPES = ['call-and-answer','trivia'] in
+  // place. Poll and survey take get-results.js's vote path, which writes
+  // PLAYER#…#SCORE rows exactly as call-and-answer does; wavelength is routed
+  // to handleWavelengthResults, which writes none, so the leaderboard is empty
+  // for wavelength and only for wavelength.
+  const results = fs.readFileSync(path.join(REPO, 'lambda-functions', 'game', 'get-results.js'), 'utf8');
+  assert(/if \(gameType === 'wavelength'\) \{\s*\n\s*return await handleWavelengthResults/.test(results),
+    'wavelength no longer bypasses the scoring path; re-derive the score variables');
+  for (const name of ['cumulativeScores', 'leaderboard', 'playerRankings', 'averageScore', 'roundScores']) {
+    assert.deepStrictEqual(typesFor(name).sort(),
+      ['call-and-answer', 'poll', 'survey', 'trivia'],
+      `${name} has drifted from the four types that accrue per-player scores`);
+  }
+});
+
+check('every type gained variables it can actually use', () => {
+  // rejects: an audit that only ever REMOVES. The catalogue's real failure was
+  // in both directions — poll had 22 of 59 variables and wavelength 27, mostly
+  // because entries with no game-type branch at all had been tagged
+  // call-and-answer by habit.
+  const counts = Object.fromEntries(
+    ['call-and-answer', 'trivia', 'poll', 'wavelength', 'survey']
+      .map((t) => [t, variablesForGameType(t).length])
+  );
+  assert(counts.poll >= 30, `poll offers only ${counts.poll} variables`);
+  assert(counts.wavelength >= 28, `wavelength offers only ${counts.wavelength} variables`);
+  assert(counts.survey >= 28, `survey offers only ${counts.survey} variables`);
+});
+
+check('{questionInfo} exists, is composite, and labels both halves', () => {
+  /*
+    The owner's own `{questioninfo}`: his model of a prompt opens with one line
+    for "here is what was asked", and until now that took two variables and two
+    hand-written labels — a prompt that wrote only the first silently dropped
+    the context the question depends on.
+
+    rejects: adding the catalogue entry without adding the key (the token would
+    render as literal braces on a projector) and adding a key that is just an
+    alias of questionTitle, which would make the composite pointless.
+  */
+  assert(isKnownTemplateVariable('questionInfo'));
+  assert.deepStrictEqual(typesFor('questionInfo').length, 5, 'every type asks a question');
+  // Search FORWARD from questionInfo. `triviaChoices` is also declared as a
+  // `let` some three hundred lines earlier, so a bare indexOf for the closing
+  // marker returns a position BEFORE the opening one and slices an empty
+  // string — which passed every `includes` check by being vacuous. Caught by
+  // mutating the handler and watching this check stay green.
+  const from = summarySource.indexOf('questionInfo: [');
+  assert(from !== -1, 'questionInfo is not assigned in templateVars');
+  const block = summarySource.slice(from, summarySource.indexOf('triviaChoices:', from));
+  assert(block.length > 20, 'the slice is empty, so every assertion below is vacuous');
+  assert(block.includes('Question: '), 'questionInfo must label the question line');
+  assert(block.includes('Detail: '), 'questionInfo must label the detail line');
+  assert(block.includes('.filter(Boolean)'),
+    'the detail line must be dropped when absent, not printed as a placeholder the model reads as fact');
+});
+
+// === 4c. Bracket directions are NOT variables =============================
+check('extractBracketDirections finds prose directions and skips markdown links', () => {
+  /*
+    Square brackets read like a placeholder and are prose. Only {braced} names
+    are substituted. That distinction is what made the broken prompt look
+    finished, and it is now stated in the editor and listed back to the author.
+
+    rejects: a naive /\[.*\]/ scan that reports every markdown link as a
+    direction — a readout that cries wolf is one an author stops reading.
+  */
+  assert.deepStrictEqual(
+    catalogue.extractBracketDirections('## S\n[Summary of the responses]\nSee [the runbook](https://x).'),
+    ['Summary of the responses']);
+  assert.deepStrictEqual(catalogue.extractBracketDirections('no brackets here'), []);
+  assert.deepStrictEqual(catalogue.extractBracketDirections(undefined), []);
+  assert.deepStrictEqual(catalogue.extractBracketDirections('[a] and [a]'), ['a'],
+    'unique, in order of first appearance, like extractVariableTokens');
+});
+
 // === 5. Token extraction — the shared basis of all three gates =============
 check('extractVariableTokens finds the tokens and nothing else', () =>
   assert.deepStrictEqual(

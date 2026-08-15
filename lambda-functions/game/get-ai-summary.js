@@ -2037,6 +2037,31 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
     questionCategory: question.category || 'General',
     questionContext: question.questionDetail || question.detail || '',
     questionNumber: currentRound,
+    /*
+      WHAT WAS ASKED, as one labelled block.
+      -------------------------------------
+      Every prompt in this product opens by restating the question, and until
+      now that took two variables and two hand-written labels:
+
+          Question: {questionTitle}
+          Detail:   {questionDetail}
+
+      A prompt that wrote only the first silently dropped the context the
+      question depends on, and nothing said so. This composite is the owner's
+      own `{questioninfo}` — the single line his model of a prompt opens with.
+
+      The detail line is omitted rather than printed empty when the question
+      carries none: "Detail: No additional context provided" is a sentence the
+      model reads as a fact about the round, and it is not one. `questionDetail`
+      keeps its own placeholder, because a prompt that names that variable
+      explicitly has asked for the field and should see what is in it.
+    */
+    questionInfo: [
+      `Question: ${question.title || question.questionDetail || 'Question not available'}`,
+      (question.questionDetail || question.detail)
+        ? `Detail: ${question.questionDetail || question.detail}`
+        : null,
+    ].filter(Boolean).join('\n'),
     triviaChoices: triviaChoices || (() => {
       // Fallback if trivia processing didn't run
       if (question && gameType === 'trivia') {

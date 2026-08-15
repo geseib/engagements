@@ -95,23 +95,93 @@ describe('the variable palette is derived from the catalogue', () => {
     expect(chip).toBeDisabled();
   });
 
-  test('clicking a chip inserts its token into the output format', async () => {
+  /*
+    THIS TEST USED TO ASSERT THE OPPOSITE, and the reversal is the fix.
+
+    It read "clicking a chip inserts its token into the output format", because
+    the editor held ONE textarea ref — the output format's — so that was the
+    only place a variable could land. That is the mechanical half of the defect
+    the redesign exists for: the half of the prompt that carries the round's
+    data could only ever be filled by typing, while every affordance on the
+    screen pointed at the half that describes the reply. The prompt that broke a
+    live session was built exactly that way.
+
+    rejects: restoring a single insertion target, and restoring the output
+    format as the default one. The two tests below are the pair — the default
+    lands in the input half, and focus moves it.
+  */
+  test('clicking a chip inserts into the half that carries the data, by default', async () => {
     await openEditor();
-    const textarea = document.querySelectorAll('.template-textarea-container textarea')[0];
-    fireEvent.change(textarea, { target: { value: '' } });
+    const given = screen.getByTestId('prompt-input-textarea');
+    const writes = screen.getByTestId('prompt-output-textarea');
+    fireEvent.change(given, { target: { value: '' } });
+    fireEvent.change(writes, { target: { value: '' } });
+
     const chip = [...document.querySelectorAll('.variable-btn')]
       .find((b) => b.textContent.includes('{eventTitle}'));
     fireEvent.click(chip);
-    await waitFor(() => expect(textarea.value).toContain('{eventTitle}'));
+
+    await waitFor(() => expect(given.value).toContain('{eventTitle}'));
+    expect(writes.value).not.toContain('{eventTitle}');
+  });
+
+  test('focusing the output half moves the target there', async () => {
+    // rejects: hardcoding the input half as the only target, which would make
+    // the output format unfillable from the palette — the same defect mirrored.
+    await openEditor();
+    const given = screen.getByTestId('prompt-input-textarea');
+    const writes = screen.getByTestId('prompt-output-textarea');
+    fireEvent.change(given, { target: { value: '' } });
+    fireEvent.change(writes, { target: { value: '' } });
+
+    fireEvent.focus(writes);
+    const chip = [...document.querySelectorAll('.variable-btn')]
+      .find((b) => b.textContent.includes('{eventTitle}'));
+    fireEvent.click(chip);
+
+    await waitFor(() => expect(writes.value).toContain('{eventTitle}'));
+    expect(given.value).not.toContain('{eventTitle}');
+  });
+
+  test('the palette names the half it is aimed at, and the name follows focus', async () => {
+    // rejects: moving the target silently. An insertion that lands somewhere
+    // the author is not looking is indistinguishable from one that did nothing.
+    await openEditor();
+    expect(screen.getByTestId('pvi-insert-target')).toHaveTextContent('What the AI is given');
+    fireEvent.focus(screen.getByTestId('prompt-output-textarea'));
+    expect(screen.getByTestId('pvi-insert-target')).toHaveTextContent('What the AI writes');
+  });
+
+  test('a variable is inserted at the cursor, not appended', async () => {
+    // rejects: the `current + token` shortcut. An author who has written a
+    // labelled block and clicks back into the middle of it gets the token at
+    // the end of the field, which reads as the click having failed.
+    await openEditor();
+    const given = screen.getByTestId('prompt-input-textarea');
+    fireEvent.change(given, { target: { value: 'Question: \nResponses: ' } });
+    given.setSelectionRange(10, 10);
+    fireEvent.focus(given);
+
+    const chip = [...document.querySelectorAll('.variable-btn')]
+      .find((b) => b.textContent.includes('{questionInfo}'));
+    fireEvent.click(chip);
+
+    await waitFor(() => expect(given.value).toBe('Question: {questionInfo}\nResponses: '));
   });
 });
 
 describe('gate 1 — the author is warned about an invented token', () => {
-  const outputFormatField = () =>
-    document.querySelectorAll('.template-textarea-container textarea')[0];
-  const instructionsField = () =>
-    [...document.querySelectorAll('.prompt-editor-form textarea')]
-      .find((t) => t.getAttribute('rows') === '4');
+  /*
+    ADDRESSED BY testid, NOT BY POSITION OR BY `rows`.
+
+    These two used to be `.template-textarea-container textarea[0]` and
+    "whichever textarea has rows=4" — both incidental. The second in particular
+    would have silently started matching the description field the day anybody
+    changed a row count, and a test that reads the wrong field passes for the
+    wrong reason. The halves carry stable ids now.
+  */
+  const outputFormatField = () => screen.getByTestId('prompt-output-textarea');
+  const instructionsField = () => screen.getByTestId('prompt-input-textarea');
 
   test('an unknown token is named under the field', async () => {
     await openEditor();

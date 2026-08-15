@@ -36,11 +36,30 @@ describe('samples come from the emitter, not from the catalogue', () => {
     const s = sampleFor('voteTally');
     expect(s.value).toMatch(/^1\. .+ \(\d+ vote points\)/);
     expect(s.value).not.toMatch(/first-place/);
-    // And the catalogue really does still describe it wrongly, so this test
-    // cannot quietly become vacuous if D11 is fixed elsewhere without telling
-    // anyone: assert the premise.
+    /*
+      THE PREMISE ASSERTION IS REVERSED, and that is the point.
+
+      It used to read `expect(entry.example).toMatch(/first-place/)` — asserting
+      the catalogue STILL describes voteTally wrongly, so that this test could
+      not go quietly vacuous if D11 were fixed somewhere else without anyone
+      noticing. It has now been fixed, in this file's own catalogue, by the
+      2026-08-15 metadata audit: the description and example were rewritten to
+      the shape `resultsString` (get-ai-summary.js:1568-1574) actually emits.
+
+      So the premise flips rather than disappears. The catalogue must now AGREE
+      with the emitter, and the two assertions above still prove the sample is
+      built from the emitter rather than read off the entry.
+
+      rejects: reintroducing votingBreakdown's shape into voteTally's catalogue
+      entry — which is the original defect — and equally, deleting this block
+      instead of updating it, which would leave the vacuity guard gone.
+    */
     const entry = TEMPLATE_VARIABLES.find((v) => v.name === 'voteTally');
-    expect(entry.example).toMatch(/first-place/);
+    expect(entry.example).not.toMatch(/first-place/);
+    expect(entry.example).toMatch(/vote points/);
+    // votingBreakdown is the entry that legitimately owns that shape.
+    expect(TEMPLATE_VARIABLES.find((v) => v.name === 'votingBreakdown').example)
+      .toMatch(/1st|first-place/);
   });
 
   test('votingBreakdown is the one that really has that shape', () => {
@@ -151,6 +170,60 @@ describe('a variable this engagement type does not produce', () => {
     expect(s.available).toBe(false);
     expect(s.unavailableNote).toMatch(/It just vanishes/);
     expect(s.unavailableNote).not.toMatch(/literal/i);
+  });
+});
+
+describe('a variable that carries nothing on ANY engagement type', () => {
+  test('is offered nowhere and cannot be inserted', () => {
+    /*
+      rejects: computing `available` from `gameTypes` alone. The two
+      `alwaysEmpty` entries list every type on purpose — the truth they carry is
+      "nowhere", and reading the list literally renders them as available on all
+      five, which is a promise of data that cannot arrive. That is the same
+      shape as the tag error that let a prompt ship with no responses in it.
+
+      This test did not exist and the mutation survived: `available` read the
+      list directly and every assertion in this file still passed.
+    */
+    const s = sampleFor('participationRate');
+    expect(s.alwaysEmpty).toBe(true);
+    expect(s.available).toBe(false);
+    for (const gt of ['call-and-answer', 'trivia', 'poll', 'wavelength']) {
+      expect(sampleFor('votingParticipation', gt).available).toBe(false);
+    }
+
+    render(<PromptVariableInspector gameType="call-and-answer" onInsert={() => {}} />);
+    const row = screen.getByTestId('pvi-row-participationRate');
+    expect(within(row).getByRole('button', { name: '{participationRate}' })).toBeDisabled();
+    expect(within(row).getByText(/Never carries data/)).toBeInTheDocument();
+  });
+
+  test('says "never", not "not here" — they are different facts', () => {
+    // rejects: reusing the unavailable-for-this-type note. "Not produced for
+    // this engagement type" invites the author to switch type and try again,
+    // which will not work; there is no type on which these carry anything.
+    expect(sampleFor('participationRate').unavailableNote).toMatch(/on any engagement type/i);
+    expect(sampleFor('correctAnswer', 'poll').unavailableNote).not.toMatch(/on any engagement type/i);
+  });
+});
+
+describe('the picker says what a variable is for, as well as what it becomes', () => {
+  test('the catalogue description and example are shown, and labelled as its words', () => {
+    /*
+      The owner asked for a picker "showing each variable's description and
+      example". They are additive and deliberately ranked BELOW the emitted
+      sample: this catalogue has been wrong about a shape before (D11), so the
+      sample is the truth and the description is attributed.
+
+      rejects: dropping either one, and rejects promoting the example to the
+      sample — the test above already fails on that, and this one keeps the
+      description from being quietly deleted as redundant.
+    */
+    render(<PromptVariableInspector gameType="call-and-answer" />);
+    const row = screen.getByTestId('pvi-row-topVotedAnswers');
+    fireEvent.click(within(row).getByText('What it becomes'));
+    expect(within(row).getByTestId('pvi-desc-topVotedAnswers').textContent).toMatch(/Top 3/);
+    expect(within(row).getByText(/Catalogue example/)).toBeInTheDocument();
   });
 });
 

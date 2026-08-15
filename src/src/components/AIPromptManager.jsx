@@ -1,15 +1,17 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import './AIPromptManager.css';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType } from '../config/gameTypes';
 import {
   unknownVariableTokens,
   extractVariableTokens,
+  extractBracketDirections,
 } from '../config/templateVariables';
 import Icon from './Icon';
 import PromptVariableInspector, { DEFAULT_ROOM_SIZE } from './PromptVariableInspector';
 import PromptAssembledPreview from './PromptAssembledPreview';
 import PromptPreflightPanel, { blocksSave } from './PromptPreflightPanel';
+import PromptLibraryPanel from './PromptLibraryPanel';
 
 const API_BASE = window.API_BASE;
 
@@ -111,6 +113,36 @@ const unknownTokensIn = (...texts) => {
   return seen;
 };
 
+/**
+ * THE TWO HALVES, and why they are named rather than numbered.
+ *
+ * The fields have always been `instructions` and `outputFormat`, labelled
+ * "1. General Instructions" and "2. Output Format (Markdown)". Those labels
+ * describe the FORM, not the model: neither says that the first half is where
+ * the round's data goes. So a careful author put the persona in the first,
+ * the whole layout in the second, and no variable carrying the responses in
+ * either — and the model was handed a question, an instruction to critique an
+ * answer, and no answer. It replied by asking for one, and that reply was
+ * stored and read to the room.
+ *
+ * The storage keys do not change; only what the screen calls them does. The
+ * lambda concatenates `instructions + '\n\n' + outputFormat` and substitutes
+ * over the WHOLE result (get-ai-summary.js:2146, :2205), so variables in the
+ * first half have always worked. Nothing in the engine had to move for this.
+ */
+const HALVES = {
+  instructions: {
+    field: 'instructions',
+    label: 'What the AI is given',
+    testId: 'prompt-half-given',
+  },
+  outputFormat: {
+    field: 'outputFormat',
+    label: 'What the AI writes',
+    testId: 'prompt-half-writes',
+  },
+};
+
 // AI Prompt Editor Modal Component
 function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
   const [formData, setFormData] = useState({
@@ -137,7 +169,29 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
 
   const [tagInput, setTagInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [outputFormatTextareaRef, setOutputFormatTextareaRef] = useState(null);
+  /**
+   * One textarea per half, and the half a click currently aims at.
+   *
+   * The palette used to hold a single ref — the output format's — so every
+   * variable an author inserted landed in the half that describes the REPLY.
+   * There was no way to put one in the half that carries the data except by
+   * typing it, and nothing on screen suggested you should. That is the
+   * mechanical half of the defect this editor exists to make hard.
+   *
+   * The default is the input half, deliberately: data belongs there, and the
+   * previous default is the one that shipped the bad prompt.
+   */
+  /*
+    A REF, NOT STATE, and the first cut of this got it wrong in a way worth
+    recording: an inline `ref={(node) => setHalfRefs(...)}` callback is a NEW
+    function on every render, so React detaches the old ref (calling it with
+    null) and attaches the new one on each commit. With a setState inside, that
+    is an unconditional render loop — "Maximum update depth exceeded", every
+    test in three suites. Nothing reads these nodes during render; only the
+    insert handler does, at event time. That is exactly what a ref is for.
+  */
+  const halfRefs = useRef({ instructions: null, outputFormat: null });
+  const [activeHalf, setActiveHalf] = useState('instructions');
   const [isGeneratingWithAI, setIsGeneratingWithAI] = useState(false);
   const [savedInstructions, setSavedInstructions] = useState('');
   const [savedOutputFormat, setSavedOutputFormat] = useState('');
@@ -168,6 +222,27 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
         template: formData.template,
         gameType: normalizeGameType(formData.gameType),
         isDefault: formData.isDefault,
+        /*
+          THE ARGUMENT THIS CALL WAS MISSING, and it is the whole reason
+          `e8c167d1` protected nothing.
+
+          `promptPreflight.js:933` gates the `no-answer-variable` rule on
+          `String(input.promptType || '') === 'analysis'` — narrowed on purpose,
+          because a first version treated a missing promptType as "analysis" and
+          lit up ten question-GENERATION defaults. Correct rule, correct
+          narrowing — and this call site never passed the field, so
+          `input.promptType` was `undefined` on every keystroke and the rule
+          could not fire in the editor at all.
+
+          `promptPreflight.test.js:780-831` exercises the rule with an explicit
+          `promptType`, so the module was green and the screen was unprotected:
+          the standing landmine "test the call site, not just the module",
+          reproduced exactly. The editor authors analysis prompts only — the
+          field is hardcoded in formData for the same reason — so it is passed
+          from formData rather than re-derived, and a call-site test now covers
+          it.
+        */
+        promptType: formData.promptType,
         targetModel: SUMMARY_MODEL_ID,
       });
     } catch (err) {
@@ -183,6 +258,7 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
     formData.template,
     formData.gameType,
     formData.isDefault,
+    formData.promptType,
     prompt,
   ]);
 
@@ -202,28 +278,65 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
     [formData.instructions, formData.outputFormat, formData.template]
   );
 
+  /**
+   * The variables the INPUT half carries — the data the model will actually
+   * receive.
+   *
+   * This is the reading that was impossible to take before. The prompt that
+   * broke a live session had `{questionTitle}` and `{questionDetail}` and
+   * nothing else, and no surface in the product would tell its author that the
+   * responses were not among them.
+   */
+  const givenTokens = useMemo(
+    () => extractVariableTokens(formData.instructions || ''),
+    [formData.instructions]
+  );
+
+  /**
+   * The `[bracketed]` spans in the OUTPUT half.
+   *
+   * Nothing substitutes these. The model reads the words. Listing them under
+   * the half, labelled as directions rather than slots, is the smallest thing
+   * that makes the distinction visible at the moment it is being typed —
+   * `[Summary of the core idea/response being analyzed]` looked finished, and
+   * arrived at the model as a request it then answered.
+   */
+  const bracketDirections = useMemo(
+    () => extractBracketDirections(formData.outputFormat || ''),
+    [formData.outputFormat]
+  );
+
+  /**
+   * Insert at the cursor of whichever half is in play, not always the output.
+   *
+   * `activeHalf` follows focus and starts on the input half. A click with
+   * nothing focused therefore puts data where data goes.
+   */
   const insertVariable = (variableName) => {
-    if (outputFormatTextareaRef) {
-      const cursorPos = outputFormatTextareaRef.selectionStart;
-      const textBefore = formData.outputFormat.substring(0, cursorPos);
-      const textAfter = formData.outputFormat.substring(outputFormatTextareaRef.selectionEnd);
-      const newOutputFormat = textBefore + `{${variableName}}` + textAfter;
-      
-      setFormData({ ...formData, outputFormat: newOutputFormat });
-      
-      // Move cursor after inserted variable
+    const field = HALVES[activeHalf] ? activeHalf : 'instructions';
+    const node = halfRefs.current[field];
+    const current = formData[field] || '';
+    const token = `{${variableName}}`;
+
+    // No node yet (first render, or a half that has never mounted): append
+    // rather than drop the click on the floor. Losing the insertion silently is
+    // the same class of failure as the variable that resolves to nothing.
+    const start = node ? node.selectionStart : current.length;
+    const end = node ? node.selectionEnd : current.length;
+    const next = current.substring(0, start) + token + current.substring(end);
+
+    setFormData({ ...formData, [field]: next });
+
+    if (node) {
+      const caret = start + token.length;
       setTimeout(() => {
-        outputFormatTextareaRef.setSelectionRange(
-          cursorPos + variableName.length + 2,
-          cursorPos + variableName.length + 2
-        );
-        outputFormatTextareaRef.focus();
+        node.setSelectionRange(caret, caret);
+        node.focus();
       }, 0);
     }
   };
 
   const gameTypes = GAME_TYPE_OPTIONS;
-  const categories = PROMPT_CATEGORIES;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -397,18 +510,24 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
               </select>
             </div>
 
-            <div className="form-group">
-              <label>Category</label>
-              <select
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              >
-                <option value="">Select a category...</option>
-                {categories[normalizeGameType(formData.gameType)]?.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
+            {/*
+              CATEGORY AND SCENARIO ARE GONE FROM THIS FORM, on the owner's
+              call: "i think the Category, Scenario are not really helpful".
+
+              Neither reaches the model. `category` is a list-filter facet and a
+              hint passed to the AI generator; `scenario` is passed to the
+              advisor and to nothing else. Both were sitting in the top third of
+              the editor, above the two fields that decide what the summary
+              says, and an author reads down.
+
+              THE STORED VALUES ARE NOT DISCARDED. Both stay in `formData`,
+              initialised from the record and submitted unchanged, so editing a
+              prompt authored before this change does not silently strip its
+              category and orphan it from the library's category filter. The
+              filter still offers every category that exists. Restoring the two
+              controls is re-adding two <div>s; nothing else in the file assumes
+              they are absent.
+            */}
 
             <div className="form-group">
               <label>Status</label>
@@ -423,19 +542,55 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
             </div>
           </div>
 
-          <div className="form-group">
-            <label>Scenario</label>
-            <input
-              type="text"
-              value={formData.scenario}
-              onChange={(e) => setFormData({ ...formData, scenario: e.target.value })}
-              placeholder="e.g., Lessons Learned Scenarios"
-            />
-          </div>
+          {/*
+            ============================================================
+            THE TWO HALVES.
+            ============================================================
+            One grid: the two authored halves in the left column, the
+            variable rail in the right, so a variable can be inserted into
+            either half from one place. The palette used to live inside the
+            output format's own container, which said — structurally, before
+            anybody read a word — that variables belong to the reply.
+          */}
+          <div className="prompt-build">
+            <div className="prompt-build-halves">
+              {/*
+                THE CONVENTION, STATED. `{}` and `[]` look alike, sit side by
+                side in every prompt in this product, and do opposite things.
+                Nothing in the editor had ever said so, and a live session was
+                summarised by a model politely asking its author for the
+                responses — because `[Summary of the core idea/response being
+                analyzed]` reads like a slot and is prose.
 
-          <div className="form-group">
+                This is an owner decision that was asked and not answered. It is
+                built because the mistake it prevents is a real outage, and it
+                is four lines of copy to remove if he disagrees.
+              */}
+              <div className="prompt-convention" data-testid="prompt-convention">
+                <h4>Two kinds of bracket, and they do opposite things</h4>
+                <ul>
+                  <li>
+                    <code className="pc-brace">{'{braces}'}</code>
+                    <span>
+                      <strong>are replaced with real data</strong> before the model reads a word of
+                      this prompt. Pick them from the list — anything else is left on screen as the
+                      characters you typed.
+                    </span>
+                  </li>
+                  <li>
+                    <code className="pc-bracket">[brackets]</code>
+                    <span>
+                      <strong>are prose.</strong> Nothing replaces them. The model reads the words
+                      inside as an instruction, so <em>[Summary of the responses]</em> tells it to
+                      write a summary &mdash; it does not hand it the responses.
+                    </span>
+                  </li>
+                </ul>
+              </div>
+
+          <div className="form-group prompt-half prompt-half--given" data-testid="prompt-half-given">
             <div className="label-with-actions">
-              <label>1. General Instructions *</label>
+              <label htmlFor="prompt-input-half">1. What the AI is given</label>
               <div className="magic-wand-actions">
                 <button 
                   type="button" 
@@ -461,74 +616,119 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
                 )}
               </div>
             </div>
+            <p className="prompt-half-lede">
+              Everything the model knows about this round arrives here, and nowhere else. Put the
+              voice you want first, then the data: one <code>{'{variable}'}</code> per line, with a
+              label in front of it, is the shape that reads best.
+            </p>
             <textarea
+              id="prompt-input-half"
+              data-testid="prompt-input-textarea"
+              ref={(node) => { halfRefs.current.instructions = node; }}
+              onFocus={() => setActiveHalf('instructions')}
               value={formData.instructions}
               onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
-              placeholder="Example: You are a Developer Consultant that provides deep thoughtful expertise on how to deploy code and develop products. You provide detailed answers and speak clearly, explaining any jargon to make sure everyone's on the same page."
+              placeholder={'You are a helpful consultant. Here is what was said.\n\n'
+                + 'Question:  {questionInfo}\n'
+                + 'Responses: {topVotedAnswers}\n'
+                + 'Standing:  {cumulativeScores}'}
               rows="4"
               required
             />
+
+            {/*
+              WHAT THE MODEL WILL ACTUALLY RECEIVE, counted from this half.
+
+              A reading that could not be taken before. The prompt that broke a
+              live session carried {questionTitle} and {questionDetail} and
+              nothing else; every screen it passed through showed a well-formed
+              prompt. The empty case is called out at the point of authorship —
+              the preflight below blocks the save, but a blocked save is read
+              after the writing, and this is read during it.
+            */}
+            {givenTokens.length > 0 ? (
+              <div className="prompt-readout" data-testid="prompt-given-readout">
+                <span className="prompt-readout-l">The model receives</span>
+                <span className="prompt-readout-v">
+                  {givenTokens.map((name) => (
+                    <code key={name}>{`{${name}}`}</code>
+                  ))}
+                </span>
+              </div>
+            ) : (
+              <div
+                className="prompt-readout prompt-readout--none"
+                data-testid="prompt-given-empty"
+                role="status"
+              >
+                <Icon name="Warning" weight="fill" size={14} color="currentColor" />{' '}
+                <strong>This half names no data.</strong> The model will be given a voice, a layout,
+                and nothing about the round &mdash; not the question, not the responses. A summary
+                prompt in that state replies by asking for the answers, and that reply is what the
+                room reads.
+              </div>
+            )}
+
             <small className="form-help">
-              Define the AI's persona, expertise, and communication style. Click "AI Generate" to create a prompt based on your game type and category.
+              Stored as <code>instructions</code>. Variables here are substituted exactly as they
+              are in the half below &mdash; the engine replaces tokens across the whole assembled
+              prompt (<code>get-ai-summary.js:2205</code>), not just the output format.
             </small>
           </div>
 
-          <div className="form-group template-group">
-            <label>2. Output Format (Markdown) *</label>
+          <div
+            className="form-group template-group prompt-half prompt-half--writes"
+            data-testid="prompt-half-writes"
+          >
+            <label htmlFor="prompt-output-half">2. What the AI writes</label>
+            <p className="prompt-half-lede">
+              The shape of the reply, in Markdown. Use <code>[square brackets]</code> to say what
+              each section should contain &mdash; they are directions the model reads, so describe
+              the writing you want, and leave the data to the half above.
+            </p>
             <div className="template-editor-container">
               <div className="template-textarea-container">
                 <textarea
-                  ref={setOutputFormatTextareaRef}
+                  id="prompt-output-half"
+                  data-testid="prompt-output-textarea"
+                  ref={(node) => { halfRefs.current.outputFormat = node; }}
+                  onFocus={() => setActiveHalf('outputFormat')}
                   value={formData.outputFormat}
                   onChange={(e) => setFormData({ ...formData, outputFormat: e.target.value })}
-                  placeholder="Example output format with Markdown formatting:
-
-## Key Insights from {eventTitle}
-Analyze the **{responseCount} responses** from participants who answered: *{questionTitle}*
-
-### Top Responses:
-{responsesText}
-
-## Strategic Implications
-Based on the **{winnerInfo}**, here are strategic implications:
-
-1. **Leadership Alignment**: How responses demonstrate team thinking
-2. **Process Improvement**: Areas for operational enhancement  
-3. **Culture Insights**: What responses reveal about team culture
-
-## Recommended Actions
-Priority actions based on `{sessionContext}`:
-
-| Priority | Action | Owner | Timeline |
-|----------|--------|--------|----------|
-| High | Follow up on winning response | Team Lead | 1 week |
-| Medium | Address common themes | Manager | 2 weeks |
-| Low | Document lessons learned | Team | 1 month |
-
-**Bold text**, *italic text*, `inline code`, and tables are supported!
-
-Click variable buttons to insert them into your output format."
+                  placeholder={'**RADIO SHOW REVIEW**\n\n'
+                    + '## Summary\n'
+                    + '[What was asked, and what the room said, in three sentences]\n\n'
+                    + '## Discussion\n'
+                    + '[Two questions worth asking this room next]\n\n'
+                    + 'Bold, italic, `code`, lists, tables and quotes all render. '
+                    + 'Images, HTML and nested lists do not.'}
                   rows="12"
                   required
                 />
               </div>
-              {/*
-                THE PALETTE IS NOW AN INSPECTOR. The chips were a name and a
-                tooltip quoting `variable.description` — and the catalogue's
-                descriptions are not reliable: `voteTally`'s reads back
-                `votingBreakdown`'s shape and example (defect D11), and no entry
-                said anything at all about how large a value renders, which is
-                how one prompt ended up 40% tally. Every row's sample is now
-                built the way get-ai-summary.js builds the value, from the same
-                sample room the preview substitutes.
-              */}
-              <PromptVariableInspector
-                gameType={normalizeGameType(formData.gameType)}
-                roomSize={roomSize}
-                usedNames={usedTokens}
-                onInsert={insertVariable}
-              />
             </div>
+
+            {/*
+              THE BRACKETS, LISTED BACK. Square brackets are the affordance that
+              made the broken prompt look finished, and the only cure that
+              scales is showing the author their own brackets under the label
+              "direction", not "slot", while they are typing them.
+            */}
+            {bracketDirections.length > 0 && (
+              <div className="prompt-readout" data-testid="prompt-writes-readout">
+                <span className="prompt-readout-l">
+                  {bracketDirections.length === 1 ? 'One direction' : `${bracketDirections.length} directions`},
+                  read as prose
+                </span>
+                <span className="prompt-readout-v">
+                  {bracketDirections.slice(0, 6).map((body) => (
+                    <code key={body}>{`[${body}]`}</code>
+                  ))}
+                  {bracketDirections.length > 6 && <em>+{bracketDirections.length - 6} more</em>}
+                </span>
+              </div>
+            )}
+
             {unknownTokens.length > 0 && (
               <div className="unknown-variable-warning" data-testid="unknown-variable-warning">
                 <Icon name="Warning" weight="fill" size={16} color="var(--danger)" />{' '}
@@ -542,8 +742,35 @@ Click variable buttons to insert them into your output format."
               </div>
             )}
             <small className="form-help">
-              Click the variable buttons to insert them into your output format. Variables will be replaced with actual content when the AI summary is generated. Supports full Markdown formatting including headers, bold, italic, code, and tables.
+              Stored as <code>outputFormat</code>. The system appends its own FORMAT contract after
+              this, and that contract overrides any formatting instruction written here &mdash; see
+              the preview below.
             </small>
+          </div>
+            </div>
+
+            {/*
+              THE RAIL. One picker, two possible targets, and it says which one
+              it is aimed at. Before this it held a single ref — the output
+              format's — so every variable an author inserted landed in the half
+              that describes the reply, and the half that carries the data could
+              only be filled by typing.
+
+              THE ROWS ARE STILL BUILT FROM THE EMITTER, not from the
+              catalogue's prose: `voteTally`'s description has read back
+              `votingBreakdown`'s shape since D11. The catalogue's description
+              and example are now shown too, underneath, labelled as its words —
+              additive, and ranked below the sample on purpose.
+            */}
+            <aside className="prompt-build-rail">
+              <PromptVariableInspector
+                gameType={normalizeGameType(formData.gameType)}
+                roomSize={roomSize}
+                usedNames={usedTokens}
+                onInsert={insertVariable}
+                insertTargetLabel={(HALVES[activeHalf] || HALVES.instructions).label}
+              />
+            </aside>
           </div>
 
           {/*
@@ -862,13 +1089,22 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
 // Main AI Prompt Manager Component
 function AIPromptManager() {
   const [prompts, setPrompts] = useState([]);
-  const [filteredPrompts, setFilteredPrompts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedGameType, setSelectedGameType] = useState('all');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedStatus, setSelectedStatus] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  
+  /*
+    ONE FILTER OBJECT, AND NO DERIVED-STATE MIRROR.
+
+    This used to be four `useState`s plus a `filteredPrompts` array kept in sync
+    by an effect — the classic derived-state-in-state arrangement, which means
+    every render draws a list computed one render ago and an effect that forgets
+    a dependency simply shows the wrong rows. `filterPrompts` was also the
+    source of the file's only exhaustive-deps warning. The filtering is a pure
+    function of props and filters and now lives in PromptLibraryPanel, computed
+    at render, the way QuestionSetsPanel does it.
+  */
+  const [filters, setFilters] = useState({
+    search: '', gameType: 'all', category: 'all', status: 'all',
+  });
+
   const [editingPrompt, setEditingPrompt] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
   const [advisorPrompt, setAdvisorPrompt] = useState(null);
@@ -876,10 +1112,6 @@ function AIPromptManager() {
   useEffect(() => {
     fetchPrompts();
   }, []);
-
-  useEffect(() => {
-    filterPrompts();
-  }, [prompts, selectedGameType, selectedCategory, selectedStatus, searchQuery]);
 
   const fetchPrompts = async () => {
     setIsLoading(true);
@@ -908,37 +1140,6 @@ function AIPromptManager() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const filterPrompts = () => {
-    let filtered = [...prompts];
-
-    if (selectedGameType !== 'all') {
-      // Normalize both sides: rows written before the vocabulary was unified
-      // still carry `callandanswer` / `polls`, and an exact-match filter on the
-      // dashed id would show none of them.
-      const wanted = normalizeGameType(selectedGameType);
-      filtered = filtered.filter(p => normalizeGameType(p.gameType) === wanted);
-    }
-
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter(p => p.category === selectedCategory);
-    }
-
-    if (selectedStatus !== 'all') {
-      filtered = filtered.filter(p => p.status === selectedStatus);
-    }
-
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(p => 
-        p.name.toLowerCase().includes(query) ||
-        p.description?.toLowerCase().includes(query) ||
-        p.tags?.some(tag => tag.toLowerCase().includes(query))
-      );
-    }
-
-    setFilteredPrompts(filtered);
   };
 
   const handleDeletePrompt = async (promptId) => {
@@ -1021,192 +1222,40 @@ function AIPromptManager() {
     }
   };
 
-  const getStatusBadgeClass = (status) => {
-    switch (status) {
-      case 'active': return 'status-active';
-      case 'draft': return 'status-draft';
-      case 'archived': return 'status-archived';
-      default: return '';
-    }
-  };
-
   return (
     <div className="ai-prompt-manager">
       <div className="prompt-manager-header">
         <h2><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI Prompt Management</h2>
         <p className="section-description">
-          Create and manage AI prompts for different game types. Use the AI Advisor to improve your prompts.
+          A summary prompt is what Workie says after a round. Each engagement type has one default;
+          a question set can pin its own.
         </p>
       </div>
 
-      <div className="prompt-controls">
-        <div className="prompt-filters">
-          <select 
-            value={selectedGameType}
-            onChange={(e) => {
-              setSelectedGameType(e.target.value);
-              // The category list below is derived from the game type, so a
-              // category that is no longer offered would otherwise stay
-              // selected and silently filter everything out.
-              setSelectedCategory('all');
-            }}
-            className="filter-select"
-          >
-            {/* D20: wavelength was missing entirely, so wavelength prompts were
-                unreachable through this filter; survey matched nothing anywhere.
-                Values are the canonical dashed ids. */}
-            <option value="all">All Game Types</option>
-            <option value="call-and-answer">Call & Answer</option>
-            <option value="trivia">Trivia</option>
-            <option value="poll">Poll</option>
-            <option value="wavelength">Wavelength</option>
-            <option value="survey">Survey</option>
-          </select>
-
-          <select 
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="filter-select"
-          >
-            {/* Derived per game type, as the editor's own select already does.
-                This list was hardcoded to the call-and-answer categories, so a
-                trivia or wavelength prompt could be authored under a category
-                and then never filtered for again. */}
-            <option value="all">All Categories</option>
-            {(selectedGameType === 'all'
-              ? ALL_PROMPT_CATEGORIES
-              : (PROMPT_CATEGORIES[normalizeGameType(selectedGameType)] || [])
-            ).map(cat => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
-
-          <select 
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-            className="filter-select"
-          >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="draft">Draft</option>
-            <option value="archived">Archived</option>
-          </select>
-
-          <input
-            type="text"
-            placeholder="Search prompts..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="search-input"
-          />
-        </div>
-
-        <div className="prompt-control-actions">
-          <button 
-            className="btn-secondary"
-            onClick={handlePopulateDefaults}
-            disabled={isLoading}
-          >
-            <Icon name="Target" weight="duotone" size={16} color="var(--primary)" /> Populate Default Prompts
-          </button>
-          <button 
-            className="btn-primary create-prompt-btn"
-            onClick={() => setIsCreating(true)}
-          >
-            <Icon name="Plus" weight="bold" size={16} color="currentColor" /> Create New Prompt
-          </button>
-        </div>
-      </div>
-
-      {isLoading ? (
-        <div className="loading-state">Loading prompts...</div>
-      ) : (
-        <div className="prompts-grid">
-          {filteredPrompts.length === 0 ? (
-            <div className="empty-state">
-              <p>No prompts found. Create your first AI prompt to get started!</p>
-            </div>
-          ) : (
-            filteredPrompts.map(prompt => (
-              <div key={prompt.promptId} className="prompt-card">
-                <div className="prompt-card-header">
-                  <h3>{prompt.name}</h3>
-                  <span className={`status-badge ${getStatusBadgeClass(prompt.status)}`}>
-                    {prompt.status}
-                  </span>
-                </div>
-                
-                <div className="prompt-card-meta">
-                  <span className="game-type-badge">{prompt.gameType}</span>
-                  {prompt.category && (
-                    <span className="category-badge">{prompt.category}</span>
-                  )}
-                  {prompt.isDefault && (
-                    <span className="default-badge">Default</span>
-                  )}
-                  {/* R1b: a generation-format prompt attached to a question set
-                      does nothing at runtime — the summary engine rejects it and
-                      silently uses the game-type default. Say so here rather
-                      than letting someone attach it and wonder why the summary
-                      never changed. */}
-                  {prompt.summaryPromptStatus === 'unusable' && (
-                    <span
-                      className="warning-badge"
-                      title={`Cannot be used as a summary prompt: ${prompt.summaryPromptDefect || 'wrong format'}`}
-                    >
-                      <Icon name="Warning" weight="fill" size={12} color="currentColor" /> Not a summary prompt
-                    </span>
-                  )}
-                  {prompt.malformed && (
-                    <span
-                      className="warning-badge"
-                      title="This record has no promptId attribute. It cannot be attached to a question set safely — run scripts/cull-ai-prompts.js."
-                    >
-                      <Icon name="Warning" weight="fill" size={12} color="currentColor" /> Broken record
-                    </span>
-                  )}
-                </div>
-
-                {prompt.description && (
-                  <p className="prompt-description">{prompt.description}</p>
-                )}
-
-                {prompt.tags && prompt.tags.length > 0 && (
-                  <div className="prompt-tags">
-                    {prompt.tags.map(tag => (
-                      <span key={tag} className="tag">{tag}</span>
-                    ))}
-                  </div>
-                )}
-
-                <div className="prompt-card-actions">
-                  <button
-                    className="btn-icon"
-                    onClick={() => setEditingPrompt(prompt)}
-                    title="Edit"
-                  >
-                    <Icon name="PencilSimple" weight="bold" size={16} color="currentColor" />
-                  </button>
-                  <button
-                    className="btn-icon"
-                    onClick={() => setAdvisorPrompt(prompt)}
-                    title="AI Advisor"
-                  >
-                    <Icon name="MagicWand" weight="duotone" size={16} color="var(--primary)" />
-                  </button>
-                  <button
-                    className="btn-icon delete"
-                    onClick={() => handleDeletePrompt(prompt.promptId)}
-                    title="Archive"
-                  >
-                    <Icon name="Trash" weight="bold" size={16} color="currentColor" />
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      {/*
+        THE LIST IS A PURE COMPONENT NOW. Everything it decides — filtering,
+        the two empty states, the drop-exits — happens in PromptLibraryPanel,
+        where it can be mounted and tested without mocking a fetch. This
+        component keeps the fetching, the dialogs and the callbacks, exactly
+        the split AdminPage/QuestionSetsPanel already uses.
+      */}
+      <PromptLibraryPanel
+        prompts={prompts}
+        loading={isLoading}
+        filters={filters}
+        onFilterChange={setFilters}
+        gameTypeOptions={GAME_TYPE_OPTIONS}
+        categoryOptions={
+          filters.gameType === 'all'
+            ? ALL_PROMPT_CATEGORIES
+            : (PROMPT_CATEGORIES[normalizeGameType(filters.gameType)] || [])
+        }
+        onEdit={setEditingPrompt}
+        onAdvise={setAdvisorPrompt}
+        onDelete={handleDeletePrompt}
+        onCreate={() => setIsCreating(true)}
+        onPopulateDefaults={handlePopulateDefaults}
+      />
 
       {(editingPrompt || isCreating) && (
         <AIPromptEditor

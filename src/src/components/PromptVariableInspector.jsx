@@ -279,6 +279,11 @@ export function sampleTemplateVars(rawGameType, sizeId = DEFAULT_ROOM_SIZE) {
 
     // QUESTION INFO
     question: 'The agent wrote the code and the tests. What are the tests worth?',
+    // :2040 — title and detail, each on its own labelled line, and the detail
+    // line dropped entirely when the question carries none.
+    questionInfo:
+      'Question: The agent wrote the code and the tests. What are the tests worth?\n'
+      + 'Detail: A test written from the implementation passes by construction. Say which cost you would pay.',
     questionTitle: 'The agent wrote the code and the tests. What are the tests worth?',
     questionDetail: 'A test written from the implementation passes by construction. Say which cost you would pay.',
     questionCategory: 'Testing',
@@ -422,6 +427,17 @@ const UNAVAILABLE_NOTE =
   'Not produced for this engagement type. It is still substituted — with an empty '
   + 'or meaningless value — so it does not leave a visible {token}. It just vanishes.';
 
+/**
+ * A variable the catalogue marks `alwaysEmpty` is worse than unavailable: there
+ * is no engagement type on which it carries anything. It is kept in the list,
+ * disabled, because an author looking for a participation figure needs to be
+ * told there is none — an absent row teaches nothing.
+ */
+const ALWAYS_EMPTY_NOTE =
+  'Never carries data, on any engagement type. It resolves to the empty string every '
+  + 'time, deliberately — the figure it used to hold was 100% by construction and was '
+  + 'being read aloud to the room. It cannot be inserted.';
+
 export function variableSamples(rawGameType, sizeId = DEFAULT_ROOM_SIZE) {
   const gameType = normalizeGameType(rawGameType);
   const vars = sampleTemplateVars(gameType, sizeId);
@@ -431,19 +447,31 @@ export function variableSamples(rawGameType, sizeId = DEFAULT_ROOM_SIZE) {
   const unknown = gameType === 'survey';
 
   return TEMPLATE_VARIABLES.map((v) => {
-    const available = v.gameTypes.map(normalizeGameType).includes(gameType);
+    const alwaysEmpty = Boolean(v.alwaysEmpty);
+    // `alwaysEmpty` beats the type list. Those entries declare every type — the
+    // truth they carry is "nowhere", and reading the list alone would render
+    // them as available on all five.
+    const available = !alwaysEmpty && v.gameTypes.map(normalizeGameType).includes(gameType);
     const raw = vars[v.name];
     const value = raw === undefined || raw === null ? '' : String(raw);
     return {
       name: v.name,
       category: v.category,
+      // The catalogue's own words, carried through so the picker can show what
+      // a variable is FOR alongside what it becomes. Kept strictly secondary in
+      // the view: the sample is the emitter, the description is the catalogue,
+      // and where they disagree the sample is the one that is true. See the
+      // header — voteTally's description has been wrong since D11.
+      description: v.description,
+      example: v.example,
+      alwaysEmpty,
       available,
       unknown,
       value: unknown ? null : value,
       empty: !unknown && value.length === 0,
       chars: unknown ? null : value.length,
       unsafe: UNSAFE_VARIABLES[v.name] || null,
-      unavailableNote: available ? null : UNAVAILABLE_NOTE,
+      unavailableNote: alwaysEmpty ? ALWAYS_EMPTY_NOTE : (available ? null : UNAVAILABLE_NOTE),
     };
   });
 }
@@ -467,6 +495,16 @@ export default function PromptVariableInspector({
   roomSize = DEFAULT_ROOM_SIZE,
   onInsert,
   usedNames = [],
+  /**
+   * Where a click lands, in the author's words.
+   *
+   * The palette used to insert into the output format ALWAYS, and silently —
+   * there was no other target and nothing said which one it was. That is how a
+   * summary prompt gets built with every variable in the half that describes
+   * the reply and none in the half that carries the data. Naming the target is
+   * half the fix; the editor moving it with the cursor is the other half.
+   */
+  insertTargetLabel = null,
 }) {
   const [expanded, setExpanded] = useState(null);
   const samples = useMemo(() => variableSamples(gameType, roomSize), [gameType, roomSize]);
@@ -486,6 +524,11 @@ export default function PromptVariableInspector({
     <div className="template-variables-panel pvi" data-testid="prompt-variable-inspector">
       <div className="pvi-head">
         <h4>Variables</h4>
+        {insertTargetLabel && (
+          <p className="pvi-target" data-testid="pvi-insert-target">
+            Inserts into <strong>{insertTargetLabel}</strong>
+          </p>
+        )}
         <p className="pvi-sub">
           Click to insert. {samples.filter((s) => s.available).length} of {samples.length} produce
           something for {gameType || 'this engagement type'}.
@@ -516,6 +559,7 @@ export default function PromptVariableInspector({
                     className={[
                       'pvi-row',
                       s.available ? '' : 'pvi-row--na',
+                      s.alwaysEmpty ? 'pvi-row--never' : '',
                       tier ? `pvi-row--${tier}` : '',
                       used.has(s.name) ? 'pvi-row--used' : '',
                     ].filter(Boolean).join(' ')}
@@ -531,7 +575,11 @@ export default function PromptVariableInspector({
                         className="variable-btn pvi-token"
                         onClick={() => onInsert && onInsert(s.name)}
                         disabled={!onInsert || !s.available}
-                        title={s.available ? 'Insert into the output format' : UNAVAILABLE_NOTE}
+                        title={
+                          s.available
+                            ? `Insert into ${insertTargetLabel || 'your prompt'}`
+                            : s.unavailableNote
+                        }
                       >
                         {`{${s.name}}`}
                       </button>
@@ -541,7 +589,10 @@ export default function PromptVariableInspector({
                         </span>
                       )}
                       {tier === 'advisory' && <span className="pvi-flag pvi-flag--advisory">Read this</span>}
-                      {!s.available && <span className="pvi-flag pvi-flag--na">Produces nothing here</span>}
+                      {s.alwaysEmpty && <span className="pvi-flag pvi-flag--never">Never carries data</span>}
+                      {!s.available && !s.alwaysEmpty && (
+                        <span className="pvi-flag pvi-flag--na">Produces nothing here</span>
+                      )}
                       {used.has(s.name) && <span className="pvi-flag pvi-flag--used">In your prompt</span>}
                       <button
                         type="button"
@@ -555,6 +606,24 @@ export default function PromptVariableInspector({
 
                     {open && (
                       <div className="pvi-detail">
+                        {/*
+                          WHAT IT IS FOR, then WHAT IT BECOMES, in that order and
+                          visibly ranked. The description and example come from
+                          the catalogue and the catalogue has been wrong before
+                          (D11), so they are labelled as its words and the
+                          emitted sample below them is labelled as the truth.
+                          Showing the description without that ranking is how
+                          the wrong shape got believed the first time.
+                        */}
+                        <p className="pvi-desc" data-testid={`pvi-desc-${s.name}`}>
+                          {s.description}
+                        </p>
+                        {s.example && (
+                          <p className="pvi-example">
+                            <span className="pvi-example-l">Catalogue example</span>
+                            <code>{s.example}</code>
+                          </p>
+                        )}
                         {s.unknown ? (
                           <p className="pvi-nosample">
                             <strong>No sample.</strong> No survey set can exist &mdash; the importer
@@ -580,7 +649,11 @@ export default function PromptVariableInspector({
                             <strong>{s.unsafe.what}</strong> {s.unsafe.why}
                           </p>
                         )}
-                        {!s.available && <p className="pvi-why pvi-why--na">{UNAVAILABLE_NOTE}</p>}
+                        {!s.available && (
+                          <p className={`pvi-why pvi-why--${s.alwaysEmpty ? 'never' : 'na'}`}>
+                            {s.unavailableNote}
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>

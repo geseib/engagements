@@ -1677,3 +1677,355 @@
   font-weight: 700;
   color: var(--pc-stop);
 }
+
+/* ============================================================================
+   THE TWO HALVES, THE CONVENTION, AND THE LIBRARY TABLE.
+
+   Brought to the standard docs/design/admin-redesign/01-sets.html sets on
+   QuestionSetsPanel.css: a 36px table row instead of a card wall, chips with a
+   stated meaning, two distinct empty states, and a 12px type floor.
+
+   IT IS PAPER, NOT DUSK, AND THAT IS DELIBERATE — see the header of the block
+   above. `AdminPage.jsx` gives the prompts section no `contentTheme`, so
+   AdminShell paints it light; converting these blocks to the dusk palette
+   without moving the section is #F4EDE4 on white, the same 1.2:1 failure
+   __tests__/questionSetsPalette.test.js exists to prevent, in the other
+   direction. So this screen matches the sets screen's STRUCTURE and its
+   discipline, measured against white and #f8f9fa rather than against #0F1A2E.
+   __tests__/promptEditorPalette.test.js holds both halves of that.
+
+   Every colour is one of the six --pc-* tokens already measured on white.
+   Nothing here reaches for a global token: an undefined custom property
+   invalidates the whole declaration, not just the value.
+   ========================================================================== */
+
+.ai-prompt-manager {
+  /* The same block the modal declares, hoisted to the section, because the
+     library table lives outside the modal and the two must not drift. Values
+     are identical by construction — change one, change both. */
+  --pc-ink: #1a1a1a;
+  --pc-muted: #5c6470;
+  --pc-rule: #dfe3e8;
+  --pc-stop: #a3160f;
+  --pc-silent: #7a3d00;
+  --pc-link: #0b5fb0;
+  --pc-paper: #f8f9fa;
+  --pc-tint-stop: rgba(163, 22, 15, .07);
+  --pc-tint-silent: rgba(122, 61, 0, .10);
+  --pc-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --pc-row-h: 36px;
+}
+
+/* ------------------------------------------------- the build area (grid) --- */
+
+.prompt-build {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 24px;
+}
+.prompt-build-halves { min-width: 0; }
+.prompt-build-rail { position: sticky; top: 0; }
+.prompt-build-rail .template-variables-panel.pvi {
+  width: 100%;
+  border: 1px solid var(--pc-rule);
+  border-radius: 8px;
+  max-height: 640px;
+}
+
+/* One column below the point where a 360px rail leaves the halves narrower
+   than the answer text they will hold. */
+@media (max-width: 1000px) {
+  .prompt-build { grid-template-columns: minmax(0, 1fr); }
+  .prompt-build-rail { position: static; }
+}
+
+/* ------------------------------------------------------- the convention --- */
+
+.prompt-convention {
+  margin: 0 0 18px;
+  padding: 13px 15px;
+  border: 1px solid var(--pc-rule);
+  border-left: 3px solid var(--pc-link);
+  border-radius: 6px;
+  background: var(--pc-paper);
+}
+.prompt-convention h4 {
+  margin: 0 0 9px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pc-ink);
+}
+.prompt-convention ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+.prompt-convention li {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--pc-muted);
+}
+.prompt-convention code {
+  font-family: var(--pc-mono);
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  justify-self: start;
+}
+.prompt-convention .pc-brace { color: var(--pc-link); background: rgba(11, 95, 176, .09); }
+.prompt-convention .pc-bracket { color: var(--pc-silent); background: var(--pc-tint-silent); }
+.prompt-convention strong { color: var(--pc-ink); }
+
+/* ------------------------------------------------------------- the halves -- */
+
+.prompt-half { margin-bottom: 22px; }
+.prompt-half > label {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .01em;
+  color: var(--pc-ink);
+}
+.prompt-half-lede {
+  margin: 3px 0 9px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--pc-muted);
+}
+.prompt-half-lede code,
+.prompt-half .form-help code {
+  font-family: var(--pc-mono);
+  font-size: 12px;
+  color: var(--pc-link);
+}
+.prompt-half--given textarea {
+  width: 100%;
+  min-height: 150px;
+  padding: 13px;
+  border: 1px solid var(--pc-rule);
+  border-radius: 6px;
+  font-family: var(--pc-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--pc-ink);
+  resize: vertical;
+}
+.prompt-half--given textarea:focus {
+  outline: none;
+  border-color: var(--pc-link);
+  box-shadow: 0 0 0 2px rgba(11, 95, 176, .18);
+}
+
+/* -------------------------------------------- what each half is carrying --- */
+
+.prompt-readout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 11px;
+  border: 1px solid var(--pc-rule);
+  border-radius: 6px;
+  background: var(--pc-paper);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--pc-muted);
+}
+.prompt-readout-l { font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
+.prompt-readout-v { display: flex; flex-wrap: wrap; gap: 5px; }
+.prompt-readout-v code {
+  font-family: var(--pc-mono);
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--pc-link);
+  background: rgba(11, 95, 176, .08);
+}
+.prompt-readout-v em { font-style: normal; }
+
+/* The empty case is the defect, so it is the loud one. It is the SILENT tier's
+   colour, not the blocking tier's: the preflight below blocks the save, and two
+   things painted stop-red for one finding reads as two findings. */
+.prompt-readout--none {
+  display: block;
+  border-color: var(--pc-silent);
+  border-left-width: 6px;
+  background: var(--pc-tint-silent);
+  font-size: 13px;
+  color: var(--pc-ink);
+}
+.prompt-readout--none strong { color: var(--pc-silent); }
+
+/* ---------------------------------------- the inspector's added affordances -- */
+
+.pvi-target {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--pc-muted);
+}
+.pvi-target strong { color: var(--pc-link); }
+
+.pvi-desc {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--pc-ink);
+}
+.pvi-example {
+  display: grid;
+  gap: 3px;
+  margin: 0 0 9px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.pvi-example-l {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--pc-muted);
+}
+.pvi-example code {
+  font-family: var(--pc-mono);
+  font-size: 12px;
+  color: var(--pc-muted);
+  white-space: pre-wrap;
+}
+
+/* A variable that carries nothing on ANY engagement type: dashed, dimmed, and
+   never insertable. Distinct from --na, which is "not here, but somewhere". */
+.pvi-row--never { background: var(--pc-paper); border-left-style: dashed; }
+.pvi-flag--never { color: var(--pc-silent); background: var(--pc-tint-silent); font-weight: 700; }
+.pvi-why--never { color: var(--pc-silent); }
+
+/* ------------------------------------------------------------ the library -- */
+
+.plib { color: var(--pc-ink); font-size: 15px; }
+.plib *, .plib *::before, .plib *::after { box-sizing: border-box; }
+.plib :focus-visible { outline: 2px solid var(--pc-link); outline-offset: 2px; border-radius: 3px; }
+
+.plib-count { font-size: 13px; color: var(--pc-muted); white-space: nowrap; }
+
+.plib-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.plib-tbl th {
+  padding: 0 10px 7px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--pc-muted);
+  border-bottom: 1px solid var(--pc-rule);
+}
+.plib-tbl td {
+  padding: 7px 10px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--pc-rule);
+  height: var(--pc-row-h);
+}
+.plib-tbl tbody tr:hover { background: var(--pc-paper); }
+
+.plib-nm { display: block; font-weight: 600; color: var(--pc-ink); }
+.plib-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--pc-muted);
+  /* Two lines, then stop. A description is a hint in an index, not the record. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.plib-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.plib-tag {
+  font-size: 12px;
+  padding: 1px 6px;
+  border: 1px solid var(--pc-rule);
+  border-radius: 10px;
+  color: var(--pc-muted);
+}
+.plib-cat { font-size: 13px; color: var(--pc-muted); }
+
+.plib-states { display: flex; flex-wrap: wrap; gap: 5px; }
+.plib-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--pc-rule);
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--pc-muted);
+  background: transparent;
+}
+.plib-chip--type { color: var(--pc-link); border-color: rgba(11, 95, 176, .35); }
+.plib-chip--on { color: var(--pc-link); border-color: rgba(11, 95, 176, .35); background: rgba(11, 95, 176, .07); }
+.plib-chip--off { color: var(--pc-muted); }
+.plib-chip--warn { color: var(--pc-silent); border-color: var(--pc-silent); background: var(--pc-tint-silent); }
+.plib-chip--bad { color: var(--pc-stop); border-color: var(--pc-stop); background: var(--pc-tint-stop); }
+
+.plib-rowact { display: flex; gap: 6px; justify-content: flex-end; }
+.plib-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--pc-rule);
+  border-radius: 5px;
+  background: transparent;
+  font-size: 13px;
+  color: var(--pc-ink);
+  cursor: pointer;
+}
+.plib-btn:hover { border-color: var(--pc-link); color: var(--pc-link); }
+.plib-btn--ghostdanger { color: var(--pc-stop); }
+.plib-btn--ghostdanger:hover { border-color: var(--pc-stop); color: var(--pc-stop); background: var(--pc-tint-stop); }
+.plib-btn-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: 13px;
+  color: var(--pc-link);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* The two empty states, which are two states. */
+.plib-empty, .plib-nomatch {
+  padding: 34px 22px;
+  border: 1px dashed var(--pc-rule);
+  border-radius: 8px;
+  text-align: center;
+  background: var(--pc-paper);
+}
+.plib-empty h3, .plib-nomatch h3 { margin: 10px 0 6px; font-size: 19px; color: var(--pc-ink); }
+.plib-empty p, .plib-nomatch p {
+  margin: 0 auto 14px;
+  max-width: 52ch;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--pc-muted);
+}
+.plib-paths { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.plib-drops { display: flex; flex-wrap: wrap; gap: 7px; justify-content: center; margin-bottom: 12px; }
+.plib-drop {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--pc-rule);
+  border-radius: 13px;
+  background: transparent;
+  font-size: 13px;
+  color: var(--pc-ink);
+  cursor: pointer;
+}
+.plib-drop:hover { border-color: var(--pc-link); color: var(--pc-link); }
+.plib-drop em { font-style: normal; color: var(--pc-muted); }
