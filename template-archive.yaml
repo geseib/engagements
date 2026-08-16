@@ -147,7 +147,18 @@ Resources:
       CodeUri: lambda-functions/archive/
       Handler: update-archive.handler
       Policies:
-        - DynamoDBWritePolicy:
+        # CRUD FOR THE SAME REASON AS DeleteArchiveFunction, found by auditing
+        # every handler in this stack after that one broke.
+        #
+        # `update-archive.js` calls GetCommand before UpdateCommand — it reads
+        # the existing row first. `DynamoDBWritePolicy` grants PutItem,
+        # UpdateItem and BatchWriteItem but NOT GetItem, so that first call is
+        # denied and the handler answers a 500 naming nothing.
+        #
+        # Not reported by anyone, because nothing in the product calls this
+        # route yet — which is exactly why it is worth fixing now rather than
+        # discovering it the way the delete fault was discovered.
+        - DynamoDBCrudPolicy:
             TableName: !Ref ArchiveTable
         - S3WritePolicy:
             BucketName: !Ref ArchiveBucket
@@ -165,7 +176,39 @@ Resources:
       CodeUri: lambda-functions/archive/
       Handler: delete-archive.handler
       Policies:
-        - DynamoDBWritePolicy:
+        # CRUD, BECAUSE THIS HANDLER GETS *AND* DELETES.
+        #
+        # `delete-archive.js` calls exactly three things: DynamoDB GetCommand
+        # (to read `S3Key` off the row before removing it), DynamoDB
+        # DeleteCommand, and S3 DeleteObjectCommand. It therefore needs
+        # dynamodb:GetItem AND dynamodb:DeleteItem.
+        #
+        # SAM's `DynamoDBWritePolicy` DOES NOT GRANT DeleteItem — only PutItem,
+        # UpdateItem and BatchWriteItem. DeleteItem lives in
+        # `DynamoDBCrudPolicy`. So Read+Write is not equivalent to Crud here,
+        # however much it reads like it should be.
+        #
+        # HOW THIS GOT LOST, AND THEN HALF-FOUND. The template was reconstructed
+        # into the repo on 2026-07-02, a year after the stack was created, and
+        # applied for the first time on 2026-08-15 — silently removing
+        # permissions from a running service. CloudFormation reported success;
+        # the first symptom was a 500 an hour later, on an unrelated task.
+        #
+        # The first repair restored `DynamoDBReadPolicy` + `DynamoDBWritePolicy`
+        # to match what the previously-deployed template said. That fixed the
+        # GetItem denial and revealed a DeleteItem denial underneath — the
+        # deployed stack's ROLE had carried DeleteItem that its template no
+        # longer implied, either from an earlier template revision or because
+        # SAM's policy-template contents changed between the 2025 deploy and now.
+        # A SAM policy template is expanded at DEPLOY time, so what a named
+        # policy grants is not frozen by the file that names it.
+        #
+        # TWO LESSONS, both learned the expensive way here. Comparing RESOURCE
+        # NAMES and runtimes is not a safety check for a template that has never
+        # been applied — diff the Policies. And when the Policies are what you
+        # are fixing, derive them from the ACTIONS THE HANDLER CALLS, not from
+        # what an older template happened to say.
+        - DynamoDBCrudPolicy:
             TableName: !Ref ArchiveTable
         - S3CrudPolicy:
             BucketName: !Ref ArchiveBucket

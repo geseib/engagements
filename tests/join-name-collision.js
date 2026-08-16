@@ -40,115 +40,27 @@ const REPO = path.join(__dirname, '..');
 
 /* ---- Stubs, installed before the handler loads ---------------------------- */
 
-class GetCommand { constructor(i) { this.input = i; this.type = 'get'; } }
-class PutCommand { constructor(i) { this.input = i; this.type = 'put'; } }
-class QueryCommand { constructor(i) { this.input = i; this.type = 'query'; } }
-class DeleteCommand { constructor(i) { this.input = i; this.type = 'delete'; } }
-class UpdateCommand { constructor(i) { this.input = i; this.type = 'update'; } }
-
-const store = new Map();
-const key = (pk, sk) => `${pk}|${sk}`;
-
-function conditionalFailure() {
-  const error = new Error('The conditional request failed');
-  error.name = 'ConditionalCheckFailedException';
-  return error;
-}
-
 /**
- * A Get that "loses a race": the next Get of this key reports a miss and then
- * seeds the row, so the handler proceeds to a Put that must be rejected by its
- * own condition. This is the only way to exercise the interleaving that made
- * two new Chrises both write.
+ * THE FAKE PARSES THE CONDITIONS NOW, rather than string-matching them.
+ *
+ * This file used to carry its own switch, which rejected any ConditionExpression
+ * it had not been written for — fine with one condition in the product, and a
+ * wall the moment `join-game.js` grew the handover branch's three-clause one.
+ * `helpers/player-table.js` evaluates the expression against the stored item,
+ * so a condition that would fail in DynamoDB fails here, and one that would
+ * pass passes. See that file's header for why a memorising stub cannot test a
+ * race at all.
  */
-let raceSeed = null;
+const { createTable, installStubs } = require('./helpers/player-table');
 
-const fakeDoc = {
-  send: async (cmd) => {
-    const inp = cmd.input || {};
-    switch (cmd.type) {
-      case 'get': {
-        const k = key(inp.Key.PK, inp.Key.SK);
-        const item = store.get(k);
-        if (raceSeed && raceSeed.k === k) {
-          store.set(k, raceSeed.item);
-          raceSeed = null;
-          return { Item: item };   // the miss the handler already read
-        }
-        return item ? { Item: item } : {};
-      }
-      case 'put': {
-        const k = key(inp.Item.PK, inp.Item.SK);
-        if (inp.ConditionExpression === 'attribute_not_exists(SK)' && store.has(k)) {
-          throw conditionalFailure();
-        }
-        if (inp.ConditionExpression && inp.ConditionExpression !== 'attribute_not_exists(SK)') {
-          throw new Error(`fake put: unsupported ConditionExpression ${inp.ConditionExpression}`);
-        }
-        store.set(k, inp.Item);
-        return {};
-      }
-      case 'update': {
-        const k = key(inp.Key.PK, inp.Key.SK);
-        const item = store.get(k);
-        if (inp.ConditionExpression !== 'attribute_not_exists(ClientId)') {
-          throw new Error(`fake update: unsupported ConditionExpression ${inp.ConditionExpression}`);
-        }
-        if (inp.UpdateExpression !== 'SET ClientId = :cid') {
-          throw new Error(`fake update: unsupported UpdateExpression ${inp.UpdateExpression}`);
-        }
-        if (item && item.ClientId) throw conditionalFailure();
-        store.set(k, { ...(item || {}), ClientId: inp.ExpressionAttributeValues[':cid'] });
-        return {};
-      }
-      case 'delete':
-        store.delete(key(inp.Key.PK, inp.Key.SK));
-        return {};
-      case 'query': {
-        const pk = inp.ExpressionAttributeValues[':pk'];
-        const prefix = inp.ExpressionAttributeValues[':sk'] ?? '';
-        let items = [...store.values()].filter(
-          (i) => i.PK === pk && String(i.SK).startsWith(String(prefix))
-        );
-        if (inp.FilterExpression === 'ConnectionType = :type') {
-          items = items.filter((i) => i.ConnectionType === inp.ExpressionAttributeValues[':type']);
-        }
-        return { Items: items };
-      }
-      default:
-        return {};
-    }
-  },
-};
+const table = createTable();
+const store = table.store;
+const key = table.keyOf;
 
 /** Every WebSocket message the handler tried to send, in order. */
 const sent = [];
 
-const STUB_PATHS = [REPO, path.join(REPO, 'lambda-functions'), path.join(REPO, 'lambda-functions', 'game')];
-
-function stub(name, exports) {
-  const seen = new Set();
-  for (const base of STUB_PATHS) {
-    let p;
-    try { p = require.resolve(name, { paths: [base] }); } catch { continue; }
-    if (seen.has(p)) continue;
-    seen.add(p);
-    require.cache[p] = { id: p, filename: p, loaded: true, exports };
-  }
-  if (!seen.size) throw new Error(`stub(): could not resolve ${name}`);
-}
-
-stub('@aws-sdk/client-dynamodb', { DynamoDBClient: class {} });
-stub('@aws-sdk/lib-dynamodb', {
-  DynamoDBDocumentClient: { from: () => fakeDoc },
-  GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand,
-});
-stub('@aws-sdk/client-apigatewaymanagementapi', {
-  ApiGatewayManagementApiClient: class {
-    async send(cmd) { sent.push(JSON.parse(cmd.input.Data)); return {}; }
-  },
-  PostToConnectionCommand: class { constructor(i) { this.input = i; } },
-});
+installStubs({ table, sent });
 
 process.env.TABLE_NAME = 'test-table';
 
@@ -166,9 +78,8 @@ async function check(label, fn) {
 const GAME = '4821';
 
 function reset({ visibility = 'public', accessCode = null } = {}) {
-  store.clear();
+  table.clear();
   sent.length = 0;
-  raceSeed = null;
   store.set(key(`GAME#${GAME}`, 'METADATA'), {
     PK: `GAME#${GAME}`, SK: 'METADATA', Started: true,
     Visibility: visibility, AccessCode: accessCode,
@@ -339,16 +250,24 @@ const playerRow = (name) => store.get(key(`GAME#${GAME}`, `PLAYER#${name}`));
 
   await check('two simultaneous first joins cannot both take the name', async () => {
     reset();
-    // The second caller's Get misses (as the first has not written yet) and the
-    // row lands underneath it before its Put.
-    raceSeed = {
-      k: key(`GAME#${GAME}`, 'PLAYER#Chris'),
-      item: {
-        PK: `GAME#${GAME}`, SK: 'PLAYER#Chris',
-        PlayerName: 'Chris', ClientId: 'chris-phone',
-      },
-    };
-    const res = await join({ playerName: 'Chris', clientId: 'other-chris-phone' });
+    /*
+      TWO HANDLERS, GENUINELY INTERLEAVED — not one handler and a seeded row.
+      The second Chris's join is held at the instant it is about to Put, by
+      which point it has already read "no such player". The first Chris then
+      runs to completion underneath it. Releasing the latch replays exactly the
+      window that used to let the second Put overwrite the first: both callers
+      read a miss, both write, last one wins.
+    */
+    const latch = table.hold((command) => command.type === 'put'
+      && command.input.Item?.SK === 'PLAYER#Chris');
+
+    const loser = join({ playerName: 'Chris', clientId: 'other-chris-phone' });
+    await latch.reached;
+    const winner = await join({ playerName: 'Chris', clientId: 'chris-phone' });
+    latch.release();
+    const res = await loser;
+
+    assert.strictEqual(winner.statusCode, 200, 'the winner did not get in');
     assert.strictEqual(res.statusCode, 409, 'the loser of the race overwrote the winner');
     assert.strictEqual(bodyOf(res).code, 'NAME_TAKEN');
     assert.strictEqual(playerRow('Chris').ClientId, 'chris-phone', 'the winner was overwritten');

@@ -6,6 +6,15 @@ import { remoteQuestionRow, filterRemoteRows } from '../config/hostRemote';
 /**
  * The host's phone browsing the question set — `17-remote.html`, right phone.
  *
+ * IT IS A PANE NOW, NOT A SCREEN, and that is the only thing about it that has
+ * changed. It used to render its own `.hr` root, its own bar and its own dock,
+ * with "Back to the round" filling the thumb arc — so for as long as the host
+ * was reading four options they could not advance the round. The owner asked
+ * for two more lists beside this one ("the players, the rounds, the
+ * questions"), which would have made that trade three times as often, so the
+ * chrome moved out to `RemoteSessionPanel`: one bar with one way back, one
+ * dock that goes on carrying the primary action, three tabs under it.
+ *
  * THE ASYMMETRY WITH THE STAGE BROWSER IS THE FEATURE, not a bug to reconcile.
  * `config/setupPanel.js:browserRow` strips the options out of every row on
  * purpose, because the stage's browser renders on the projector and a set that
@@ -26,13 +35,10 @@ import { remoteQuestionRow, filterRemoteRows } from '../config/hostRemote';
 const apiBase = () => window.API_BASE || '';
 
 export default function RemoteQuestionBrowser({
-  gameId,
   setId,
   unaskedCount = null,
-  connected = false,
   busy = false,
   onAsk,
-  onClose,
 }) {
   const [questions, setQuestions] = useState(null);
   const [setName, setSetName] = useState('');
@@ -88,112 +94,88 @@ export default function RemoteQuestionBrowser({
   ].filter(Boolean).join(' · ');
 
   return (
-    <div className="hr hrq">
-      <header className="hr-bar">
-        <div className="hr-bar-id">
-          <span className="hr-bar-code">{gameId}</span>
-          <span className="hr-bar-title">Choose the next question</span>
-        </div>
-        <span className={`hr-live ${connected ? 'is-live' : 'is-down'}`}>
-          <Icon
-            name={connected ? 'Broadcast' : 'WifiSlash'}
-            weight="fill"
-            size={14}
-            color="currentColor"
-          />
-          <span className="hr-live-word">{connected ? 'Live' : 'Offline'}</span>
-        </span>
-      </header>
+    <div className="hrq">
+      {/* The set's own name and how much of it is left, kept from the screen
+          this used to be: a host who opened the browser to choose needs to know
+          which set they are choosing FROM, and "31 unasked" is the number that
+          says whether choosing is even necessary. */}
+      <p className="hrq-kicker">{kicker}</p>
 
-      <main className="hr-body">
-        <section className="hr-status">
-          <p className="hr-status-kicker">{kicker}</p>
-          <h1 className="hr-status-phase">Browse</h1>
-        </section>
+      <label className="hrq-search">
+        <Icon name="MagnifyingGlass" weight="bold" size={18} color="var(--muted)" />
+        <input
+          type="search"
+          value={search}
+          placeholder="Search titles…"
+          aria-label="Search questions"
+          onChange={(event) => setSearch(event.target.value)}
+        />
+      </label>
 
-        <label className="hrq-search">
-          <Icon name="MagnifyingGlass" weight="bold" size={18} color="var(--muted)" />
-          <input
-            type="search"
-            value={search}
-            placeholder="Search titles…"
-            aria-label="Search questions"
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </label>
+      {questions === null && <p className="hr-hint">Reading the question set…</p>}
 
-        {questions === null && <p className="hr-hint">Reading the question set…</p>}
+      {failed && (
+        <p className="hr-flash hr-flash--error" role="alert">
+          <Icon name="Warning" weight="fill" size={18} color="currentColor" />
+          Could not read the question set.
+        </p>
+      )}
 
-        {failed && (
-          <p className="hr-flash hr-flash--error" role="alert">
-            <Icon name="Warning" weight="fill" size={18} color="currentColor" />
-            Could not read the question set.
-          </p>
-        )}
+      {questions !== null && !failed && shown.length === 0 && (
+        <p className="hr-hint">
+          {rows.length === 0 ? 'This set has no questions.' : 'Nothing matches that search.'}
+        </p>
+      )}
 
-        {questions !== null && !failed && shown.length === 0 && (
-          <p className="hr-hint">
-            {rows.length === 0 ? 'This set has no questions.' : 'Nothing matches that search.'}
-          </p>
-        )}
+      {shown.map((row) => (
+        <article className="hrq-card" key={row.id}>
+          <h2 className="hrq-title">{row.title}</h2>
+          {(row.category || row.difficulty) && (
+            <p className="hrq-meta">
+              {[row.category, row.difficulty].filter(Boolean).join(' · ')}
+            </p>
+          )}
+          {row.detail && <p className="hrq-detail">{row.detail}</p>}
 
-        {shown.map((row) => (
-          <article className="hrq-card" key={row.id}>
-            <h2 className="hrq-title">{row.title}</h2>
-            {(row.category || row.difficulty) && (
-              <p className="hrq-meta">
-                {[row.category, row.difficulty].filter(Boolean).join(' · ')}
-              </p>
-            )}
-            {row.detail && <p className="hrq-detail">{row.detail}</p>}
+          {row.options.length > 0 && (
+            <ol className="hrq-opts">
+              {row.options.map((option) => (
+                <li key={option.letter} className={option.correct ? 'is-right' : ''}>
+                  <b>{option.letter}</b>
+                  <span>
+                    {option.text}
+                    {option.correct && <em className="hrq-correct">Correct</em>}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
 
-            {row.options.length > 0 && (
-              <ol className="hrq-opts">
-                {row.options.map((option) => (
-                  <li key={option.letter} className={option.correct ? 'is-right' : ''}>
-                    <b>{option.letter}</b>
-                    <span>
-                      {option.text}
-                      {option.correct && <em className="hrq-correct">Correct</em>}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            )}
+          {/* The set claims an answer that matches none of its own options.
+              Said out loud: the host is about to read these to a room. */}
+          {row.answerUnresolved && (
+            <p className="hrq-unresolved">
+              This set does not say which option is right.
+            </p>
+          )}
 
-            {/* The set claims an answer that matches none of its own options.
-                Said out loud: the host is about to read these to a room. */}
-            {row.answerUnresolved && (
-              <p className="hrq-unresolved">
-                This set does not say which option is right.
-              </p>
-            )}
+          <button
+            className="hr-btn hr-btn--ghost hrq-ask"
+            type="button"
+            disabled={busy || asking !== null}
+            onClick={() => ask(row)}
+          >
+            {asking === row.id ? 'Working…' : 'Ask this next'}
+          </button>
+        </article>
+      ))}
 
-            <button
-              className="hr-btn hr-btn--ghost hrq-ask"
-              type="button"
-              disabled={busy || asking !== null}
-              onClick={() => ask(row)}
-            >
-              {asking === row.id ? 'Working…' : 'Ask this next'}
-            </button>
-          </article>
-        ))}
-
-        {shown.length > 0 && (
-          <p className="hr-wait-private hrq-private">
-            <b>Private</b> Correct answers appear here and nowhere else. The stage lists the
-            same questions without them.
-          </p>
-        )}
-      </main>
-
-      <div className="hr-dock">
-        <button className="hr-primary" type="button" onClick={onClose}>
-          <Icon name="ArrowLeft" weight="bold" size={24} color="currentColor" />
-          <span className="hr-primary-label">Back to the round</span>
-        </button>
-      </div>
+      {shown.length > 0 && (
+        <p className="hr-wait-private hrq-private">
+          <b>Private</b> Correct answers appear here and nowhere else. The stage lists the
+          same questions without them.
+        </p>
+      )}
     </div>
   );
 }

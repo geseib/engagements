@@ -504,6 +504,254 @@ describe('the ballot', () => {
       expect(within(card).getByRole('button', { name: /Show all/i })).toBeInTheDocument();
     });
   });
+
+  /* rejects: the reading view reverting to a paper island.
+              `Show all ↓` opens `AnswerSpotlight`, which belongs to the host's
+              results wall and is painted out of the `styles.css` monolith. It
+              was mounted as a SIBLING of the shell — outside `.plr`, therefore
+              outside the data-theme="dark" this surface re-declares and outside
+              every --plr-* token — so it opened a WHITE card with
+              #F6A94C-on-#FFFFFF Previous/Next buttons at 1.96:1 over a dusk
+              ballot. Containment is the whole fix: an undefined custom property
+              invalidates the whole declaration, so `.plr-spot` outside `.plr`
+              would drop §10 of the stylesheet on the floor silently, in the
+              bundle only, where no test can see it. Document containment is a
+              relationship jsdom genuinely models. */
+  test('reading one response in full happens inside the surface, in its palette', async () => {
+    const server = makeServer({ state: 'CREATED' });
+    installFetch(server);
+    await reachBallot(server);
+
+    fireEvent.click(screen.getByRole('button', { name: /Detailed Vote/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Show all/i })[0]);
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveClass('answer-spotlight', 'plr-spot');
+    expect(shell().contains(dialog)).toBe(true);
+    // ...and after the dock, not inside the region that scrolls. A dialog
+    // nested in `.plr-stage` is a dialog inside the thing it covers.
+    expect(stage().contains(dialog)).toBe(false);
+  });
+
+  /* rejects: the re-tint being applied to the host's copy too. `PastRound` and
+              the host results wall render the same component on paper and must
+              not move; the class is opt-in, from the caller, because only the
+              caller knows which polarity it is on. */
+  test('the re-tint is the player\'s alone', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '');       // prose is not a call site
+    // Opt-in, and off by default: an unspecified caller gets exactly the
+    // markup it had.
+    expect(src('components', 'AnswerSpotlight.jsx')).toMatch(/surfaceClassName\s*=\s*''/);
+    // The other two callers are paper and stay paper.
+    expect(src('components', 'PastRound.jsx')).not.toMatch(/surfaceClassName/);
+    expect(src('GameHostPage.jsx')).not.toMatch(/surfaceClassName/);
+  });
+});
+
+describe('the join refusal', () => {
+  /* The second Chris. The refusal used to render its heading, its sentence and
+     two `.btn-primary`/`.btn-secondary` buttons into the middle of `.plr-stage`
+     — the one scrolling region — from a stylesheet whose own header described a
+     white `.join-screen` container that had been deleted. Its explanatory
+     sentence was `color: #444`: 1.79:1 on `--bg #0F1A2E`, which is not "low
+     contrast", it is not there. */
+  /**
+   * A session that refuses this name.
+   *
+   * `grantedTo` models the host having unlocked it: the join then succeeds,
+   * but ONLY for a request that actually carries `claimExisting`. That
+   * condition is the server's real rule (join-game.js's `handover` verdict
+   * needs both the grant and the person's own yes), and modelling it here is
+   * what makes "the takeover claims" testable at all — a mock that says yes to
+   * anything cannot tell a claim from a plain retry.
+   */
+  async function refuse(code, { granted = false } = {}) {
+    const server = makeServer({ state: 'CREATED' });
+    server.handle = ((inner) => (url, options) => {
+      const method = options?.method || 'GET';
+      if (method === 'POST' && url.includes('/handover-request')) {
+        return { ok: true, body: { success: true, playerName: ME } };
+      }
+      if (method === 'POST' && url.includes(`games/${GAME}/players`)) {
+        const sent = JSON.parse(options?.body || '{}');
+        if (granted && sent.claimExisting === true) {
+          return { ok: true, body: { success: true, playerName: ME, isReconnection: true } };
+        }
+        return {
+          ok: false,
+          status: 409,
+          body: { code, playerName: ME, message: 'Someone here is already answering as that name.' },
+        };
+      }
+      return inner(url, options);
+    })(server.handle);
+
+    global.fetch.mockImplementation((url, options) => {
+      const { ok, status, body } = server.handle(String(url), options);
+      return Promise.resolve({ ok, status: status || (ok ? 200 : 500), json: async () => body });
+    });
+
+    await join();
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+  }
+
+  // rejects: the ways out drifting back into the scrolling region. Every other
+  //          ACT state on this surface puts its actions in the dock, which is a
+  //          SIBLING of the stage — that is what makes "scrolling to read is
+  //          fine, scrolling to act is not" structural. The one screen where a
+  //          player is already stuck was the one screen that broke it.
+  test('the refusal is in the stage and its ways out are in the dock', async () => {
+    await refuse('NAME_UNVERIFIED');
+
+    expect(stage().contains(screen.getByRole('alert'))).toBe(true);
+    const buttons = within(dock()).getAllByRole('button');
+    expect(buttons.map((b) => b.textContent.trim())).toEqual([
+      `Yes — rejoin as ${ME}`,
+      `No — I'm a different ${ME}`,
+    ]);
+    // Nothing pressable is left behind in the stage: two places for one
+    // decision is how a player answers the question twice.
+    expect(within(stage()).queryAllByRole('button')).toEqual([]);
+  });
+
+  // rejects: the monolith's paper buttons coming back onto a dusk shell.
+  test('the ways out wear the dock vocabulary, not the global one', async () => {
+    await refuse('NAME_TAKEN');
+
+    const buttons = within(dock()).getAllByRole('button');
+    for (const button of buttons) {
+      expect(button).toHaveClass('plr-btn');
+      expect(button.className).not.toMatch(/btn-primary|btn-secondary|btn-large/);
+    }
+    expect(within(stage()).queryAllByRole('button')).toEqual([]);
+  });
+
+  /* rejects: a self-serve takeover reappearing on the one screen built to
+     refuse one.
+
+     THIS TEST COUNTED ONE BUTTON UNTIL THE HANDOVER SHIPPED, and the count was
+     standing in for the real rule: nothing on this screen may take a name the
+     server has said is held. Two buttons now, and the rule is asserted
+     directly instead — the first offer is to ASK, and the takeover is not
+     reachable until the person has. A single button labelled "take it anyway"
+     would satisfy a count of two and is exactly what must never appear. */
+  test('the first offer is to ask the host, never to take the name', async () => {
+    await refuse('NAME_TAKEN');
+
+    const labels = () => within(dock()).getAllByRole('button')
+      .map((b) => b.textContent.trim());
+    expect(labels()).toEqual(['Ask the host to hand it over', 'Pick a different name']);
+
+    // Only after asking does a takeover appear at all — and even then the
+    // server refuses it without a host grant (tests/name-handover.js §1).
+    fireEvent.click(screen.getByRole('button', { name: /ask the host/i }));
+    await waitFor(() => expect(labels()).toEqual(['Take over the name', 'Pick a different name']));
+    expect(screen.getByText(/when they say go ahead/i)).toBeInTheDocument();
+  });
+
+  /* rejects: a takeover the host has not authorised failing SILENTLY. The
+     server refuses it — a 409 with the same NAME_TAKEN code the screen is
+     already showing — so without this branch the button does nothing visible
+     and the person taps it forever. */
+  test('a takeover the host has not granted says "not yet", not nothing', async () => {
+    await refuse('NAME_TAKEN');
+
+    fireEvent.click(screen.getByRole('button', { name: /ask the host/i }));
+    await waitFor(() => screen.getByRole('button', { name: /take over the name/i }));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /take over the name/i }));
+    });
+
+    await waitFor(() => expect(screen.getByText(/has not unlocked/i)).toBeInTheDocument());
+    expect(screen.getByText(/ask them out loud/i)).toBeInTheDocument();
+    // The way out is still there, and the takeover can still be retried once
+    // the host does unlock it.
+    expect(within(dock()).getAllByRole('button').map((b) => b.textContent.trim()))
+      .toEqual(['Take over the name', 'Pick a different name']);
+  });
+
+  /* rejects: a takeover that does not actually CLAIM. Without `claimExisting`
+     the server treats it as an ordinary retry and refuses it however wide the
+     host's grant is open — the button would be permanently, silently inert,
+     and every other test here would stay green because they all model a
+     session that refuses. */
+  test('the takeover claims the name, and the grant lets it through', async () => {
+    await refuse('NAME_TAKEN', { granted: true });
+
+    fireEvent.click(screen.getByRole('button', { name: /ask the host/i }));
+    await waitFor(() => screen.getByRole('button', { name: /take over the name/i }));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /take over the name/i }));
+    });
+
+    // In. The refusal is gone and the surface has left the join phase.
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(shell().getAttribute('data-phase')).not.toBe('join');
+
+    const claim = global.fetch.mock.calls
+      .map(([url, options]) => ({ url: String(url), options }))
+      .filter(({ url, options }) => (options?.method === 'POST')
+        && url.endsWith(`games/${GAME}/players`))
+      .pop();
+    expect(JSON.parse(claim.options.body).claimExisting).toBe(true);
+  });
+
+  /* rejects: an ask that carries no identity. The host's console offers "let
+     the person who asked take it", and the SERVER aims that grant by reading
+     the client id off its own row — so an ask with no id can only ever produce
+     an OPEN grant, spendable by whoever types the name next. The id is also
+     the thing that ends up owning the row afterwards. */
+  test('the ask carries this browser\'s id, so the grant can be aimed at it', async () => {
+    await refuse('NAME_TAKEN');
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /ask the host/i }));
+    });
+
+    const ask = global.fetch.mock.calls
+      .map(([url, options]) => ({ url: String(url), options }))
+      .find(({ url }) => url.includes('/handover-request'));
+    expect(ask).toBeTruthy();
+    // The same id the join sends, not a fresh one — a new id per request would
+    // bind the grant to a browser that never comes back.
+    const asked = JSON.parse(ask.options.body);
+    const joined = JSON.parse(global.fetch.mock.calls
+      .map(([url, options]) => ({ url: String(url), options }))
+      .find(({ url, options }) => options?.method === 'POST' && url.endsWith(`games/${GAME}/players`))
+      .options.body);
+    expect(asked.clientId).toBeTruthy();
+    expect(asked.clientId).toBe(joined.clientId);
+    // And the name is a path segment, so it is escaped.
+    expect(ask.url).toContain(`${encodeURIComponent(ME)}/handover-request`);
+  });
+
+  /* rejects: `asked` surviving into a refusal about a DIFFERENT name. The
+     two-step is the guard on this screen — reaching "Take over the name"
+     requires having asked — and a stage carried across a fresh join would hand
+     that button to somebody who has asked nobody anything. */
+  test('picking a different name and colliding again starts the ask over', async () => {
+    await refuse('NAME_TAKEN');
+
+    fireEvent.click(screen.getByRole('button', { name: /ask the host/i }));
+    await waitFor(() => screen.getByRole('button', { name: /take over the name/i }));
+
+    // Give up on that name and try another, which is also taken.
+    fireEvent.click(screen.getByRole('button', { name: /pick a different name/i }));
+    fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: 'Someone Else' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+    });
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    expect(within(dock()).getAllByRole('button').map((b) => b.textContent.trim()))
+      .toEqual(['Ask the host to hand it over', 'Pick a different name']);
+    expect(screen.queryByText(/when they say go ahead/i)).toBeNull();
+  });
 });
 
 describe('results shows the personal half and points at the room for the rest', () => {

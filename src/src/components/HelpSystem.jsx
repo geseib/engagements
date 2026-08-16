@@ -1,176 +1,94 @@
-import React, { useState, useEffect } from 'react';
-import AdminAIPromptsDoc from './documentation/AdminAIPromptsDoc';
-import HostQuickStartDoc from './documentation/HostQuickStartDoc';
+import React, { useState, useEffect, useMemo } from 'react';
+import DocRenderer from './documentation/DocRenderer';
 import './HelpSystem.css';
 import Icon from './Icon';
+import {
+  HELP_ROLES,
+  ROLE_BY_ID,
+  GUIDE_BY_ID,
+  ROLE_ID_BY_GUIDE_ID,
+  ISSUES_URL,
+  resolveHelpTarget,
+  searchHelp,
+} from '../config/help';
 
+/**
+ * THE HELP MODAL. Its contents are now derived, not declared.
+ *
+ * What was here: a hand-written `documentation` object naming 18 guides across
+ * 5 roles, and a `switch` under it with two cases. Sixteen of the eighteen tiles
+ * on the home screen opened onto a box that said "Content for X is being
+ * loaded… This documentation section is currently under development." The two
+ * that worked were reachable only by knowing their exact ids — and the buttons
+ * that were supposed to pass those ids passed different ones (see HELP_ALIASES).
+ *
+ * Everything on this screen now comes from `config/help`: the role cards count
+ * `role.guides.length`, the tiles are `role.guides`, and the renderer looks up
+ * the same id the tile linked to. A guide is advertised because it exists.
+ *
+ * THE SEARCH FIELD IS WIRED. It was rendered, it set `searchTerm`, and no other
+ * line in the file read that variable — a search box that silently discarded
+ * every query, sitting at the top of a documentation set where most of the
+ * documentation was missing. It filters the corpus now.
+ */
 const HelpSystem = ({ section, onClose }) => {
-  const [currentDoc, setCurrentDoc] = useState(null);
+  const [currentDoc, setCurrentDoc] = useState('home');
   const [searchTerm, setSearchTerm] = useState('');
   const [navigationHistory, setNavigationHistory] = useState([]);
 
-  // Documentation structure
-  const documentation = {
-    admin: {
-      title: "Admin Documentation",
-      icon: "Gear",
-      sections: [
-        {
-          id: "getting-started",
-          title: "Getting Started",
-          content: "admin-getting-started"
-        },
-        {
-          id: "ai-prompts",
-          title: "AI Prompts Management", 
-          content: "admin-ai-prompts"
-        },
-        {
-          id: "question-sets",
-          title: "Question Sets Management",
-          content: "admin-question-sets"
-        },
-        {
-          id: "ai-builders",
-          title: "AI Builders Guide",
-          content: "admin-ai-builders"
-        },
-        {
-          id: "game-management",
-          title: "Game Administration",
-          content: "admin-game-management"
-        }
-      ]
-    },
-    host: {
-      title: "Host Documentation",
-      icon: "GameController",
-      sections: [
-        {
-          id: "quick-start",
-          title: "Quick Start Guide",
-          content: "host-quick-start"
-        },
-        {
-          id: "game-setup",
-          title: "Game Setup",
-          content: "host-game-setup"
-        },
-        {
-          id: "running-engagements",
-          title: "Running Engagements",
-          content: "host-running-engagements"
-        },
-        {
-          id: "player-management",
-          title: "Player Management",
-          content: "host-player-management"
-        },
-        {
-          id: "reporting",
-          title: "Results & Reporting",
-          content: "host-reporting"
-        }
-      ]
-    },
-    player: {
-      title: "Player Documentation",
-      icon: "UsersThree",
-      sections: [
-        {
-          id: "getting-started",
-          title: "Getting Started",
-          content: "player-getting-started"
-        },
-        {
-          id: "joining-games",
-          title: "Joining Games",
-          content: "player-joining"
-        },
-        {
-          id: "playing-games",
-          title: "Playing Games",
-          content: "player-playing"
-        },
-        {
-          id: "scoring",
-          title: "Scoring & Rankings",
-          content: "player-scoring"
-        }
-      ]
-    },
-    builder: {
-      title: "Builder Documentation", 
-      icon: "Buildings",
-      sections: [
-        {
-          id: "manual-creation",
-          title: "Manual Question Creation",
-          content: "builder-manual"
-        },
-        {
-          id: "ai-assistance",
-          title: "AI Assistant Features",
-          content: "builder-ai"
-        }
-      ]
-    },
-    technical: {
-      title: "Technical Documentation",
-      icon: "Wrench",
-      sections: [
-        {
-          id: "troubleshooting",
-          title: "Troubleshooting",
-          content: "technical-troubleshooting"
-        },
-        {
-          id: "system-requirements",
-          title: "System Requirements",
-          content: "technical-requirements"
-        }
-      ]
-    }
-  };
-
+  /*
+    An unknown `section` lands on home rather than on an apology. The old
+    default branch rendered "Coming Soon" for any id it did not recognise,
+    which made a mistyped link indistinguishable from a missing feature.
+  */
   useEffect(() => {
-    if (section) {
-      setCurrentDoc(section);
-    } else {
-      setCurrentDoc('home');
-    }
+    setCurrentDoc(resolveHelpTarget(section).id);
   }, [section]);
 
+  const results = useMemo(() => searchHelp(searchTerm), [searchTerm]);
+
   const navigateToDoc = (docId) => {
-    if (currentDoc && currentDoc !== 'home') {
-      setNavigationHistory(prev => [currentDoc, ...prev.slice(0, 9)]); // Keep last 10
-    }
+    setNavigationHistory((prev) => [currentDoc, ...prev.slice(0, 9)]);
+    setSearchTerm('');
     setCurrentDoc(docId);
   };
 
   const navigateBack = () => {
-    if (navigationHistory.length > 0) {
-      const previousDoc = navigationHistory[0];
-      setNavigationHistory(prev => prev.slice(1));
-      setCurrentDoc(previousDoc);
-    } else {
+    if (!navigationHistory.length) {
       setCurrentDoc('home');
+      return;
     }
+    setCurrentDoc(navigationHistory[0]);
+    setNavigationHistory((prev) => prev.slice(1));
+  };
+
+  const goHome = () => {
+    setSearchTerm('');
+    setNavigationHistory([]);
+    setCurrentDoc('home');
   };
 
   const renderNavigation = () => (
     <div className="help-navigation">
       <div className="help-nav-header">
-        <button className="help-back-btn" onClick={navigateBack} disabled={!navigationHistory.length && currentDoc === 'home'}>
+        <button
+          className="help-back-btn"
+          onClick={navigateBack}
+          disabled={!navigationHistory.length && currentDoc === 'home'}
+        >
           <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back
         </button>
-        <button className="help-home-btn" onClick={() => setCurrentDoc('home')}>
+        <button className="help-home-btn" onClick={goHome}>
           <Icon name="House" weight="bold" size={16} color="currentColor" /> Home
         </button>
         <div className="help-search">
+          <label className="help-sr-only" htmlFor="help-search-input">
+            Search documentation
+          </label>
           <input
-            type="text"
-            placeholder="Search documentation..."
+            id="help-search-input"
+            type="search"
+            placeholder="Search documentation…"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="help-search-input"
@@ -180,70 +98,122 @@ const HelpSystem = ({ section, onClose }) => {
     </div>
   );
 
+  /*
+    RESULTS REPLACE THE PAGE while there is a query, rather than sitting
+    alongside it. Typing is an explicit "show me something else", and a filtered
+    list rendered underneath the guide you were reading is two answers to one
+    question.
+  */
+  const renderSearch = () => (
+    <div className="help-search-results">
+      <h2>
+        {results.length === 0
+          ? `Nothing matches “${searchTerm}”`
+          : `${results.length} ${results.length === 1 ? 'guide' : 'guides'} matching “${searchTerm}”`}
+      </h2>
+      {results.length === 0 ? (
+        <p className="help-search-empty">
+          Try a shorter word — the guides are indexed by their whole text, so
+          “vote”, “name”, “qr” or “reveal” all land somewhere.
+        </p>
+      ) : (
+        <ul className="help-search-list">
+          {results.map(({ role, guide }) => (
+            <li key={guide.id}>
+              <button type="button" onClick={() => navigateToDoc(guide.id)}>
+                <span className="help-search-role">{role.title}</span>
+                <span className="help-search-title">{guide.title}</span>
+                <span className="help-search-summary">{guide.summary}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+
   const renderHome = () => (
     <div className="help-home">
       <div className="help-home-header">
-        <h1><Icon name="Books" weight="duotone" size={16} color="var(--primary)" /> Engagements Platform Documentation</h1>
-        <p>Welcome to the comprehensive help system for the Engagements real-time engagement platform. 
-           Select your role below to get started with role-specific documentation.</p>
+        <h1>
+          <Icon name="Books" weight="duotone" size={16} color="var(--primary)" /> Help
+        </h1>
+        <p>
+          Pick the one that sounds like you. Everything here is about this
+          platform — how to join a session, how to run one, and how to build the
+          questions.
+        </p>
       </div>
-      
+
       <div className="help-role-grid">
-        {Object.entries(documentation).map(([key, section]) => (
-          <div key={key} className="help-role-card" onClick={() => navigateToDoc(key)}>
-            <div className="help-role-icon"><Icon name={section.icon} weight="duotone" size={28} color="var(--primary)" /></div>
-            <h3>{section.title}</h3>
-            <p>{section.sections.length} guides available</p>
-            <div className="help-role-sections">
-              {section.sections.slice(0, 3).map(subsection => (
-                <span key={subsection.id} className="help-role-preview">
-                  {subsection.title}
-                </span>
-              ))}
-              {section.sections.length > 3 && <span className="help-role-more">+{section.sections.length - 3} more</span>}
+        {HELP_ROLES.map((role) => (
+          <button
+            type="button"
+            key={role.id}
+            className="help-role-card"
+            onClick={() => navigateToDoc(role.id)}
+          >
+            <div className="help-role-icon">
+              <Icon name={role.icon} weight="duotone" size={28} color="var(--primary)" />
             </div>
-          </div>
+            <h3>{role.title}</h3>
+            <p>{role.blurb}</p>
+            <div className="help-role-sections">
+              {role.guides.map((guide) => (
+                <span key={guide.id} className="help-role-preview">{guide.title}</span>
+              ))}
+            </div>
+          </button>
         ))}
       </div>
 
       <div className="help-quick-links">
-        <h3><Icon name="RocketLaunch" weight="duotone" size={16} color="var(--primary)" /> Quick Start</h3>
+        <h3>
+          <Icon name="RocketLaunch" weight="duotone" size={16} color="var(--primary)" /> Straight to it
+        </h3>
         <div className="help-quick-grid">
-          <button className="help-quick-btn" onClick={() => navigateToDoc('host-quick-start')}>
-            Create Your First Game
-          </button>
-          <button className="help-quick-btn" onClick={() => navigateToDoc('admin-ai-prompts')}>
-            Setup AI Prompts
-          </button>
-          <button className="help-quick-btn" onClick={() => navigateToDoc('admin-question-sets')}>
-            Upload Question Sets
-          </button>
           <button className="help-quick-btn" onClick={() => navigateToDoc('player-joining')}>
-            Join a Game
+            Join a session
+          </button>
+          <button className="help-quick-btn" onClick={() => navigateToDoc('host-quick-start')}>
+            Run your first session
+          </button>
+          <button className="help-quick-btn" onClick={() => navigateToDoc('host-player-management')}>
+            My name is taken
+          </button>
+          <button className="help-quick-btn" onClick={() => navigateToDoc('builder-manual')}>
+            Write questions
           </button>
         </div>
       </div>
     </div>
   );
 
-  const renderRoleSection = (roleKey) => {
-    const role = documentation[roleKey];
-    if (!role) return null;
-
+  const renderRoleSection = (roleId) => {
+    const role = ROLE_BY_ID[roleId];
     return (
       <div className="help-role-section">
         <div className="help-section-header">
-          <h1><Icon name={role.icon} weight="duotone" size={26} color="var(--primary)" /> {role.title}</h1>
-          <p>Comprehensive guides for {roleKey} users</p>
+          <h1>
+            <Icon name={role.icon} weight="duotone" size={26} color="var(--primary)" /> {role.title}
+          </h1>
+          <p>{role.blurb}</p>
         </div>
-        
+
         <div className="help-sections-grid">
-          {role.sections.map(section => (
-            <div key={section.id} className="help-section-card" onClick={() => navigateToDoc(section.content)}>
-              <h3>{section.title}</h3>
-              <p>Learn about {section.title.toLowerCase()}</p>
-              <span className="help-section-arrow"><Icon name="ArrowRight" weight="bold" size={16} color="currentColor" /></span>
-            </div>
+          {role.guides.map((guide) => (
+            <button
+              type="button"
+              key={guide.id}
+              className="help-section-card"
+              onClick={() => navigateToDoc(guide.id)}
+            >
+              <h3>{guide.title}</h3>
+              <p>{guide.summary}</p>
+              <span className="help-section-arrow">
+                <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" />
+              </span>
+            </button>
           ))}
         </div>
       </div>
@@ -251,35 +221,28 @@ const HelpSystem = ({ section, onClose }) => {
   };
 
   const renderContent = () => {
-    if (currentDoc === 'home') {
-      return renderHome();
-    }
-
-    if (documentation[currentDoc]) {
-      return renderRoleSection(currentDoc);
-    }
-
-    // Render specific content based on currentDoc ID
-    switch (currentDoc) {
-      case 'admin-ai-prompts':
-        return <AdminAIPromptsDoc />;
-      case 'host-quick-start':
-        return <HostQuickStartDoc />;
-      default:
-        return (
-          <div className="help-content">
-            <div className="help-content-loading">
-              <h2><Icon name="FileText" weight="bold" size={16} color="currentColor" /> Loading Documentation</h2>
-              <p>Content for "{currentDoc}" is being loaded...</p>
-              <p>This documentation section is currently under development.</p>
-              <div className="help-tip-box">
-                <h4><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> Coming Soon</h4>
-                <p>We're working on expanding our documentation. In the meantime, feel free to explore the available sections or report any issues you encounter.</p>
-              </div>
-            </div>
-          </div>
-        );
-    }
+    if (searchTerm.trim()) return renderSearch();
+    if (currentDoc === 'home') return renderHome();
+    if (ROLE_BY_ID[currentDoc]) return renderRoleSection(currentDoc);
+    const guide = GUIDE_BY_ID[currentDoc];
+    /*
+      There is no "coming soon" branch any more, and that is the point of the
+      change. `currentDoc` is only ever set from `resolveHelpTarget` or from a
+      tile built out of the corpus, so a miss here is not a content gap — it is
+      a bug, and going home is the honest response to one.
+    */
+    if (!guide) return renderHome();
+    const roleId = ROLE_ID_BY_GUIDE_ID[guide.id];
+    return (
+      <>
+        <p className="help-breadcrumb">
+          <button type="button" onClick={() => navigateToDoc(roleId)}>
+            {ROLE_BY_ID[roleId].title}
+          </button>
+        </p>
+        <DocRenderer guide={guide} />
+      </>
+    );
   };
 
   return (
@@ -287,26 +250,43 @@ const HelpSystem = ({ section, onClose }) => {
       <div className="help-modal-overlay" onClick={onClose}></div>
       <div className="help-modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="help-modal-header">
-          <h2><Icon name="Books" weight="duotone" size={16} color="var(--primary)" /> Help & Documentation</h2>
-          <button className="help-close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
+          <h2>
+            <Icon name="Books" weight="duotone" size={16} color="var(--primary)" /> Help
+          </h2>
+          <button className="help-close-button" onClick={onClose} aria-label="Close help">
+            <Icon name="X" weight="bold" size={16} color="currentColor" />
+          </button>
         </div>
 
         {renderNavigation()}
-        
+
         <div className="help-modal-body">
           {renderContent()}
         </div>
 
         <div className="help-modal-footer">
           <div className="help-footer-links">
-            <button className="help-footer-btn" onClick={() => navigateToDoc('technical-troubleshooting')}>
+            <button
+              className="help-footer-btn"
+              onClick={() => navigateToDoc('technical-troubleshooting')}
+            >
               <Icon name="Wrench" weight="bold" size={16} color="currentColor" /> Troubleshooting
             </button>
-            <button className="help-footer-btn" onClick={() => navigateToDoc('technical-requirements')}>
-              <Icon name="ClipboardText" weight="bold" size={16} color="currentColor" /> System Requirements
+            <button
+              className="help-footer-btn"
+              onClick={() => navigateToDoc('technical-requirements')}
+            >
+              <Icon name="ClipboardText" weight="bold" size={16} color="currentColor" /> What you need
             </button>
-            <a href="https://github.com/your-repo/engage2/issues" target="_blank" rel="noopener noreferrer" className="help-footer-btn">
-              <Icon name="Bug" weight="bold" size={16} color="currentColor" /> Report Issue
+            {/* The shipped link was `github.com/your-repo/engage2/issues`, which
+                is a placeholder nobody replaced — it 404s from every screen. */}
+            <a
+              href={ISSUES_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="help-footer-btn"
+            >
+              <Icon name="Bug" weight="bold" size={16} color="currentColor" /> Report an issue
             </a>
           </div>
         </div>

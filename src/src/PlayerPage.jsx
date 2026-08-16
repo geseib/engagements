@@ -8,8 +8,9 @@ import { displayLabelFor, ownAnswerIndex } from './config/anonymity';
 import {
   participationUrl, participationFrom, nextParticipation,
 } from './utils/playerParticipation';
-import JoinNameCollision from './components/JoinNameCollision';
+import JoinNameCollision, { JoinNameCollisionActions } from './components/JoinNameCollision';
 import AnswerSpotlight from './components/AnswerSpotlight';
+import HelpButton from './components/HelpButton';
 import { getClientId, classifyJoinFailure } from './components/joinResult';
 import './components/PlayerSurface.css';
 
@@ -62,9 +63,9 @@ const LookUpCue = ({ children }) => (
  * inside PlayerPage would remount its whole subtree on every keystroke and take
  * the focused textarea with it.
  */
-const PlayerShell = ({
+export const PlayerShell = ({
   phase, volume, ctx, category, who, online = true, banner,
-  centre = false, dock = null, children,
+  centre = false, dock = null, after = null, children,
 }) => (
   <div className="plr" data-theme="dark" data-phase={phase} data-volume={volume}>
     {banner}
@@ -80,12 +81,39 @@ const PlayerShell = ({
             {who}
           </span>
         )}
+        {/*
+          THE PLAYER'S ONLY WAY INTO THE DOCUMENTATION WRITTEN FOR THEM.
+
+          `HelpButton` was mounted in exactly one file — `AdminPage.jsx` — while
+          the help system's contents advertised four player guides. The audience
+          with the least context and the smallest screen had a documentation set
+          and no door into it from anywhere in the product.
+
+          IN THE BAR, NOT THE DOCK. The dock is the primary action and is
+          omitted entirely when there is nothing to do (see the note on
+          `dock` above); help has to be reachable in precisely those states —
+          "that name is taken" is a dock-less screen, and it is the single most
+          likely moment for a player to want an explanation.
+
+          It renders inside `.plr` so the modal is in the dusk scope rather
+          than beside it, for the same reason `after` is: a dialog rendered as
+          a sibling of this shell resolves none of the --plr-* tokens.
+        */}
+        <HelpButton section="player" variant="inline" size="small" tooltip="Help" />
       </div>
     </header>
     <main className={`plr-stage${centre ? ' plr-stage--centre' : ''}`}>
       {children}
     </main>
     {dock && <footer className="plr-dock">{dock}</footer>}
+    {/* OVERLAYS, INSIDE THE SCOPE RATHER THAN BESIDE IT.
+        A dialog rendered as a sibling of this shell is outside `.plr`, so it
+        inherits the data-theme="light" that public/index.html puts on <html>
+        and resolves none of the --plr-* tokens — which is how the spotlight
+        came to open a white card with 1.96:1 buttons over a dusk ballot. It is
+        NOT part of `children`: children land in `.plr-stage`, the scrolling
+        region, and a dialog does not belong inside the thing it covers. */}
+    {after}
   </div>
 );
 
@@ -262,6 +290,9 @@ function PlayerPage() {
   // A join the server refused because the name is already answering in this
   // session: { kind: 'name-taken' | 'name-unverified', playerName, message }.
   const [joinCollision, setJoinCollision] = useState(null);
+  /* In flight, so the ask and the take-over cannot be double-tapped into two
+     requests — the second of which would spend a grant the first already had. */
+  const [handoverBusy, setHandoverBusy] = useState(false);
   /*
     WHY THE JOIN REFUSAL IS STATE AND NOT AN `alert()`.
 
@@ -495,7 +526,12 @@ function PlayerPage() {
       setJoinCollision({
         kind: failure.kind,
         playerName: failure.playerName || name,
-        message: failure.message
+        message: failure.message,
+        // A FRESH refusal starts the handover flow over. Carrying a stale
+        // `asked` across a new join attempt would offer "Take over the name"
+        // to somebody who has not asked anybody anything — the two-step is the
+        // guard, so it must not survive the screen being re-entered.
+        handoverStage: 'idle'
       });
       return;
     }
@@ -1721,6 +1757,71 @@ function PlayerPage() {
     setPlayerName('');
   };
 
+  /**
+   * "Ask the host to let me take this name."
+   *
+   * The escape hatch from NAME_TAKEN, and it deliberately does not take
+   * anything: it records the ask and pings the host's Players tab. The host
+   * decides, because the host is the only party who can tell "Chris on a new
+   * laptop" from "a second Chris" — owner: *"they need the choice though
+   * because they may have just mistakenly picked the same name."*
+   *
+   * The route carries no authorizer, and must not: the caller is by definition
+   * somebody who is NOT in the session.
+   */
+  const handleRequestHandover = async () => {
+    if (!joinCollision) return;
+    const name = joinCollision.playerName;
+    setHandoverBusy(true);
+    try {
+      await fetch(`${API_BASE}games/${gameId}/players/${encodeURIComponent(name)}/handover-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: getClientId(gameId), accessCode: accessCodeInput.trim() || null }),
+      });
+    } catch (error) {
+      // A failed ask is not a dead end — the host can unlock without being
+      // asked through the app at all, which is the commoner case in a real
+      // room. So advance to `asked` either way and let the person try.
+      console.error('PLAYER: handover request failed:', error);
+    }
+    setHandoverBusy(false);
+    setJoinCollision((current) => (current ? { ...current, handoverStage: 'asked' } : current));
+  };
+
+  /**
+   * "The host said go ahead."
+   *
+   * A retry of the join carrying `claimExisting`. NOT a takeover: the server
+   * refuses it outright unless the host has opened a one-shot grant on this
+   * name, and spends the grant in a conditional write so two people racing one
+   * grant cannot both get in (join-game.js's `handover` branch).
+   *
+   * A refusal is not an error screen — it is "not yet", which is the only
+   * reading a person on a blocked screen can act on.
+   */
+  const handleTakeOverName = async () => {
+    if (!joinCollision) return;
+    const name = joinCollision.playerName;
+    setHandoverBusy(true);
+    const result = await performJoin(gameId, name, {
+      accessCode: accessCodeInput.trim() || null,
+      claimExisting: true,
+    });
+    setHandoverBusy(false);
+
+    if (result.ok) {
+      enterSession(gameId, name, result.data);
+      return;
+    }
+
+    if (result.failure.kind === 'name-taken' || result.failure.kind === 'name-unverified') {
+      setJoinCollision((current) => (current ? { ...current, handoverStage: 'refused' } : current));
+      return;
+    }
+    applyJoinFailure(result.failure, name);
+  };
+
   const handleRejoinDecline = () => {
     if (!rejoinPrompt) return;
     console.log(`🙅 PLAYER: Declining rejoin — joining as someone else`);
@@ -1887,13 +1988,36 @@ function PlayerPage() {
   // them into the first Chris and said "Reconnected".
   if (!joined && joinCollision) {
     return (
-      <PlayerShell phase="join" volume="act" ctx="Join a session">
+      <PlayerShell
+        phase="join"
+        volume="act"
+        ctx="Join a session"
+        /* The refusal's two ways out belong in the dock, exactly as the rejoin
+           prompt's do twenty lines below. They rendered inside `.plr-stage`
+           until now, which is the one screen on this surface where a player is
+           already stuck being the one screen that asked them to scroll to get
+           unstuck. */
+        dock={(
+          <JoinNameCollisionActions
+            kind={joinCollision.kind}
+            playerName={joinCollision.playerName}
+            /* ONE STAGE, READ BY BOTH HALVES. The note in the stage and the
+               label in the dock describe the same step, so they come from the
+               same value rather than from two conditions that can drift. */
+            handoverStage={joinCollision.handoverStage || 'idle'}
+            busy={handoverBusy}
+            onRejoinAnyway={handleCollisionRejoin}
+            onUseAnotherName={handleCollisionRename}
+            onRequestHandover={handleRequestHandover}
+            onTakeOver={handleTakeOverName}
+          />
+        )}
+      >
         <JoinNameCollision
           kind={joinCollision.kind}
           playerName={joinCollision.playerName}
           message={joinCollision.message}
-          onRejoinAnyway={handleCollisionRejoin}
-          onUseAnotherName={handleCollisionRename}
+          handoverStage={joinCollision.handoverStage || 'idle'}
         />
       </PlayerShell>
     );
@@ -2300,7 +2424,17 @@ function PlayerPage() {
                     type="button"
                     role="radio"
                     aria-checked={isSelected}
-                    className={`plr-opt trivia-option${isSelected ? ' active' : ''}`}
+                    /* `trivia-option` and `active` are gone. They were the last
+                       two globals left on this surface and BOTH were already
+                       dead paint: styles.css:6839 records that `.trivia-option`
+                       lost its rules ("now using .category-item styling"), and
+                       the only surviving selectors need `.category-item`
+                       alongside it, which this element has never had. What
+                       actually paints a chosen option is
+                       `.plr-opt[aria-checked="true"]` — the same attribute a
+                       screen reader announces, so the visual state and the
+                       announced state cannot drift apart. */
+                    className="plr-opt"
                     onClick={() => setSelectedTriviaAnswer(optionLetter)}
                   >
                     <span className="plr-k">{optionLetter}</span>
@@ -2978,40 +3112,51 @@ function PlayerPage() {
   }
 
   return (
-    <>
-      <PlayerShell
-        phase={phase}
-        volume={volume}
-        ctx={ctx}
-        category={barCategory}
-        who={playerName}
-        online={wsConnected}
-        banner={offlineBanner}
-        centre={centre}
-        dock={dock}
-      >
-        {body}
-      </PlayerShell>
+    <PlayerShell
+      phase={phase}
+      volume={volume}
+      ctx={ctx}
+      category={barCategory}
+      who={playerName}
+      online={wsConnected}
+      banner={offlineBanner}
+      centre={centre}
+      dock={dock}
+      /* Reading one response in full.
 
-      {/* Reading one response in full.
+         MOUNTED ONCE, ONCE PER PAGE rather than once per view — `answers` is
+         page state and the same list is on screen during VOTE and during
+         RESULTS, so one mount serves both phases and there is one piece of
+         open/closed state rather than two that can disagree.
 
-          MOUNTED ONCE, OUTSIDE THE SHELL, rather than inside the voting view —
-          `answers` is page state and the same list is on screen during VOTE and
-          during RESULTS, so one mount serves both phases and there is one piece
-          of open/closed state rather than two that can disagree.
+         IT USED TO BE A SIBLING OF THE SHELL, which put it outside `.plr` and
+         therefore outside both the dusk theme and every --plr-* token: a white
+         card with #F6A94C-on-white Previous/Next buttons at 1.96:1, opening
+         over a dusk ballot. `after` renders it inside the scope and after the
+         dock, so `surfaceClassName` below has tokens to reach for.
 
-          `displayLabelFor`, not `stageLabelFor`: on a player's own device the
-          row decides. The server has already redacted what this player may not
-          see, and there is no projector here for a session setting to protect. */}
-      <AnswerSpotlight
-        answers={answers}
-        index={spotlightIndex}
-        onIndex={setSpotlightIndex}
-        onClose={() => setSpotlightIndex(null)}
-        labelFor={displayLabelFor}
-        title="Response"
-      />
-    </>
+         `surfaceClassName` RE-TINTS RATHER THAN FORKS. The dialog is the host's
+         and `PastRound` uses it too; §10 of PlayerSurface.css re-points the
+         handful of values styles.css hardcodes, the way `.qsets--onlight` does
+         for the other polarity, so neither of the other two callers moves.
+
+         `displayLabelFor`, not `stageLabelFor`: on a player's own device the
+         row decides. The server has already redacted what this player may not
+         see, and there is no projector here for a session setting to protect. */
+      after={(
+        <AnswerSpotlight
+          answers={answers}
+          index={spotlightIndex}
+          onIndex={setSpotlightIndex}
+          onClose={() => setSpotlightIndex(null)}
+          labelFor={displayLabelFor}
+          title="Response"
+          surfaceClassName="plr-spot"
+        />
+      )}
+    >
+      {body}
+    </PlayerShell>
   );
 }
 

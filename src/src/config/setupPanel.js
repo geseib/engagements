@@ -278,6 +278,55 @@ export function rosterRows({
       : voting
         ? playersWhoVoted.includes(player.name)
         : null;
-    return { name, score: player.score || 0, rank: currentRank, done };
+    /*
+      WHETHER THIS NAME IS IN THE MIDDLE OF A HANDOVER — booleans only.
+
+      `get-players.js` publishes `handover: { open, requested, requestedAt }`
+      and deliberately NOT the requester's client id: that endpoint has no
+      authorizer, and a client id is the secret `get-answers.js` accepts as
+      proof of identity. So the host's console never sees one, and the grant is
+      aimed at the asker by the SERVER reading its own row
+      (`bindToRequester`). Defaulted here rather than assumed present, because
+      a roster fetched from an older backend has no `handover` key at all and
+      an undefined read would render "asking" as a permanent blank chip.
+    */
+    const handover = player.handover || {};
+    return {
+      name,
+      score: player.score || 0,
+      rank: currentRank,
+      done,
+      handoverRequested: Boolean(handover.requested),
+      handoverOpen: Boolean(handover.open),
+    };
   });
+}
+
+/**
+ * THE PEOPLE WHO LEFT — a second, separate list, never rows mixed into the one
+ * above.
+ *
+ * Owner: *"if someone has left, the host should be able to remove them so they
+ * are not in the next rounds counts. this should not eliminate any contribution
+ * they had made or points they had accumulated before leaving."* So they are
+ * out of the roster the counts are drawn from, and still on screen — because
+ * the roster is the only surface a removal can be undone from, and a row you
+ * cannot see is a row you cannot press "Bring back" on.
+ *
+ * They carry their score, because showing them at zero would read as "removing
+ * someone wipes their points", which is exactly the thing the design promises
+ * it does not do.
+ *
+ * NO RANK. Ranking is a statement about the contest currently in progress, and
+ * these people are not in it; the report ranks the whole session and is where
+ * their standing lives (create-report.js:147 still counts them).
+ */
+export function departedRows(removedPlayers = []) {
+  return [...removedPlayers]
+    .map((player) => ({
+      name: player.name || player.playerName || 'Unknown Player',
+      score: player.score || player.totalScore || 0,
+      removedAt: player.removedAt || null,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }

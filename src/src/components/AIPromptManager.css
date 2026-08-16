@@ -16,21 +16,25 @@
    EVERY selector below is rooted at one of seven scope classes, and
    `__tests__/promptManagerScope.test.js` fails on an eighth:
 
-     .pmgr                   AIPromptManager.jsx — the section and both dialogs
-     .plib                   PromptLibraryPanel.jsx — the table and its controls
-     .pvi                    PromptVariableInspector.jsx
-     .ppf                    PromptPreflightPanel.jsx
-     .pap                    PromptAssembledPreview.jsx
-     .ai-prompt-editor-modal AIGenerationPromptEditor.jsx  (see below)
-     .prompt-type-sections   AdminPage.jsx's prompts tab   (see below)
+     .padm   AdminPage.jsx's prompts section — the chooser and the back bar
+     .pmgr   AIPromptManager.jsx — the analysis library, both dialogs, the editor
+     .pgen   AIGenerationPromptEditor.jsx — the generation library and its form
+     .plib   PromptLibraryPanel.jsx — the table and its controls, mounted in both
+     .pvi    PromptVariableInspector.jsx
+     .ppf    PromptPreflightPanel.jsx
+     .pap    PromptAssembledPreview.jsx
 
-   THE LAST TWO ARE NOT THIS FILE'S TO NAME, and that is worth stating rather
-   than hiding. `AIGenerationPromptEditor.jsx` imports this stylesheet and
-   AdminPage.jsx renders the prompt-type cards; both files are owned by other
-   changes in flight. Their rules are rooted at their own component roots so
-   they cannot leak either, and they collapse into `.pmgr` — or move to their
-   own stylesheets — the day those files can be touched. AUDIT.md §6.2 items 9
-   and 14.
+   `.pgen` AND `.prompt-type-sections` ARE GONE, and the
+   rename is the change, not tidiness. The first named a hand-rolled full-screen
+   overlay that `AdminPage.jsx` rendered in the top-level fragment beside
+   `<IssueFab>` — outside every section and outside the console's theme — while
+   the OTHER prompt library expanded inline below a card in the same section.
+   Two libraries over one table, reached two different ways; the owner: *"the
+   way you get to the Question set AI generator prompts and the Engagement
+   results prompts on the prompt admin screen is slightly different. they should
+   be the same."* Both are places in the work area now, reached by the same
+   chooser and left by the same back control, so `.pgen` is a panel and not an
+   overlay. AUDIT.md §6.2 items 9, 14 and 16.
 
    ONE GLOBAL SURVIVES ON PURPOSE. `.form-group input[type="text"] / textarea /
    select` is the ONLY rule in the product that gives a form control its width,
@@ -43,20 +47,47 @@
    so it stays here, alone, named, and pinned by a test that fails if a second
    global joins it.
 
-   THIS SURFACE IS STILL PAPER, ON PURPOSE. `AdminPage.jsx` gives the prompts
-   section no `contentTheme`, so AdminShell paints it light — the question sets
-   and users tabs each converted their theme and their markup in one change, and
-   this file cannot: AdminPage.jsx is owned elsewhere this pass. Painting dusk
-   markup onto the light field would be the exact 1.4:1 failure
-   __tests__/questionSetsPalette.test.js exists to prevent, so every colour here
-   is measured against white and #f8f9fa instead. When the section is converted,
-   these blocks convert with it. Measured, on white:
+   THIS SURFACE IS DUSK NOW. The owner, of the prompt screens: *"why are these
+   the only things that are on a light background vs the dark background"* —
+   they were. `AdminPage.jsx` gave the prompts section no `contentTheme`, so
+   AdminShell painted it light while question sets, sessions and users had each
+   converted. AUDIT.md §6.2 items 11-15.
 
-     --pc-ink        #1a1a1a   16.1:1   body copy
-     --pc-muted      #5c6470    6.5:1   notes, labels
-     --pc-stop       #a3160f    7.1:1   blocking tier
-     --pc-silent     #7a3d00    7.7:1   the silent tier — the loud one
-     --pc-link       #0b5fb0    6.0:1   tokens
+   THE MARKUP AND THE THEME CONVERTED IN ONE CHANGE, which is not optional:
+   `contentTheme: 'dark'` with `--pc-ink #1a1a1a` still in this block is 1.3:1,
+   and this block on dusk values with the section still light is 1.2:1. Either
+   half alone is unreadable, so `__tests__/promptEditorPalette.test.js` asserts
+   both ends of the pair.
+
+   THE SIX --pc-* NAMES SURVIVED; WHAT THEY POINT AT DID NOT. Four hundred
+   declarations read them, and renaming those would have buried the colour
+   change in a diff nobody could review. They are aliases onto the shipped dusk
+   tokens now (AUDIT item 12) rather than a seventh private palette:
+
+     --pc-ink     var(--text)          #F4EDE4
+     --pc-muted   var(--muted)         #9BA8BE
+     --pc-link    var(--secondary)     #7CA7E6
+     --pc-stop    var(--danger-text)   #EF8C86   (never --danger: 4.38:1)
+     --pc-silent  var(--primary)       #F6A94C
+     --pc-card    var(--surface)       #1B2942
+
+   MEASURED, unlifted — there is no projector on a laptop console. Composited
+   up the ancestor chain, including every tint, in promptEditorPalette.test.js:
+
+     --pc-ink    on --bg #0F1A2E            14.97:1   body copy, values
+     --pc-ink    on --pc-card #1B2942       12.53:1   dialog copy
+     --pc-muted  on --bg                     7.24:1   notes, labels, ledes
+     --pc-muted  on --pc-card                6.06:1
+     --pc-muted  on --pc-paper over card     5.36:1   the rail, the wells
+     --pc-link   on --bg                     7.06:1   variable tokens, links
+     --pc-stop   on --bg                     7.26:1   the blocking tier
+     --pc-silent on --bg                     8.86:1   the silent tier
+     --pc-go     on --bg                     9.30:1   Active
+
+   The worst pairing on the surface is `--pc-muted` on `--pc-paper` over
+   `--pc-card` at 5.36:1, which is the variable rail. Nothing composites deeper
+   than that on purpose: a second lift on top of the same stack takes muted to
+   4.38:1, which is why there is no `--surface-2` bed anywhere below.
    ========================================================================== */
 
 /* ============================================================================
@@ -78,7 +109,7 @@
 .form-group textarea:focus,
 .form-group select:focus {
   outline: none;
-  border-color: #2196f3;
+  border-color: var(--pc-link);
 }
 
 .form-group textarea {
@@ -87,28 +118,72 @@
   line-height: 1.5;
 }
 
+/*
+  AND THE DUSK OVERRIDE FOR IT, WHICH IS SCOPED — that is the whole point.
+
+  The rule above still paints eighteen components on PAPER surfaces, so its
+  `#ddd` border and its transparent background cannot move. On this surface they
+  are wrong in both directions: a `#ddd` hairline is the brightest thing on a
+  #0F1A2E field, and a transparent input is indistinguishable from the card it
+  sits on. Re-pointed here, under the two prompt scopes only, so the global
+  stays exactly as the other eighteen need it.
+
+  `background: var(--pc-field)` is `--bg`, one step DOWN from the card — the
+  same move `.qsets-input` makes (QuestionSetsPanel.css:143-152). A field is a
+  hole in the surface on dusk, not a raised white box.
+*/
+.pmgr .form-group input[type="text"],
+.pmgr .form-group textarea,
+.pmgr .form-group select,
+.pgen .form-group input[type="text"],
+.pgen .form-group textarea,
+.pgen .form-group select {
+  border-color: var(--pc-rule-strong);
+  background: var(--pc-field);
+  color: var(--pc-ink);
+  /* The ladder's body size. 14px was below it, and an input that renders
+     smaller than the table it feeds is the RATIONALE §3.2 failure exactly. */
+  font-size: var(--pc-t-body);
+}
+
+.pmgr .form-group input[type="text"]::placeholder,
+.pmgr .form-group textarea::placeholder,
+.pgen .form-group input[type="text"]::placeholder,
+.pgen .form-group textarea::placeholder {
+  color: var(--pc-muted);
+  opacity: .62;
+}
+
+.pmgr .form-group input[type="text"]:focus,
+.pmgr .form-group textarea:focus,
+.pmgr .form-group select:focus,
+.pgen .form-group input[type="text"]:focus,
+.pgen .form-group textarea:focus,
+.pgen .form-group select:focus {
+  border-color: var(--pc-silent);
+  outline: 2px solid var(--pc-silent);
+  outline-offset: 1px;
+}
+
 /* ============================================================================
-   .pmgr — the section itself, and the token block every scope below reads.
+   THE TOKEN BLOCK EVERY SCOPE BELOW READS, AND THE PROMPTS SECTION ITSELF.
    ========================================================================== */
 
 /*
-  ONE DECLARATION, THREE ROOTS, AND THE SECOND AND THIRD ARE NOT OPTIONAL.
+  ONE DECLARATION, FOUR ROOTS, AND NONE OF THE FOUR IS OPTIONAL.
 
   There used to be two identical copies of this block — one on the section, one
   on the editor modal — with a comment asking whoever changed one to remember
-  the other. Three selectors on ONE rule cannot drift; three copies can.
+  the other. Four selectors on ONE rule cannot drift; four copies can.
 
-  WHY IT IS NOT JUST `.pmgr`. `PromptLibraryPanel` is mounted in two places
-  now: inside `.pmgr`, and inside `.ai-prompt-editor-modal` — which
-  `AdminPage.jsx:1283` renders in the top-level fragment beside `<IssueFab>`,
-  OUTSIDE every section, so it is not a descendant of `.pmgr` and inherits
-  nothing from it. An undefined custom property invalidates the WHOLE
-  declaration rather than just the value, so a `.plib` reached that way would
-  lose its rules, its focus outline and every chip colour — including the
-  "Broken record" chip, which is the one that warns about a dangling
-  reference — and nothing would error. `.plib` carries them so the panel is
-  mountable anywhere; `.ai-prompt-editor-modal` carries them so anything else
-  that overlay grows is covered too.
+  WHY IT IS NOT JUST `.pmgr`. `PromptLibraryPanel` is mounted twice, under
+  `.pmgr` and under `.pgen`, and neither is a descendant of the other — they are
+  the two sub-places of the prompts section, siblings under `.padm`. An
+  undefined custom property invalidates the WHOLE declaration rather than just
+  the value, so a `.plib` that inherited nothing would lose its rules, its focus
+  outline and every chip colour — including the "Broken record" chip, which is
+  the one that warns about a dangling reference — and nothing would error.
+  `.plib` carries them itself so the panel stays mountable anywhere.
 
   Everything else — `.pvi`, `.ppf`, `.pap`, the halves, the readouts — renders
   only inside the summary editor, which IS a DOM descendant of `.pmgr` because
@@ -118,44 +193,130 @@
   the JSX rather than trusting this comment: every root that mounts
   `<PromptLibraryPanel>` must appear here.
 */
+.padm,
 .pmgr,
-.plib,
-.ai-prompt-editor-modal {
-  --pc-ink: #1a1a1a;
-  --pc-muted: #5c6470;
-  --pc-rule: #dfe3e8;
-  --pc-stop: #a3160f;
-  --pc-silent: #7a3d00;
-  --pc-link: #0b5fb0;
-  --pc-paper: #f8f9fa;
-  --pc-tint-stop: rgba(163, 22, 15, .07);
-  --pc-tint-silent: rgba(122, 61, 0, .10);
+.pgen,
+.plib {
+  /* Aliases onto the shipped dusk tokens. See the file header for the mapping
+     and the measured ratios; nothing below may declare a hex of its own. */
+  --pc-ink: var(--text);
+  --pc-muted: var(--muted);
+  --pc-link: var(--secondary);
+  --pc-stop: var(--danger-text);
+  --pc-silent: var(--primary);
+
+  /* `styles.css` has never declared a success TEXT token — RATIONALE §5 lists
+     one that does not exist — so every dusk screen declares its own. This is
+     `--qsets-success-text` (QuestionSetsPanel.css:65) to the digit, because two
+     greens for one meaning is how a palette starts drifting. */
+  --pc-go: #6FD0A4;
+
+  /* THE THREE BEDS, AND WHY THERE ARE ONLY THREE.
+     --pc-card   a dialog, and the blocks that used to be `background: white`
+     --pc-paper  a recessed panel: the variable rail, the wells, row hover, the
+                 empty states. Translucent so it lifts over --bg and over
+                 --pc-card alike; a solid value would have to be two values.
+     --pc-field  a form control, one step DOWN from its card (.qsets-input:145)
+     There is deliberately no `--surface-2` bed: --pc-paper composited on top of
+     #25375A takes --pc-muted to 4.38:1, under AA, and nothing on this surface
+     is worth a third plane. */
+  --pc-card: var(--surface);
+  --pc-paper: rgba(155, 168, 190, .07);
+  --pc-field: var(--bg);
+
+  --pc-rule: rgba(155, 168, 190, .20);
+  --pc-rule-strong: rgba(155, 168, 190, .34);
+  --pc-hover: rgba(155, 168, 190, .055);
+
+  /* Tints at the alphas `.qsets-tint-*` already uses (QuestionSetsPanel.css:70-72),
+     over the hue of the token each one backs. */
+  --pc-tint-stop: rgba(229, 100, 94, .09);
+  --pc-tint-silent: rgba(246, 169, 76, .09);
+  --pc-tint-link: rgba(124, 167, 230, .10);
+  --pc-tint-go: rgba(79, 178, 134, .10);
+
+  /* The laptop ladder (RATIONALE §3), same six steps as `--qsets-t-*`. Rows are
+     36px. Nothing on this surface renders below the 12px floor. */
+  --pc-t-floor: 12px;
+  --pc-t-label: 13px;
+  --pc-t-body: 15px;
+  --pc-t-head: 19px;
+  --pc-t-title: 24px;
+  --pc-t-numeral: 30px;
+
   --pc-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --pc-row-h: 36px;
 }
 
-.pmgr {
-  padding: 20px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  margin-bottom: 30px;
+/* ============================================================================
+   .padm — the prompts section: the chooser, and the way back from a library.
+
+   THE CONTAINER RULE, APPLIED TO A SECTION THAT WAS BREAKING IT TWICE.
+
+   What used to be here: a `.tab-content` wrapper (500px min-height and a fade-in
+   written for the paper tabs), inside it an `.admin-section` white card, inside
+   THAT two more white cards, one of which opened a full-screen overlay and the
+   other of which expanded a third panel inline underneath. Four nested boxes and
+   two different navigation idioms for one pair of libraries.
+
+   Now: the section is the field, the chooser is two cards on it, and choosing
+   one REPLACES the chooser with that library — the same move the question sets
+   tab makes for its editor (AdminPage.jsx renders it instead of the list, not
+   below it). A list and its detail are two places, not two sections
+   (RATIONALE §2). AUDIT.md §6.2 item 14.
+   ========================================================================== */
+
+.padm {
+  color: var(--pc-ink);
+  font: 400 var(--pc-t-body)/1.45 var(--font-ui);
 }
 
-.pmgr-header {
+.padm *,
+.padm *::before,
+.padm *::after { box-sizing: border-box; }
+
+/* THE WAY BACK, AND IT IS ONE CONTROL FOR BOTH PLACES.
+
+   Rendered by `.padm` rather than by each library, which is the structural half
+   of "they should be the same": one element, one handler, one appearance, so
+   the two sub-places cannot drift into two different exits the way they had
+   drifted into two different entrances. Mockup 19's breadcrumb ("‹ Prompts")
+   is the shape. */
+.padm-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 5px 11px 5px 8px;
+  border: 1px solid var(--pc-rule-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--pc-muted);
+  font: 600 var(--pc-t-label)/1.4 var(--font-ui);
+  cursor: pointer;
+}
+.padm-back:hover { color: var(--pc-ink); border-color: var(--pc-silent); }
+.padm-back:focus-visible { outline: 2px solid var(--pc-silent); outline-offset: 2px; }
+
+.pmgr-header,
+.pgen-header {
   margin-bottom: 24px;
 }
 
-.pmgr-header h2 {
+.pmgr-header h2,
+.pgen-header h2 {
   margin: 0 0 8px 0;
+  font-size: var(--pc-t-head);
   color: var(--pc-ink);
 }
 
 /* Was `.section-description`, a bare global that `styles.css:4774` already
    owns and already won. Renamed rather than scoped so the section keeps a lede
    of its own measured colour instead of one it inherited by accident. */
-.pmgr-lede {
+.pmgr-lede,
+.pgen-lede {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--pc-t-label);
   line-height: 1.55;
   color: var(--pc-muted);
 }
@@ -200,24 +361,36 @@
   flex: 1;
 }
 
-.plib .filter-select {
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  background: white;
-  font-size: 14px;
-  min-width: 140px;
+/* The filter controls, on the `.qsets-input` shape: a hole in the field with a
+   rule around it, body-size text, and the amber focus ring the rest of the
+   console uses. 14px was below the ladder's body step — see RATIONALE §3.2. */
+.plib .filter-select,
+.plib .search-input {
+  padding: 7px 10px;
+  border: 1px solid var(--pc-rule-strong);
+  border-radius: 6px;
+  background: var(--pc-field);
+  color: var(--pc-ink);
+  font: 400 var(--pc-t-body)/1.4 var(--font-ui);
+  min-height: 32px;
 }
 
+.plib .filter-select { min-width: 140px; }
+
 .plib .search-input {
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  background: white;
-  font-size: 14px;
   min-width: 200px;
   flex: 1;
   max-width: 300px;
+}
+
+.plib .search-input::placeholder { color: var(--pc-muted); opacity: .62; }
+
+/* The one place a raw colour is unavoidable: a native <option> is painted by
+   the OS popup, not by this element, and inherits nothing useful. Naming the
+   two dusk tokens keeps the popup legible without a hex of its own. */
+.plib .filter-select option {
+  background: var(--pc-card);
+  color: var(--pc-ink);
 }
 
 .plib .prompt-control-actions {
@@ -226,20 +399,69 @@
   align-items: center;
 }
 
-.plib .create-prompt-btn {
-  padding: 10px 20px;
-  background: #2e7d32;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.2s;
+/*
+  THE TWO GLOBAL BUTTON CLASSES, RE-TINTED IN SCOPE RATHER THAN REPLACED.
+
+  `.btn-primary` and `.btn-secondary` live in styles.css and are rendered by
+  this panel, the two dialogs and the generation form. Neither survives the move
+  to dusk as written: `.btn-primary` is `var(--primary)` carrying WHITE, which is
+  1.96:1 on #F6A94C, and `.btn-secondary` is `background: white`, a paper button
+  on a dusk field. Renaming them across four components would drag styles.css
+  into this change; re-pointing them under the three prompt scopes does not, and
+  leaves every other screen's buttons exactly as they are.
+
+  The values are `.qsets-btn`'s (QuestionSetsPanel.css): amber carrying --bg at
+  8.86:1 for the primary, an outline carrying --text for the secondary.
+*/
+.padm .btn-primary,
+.pmgr .btn-primary,
+.pgen .btn-primary,
+.plib .btn-primary {
+  background: var(--pc-silent);
+  color: var(--bg);
+  border: 1px solid transparent;
+  padding: 7px 14px;
+  border-radius: 6px;
+  font: 600 var(--pc-t-label)/1.4 var(--font-ui);
+}
+.padm .btn-primary:hover,
+.pmgr .btn-primary:hover,
+.pgen .btn-primary:hover,
+.plib .btn-primary:hover {
+  /* No lift and no shadow: the global's `translateY(-2px)` plus a 20px navy
+     shadow was drawn for a hero button on paper and reads as a glitch in a
+     dense row of 13px controls. */
+  transform: none;
+  box-shadow: none;
+  background: var(--primary-deep);
+  color: var(--text);
 }
 
-.plib .create-prompt-btn:hover {
-  background: #1b5e20;
+.padm .btn-secondary,
+.pmgr .btn-secondary,
+.pgen .btn-secondary,
+.plib .btn-secondary {
+  background: transparent;
+  color: var(--pc-ink);
+  border: 1px solid var(--pc-rule-strong);
+  padding: 7px 14px;
+  border-radius: 6px;
+  font: 600 var(--pc-t-label)/1.4 var(--font-ui);
+}
+.padm .btn-secondary:hover,
+.pmgr .btn-secondary:hover,
+.pgen .btn-secondary:hover,
+.plib .btn-secondary:hover {
+  background: var(--pc-hover);
+  border-color: var(--pc-silent);
+  color: var(--pc-ink);
+}
+
+/* Was a green fill of its own, which said "this is a different kind of button"
+   about the panel's ONE primary action. It is the primary; it only needs to be
+   the same one. */
+.plib .create-prompt-btn {
+  white-space: nowrap;
 }
 
 .plib .loading-state {
@@ -288,7 +510,7 @@
 }
 
 .pmgr-modal {
-  background: white;
+  background: var(--pc-card);
   border-radius: 8px;
   max-width: 800px;
   width: 100%;
@@ -321,22 +543,22 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--pc-rule);
   flex: none;
 }
 
 .pmgr-modal-head h2 {
   margin: 0;
-  font-size: 24px;
+  font-size: var(--pc-t-title);
   color: var(--pc-ink);
 }
 
 .pmgr-x {
   background: none;
   border: none;
-  font-size: 24px;
+  font-size: var(--pc-t-title);
   cursor: pointer;
-  color: #666;
+  color: var(--pc-muted);
   padding: 0;
   width: 32px;
   height: 32px;
@@ -348,7 +570,8 @@
 }
 
 .pmgr-x:hover {
-  background: #f0f0f0;
+  background: var(--pc-hover);
+  color: var(--pc-ink);
 }
 
 /* The scrolling body of each dialog. `min-height: 0` because a flex item's
@@ -372,7 +595,7 @@
   justify-content: flex-end;
   align-items: center;
   padding: 20px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--pc-rule);
   flex: none;
 }
 
@@ -423,20 +646,21 @@
 
 .pmgr .btn-add-tag {
   padding: 10px 16px;
-  background: #f0f0f0;
-  border: 1px solid #ddd;
+  background: transparent;
+  color: var(--pc-ink);
+  border: 1px solid var(--pc-rule-strong);
   border-radius: 4px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--pc-t-label);
   transition: background 0.2s;
 }
 
 .pmgr .btn-add-tag:hover {
-  background: #e0e0e0;
+  background: var(--pc-hover);
 }
 
 .pmgr .tags-list,
-.ai-prompt-editor-modal .tags-list {
+.pgen .tags-list {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
@@ -444,34 +668,34 @@
 }
 
 .pmgr .tag,
-.ai-prompt-editor-modal .tag {
+.pgen .tag {
   padding: 4px 8px;
-  background: #f0f0f0;
+  background: var(--pc-paper);
   border-radius: 4px;
   font-size: 12px;
-  color: #555;
+  color: var(--pc-muted);
 }
 
 .pmgr .tags-list .tag,
-.ai-prompt-editor-modal .tags-list .tag {
+.pgen .tags-list .tag {
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  background: #e3f2fd;
-  color: #1976d2;
+  background: var(--pc-tint-link);
+  color: var(--pc-link);
   border-radius: 4px;
 }
 
 .pmgr .tags-list .tag button,
-.ai-prompt-editor-modal .tags-list .tag button {
+.pgen .tags-list .tag button {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 16px;
+  font-size: var(--pc-t-head);
   line-height: 1;
   padding: 0;
-  color: #1976d2;
+  color: var(--pc-link);
 }
 
 .pmgr .checkbox-group label {
@@ -503,10 +727,10 @@
 
 .pmgr .prompt-meta .badge {
   padding: 4px 8px;
-  background: #f0f0f0;
+  background: var(--pc-paper);
   border-radius: 4px;
   font-size: 12px;
-  color: #666;
+  color: var(--pc-muted);
 }
 
 .pmgr .analysis-types {
@@ -521,7 +745,7 @@
   flex-direction: column;
   align-items: center;
   padding: 16px;
-  border: 2px solid #e0e0e0;
+  border: 2px solid var(--pc-rule-strong);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
@@ -529,13 +753,13 @@
 }
 
 .pmgr .analysis-type-option:hover {
-  border-color: #2196f3;
-  background: #f8f9fa;
+  border-color: var(--pc-link);
+  background: var(--pc-paper);
 }
 
 .pmgr .analysis-type-option.selected {
-  border-color: #2196f3;
-  background: #e3f2fd;
+  border-color: var(--pc-link);
+  background: var(--pc-tint-link);
 }
 
 .pmgr .analysis-type-option input {
@@ -544,19 +768,19 @@
 }
 
 .pmgr .type-icon {
-  font-size: 24px;
+  font-size: var(--pc-t-title);
   margin-bottom: 8px;
 }
 
 .pmgr .type-label {
-  font-size: 14px;
+  font-size: var(--pc-t-body);
   font-weight: 500;
 }
 
 .pmgr .analyze-btn {
   width: 100%;
   padding: 12px;
-  font-size: 16px;
+  font-size: var(--pc-t-head);
 }
 
 .pmgr .analysis-results {
@@ -572,7 +796,7 @@
 
 .pmgr .result-section h4 {
   margin: 0 0 12px 0;
-  font-size: 16px;
+  font-size: var(--pc-t-head);
 }
 
 .pmgr .improved-prompt {
@@ -580,8 +804,8 @@
 }
 
 .pmgr .improved-prompt pre {
-  background: white;
-  border: 1px solid #e0e0e0;
+  background: var(--pc-card);
+  border: 1px solid var(--pc-rule);
   padding: 16px;
   border-radius: 4px;
   white-space: pre-wrap;
@@ -596,38 +820,40 @@
   gap: 8px;
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--pc-rule);
 }
 
 .pmgr .apply-btn {
-  background: #4caf50;
-  color: white;
+  background: var(--pc-go);
+  color: var(--bg);
   border: none;
   padding: 8px 16px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--pc-t-label);
   transition: background-color 0.2s ease;
 }
 
 .pmgr .apply-btn:hover {
-  background: #45a049;
+  background: var(--success);
+  color: var(--text);
 }
 
 .pmgr .copy-btn {
-  background: #6c757d;
-  color: white;
+  background: transparent;
+  color: var(--pc-ink);
+  border: 1px solid var(--pc-rule-strong);
   border: none;
   padding: 8px 16px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--pc-t-label);
   transition: background-color 0.2s ease;
   width: 100%;
 }
 
 .pmgr .copy-btn:hover {
-  background: #5a6268;
+  background: var(--pc-hover);
 }
 
 .pmgr .score-display {
@@ -637,22 +863,22 @@
 }
 
 .pmgr .score-value {
-  font-size: 32px;
+  font-size: var(--pc-t-numeral);
   font-weight: bold;
-  color: #2196f3;
+  color: var(--pc-link);
 }
 
 .pmgr .score-bar {
   flex: 1;
   height: 20px;
-  background: #e0e0e0;
+  background: var(--pc-rule);
   border-radius: 10px;
   overflow: hidden;
 }
 
 .pmgr .score-fill {
   height: 100%;
-  background: #2196f3;
+  background: var(--pc-link);
   transition: width 0.5s ease;
 }
 
@@ -672,7 +898,7 @@
   content: '✓';
   position: absolute;
   left: 0;
-  color: #2e7d32;
+  color: var(--pc-go);
 }
 
 .pmgr .improvements-list {
@@ -683,22 +909,22 @@
 
 .pmgr .improvement-item {
   padding: 16px;
-  background: white;
-  border: 1px solid #e0e0e0;
+  background: var(--pc-card);
+  border: 1px solid var(--pc-rule);
   border-radius: 4px;
-  border-left: 4px solid #e0e0e0;
+  border-left: 4px solid var(--pc-rule-strong);
 }
 
 .pmgr .improvement-item.priority-high {
-  border-left-color: #f44336;
+  border-left-color: var(--pc-stop);
 }
 
 .pmgr .improvement-item.priority-medium {
-  border-left-color: #ff9800;
+  border-left-color: var(--pc-silent);
 }
 
 .pmgr .improvement-item.priority-low {
-  border-left-color: #4caf50;
+  border-left-color: var(--pc-go);
 }
 
 .pmgr .improvement-header {
@@ -709,7 +935,7 @@
 
 .pmgr .improvement-category {
   font-weight: 500;
-  color: #1976d2;
+  color: var(--pc-link);
 }
 
 .pmgr .improvement-priority {
@@ -720,18 +946,18 @@
 }
 
 .pmgr .priority-high .improvement-priority {
-  background: #ffebee;
-  color: #c62828;
+  background: var(--pc-tint-stop);
+  color: var(--pc-stop);
 }
 
 .pmgr .priority-medium .improvement-priority {
-  background: #fff3e0;
-  color: #ef6c00;
+  background: var(--pc-tint-silent);
+  color: var(--pc-silent);
 }
 
 .pmgr .priority-low .improvement-priority {
-  background: #e8f5e9;
-  color: #2e7d32;
+  background: var(--pc-tint-go);
+  color: var(--pc-go);
 }
 
 .pmgr .improvement-issue {
@@ -754,15 +980,15 @@
 
 .pmgr .alternative-approach {
   padding: 16px;
-  background: white;
-  border: 1px solid #e0e0e0;
+  background: var(--pc-card);
+  border: 1px solid var(--pc-rule);
   border-radius: 4px;
   margin-bottom: 12px;
 }
 
 .pmgr .alternative-approach h5 {
   margin: 0 0 8px 0;
-  color: #1976d2;
+  color: var(--pc-link);
 }
 
 .pmgr .alternative-approach p {
@@ -778,14 +1004,14 @@
 
 .pmgr .pros,
 .pmgr .cons {
-  font-size: 14px;
+  font-size: var(--pc-t-body);
 }
 
 .pmgr .pros strong,
 .pmgr .cons strong {
   display: block;
   margin-bottom: 4px;
-  color: #333;
+  color: var(--pc-ink);
 }
 
 .pmgr .pros ul,
@@ -809,10 +1035,10 @@
 .pmgr .template-editor-container {
   display: flex;
   gap: 16px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--pc-rule);
   border-radius: 8px;
   overflow: hidden;
-  background: white;
+  background: var(--pc-card);
 }
 
 .pmgr .template-textarea-container {
@@ -833,7 +1059,7 @@
 
 .pmgr .template-textarea-container textarea:focus {
   outline: none;
-  box-shadow: inset 0 0 0 2px #0066cc;
+  box-shadow: inset 0 0 0 2px var(--pc-link);
 }
 
 /* --------------------------------------------------------- the magic wand -- */
@@ -857,7 +1083,7 @@
   gap: 6px;
   padding: 6px 12px;
   background: var(--primary);
-  color: white;
+  color: var(--bg);
   border: none;
   border-radius: 6px;
   font-size: 12px;
@@ -868,13 +1094,15 @@
 }
 
 .pmgr .magic-wand-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--primary-deep) 0%, #6b46c1 100%);
+  background: var(--primary-deep);
+  color: var(--text);
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 .pmgr .magic-wand-btn:disabled {
-  background: #ccc;
+  background: var(--pc-rule);
+  color: var(--pc-muted);
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
@@ -885,8 +1113,8 @@
   align-items: center;
   gap: 4px;
   padding: 6px 10px;
-  background: var(--danger);
-  color: white;
+  background: var(--danger-deep);
+  color: var(--text);
   border: none;
   border-radius: 4px;
   font-size: 12px;
@@ -896,93 +1124,48 @@
 }
 
 .pmgr .revert-btn:hover {
-  background: #ff5252;
+  background: var(--danger);
+  color: var(--bg);
   transform: translateY(-1px);
 }
 
 /* ============================================================================
-   .ai-prompt-editor-modal — the GENERATION prompt editor.
+   .pgen — the GENERATION prompt library, and its editor form.
 
-   Not this file's component and not this change's file: `AdminPage.jsx` renders
-   it outside `.pmgr`, and `AIGenerationPromptEditor.jsx` imports this
-   stylesheet. Every rule it needs is rooted at its own component root so
-   nothing leaks, which is the whole point; giving it its own stylesheet means
-   editing its import line, and AUDIT.md §6.2 item 9 owns that file.
+   IT WAS A FULL-SCREEN OVERLAY AND IT IS A PLACE NOW.
+
+   `.pgen` used to be `position: fixed` over the whole viewport, holding
+   `.modal-overlay > .modal-content.large-modal` — the last hand-rolled dialog
+   shell in the prompt admin, with no Escape, no focus trap, no scroll lock and
+   no `role="dialog"`. AUDIT §5 counted it as the fifth appearance of the
+   centred-scrim trap and item 4 had already routed the OTHER two prompt dialogs
+   through `Modal`.
+
+   It is not a dialog at all now, so none of that applies: it is the second
+   sub-place of the prompts section, mounted in the work area exactly where
+   `.pmgr` mounts, reached by the same chooser and left by `.padm-back`. That is
+   the owner's *"they should be the same"*, and it is also what the container
+   rule says about this shape — a library plus a fourteen-field editor is a
+   detail with panels and tables, which is a PLACE in the console (SKILL §6, the
+   RATIONALE §10 reading of `admin-container-rule.md`), never a modal.
+
+   `.modal-overlay` and `.modal-content` are still absent from this file and
+   must stay absent: they are global selectors styles.css owns, this file's copy
+   carried the broken centred shape, and it was losing only by webpack injection
+   order. `__tests__/modalReachability.test.js` fails if any component
+   stylesheet redeclares them.
    ========================================================================== */
 
-.ai-prompt-editor-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1000;
+.pgen {
+  color: var(--pc-ink);
+  font: 400 var(--pc-t-body)/1.45 var(--font-ui);
 }
 
-/*
-  `.modal-overlay` AND `.modal-content` ARE DELETED FROM THIS FILE, NOT MOVED.
+.pgen *,
+.pgen *::before,
+.pgen *::after { box-sizing: border-box; }
 
-  They were verbatim redeclarations of two GLOBAL selectors that styles.css
-  already owns (:5561 and :5583) — and this copy carried the OLD, BROKEN shape:
-  `align-items: center` with no `overflow-y`, which is the exact fault
-  __tests__/modalReachability.test.js exists to prevent, in the exact selector
-  it guards. `.modal-content` here also had `overflow: hidden`, which clips
-  instead of scrolling.
-
-  IT WAS LOSING ONLY BY IMPORT ORDER. index.jsx imports `./App` before
-  `./styles.css`, so the component stylesheet injects first and the global one
-  wins on equal specificity. Swapping those two lines — a change nobody would
-  think to test — would have silently re-broken every `.modal-overlay` dialog
-  in the product, on every screen.
-
-  The width below is what `.large-modal` used to say with two `!important`s and
-  a duplicate rule. Rooted at the component, it beats the global `.modal-content`
-  on specificity alone.
-*/
-.ai-prompt-editor-modal .modal-content {
-  max-width: 1200px;
-  width: 95%;
-  min-width: 800px;
-}
-
-.ai-prompt-editor-modal .modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.ai-prompt-editor-modal .modal-header h2 {
-  margin: 0;
-  font-size: 24px;
-}
-
-.ai-prompt-editor-modal .close-button {
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  color: #666;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: background 0.2s;
-}
-
-.ai-prompt-editor-modal .close-button:hover {
-  background: #f0f0f0;
-}
-
-.ai-prompt-editor-modal .modal-body {
-  padding: 20px;
-  overflow-y: auto;
-  flex: 1;
-}
+.pgen :focus-visible { outline: 2px solid var(--pc-silent); outline-offset: 2px; border-radius: 3px; }
 
 /*
   THE CARD GRID IS GONE FROM HERE TOO. `.filters-section`, `.filter-row`,
@@ -994,100 +1177,164 @@
   selector nothing renders, which is what caught them.
 */
 
-.ai-prompt-editor-modal .form-actions {
+/* The form's footer. No longer pinned outside a scroll region, because there is
+   no scroll region — the work area scrolls, and it is the only thing that does
+   (AdminShell.css:393). Cancel and Save sit at the end of the form where the
+   page ends. */
+.pgen .form-actions {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
-  padding: 20px;
-  border-top: 1px solid #e0e0e0;
+  padding: 20px 0 0;
+  margin-top: 8px;
+  border-top: 1px solid var(--pc-rule);
 }
 
-.ai-prompt-editor-modal .form-group {
+.pgen .prompt-edit-form > h3 {
+  margin: 0 0 18px;
+  font-size: var(--pc-t-head);
+  color: var(--pc-ink);
+}
+
+.pgen .form-group {
   margin-bottom: 20px;
 }
 
-.ai-prompt-editor-modal .form-grid {
+.pgen .form-group > label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: var(--pc-t-label);
+  font-weight: 700;
+  color: var(--pc-ink);
+}
+
+.pgen .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
 
-.ai-prompt-editor-modal .form-grid .full-width {
+.pgen .form-grid .full-width {
   grid-column: 1 / -1;
 }
 
-.ai-prompt-editor-modal .tags-input {
+.pgen .tags-input {
   display: flex;
   gap: 8px;
   margin-bottom: 8px;
 }
 
-.ai-prompt-editor-modal .tags-input input {
+.pgen .tags-input input {
   flex: 1;
   padding: 8px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--pc-rule-strong);
   border-radius: 4px;
-  font-size: 14px;
+  background: var(--pc-field);
+  color: var(--pc-ink);
+  font-size: var(--pc-t-body);
 }
 
-.ai-prompt-editor-modal .tags-input button {
+.pgen .tags-input button {
   padding: 8px 16px;
-  background: #f0f0f0;
-  border: 1px solid #ddd;
+  background: transparent;
+  color: var(--pc-ink);
+  border: 1px solid var(--pc-rule-strong);
   border-radius: 4px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--pc-t-label);
 }
 
-.ai-prompt-editor-modal .loading-spinner {
+.pgen .tags-list { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+
+.pgen-loading {
   text-align: center;
-  padding: 40px;
-  color: #666;
+  padding: 60px 20px;
+  color: var(--pc-muted);
 }
 
 /* ============================================================================
-   .prompt-type-sections — the two cards on AdminPage's prompts tab.
+   .padm-choose — the two cards that ARE the prompts section until one is picked.
 
-   AdminPage.jsx renders these and AUDIT.md §6.2 item 14 removes them, along
-   with the `.admin-section` card they sit in, when the section converts to
-   dusk. Until then they are rooted at the outer card so they cannot leak; the
-   `.section-header` inside used to be a bare global two clicks from
-   `styles.css`'s own.
+   Was `.prompt-type-sections` inside `.admin-section` inside `.tab-content`:
+   three nested boxes, the outer two of them white cards on a dark work field,
+   which is the light background the owner asked about. AUDIT §6.2 item 14.
+
+   Each card is now a single BUTTON rather than a card containing a button. The
+   whole tile is the target, so there is one thing to click per library instead
+   of a heading, a paragraph, a help icon and a button that all look equally
+   interactive and only one of which is.
    ========================================================================== */
 
-.prompt-type-sections {
+.padm-choose {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  margin-bottom: 32px;
-}
-
-.prompt-type-sections .prompt-section {
-  background: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 20px;
-}
-
-.prompt-type-sections .section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.prompt-type-sections .section-header h3 {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
   margin: 0;
-  font-size: 18px;
-  color: #1a1a1a;
+  padding: 0;
+  list-style: none;
 }
 
-.prompt-type-sections .section-header-right {
+.padm-card {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 7px;
+  width: 100%;
+  height: 100%;
+  text-align: left;
+  padding: 16px 18px;
+  border: 1px solid var(--pc-rule-strong);
+  border-radius: 10px;
+  background: var(--pc-card);
+  color: var(--pc-ink);
+  font: 400 var(--pc-t-body)/1.5 var(--font-ui);
+  cursor: pointer;
+}
+.padm-card:hover { border-color: var(--pc-silent); background: var(--pc-hover); }
+.padm-card:focus-visible { outline: 2px solid var(--pc-silent); outline-offset: 2px; }
+
+.padm-card-h {
+  display: flex;
   align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--pc-t-head);
+  font-weight: 700;
+  color: var(--pc-ink);
+}
+
+.padm-card-b {
+  margin: 0;
+  font-size: var(--pc-t-label);
+  line-height: 1.55;
+  color: var(--pc-muted);
+}
+
+/* THE TILE'S LAST LINE, AND IT IS NOT A COUNT.
+
+   A count belongs here — it is the reason to look in one library rather than
+   the other, and RATIONALE §4 allows each tile one number. But the console has
+   never fetched either library before you open it, and a number it cannot know
+   is worse than no number: "0 prompts" over a library holding eleven is the
+   empty state that lies, one screen early. So the line says what the tile does
+   instead, and the count arrives with the table. */
+.padm-card-n {
+  margin-top: auto;
+  padding-top: 8px;
+  font-size: var(--pc-t-floor);
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--pc-silent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The help affordance stays a sibling of the tile, not a child of it: a button
+   inside a button is invalid HTML and the inner one is what gets clicked. */
+.padm-card-aside {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 /* ============================================================================
@@ -1116,35 +1363,35 @@
   background: var(--pc-paper);
   padding: 16px;
   border-right: 0;
-  border-left: 1px solid #e0e0e0;
+  border-left: 1px solid var(--pc-rule);
   overflow-y: auto;
   max-height: 520px;
 }
 
-.pvi-head h4 { margin: 0 0 4px; font-size: 16px; color: var(--pc-ink); }
+.pvi-head h4 { margin: 0 0 4px; font-size: var(--pc-t-head); color: var(--pc-ink); }
 .pvi-sub { margin: 0 0 14px; font-size: 12px; line-height: 1.5; color: var(--pc-muted); }
 .pvi-unsafe-count { color: var(--pc-silent); }
 
 .pvi .variable-category {
   margin-bottom: 20px;
   padding: 12px;
-  background: white;
-  border: 1px solid #e0e0e0;
+  background: var(--pc-card);
+  border: 1px solid var(--pc-rule);
   border-radius: 6px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .pvi .variable-category .category-header {
   margin: 0 0 12px 0;
-  color: #333;
-  font-size: 14px;
+  color: var(--pc-ink);
+  font-size: var(--pc-t-label);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   padding: 8px 12px;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  background: var(--pc-paper);
   border-radius: 4px;
-  border-left: 4px solid #0066cc;
+  border-left: 4px solid var(--pc-link);
   text-align: center;
 }
 
@@ -1153,21 +1400,21 @@
   width: 100%;
   margin-bottom: 4px;
   padding: 6px 8px;
-  background: white;
-  border: 1px solid #ddd;
+  background: var(--pc-card);
+  border: 1px solid var(--pc-rule-strong);
   border-radius: 4px;
   font-size: 12px;
   font-family: 'Courier New', monospace;
-  color: #0066cc;
+  color: var(--pc-link);
   cursor: pointer;
   text-align: left;
   transition: all 0.2s ease;
 }
 
 .pvi .variable-btn:hover:not(:disabled) {
-  background: #0066cc;
-  color: white;
-  border-color: #0066cc;
+  background: var(--pc-link);
+  color: var(--bg);
+  border-color: var(--pc-link);
 }
 
 .pvi .variable-btn:active:not(:disabled) {
@@ -1184,8 +1431,9 @@
   top: 0;
   margin-left: 10px;
   padding: 8px 12px;
-  background: #333;
-  color: white;
+  background: var(--pc-card);
+  color: var(--pc-ink);
+  border: 1px solid var(--pc-rule-strong);
   border-radius: 6px;
   font-size: 12px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -1212,7 +1460,7 @@
   border-left-width: 3px;
   border-radius: 5px;
   padding: 5px 7px;
-  background: #fff;
+  background: var(--pc-card);
 }
 .pvi-row--silent { border-left-color: var(--pc-silent); background: var(--pc-tint-silent); }
 .pvi-row--advisory { border-left-color: var(--pc-muted); }
@@ -1287,7 +1535,7 @@
   border-left-width: 4px;
   border-radius: 6px;
   padding: 11px 13px;
-  background: #fff;
+  background: var(--pc-card);
 }
 .ppf-tier h5 {
   margin: 0 0 4px;
@@ -1317,20 +1565,22 @@
   border-left-width: 6px;
   border-left-color: var(--pc-silent);
   background: var(--pc-tint-silent);
-  box-shadow: inset 0 0 0 1px rgba(122, 61, 0, .18);
+  box-shadow: inset 0 0 0 1px rgba(246, 169, 76, .24);
 }
-.ppf-tier--silent h5 { color: var(--pc-silent); font-size: 17px; }
+/* The loud tier is the ONE step above head on this surface, because a silent
+   finding is read aloud to a room wrong and announces nothing itself. */
+.ppf-tier--silent h5 { color: var(--pc-silent); font-size: var(--pc-t-title); }
 .ppf-tier--silent .ppf-lede { color: var(--pc-ink); font-weight: 600; }
 
 .ppf-tier--advisory { border-left-color: var(--pc-muted); }
-.ppf-tier--clean { border-left-color: #2e7d32; }
+.ppf-tier--clean { border-left-color: var(--pc-go); }
 .ppf-tier--absent { border-left-color: var(--pc-silent); background: var(--pc-tint-silent); }
 .ppf-tier--absent h5 { color: var(--pc-silent); }
 
 .ppf-findings { list-style: none; margin: 9px 0 0; padding: 0; display: grid; gap: 9px; }
 .ppf-finding { border-top: 1px solid var(--pc-rule); padding-top: 8px; }
 .ppf-finding:first-child { border-top: 0; padding-top: 0; }
-.ppf-finding-title { margin: 0; font-size: 14px; color: var(--pc-ink); }
+.ppf-finding-title { margin: 0; font-size: var(--pc-t-body); color: var(--pc-ink); }
 .ppf-finding-title strong { color: var(--pc-ink); }
 .ppf-code {
   margin-left: 7px;
@@ -1342,7 +1592,7 @@
 .ppf-evidence {
   margin: 6px 0 0;
   padding: 7px 9px;
-  background: #fff;
+  background: var(--pc-card);
   border: 1px solid var(--pc-rule);
   border-radius: 4px;
   font-family: var(--pc-mono);
@@ -1368,7 +1618,7 @@
 
 .pap { margin-top: 14px; }
 .pap-head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
-.pap-head h4 { margin: 0 0 2px; font-size: 16px; color: var(--pc-ink); }
+.pap-head h4 { margin: 0 0 2px; font-size: var(--pc-t-head); color: var(--pc-ink); }
 .pap-sub { margin: 0; font-size: 13px; color: var(--pc-muted); line-height: 1.5; }
 .pap-sub code { font-family: var(--pc-mono); font-size: 12px; }
 
@@ -1378,7 +1628,7 @@
   padding: 4px 9px;
   border: 1px solid var(--pc-rule);
   border-radius: 999px;
-  background: #fff;
+  background: var(--pc-card);
   color: var(--pc-muted);
   cursor: pointer;
 }
@@ -1395,12 +1645,12 @@
   border: 1px solid var(--pc-rule);
   border-radius: 6px;
   padding: 9px 11px;
-  background: #fff;
+  background: var(--pc-card);
 }
 .pap-stat--bad { border-color: var(--pc-silent); background: var(--pc-tint-silent); }
 .pap-stat-n {
   display: block;
-  font-size: 24px;
+  font-size: var(--pc-t-title);
   font-weight: 700;
   color: var(--pc-ink);
   font-variant-numeric: tabular-nums;
@@ -1440,7 +1690,7 @@
   border: 1px solid var(--pc-rule);
   border-radius: 6px;
   overflow: hidden;
-  background: #fff;
+  background: var(--pc-card);
 }
 .pap-block > header {
   display: flex;
@@ -1556,7 +1806,7 @@
   border-radius: 4px;
   justify-self: start;
 }
-.pmgr .prompt-convention .pc-brace { color: var(--pc-link); background: rgba(11, 95, 176, .09); }
+.pmgr .prompt-convention .pc-brace { color: var(--pc-link); background: var(--pc-tint-link); }
 .pmgr .prompt-convention .pc-bracket { color: var(--pc-silent); background: var(--pc-tint-silent); }
 .pmgr .prompt-convention strong { color: var(--pc-ink); }
 
@@ -1596,7 +1846,7 @@
 .pmgr .prompt-half--given textarea:focus {
   outline: none;
   border-color: var(--pc-link);
-  box-shadow: 0 0 0 2px rgba(11, 95, 176, .18);
+  box-shadow: 0 0 0 2px rgba(124, 167, 230, .28);
 }
 
 /* -------------------------------------------- what each half is carrying --- */
@@ -1623,7 +1873,7 @@
   padding: 1px 5px;
   border-radius: 4px;
   color: var(--pc-link);
-  background: rgba(11, 95, 176, .08);
+  background: var(--pc-tint-link);
 }
 .pmgr .prompt-readout-v em { font-style: normal; }
 
@@ -1684,26 +1934,53 @@
 
 /* ------------------------------------------------------------ the library -- */
 
-.plib { color: var(--pc-ink); font-size: 15px; }
+.plib { color: var(--pc-ink); font: 400 var(--pc-t-body)/1.45 var(--font-ui); font-variant-numeric: tabular-nums; }
 .plib *, .plib *::before, .plib *::after { box-sizing: border-box; }
-.plib :focus-visible { outline: 2px solid var(--pc-link); outline-offset: 2px; border-radius: 3px; }
+/* Amber, not link-blue: the focus ring is the same on every dusk surface in the
+   console, and `.qsets :focus-visible` is `var(--primary)`. */
+.plib :focus-visible { outline: 2px solid var(--pc-silent); outline-offset: 2px; border-radius: 3px; }
 
-.plib-count { font-size: 13px; color: var(--pc-muted); white-space: nowrap; }
+.plib-count { font-size: var(--pc-t-label); color: var(--pc-muted); white-space: nowrap; }
 
+/*
+  `table-layout: fixed` PLUS DECLARED WIDTHS, WHICH ONLY WORK TOGETHER.
+
+  Hard rule 11. Under `auto` layout a declared width is a hint, and the chips in
+  the State column are `white-space: nowrap`, so their min-content width grows
+  the whole table until the Prompt column has nothing left and the row actions
+  wrap. The widths are the `.qsets-col-*` split (QuestionSetsPanel.css:257-262)
+  re-cut for this table's five columns: the name column is the one that
+  ellipsizes gracefully, so it donates the space every other column needs.
+*/
 .plib-tbl {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
-  font-size: 15px;
+  font-size: var(--pc-t-body);
 }
+.plib-col-name  { width: 34%; }
+.plib-col-type  { width: 12%; }
+.plib-col-cat   { width: 14%; }
+.plib-col-state { width: 20%; }
+.plib-col-acts  { width: 20%; }
+
 .plib-tbl th {
+  /* Sticky, like `.qsets-tbl th`: the work body is the one scrolling region, so
+     a long library scrolls its own header off screen without this. The
+     background must be opaque or the rows show through it. */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
   padding: 0 10px 7px;
   text-align: left;
-  font-size: 12px;
+  font-size: var(--pc-t-floor);
   font-weight: 700;
   letter-spacing: .08em;
   text-transform: uppercase;
   color: var(--pc-muted);
-  border-bottom: 1px solid var(--pc-rule);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--pc-rule-strong);
 }
 .plib-tbl td {
   padding: 7px 10px;
@@ -1711,13 +1988,27 @@
   border-bottom: 1px solid var(--pc-rule);
   height: var(--pc-row-h);
 }
-.plib-tbl tbody tr:hover { background: var(--pc-paper); }
+/* On the CELLS, not the row: a `tr` background is painted under the `td`
+   backgrounds in some engines and the hover then does not show at all. */
+.plib-tbl tbody tr:hover td { background: var(--pc-hover); }
 
-.plib-nm { display: block; font-weight: 600; color: var(--pc-ink); }
-.plib-sub {
+/* A SINGLE TEXT NODE with min-width:0 — `text-overflow` is inert on a flex
+   container, so a name that "truncates" there is silently cut instead (hard
+   rule 8, `.qsets-nm`). The JSX carries `title=` so the full string is still
+   recoverable: a reduction with no recovery is a deletion. */
+.plib-nm {
   display: block;
+  font-weight: 600;
+  color: var(--pc-ink);
+  max-width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plib-sub {
   margin-top: 2px;
-  font-size: 13px;
+  font-size: var(--pc-t-label);
   line-height: 1.45;
   color: var(--pc-muted);
   /* Two lines, then stop. A description is a hint in an index, not the record. */
@@ -1728,13 +2019,13 @@
 }
 .plib-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .plib-tag {
-  font-size: 12px;
+  font-size: var(--pc-t-floor);
   padding: 1px 6px;
   border: 1px solid var(--pc-rule);
   border-radius: 10px;
   color: var(--pc-muted);
 }
-.plib-cat { font-size: 13px; color: var(--pc-muted); }
+.plib-cat { font-size: var(--pc-t-label); color: var(--pc-muted); }
 
 .plib-states { display: flex; flex-wrap: wrap; gap: 5px; }
 .plib-chip {
@@ -1743,18 +2034,26 @@
   gap: 4px;
   padding: 2px 8px;
   border: 1px solid var(--pc-rule);
-  border-radius: 11px;
-  font-size: 12px;
+  border-radius: 999px;
+  font-size: var(--pc-t-floor);
   font-weight: 600;
   white-space: nowrap;
   color: var(--pc-muted);
   background: transparent;
 }
-.plib-chip--type { color: var(--pc-link); border-color: rgba(11, 95, 176, .35); }
-.plib-chip--on { color: var(--pc-link); border-color: rgba(11, 95, 176, .35); background: rgba(11, 95, 176, .07); }
-.plib-chip--off { color: var(--pc-muted); }
-.plib-chip--warn { color: var(--pc-silent); border-color: var(--pc-silent); background: var(--pc-tint-silent); }
-.plib-chip--bad { color: var(--pc-stop); border-color: var(--pc-stop); background: var(--pc-tint-stop); }
+/* THE FOUR CHIP STATES ARE THE `.qsets-chip` FOUR, AND ACTIVE IS GREEN NOW.
+
+   It was link-blue, which is the same colour this sheet uses for the TYPE chip
+   sitting two cells to its left — so "Active" and "Call & Answer" read as the
+   same kind of fact. On the sets screen Active is `--qsets-success-text` and
+   nothing else is; matching that is the whole point of the exercise. Archived
+   keeps the dashed border `.qsets-chip--off` uses, because muted-on-muted needs
+   a second signal. */
+.plib-chip--type { color: var(--pc-ink); }
+.plib-chip--on { color: var(--pc-go); border-color: rgba(79, 178, 134, .5); background: var(--pc-tint-go); }
+.plib-chip--off { color: var(--pc-muted); border-style: dashed; }
+.plib-chip--warn { color: var(--pc-silent); border-color: rgba(246, 169, 76, .5); background: var(--pc-tint-silent); }
+.plib-chip--bad { color: var(--pc-stop); border-color: rgba(229, 100, 94, .55); background: var(--pc-tint-stop); }
 /* Chips that are toggles, not labels: the status chip flips Active ⇄ Draft.
    `button.qsets-chip` (QuestionSetsPanel.css:329-331) is the same rule for the
    same reason — 24px is the tap-target floor audit A5 holds a clickable chip
@@ -1762,27 +2061,38 @@
    is measured against `--pc-paper` at full strength in the palette test, and a
    translucent chip is a contrast claim nothing checks. The cursor says it. */
 button.plib-chip { cursor: pointer; min-height: 24px; }
-button.plib-chip:hover:not(:disabled) { background: var(--pc-paper); }
+button.plib-chip:hover:not(:disabled) { background: var(--pc-hover); }
 button.plib-chip:disabled { cursor: progress; }
 
-.plib-rowact { display: flex; gap: 6px; justify-content: flex-end; }
+/* NEVER `justify-content: flex-end` HERE — hard rule 9, and the sets screen
+   shipped the bug before this file copied its shape. A flex-end group that
+   outgrows its cell overflows towards the START of the row, where a hidden
+   overflow cannot be reached by any gesture; the leftmost button (Edit) is the
+   one that disappears. `margin-left: auto` on the first child right-aligns
+   identically while it fits and collapses to zero when it does not, so any
+   overflow lands on the trailing edge. `flex-wrap` then puts a fourth action on
+   a second line instead of losing it — and this row has four now (Edit,
+   Advisor, Copy to archive, Retire). */
+.plib-rowact { display: flex; gap: 5px; flex-wrap: wrap; }
+.plib-rowact > :first-child { margin-left: auto; }
 .plib-btn {
   padding: 4px 10px;
   border: 1px solid var(--pc-rule);
   border-radius: 5px;
   background: transparent;
-  font-size: 13px;
+  font-size: var(--pc-t-label);
   color: var(--pc-ink);
   cursor: pointer;
 }
-.plib-btn:hover { border-color: var(--pc-link); color: var(--pc-link); }
+.plib-btn:hover:not(:disabled) { border-color: var(--pc-silent); background: var(--pc-hover); }
+.plib-btn:disabled { color: var(--pc-muted); cursor: progress; }
 .plib-btn--ghostdanger { color: var(--pc-stop); }
 .plib-btn--ghostdanger:hover { border-color: var(--pc-stop); color: var(--pc-stop); background: var(--pc-tint-stop); }
 .plib-btn-link {
   border: 0;
   background: none;
   padding: 0;
-  font-size: 13px;
+  font-size: var(--pc-t-label);
   color: var(--pc-link);
   text-decoration: underline;
   cursor: pointer;
@@ -1791,16 +2101,21 @@ button.plib-chip:disabled { cursor: progress; }
 /* The two empty states, which are two states. */
 .plib-empty, .plib-nomatch {
   padding: 34px 22px;
-  border: 1px dashed var(--pc-rule);
+  border: 1px dashed var(--pc-rule-strong);
   border-radius: 8px;
   text-align: center;
   background: var(--pc-paper);
 }
-.plib-empty h3, .plib-nomatch h3 { margin: 10px 0 6px; font-size: 19px; color: var(--pc-ink); }
+.plib-empty h3, .plib-nomatch h3 {
+  margin: 10px 0 6px;
+  font-family: var(--font-display);
+  font-size: var(--pc-t-head);
+  color: var(--pc-ink);
+}
 .plib-empty p, .plib-nomatch p {
   margin: 0 auto 14px;
   max-width: 52ch;
-  font-size: 13px;
+  font-size: var(--pc-t-label);
   line-height: 1.6;
   color: var(--pc-muted);
 }
@@ -1812,13 +2127,13 @@ button.plib-chip:disabled { cursor: progress; }
   gap: 5px;
   padding: 4px 10px;
   border: 1px solid var(--pc-rule);
-  border-radius: 13px;
+  border-radius: 999px;
   background: transparent;
-  font-size: 13px;
+  font-size: var(--pc-t-label);
   color: var(--pc-ink);
   cursor: pointer;
 }
-.plib-drop:hover { border-color: var(--pc-link); color: var(--pc-link); }
+.plib-drop:hover { border-color: var(--pc-silent); background: var(--pc-hover); }
 .plib-drop em { font-style: normal; color: var(--pc-muted); }
 
 /* ============================================================================
@@ -1832,14 +2147,14 @@ button.plib-chip:disabled { cursor: progress; }
   .pmgr .prompt-build-rail { position: static; }
 }
 
-@media (max-width: 1024px) {
-  .prompt-type-sections {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-}
+/* `.padm-choose` needs no breakpoint of its own: `auto-fit` with a 320px
+   minimum already collapses to one column when two will not fit. */
 
 @media (max-width: 768px) {
+  .pgen .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .plib .prompt-controls {
     flex-direction: column;
     align-items: stretch;

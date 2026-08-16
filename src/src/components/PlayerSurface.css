@@ -1068,6 +1068,129 @@
   border-radius: 14px;
 }
 
+/* ==========================================================================
+   10. THE SPOTLIGHT — the host's read-one-response dialog, re-tinted
+   ==========================================================================
+   `Show all ↓` on a ballot row, and a tap on the row's text, open
+   `components/AnswerSpotlight.jsx`. That component belongs to the HOST results
+   wall, is shared with `PastRound`, and is painted from the `styles.css`
+   monolith. Mounted as a SIBLING of this shell it rendered under the paper
+   theme `public/index.html` puts on <html>: a white card with `.btn-secondary`
+   Previous/Next buttons — #F6A94C on #FFFFFF, 1.96:1 — opening over a dusk
+   ballot. That is the last paper island on the participant's device.
+
+   IT IS MOUNTED INSIDE `.plr` NOW, through `PlayerShell`'s `after` slot, and
+   that placement is what the whole block below depends on. `--plr-rule`,
+   `--plr-muted` and the ladder are declared on `.plr`; an undefined custom
+   property invalidates the WHOLE declaration rather than falling back, so a
+   `.plr-spot` rule hanging outside the scope would have dropped every line
+   here on the floor, silently, in the bundle only. Being inside `.plr` is also
+   what re-points `var(--surface)` and `var(--text)` to dusk on their own —
+   that is exactly what `styles.css`'s `[data-theme="dark"]` block exists for
+   (SKILL §1, "so a container can re-enter dusk under a paper ancestor").
+
+   IT STILL COVERS THE VIEWPORT. `.modal-overlay` is `position: fixed`, and a
+   fixed element is clipped by an ancestor's `overflow: hidden` only when that
+   ancestor is its containing block — which needs `transform`, `filter`,
+   `perspective`, `contain` or `will-change`. `.plr` has none of those and must
+   not gain one. `__tests__/playerSurfacePalette.test.js` asserts their absence,
+   because jsdom computes no layout: the day one arrives the dialog vanishes on
+   a device and every test still passes.
+
+   ONLY WHAT styles.css HARDCODES IS RESTATED — the two black rules, the two
+   bare opacities and the paper buttons. Everything it expresses as a token
+   already resolves correctly. The one thing deliberately NOT restated is
+   `.btn-secondary`'s `transition: all .3s ease`: overriding it would mean the
+   token `transition:` appearing in this file, and the no-motion assertion at
+   the foot of this sheet is worth more than a hover ramp on two nav buttons. */
+
+.plr-spot.answer-spotlight {
+  /* Every other raised thing on this surface — `.plr-card`, `.plr-resp`,
+     `.plr-opt` — is a --surface fill inside a 1px rule. Without one, a dusk
+     card on a dusk scrim has no edge at all. */
+  border: 1px solid var(--plr-rule-strong);
+}
+
+/* A BARE `opacity` IS A COLOUR NOBODY CAN MEASURE. Both of these were tuned
+   against white; on --surface they composite to something no token table
+   shows, which is the failure mode SKILL §4 names ("a tint is invisible in a
+   token table"). Restated as --plr-muted, which the palette test measures. */
+.plr-spot .answer-spotlight__count {
+  font-size: var(--plr-t-meta);
+  color: var(--plr-muted);
+  opacity: 1;
+}
+
+.plr-spot .answer-spotlight__tally small {
+  color: var(--plr-muted);
+  opacity: 1;
+}
+
+/* The response, at the same rung as the ballot row it was opened from
+   (`.plr-rtxt`), so expanding it changes the length and not the voice. The
+   shipped `clamp(1.15rem, 2.4vw, 1.75rem)` is a fourth ladder, viewport-keyed,
+   and RATIONALE §3.3 is explicit that this surface has three literal ones. */
+.plr-spot .answer-spotlight__text {
+  font-size: var(--plr-t-secondary);
+}
+
+.plr-spot .answer-spotlight__who {
+  font-size: var(--plr-t-body);
+}
+
+/* `rgba(0, 0, 0, .1)` and `rgba(0, 0, 0, .07)` are invisible on #1B2942 — a
+   rule that separates nothing and a hover state that reports nothing. */
+.plr-spot .answer-spotlight__meta {
+  border-top: 1px solid var(--plr-rule);
+}
+
+.plr-spot .answer-spotlight__close:hover {
+  background: var(--plr-rule);
+}
+
+/* PREVIOUS AND NEXT. `styles.css:154-164` gives `.btn-secondary`
+   `background: white; color: var(--primary)` and a hover of white on
+   `--primary` — 1.96:1 both ways, the one pairing SKILL §1 says outright
+   cannot carry text. It also declares no disabled state at all, so the
+   Previous on the first response looked identical to a live one. Restated as
+   the ghost treatment `.plr-btn--ghost` already uses in the dock, so stepping
+   through responses reads as the same product as the button that submitted the
+   answer. */
+.plr-spot .answer-spotlight__nav .btn-secondary {
+  min-height: var(--plr-tap);
+  padding: 12px 18px;
+  border: 1px solid var(--plr-rule-strong);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--plr-t-meta);
+  font-weight: 700;
+}
+
+.plr-spot .answer-spotlight__nav .btn-secondary:hover {
+  background: var(--plr-rule);
+  color: var(--text);
+}
+
+/* A dead end says so. At the first and last response these are the only two
+   controls besides the X, and an enabled-looking Previous that does nothing is
+   how somebody concludes the dialog is broken. */
+.plr-spot .answer-spotlight__nav .btn-secondary[disabled] {
+  color: var(--plr-muted);
+  cursor: default;
+}
+
+.plr-spot .answer-spotlight__nav .btn-secondary[disabled]:hover {
+  background: transparent;
+}
+
+.plr-spot .answer-spotlight__close:focus-visible,
+.plr-spot .answer-spotlight__nav .btn-secondary:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
 /* NO MOTION ANYWHERE ON THIS SURFACE (§9.11), AND THAT IS WHY THIS FILE ENDS
    HERE. The screen it replaced animated a pulsing dot that meant "wait" —
    motion in the peripheral vision of forty people who are supposed to be

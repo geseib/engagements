@@ -3,12 +3,13 @@ import { QRCodeSVG } from 'qrcode.react';
 import Icon from '../Icon';
 import {
   setupPanelTabs, categoryRows, questionsRemaining,
-  browserRow, filterBrowserRows, rosterRows,
+  browserRow, filterBrowserRows, rosterRows, departedRows,
 } from '../../config/setupPanel';
 import {
   anonymityApplies, anonymityActive, waitingNamesCaution,
 } from '../../config/anonymity';
 import { roundSubtitle, hasSummary } from '../../config/sessionHistory';
+import HelpButton from '../HelpButton';
 
 /**
  * Everything the host needs and the room does not, behind one dock button.
@@ -67,6 +68,17 @@ export default function SessionSetupPanel({
   gameState = '',
   playersWhoAnswered = [],
   playersWhoVoted = [],
+  /* WHO LEFT, kept out of `players` by get-players.js so that every count the
+     host page derives from `players.length` is automatically a count of the
+     room rather than a count of the session's history. Passed separately
+     because the Players tab is the only place a removal can be undone. */
+  removedPlayers = [],
+  /* Both host-gated (template-clean.yaml). Defaulted to no-ops so the panel
+     stays presentational and mountable without the page — every other action
+     on it is wired the same way. */
+  onRemovePlayer = () => {},
+  onRestorePlayer = () => {},
+  onGrantHandover = () => {},
 
   // Questions — categories
   categories = [],
@@ -194,6 +206,7 @@ export default function SessionSetupPanel({
   };
 
   const roster = rosterRows({ players, gameState, playersWhoAnswered, playersWhoVoted });
+  const departed = departedRows(removedPlayers);
 
   const catRows = useMemo(
     () => categoryRows({ categories, categoryCounts, categoryBitmasks, activeCategoryIds }),
@@ -345,6 +358,93 @@ export default function SessionSetupPanel({
                             color={player.done ? 'var(--success)' : 'var(--muted)'}
                           />
                         )}
+                        {/* THE HOST'S TWO DECISIONS ABOUT THIS PERSON.
+                            `margin-left: auto` on the group, never
+                            `justify-content: flex-end` — hard rule 9: flex-end
+                            inside a clipped cell overflows towards the START,
+                            where a hidden overflow is unreachable. */}
+                        <span className="setup-roster__acts">
+                          {/* THE STATE IS PRINTED, NOT COLOURED. This panel is
+                              read on a projector that has lifted the black
+                              point and by hosts who cannot rely on hue, so
+                              "asking" and "unlocked" are words. */}
+                          {player.handoverRequested && !player.handoverOpen && (
+                            <span className="setup-roster__flag" data-testid="handover-flag">
+                              asking to take this name
+                            </span>
+                          )}
+                          {player.handoverOpen && (
+                            <span className="setup-roster__flag" data-testid="handover-flag">
+                              unlocked for one handover
+                            </span>
+                          )}
+                          {/* One button whose MEANING changes with the ask,
+                              not two buttons one of which is usually inert.
+                              Bound when somebody asked (only they can spend
+                              it); open when the host is acting on something
+                              said out loud, which is the commoner case in a
+                              real room. */}
+                          <button
+                            type="button"
+                            className="setup-roster__act"
+                            onClick={() => onGrantHandover(player.name, player.handoverRequested)}
+                            title={player.handoverRequested
+                              ? `Let the person who asked take over "${player.name}" — once`
+                              : `Unlock "${player.name}" so one other device can take it — once`}
+                          >
+                            {player.handoverRequested ? 'Let them take it' : 'Unlock name'}
+                          </button>
+                          <button
+                            type="button"
+                            className="setup-roster__act"
+                            onClick={() => onRemovePlayer(player.name)}
+                            title={`Take "${player.name}" out of the live counts. Their answers and points stay in the report.`}
+                          >
+                            Remove
+                          </button>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {/* WHO LEFT. A separate list, below the room, because these
+                  people are not in the counts and must not read as though they
+                  are — and on screen at all, because this is the only place a
+                  removal can be undone.
+
+                  Their points are printed for the same reason: a row showing
+                  "0 pts" would say removal wipes a score, which is precisely
+                  what the design promises it does not do (create-report.js
+                  still counts them). */}
+              {departed.length > 0 && (
+                <>
+                  <h3 className="setup-h setup-h--after" data-testid="departed-heading">
+                    {`${departed.length} removed from the room`}
+                  </h3>
+                  <p className="setup-note">
+                    Out of the live counts. Their answers, votes and points stay in the session report.
+                  </p>
+                  <ul className="setup-roster">
+                    {departed.map((player) => (
+                      <li
+                        key={player.name}
+                        className="setup-roster__row setup-roster__row--gone"
+                        data-testid="departed-row"
+                      >
+                        <span className="setup-roster__name" data-testid="departed-name">{player.name}</span>
+                        <span className="setup-roster__score">{`${player.score} pts`}</span>
+                        <span className="setup-roster__acts">
+                          <button
+                            type="button"
+                            className="setup-roster__act"
+                            onClick={() => onRestorePlayer(player.name)}
+                            title={`Put "${player.name}" back into the live counts`}
+                          >
+                            Bring back
+                          </button>
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -546,6 +646,27 @@ export default function SessionSetupPanel({
               aria-labelledby="setup-tab-history"
             >
               {/*
+                THE SESSION REPORT, AT THE TOP OF THE ROUNDS IT REPORTS ON.
+
+                The owner: *"i would like to [move] the report button to the
+                rounds page, at the top. as it fits well with that section."*
+
+                It used to sit under "Display" in the Settings tab, between the
+                display-profile select and the join links — filed with the
+                plumbing, three items away from the only list on this screen it
+                describes. The report IS the rounds, read end to end, so it
+                belongs above them.
+
+                ABOVE THE LIST RATHER THAN BESIDE THE TAB, because the list is
+                what it summarises and a host scanning rounds is exactly the
+                host who wants the whole thing. It stays a single row so it
+                cannot be mistaken for one of the rounds beneath it.
+              */}
+              <div className="setup-row setup-history__actions">
+                <button type="button" onClick={onViewReports}>Session report</button>
+              </div>
+
+              {/*
                 THE ROUNDS PLAYED SO FAR. The list is one half of what the owner
                 asked for; the arrows inside <PastRound> are the other.
 
@@ -671,9 +792,9 @@ export default function SessionSetupPanel({
                   ))}
                 </select>
               </label>
-              <div className="setup-row">
-                <button type="button" onClick={onViewReports}>Session report</button>
-              </div>
+              {/* "Session report" moved to the top of the Rounds tab, above the
+                  list it summarises. It was filed here with the display profile
+                  and the join links — plumbing — which is not what it is. */}
 
               <h3 className="setup-h">Players join at</h3>
               <p className="setup-url">{playUrl}</p>
@@ -710,6 +831,21 @@ export default function SessionSetupPanel({
               <h3 className="setup-h">Session</h3>
               <div className="setup-row">
                 <button type="button" onClick={onShowHowToPlay}>Show how this works on the stage →</button>
+                {/*
+                  THE HOST'S WAY INTO THE HOST GUIDES, which they did not have.
+
+                  `onShowHowToPlay` beside it is a different thing and both are
+                  wanted: that one puts an explanation ON THE STAGE, for the
+                  room to read, and is a presentation aid. This opens the
+                  documentation on the host's own screen — the five host guides
+                  plus everything else — and the room never sees it.
+
+                  Aimed at the `host` role rather than a single guide, because a
+                  host reaching for help mid-session could want any of running
+                  the room, managing players, or reporting, and the role index
+                  is one tap from all three.
+                */}
+                <HelpButton section="host" variant="text" size="small" tooltip="Host guides" />
                 <button type="button" onClick={onSwitchGame}>Switch game</button>
                 {/*
                   ADMIN OPENS IN A NEW TAB, AND THAT IS THE WHOLE POINT.

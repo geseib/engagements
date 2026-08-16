@@ -29,6 +29,15 @@ const QS_CSS = fs.readFileSync(
   path.join(__dirname, '..', 'components', 'QuestionSetsPanel.css'),
   'utf8',
 );
+/* The prompt library copied this screen's shape when it converted to dusk
+   (AUDIT §6.2 item 13) — table, chips, two empty states, a row action group —
+   and copying a shape is exactly when a fixed bug comes back. Its row carries
+   FOUR actions (Edit, Advisor, Copy to archive, Retire) where the sets row
+   carries two, so it has more to lose off the leading edge, not less. */
+const PLIB_CSS = fs.readFileSync(
+  path.join(__dirname, '..', 'components', 'AIPromptManager.css'),
+  'utf8',
+);
 
 /** A rule's declaration block, read out of the stylesheet by exact selector. */
 function block(css, selector) {
@@ -83,5 +92,64 @@ describe('row action buttons stay reachable', () => {
       '.qsets-col-state', '.qsets-col-when', '.qsets-col-acts'].reduce((a, s) => a + pct(s), 0);
     expect(total).toBe(100);
     expect(block(QS_CSS, '.qsets-nm')).toMatch(/text-overflow:\s*ellipsis/);
+  });
+});
+
+describe('the prompt library inherited the fix, not just the shape', () => {
+  const pctP = (selector) => {
+    const width = block(PLIB_CSS, selector).match(/width:\s*([\d.]+)%/);
+    if (!width) throw new Error(`No percentage width on "${selector}"`);
+    return parseFloat(width[1]);
+  };
+
+  // rejects: `.plib-rowact { justify-content: flex-end }`, which is what this
+  //          rule actually said until the dusk conversion — copied from the
+  //          sets screen BEFORE the sets screen was fixed.
+  test('the action row does not align in a way that clips its leading edge', () => {
+    expect(block(PLIB_CSS, '.plib-rowact'))
+      .not.toMatch(/justify-content:\s*(flex-end|end|center|right)/);
+  });
+
+  test('the controls still sit to the right while they fit', () => {
+    expect(PLIB_CSS).toMatch(/\.plib-rowact\s*>\s*:first-child\s*\{[^}]*margin-left:\s*auto/);
+  });
+
+  test('the controls wrap rather than overflow', () => {
+    expect(block(PLIB_CSS, '.plib-rowact')).toMatch(/flex-wrap:\s*wrap/);
+  });
+
+  /*
+    HARD RULE 11, AND IT IS ONLY HALF A RULE ON ITS OWN.
+
+    Under `table-layout: auto` a declared width is a HINT. The State column's
+    chips are `white-space: nowrap`, so their min-content width wins and grows
+    the table until the actions column is narrower than the four buttons in it
+    — which is the alignment fault above, arrived at from the other direction.
+    Fixed layout plus declared widths is one contract, so both halves are here.
+  */
+  test('the table is fixed-layout, so its declared widths are widths', () => {
+    expect(block(PLIB_CSS, '.plib-tbl')).toMatch(/table-layout:\s*fixed/);
+  });
+
+  test('every column is declared, and they add to 100', () => {
+    const cols = ['.plib-col-name', '.plib-col-type', '.plib-col-cat',
+      '.plib-col-state', '.plib-col-acts'];
+    expect(cols.reduce((a, s) => a + pctP(s), 0)).toBe(100);
+    // The four-button actions column needs more than the sets screen's two did.
+    expect(pctP('.plib-col-acts')).toBeGreaterThanOrEqual(pct('.qsets-col-acts'));
+  });
+
+  test('the width comes out of the column that degrades gracefully', () => {
+    // rejects: fixed layout landing without the truncation that makes it
+    //          survivable. A fixed column with no ellipsis clips mid-glyph.
+    expect(block(PLIB_CSS, '.plib-nm')).toMatch(/text-overflow:\s*ellipsis/);
+    expect(block(PLIB_CSS, '.plib-nm')).toMatch(/min-width:\s*0/);
+  });
+
+  test('and the truncated name is still recoverable', () => {
+    // rejects: a reduction with no recovery, which is a deletion (hard rule 7).
+    const jsx = fs.readFileSync(
+      path.join(__dirname, '..', 'components', 'PromptLibraryPanel.jsx'), 'utf8');
+    expect(jsx).toMatch(/className="plib-nm"\s+title=\{prompt\.name\}/);
   });
 });

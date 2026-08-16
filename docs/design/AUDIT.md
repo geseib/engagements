@@ -123,13 +123,18 @@ the list; new surfaces will not add themselves.
 |---|---|---|---|---|---|---|---|---|---|
 | Root door `/` | `components/RootPage.{jsx,css}` | ok `.entry-` | part¹ | ok | ok | ok | — | ok² | ok `rootPage.test.jsx` |
 | Sign in / register / verify / pending | `auth/*.jsx`, `auth/auth.css` | part³ | part | ok `AuthChrome.jsx:115` | ok | ok | — | part | part `authSurfaces.test.jsx` |
-| Join name collision | `components/JoinNameCollision.{jsx,css}` | ok `.join-` | ok | inherited | ok | — | — | n/a | ok `joinNameCollision.test.jsx` |
+
+*(Join name collision has moved to **Player**: it renders inside `PlayerPage`'s shell and
+is scoped, themed and tested with it. It was listed here as `ok .join-` / theme
+"inherited" / contrast `n/a` — all three were wrong, and citation 28 says how.)*
 
 ### Player
 
 | Surface | Files | A | B | C | D | E | F | G | H |
 |---|---|---|---|---|---|---|---|---|---|
-| Player session (join → lobby → ask → vote → results → end) | `PlayerPage.jsx` + `styles.css:2195+` | FAIL⁴ | FAIL⁴ | FAIL⁵ | FAIL⁶ | FAIL⁷ | FAIL⁷ | FAIL | FAIL — no CSS contract test |
+| Player session (join → lobby → ask → vote → results → end) | `PlayerPage.jsx`, `components/PlayerSurface.css` | ok `.plr` | ok | ok `PlayerPage.jsx:69`⁵ | ok — three literal ladders | ok | ok | ok | ok `playerSurfacePalette`, `playerSurface` |
+| Join name collision | `components/JoinNameCollision.jsx` | ok `.plr`²⁸ | ok²⁸ | ok — inside `.plr` | ok²⁸ | — | — | ok²⁸ | ok `joinNameCollision`, `playerSurface` |
+| Read one response (shared with the host) | `components/AnswerSpotlight.jsx` + `styles.css:11266+` | part²⁹ | part²⁹ | ok on the player (`.plr-spot`); paper for the host and `PastRound` | part²⁹ | ok (Modal) | ok — X, backdrop and Escape | part²⁹ | ok `answerSpotlight`, `playerSurfacePalette` §7b |
 
 ### Host
 
@@ -141,7 +146,7 @@ the list; new surfaces will not add themselves.
 | Create engagement | `components/GameSetupDialog.jsx` + `styles.css:2643` | part | FAIL | part | part | ok (Modal) | **FAIL⁹** | part | ok `gameSetupDialog.test.jsx` |
 | Quickstart menu | `components/QuickstartMenu.jsx` + `styles.css` | part | part | ok `:195` | part | FAIL⁷ | part | n/a | ok `quickstartMenu.test.jsx` |
 | Host question-set shelf | `components/HostQuestionSetsDialog.jsx` | ok `.qsets--onlight` | ok | ok | ok | ok | ok `:193` + footer | ok | ok `hostQuestionSetsPalette` |
-| Host remote (phone) | `HostRemote.{jsx,css}`, `RemoteCategoryList`, `RemoteQuestionBrowser` | ok `.hr-/.hrc-/.hrq-` | ok | ok | ok | ok | — | n/a — no palette test | part `hostRemote*.test` |
+| Host remote (phone) | `HostRemote.{jsx,css}`, `RemoteCategoryList`, `RemoteQuestionBrowser`, `RemoteSessionPanel` | ok `.hr-/.hrc-/.hrq-/.hrs-` | ok | ok `HostRemote.jsx`³⁰ | ok — one phone ladder, **not** a stage profile³¹ | ok | ok³² | part³⁰ — no palette test; every pairing is a measured `styles.css` token | ok `hostRemote`, `hostRemoteScreen`, `hostRemoteBrowser`, `hostRemoteSession` |
 | Game report | `components/GameReport.{jsx,css}` | ok `.report-` | part | ok `:208` paper by design | ok | part | part | n/a | part `gameReport.test.jsx` |
 
 ### Admin console
@@ -153,10 +158,11 @@ the list; new surfaces will not add themselves.
 | Question-set editor | `QuestionSetEditor`, `QuestionsPanel`, `CategoryPicker` + `styles.css:10012+` | part¹⁰ | FAIL¹⁰ | **FAIL¹¹** | part | part¹² | ok (`4fd425d6`) | part | part |
 | Sessions | `components/SessionsPanel.{jsx,css}` | ok `.sp` | ok | ok `AdminPage.jsx:62` | ok | ok | ok | ok | ok `adminTabsPalette`, `sessionsPanel` |
 | Users | `components/UserManagement.{jsx,css}` | ok `.um` | ok | ok `AdminPage.jsx:84` | ok | ok | ok | ok | ok `adminTabsPalette`, `userManagement` |
-| **Prompts — library list** | `components/PromptLibraryPanel.jsx` + `AIPromptManager.css:1905+` | ok `.plib` | ok (`--pc-*`) | **FAIL¹³** | ok | ok (table) | — | ok (on white) | ok `promptLibraryPanel`, `promptEditorPalette` |
-| **Prompts — summary editor** | `AIPromptManager.jsx:146-878` + `.css` | **FAIL¹⁴** | **FAIL¹⁴** | **FAIL¹³** | FAIL¹⁵ | **FAIL¹⁶** | part¹⁷ | part¹⁸ | part |
-| **Prompts — advisor** | `AIPromptManager.jsx:881-1086` | **FAIL¹⁴** | **FAIL¹⁴** | **FAIL¹³** | FAIL¹⁵ | **FAIL¹⁶** | **FAIL¹⁹** | FAIL | FAIL |
-| **Prompts — generation editor** | `components/AIGenerationPromptEditor.jsx` | **FAIL¹⁴** | **FAIL¹⁴** | **FAIL¹³** | FAIL | **FAIL²⁰** | FAIL | FAIL | FAIL |
+| **Prompts — the section** | `AdminPage.jsx` (`.padm`) + `AIPromptManager.css` | ok `.padm` | ok | ok `AdminPage.jsx` `contentTheme:'dark'` | ok | ok (chooser → place) | ok — one `.padm-back` for both | ok | ok `AdminPage`, `promptEditorPalette` |
+| **Prompts — library list** | `components/PromptLibraryPanel.jsx` + `AIPromptManager.css` | ok `.plib` | ok (`--pc-*`, now aliases) | ok | ok | ok (table, fixed layout) | — | ok — measured on dusk | ok `promptLibraryPanel`, `promptEditorPalette`, `rowActionsReachable` |
+| **Prompts — summary editor** | `AIPromptManager.jsx:146-878` + `.css` | ok `.pmgr` | ok | ok | ok | ok (`Modal`) | ok | ok | ok `promptEditorPalette`, `promptManagerScope`, `promptManagerDialogs` |
+| **Prompts — advisor** | `AIPromptManager.jsx:881-1086` | ok `.pmgr` | ok | ok | ok | ok (`Modal`) | ok | ok | ok `promptManagerDialogs` |
+| **Prompts — generation library** | `components/AIGenerationPromptEditor.jsx` | ok `.pgen` | ok | ok | ok | ok — a **place**, no longer an overlay | ok — `.padm-back` | ok | ok `aiGenerationPromptEditor` |
 | Archive | `components/ArchivePanel.jsx` + `styles.css:3580+` | FAIL⁴ | FAIL⁴ | **FAIL¹³** | FAIL | **FAIL²¹** | FAIL | FAIL | FAIL |
 | Settings | `AdminPage.jsx:1153+` + `styles.css:4760` | FAIL⁴ | FAIL⁴ | **FAIL¹³** | FAIL | — | — | FAIL | FAIL |
 
@@ -186,19 +192,26 @@ the list; new surfaces will not add themselves.
 4. `styles.css` is an 11,665-line unscoped monolith: 690 hex literals outside any token
    block, and it owns `.btn-*`, `.modal-*`, `.form-*`, `.card`, `.chip`, `.tag`,
    `.status-*` globally. Every surface still living in it inherits that.
-5. `PlayerPage.jsx` never declares `data-theme`; it inherits `light` from
-   `public/index.html` while painting its own gradients.
+5. **Was**: "`PlayerPage.jsx` never declares `data-theme`; it inherits `light` from
+   `public/index.html` while painting its own gradients." **Fixed** by `5678b92b`:
+   `PlayerPage.jsx:69` is `<div className="plr" data-theme="dark" …>`, and
+   `components/PlayerSurface.css` is the scoped stylesheet that theme is useless
+   without. Both directions are asserted in `__tests__/playerSurfacePalette.test.js`.
 6. `styles.css:794`, `:927`, `:2801`, `:9879`, `:9996`, `:10939`, `:11015`, `:11051` are
    all `font-size: 11px`.
 7. Raw overlay `div`s that bypass `components/Modal.jsx` — no Escape, no focus trap, no
-   scroll lock, no `role="dialog"`: `PlayerPage.jsx:2657`, `QuestionsPanel.jsx:1186`,
+   scroll lock, no `role="dialog"`. `PlayerPage.jsx:2657` was the twenty-second and is
+   **gone**: `5678b92b` deleted the game-end dialog outright (a finished session is a
+   state, not a modal), and the page's one remaining dialog — `AnswerSpotlight` — has
+   always routed through `Modal`. Re-derive this list rather than trusting the count;
+   the twenty-one below have not been re-checked since. `QuestionsPanel.jsx:1186`,
    `QuestionsPanel.jsx:1204`, `QuestionSetEditor.jsx:1333`, `HelpSystem.jsx:287`,
    `IssueReportForm.jsx:88`, `AIAssistant.jsx:155`, `AIScenarioBuilder.jsx:927`,
    `PollAIBuilder.jsx:374`, `SurveyAIBuilder.jsx:503`, `TriviaAIBuilder.jsx:369`,
    `AIGenerationPromptEditor.jsx:242`, `AIGenerationPromptEditor.jsx:253`,
    `AIPromptManager.jsx:466`, `AIPromptManager.jsx:927`, `QuickstartMenu.jsx:209`,
    `GameHostPage.jsx:3824`, `GameHostPage.jsx:5177`, `GameHostPage.jsx:5195`,
-   `GameHostPage.jsx:5245`, `GameReport.jsx:281`, `GameReport.jsx:341`. **Twenty-two.**
+   `GameHostPage.jsx:5245`, `GameReport.jsx:281`, `GameReport.jsx:341`. **Twenty-one.**
 8. `components/WelcomeScreen.css:140-142` — `.wel-badge` at `font-size: 11px`, below the
    12px floor. Same class of defect at `components/RoundKindPicker.css:166`.
 9. `components/GameSetupDialog.jsx:150-160` is `closeOnBackdrop={false}` on a long form
@@ -212,34 +225,50 @@ the list; new surfaces will not add themselves.
     so the console changes polarity when you press Edit.
 12. `QuestionSetEditor.jsx:1333` — `pendingDelete` is a fourth raw `modal-overlay`,
     inside a component that otherwise uses `Modal`. Reported in `4fd425d6`, not fixed.
-13. `AdminPage.jsx:65-71` (prompts), `:72-78` (archive), `:86-95` (settings) carry no
-    `contentTheme`, so `AdminShell.css:410-413` paints `#f5f7fa` under them. The seam is
-    deliberate and marked TRANSITIONAL — but three of six sections are still on the wrong
-    side of it.
-14. `components/AIPromptManager.css` declares **global** selectors from a component
-    stylesheet: `.btn-primary` `:472,483`, `.btn-secondary` `:472,497`, `.modal-overlay`
-    `:1094`, `.modal-content` `:1108`, `.large-modal` `:1118` (with `!important`),
-    `.status-badge` `:118`, `.empty-state` `:237`, `.form-group` `:338`, `.form-actions`
-    `:1085`, `.tag` `:199`, `.loading-spinner` `:1277`. 158 hex literals outside any
-    token block.
-15. `components/AIPromptManager.css:952` — an 11px tooltip. The floor assertion in
-    `promptEditorPalette.test.js:174-182` only covers the block **after** `BEFORE YOU
-    SAVE`, so the legacy half is unchecked.
-16. `AIPromptManager.jsx:466` and `:927` are hand-rolled overlays. No Escape, no focus
-    trap, no scroll lock, no `role="dialog"` — on the tallest form in the product.
-17. The editor has an X (`:470`) and a bottom Cancel (`:866-868`), but neither routes
-    through a shared `requestClose()` and there is no dirty check on either.
-18. `AIPromptManager.css:1350-1365` declares a genuinely measured paper palette
-    (`--pc-*`, ratios in the header at `:1343-1347`), asserted by
-    `promptEditorPalette.test.js`. That half is good work. The 1,325 lines above it are
-    not covered.
-19. `AIPromptManager.jsx:927-1086` — the advisor has an X at `:931` and **no bottom
-    exit** at all, on a panel that renders analysis lists, improvement items, pros/cons
-    and recommendations. Scroll to the recommendations and the only way out has left the
-    frame.
-20. `AIGenerationPromptEditor.jsx:318-333` still renders `.prompts-grid` / `.prompt-card`
-    — the card grid RATIONALE §4 rejected — and is the third UI over the one prompt
-    record (RATIONALE §9, "One prompt library").
+13. **Was**: "prompts, archive and settings carry no `contentTheme`, so
+    `AdminShell.css:410-413` paints `#f5f7fa` under them — three of six sections on the
+    wrong side of the seam." **Prompts is fixed** (§6.2 items 11-15): the section carries
+    `contentTheme: 'dark'` and `AIPromptManager.css` converted in the same change, which
+    is the only safe order. Archive and Settings are still light; **two** of six now.
+14. **Was**: "`components/AIPromptManager.css` declares **global** selectors from a
+    component stylesheet — `.btn-primary`, `.btn-secondary`, `.modal-overlay`,
+    `.modal-content`, `.large-modal` (with `!important`), `.status-badge`,
+    `.empty-state`, `.form-group`, `.form-actions`, `.tag`, `.loading-spinner`. 158 hex
+    literals outside any token block." **Fixed** across §6.2 items 1-3 and 11-13. Every
+    selector is rooted at one of seven scopes (`.padm`, `.pmgr`, `.pgen`, `.plib`,
+    `.pvi`, `.ppf`, `.pap`) and **zero** hex literals survive outside the token block.
+    ONE global remains and it is named: `.form-group input/textarea/select`, the only
+    rule in the product that gives a form control its border — eighteen paper components
+    read it, so it stays and the dusk override for it is scoped. Both halves are pinned
+    by `__tests__/promptManagerScope.test.js` and `promptEditorPalette.test.js`.
+15. **Was**: "`AIPromptManager.css:952` — an 11px tooltip, and the floor assertion only
+    covers the block after `BEFORE YOU SAVE`, so the legacy half is unchecked."
+    **Fixed** (§6.2 item 8): the tooltip is 12px and the assertion reads the whole sheet.
+    Extended again in items 11-15 to cover the LADDER TOKENS as well — with the sheet
+    reading `var(--pc-t-*)`, an 11px step added to the token block would put 11px type on
+    screen while every literal `font-size:` still measured 12 or more.
+16. **Was**: "`AIPromptManager.jsx:466` and `:927` are hand-rolled overlays. No Escape,
+    no focus trap, no scroll lock, no `role="dialog"` — on the tallest form in the
+    product." **Fixed** (§6.2 item 4): both route through `components/Modal.jsx`.
+17. **Was**: "the editor has an X and a bottom Cancel, but neither routes through a
+    shared `requestClose()` and there is no dirty check on either." **Fixed** (§6.2 item
+    6): one `requestClose()` behind both, with `closeOnEscape={() => !isDirty}`.
+18. **Was**: "`AIPromptManager.css` declares a genuinely measured PAPER palette
+    (`--pc-*`) … the 1,325 lines above it are not covered." The palette is dusk now and
+    the `--pc-*` names are aliases onto `styles.css`'s own tokens rather than a seventh
+    private set (§6.2 item 12). Coverage is the whole sheet: `promptEditorPalette.test.js`
+    asserts that no hex survives outside the token block, that every alias resolves to a
+    DUSK value, and that every tinted composite still clears AA on both beds.
+19. **Was**: "the advisor has an X and **no bottom exit** at all, on a panel that renders
+    analysis lists, improvement items, pros/cons and recommendations." **Fixed** (§6.2
+    item 5): it carries the same footer exit the editor does, outside the scroll region.
+20. **Was**: "`AIGenerationPromptEditor.jsx` still renders `.prompts-grid` /
+    `.prompt-card` — the card grid RATIONALE §4 rejected — and is the third UI over the
+    one prompt record." **Fixed** (§6.2 item 9): it mounts `PromptLibraryPanel`. Item 16
+    followed: it is no longer a full-viewport overlay either, but a place in the work
+    area reached by the same chooser and left by the same control as the summary
+    library — which is what the owner asked for when they said the two were *"slightly
+    different. they should be the same."*
 21. `styles.css:3632` — `.archive-grid` is a card grid. RATIONALE §10: *"Cards for the
     archive. Rejected. 214 items."*
 22. `BuilderPage.css` — 140 hex literals, bare `.modal`, `.btn`, `.tab`, `.form-group`
@@ -257,16 +286,67 @@ the list; new surfaces will not add themselves.
     paper `.status-message.success` ground (`#d4edda`) that is 2.10:1 — which is why
     `QuestionSetsPanel.css:672-675` restates `--success: #1C7350` for the host scope. The
     global default is still the unreadable one.
+28. `components/JoinNameCollision.css` is **deleted**. It had no scope prefix
+    (`.join-name-collision*`), a heading at `clamp(1.3rem, 6vw, 1.9rem)` — a fourth
+    ladder on a surface with three — and `color: #444` on its explanatory sentence,
+    which is **1.79:1** on `--bg #0F1A2E`. Its own header comment explained why: *"Sits
+    inside `.join-screen`, which is centred and white"*, a container `5678b92b` had
+    deleted. Nothing replaced the stylesheet: the refusal is now `.plr-h1
+    .plr-h1--primary` and `.plr-lede .plr-muted`, and its two ways out moved into
+    `.plr-dock` as `.plr-btn` / `.plr-btn--ghost`, which is where every other ACT state
+    on this surface already put its actions. It was the only one that did not, and it is
+    the one screen where a player is already stuck.
+29. `components/AnswerSpotlight.jsx` is the host's dialog, shared with `PastRound` and
+    painted from `styles.css:11266+` for the paper theme: `border-top: rgba(0,0,0,.1)`,
+    two bare `opacity` values tuned against white, `font-size: clamp(1.15rem, 2.4vw,
+    1.75rem)`, and `.btn-secondary` nav buttons that are `background: white; color:
+    var(--primary)` — **1.96:1**, plus a hover of white on `--primary` at the same ratio
+    and no disabled state at all. On the player it was mounted as a **sibling** of
+    `.plr`, so it opened that white card over a dusk ballot. Fixed on the player side
+    only: it mounts inside `.plr` through `PlayerShell`'s `after` slot and takes an
+    opt-in `surfaceClassName="plr-spot"`, which `PlayerSurface.css` §10 re-tints — the
+    `.qsets--onlight` move, in the other polarity. **The host and `PastRound` are
+    unchanged and still carry every defect above**; fixing them means fixing
+    `styles.css`, which is citation 4's problem.
+30. **Was**: theme "ok" and contrast "n/a". Both were wrong, and for one reason.
+    `HostRemote.jsx` never declared `data-theme`, so under
+    `public/index.html:2`'s `<html data-theme="light">` — and `:root` **is**
+    `html`, so `styles.css:58-66` wins on specificity — every token the remote
+    reads resolved to the PAPER value. A surface whose own stylesheet header says
+    it is held "in a dim room, glancing down between sentences" was rendering a
+    cream `#FBF7F1` field with navy text. Two consequences past the glare: `.hr-btn--primary`
+    and `.hr-primary` hard-code `color: #1B2942` for their label because that is the
+    **dusk** surface colour, and `RemoteQuestionBrowser.css:94,106` reads
+    `var(--success-text, var(--success))` — there has never been a global
+    `--success-text` (see the skill's §6), so it fell back to `--success` `#4FB286`,
+    **2.65:1 on white**, on the CORRECT flag, which is the single fact that surface
+    exists to carry. Identical defect and identical one-line fix to citation 5:
+    `<div className="hr" data-theme="dark">`, on both the entry card and the
+    session view, asserted in `hostRemoteSession.test.jsx`. Contrast is now `part`
+    rather than `n/a`: with dusk restored every pairing in use is a token already
+    measured in the skill's table, but no `*Palette.test.js` composites them here.
+31. The remote deliberately does **not** use `config/displayProfile.js`. Those four
+    profiles are the STAGE's, derived for a room reading from 2–30ft; the closest,
+    Table, is a laptop at 3ft with a 16px floor. The remote follows the entry/welcome
+    pattern instead — one ladder, `clamp()` against the viewport
+    (`tokens-and-type.md` §4.3). `hostRemoteSession.test.jsx` fails if a `--L-*`
+    ladder or a `.d-*` class ever appears in `RemoteSessionPanel.css`.
+32. Exits were `—` when the remote had no dialog. It now has three lists behind one
+    panel, and the way back is `.hr-back` in the sticky bar rather than in the dock —
+    so the primary action stays in the thumb arc while a list is open, which the old
+    full-screen question browser did not manage. Pinned in `hostRemoteSession.test.jsx`
+    by document order, not by geometry.
 
 ---
 
 ## 4. Headline findings
 
-**The console is two-thirds converted and the seam runs through Prompts.** Question sets,
-Sessions and Users are dusk, namespaced, ladder-correct and contrast-asserted. Prompts,
-Archive and Settings are paper markup on a `#f5f7fa` patch that `AdminShell` paints
-specifically so they do not render at 1.4:1. That patch
-(`AdminShell.css:402-413`) is marked "DELETE WHEN WAVE D LANDS".
+**The console is four-fifths converted and the seam now runs through Archive.** Question
+sets, Sessions, Users and **Prompts** are dusk, namespaced, ladder-correct and
+contrast-asserted. Archive and Settings are still paper markup on a `#f5f7fa` patch that
+`AdminShell` paints specifically so they do not render at 1.4:1. That patch
+(`AdminShell.css:402-413`) is marked "DELETE WHEN WAVE D LANDS" and has two sections left
+to outlive.
 
 **The worst surfaces, in order.**
 
@@ -274,21 +354,33 @@ specifically so they do not render at 1.4:1. That patch
    one design doc that mentions it says the format cannot round-trip a set.
 2. **`/builder`** — 1,422 lines of undesigned CSS, never in scope for any redesign,
    opening in a second tab that does not know which set you were looking at.
-3. **Prompts (editor + advisor + generation editor)** — three UIs over one record type,
-   two hand-rolled overlays on the tallest form in the product, a card grid, and eleven
-   global class names declared from a component stylesheet. §6 is the plan.
-4. **Player session** — the largest surface with no design pass at all, no theme
-   declaration, no scoped stylesheet and no CSS contract test, despite
-   `docs/design/player-redesign/` holding 23 finished mockups and a RATIONALE.
+3. ~~**Prompts (editor + advisor + generation editor)**~~ — **converted.** It was "three
+   UIs over one record type, two hand-rolled overlays on the tallest form in the product,
+   a card grid, and eleven global class names declared from a component stylesheet". §6
+   was the plan and §6.2 is now the record: one library component mounted twice, three
+   dialogs through `Modal`, seven scopes, zero stray hex, and the two libraries reached by
+   one chooser and left by one control. What remains is a product question, not a paint
+   one — see item 16 on the summary editor's duplicate-on-save path.
+4. ~~**Player session**~~ — **converted.** It was "the largest surface with no design
+   pass at all, no theme declaration, no scoped stylesheet and no CSS contract test,
+   despite `docs/design/player-redesign/` holding 23 finished mockups and a RATIONALE".
+   `5678b92b` built it from those mockups (`.plr`, `data-theme="dark"`, three literal
+   ladders, `playerSurfacePalette` + `playerSurface`); a follow-up closed the two paper
+   islands left inside it (citations 28 and 29) and pinned the markup namespace as well
+   as the stylesheet's. **What is still not provable anywhere in this repo** is the
+   design's own audit checks A1-A4 — no sideways scroll, the page itself never scrolls,
+   the dock is on screen at rest, every target is 44×44. All four are geometric, jsdom
+   has no layout engine, and only a device can answer them.
 5. **Settings** — three switches in a white `.admin-section` card, one of which prints AI
    prompt text onto the **host's** screen, which may be a projector (RATIONALE §9). That
    is a warning, not a feature description, and it is currently neither.
 
 **Systemic, not per-surface:**
 
-- **Twenty-two raw overlay `div`s bypass `Modal.jsx`** (citation 7). Each is a dialog with
-  no Escape, no focus trap, no scroll lock and no `role="dialog"`. The container rule
-  document counted twelve shells in August; the count above is by call site.
+- **Twenty-one raw overlay `div`s bypass `Modal.jsx`** (citation 7 — twenty-two until the
+  player's game-end dialog went). Each is a dialog with no Escape, no focus trap, no
+  scroll lock and no `role="dialog"`. The container rule document counted twelve shells in
+  August; the count above is by call site.
 - **Four component stylesheets redeclare the global `.btn-primary` / `.btn-secondary`**
   (`AIPromptManager.css:472`, `IssueReportForm.css:172`, `FileUploadPrompt.css:145`,
   `BuilderPage.css`), competing with `styles.css:127` at equal specificity. Which one wins
@@ -356,21 +448,24 @@ width modifier instead of `max-width: 1200px !important`; then extend
 
 The owner's specific complaint — *"i still dont like the admin prompt management
 interface... i dont think its been given the same UX treatment, as the question set admin
-peice"* — gets its own ordered plan here, with the blocking test named. **Nothing below is
-implemented; a separate change applies it.**
+peice"* — gets its own ordered plan here, with the blocking test named. **Items 1-15 are implemented and 16 is
+partly implemented; the status column below is the record.**
 
-### 6.1 What is blocked, and by what
+### 6.1 What was blocked, and by what
 
-`__tests__/promptEditorPalette.test.js:150-161` asserts that `AdminPage.jsx`'s prompts
-section carries **no** `contentTheme`. Its comment is correct and should be honoured:
+`__tests__/promptEditorPalette.test.js` used to assert that `AdminPage.jsx`'s prompts
+section carried **no** `contentTheme`. Its comment was correct and was honoured:
 
 > If this test goes red because the section gained `contentTheme:'dark'`, THAT is the
 > signal to convert these blocks, in the same change.
 
-**Verified**: `AdminPage.jsx:65-71` has no `contentTheme`, and `AdminShell.jsx:69` defaults
-to `'light'`. So every item marked **[blocked]** below must land in the *same commit* as
-the `contentTheme: 'dark'` flip and the rewrite of that test's expectation. Items marked
-**[free]** can be done now, on the paper theme, without touching it.
+**Verified, and then done.** That test's own comment named its exit — *"If this test goes
+red because the section gained `contentTheme:'dark'`, THAT is the signal to convert these
+blocks, in the same change"* — and that is the change items 11-15 are. The flip, the
+repaint and the rewritten expectation all landed together, because either half alone is
+unreadable: the flip alone puts `--pc-ink #1a1a1a` on `--bg #0F1A2E` at 1.3:1, the repaint
+alone puts `#F4EDE4` on the light field at 1.2:1. `promptEditorPalette.test.js` now asserts
+BOTH ends of that pair rather than only the "still paper" end.
 
 ### 6.2 The list, in order
 
@@ -384,14 +479,14 @@ the `contentTheme: 'dark'` flip and the rewrite of that test's expectation. Item
 | 6 | **[DONE]** Route the editor's X `:470` and Cancel `:867-869` through one `requestClose()` that confirms when the form is dirty, and gate `closeOnEscape` on the same flag. | §1.F | `components/AIPromptManager.jsx:470,861-874` |
 | 7 | **[DONE — two Modal confirms; the failure/success alerts became inline `StatusMessage` banners instead, because a modal reporting a failed list load is dismissed into an empty state that lies]** Replace `window.confirm` at `:1146` and `:1183` and the six `alert()` calls (`:372,392,446,920,1139,1162,1212,1219`) with `Modal`-based dialogs that state the **consequence**, not the severity — and, for archive-a-prompt, offer the reversible neighbour. | §1.E, RATIONALE §8 | `components/AIPromptManager.jsx` |
 | 8 | **[DONE]** Raise the 11px tooltip at `AIPromptManager.css:952` to the 12px floor, and extend the floor assertion to the **whole** stylesheet rather than only the block after `BEFORE YOU SAVE`. | §1.D | `.css:952`, `__tests__/promptEditorPalette.test.js:174-182` |
-| 9 | **[free]** Replace the third prompt UI: `AIGenerationPromptEditor.jsx:318-333` renders `.prompts-grid`/`.prompt-card`. Point it at `PromptLibraryPanel` — the table already exists. | §1.D/E, RATIONALE §9 | `components/AIGenerationPromptEditor.jsx:318` |
+| 9 | **[DONE]** Replace the third prompt UI: `AIGenerationPromptEditor.jsx:318-333` renders `.prompts-grid`/`.prompt-card`. Point it at `PromptLibraryPanel` — the table already exists. | §1.D/E, RATIONALE §9 | `components/AIGenerationPromptEditor.jsx:318` |
 | 10 | **[DONE — `modalReachability.test.js`, plus a new `promptManagerScope.test.js` for the namespace and orphan contract]** Give the editor a `promptEditor`-scoped reachability test asserting its scrim contract, the way `modalReachability.test.js:133-152` already does for `.prompt-editor-overlay`. | §1.H | new assertions in `modalReachability.test.js` |
-| 11 | **[blocked]** Flip `AdminPage.jsx:65-71` to `contentTheme: 'dark'` **and** convert every `--pc-*` value to the dusk set in the same commit. `--pc-ink #1a1a1a` on `--bg #0F1A2E` is 1.3:1 the moment the flip lands alone. | §1.C | `AdminPage.jsx:65-71` + `AIPromptManager.css:1356-1365`, `:1706-1716` |
-| 12 | **[blocked]** Map the six `--pc-*` tokens onto the shipped dusk tokens rather than inventing new ones: `--pc-ink → --text`, `--pc-muted → --muted`, `--pc-link → --secondary`, `--pc-stop → --danger-text`, `--pc-silent → --primary`, `--pc-paper → --surface`, and the two tints onto `rgba()` of `--danger` / `--primary` at the alphas `.qsets-tint-*` already uses. | §1.B | `components/AIPromptManager.css:1356-1365` |
-| 13 | **[blocked]** Convert `.plib` to the `.qsets` palette. Structurally it is already the right screen — table, two empty states, drop-exits, chips — so this is paint only: `.plib-tbl` `:1911`, `.plib-chip*` `:1958-1975`, `.plib-btn*` `:1978-1999`, `.plib-empty/-nomatch` `:2001-2016`. | §1.B/C | `components/AIPromptManager.css:1905-2020` |
-| 14 | **[blocked]** Remove the `.admin-section` white card and the `.tab-content` wrapper from the prompts branch, exactly as the users section already did (`AdminPage.jsx:1148-1151`: *"No `.tab-content` wrapper: that class carries a 500px min-height and a fade-in written for the paper tabs"*). | §1.C | `AdminPage.jsx:1001-1005` |
-| 15 | **[blocked]** Rewrite `promptEditorPalette.test.js` in the same commit: swap the "still paper" assertion at `:150-161` for the dusk one at `questionSetsPalette.test.js:197-204`, re-measure every `--pc-*` pairing against `--bg`/`--surface` instead of white and `#f8f9fa`, and add the namespace-both-ways and stray-hex assertions. | §1.H | `__tests__/promptEditorPalette.test.js` |
-| 16 | **[after 11-15]** Consider making the editor a **place** rather than a modal, matching `docs/design/admin-redesign/19-prompt-editor.html` — breadcrumb "‹ Prompts", full work area, versioned save. This is a product decision, not a paint one: RATIONALE §1 parked the prompt designs because *"the editor creates duplicates instead of updating, and there is no versioning in the editor despite versioning existing in the lambda"*. Do not draw a beautiful editor on top of a save path that duplicates records. | RATIONALE §1, §2 | `AIPromptManager.jsx:146` |
+| 11 | **[DONE]** Flip `AdminPage.jsx:65-71` to `contentTheme: 'dark'` **and** convert every `--pc-*` value to the dusk set in the same commit. `--pc-ink #1a1a1a` on `--bg #0F1A2E` is 1.3:1 the moment the flip lands alone. | §1.C | `AdminPage.jsx:65-71` + `AIPromptManager.css:1356-1365`, `:1706-1716` |
+| 12 | **[DONE — plus `--pc-go`, `--pc-card`, `--pc-field`, `--pc-hover` and the `--pc-t-*` ladder, all named in the stylesheet header]** Map the six `--pc-*` tokens onto the shipped dusk tokens rather than inventing new ones: `--pc-ink → --text`, `--pc-muted → --muted`, `--pc-link → --secondary`, `--pc-stop → --danger-text`, `--pc-silent → --primary`, `--pc-paper → --surface`, and the two tints onto `rgba()` of `--danger` / `--primary` at the alphas `.qsets-tint-*` already uses. | §1.B | `components/AIPromptManager.css:1356-1365` |
+| 13 | **[DONE — and two idiom faults came with it: `.plib-rowact` was `justify-content: flex-end` inside a table cell (hard rule 9, the exact bug `rowActionsReachable.test.js` was written for), and `.plib-tbl` had declared widths under `table-layout: auto`, where they are hints (hard rule 11). Active moved off the link hue it shared with the Type chip onto `--qsets-success-text`.]** Convert `.plib` to the `.qsets` palette. Structurally it is already the right screen — table, two empty states, drop-exits, chips — so this is paint only: `.plib-tbl` `:1911`, `.plib-chip*` `:1958-1975`, `.plib-btn*` `:1978-1999`, `.plib-empty/-nomatch` `:2001-2016`. | §1.B/C | `components/AIPromptManager.css:1905-2020` |
+| 14 | **[DONE]** Remove the `.admin-section` white card and the `.tab-content` wrapper from the prompts branch, exactly as the users section already did (`AdminPage.jsx:1148-1151`: *"No `.tab-content` wrapper: that class carries a 500px min-height and a fade-in written for the paper tabs"*). | §1.C | `AdminPage.jsx:1001-1005` |
+| 15 | **[DONE]** Rewrite `promptEditorPalette.test.js` in the same commit: swap the "still paper" assertion at `:150-161` for the dusk one at `questionSetsPalette.test.js:197-204`, re-measure every `--pc-*` pairing against `--bg`/`--surface` instead of white and `#f8f9fa`, and add the namespace-both-ways and stray-hex assertions. | §1.H | `__tests__/promptEditorPalette.test.js` |
+| 16 | **[PARTLY DONE — the generation library became a place; the SUMMARY editor is still a modal, deliberately]** The generation library is no longer a full-viewport overlay mounted outside the console: it is a place in the work area, reached by the same chooser and left by the same `.padm-back` as the summary library. That was the owner's *"the way you get to the Question set AI generator prompts and the Engagement results prompts … should be the same"*, and it is the container rule's own answer for a library plus a fourteen-field editor. The SUMMARY editor stays a `Modal`, and the reason RATIONALE §1 gave is unchanged: *"the editor creates duplicates instead of updating, and there is no versioning in the editor despite versioning existing in the lambda"*. Do not draw a beautiful editor on top of a save path that duplicates records. | RATIONALE §1, §2 | `AIPromptManager.jsx:146`, `AdminPage.jsx` (`.padm`) |
 
 ### 6.3 What NOT to touch
 

@@ -21,6 +21,7 @@
  */
 
 import { gameTypeMeta, normalizeGameType } from './gameTypes';
+import { rosterRows } from './setupPanel';
 
 /* ------------------------------------------------------------------ phases */
 
@@ -507,6 +508,138 @@ export function waitingOn(rosterResponse, state) {
   return phase === 'ASK'
     ? { applicable: true, heading: 'Still to answer', verb: 'answered', names }
     : { applicable: true, heading: 'Still to vote', verb: 'voted', names };
+}
+
+/* ------------------------------------------------- the session panel */
+
+/**
+ * The remote's three lists, named by the owner:
+ *
+ *   *"it would be nice if it had the same menu as the main screen with listing
+ *    the players, the rounds, the questions. can this just be a mobile friendly
+ *    version of the session tab?"*
+ *
+ * THE IDS ARE THE DESKTOP PANEL'S IDS, deliberately — `config/setupPanel.js`'s
+ * `setupPanelTabs()` calls the rounds tab `history` and labels it `Rounds`, and
+ * the two surfaces showing the same list under two internal names is how they
+ * drift. Not a re-export of that function, because the two menus genuinely
+ * differ in two ways that a shared list would have to encode as options:
+ *
+ *   SETTINGS IS ABSENT. Everything in the desktop's fourth tab already has a
+ *   home on this phone — the join QR, the categories, the big-screen pad and
+ *   Switch game are the round view's `Session` card, one tap away and visible
+ *   without opening anything. A fourth tab would be a second door to controls
+ *   the host is already looking at.
+ *
+ *   ROUNDS COMES SECOND, where the desktop puts Questions there. The owner's
+ *   own order ("the players, the rounds, the questions") and the fact that this
+ *   surface has a dedicated `Choose next question` button on the round view
+ *   point the same way: Questions is the tab with another way in, so it is the
+ *   one that can afford to be last.
+ */
+export function remotePanelTabs() {
+  return [
+    { id: 'players', label: 'Players' },
+    { id: 'history', label: 'Rounds' },
+    { id: 'questions', label: 'Questions' },
+  ];
+}
+
+/**
+ * EVERY PLAYER IN THE ROOM, for the phone's Players tab.
+ *
+ *   *"it no longer list the players that joined in the beginning"*
+ *
+ * The names have been in this component's memory since `pollRoster` stopped
+ * throwing the array away (see HostRemote.jsx's KEEP THE ARRAY note), but the
+ * only thing reading them was `waitingOn`, which is scoped to ASK and VOTE. In
+ * the lobby — the phase the owner is describing — nothing on this phone has
+ * ever printed a name; the status card counts the room and stops there.
+ *
+ * ROWS COME FROM `config/setupPanel.js:rosterRows`, THE DESKTOP SESSION TAB'S
+ * OWN FUNCTION, and that reuse is the point of the request: "the same menu as
+ * the main screen" has to mean the same rows, in the same order, with the same
+ * ranks and the same per-round tick, or the two screens will disagree in front
+ * of a room. All this does is adapt `GET /games/{id}/players` onto the shape
+ * that function already takes — the desktop is fed by the host page's socket
+ * state (`players`, `playersWhoAnswered`, `playersWhoVoted`), the phone by the
+ * roster payload's `totalScore` and `readiness`.
+ *
+ * THE POLARITY IS THE DESKTOP'S, NOT THE STAGE'S, AND THE DIFFERENCE IS
+ * DELIBERATE. `components/stage/RoomMeter.jsx` may never name who HAS answered
+ * — a projector turns that into a participation league table, and
+ * `USER-REVIEWS.md` rejected exactly that. This list does carry the tick, for
+ * the same reason the desktop's does: the owner ruled on it there (*"the
+ * anonymity is just for preventing people voting for an answer based on who
+ * said it. thats it."*), and this surface is strictly more private than the one
+ * he ruled it onto — a phone in one hand rather than a panel over the stage.
+ * The one thing neither surface carries is what anybody WROTE, and `get-players`
+ * does not return answer text at all.
+ *
+ * `kind` says which set the list is, in the markup rather than in the copy —
+ * `RoomMeter`'s `data-list-kind` idiom, and for its reason: a list of joiners
+ * under a waiting caption is an accusation, and a caption is not something a
+ * test can hold on to.
+ *
+ *   'joined'   the lobby. Nobody is late to a round that has not started, so
+ *              there is no tick and the heading is the lobby's own word.
+ *   'everyone' a running session: the whole room, with each person's rank,
+ *              score, and — inside ASK or VOTE — whether they have acted.
+ */
+export function rosterListing(rosterResponse, state) {
+  const { phase } = parseGamePhase(state);
+  // UNKNOWN counts as the lobby because it is what a state poll that has not
+  // landed yet looks like, and the roster poll can land first. Nothing has been
+  // asked of anyone in either case, which is exactly what 'joined' means; the
+  // alternative would flash a tick column that has nothing to say.
+  const lobby = phase === 'CREATED' || phase === 'STARTED' || phase === 'UNKNOWN';
+
+  const payload = rosterResponse && typeof rosterResponse === 'object' ? rosterResponse : {};
+  const players = Array.isArray(payload.players) ? payload.players : [];
+
+  const people = players
+    .filter((player) => player && typeof player === 'object')
+    .map((player) => ({
+      name: player.playerName || player.PlayerName || '',
+      // `totalScore` is get-players' spelling; `score` is what the host page
+      // keeps. Both are accepted so one adapter serves either payload.
+      score: Number(player.totalScore ?? player.score) || 0,
+      answered: !!player.readiness?.hasAnswered,
+      voted: !!player.readiness?.hasVoted,
+    }))
+    // A row with no name cannot be listed, and `rosterRows` would print it as
+    // "Unknown Player" — a ghost in the count the host cannot account for.
+    .filter((player) => player.name);
+
+  const rows = rosterRows({
+    players: people.map(({ name, score }) => ({ name, score })),
+    // `rosterRows` calls `.startsWith` on this, so a non-string state — a
+    // half-loaded poll — must arrive as '' rather than as undefined.
+    gameState: typeof state === 'string' ? state : '',
+    playersWhoAnswered: people.filter((p) => p.answered).map((p) => p.name),
+    playersWhoVoted: people.filter((p) => p.voted).map((p) => p.name),
+  });
+
+  return {
+    kind: lobby ? 'joined' : 'everyone',
+    heading: rosterHeading(rows.length, lobby),
+    rows,
+  };
+}
+
+/**
+ * The line over the names.
+ *
+ * "Already joined" is `RoomMeter`'s lobby word, chosen there because it cannot
+ * be read as a waiting list under any stress — and the same phrase on both
+ * surfaces is one less thing for a host to translate mid-session. The count
+ * rides with it because that is the number the status card was showing a moment
+ * ago, and a list that disagrees with the count above it reads as broken.
+ */
+function rosterHeading(count, lobby) {
+  if (count === 0) return 'Nobody has joined yet';
+  const people = `${count} ${count === 1 ? 'player' : 'players'}`;
+  return lobby ? `Already joined · ${people}` : people;
 }
 
 /* ----------------------------------------------------------- field notes */

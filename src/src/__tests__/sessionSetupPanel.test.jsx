@@ -496,9 +496,10 @@ describe('the Settings tab', () => {
   });
 
   test('the session actions are all present and raise their handlers', () => {
+    // onViewReports is NOT here: it moved to the Rounds tab, and its own test
+    // below asserts both that it is there and that Settings no longer has it.
     const handlers = {
       onShowJoinCode: jest.fn(),
-      onViewReports: jest.fn(),
       onSwitchGame: jest.fn(),
       onSignOut: jest.fn(),
       onShowHowToPlay: jest.fn(),
@@ -506,11 +507,38 @@ describe('the Settings tab', () => {
     renderPanel(handlers);
     openTab('Settings');
     fireEvent.click(screen.getByRole('button', { name: /join code/i }));
-    fireEvent.click(screen.getByRole('button', { name: /session report/i }));
     fireEvent.click(screen.getByRole('button', { name: /switch game/i }));
     fireEvent.click(screen.getByRole('button', { name: /sign out/i }));
     fireEvent.click(screen.getByRole('button', { name: /how this works/i }));
     for (const fn of Object.values(handlers)) expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  test('the session report lives on Rounds, above the list it summarises', () => {
+    /*
+      rejects: leaving it under "Display" in Settings, where it shipped —
+      filed with the display-profile select and the join links, three items
+      from the only list on this screen it describes.
+
+      The owner: *"[move] the report button to the rounds page, at the top. as
+      it fits well with that section."* Both halves are asserted: it is on the
+      Rounds tab at all, and it comes BEFORE the rounds. Document order, not
+      geometry — jsdom models the first and returns zeroes for the second.
+    */
+    const onViewReports = jest.fn();
+    const { container } = renderPanel({ onViewReports });
+
+    openTab('Settings');
+    expect(screen.queryByRole('button', { name: /session report/i })).toBeNull();
+
+    openTab('Rounds');
+    const report = screen.getByRole('button', { name: /session report/i });
+    fireEvent.click(report);
+    expect(onViewReports).toHaveBeenCalledTimes(1);
+
+    const panel = container.querySelector('.setup-history');
+    const list = panel.querySelector('.setup-history__list, .setup-empty');
+    expect(list).toBeTruthy();
+    expect(report.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   test('report-a-problem is rendered where the caller puts it', () => {

@@ -78,8 +78,32 @@ const fakeDoc = {
         if (!item) return {};
         const expr = inp.UpdateExpression || '';
         const names = inp.ExpressionAttributeNames || {};
-        const values = inp.ExpressionAttributeValues || {};
         const resolve = (t) => (t.startsWith('#') ? names[t] : t);
+
+        /*
+          `removeUndefinedValues: true` IS MODELLED, BECAUSE THAT IS WHERE THE
+          SECOND HALF OF THE KEYLESS-ROW BUG LIVED.
+
+          update-ai-prompt.js builds its document client with
+          `marshallOptions: { removeUndefinedValues: true }`, so an
+          ExpressionAttributeValues entry whose value is `undefined` is DROPPED
+          before the request is sent — while the clause that reads it stays in
+          the UpdateExpression. DynamoDB then refuses the whole write with "an
+          expression attribute value used in expression is not defined". A stub
+          that quietly assigns `undefined` instead turns a guaranteed failure
+          into a passing test, which is exactly what it did.
+        */
+        const values = Object.fromEntries(
+          Object.entries(inp.ExpressionAttributeValues || {}).filter(([, v]) => v !== undefined)
+        );
+        for (const ref of expr.match(/:[A-Za-z0-9_]+/g) || []) {
+          if (!(ref in values)) {
+            throw new Error(
+              'ValidationException: Invalid UpdateExpression: An expression attribute value '
+              + `used in expression is not defined; attribute value: ${ref}`
+            );
+          }
+        }
 
         const setPart = (expr.match(/SET\s+(.*?)(?=\s+REMOVE\b|$)/i) || [])[1];
         if (setPart) {
@@ -114,10 +138,31 @@ stub('@aws-sdk/lib-dynamodb', {
 });
 
 // ---- in-memory S3 ----------------------------------------------------------
+/*
+  THE STUB REFUSES `Key: undefined`, BECAUSE THE REAL CLIENT DOES.
+
+  This harness used to accept it, and section 4 below said so out loud: "the S3
+  stub accepts `Key: undefined`, where the real client throws, so what a keyless
+  row does past this point is not decided here." That was an honest limit while
+  no UI sent a status-only PUT to a keyless row. The generation library's status
+  chip does now, so the limit had to go rather than be documented again — a stub
+  more forgiving than the thing it stands in for turns a guaranteed 500 into a
+  green test.
+
+  `@aws-sdk/client-s3` serializes Key into the request URI path, so a missing one
+  fails client-side before any network call, with "No value provided for input
+  HTTP label: Key."
+*/
 const s3Store = new Map();
+const requireKey = (cmd) => {
+  if (cmd.input.Key === undefined || cmd.input.Key === null || cmd.input.Key === '') {
+    throw new Error('No value provided for input HTTP label: Key.');
+  }
+};
 stub('@aws-sdk/client-s3', {
   S3Client: class {
     async send(cmd) {
+      if (cmd.type === 'put' || cmd.type === 'get' || cmd.type === 'delete') requireKey(cmd);
       if (cmd.type === 'put') { s3Store.set(cmd.input.Key, cmd.input.Body); return {}; }
       if (cmd.type === 'delete') { s3Store.delete(cmd.input.Key); return {}; }
       if (cmd.type === 'get') {
@@ -298,36 +343,142 @@ async function seed(overrides = {}) {
     assert.strictEqual(isUsableSummaryPrompt(content(p3)), true);
   });
 
-  // === 4. A row that never had stored content is not caught by the guard ===
-  store.set(key('AIPROMPTS', 'AIPROMPT#gen-call-and-answer-lessons-learned'), {
-    PK: 'AIPROMPTS', SK: 'AIPROMPT#gen-call-and-answer-lessons-learned',
-    promptId: 'gen-call-and-answer-lessons-learned',
-    promptType: 'generation', gameType: 'call-and-answer',
-    name: 'Lessons Learned Scenarios', basePrompt: 'Write scenarios about…',
-    status: 'active', version: 1,
-    // no s3Key: populate-generation-prompts.js:497 writes the whole body to
-    // DynamoDB and never touches the bucket.
-  });
+  // === 4. The generation rows: no s3Key, and now a status chip of their own ==
+  /*
+    THE SHAPE `populate-generation-prompts.js:497` REALLY WRITES.
+
+    Copied field for field from that handler, including the two details that
+    each broke this route on their own:
+
+      - NO `s3Key`, and no S3 object anywhere. The whole prompt — basePrompt,
+        the four templates, defaultSettings — is on the DynamoDB row.
+      - `version: '1.0.0'`, a STRING. `'1.0.0' + 1` is `'1.0.01'`.
+
+    Both were unreachable while the generation library drew its status as a
+    plain label. It is a toggle now (AIGenerationPromptEditor passes
+    `onToggleStatus`), so every row below is one click away from this handler.
+  */
+  const genRow = (promptId, extra = {}) => {
+    store.set(key('AIPROMPTS', `AIPROMPT#${promptId}`), {
+      PK: 'AIPROMPTS', SK: `AIPROMPT#${promptId}`,
+      promptId,
+      promptType: 'generation', gameType: 'call-and-answer',
+      name: 'Lessons Learned Scenarios',
+      basePrompt: 'Write scenarios about…',
+      contextTemplate: '\n\nContext: {context}',
+      outputFormat: 'Return as JSON array',
+      defaultSettings: { difficulty: 'medium' },
+      status: 'active', isDefault: false, version: '1.0.0',
+      ...extra,
+    });
+  };
+
+  genRow('gen-call-and-answer-lessons-learned');
   const genRes = await put('gen-call-and-answer-lessons-learned', { status: 'draft' });
-  check('a DynamoDB-only prompt is not caught by the guard — it has nothing to lose', () => {
+
+  check('a DynamoDB-only prompt is not caught by the body guard — it has nothing to lose', () => {
     /*
       rejects: gating the guard on `!currentContent` rather than on
       `s3Key && !currentContent`. Every generation prompt in the environment
       reads as "content unreadable" because there is no content in S3 to read,
       and the blunt guard would refuse every one of them by name — a refusal
-      that would be indistinguishable, in the log, from the real thing it exists
-      to catch.
-
-      SCOPED TO THE GUARD ON PURPOSE, and this is the honest limit of the
-      harness: the S3 stub accepts `Key: undefined`, where the real client
-      throws, so what a keyless row does past this point is not decided here.
-      That is pre-existing behaviour for a shape no UI sends to this route (the
-      generation library passes no status handler, and its editor saves through
-      POST /admin/ai-prompts/save), and asserting a 200 would be asserting the
-      stub.
+      indistinguishable, in the log, from the real thing it exists to catch.
     */
     assert(!/could not be read/.test(genRes.body),
       'the body guard fired on a row that never had a body in S3');
+  });
+
+  check('and the flip actually lands, rather than 500ing on a missing S3 key', () => {
+    /*
+      rejects: the shipped arrangement, which reached `PutObjectCommand` with
+      `Key: undefined` for exactly this row. The real client refuses that
+      client-side, so every non-default generation prompt answered a status
+      click with a 500 and no explanation. The stub above refuses it too now.
+    */
+    assert.strictEqual(genRes.statusCode, 200, genRes.body);
+    assert.strictEqual(row('gen-call-and-answer-lessons-learned').status, 'draft');
+  });
+
+  check('nothing was invented in the bucket for it', () => {
+    /*
+      rejects: "fixing" the crash by minting a key and writing the object
+      anyway. `currentContent` is null for these rows, so the object would carry
+      the name and the status and NONE of the prompt text — and `s3Key` would
+      then point at it, so the next edit would rebuild the record from that
+      husk. A row with no body in S3 must come out of this route with no body in
+      S3.
+    */
+    const r = row('gen-call-and-answer-lessons-learned');
+    // ABSENT, not present-and-undefined: `s3Key = :s3Key` with an undefined
+    // value is refused outright by DynamoDB (see the stub's note), so a row
+    // that came back with the attribute set to undefined would mean the write
+    // never reached the table at all.
+    assert.strictEqual('s3Key' in r, false, `a bucket key was invented: ${r.s3Key}`);
+    assert.strictEqual([...s3Store.keys()].some((k) => k.includes('lessons-learned')), false,
+      'an object was written for a prompt that keeps its body on the row');
+  });
+
+  check('the row keeps the prompt text that only it holds', () => {
+    // rejects: any path that rewrites these attributes from `currentContent`.
+    const r = row('gen-call-and-answer-lessons-learned');
+    assert.strictEqual(r.basePrompt, 'Write scenarios about…');
+    assert.strictEqual(r.contextTemplate, '\n\nContext: {context}');
+    assert.deepStrictEqual(r.defaultSettings, { difficulty: 'medium' });
+  });
+
+  check('and its version is left alone, because nothing was versioned', () => {
+    /*
+      rejects: bumping the version on a write that produced no new object. A
+      version number counts S3 objects; incrementing it with none written makes
+      the row claim a v2 that does not exist.
+    */
+    assert.strictEqual(row('gen-call-and-answer-lessons-learned').version, '1.0.0');
+  });
+
+  // The default generation prompt takes the `currentPrompt.isDefault` branch,
+  // which is where the string version was concatenated into a filename.
+  genRow('gen-trivia-general-knowledge', { isDefault: true, gameType: 'trivia' });
+  const genDefault = await put('gen-trivia-general-knowledge', { status: 'draft' });
+
+  check('the DEFAULT generation prompt toggles too, and does not mint v1.0.01', () => {
+    /*
+      rejects: `newVersion = currentPrompt.version + 1` unguarded. With
+      `version: '1.0.0'` that is the STRING '1.0.01', which went into
+      `prompts/trivia/…/v1.0.01.json` and was stored back as the row's version —
+      a version that no longer sorts, compares or increments.
+    */
+    assert.strictEqual(genDefault.statusCode, 200, genDefault.body);
+    assert.strictEqual(row('gen-trivia-general-knowledge').status, 'draft');
+    assert.strictEqual(row('gen-trivia-general-knowledge').version, '1.0.0');
+    assert.strictEqual([...s3Store.keys()].some((k) => k.includes('1.0.01')), false,
+      'a filename was built by string-concatenating a version');
+  });
+
+  const genBack = await put('gen-call-and-answer-lessons-learned', { status: 'active' });
+  check('a generation prompt goes back to Active, which is what makes it a toggle', () => {
+    // rejects: a one-way trip. The chip offers both directions on these rows.
+    assert.strictEqual(genBack.statusCode, 200, genBack.body);
+    assert.strictEqual(row('gen-call-and-answer-lessons-learned').status, 'active');
+  });
+
+  // The recovery path for a keyless row: supply the text and it DOES get a
+  // bucket object, because now there is something to put in one.
+  const genRebuild = await put('gen-call-and-answer-lessons-learned', {
+    status: 'draft',
+    template: 'Write scenarios about {context}',
+  });
+  check('supplying a body to a keyless row does mint a key, so this is not a lock-out', () => {
+    /*
+      rejects: skipping S3 on `!s3Key` alone. The skip is about having nothing
+      to write, not about the row being untouchable — a caller that brings text
+      has to be able to store it, and the version has to start at a number.
+    */
+    assert.strictEqual(genRebuild.statusCode, 200, genRebuild.body);
+    const r = row('gen-call-and-answer-lessons-learned');
+    assert(r.s3Key && r.s3Key.endsWith('/v1.json'),
+      `expected a numeric first version, got ${r.s3Key}`);
+    assert.strictEqual(r.version, 1);
+    assert.strictEqual(JSON.parse(s3Store.get(r.s3Key)).template, 'Write scenarios about {context}');
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
