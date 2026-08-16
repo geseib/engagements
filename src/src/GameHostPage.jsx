@@ -11,6 +11,7 @@ import WavelengthWordCloud from './components/WavelengthWordCloud';
 import Icon from './components/Icon';
 import SetImageBadge from './components/SetImageBadge';
 import SessionHistoryPanel from './components/SessionHistoryPanel';
+import InviteDialog from './components/InviteDialog';
 import HostActionBar from './components/HostActionBar';
 import GameReport from './components/GameReport';
 import AISummaryStatus from './components/AISummaryStatus';
@@ -704,7 +705,21 @@ function GameHostPage() {
   // control, for three or four seconds while a room waited on the host. The
   // room meter already states where the room is, continuously and without
   // taking the screen.
-  const [inviteCopied, setInviteCopied] = useState(false);
+  /*
+    WHICH SESSION THE INVITE DIALOG IS FOR, or null when it is shut. One piece
+    of state drives both buttons, which is what makes them "identical mech" —
+    the session panel and the history list each only say WHICH session, and the
+    dialog owns everything else.
+  */
+  const [inviteTarget, setInviteTarget] = useState(null);
+  /*
+    WHEN THE LIVE SESSION WAS CREATED, which the host page did not hold.
+    The retention deadline is creation + 90 days, so the invite dialog cannot
+    check a date without it. `get-game-state` already returns it as
+    `gameMetadata.createdAt` and `restoreGameState` already calls that
+    endpoint — it was simply never kept.
+  */
+  const [gameCreatedAt, setGameCreatedAt] = useState(null);
   
   // Loading overlay state
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -753,12 +768,12 @@ function GameHostPage() {
     showReport: setShowReport,
     reportData: setReportData,
     eventTitle: setEventTitle,
+    gameCreatedAt: setGameCreatedAt,
     lessonExpanded: setLessonExpanded,
     showExpandedQR: setShowExpandedQR,
     qrMode: setQrMode,
     setupPanelOpen: setSetupPanelOpen,
     browsingQuestions: setBrowsingQuestions,
-    inviteCopied: setInviteCopied,
     isLoadingData: setIsLoadingData,
     isRestoringState: setIsRestoringState,
     manualStateChange: setManualStateChange,
@@ -1735,6 +1750,9 @@ Focus on actionable business strategy insights.`;
         if (gameStateData.gameMetadata) {
           setEventTitle(gameStateData.gameMetadata.title || '');
           setCurrentGameType(gameStateData.gameMetadata.gameType || 'call-and-answer');
+          // The retention deadline is creation + 90 days, and the invite dialog
+          // cannot check a chosen date without this. Already in the payload.
+          setGameCreatedAt(gameStateData.gameMetadata.createdAt || null);
           // Show the voice the game is actually set to, not a fresh default.
           setGamePersonaId(gameStateData.gameMetadata.personaId || '');
           const restoredSetId = gameStateData.gameMetadata.questionSetId || '';
@@ -3391,14 +3409,6 @@ Focus on actionable business strategy insights.`;
     });
   };
   
-  const copyInviteInfo = (game) => {
-    const inviteText = `Join the engagement!\n\nGame ID: ${game.gameId}\nURL: ${window.location.origin}/player?gameId=${game.gameId}\n\nTitle: ${game.eventTitle || 'Engagement Session'}`;
-    navigator.clipboard.writeText(inviteText).then(() => {
-      console.log('📋 Invite info copied to clipboard');
-    }).catch(err => {
-      console.error('❌ Failed to copy to clipboard:', err);
-    });
-  };
 
   /**
    * Create the engagement <GameSetupDialog> just described.
@@ -3530,65 +3540,6 @@ Focus on actionable business strategy insights.`;
   };
 
   // Create and copy comprehensive meeting invite
-  const createInvite = async () => {
-    if (!gameId || !eventTitle) {
-      console.error('Cannot create invite: missing gameId or eventTitle');
-      return;
-    }
-
-    // Derived, never hardcoded. This read `https://eng.dev.seibtribe.us` — a
-    // single environment, and the off-pipeline one being retired — so a host
-    // running a PROD session copied an invitation that sent the whole room to
-    // dev. Every other url on this page is already built this way (`playUrl`,
-    // `joinDisplayUrl`, `remoteUrl`); this one was missed because it is a
-    // string in a template rather than a value anything renders.
-    const gameUrl = `${window.location.origin}/play?gameId=${gameId}`;
-    const questionSet = questionSets.find(set => set.id === selectedSetId);
-    
-    // Get selected categories text
-    const selectedCategoriesList = categories.filter(cat => activeCategoryIds.has(cat.name));
-    const catText = selectedCategoriesList.length > 0 
-      ? selectedCategoriesList.map(cat => `${cat.name} (${cat.questionCount})`).join(', ')
-      : 'All categories';
-
-    const inviteText = `ENGAGEMENT INVITATION
-
-${eventTitle}
-
-You're invited to participate in an interactive engagement session!
-
-DETAILS:
-• Type: ${gameTypeLabel(currentGameType)} — ${gameTypeMeta(currentGameType).blurb}
-• Question Set: ${questionSet?.name || questionSet?.title || 'Unknown Set'}
-• Categories: ${catText}
-
-TO JOIN:
-Click this link or copy it to your browser:
-${gameUrl}
-
-INSTRUCTIONS:
-1. Click the link above or paste it into your browser
-2. Enter your name when prompted
-3. Wait for the host to begin
-4. Participate by answering questions and voting
-
-Ready to engage? See you there!`;
-
-    try {
-      await navigator.clipboard.writeText(inviteText);
-      // The button itself says "Copied!" for four seconds. A full-screen
-      // overlay to say the same thing is a modal in front of a live room.
-      setInviteCopied(true);
-      setTimeout(() => setInviteCopied(false), 4000);
-      
-      console.log('📋 Invite copied to clipboard');
-      console.log('Invite text:', inviteText);
-    } catch (error) {
-      console.error('Failed to copy invite to clipboard:', error);
-      // Fallback: show invite text in an alert
-      alert('Invite text (copy manually):\n\n' + inviteText);
-    }
-  };
 
   // authFetch, not fetch: GET /games now carries the Cognito authorizer and
   // requires the hosts or admins group, like /close-round and /reveal-authors.
@@ -3959,7 +3910,17 @@ Ready to engage? See you there!`;
             mode={reportsModalMode}
             questionSets={questionSets}
             onCopyPlayerUrl={copyPlayerUrl}
-            onInvite={copyInviteInfo}
+            onInvite={(session) => setInviteTarget({
+              gameId: session.gameId,
+              title: session.title || session.eventTitle,
+              gameType: session.gameType,
+              setName: (questionSets.find((set) => set.id === session.questionSetId) || {}).name
+                || session.questionSetId,
+              /* null, not [] — a history row carries no category data, and []
+                 would print "All categories" onto an invite nobody checked. */
+              categories: null,
+              createdAt: session.createdAt,
+            })}
             onReport={generateReportForGame}
             onOpen={selectGameFromHistory}
             onStart={startGameFromHistory}
@@ -3971,6 +3932,13 @@ Ready to engage? See you there!`;
             }}
           />
         </div>
+        {/*
+          MOUNTED HERE TOO, AND THAT IS NOT A DUPLICATE. This branch is an early
+          `return`, so anything rendered in the main tree below is unreachable
+          from session history — a single mount there would leave the history
+          list's Invite button pressing nothing at all.
+        */}
+        <InviteDialog target={inviteTarget} onClose={() => setInviteTarget(null)} />
       </div>
     );
   }
@@ -5086,9 +5054,19 @@ Ready to engage? See you there!`;
           playUrl={playUrl}
           remoteUrl={remoteUrl}
           joinLinkCopied={sidebarCopyMessage}
-          inviteCopied={inviteCopied}
           onCopyJoinLink={() => copyUrlToClipboard(playUrl, 'sidebar')}
-          onCopyInvite={createInvite}
+          onInvite={() => setInviteTarget({
+            gameId,
+            title: eventTitle,
+            gameType: currentGameType,
+            setName: (questionSets.find((set) => set.id === selectedSetId) || {}).name
+              || (questionSets.find((set) => set.id === selectedSetId) || {}).title,
+            categories: categories
+              .filter((cat) => activeCategoryIds.has(cat.name))
+              .map((cat) => ({ name: cat.name, questionCount: cat.questionCount })),
+            createdAt: gameCreatedAt,
+          })}
+          suppressKeys={Boolean(inviteTarget)}
           onShowJoinCode={() => setQrMode('pinned')}
           profile={profile}
           onProfileChange={setProfile}
@@ -5284,7 +5262,11 @@ Ready to engage? See you there!`;
       />
 
     </div>
-    
+
+    {/* The session panel's Invite button opens the same dialog as session
+        history's — one component, one piece of state, two openers. */}
+    <InviteDialog target={inviteTarget} onClose={() => setInviteTarget(null)} />
+
     </>
   );
 }

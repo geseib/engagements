@@ -99,9 +99,17 @@ export default function SessionSetupPanel({
   playUrl = '',
   remoteUrl = '',
   joinLinkCopied = false,
-  inviteCopied = false,
   onCopyJoinLink = () => {},
-  onCopyInvite = () => {},
+  onInvite = () => {},
+  /*
+    Silence this panel's own document-level keydown while a dialog it opened is
+    on screen. That handler answers Escape AND `\` unconditionally, and it is
+    hand-rolled, so `Modal`'s topmost-by-DOM-containment logic cannot see it —
+    without this, Escape inside the invite dialog closes the dialog and the
+    panel underneath it, and `\` types a backslash nowhere while toggling the
+    panel shut.
+  */
+  suppressKeys = false,
   onShowJoinCode = () => {},
   profile = 'room',
   onProfileChange = () => {},
@@ -173,6 +181,11 @@ export default function SessionSetupPanel({
   // Esc and `\` both close, because `\` is what opened it.
   useEffect(() => {
     const onKeyDown = (event) => {
+      // A dialog this panel opened is on top. This listener is on `document`
+      // and hand-rolled, so `Modal`'s topmost-by-containment check cannot see
+      // it — without this bail, one Escape closes the dialog AND the panel
+      // under it, and `\` shuts the panel out from under an open dialog.
+      if (suppressKeys) return;
       if (event.key === 'Escape' || event.key === '\\') {
         event.preventDefault();
         onClose();
@@ -180,7 +193,7 @@ export default function SessionSetupPanel({
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+  }, [onClose, suppressKeys]);
 
   /**
    * Focus stays inside while it is open. Without this, Tab walks out of the
@@ -830,8 +843,8 @@ export default function SessionSetupPanel({
                 </button>
                 {/* A calendar-invite blob, not a url — distinct from the link
                     above, and the mockup only drew the link. */}
-                <button type="button" onClick={onCopyInvite}>
-                  {inviteCopied ? 'Copied!' : 'Copy Invite'}
+                <button type="button" onClick={onInvite}>
+                  {'Invite…'}
                 </button>
                 <button type="button" onClick={onShowJoinCode}>
                   Put the join code back on the stage

@@ -462,17 +462,46 @@ describe('the Settings tab', () => {
     expect(screen.getByText('https://eng.example.us/remote?gameId=4821')).toBeInTheDocument();
   });
 
-  test('the join link and Copy Invite are both there, and different', () => {
-    // rejects: collapsing them. Copy Invite is a calendar blob; the join link
-    // is a url. The mockup only drew the link.
+  test('the join link and Invite are both there, and different', () => {
+    /*
+      rejects: collapsing them. The invite is a whole document — title, type,
+      question set, categories, joining instructions — and the join link is a
+      url. The mockup only drew the link.
+
+      `onInvite` OPENS A DIALOG now rather than copying straight to the
+      clipboard, which is what makes this button and session history's the same
+      mechanism. The panel still only says WHICH session; everything else is the
+      dialog's.
+    */
     const onCopyJoinLink = jest.fn();
-    const onCopyInvite = jest.fn();
-    renderPanel({ onCopyJoinLink, onCopyInvite });
+    const onInvite = jest.fn();
+    renderPanel({ onCopyJoinLink, onInvite });
     openTab('Settings');
     fireEvent.click(screen.getByRole('button', { name: /copy join link/i }));
-    fireEvent.click(screen.getByRole('button', { name: /copy invite/i }));
+    fireEvent.click(screen.getByRole('button', { name: /invite/i }));
     expect(onCopyJoinLink).toHaveBeenCalledTimes(1);
-    expect(onCopyInvite).toHaveBeenCalledTimes(1);
+    expect(onInvite).toHaveBeenCalledTimes(1);
+  });
+
+  test('the panel stops answering Escape while a dialog it opened is on top', () => {
+    /*
+      This panel's keydown is on `document` and hand-rolled, so `Modal`'s
+      topmost-by-DOM-containment check cannot see it. Without the bail, one
+      Escape inside the invite dialog closes the dialog AND the panel beneath
+      it — and `\\` shuts the panel out from under an open dialog.
+    */
+    const onClose = jest.fn();
+    renderPanel({ onClose, suppressKeys: true });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: '\\' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  test('and answers it again once the dialog has gone', () => {
+    const onClose = jest.fn();
+    renderPanel({ onClose });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   test('the display profile picker changes the profile', () => {
