@@ -262,6 +262,47 @@ exports.handler = async (event) => {
 
     // If host is requesting, get additional host-specific data
     if (!playerId || event.queryStringParameters?.includeHostData === 'true') {
+      /*
+        THE QUEUED RUNNING ORDER — and the remote is the reason it is HERE.
+
+        The phone remote holds no WebSocket at all (HostRemote.jsx explains
+        why: the host connection row gets evicted, so the remote deliberately
+        does not hold one). It polls this endpoint every 2s and that is its
+        ONLY channel. A queue announced solely over `questionQueueChanged`
+        would be invisible on the surface the host is actually holding — they
+        would queue three questions on the stage and see nothing on the phone,
+        which reads as the feature not working rather than as a missing field.
+
+        The projection is the SAME shape `GET /games/{id}/queue` returns, on
+        purpose: the remote reads both, and two shapes would be two parsers of
+        one fact. `version` travels with it because the next thing the phone
+        does with this is post an op carrying `expectedVersion`.
+
+        Its own try/catch, like the category block below — a session that has
+        never queued anything must not lose its whole state payload to a
+        failure in an optional extra.
+      */
+      try {
+        const queueResult = await db.send(new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: 'QUEUE' }
+        }));
+
+        const queueItem = queueResult.Item;
+        // No QUEUE row is an EMPTY queue at version 0, not an absent field. A
+        // surface that has to distinguish "no queue yet" from "queue of none"
+        // is a surface that will get it wrong on first render.
+        response.questionQueue = {
+          queue: Array.isArray(queueItem?.Queue) ? queueItem.Queue : [],
+          version: Number(queueItem?.Version) || 0,
+          setId: queueItem?.SetId || null,
+          setVersion: queueItem?.SetVersion !== undefined ? queueItem.SetVersion : null,
+          updatedAt: queueItem?.UpdatedAt || null
+        };
+      } catch (error) {
+        console.error('Error fetching question queue:', error);
+      }
+
       // Get category counts and state for dynamic management
       try {
         const categoryCountsResult = await db.send(new GetCommand({

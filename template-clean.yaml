@@ -361,6 +361,63 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  QuestionQueueFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-question-queue'
+      CodeUri: lambda-functions/game/
+      Handler: question-queue.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Events:
+        # Two events, one function, because they are two halves of one fact:
+        # the panel reads the running order and then edits it, and a split
+        # across two handlers would be two copies of the projection shape.
+        ReadQueue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/queue
+            Method: get
+            # HOST ONLY, exactly like /stage-beat and /reveal-authors above.
+            # The queue names the questions the room has NOT been asked yet, so
+            # on a public route it is a spoiler served to any phone holding the
+            # four-digit game id — and players have that id by definition.
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ChangeQueue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/queue
+            Method: post
+            # HOST ONLY, and here it decides what the whole room is asked next.
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        # CRUD, NOT Read+Write, and the difference is not cosmetic: SAM's
+        # DynamoDBWritePolicy grants PutItem/UpdateItem/BatchWrite but NOT
+        # DeleteItem, and this handler deletes — the 410-Gone connection reaping
+        # in its broadcast drops dead CONNECTION# rows inline, the same cleanup
+        # stage-beat.js and next-question.js do. With Write only, every stale
+        # connection survives forever and is retried on every future broadcast,
+        # and the failure is an AccessDenied inside a catch that deliberately
+        # never throws, so nothing surfaces anywhere.
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        # The OTHER host surface has to hear about the change. Queue on the
+        # phone, watch the stage follow; reorder on the stage, watch the phone
+        # follow. Without this the broadcast is a silent AccessDenied and the
+        # two devices disagree about what is queued.
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   ### HTTP API with Simple Naming (like original GameApi)
   RestApi:
     Type: AWS::Serverless::HttpApi

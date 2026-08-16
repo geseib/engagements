@@ -297,11 +297,35 @@ class BatchGetCommand { constructor(i) { this.input = i; this.type = 'batchGet';
 /**
  * Install the AWS stubs so every handler under `lambda-functions/game/` sees
  * them, whichever `node_modules` it would have resolved to.
+ *
+ * `sent` keeps its original meaning — the parsed frames, in order — because
+ * every existing caller reads it that way. Two OPTIONAL extras were added for
+ * the queue handler, which broadcasts and reaps:
+ *
+ *   `frames` also records WHICH CONNECTION each frame went to, which `sent`
+ *            throws away. "Was the projector told?" is a different question
+ *            from "was a frame sent", and only the first one matters when the
+ *            whole point of a type is that the other surface follows.
+ *   `gone`   a Set of connection ids that answer 410 Gone, so the inline
+ *            reaping every broadcaster in this repo performs can actually be
+ *            exercised. Without it a handler that never deletes a dead row
+ *            passes, and the row is retried on every future broadcast forever.
+ *
+ * `lambda-functions/websocket` is in the base list so a TEST can require a
+ * module from that directory — the TTL constants live there and the game
+ * handlers pin themselves against them. Production code must NOT require
+ * across those directories: a Lambda package is rooted at its CodeUri, so it
+ * resolves here and throws MODULE_NOT_FOUND once deployed.
  */
-function installStubs({ table, sent }) {
+function installStubs({ table, sent, frames = null, gone = null }) {
   const path = require('path');
   const REPO = path.join(__dirname, '..', '..');
-  const bases = [REPO, path.join(REPO, 'lambda-functions'), path.join(REPO, 'lambda-functions', 'game')];
+  const bases = [
+    REPO,
+    path.join(REPO, 'lambda-functions'),
+    path.join(REPO, 'lambda-functions', 'game'),
+    path.join(REPO, 'lambda-functions', 'websocket'),
+  ];
 
   const stub = (name, exports) => {
     const seen = new Set();
@@ -323,7 +347,19 @@ function installStubs({ table, sent }) {
   });
   stub('@aws-sdk/client-apigatewaymanagementapi', {
     ApiGatewayManagementApiClient: class {
-      async send(command) { sent.push(JSON.parse(command.input.Data)); return {}; }
+      async send(command) {
+        const { ConnectionId, Data } = command.input;
+        if (gone && gone.has(ConnectionId)) {
+          const error = new Error('Gone');
+          error.name = 'GoneException';
+          error.statusCode = 410;
+          throw error;
+        }
+        const message = JSON.parse(Data);
+        sent.push(message);
+        if (frames) frames.push({ connectionId: ConnectionId, message });
+        return {};
+      }
     },
     PostToConnectionCommand: class { constructor(i) { this.input = i; } },
   });
