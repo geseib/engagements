@@ -1245,3 +1245,43 @@
   padding-top: 4px;
   padding-bottom: 4px;
 }
+
+/* ---------------------------------------------------------------------------
+   AN INLINE TEXT ACTION UNDER A FIELD.
+
+   "Use a different code" is not a dock button: `.plr-btn` is the full-width
+   56px primary action, and the dock is where the ONE thing you came to do
+   lives. This is a way out of a field, sitting under that field, and it must
+   not compete with Join Game two inches below it.
+
+   Colour is `--primary`, which playerSurfacePalette.test.js already measures
+   against this surface's field ("--primary on the shell"). It is underlined as
+   well as coloured, because hue alone is not an affordance.
+
+   44px MINIMUM, from padding rather than from a box. Audit A4 is "every target
+   is 44x44" and this is the phone. The visible text stays at the meta rung so
+   the field's own help line above it is still the louder of the two — the
+   target is bigger than the paint, which is the point.
+   --------------------------------------------------------------------------- */
+.plr-linkish {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: var(--plr-t-meta);
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.plr-linkish:hover,
+.plr-linkish:active {
+  color: var(--text);
+}
