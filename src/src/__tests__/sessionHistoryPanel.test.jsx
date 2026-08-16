@@ -338,6 +338,37 @@ describe('§6 the stylesheet contracts jsdom cannot measure', () => {
     expect(widths.reduce((a, b) => a + b, 0) + when * 2 + num * 2).toBe(100);
   });
 
+  test('the dialog is wide enough for nine columns', () => {
+    /*
+      The container was sized for the CARD list that used to live here, where
+      every field had its own line. At its old 800px the two date columns
+      resolve to about 72px — enough for "Aug 10," and not the year, which is
+      exactly what the owner reported.
+    */
+    const fs2 = require('fs');
+    const global2 = fs2
+      .readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const rule = global2.slice(global2.indexOf('.reports-modal {'));
+    const body = rule.slice(0, rule.indexOf('}'));
+    const px = Number(body.match(/max-width:\s*min\((\d+)px/)[1]);
+    expect(px).toBeGreaterThanOrEqual(1100);
+    // And it caps against the viewport, so a laptop at 1280 still fits it.
+    expect(body).toMatch(/95vw/);
+  });
+
+  test('only the table body scrolls, not the dialog as well', () => {
+    // Two nested scrollers is how a sticky table header scrolls away from the
+    // rows it labels.
+    const fs2 = require('fs');
+    const global2 = fs2
+      .readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const rule = global2.slice(global2.indexOf('.reports-modal {'));
+    expect(rule.slice(0, rule.indexOf('}'))).toMatch(/overflow:\s*hidden/);
+    expect(CSS).toMatch(/\.shist__scroll\s*\{[^}]*overflow-y:\s*auto/);
+  });
+
   test('nothing drops below the 12px floor', () => {
     const sizes = [...CSS.matchAll(/font-size:\s*(\d+)px/g)].map((m) => Number(m[1]));
     expect(sizes.length).toBeGreaterThan(0);

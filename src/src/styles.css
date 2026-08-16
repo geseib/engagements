@@ -2870,9 +2870,29 @@ body {
    four of that screen's actions ended up the same weight. */
 
 /* Reports Modal Styles */
+/*
+  THE SESSION HISTORY IS A TABLE NOW, AND 800px COULD NOT HOLD IT.
+
+  This was sized for the card list that used to live here, where every field had
+  a whole line to itself. The table carries nine columns, and at 800px the two
+  date columns resolve to about 72px each — enough for "Aug 10," and not the
+  year. The owner's report was "many columns are cut off dates for example".
+
+  `min(..., 95vw)` rather than a flat width so the dialog still fits a laptop
+  at 1280 with the browser chrome, and the panel keeps its own scrolling: the
+  container is `overflow: hidden` and a flex column, so `.shist__scroll` is the
+  one thing that scrolls. Two nested scrollers is how a sticky table header
+  ends up scrolling away from its own rows.
+*/
 .reports-modal {
-  max-width: 800px;
-  max-height: 80vh;
+  max-width: min(1180px, 95vw);
+  width: 100%;
+  height: min(820px, 88vh);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 20px;
 }
 
 .games-list {

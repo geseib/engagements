@@ -234,7 +234,7 @@ export default function WelcomeScreen({
 
                 <div className="wel-link">
                   <button type="button" className="wel-btn wel-btn-line" onClick={() => onViewHistory?.()}>
-                    Game history
+                    Session history
                   </button>
                   <p className="wel-meta">
                     Every session you have run, with its report — and anything you left part-way.

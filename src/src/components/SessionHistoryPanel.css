@@ -47,6 +47,11 @@
 
   display: flex;
   flex-direction: column;
+  /* Fills the dialog, which is a flex column of a fixed height. `min-height: 0`
+     is what lets `.shist__scroll` below actually overflow — without it a flex
+     item's default `min-height: auto` resolves to content height and the
+     overflow never exists. */
+  flex: 1 1 auto;
   min-height: 0;
   background: var(--bg);
   color: var(--text);
@@ -191,13 +196,13 @@
 
 /* Sums to 100. The actions column is far wider than the admin table's 9%
    because this row carries up to five controls where that one carries one. */
-.shist__c-name  { width: 20%; }
-.shist__c-id    { width: 7%; }
-.shist__c-type  { width: 11%; }
-.shist__c-state { width: 10%; }
+.shist__c-name  { width: 22%; }
+.shist__c-id    { width: 6%; }
+.shist__c-type  { width: 10%; }
+.shist__c-state { width: 9%; }
 .shist__c-num   { width: 5%; }
-.shist__c-when  { width: 9%; }
-.shist__c-acts  { width: 24%; }
+.shist__c-when  { width: 12%; }
+.shist__c-acts  { width: 19%; }
 
 /* Floor size is right for these: they are glanced, never read in runs. Tabular
    numerals come from `.shist` so a column of counts lines up. */
