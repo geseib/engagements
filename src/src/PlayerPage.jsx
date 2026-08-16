@@ -289,6 +289,18 @@ function PlayerPage() {
   const [isAnswerInputFocused, setIsAnswerInputFocused] = useState(false);
   const [showFullQuestion, setShowFullQuestion] = useState(false);
   const [gameIdFromUrl, setGameIdFromUrl] = useState(false);
+  /*
+    Has the player asked to type a code over the one the link supplied?
+
+    SEPARATE FROM `gameIdFromUrl` ON PURPOSE. That flag records a fact about how
+    this page was opened and stays true for the life of it — `handleJoinGame`
+    and the reconnection logic both read it. Unlocking is a different thing: a
+    choice the player made afterwards. Folding the two together by flipping
+    `gameIdFromUrl` to false would rewrite history to say the code was typed,
+    which is not what happened and is not what those other readers are asking.
+  */
+  const [codeUnlocked, setCodeUnlocked] = useState(false);
+  const codeInputRef = useRef(null);
   const [lastVoteInteraction, setLastVoteInteraction] = useState(0);
   const [isUserVoting, setIsUserVoting] = useState(false);
   const [rejoinedPlayer, setRejoinedPlayer] = useState(false);
@@ -1423,6 +1435,36 @@ function PlayerPage() {
     }
   };
 
+  /**
+   * IS THE SESSION CODE FIELD READ-ONLY RIGHT NOW?
+   *
+   * Derived rather than stored, so the two things it depends on cannot disagree
+   * with each other or with the help text beside the field. A code that was
+   * typed was never locked; a code that arrived in a link is locked until the
+   * player says otherwise.
+   */
+  const codeLocked = gameIdFromUrl && !codeUnlocked;
+
+  /**
+   * Let the player type over the code the link supplied.
+   *
+   * Selects rather than clears — see the note at the control. `select()` is
+   * guarded because jsdom implements it on HTMLInputElement but a future test
+   * double need not, and a help affordance must never be the thing that throws.
+   */
+  const unlockCode = () => {
+    setCodeUnlocked(true);
+    setJoinError('');
+    // After the re-render that removes `readOnly`: focusing a read-only input
+    // works but selecting inside one does not, on iOS in particular.
+    setTimeout(() => {
+      const el = codeInputRef.current;
+      if (!el) return;
+      el.focus();
+      if (typeof el.select === 'function') el.select();
+    }, 0);
+  };
+
   const handleJoinGame = async (e) => {
     e.preventDefault();
     if (!nameInput.trim() || !gameId) return;
@@ -2167,13 +2209,52 @@ function PlayerPage() {
               autoComplete="one-time-code"
               aria-describedby="plr-code-help"
               required
-              readOnly={gameIdFromUrl}
+              readOnly={codeLocked}
+              ref={codeInputRef}
             />
             <p className="plr-help" id="plr-code-help">
-              {gameIdFromUrl
+              {codeLocked
                 ? 'Read from the link you followed. Nothing to type.'
                 : 'Four digits. Not case-sensitive, because there are no letters.'}
             </p>
+            {/*
+              THE WAY OUT OF A CODE THAT IS NO LONGER THE RIGHT ONE.
+
+              A code that arrived in a link was read-only with "Nothing to
+              type", and there was no way to change it at all. That is fine
+              right up until the code is wrong: the host started a different
+              session, the link was yesterday's, someone forwarded the wrong
+              message. The player could scan a new QR or follow a new link, but
+              if all they had was four digits read off the screen — which is the
+              commonest way a room fixes this — the field refused them and the
+              only remaining move was editing the URL by hand.
+
+              UNLOCK RATHER THAN NAVIGATE. "Go back to the page where you type
+              one in" is not a different page — it is this form with the field
+              unlocked, and getting there would mean rewriting the URL first or
+              the param would just re-lock it on the next render. So this
+              unlocks in place. Nothing else has to change: handleJoinGame
+              already rewrites `?gameId=` on a successful manual join, so the
+              link is correct again afterwards without touching that path.
+
+              IT SELECTS RATHER THAN CLEARS. Wiping the field would be a
+              reduction with no recovery — one stray tap and the code that DID
+              arrive in the link is gone. Selected text is replaced by the first
+              keystroke, which costs the same on a phone, and is still there if
+              the tap was a mistake.
+
+              It is not rendered once unlocked: a control whose whole job is
+              already done reads as a second, subtly different action.
+            */}
+            {codeLocked && (
+              <button
+                type="button"
+                className="plr-linkish"
+                onClick={unlockCode}
+              >
+                Use a different code
+              </button>
+            )}
           </div>
 
           <div className="plr-field">

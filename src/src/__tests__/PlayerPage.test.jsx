@@ -95,3 +95,125 @@ describe('joining a session', () => {
     expect(screen.getByPlaceholderText(/Game ID/i)).toBeInTheDocument();
   });
 });
+
+/**
+ * CHANGING THE CODE THE LINK ARRIVED WITH.
+ *
+ * A code from `?gameId=` was `readOnly`, and the help beside it said "Nothing
+ * to type." True right up until the code is the wrong one — the host started a
+ * different session, the link was yesterday's, someone forwarded the wrong
+ * message. Scanning a fresh QR or following a fresh link both worked, because
+ * both replace the URL. Reading four digits off the wall did not, and that is
+ * the way a room actually fixes this. The field refused, and the only move left
+ * was editing the address bar by hand on a phone.
+ */
+describe('a code that arrived in a link can be replaced', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    window.history.pushState({}, '', '/play');
+    global.fetch.mockClear();
+    global.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, playerName: 'Ada', state: 'CREATED' }),
+      text: async () => '{}',
+    });
+  });
+
+  const arriveByLink = () => {
+    window.history.pushState({}, '', '/play?gameId=4821');
+    render(<PlayerPage />);
+  };
+
+  /*
+    The FIELD'S OWN description, resolved through `aria-describedby` rather than
+    searched for by text. The page lede also says "Type the four digits on the
+    main screen", so a bare text query matches two elements and a test that
+    settles for the first is asserting about whichever one happens to come
+    first in the document.
+  */
+  const codeHelp = () => {
+    const field = screen.getByPlaceholderText(/Game ID/i);
+    return document.getElementById(field.getAttribute('aria-describedby'));
+  };
+
+  test('the code is locked by default, so a scanned link still reads as settled', () => {
+    arriveByLink();
+    expect(screen.getByPlaceholderText(/Game ID/i)).toHaveAttribute('readonly');
+    expect(codeHelp()).toHaveTextContent(/Nothing to type/i);
+  });
+
+  test('a typed code is not locked, and never was', () => {
+    render(<PlayerPage />);
+    expect(screen.getByPlaceholderText(/Game ID/i)).not.toHaveAttribute('readonly');
+    expect(screen.queryByRole('button', { name: /Use a different code/i })).toBeNull();
+  });
+
+  test('a locked code offers a way out', () => {
+    arriveByLink();
+    expect(screen.getByRole('button', { name: /Use a different code/i })).toBeInTheDocument();
+  });
+
+  test('taking it unlocks the field for typing', () => {
+    arriveByLink();
+    fireEvent.click(screen.getByRole('button', { name: /Use a different code/i }));
+    expect(screen.getByPlaceholderText(/Game ID/i)).not.toHaveAttribute('readonly');
+  });
+
+  /*
+    SELECTED, NOT CLEARED. Wiping the field would be a reduction with no
+    recovery — one stray tap and the code that DID arrive is gone. The first
+    keystroke replaces a selection anyway, so this costs the player nothing and
+    survives a mis-tap.
+  */
+  test('the code that arrived is still there, not wiped', () => {
+    arriveByLink();
+    fireEvent.click(screen.getByRole('button', { name: /Use a different code/i }));
+    expect(screen.getByPlaceholderText(/Game ID/i)).toHaveValue('4821');
+  });
+
+  test('the help line stops saying there is nothing to type', () => {
+    arriveByLink();
+    fireEvent.click(screen.getByRole('button', { name: /Use a different code/i }));
+    expect(codeHelp()).not.toHaveTextContent(/Nothing to type/i);
+    expect(codeHelp()).toHaveTextContent(/Four digits/i);
+  });
+
+  test('the control retires once it has done its job', () => {
+    // A control whose only purpose is already served reads as a second,
+    // subtly different action if it stays on screen.
+    arriveByLink();
+    fireEvent.click(screen.getByRole('button', { name: /Use a different code/i }));
+    expect(screen.queryByRole('button', { name: /Use a different code/i })).toBeNull();
+  });
+
+  test('the new code is what gets joined, and the URL follows it', async () => {
+    arriveByLink();
+    fireEvent.click(screen.getByRole('button', { name: /Use a different code/i }));
+    fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: '9137' } });
+    fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: 'Ada' } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+    });
+
+    await waitFor(() => {
+      const joins = global.fetch.mock.calls
+        .filter(([u, o]) => String(u).includes('/players') && o?.method === 'POST');
+      expect(joins.length).toBeGreaterThan(0);
+      expect(String(joins[0][0])).toContain('9137');
+      expect(String(joins[0][0])).not.toContain('4821');
+    });
+
+    /*
+      THE HALF THAT MAKES THIS A FIX RATHER THAN A WORKAROUND. `handleJoinGame`
+      already rewrites `?gameId=` on a successful manual join, which is why
+      unlocking in place is enough and no navigation was needed: reload the page
+      after switching and you land on the session you switched TO, not the stale
+      one the original link named.
+    */
+    await waitFor(() => {
+      expect(window.location.search).toContain('gameId=9137');
+    });
+  });
+});
