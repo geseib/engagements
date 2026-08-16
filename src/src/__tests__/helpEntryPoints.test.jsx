@@ -69,32 +69,95 @@ describe('§2 the host has a way in', () => {
     remoteUrl: 'https://example.test/remote/1234',
   };
 
-  const openSettings = () => {
-    render(<SessionSetupPanel {...panelProps} />);
-    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
-  };
+  /*
+    REACHABLE WITHOUT OPENING ANYTHING, which is the whole of this fix.
 
-  test('the Settings tab offers the host guides', () => {
-    openSettings();
+    The first version put this control in the Settings tab under a "Session"
+    heading — fourth tab, fifth block down — and the owner's report was "i dont
+    see the help anywhere". These tests deliberately do NOT click a tab first:
+    the previous ones did, which is why they stayed green while the control was
+    effectively unreachable.
+  */
+  test('the host guides are on screen the moment the panel opens', () => {
+    render(<SessionSetupPanel {...panelProps} />);
     expect(screen.getByRole('button', { name: /Host guides/i })).toBeInTheDocument();
   });
 
+  test('it lives in the header, beside Close, not inside a tab panel', () => {
+    // The header is the one region on screen whichever tab is selected. A
+    // control in a tabpanel is a control most hosts never see.
+    const { container } = render(<SessionSetupPanel {...panelProps} />);
+    const header = container.querySelector('.setup-panel__header');
+    expect(within(header).getByRole('button', { name: /Host guides/i })).toBeInTheDocument();
+    expect(within(header).getByRole('button', { name: /Close setup/i })).toBeInTheDocument();
+  });
+
+  test('it stays reachable on every tab', () => {
+    render(<SessionSetupPanel {...panelProps} />);
+    for (const tab of ['Players', 'Questions', 'Rounds', 'Settings']) {
+      fireEvent.click(screen.getByRole('tab', { name: tab }));
+      expect(screen.getByRole('button', { name: /Host guides/i })).toBeInTheDocument();
+    }
+  });
+
   test('it opens the host role index', () => {
-    openSettings();
+    render(<SessionSetupPanel {...panelProps} />);
     fireEvent.click(screen.getByRole('button', { name: /Host guides/i }));
     expect(screen.getByRole('heading', { level: 1, name: /For hosts/i })).toBeInTheDocument();
   });
 
   /*
     "Show how this works on the stage" is a DIFFERENT control and both are
-    wanted: that one puts an explanation on the projector for the room to read.
-    This one opens documentation on the host's own screen. A change that
-    replaced either with the other would pass a looser assertion than this.
+    wanted: that one puts an explanation on the PROJECTOR for the room to read.
+    This one opens documentation on the host's own screen. Moving the guides out
+    of Settings must not have taken the explainer with them.
   */
-  test('it does not replace the on-stage explainer, which is a different thing', () => {
-    openSettings();
+  test('the on-stage explainer is still in Settings, and is a different thing', () => {
+    render(<SessionSetupPanel {...panelProps} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
     expect(screen.getByRole('button', { name: /Show how this works on the stage/i }))
       .toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Host guides/i })).toBeInTheDocument();
+    // Exactly one help control on the surface — the move was a move, not a copy.
+    expect(screen.getAllByRole('button', { name: /Host guides/i })).toHaveLength(1);
+  });
+});
+
+describe('§3 neither control is painted in a colour the palette does not have', () => {
+  /*
+    `.help-button` ships `background: #3b82f6` with a blue drop shadow — a
+    colour in no Warm Summit palette, dusk or paper. Unretinted it reads as a
+    browser affordance left on the surface rather than part of the product.
+    Both host surfaces re-tint it rather than forking the component.
+
+    Read as text: jsdom loads no stylesheet and resolves no custom property, so
+    this is the same technique playerSurfacePalette.test.js uses throughout.
+  */
+  const fs = require('fs');
+  const path = require('path');
+  const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
+  const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  test('the player re-tints it, at a specificity that does not depend on bundle order', () => {
+    const css = strip(read('components', 'PlayerSurface.css'));
+    expect(css).toMatch(/\.plr\s+\.help-button\.plr-helpbtn\s*\{/);
+    expect(css).not.toMatch(/#3b82f6/i);
+  });
+
+  test('the player target is 44px, which the base component is not', () => {
+    // `.help-button-small` is 32px. Audit A4 is "every target is 44x44", and
+    // the player surface is the phone — the one place that is not negotiable.
+    const css = strip(read('components', 'PlayerSurface.css'));
+    const rule = css.slice(css.indexOf('.plr .help-button.plr-helpbtn {'));
+    const body = rule.slice(0, rule.indexOf('}'));
+    expect(body).toMatch(/width:\s*44px/);
+    expect(body).toMatch(/height:\s*44px/);
+  });
+
+  test('the host panel re-tints it too, and exempts it from the blanket repaint', () => {
+    const css = strip(read('styles.css'));
+    expect(css).toMatch(/\.setup-panel\s+\.help-button\.setup-panel__help\s*\{/);
+    // Without the exemption the blanket `.setup-panel button:not(...)` rule
+    // makes it a full-size panel button in a header sized for a 34px icon.
+    expect(css).toMatch(/\.setup-panel button:not\([^{]*\.setup-panel__help/);
   });
 });

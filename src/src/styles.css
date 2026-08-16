@@ -574,6 +574,37 @@ body {
 }
 .setup-panel__ws.connected { color: #6FD0A4; }
 
+/* THE HOST GUIDES, DRESSED AS PART OF THIS PANEL.
+
+   `.help-button`'s own paint is a #3b82f6 circle with a blue drop shadow — a
+   colour that appears in no Warm Summit palette. Dropped into this navy header
+   unretinted it reads as a browser affordance somebody left behind, so it is
+   re-tinted here to match `.setup-panel__close`, which is the control it sits
+   next to. Same 34px, same radius, same border.
+
+   Specificity, not order: `.setup-panel .help-button.setup-panel__help` is
+   (0,3,0) against `.help-button`'s (0,1,0), so this wins wherever the two
+   stylesheets land in the bundle. It is also excluded from the blanket
+   `.setup-panel button:not(...)` repaint above, which would otherwise make it a
+   full-size panel button in a header that has room for an icon. */
+.setup-panel .help-button.setup-panel__help {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  padding: 0;
+  background: #25375A;
+  border: 1px solid rgba(155, 168, 190, 0.22);
+  color: #F4EDE4;
+  box-shadow: none;
+}
+
+.setup-panel .help-button.setup-panel__help:hover {
+  background: #2F4570;
+  transform: none;
+  box-shadow: none;
+}
+
 .setup-panel__close {
   width: 34px;
   height: 34px;
@@ -691,7 +722,7 @@ body {
    at higher specificity. Dark grey on dark navy: the labels were unreadable.
    Excluding it here restores the FAB's own white-on-dark-text design rather
    than fighting it with another override. */
-.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.issue-fab-main):not(.issue-fab-option) {
+.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.setup-panel__help):not(.issue-fab-main):not(.issue-fab-option) {
   font: inherit;
   font-weight: 600;
   padding: 8px 12px;
