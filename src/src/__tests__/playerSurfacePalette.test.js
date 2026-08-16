@@ -500,6 +500,62 @@ describe('the shell is what makes "scroll to read, never to act" structural', ()
     expect(shell.indexOf('height: 100dvh')).toBeGreaterThan(shell.indexOf('height: 100vh'));
   });
 
+  /*
+    THE OTHER HALF OF THE SAME RULE, AND THE HALF THAT WAS MISSING.
+
+    The test above pins the shell. It passed for months while an iPhone still
+    put the player's header underneath Safari's address bar, because a correctly
+    sized shell inside an oversized document scrolls anyway: `styles.css` had
+    `body { min-height: 100vh }`, so the DOCUMENT was taller than the visible
+    viewport by exactly the height of the URL bar, and the first thing that
+    scrolls off the top of a `100dvh` shell is `.plr-bar`.
+
+    This is as close as this repo can get to audit check A2 — "the page itself
+    never scrolls" — which the header of this file lists among the four that are
+    geometric and cannot be asserted here. The geometry is unmeasurable in
+    jsdom. The cause is one declaration, and it is right here.
+
+    Asserted on GLOBAL_CSS rather than on the player's own sheet on purpose: the
+    fault was never in `PlayerSurface.css`, and a test that only ever reads the
+    component's stylesheet is a test that could not have caught it.
+  */
+  test('the document is no taller than the shell, so the page has nothing to scroll', () => {
+    /*
+      `stripped()` BEFORE THE ORDER IS READ, and that is not tidiness.
+
+      A first version of this test asserted the order with `indexOf` over the
+      raw block. The rule above is explained by a comment that necessarily
+      QUOTES the declaration it is warning about, so `indexOf('min-height:
+      100vh')` found the prose — which sits above both declarations — and the
+      ordering assertion became "the comment comes before the fix". A mutation
+      that swapped the two declarations into the losing order, putting the
+      shipped bug straight back, sailed through it.
+
+      This is the exact trap `stripped()` was written for further up this file
+      ("passed on prose in a header comment"). It was applied to `PLR_CSS` and
+      never to `GLOBAL_CSS`. Only cascade order decides which declaration wins,
+      so only declarations may be read.
+    */
+    const body = block(stripped(GLOBAL_CSS), 'body');
+    const vh = body.indexOf('min-height: 100vh');
+    const dvh = body.indexOf('min-height: 100dvh');
+
+    expect(vh).toBeGreaterThanOrEqual(0);
+    expect(dvh).toBeGreaterThanOrEqual(0);
+    // Last one wins, so dvh must come second or the fallback overrides the fix.
+    expect(dvh).toBeGreaterThan(vh);
+  });
+
+  test('body and the shell measure themselves against the same viewport unit', () => {
+    // If these two disagree the document can outgrow the shell again, in
+    // whichever direction the disagreement runs. `dvh` on both is the invariant
+    // — not merely "dvh appears somewhere in each".
+    const body = block(stripped(GLOBAL_CSS), 'body');
+    const shell = block(CSS, '.plr');
+    expect(body).toMatch(/min-height:\s*100dvh/);
+    expect(shell).toMatch(/height:\s*100dvh/);
+  });
+
   test('the stage is the one scrolling region, and its overflow actually exists', () => {
     const stage = block(CSS, '.plr-stage');
     expect(stage).toMatch(/overflow-y:\s*auto/);

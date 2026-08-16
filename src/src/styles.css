@@ -120,7 +120,35 @@ body {
   line-height: 1.6;
   color: var(--text);
   background: var(--bg);
+  /*
+    dvh BEFORE vh, AND THE ORDER IS THE WHOLE FIX.
+
+    On iOS `100vh` is the LARGE viewport — the height the page would have if the
+    browser chrome were hidden. So `min-height: 100vh` makes the document taller
+    than what you can actually see by exactly the height of Safari's URL bar,
+    and a document taller than the viewport scrolls.
+
+    That is how the player's header ended up underneath the address bar on an
+    iPhone. `.plr` is a `100dvh` shell with `overflow: hidden` and it was sized
+    correctly — components/PlayerSurface.css:128-130 already carries this exact
+    paragraph about its own height. But the shell sits inside a body that was
+    still claiming the large viewport, so the document had a scroll the shell
+    knew nothing about, and the first thing that scrolls off the top is the bar.
+
+    Both surfaces have to agree, which is why this is `dvh` rather than the more
+    conservative `svh`: `.plr` is `100dvh`, and body matching it exactly means
+    the document can never be taller than the shell it contains, in either
+    toolbar state. The `100vh` line stays as the fallback for engines without
+    `dvh` — a browser that does not understand the second declaration keeps the
+    first, which is the behaviour it had before.
+
+    playerSurfacePalette.test.js pins the pair and the order. It is the closest
+    the repo can get to audit check A2, "the page itself never scrolls", which
+    that file has always listed as geometric and therefore unassertable here —
+    the geometry cannot be measured in jsdom, but the CSS that causes it can.
+  */
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* Common components */
