@@ -1197,3 +1197,51 @@
    listening to somebody. There is no @keyframes, no `animation`, no
    `transition` and no `scroll-behavior: smooth` in this stylesheet, and
    `__tests__/playerSurfacePalette.test.js` fails the day one arrives. */
+
+/* ---------------------------------------------------------------------------
+   THE HELP CONTROL, IN THE PLAYER'S OWN PALETTE.
+
+   `.help-button` paints itself #3b82f6 with a blue drop shadow. That blue is in
+   no Warm Summit palette — dusk or paper — and on this bar, between amber and
+   `--plr-muted`, it reads as a browser affordance somebody left behind rather
+   than part of the product. Colour is tokens only; this scope re-tints rather
+   than forking the component, which is the same move
+   QuestionSetsPanel.css:585-604 makes for a dusk component on a white card.
+
+   44x44, WHICH THE BASE COMPONENT IS NOT. `.help-button-small` is 32px (36px
+   under its own 768px query) and audit check A4 is "every target is 44x44".
+   This surface is the phone; it is the one place that rule is not negotiable.
+   The visible disc stays small so it does not shout over the round context
+   beside it — the target is the padding, not the paint.
+
+   Specificity, not import order: `.plr .help-button.plr-helpbtn` is (0,3,0)
+   against the component's (0,1,0), so this holds wherever the two sheets land
+   in the bundle.
+   --------------------------------------------------------------------------- */
+.plr .help-button.plr-helpbtn {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--plr-rule-strong);
+  color: var(--plr-muted);
+  box-shadow: none;
+}
+
+.plr .help-button.plr-helpbtn:hover,
+.plr .help-button.plr-helpbtn:active {
+  background: var(--plr-amber-tint);
+  border-color: var(--plr-amber-edge);
+  color: var(--text);
+  transform: none;
+  box-shadow: none;
+}
+
+/* The bar is the one row on this surface with a 44px child in it, so it gets
+   its vertical padding back — otherwise the target's own height sets the bar's
+   height and the context line grows by 14px on every screen. */
+.plr-line {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}

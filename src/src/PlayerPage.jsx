@@ -99,7 +99,13 @@ export const PlayerShell = ({
           than beside it, for the same reason `after` is: a dialog rendered as
           a sibling of this shell resolves none of the --plr-* tokens.
         */}
-        <HelpButton section="player" variant="inline" size="small" tooltip="Help" />
+        <HelpButton
+          section="player"
+          variant="inline"
+          size="small"
+          tooltip="Help"
+          className="plr-helpbtn"
+        />
       </div>
     </header>
     <main className={`plr-stage${centre ? ' plr-stage--centre' : ''}`}>

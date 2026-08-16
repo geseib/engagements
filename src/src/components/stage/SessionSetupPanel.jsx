@@ -291,6 +291,31 @@ export default function SessionSetupPanel({
             />
             {wsConnected ? ' Connected' : ' Connecting…'}
           </span>
+          {/*
+            THE HOST GUIDES, IN THE HEADER.
+
+            The first version of this put it in the Settings tab, under a
+            "Session" heading — the FOURTH tab, the FIFTH block down. That is
+            not an entry point, it is a hiding place, and the owner's report
+            was "i dont see the help anywhere". A control nobody can find is
+            the same as the placeholder screens this whole change removed.
+
+            Beside Close because the header is the one part of this panel that
+            is on screen whichever tab is open, and because help and close are
+            the two things you reach for when you are lost. It is NOT on the
+            dock: the dock faces the room, and the room does not need this.
+
+            `onShowHowToPlay` stays where it is in Settings and is a different
+            thing — that one puts an explanation on the PROJECTOR for everyone
+            to read. This one is documentation on the host's own screen.
+          */}
+          <HelpButton
+            section="host"
+            variant="inline"
+            size="small"
+            tooltip="Host guides"
+            className="setup-panel__help"
+          />
           <button
             type="button"
             className="setup-panel__close"
@@ -830,22 +855,11 @@ export default function SessionSetupPanel({
 
               <h3 className="setup-h">Session</h3>
               <div className="setup-row">
+                {/* The host guides used to be here, which is why nobody found
+                    them. They are in the panel header now, beside Close. This
+                    control is a different thing: it puts an explanation on the
+                    PROJECTOR, for the room. */}
                 <button type="button" onClick={onShowHowToPlay}>Show how this works on the stage →</button>
-                {/*
-                  THE HOST'S WAY INTO THE HOST GUIDES, which they did not have.
-
-                  `onShowHowToPlay` beside it is a different thing and both are
-                  wanted: that one puts an explanation ON THE STAGE, for the
-                  room to read, and is a presentation aid. This opens the
-                  documentation on the host's own screen — the five host guides
-                  plus everything else — and the room never sees it.
-
-                  Aimed at the `host` role rather than a single guide, because a
-                  host reaching for help mid-session could want any of running
-                  the room, managing players, or reporting, and the role index
-                  is one tap from all three.
-                */}
-                <HelpButton section="host" variant="text" size="small" tooltip="Host guides" />
                 <button type="button" onClick={onSwitchGame}>Switch game</button>
                 {/*
                   ADMIN OPENS IN A NEW TAB, AND THAT IS THE WHOLE POINT.
