@@ -25,18 +25,19 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import SessionHistoryPanel, {
   rowActions, matchesSearch, orderSessions,
 } from '../components/SessionHistoryPanel';
+import { countOrDash } from '../config/tableCells';
 
 const started = {
   gameId: '4821', title: 'Q3 Offsite', gameType: 'call-and-answer',
   questionSetId: 'set-alpha', hostName: 'Ada',
   createdAt: '2026-08-10T09:00:00Z', lastPlayedAt: '2026-08-11T09:00:00Z',
-  started: true,
+  started: true, playerCount: 7, roundsPlayed: 4,
 };
 const fresh = {
   gameId: '9137', title: 'Pricing Workshop', gameType: 'trivia',
   questionSetId: 'set-beta', hostName: 'Grace',
   createdAt: '2026-08-14T09:00:00Z', lastPlayedAt: null,
-  started: false,
+  started: false, playerCount: 0, roundsPlayed: 0,
 };
 
 const mount = (props = {}) => {
@@ -249,6 +250,55 @@ describe('§5 two empty states, saying different things', () => {
   });
 });
 
+describe('§5b the two counts', () => {
+  const cellUnder = (rowTitle, header) => {
+    const i = screen.getAllByRole('columnheader').findIndex((th) => th.textContent === header);
+    return rowFor(rowTitle).cells[i].textContent;
+  };
+
+  test('both counts are columns', () => {
+    mount();
+    expect(screen.getByRole('columnheader', { name: 'Players' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Rounds' })).toBeInTheDocument();
+  });
+
+  test('a session that was played shows both', () => {
+    mount();
+    expect(cellUnder('Q3 Offsite', 'Players')).toBe('7');
+    expect(cellUnder('Q3 Offsite', 'Rounds')).toBe('4');
+  });
+
+  /*
+    ZERO IS A REAL ANSWER AND MUST SURVIVE. A session nobody joined genuinely
+    had no players, so it prints 0. A `!value` guard — the obvious way to write
+    this — would turn every empty session into "unknown", which is the same
+    empty-state-that-lies mistake in miniature.
+  */
+  test('zero prints as zero, not as unknown', () => {
+    mount();
+    expect(cellUnder('Pricing Workshop', 'Players')).toBe('0');
+    expect(cellUnder('Pricing Workshop', 'Rounds')).toBe('0');
+  });
+
+  test('null prints an em dash — "we could not read it" is not "nobody"', () => {
+    mount({ sessions: [{ ...started, playerCount: null, roundsPlayed: null }] });
+    expect(cellUnder('Q3 Offsite', 'Players')).toBe('—');
+    expect(cellUnder('Q3 Offsite', 'Rounds')).toBe('—');
+  });
+
+  test('a row from an API that never sent the fields still renders', () => {
+    // Older deployments, and any tier not yet carrying the enriched handler.
+    mount({ sessions: [{ ...started, playerCount: undefined, roundsPlayed: undefined }] });
+    expect(cellUnder('Q3 Offsite', 'Players')).toBe('—');
+  });
+
+  test.each([[0, '0'], [7, '7'], [null, '—'], [undefined, '—']])(
+    'countOrDash(%s) is %s', (input, expected) => {
+      expect(countOrDash(input)).toBe(expected);
+    }
+  );
+});
+
 describe('§6 the stylesheet contracts jsdom cannot measure', () => {
   const fs = require('fs');
   const path = require('path');
@@ -283,8 +333,9 @@ describe('§6 the stylesheet contracts jsdom cannot measure', () => {
       return Number(m[1]);
     });
     const when = Number(CSS.match(/\.shist__c-when\s*\{\s*width:\s*(\d+)%/)[1]);
-    // Two `when` columns share one rule.
-    expect(widths.reduce((a, b) => a + b, 0) + when * 2).toBe(100);
+    const num = Number(CSS.match(/\.shist__c-num\s*\{\s*width:\s*(\d+)%/)[1]);
+    // Two `when` columns and two `num` columns each share one rule.
+    expect(widths.reduce((a, b) => a + b, 0) + when * 2 + num * 2).toBe(100);
   });
 
   test('nothing drops below the 12px floor', () => {

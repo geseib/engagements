@@ -257,6 +257,24 @@ function createTable() {
             return { Items: items };
           }
 
+          /*
+            BatchGet, because get-games-list reads one STATE row per session
+            and does it 100 at a time. Modelled honestly: DynamoDB OMITS keys
+            it has no item for rather than returning a null placeholder, so
+            missing rows simply do not appear in Responses — which is the
+            behaviour that makes "an unstarted session has no rounds" resolve
+            to null instead of 0.
+          */
+          case 'batchGet': {
+            const out = {};
+            for (const [name, spec] of Object.entries(input.RequestItems || {})) {
+              out[name] = (spec.Keys || [])
+                .map((k) => store.get(keyOf(k.PK, k.SK)))
+                .filter(Boolean);
+            }
+            return { Responses: out };
+          }
+
           default:
             return {};
         }
@@ -274,6 +292,7 @@ class PutCommand { constructor(i) { this.input = i; this.type = 'put'; } }
 class QueryCommand { constructor(i) { this.input = i; this.type = 'query'; } }
 class DeleteCommand { constructor(i) { this.input = i; this.type = 'delete'; } }
 class UpdateCommand { constructor(i) { this.input = i; this.type = 'update'; } }
+class BatchGetCommand { constructor(i) { this.input = i; this.type = 'batchGet'; } }
 
 /**
  * Install the AWS stubs so every handler under `lambda-functions/game/` sees
@@ -300,6 +319,7 @@ function installStubs({ table, sent }) {
   stub('@aws-sdk/lib-dynamodb', {
     DynamoDBDocumentClient: { from: () => table.doc },
     GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand,
+    BatchGetCommand,
   });
   stub('@aws-sdk/client-apigatewaymanagementapi', {
     ApiGatewayManagementApiClient: class {
@@ -316,4 +336,5 @@ module.exports = {
   applyUpdate,
   conditionalFailure,
   GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand,
+  BatchGetCommand,
 };

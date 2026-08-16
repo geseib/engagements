@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import './SessionHistoryPanel.css';
 import Icon from './Icon';
 import SetImageBadge from './SetImageBadge';
-import { formatWhen } from './SessionsPanel';
+import { formatWhen, countOrDash } from '../config/tableCells';
 import { resolveGameType, gameTypeLabel, gameTypeMeta } from '../config/gameTypes';
 
 /**
@@ -18,8 +18,9 @@ import { resolveGameType, gameTypeLabel, gameTypeMeta } from '../config/gameType
  * Both are the owner's standard — `.sp` is itself cut from the question-set
  * screen — but the admin already renders exactly this object, with exactly
  * these columns, and a host who is also an admin was seeing sessions drawn two
- * completely different ways. One object, one table. `formatWhen` is imported
- * from that panel rather than re-written for the same reason.
+ * completely different ways. One object, one table. `formatWhen` and
+ * `countOrDash` come from config/tableCells.js, which is where those two rules
+ * were consolidated when this screen became their third caller.
  *
  * PRESENTATIONAL BY RULE. No fetch, no `useAuth`, no API_BASE — every action is
  * a prop, exactly as `SessionSetupPanel` is. That is what makes it mountable in
@@ -155,6 +156,8 @@ export default function SessionHistoryPanel({
               <th className="shist__c-id">Code</th>
               <th className="shist__c-type">Type</th>
               <th className="shist__c-state">State</th>
+              <th className="shist__c-num">Players</th>
+              <th className="shist__c-num">Rounds</th>
               <th className="shist__c-when">Created</th>
               <th className="shist__c-when">Last played</th>
               <th className="shist__c-acts" />
@@ -170,14 +173,14 @@ export default function SessionHistoryPanel({
             */}
             {sorted.length === 0 && (
               <tr className="shist__dim">
-                <td colSpan={7}>
+                <td colSpan={9}>
                   No sessions yet. Create one and it will appear here.
                 </td>
               </tr>
             )}
             {sorted.length > 0 && shown.length === 0 && (
               <tr className="shist__dim">
-                <td colSpan={7}>No session matches that search.</td>
+                <td colSpan={9}>No session matches that search.</td>
               </tr>
             )}
 
@@ -233,6 +236,15 @@ export default function SessionHistoryPanel({
                       {session.started ? 'Played' : 'Not started'}
                     </span>
                   </td>
+                  {/*
+                      NULL IS NOT ZERO. "Nobody joined" and "we could not read
+                      it" are different facts, and rendering the second as `0`
+                      is the empty-state-that-lies rule in miniature. The API
+                      sends null when its per-session read failed or the row
+                      predates the counters.
+                  */}
+                  <td className="shist__num">{countOrDash(session.playerCount)}</td>
+                  <td className="shist__num">{countOrDash(session.roundsPlayed)}</td>
                   <td className="shist__when">{formatWhen(session.createdAt)}</td>
                   <td className="shist__when">{formatWhen(session.lastPlayedAt)}</td>
                   <td>

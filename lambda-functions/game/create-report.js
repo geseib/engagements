@@ -1,6 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { resolveSetPartition } = require('./set-version');
+const { uniquePlayerRecords } = require('./player-rows');
 const { isHidden } = require('./anonymity');
 
 const client = new DynamoDBClient({});
@@ -122,25 +123,12 @@ exports.handler = async (event) => {
     // This is the same filter-then-dedupe that playerPerformance below already
     // ran; it just ran too late to be the number anybody read. One computation,
     // used by both.
-    const mainPlayerRecords = players.filter(player =>
-      !player.SK.includes('#SCORE') &&
-      !player.SK.includes('#STATE') &&
-      player.SK.startsWith('PLAYER#')
-    );
-
-    // Deduplicate players by name, keeping the most recent record
-    const playerMap = new Map();
-    mainPlayerRecords.forEach(player => {
-      const playerName = player.PlayerName || player.playerName;
-      const existing = playerMap.get(playerName);
-
-      if (!existing || (player.JoinedAt && (!existing.JoinedAt || player.JoinedAt > existing.JoinedAt))) {
-        playerMap.set(playerName, player);
-      }
-    });
-
-    const uniquePlayers = Array.from(playerMap.values());
-    console.log(`📊 Filtered and deduplicated players: ${players.length} → ${mainPlayerRecords.length} → ${uniquePlayers.length}`);
+    // Lifted to game/player-rows.js when the session-history list needed the
+    // same count. Two readers, one rule — a player count that is right in the
+    // report and wrong in the list is worse than one that is wrong in both,
+    // because nobody can tell which to believe.
+    const uniquePlayers = uniquePlayerRecords(players);
+    console.log(`📊 Filtered and deduplicated players: ${players.length} → ${uniquePlayers.length}`);
 
     // Calculate statistics
     const gameStats = {

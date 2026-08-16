@@ -191,12 +191,17 @@
 
 /* Sums to 100. The actions column is far wider than the admin table's 9%
    because this row carries up to five controls where that one carries one. */
-.shist__c-name  { width: 24%; }
-.shist__c-id    { width: 8%; }
-.shist__c-type  { width: 12%; }
-.shist__c-state { width: 11%; }
-.shist__c-when  { width: 10%; }
-.shist__c-acts  { width: 25%; }
+.shist__c-name  { width: 20%; }
+.shist__c-id    { width: 7%; }
+.shist__c-type  { width: 11%; }
+.shist__c-state { width: 10%; }
+.shist__c-num   { width: 5%; }
+.shist__c-when  { width: 9%; }
+.shist__c-acts  { width: 24%; }
+
+/* Floor size is right for these: they are glanced, never read in runs. Tabular
+   numerals come from `.shist` so a column of counts lines up. */
+.shist__num { font-size: var(--shist-t-label); color: var(--muted); }
 
 /* A SINGLE TEXT NODE WITH min-width: 0. `text-overflow` on a flex container
    with span children is inert and the text is silently cut instead. */
@@ -321,8 +326,8 @@
      and the two date columns go first because they are the least load-bearing
      thing on the row. */
   .shist__c-when { display: none; }
-  .shist__c-name { width: 34%; }
-  .shist__c-acts { width: 31%; }
-  .shist__tbl td:nth-child(5),
-  .shist__tbl td:nth-child(6) { display: none; }
+  .shist__c-name { width: 30%; }
+  .shist__c-acts { width: 29%; }
+  .shist__tbl td:nth-child(7),
+  .shist__tbl td:nth-child(8) { display: none; }
 }

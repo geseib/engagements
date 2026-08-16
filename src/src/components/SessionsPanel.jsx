@@ -4,6 +4,11 @@ import { adminApiUrl } from '../utils/adminApi';
 import { resolveGameType, gameTypeLabel } from '../config/gameTypes';
 import Icon from './Icon';
 import './SessionsPanel.css';
+import { formatWhen, countOrDash } from '../config/tableCells';
+
+/* Re-exported: this module was formatWhen's home before three screens needed
+   it, and existing importers should not have to move. */
+export { formatWhen, countOrDash };
 
 /**
  * THE SESSIONS SCREEN.
@@ -33,14 +38,6 @@ import './SessionsPanel.css';
  * normalised away — OPEN-QUESTIONS #11 needs to know whether that is a bad
  * write or a bad formatter, and a guard here would hide the evidence.
  */
-
-/** A date that is present, formatted; a date that is absent, an em dash. */
-export function formatWhen(value) {
-  if (!value) return '—';
-  const when = new Date(value);
-  if (Number.isNaN(when.getTime())) return '—';
-  return when.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-}
 
 /** The phrase that has to be typed before delete-all is armed. */
 export const DELETE_ALL_PHRASE = 'delete all sessions';
@@ -251,6 +248,8 @@ export default function SessionsPanel({
                 <th className="sp-col-id">Code</th>
                 <th className="sp-col-type">Type</th>
                 <th className="sp-col-state">State</th>
+                <th className="sp-col-num">Players</th>
+                <th className="sp-col-num">Rounds</th>
                 <th className="sp-col-when">Created</th>
                 <th className="sp-col-when">Last played</th>
                 <th className="sp-col-acts" />
@@ -259,7 +258,7 @@ export default function SessionsPanel({
             <tbody>
               {shown.length === 0 && (
                 <tr className="sp-dimrow">
-                  <td colSpan={7}>No session matches this search.</td>
+                  <td colSpan={9}>No session matches this search.</td>
                 </tr>
               )}
               {shown.map((session) => {
@@ -289,6 +288,11 @@ export default function SessionsPanel({
                         {session.started ? 'Played' : 'Never started'}
                       </span>
                     </td>
+                    {/* null, never 0 — "we could not read it" is not "nobody
+                        joined". get-games-list sends null when its per-session
+                        read failed or the row predates the counts. */}
+                    <td className="sp-num">{countOrDash(session.playerCount)}</td>
+                    <td className="sp-num">{countOrDash(session.roundsPlayed)}</td>
                     <td className="sp-when">{formatWhen(session.createdAt)}</td>
                     <td className="sp-when">{formatWhen(session.lastPlayedAt)}</td>
                     <td>
