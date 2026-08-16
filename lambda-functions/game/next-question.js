@@ -594,13 +594,41 @@ exports.handler = async (event) => {
 
       console.log(`📋 Specific question ${questionId} mapped to category ${categoryId} at position ${categoryPosition}`);
 
-      // Create nextQuestion object for specific selection
+      /*
+        A SPECIFIC PICK CARRIES NO CURSOR, AND MUST NOT PRETEND TO.
+
+        This object used to carry `activeIndex: 0` and `questionCount: 1`, with
+        a comment on the second saying "Not relevant for specific selection".
+        That was true of the intent and false of the effect: two blocks further
+        down read both as if they were real, and did real damage with them.
+
+          - the ActiveIndex write took `activeIndex + 1` and stored 1 on
+            `CATEGORY#<id>#ACTIVE`, CLOBBERING wherever the auto-selection
+            cursor actually was. A category the room had worked through to
+            position 5 was reset to 1, and the next five auto-picks re-served
+            questions everyone had already answered.
+
+          - the exhaustion check asked `activeIndex + 1 >= questionCount`,
+            which with the fabricated pair is `1 >= 1` — TRUE for every
+            specific pick ever made. So each one zeroed that category's
+            AvailMask bit, and the auto path never offered the category again.
+            A host who picked one question out of a 40-question category lost
+            the other 39.
+
+        Both blocks are now gated on `isSpecific`, and the two invented numbers
+        are gone rather than left lying around for the next reader to trust.
+        `decrementCategoryCount` below still runs: the question really was
+        asked, and that count is honest bookkeeping either way.
+
+        This matters far more than it looks. One press did the damage once;
+        anything that serves several questions in a row does it once per
+        question.
+      */
       nextQuestion = {
         questionId: `QUESTION#${questionId}`,
         categoryId: categoryId,
         categoryPosition: categoryPosition,
-        activeIndex: 0, // Will be updated when we increment it
-        questionCount: 1, // Not relevant for specific selection
+        isSpecific: true,
         questionNumber: parseInt(questionId)
       };
 
@@ -720,21 +748,31 @@ exports.handler = async (event) => {
       }
     }));
 
-    // Update category active index
-    await db.send(new UpdateCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: `CATEGORY#${nextQuestion.categoryId}#ACTIVE` },
-      UpdateExpression: 'SET #activeIndex = :activeIndex',
-      ExpressionAttributeNames: {
-        '#activeIndex': 'ActiveIndex'
-      },
-      ExpressionAttributeValues: {
-        ':activeIndex': nextQuestion.activeIndex + 1
-      }
-    }));
+    /*
+      THE CURSOR AND THE EXHAUSTION FLAG BELONG TO THE AUTOMATIC PATH ONLY.
+
+      Both of these describe where the auto-selector has got to in a category.
+      A host reaching past it to name one question has not moved that position
+      and has not emptied anything, so neither write applies. See the note on
+      `isSpecific` where the specific branch builds `nextQuestion`.
+    */
+    if (!nextQuestion.isSpecific) {
+      // Update category active index
+      await db.send(new UpdateCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: `CATEGORY#${nextQuestion.categoryId}#ACTIVE` },
+        UpdateExpression: 'SET #activeIndex = :activeIndex',
+        ExpressionAttributeNames: {
+          '#activeIndex': 'ActiveIndex'
+        },
+        ExpressionAttributeValues: {
+          ':activeIndex': nextQuestion.activeIndex + 1
+        }
+      }));
+    }
 
     // Check if this category is now exhausted and update AvailMask if needed
-    if (nextQuestion.activeIndex + 1 >= nextQuestion.questionCount) {
+    if (!nextQuestion.isSpecific && nextQuestion.activeIndex + 1 >= nextQuestion.questionCount) {
       console.log(`🏁 Category ${nextQuestion.categoryId} exhausted, updating AvailMask`);
       
       const position = nextQuestion.categoryPosition;
