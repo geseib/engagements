@@ -10,6 +10,7 @@ import HostQuestionSetsDialog from './components/HostQuestionSetsDialog';
 import WavelengthWordCloud from './components/WavelengthWordCloud';
 import Icon from './components/Icon';
 import SetImageBadge from './components/SetImageBadge';
+import SessionHistoryPanel from './components/SessionHistoryPanel';
 import HostActionBar from './components/HostActionBar';
 import GameReport from './components/GameReport';
 import AISummaryStatus from './components/AISummaryStatus';
@@ -3927,180 +3928,48 @@ Ready to engage? See you there!`;
 
   // Render the game history modal if it's being shown
   if (showReportsModal) {
-    // Sort games by creation date (newest first) and find the most recent
-    const sortedGames = [...gamesList].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    const mostRecentGameId = sortedGames.length > 0 ? sortedGames[0].gameId : null;
-    
+    /*
+      THE SESSION HISTORY. Extracted to components/SessionHistoryPanel.jsx —
+      170 lines of card markup used to live here, one card per session with a
+      title, a status badge and a four-item label/value grid. Forty sessions was
+      forty stacked blocks of chrome, which is the wall RATIONALE §4 rejects and
+      the argument the console already settled for question sets.
+
+      The panel is presentational: it fetches nothing and every action below is
+      a prop, which is what makes it mountable in jsdom instead of only
+      reachable through this 5,000-line file.
+
+      ONE BEHAVIOUR CHANGE, AND IT IS THE POINT. Owner: *"i cant edit the
+      session without starting it today."* The card had ONE primary button that
+      forked on `game.started` — an unstarted session's only door went through
+      `startGameFromHistory`, which POSTs /start and lets players in. So a
+      session could not be set up before the room arrived.
+
+      `selectGameFromHistory` already loads a session without starting it and
+      always did; it was simply never offered for an unstarted one. It is
+      `onOpen` here, for both states — Open for a session that has not started,
+      Continue for one that has. Starting is now its own separate control.
+    */
     return (
       <div className="new-game-overlay">
         <div className="new-game-dialog reports-modal">
-          <div className="modal-header">
-            <h2 className="modal-title">
-              {reportsModalMode === 'select'
-                ? <><Icon name="GameController" weight="duotone" size={24} color="var(--primary)" /> Game History</>
-                : <><Icon name="ChartBar" weight="duotone" size={24} color="var(--primary)" /> Game Reports</>}
-            </h2>
-            <div className="modal-subtitle">
-              {reportsModalMode === 'select' ? 'Select a game to start or continue' : 'View past game reports'}
-            </div>
-          </div>
-          
-          <div className="dialog-content">
-            <div className="games-list">
-              {gamesList.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-icon"><Icon name="Target" weight="duotone" size={48} color="var(--primary)" /></div>
-                  <p>No games found.</p>
-                  <small>Create your first engagement session to get started!</small>
-                </div>
-              ) : (
-                sortedGames.map((game, index) => {
-                  const isRecent = game.gameId === mostRecentGameId;
-                  const isCurrent = game.gameId === gameId;
-                  const isFirst = index === 0;
-                  const displayTitle = game.title || game.eventTitle || 'Engagement Session';
-                  
-                  return (
-                    <div 
-                      key={game.gameId} 
-                      className={`game-history-item ${isCurrent ? 'current-game' : ''} ${isRecent ? 'recent-game' : ''} ${isFirst ? 'first-game' : ''}`}
-                    >
-                      <div className="game-header">
-                        <div className="game-title-section">
-                          <h3 className="game-title">
-                            {displayTitle}
-                            {isRecent && <span className="new-badge"><Icon name="Sparkle" weight="fill" size={13} /> Latest</span>}
-                            {isCurrent && <span className="current-badge"><Icon name="MapPin" weight="fill" size={13} /> Current</span>}
-                          </h3>
-                          <div className="game-id">#{game.gameId}</div>
-                        </div>
-                        <div className="game-status-badges">
-                          {game.started ? (
-                            <span className="status-badge started"><Icon name="Play" weight="fill" size={13} /> Started</span>
-                          ) : (
-                            <span className="status-badge pending"><Icon name="Pause" weight="fill" size={13} /> Ready to Start</span>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="game-details">
-                        <div className="game-info-grid">
-                          <div className="info-item">
-                            <span className="info-label">Type:</span>
-                            <span className="info-value">
-                              <Icon
-                                name={gameTypeMeta(game.gameType).icon}
-                                weight="bold"
-                                size={15}
-                                color={gameTypeMeta(game.gameType).accent}
-                              />{' '}
-                              {gameTypeMeta(game.gameType).label}
-                            </span>
-                          </div>
-                          <div className="info-item">
-                            <span className="info-label">Question Set:</span>
-                            <span className="info-value">
-                              {game.questionSetId || 'Unknown'}
-                              <SetImageBadge hasImages={questionSets.find(s => s.id === game.questionSetId)?.hasImages} />
-                            </span>
-                          </div>
-                          <div className="info-item">
-                            <span className="info-label">Created:</span>
-                            <span className="info-value">
-                              {game.createdAt ? new Date(game.createdAt).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              }) : 'Unknown'}
-                            </span>
-                          </div>
-                          {game.lastPlayedAt && (
-                            <div className="info-item">
-                              <span className="info-label">Last Played:</span>
-                              <span className="info-value">
-                                {new Date(game.lastPlayedAt).toLocaleDateString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="game-actions">
-                        <button 
-                          className="game-action-btn category-style-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            copyPlayerUrl(game.gameId);
-                          }}
-                          title="Copy player URL"
-                        >
-                          <Icon name="LinkSimple" weight="bold" size={16} /> Player URL
-                        </button>
-                        <button 
-                          className="game-action-btn category-style-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            copyInviteInfo(game);
-                          }}
-                          title="Copy invite info"
-                        >
-                          <Icon name="ClipboardText" weight="bold" size={16} /> Invite
-                        </button>
-                        {game.started && (
-                          <button 
-                            className="game-action-btn category-style-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              generateReportForGame(game.gameId, displayTitle);
-                            }}
-                            title="View detailed game report"
-                          >
-                            <Icon name="ChartBar" weight="bold" size={16} /> Report
-                          </button>
-                        )}
-                        <button 
-                          className={`game-action-btn category-style-btn primary-action-btn ${game.started ? 'continue-btn' : 'start-btn'}`}
-                          onClick={() => {
-                            if (game.started) {
-                              // Continue existing game
-                              selectGameFromHistory(game.gameId, displayTitle);
-                            } else {
-                              // Start new game
-                              startGameFromHistory(game.gameId, displayTitle);
-                            }
-                          }}
-                        >
-                          {game.started
-                            ? <><Icon name="Play" weight="fill" size={16} /> Continue</>
-                            : <><Icon name="PlayCircle" weight="fill" size={16} /> Start Game</>}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-          
-          <div className="dialog-actions">
-            <button 
-              className="btn-secondary modal-close-btn" 
-              onClick={() => {
-                setShowReportsModal(false);
-                if (reportsModalMode === 'select' && isLobbyState(gameState) && lessonNumber === 0) {
-                  setShowWelcomeScreen(true);
-                }
-              }}
-            >
-              <Icon name="X" weight="bold" size={16} /> {reportsModalMode === 'select' ? 'Cancel' : 'Close'}
-            </button>
-          </div>
+          <SessionHistoryPanel
+            sessions={gamesList}
+            currentGameId={gameId}
+            mode={reportsModalMode}
+            questionSets={questionSets}
+            onCopyPlayerUrl={copyPlayerUrl}
+            onInvite={copyInviteInfo}
+            onReport={generateReportForGame}
+            onOpen={selectGameFromHistory}
+            onStart={startGameFromHistory}
+            onClose={() => {
+              setShowReportsModal(false);
+              if (reportsModalMode === 'select' && isLobbyState(gameState) && lessonNumber === 0) {
+                setShowWelcomeScreen(true);
+              }
+            }}
+          />
         </div>
       </div>
     );
