@@ -2,6 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand, PutCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { resolveSetPartition } = require('./set-version');
+const { normaliseQueue, queueDrop } = require('./queue-order');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -19,6 +20,222 @@ const isBitSet = (mask, position) => {
 const setBitToZero = (mask, position) => {
   const pos = position - 1; // Convert to 0-based index
   return mask.substring(0, pos) + '0' + mask.substring(pos + 1);
+};
+
+// Is this category switched ON by the host? The three eight-bit masks, read the
+// way every other caller in this file reads them.
+const isHostEnabled = (categoryState, position) => {
+  if (position <= 8) return isBitSet(categoryState['HostMask1-8'], position);
+  if (position <= 16) return isBitSet(categoryState['HostMask9-16'], position - 8);
+  return isBitSet(categoryState['HostMask17-24'], position - 16);
+};
+
+/**
+ * A category NAME to its id and 1-based position in the set.
+ *
+ * Position is the category's index in the set partition, which is what the
+ * host masks and the counts arrays are keyed by. Extracted because the specific
+ * branch and the queue drain need exactly the same answer, and two copies of
+ * this loop is two chances to be off by one against the masks — the seam that
+ * silently toggles the neighbouring category.
+ */
+const locateCategory = async (setPk, categoryName) => {
+  const categoriesQuery = await db.send(new QueryCommand({
+    TableName: process.env.TABLE_NAME,
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+    ExpressionAttributeValues: { ':pk': setPk, ':sk': 'CATEGORY#' }
+  }));
+
+  const allCategories = categoriesQuery.Items || [];
+  for (let i = 0; i < allCategories.length; i++) {
+    const category = allCategories[i];
+    if ((category.Name || category.name) === categoryName) {
+      return { categoryId: category.SK.replace('CATEGORY#', ''), categoryPosition: i + 1 };
+    }
+  }
+  return null;
+};
+
+/** Every question this game has already put on screen, by source id. */
+const askedSourceQuestionIds = async (gameId) => {
+  const res = await db.send(new QueryCommand({
+    TableName: process.env.TABLE_NAME,
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+    ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'QUESTION#' }
+  }));
+
+  const asked = new Set();
+  for (const item of res.Items || []) {
+    // Only the #REF rows say "this was asked". The sibling ANSWER#/VOTE#/
+    // RESULTS rows share the prefix and carry no SourceQuestionId.
+    if (String(item.SK).endsWith('#REF') && item.SourceQuestionId) {
+      asked.add(item.SourceQuestionId);
+    }
+  }
+  return asked;
+};
+
+const QUEUE_DRAIN_ATTEMPTS = 3;
+
+/**
+ * SERVE THE HEAD OF THE HOST'S QUEUE, AND POP IT IN THE SAME BREATH.
+ *
+ * The owner's request: *"queue up multiple questions but they are not triggered
+ * until the end of the round is selected by the host"*. This is the trigger.
+ * `question-queue.js` is the only thing that BUILDS the list; this is the only
+ * thing that consumes it.
+ *
+ * THE POP HAPPENS BEFORE THE QUESTION IS SERVED, conditional on the version the
+ * list was just read at. If the write loses to a host editing the queue at the
+ * same moment, nothing is served from it on that attempt — the alternative is
+ * asking a question that the other surface has just removed, and then failing
+ * to remove it because it is already gone. Serving is the irreversible half, so
+ * the reversible half goes first.
+ *
+ * THE THREE WAYS A QUEUED QUESTION CAN BE UNSERVABLE, and they do NOT get the
+ * same treatment, because only one of them is spent:
+ *
+ *   ALREADY ASKED (a `QUESTION#<nnn>#REF` row names it) — DROPPED. The host
+ *   queued it and then asked it directly, or queued it twice across a rebuild.
+ *   It can never be served again, so leaving it in the list means the host
+ *   watches a row that will silently be skipped forever.
+ *
+ *   ITS CATEGORY IS SWITCHED OFF — SKIPPED, AND LEFT WHERE IT IS. A skipped
+ *   question was never asked. Deleting a host's explicit choice because they
+ *   toggled a category chip is a reduction with no recovery: the chip goes back
+ *   on with one tap, and the queue does not come back at all.
+ *
+ *   NOT IN THE SET, OR IN NO CATEGORY — SKIPPED AND LEFT, same reasoning. A set
+ *   replaced underneath a session is recoverable by putting the set back; a
+ *   queue quietly emptied by that replacement is not.
+ *
+ * EVERYTHING BLOCKED IS NOT THE END OF THE GAME. The caller falls through to
+ * the ordinary automatic selection, which is exactly what would have happened
+ * if the host had never queued anything. Ending the session because the queue
+ * happened to be full of switched-off categories would be a queue that can
+ * close a room down.
+ *
+ * @returns null                      nothing queued — caller proceeds as before
+ *          { staleSet: true }        built against another version of the set
+ *          { served: null, ... }     nothing servable; caller auto-selects
+ *          { served: {...}, queue, version }
+ */
+const drainQueuedQuestion = async ({ gameId, setPk, resolvedSet, categoryState }) => {
+  for (let attempt = 1; attempt <= QUEUE_DRAIN_ATTEMPTS; attempt++) {
+    const queueRead = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'QUEUE' }
+    }));
+
+    const item = queueRead.Item;
+    const queue = normaliseQueue(item && item.Queue);
+    // No queue is the overwhelmingly common case and must cost nothing but this
+    // one read: every session that has never used the feature comes through
+    // here on every round.
+    if (queue.length === 0) return null;
+
+    /*
+      A QUEUE BUILT AGAINST A DIFFERENT VERSION OF THE SET IS NOT A QUEUE.
+
+      Question ids are per-version — `SET#<id>#v<n>` partitions hold their own
+      QUESTION# rows — so after a replace the same key names a different
+      question, or none at all. Serving from it would put an unrelated question
+      on the projector under the host's chosen title. Refused wholesale rather
+      than filtered item by item, because "some of your running order still
+      works" is not a thing a facilitator can act on mid-session.
+    */
+    const builtFor = item.SetVersion === undefined ? null : item.SetVersion;
+    const playing = resolvedSet.version === undefined ? null : resolvedSet.version;
+    if (builtFor !== playing) {
+      console.log(`⚠️ QUEUE: built for set version ${builtFor}, game is playing ${playing} — serving nothing from it`);
+      return { staleSet: true };
+    }
+
+    const asked = await askedSourceQuestionIds(gameId);
+
+    const spent = [];
+    let candidate = null;
+
+    for (const key of queue) {
+      const sourceQuestionId = `QUESTION#${key}`;
+
+      if (asked.has(sourceQuestionId)) {
+        console.log(`🧹 QUEUE: ${key} has already been asked — dropping it`);
+        spent.push(key);
+        continue;
+      }
+
+      const questionRow = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: setPk, SK: sourceQuestionId }
+      }));
+
+      if (!questionRow.Item) {
+        console.log(`⚠️ QUEUE: ${key} is not in ${setPk} — skipping, leaving it queued`);
+        continue;
+      }
+
+      const categoryName = questionRow.Item.category || questionRow.Item.Category;
+      if (!categoryName) {
+        console.log(`⚠️ QUEUE: ${key} has no category — skipping, leaving it queued`);
+        continue;
+      }
+
+      const located = await locateCategory(setPk, categoryName);
+      if (!located) {
+        console.log(`⚠️ QUEUE: category '${categoryName}' is not in ${setPk} — skipping, leaving it queued`);
+        continue;
+      }
+
+      if (!isHostEnabled(categoryState, located.categoryPosition)) {
+        console.log(`⏭️ QUEUE: ${key} is in a switched-off category — skipping, leaving it queued`);
+        continue;
+      }
+
+      candidate = { questionKey: key, questionId: sourceQuestionId, ...located };
+      break;
+    }
+
+    const removals = candidate ? [...spent, candidate.questionKey] : spent;
+    // Nothing to serve AND nothing to tidy: leave the row untouched so its
+    // version does not move under a host who is mid-edit on the other surface.
+    if (removals.length === 0) return { served: null };
+
+    const version = Number(item.Version) || 0;
+    const next = queueDrop(queue, removals);
+
+    try {
+      await db.send(new UpdateCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'QUEUE' },
+        UpdateExpression: 'SET #queue = :queue, #version = :next, #updatedAt = :now',
+        ConditionExpression: '#version = :expected',
+        ExpressionAttributeNames: {
+          '#queue': 'Queue', '#version': 'Version', '#updatedAt': 'UpdatedAt'
+        },
+        ExpressionAttributeValues: {
+          ':queue': next.queue,
+          ':next': version + 1,
+          ':expected': version,
+          ':now': new Date().toISOString()
+        }
+      }));
+    } catch (error) {
+      if (error.name !== 'ConditionalCheckFailedException') throw error;
+      // A host edited the queue between our read and our write. Go round again
+      // and re-pick — the head may be a different question now.
+      console.log(`🔁 QUEUE: the list moved while draining (attempt ${attempt}/${QUEUE_DRAIN_ATTEMPTS})`);
+      continue;
+    }
+
+    return { served: candidate, queue: next.queue, version: version + 1 };
+  }
+
+  // Lost the race three times. Fall through to automatic selection rather than
+  // serving anything: the host still gets a question, which is what pressing
+  // the button asked for.
+  console.log('⚠️ QUEUE: could not drain after repeated contention — selecting automatically');
+  return { served: null };
 };
 
 // Helper function to select next question from enhanced counts (array-based)
@@ -528,6 +745,7 @@ exports.handler = async (event) => {
     }
 
     let nextQuestion;
+    let queueOutcome = null;
 
     // Check if specific question was requested
     if (questionId && (action === 'select_specific' || action === 'skip_to_specific')) {
@@ -558,31 +776,11 @@ exports.handler = async (event) => {
         };
       }
 
-      // Find the categoryId and position for the specific question
-      const categoriesQuery = await db.send(new QueryCommand({
-        TableName: process.env.TABLE_NAME,
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-        ExpressionAttributeValues: {
-          ':pk': setPk,
-          ':sk': 'CATEGORY#'
-        }
-      }));
-
-      const allCategories = categoriesQuery.Items || [];
-      let categoryPosition = null;
-      let categoryId = null;
-
-      for (let i = 0; i < allCategories.length; i++) {
-        const category = allCategories[i];
-        const catId = category.SK.replace('CATEGORY#', '');
-        const categoryName = category.Name || category.name;
-        
-        if (categoryName === questionCategory) {
-          categoryPosition = i + 1;
-          categoryId = catId;
-          break;
-        }
-      }
+      // Find the categoryId and position for the specific question. Shared with
+      // the queue drain — see locateCategory on why this is not inlined twice.
+      const located = await locateCategory(setPk, questionCategory);
+      const categoryId = located && located.categoryId;
+      const categoryPosition = located && located.categoryPosition;
 
       if (!categoryId || !categoryPosition) {
         return {
@@ -633,27 +831,78 @@ exports.handler = async (event) => {
       };
 
     } else {
-      // Get randomization preference from any category ORDER record
-      let isRandomized = true; // Default to true
-      const categoryOrderQuery = await db.send(new QueryCommand({
-        TableName: process.env.TABLE_NAME,
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-        ExpressionAttributeValues: {
-          ':pk': `GAME#${gameId}`,
-          ':sk': 'CATEGORY#'
-        }
-      }));
-      
-      // Find the first ORDER record
-      const orderRecords = (categoryOrderQuery.Items || []).filter(item => item.SK.includes('#ORDER'));
-      if (orderRecords.length > 0) {
-        isRandomized = orderRecords[0].IsRandom !== false;
-        console.log(`🎲 Randomization preference: ${isRandomized ? 'RANDOM' : 'IN ORDER'}`);
-      }
+      /*
+        THE HOST'S OWN RUNNING ORDER GETS FIRST REFUSAL.
 
-      // Select next question automatically
-      nextQuestion = await selectNextQuestion(gameId, categoryState.Item, setPk, isRandomized);
+        This sits AFTER the ASK# duplicate guard above on purpose. That guard
+        answers "Already asking a question" for a repeat press mid-round, and it
+        must keep doing that WITHOUT consuming the queue — a double-tap that
+        quietly swallowed the next queued question would lose it with no error
+        and no way to tell it had happened.
+
+        It sits after the metadata, set resolution and category state because it
+        needs all three: which version of the set the game is playing, and which
+        categories the host currently has switched on.
+
+        An empty queue — every session that has never used the feature, on every
+        round — falls straight through to the automatic selection below with no
+        change to anything. That is the load-bearing property here; the queue is
+        an addition to the existing path, never a replacement for it.
+      */
+      queueOutcome = await drainQueuedQuestion({
+        gameId, setPk, resolvedSet, categoryState: categoryState.Item
+      });
+
+      if (queueOutcome && queueOutcome.served) {
+        const served = queueOutcome.served;
+        console.log(`📋 QUEUE: serving ${served.questionId} from the host's queue`);
+        nextQuestion = {
+          questionId: served.questionId,
+          categoryId: served.categoryId,
+          categoryPosition: served.categoryPosition,
+          /*
+            A QUEUED PICK IS A SPECIFIC PICK, and this flag is why.
+
+            The host reached past the automatic selector to name this question,
+            just in advance rather than in the moment. So the two writes gated
+            on `isSpecific` further down must NOT fire: `7ddb0e0a` records what
+            they cost when they do — the ActiveIndex write resets the category's
+            cursor to 1, and the exhaustion check zeroes its AvailMask bit and
+            makes the whole category unreachable. `tests/specific-selection-
+            damage.js` pins that for the direct path; the queue must not
+            reintroduce it by the side door, once per queued question.
+          */
+          isSpecific: true,
+          questionNumber: parseInt(served.questionKey, 10)
+        };
+      } else {
+        // Get randomization preference from any category ORDER record
+        let isRandomized = true; // Default to true
+        const categoryOrderQuery = await db.send(new QueryCommand({
+          TableName: process.env.TABLE_NAME,
+          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+          ExpressionAttributeValues: {
+            ':pk': `GAME#${gameId}`,
+            ':sk': 'CATEGORY#'
+          }
+        }));
+
+        // Find the first ORDER record
+        const orderRecords = (categoryOrderQuery.Items || []).filter(item => item.SK.includes('#ORDER'));
+        if (orderRecords.length > 0) {
+          isRandomized = orderRecords[0].IsRandom !== false;
+          console.log(`🎲 Randomization preference: ${isRandomized ? 'RANDOM' : 'IN ORDER'}`);
+        }
+
+        // Select next question automatically
+        nextQuestion = await selectNextQuestion(gameId, categoryState.Item, setPk, isRandomized);
+      }
     }
+
+    // Whether the queue had anything to say about this round — reported on both
+    // the served and the ENDED response so a host whose running order was built
+    // against a replaced set finds out, rather than watching it be ignored.
+    const queueNotes = queueOutcome && queueOutcome.staleSet ? { staleSet: true } : {};
 
     if (!nextQuestion) {
       // Game is finished - update state to ENDED and broadcast
@@ -695,7 +944,8 @@ exports.handler = async (event) => {
           gameId: gameId,
           state: 'ENDED',
           message: 'Game completed - all questions have been used',
-          gameEnded: true
+          gameEnded: true,
+          ...queueNotes
         }),
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
@@ -820,6 +1070,20 @@ exports.handler = async (event) => {
       timestamp: now
     });
 
+    // The list is one shorter than it was. Told separately, and never folded
+    // into questionStarted, because the phone remote's queue panel and the
+    // stage's are the same fact on two devices — and the phone would otherwise
+    // go on drawing the served question as still queued until its next 2s poll.
+    if (queueOutcome && queueOutcome.queue) {
+      await broadcastToGame(gameId, {
+        type: 'questionQueueChanged',
+        gameId: gameId,
+        version: queueOutcome.version,
+        queue: queueOutcome.queue,
+        timestamp: now
+      });
+    }
+
     console.log(`✅ Next question selected for game ${gameId}: ${nextQuestion.questionId}`);
 
     return {
@@ -831,7 +1095,15 @@ exports.handler = async (event) => {
         questionId: nextQuestion.questionId,
         lessonNumber: newLessonNumber,
         categoryId: nextQuestion.categoryId,
-        message: 'Next question selected successfully'
+        message: 'Next question selected successfully',
+        // Whether this round came off the host's running order, and what is
+        // left of it. The surface that pressed the button re-renders from this
+        // rather than guessing which entry was consumed.
+        fromQueue: Boolean(queueOutcome && queueOutcome.served),
+        ...(queueOutcome && queueOutcome.queue
+          ? { queue: queueOutcome.queue, queueVersion: queueOutcome.version }
+          : {}),
+        ...queueNotes
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }
     };
