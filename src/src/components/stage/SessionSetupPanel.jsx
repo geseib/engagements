@@ -9,6 +9,7 @@ import {
   anonymityApplies, anonymityActive, waitingNamesCaution,
 } from '../../config/anonymity';
 import { roundSubtitle, hasSummary } from '../../config/sessionHistory';
+import HelpButton from '../HelpButton';
 
 /**
  * Everything the host needs and the room does not, behind one dock button.
@@ -830,6 +831,21 @@ export default function SessionSetupPanel({
               <h3 className="setup-h">Session</h3>
               <div className="setup-row">
                 <button type="button" onClick={onShowHowToPlay}>Show how this works on the stage →</button>
+                {/*
+                  THE HOST'S WAY INTO THE HOST GUIDES, which they did not have.
+
+                  `onShowHowToPlay` beside it is a different thing and both are
+                  wanted: that one puts an explanation ON THE STAGE, for the
+                  room to read, and is a presentation aid. This opens the
+                  documentation on the host's own screen — the five host guides
+                  plus everything else — and the room never sees it.
+
+                  Aimed at the `host` role rather than a single guide, because a
+                  host reaching for help mid-session could want any of running
+                  the room, managing players, or reporting, and the role index
+                  is one tap from all three.
+                */}
+                <HelpButton section="host" variant="text" size="small" tooltip="Host guides" />
                 <button type="button" onClick={onSwitchGame}>Switch game</button>
                 {/*
                   ADMIN OPENS IN A NEW TAB, AND THAT IS THE WHOLE POINT.

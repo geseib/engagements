@@ -300,3 +300,86 @@ code {
     font-size: 12px;
   }
 }
+/* ---------------------------------------------------------------------------
+   Blocks introduced with DocRenderer: tables and keyboard shortcuts.
+   --------------------------------------------------------------------------- */
+
+/* A TABLE THAT SCROLLS ITSELF RATHER THAN THE PAGE. Three columns of prose in
+   a modal on a phone will overflow; the wrapper takes that scroll so the help
+   modal's own body never gains a horizontal scrollbar. jsdom computes no
+   layout, so like `.answer-spotlight__text` this contract is pinned by reading
+   the stylesheet as text — see modalReachability.test.js for the technique. */
+.help-table-wrap {
+  overflow-x: auto;
+  margin: 16px 0;
+}
+
+.help-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.95rem;
+}
+
+.help-table th,
+.help-table td {
+  border: 1px solid #e5e7eb;
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.help-table thead th {
+  background: #f9fafb;
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.help-table tbody th {
+  background: #fcfcfd;
+  color: #1f2937;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Shortcuts as a two-column list of <kbd>, so they can be scanned rather than
+   read. The rounds review alone has three. */
+.help-keys {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+  align-items: baseline;
+  margin: 16px 0;
+}
+
+.help-keys dt {
+  margin: 0;
+}
+
+.help-keys dd {
+  margin: 0;
+  color: #374151;
+}
+
+.help-keys kbd {
+  display: inline-block;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  color: #1f2937;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .help-keys {
+    grid-template-columns: 1fr;
+    gap: 2px 0;
+  }
+
+  .help-keys dd {
+    margin-bottom: 10px;
+  }
+}

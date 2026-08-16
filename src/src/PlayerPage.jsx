@@ -10,6 +10,7 @@ import {
 } from './utils/playerParticipation';
 import JoinNameCollision, { JoinNameCollisionActions } from './components/JoinNameCollision';
 import AnswerSpotlight from './components/AnswerSpotlight';
+import HelpButton from './components/HelpButton';
 import { getClientId, classifyJoinFailure } from './components/joinResult';
 import './components/PlayerSurface.css';
 
@@ -62,7 +63,7 @@ const LookUpCue = ({ children }) => (
  * inside PlayerPage would remount its whole subtree on every keystroke and take
  * the focused textarea with it.
  */
-const PlayerShell = ({
+export const PlayerShell = ({
   phase, volume, ctx, category, who, online = true, banner,
   centre = false, dock = null, after = null, children,
 }) => (
@@ -80,6 +81,25 @@ const PlayerShell = ({
             {who}
           </span>
         )}
+        {/*
+          THE PLAYER'S ONLY WAY INTO THE DOCUMENTATION WRITTEN FOR THEM.
+
+          `HelpButton` was mounted in exactly one file — `AdminPage.jsx` — while
+          the help system's contents advertised four player guides. The audience
+          with the least context and the smallest screen had a documentation set
+          and no door into it from anywhere in the product.
+
+          IN THE BAR, NOT THE DOCK. The dock is the primary action and is
+          omitted entirely when there is nothing to do (see the note on
+          `dock` above); help has to be reachable in precisely those states —
+          "that name is taken" is a dock-less screen, and it is the single most
+          likely moment for a player to want an explanation.
+
+          It renders inside `.plr` so the modal is in the dusk scope rather
+          than beside it, for the same reason `after` is: a dialog rendered as
+          a sibling of this shell resolves none of the --plr-* tokens.
+        */}
+        <HelpButton section="player" variant="inline" size="small" tooltip="Help" />
       </div>
     </header>
     <main className={`plr-stage${centre ? ' plr-stage--centre' : ''}`}>
