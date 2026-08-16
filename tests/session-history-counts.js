@@ -143,6 +143,65 @@ const byId = (games, id) => games.find((g) => g.gameId === id);
     assert.ok('playerCount' in row && 'roundsPlayed' in row);
   });
 
+  console.log('\n§3a  rounds means COMPLETED rounds, matching the Rounds tab');
+
+  /*
+    `LessonNumber` counts questions SERVED; the Rounds tab is fed by
+    `POST /report`, which lists rounds that RESULTED. A round open right now is
+    counted by the first and not the second, so the column read one higher than
+    the list it was meant to agree with.
+  */
+  await check('a round still in ASK is not counted as played', async () => {
+    store.clear();
+    seedSession('4821', { players: ['Ada'], rounds: 5 });
+    store.get(table.keyOf('GAME#4821', 'STATE')).State = 'ASK#005';
+    assert.strictEqual(byId(await list(), '4821').roundsPlayed, 4,
+      'four rounds have results; the fifth is still being answered');
+  });
+
+  await check('a round in VOTE is not counted either', async () => {
+    store.clear();
+    seedSession('4821', { players: ['Ada'], rounds: 5 });
+    store.get(table.keyOf('GAME#4821', 'STATE')).State = 'VOTE#005';
+    assert.strictEqual(byId(await list(), '4821').roundsPlayed, 4);
+  });
+
+  await check('once it results, it counts', async () => {
+    store.clear();
+    seedSession('4821', { players: ['Ada'], rounds: 5 });
+    store.get(table.keyOf('GAME#4821', 'STATE')).State = 'RESULTS#005';
+    assert.strictEqual(byId(await list(), '4821').roundsPlayed, 5);
+  });
+
+  await check('a session abandoned during its first round says zero, not minus one', async () => {
+    store.clear();
+    seedSession('4821', { players: ['Ada'], rounds: 1 });
+    store.get(table.keyOf('GAME#4821', 'STATE')).State = 'ASK#001';
+    assert.strictEqual(byId(await list(), '4821').roundsPlayed, 0);
+  });
+
+  await check('a started session that never asked anything says zero', async () => {
+    store.clear();
+    seedSession('4821', { players: ['Ada'], rounds: 0 });
+    store.get(table.keyOf('GAME#4821', 'STATE')).State = 'STARTED';
+    assert.strictEqual(byId(await list(), '4821').roundsPlayed, 0);
+  });
+
+  await check('a STATE row with no LessonNumber never reports a negative', async () => {
+    /*
+      Inconsistent, but reachable: a row whose State says ASK while
+      LessonNumber was never written — legacy data, or a partial write. Without
+      the floor this arithmetic returns -1, and "-1 rounds" in a column is the
+      kind of thing that gets screenshotted.
+    */
+    store.clear();
+    seedSession('4821', { players: ['Ada'], rounds: 0 });
+    const state = store.get(table.keyOf('GAME#4821', 'STATE'));
+    state.State = 'ASK#001';
+    delete state.LessonNumber;
+    assert.strictEqual(byId(await list(), '4821').roundsPlayed, 0);
+  });
+
   console.log('\n§3b  the rows expire before the session does');
 
   /*

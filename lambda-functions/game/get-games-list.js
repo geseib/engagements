@@ -72,7 +72,31 @@ function knowablePlayerCount(count, game) {
   return ageDays <= SCORE_ROW_TTL_DAYS ? 0 : null;
 }
 
-/** Rounds played per gameId, from STATE.LessonNumber. Missing → null. */
+/**
+ * ROUNDS PLAYED PER GAME — and "played" has to mean what the Rounds tab means.
+ *
+ * `LessonNumber` counts questions SERVED: next-question increments it the
+ * moment a question goes up. The session panel's Rounds tab is fed by
+ * `POST /report`, which lists rounds that produced RESULTS. So a round that is
+ * open right now — sitting in ASK or VOTE, answered by nobody yet or being
+ * voted on — is counted by the first and not the second, and the column read
+ * one higher than the list it was supposed to agree with. The owner spotted it:
+ * "the rounds number on the session history seems to be one more than show up
+ * in the list on the session/rounds tab".
+ *
+ * So the in-flight round is subtracted. `State` says whether there is one:
+ * `ASK#nnn` and `VOTE#nnn` mean the current round has not resulted yet;
+ * `RESULTS#nnn`, `STARTED` and `ENDED` mean every served round has.
+ *
+ * This also gets the abandoned session right, which counting results rows
+ * would too but which a bare LessonNumber would not: a session closed during
+ * ASK#7 has six rounds in its report, and now says six.
+ *
+ * `State` is a DynamoDB RESERVED WORD, hence the `#st` alias — a bare `State`
+ * in a ProjectionExpression is a validation error at runtime, which is the kind
+ * of thing that passes every local test and fails on deploy.
+ */
+const IN_FLIGHT = /^(ASK|VOTE)#/;
 async function roundsPlayedByGame(gameIds) {
   const out = new Map();
   for (let i = 0; i < gameIds.length; i += BATCH_LIMIT) {
@@ -82,14 +106,17 @@ async function roundsPlayedByGame(gameIds) {
         RequestItems: {
           [process.env.TABLE_NAME]: {
             Keys: slice.map((id) => ({ PK: `GAME#${id}`, SK: 'STATE' })),
-            ProjectionExpression: 'PK, LessonNumber',
+            ProjectionExpression: 'PK, LessonNumber, #st',
+            ExpressionAttributeNames: { '#st': 'State' },
           },
         },
       }));
       const items = (res.Responses && res.Responses[process.env.TABLE_NAME]) || [];
       items.forEach((item) => {
         const id = String(item.PK).replace('GAME#', '');
-        out.set(id, Number(item.LessonNumber) || 0);
+        const served = Number(item.LessonNumber) || 0;
+        const open = IN_FLIGHT.test(String(item.State || '')) ? 1 : 0;
+        out.set(id, Math.max(0, served - open));
       });
     } catch (error) {
       // Leave this slice unset: the rows render an em dash rather than a zero.
