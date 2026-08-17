@@ -361,6 +361,38 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  UpNextFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-up-next'
+      CodeUri: lambda-functions/game/
+      Handler: up-next.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Events:
+        UpNextEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/up-next
+            Method: get
+            # HOST ONLY, and this one is not a judgement call. The response
+            # ENUMERATES QUESTIONS THAT HAVE NOT BEEN ASKED YET. On a trivia
+            # round, knowing the next three questions is most of the way to
+            # knowing the next three answers, and a participant already holds
+            # the four-digit game id.
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        # Read-only by design — see the handler's header. Peeking at the running
+        # order must not spend a question, or checking what is coming would
+        # change what is coming.
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   StageFocusFunction:
     Type: AWS::Serverless::Function
     Properties:
