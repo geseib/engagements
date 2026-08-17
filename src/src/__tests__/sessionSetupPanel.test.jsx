@@ -1,10 +1,15 @@
 /**
  * The session setup panel, rendered directly.
  *
- * `GameHostPage` cannot be mounted in jsdom, but an extracted panel can —
- * `gameSetupDialog.test.jsx` is the proof. So everything below is a real render
- * with real assertions, and the only source-text checks in this stream live in
- * `setupPanelCallSite.test.js`, where they belong.
+ * Everything below is a real render with real assertions; the only source-text
+ * checks in this stream live in `setupPanelCallSite.test.js`, where they belong.
+ *
+ * CORRECTION, 2026-08-17. This block used to open "GameHostPage cannot be
+ * mounted in jsdom, but an extracted panel can". The second half is the useful
+ * half; the first was false and is gone. `GameHostPage.test.jsx` mounts the
+ * page — one mocked `AuthProvider` was the whole obstacle. Extracting the panel
+ * is still right, because a panel takes its props directly and a page has to be
+ * driven into every state through five other screens.
  *
  * jsdom has no layout engine. There is not a single geometric assertion here,
  * because every one of them would return zero and pass unconditionally. That

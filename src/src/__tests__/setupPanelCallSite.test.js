@@ -2,10 +2,18 @@
  * The wiring between the panel and the page that mounts it.
  *
  * `SessionSetupPanel` is tested by rendering it and `config/setupPanel.js` by
- * calling it. Between them sits `GameHostPage`, a 5,000-line file that cannot
- * be mounted in jsdom at all — and that gap is exactly where a change ships as
- * dead code. An entire OAuth return-path fix did, with twelve green tests on
- * the module and nothing on its only call site.
+ * calling it. Between them sits `GameHostPage`, and the gap between a tested
+ * module and its only call site is exactly where a change ships as dead code.
+ * An entire OAuth return-path fix did, with twelve green tests on the module
+ * and nothing on the call site.
+ *
+ * CORRECTION, 2026-08-17. This block used to justify the source-reading below
+ * by saying `GameHostPage` "cannot be mounted in jsdom at all". It can:
+ * `GameHostPage.test.jsx` mocks the one unmocked `AuthProvider` that had kept
+ * its suite red, mounts the page and passes. The real justification is
+ * narrower and survives without the fiction — WIRING is what a mount cannot
+ * see. A prop that was never passed, a handler registered and never removed,
+ * a rollback that was dropped: the rendered page looks identical either way.
  *
  * So these are source assertions, deliberately, and they run against
  * COMMENT-STRIPPED source: a previous agent's test passed on a comment.
