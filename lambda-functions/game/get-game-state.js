@@ -89,6 +89,22 @@ exports.handler = async (event) => {
      * business of inventing a default.
      */
     let stageBeat = 'results';
+    /**
+     * WHAT THE ROOM IS LOOKING AT CLOSELY — see `stage-focus.js`.
+     *
+     * Same record, same read, no extra round trip, and here for the same reason
+     * `stageBeat` is: the Host Remote holds no WebSocket and polls this endpoint
+     * every two seconds, so this field is the only way a spotlight opened on the
+     * projector reaches the phone. It is also what lets a reloading host page
+     * come back up on the response it was showing rather than dropping the room
+     * out of a spotlight nobody asked to close.
+     *
+     * Defaults to `'none'`, never undefined. "The host closed it" and "nobody
+     * has opened one this round" are the same picture on stage but different
+     * facts on the wire, and a client inventing its own default is how the two
+     * surfaces come to disagree.
+     */
+    let stageFocus = { focus: 'none', index: null };
     if (currentQuestionNumber) {
       try {
         const roundRecord = await db.send(new GetCommand({
@@ -98,6 +114,22 @@ exports.handler = async (event) => {
         authorsRevealed = !!(roundRecord.Item && roundRecord.Item.AuthorsRevealed);
         if (roundRecord.Item && roundRecord.Item.StageBeat === 'field-notes') {
           stageBeat = 'field-notes';
+        }
+        /*
+          Read against the CLOSED set the writer enforces. A value this build
+          has never heard of — an older or newer deploy's — resolves to 'none'
+          rather than travelling on to a client that will compare it against
+          three strings and silently do nothing.
+
+          `Number.isInteger` and not a truthiness test: index 0 is the FIRST
+          response and the most likely one a host enlarges, and `|| null` would
+          erase exactly that case.
+        */
+        const storedFocus = roundRecord.Item && roundRecord.Item.StageFocus;
+        if (storedFocus === 'question') {
+          stageFocus = { focus: 'question', index: null };
+        } else if (storedFocus === 'answer' && Number.isInteger(roundRecord.Item.StageFocusIndex)) {
+          stageFocus = { focus: 'answer', index: roundRecord.Item.StageFocusIndex };
         }
       } catch (error) {
         console.error(`❌ Error fetching round record for question ${currentQuestionNumber}:`, error);
@@ -181,6 +213,7 @@ exports.handler = async (event) => {
       currentQuestionData: currentQuestionData,
       authorsRevealed: authorsRevealed,
       stageBeat: stageBeat,
+      stageFocus: stageFocus,
       gameType: gameMetadata.Item.GameType || 'call-and-answer',
       gameMetadata: {
         title: gameMetadata.Item.Title,

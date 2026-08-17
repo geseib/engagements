@@ -4,6 +4,7 @@ import webSocketClient from './WebSocketClient';
 import { requestNextQuestion } from './utils/nextQuestion';
 import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
 import { queueEnqueue, queueMove, queueRemove, normaliseQueue } from './config/questionQueue';
+import { focusFromFrame, focusToStage, focusRequest, sameFocus } from './config/stageFocus';
 import IssueFab from './components/IssueFab';
 import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
@@ -142,6 +143,36 @@ function GameHostPage() {
    */
   const gameStateRef = useRef(gameState);
   useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
+  /*
+    THE ROUND'S ANSWERS, FOR THE FROZEN CLOSURES — same reason as the line above.
+
+    `stageFocusChanged` clamps an incoming spotlight index against how many
+    responses actually exist, so that a focus for a response that has not
+    arrived opens nothing rather than an empty overlay. The WebSocket effect
+    registers ONCE, at first render, when `answers` is `[]` — so reading the
+    state directly would compare every index against 0 and the phone's spotlight
+    would never open at all.
+  */
+  const answersRef = useRef([]);
+  /*
+    A FOCUS RESTORED FROM THE SERVER, WAITING FOR ITS ANSWERS.
+
+    `restoreGameState` learns the round's focus before it fetches the round's
+    responses, and `AnswerSpotlight` reads `answers[index].points` — so applying
+    a spotlight index against an empty array throws. Parked here, drained below
+    the moment the rows land, cleared either way so a stale focus cannot reopen
+    on a later round.
+  */
+  const pendingFocusRef = useRef(null);
+  useEffect(() => {
+    answersRef.current = answers;
+
+    if (!pendingFocusRef.current) return;
+    const restored = focusToStage(pendingFocusRef.current, { answerCount: answers.length });
+    pendingFocusRef.current = null;
+    setLessonExpanded(restored.lessonExpanded);
+    setSpotlightIndex(restored.spotlightIndex);
+  }, [answers]);
   const [currentGameType, setCurrentGameType] = useState('call-and-answer'); // Track the type of the current game
   // Whether THIS game holds authorship back until reveal — the per-game flag
   // from setup (config/anonymity.js), as opposed to anonymityApplies(), which
@@ -1573,6 +1604,35 @@ Focus on actionable business strategy insights.`;
     });
 
     /*
+      THE PHONE ENLARGED SOMETHING — or the other way round.
+
+      `focusFromFrame` decides whether this frame is ours, and its answer is
+      three-valued in a way that matters: a focus to apply, or NULL meaning
+      "ignore, this is not our round". NULL IS NOT `{focus:'none'}` — that would
+      CLOSE what is open, so a late frame from round 3 would shut the spotlight
+      the host just opened on round 4. config/stageFocus.js carries the argument
+      and a test named for it.
+
+      NO restoreGameState, for stage-beat's reason: restoring rewrites
+      `currentQuestionId`, whose change re-fires the beat-reset effect and
+      discards the beat. A focus is not a game-state fact and needs no re-read.
+
+      `answersRef` rather than `answers`: this effect registered once and its
+      closure is frozen at the empty first render, so the clamp inside
+      `focusToStage` would compare every index against 0 and open nothing. Same
+      trap `gameStateRef` exists for.
+    */
+    webSocketClient.onMessage('stageFocusChanged', (data) => {
+      console.log('🔌 Stage focus notification:', data);
+      const focus = focusFromFrame(data, gameStateRef.current);
+      if (!focus) return;
+
+      const next = focusToStage(focus, { answerCount: answersRef.current.length });
+      setLessonExpanded(next.lessonExpanded);
+      setSpotlightIndex(next.spotlightIndex);
+    });
+
+    /*
       THE OTHER HOST SURFACE CHANGED THE RUNNING ORDER.
 
       Queue on the phone, watch the stage follow. The frame carries the whole
@@ -1682,6 +1742,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('votingStarted');
       webSocketClient.offMessage('authorsRevealed');
       webSocketClient.offMessage('stageBeatChanged');
+      webSocketClient.offMessage('stageFocusChanged');
       webSocketClient.offMessage('questionQueueChanged');
       webSocketClient.offMessage('aiSummaryReady');
       webSocketClient.offMessage('aiSummaryError');
@@ -1801,6 +1862,28 @@ Focus on actionable business strategy insights.`;
           state: gameStateData.state ?? null,
           beat: gameStateData.stageBeat === 'field-notes' ? 'field-notes' : 'results',
         };
+
+        /*
+          COME BACK UP ON WHATEVER THE ROOM IS LOOKING AT CLOSELY.
+
+          A reload used to drop the room out of a spotlight nobody asked to
+          close — the third of the three faults `stage-beat.js` lists, in its
+          own form. `stageFocus` is a durable per-round fact now, so a restore
+          can honour it.
+
+          PARKED, NOT APPLIED, and that is not caution — it is required.
+          `AnswerSpotlight` reads `answers[index].points`, so an index that
+          outruns the loaded answers THROWS rather than rendering nothing. The
+          answers for this round are fetched further down in this same restore
+          and `answers` is still the previous round's (or empty) right here, so
+          applying now would either open the wrong response or crash the page.
+
+          `answerProgress` is not a way out: `get-game-state` only populates it
+          for ASK#, and a spotlight is a RESULTS# thing, so it reads 0 in
+          exactly the case that matters. The effect beside `answersRef` drains
+          this once the rows are in and the count is real.
+        */
+        pendingFocusRef.current = gameStateData.stageFocus || null;
 
         // First, load question sets for the restored game
         console.log(`🔍 HOST: Loading question sets for restored game...`);
@@ -4448,6 +4531,76 @@ Focus on actionable business strategy insights.`;
   const closeSpotlight = () => {
     if (spotlightIndex !== null) setStagePageIndex(pageOf(spotlightIndex, stagePageSize));
     setSpotlightIndex(null);
+    // …and tell the phone. See publishFocus: without this the remote keeps
+    // offering "Close" for a spotlight the projector has already shut.
+    publishFocus({ focus: 'none' });
+  };
+
+  /*
+    ONE OPENER FOR ALL THREE WAYS IN — the card's click, the card's Enter/Space,
+    and the spotlight's own next/previous arrows. They were three bare
+    `setSpotlightIndex` calls, and three call sites is three chances for one of
+    them to forget to announce itself. `sameFocus` keeps the arrows from posting
+    when they land back where they already were.
+  */
+  const openSpotlight = (idx) => {
+    setSpotlightIndex(idx);
+    if (!sameFocus({ focus: 'answer', index: idx }, { focus: 'answer', index: spotlightIndex })) {
+      publishFocus({ focus: 'answer', index: idx });
+    }
+  };
+
+  /* The question, blown up for the room. Same deal as openSpotlight. */
+  const expandQuestion = () => {
+    setLessonExpanded(true);
+    publishFocus({ focus: 'question' });
+  };
+
+  const collapseQuestion = () => {
+    setLessonExpanded(false);
+    publishFocus({ focus: 'none' });
+  };
+
+  /**
+   * WHAT THE ROOM IS LOOKING AT CLOSELY, ANNOUNCED.
+   *
+   * `lessonExpanded` and `spotlightIndex` were client-only state on this page,
+   * so the phone could neither drive them nor see them. `POST /stage-focus`
+   * makes the focus a durable per-round fact and broadcasts it, exactly as
+   * `stage-beat` did for the RESULTS beat — read that handler's header for the
+   * full argument.
+   *
+   * BIDIRECTIONAL, hence this function. Tap it on the projector and the phone
+   * follows; tap it on the phone and the projector follows. Both surfaces then
+   * read one source of truth instead of two that drift.
+   *
+   * NO LOOP. The frame this produces comes back to `stageFocusChanged` below,
+   * which only ever SETS state — it never re-publishes. That asymmetry is what
+   * keeps the two directions from feeding each other.
+   *
+   * Silent on failure, deliberately. The overlay the host asked for is already
+   * open in front of them; an alert saying the announcement failed would be a
+   * modal about a thing that visibly worked, and the next tap or the next poll
+   * repairs the other surface anyway.
+   *
+   * A PLAIN FUNCTION, NOT A useCallback, and that is forced rather than
+   * stylistic: this sits BELOW an early return, and a hook after a conditional
+   * return breaks the rule that every render must call the same hooks in the
+   * same order. `closeSpotlight` immediately above carries the same note for
+   * the same reason. It runs from a click and memoising it buys nothing.
+   */
+  const publishFocus = (focus) => {
+    const body = focusRequest({ ...focus, state: gameStateRef.current });
+    // No round on screen — nothing can be focused, so there is nothing to say.
+    if (!body) return;
+
+    authFetch(`${API_BASE}games/${gameId}/stage-focus`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch((error) => {
+      console.warn('⚠️ STAGE FOCUS: the room was not told:', error?.message);
+    });
   };
 
   /**
@@ -4687,7 +4840,7 @@ Focus on actionable business strategy insights.`;
                   className="q"
                   data-expandable="1"
                   title="Show the full question"
-                  onClick={() => setLessonExpanded(true)}
+                  onClick={expandQuestion}
                 >
                   {currentQuestion.title || currentQuestion.question}
                 </h1>
@@ -4939,11 +5092,11 @@ Focus on actionable business strategy insights.`;
                           role="button"
                           tabIndex={0}
                           aria-label={`Read this answer in full: ${displayName}`}
-                          onClick={() => setSpotlightIndex(idx)}
+                          onClick={() => openSpotlight(idx)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
                               e.preventDefault();
-                              setSpotlightIndex(idx);
+                              openSpotlight(idx);
                             }
                           }}
                         >
@@ -5031,7 +5184,7 @@ Focus on actionable business strategy insights.`;
                 <AnswerSpotlight
                   answers={answers}
                   index={spotlightIndex}
-                  onIndex={setSpotlightIndex}
+                  onIndex={openSpotlight}
                   onClose={closeSpotlight}
                   showPoints={standingsVisible({
                     gameType: currentGameType, anonymousUntilReveal, authorsRevealed,
@@ -5337,7 +5490,7 @@ Focus on actionable business strategy insights.`;
 
       {/* Expanded Lesson Modal */}
       {lessonExpanded && questions.length > 0 && (
-        <div className="expanded-lesson-overlay" onClick={() => setLessonExpanded(false)}>
+        <div className="expanded-lesson-overlay" onClick={collapseQuestion}>
           <div className="expanded-lesson-content" onClick={(e) => e.stopPropagation()}>
             <div className="expanded-lesson-header">
               <div className="field-badge">

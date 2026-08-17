@@ -361,6 +361,47 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  StageFocusFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-stage-focus'
+      CodeUri: lambda-functions/game/
+      Handler: stage-focus.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Events:
+        StageFocusEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/stage-focus
+            Method: post
+            # HOST ONLY, exactly like /stage-beat above and for a sharper
+            # version of its reason. This does not merely move the room between
+            # two beats of one round — it puts ONE NAMED PERSON'S RESPONSE
+            # full-screen on a wall. On a public route that is a button any
+            # phone holding the four-digit game id could press, about somebody
+            # else's answer.
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        # Crud, NOT Write: the 410-Gone reaping in this handler's broadcast
+        # deletes dead CONNECTION# rows, and SAM's DynamoDBWritePolicy grants
+        # Put/Update/BatchWrite but NOT DeleteItem. With Write only, every stale
+        # connection survives forever and is retried on every future broadcast —
+        # and the failure is an AccessDenied inside a catch that never throws,
+        # so nothing surfaces anywhere.
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   QuestionQueueFunction:
     Type: AWS::Serverless::Function
     Properties:

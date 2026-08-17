@@ -651,3 +651,104 @@
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 55%, transparent);
   }
 }
+
+/* ----------------------------------------------- what the room is showing */
+/* components/RemoteFocusPanel.jsx — the phone's control over the PROJECTOR.
+
+   Scoped `.hr-focus`, inside `.hr-card-panel`, so it inherits this sheet's
+   tokens rather than declaring a second palette. Nothing here paints a new
+   colour: every pairing is --text or --muted on --surface, already measured for
+   this surface.
+
+   The 44px touch floor is the constraint that shapes all of it. `.hr-btn` sets
+   48px and the row button below deliberately does NOT shrink under that — a
+   list of responses is exactly where a host's thumb is hurried and a room is
+   watching. `--small` narrows the padding, never the height. */
+
+.hr-focus {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hr-focus__lead {
+  margin: 0;
+  font-size: .8125rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* The question being enlarged, quoted so the host is not pressing on faith.
+   Clamped to three lines: enough to recognise, never enough to push the
+   controls off a phone screen. */
+.hr-focus__q {
+  margin: 0;
+  font-size: .875rem;
+  line-height: 1.4;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.hr-focus__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hr-focus__empty {
+  margin: 0;
+  font-size: .8125rem;
+  color: var(--muted);
+}
+
+/* ONE COLUMN, NOT TWO. A response and its button side by side on a phone gives
+   the text about half of a 360px viewport, which is not enough to tell two
+   answers apart — and telling them apart is the entire job of this list. */
+.hr-focus__row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid color-mix(in srgb, var(--muted) 28%, transparent);
+  background: var(--surface);
+}
+
+/* The row on the wall right now. A BORDER and a label, never colour alone —
+   the button inside it already reads "Stop showing", which is the fact. */
+.hr-focus__row.is-showing {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+}
+
+.hr-focus__who {
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* CLAMPED, NOT TRUNCATED BY JS. Four lines is enough to distinguish responses,
+   and the full string stays in the DOM — for a screen reader, and because a
+   reduction with no recovery is a deletion. */
+.hr-focus__text {
+  font-size: .875rem;
+  line-height: 1.45;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Narrower padding, SAME HEIGHT. See the note at the top of this block: the
+   44px floor is not negotiable on the surface a hurried thumb uses most. */
+.hr-btn--small {
+  padding: 8px 12px;
+  font-size: .875rem;
+  align-self: flex-start;
+}
