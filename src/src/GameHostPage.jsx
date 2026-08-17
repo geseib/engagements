@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import webSocketClient from './WebSocketClient';
 import { requestNextQuestion } from './utils/nextQuestion';
+import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
+import { queueEnqueue, queueMove, queueRemove, normaliseQueue } from './config/questionQueue';
 import IssueFab from './components/IssueFab';
 import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
@@ -392,6 +394,25 @@ function GameHostPage() {
    * can actually see: the questions it has watched go by. It resets on reload.
    */
   const [usedQuestionIds, setUsedQuestionIds] = useState([]);
+
+  /*
+    THE RUNNING ORDER, AND WHY IT IS THREE PIECES OF STATE.
+
+    `questionQueue` is the list; `queueVersion` is what the server had when we
+    last heard from it, sent back with every op as `expectedVersion`; and
+    `queueBusyKeys` names the rows with a request in flight so a host cannot
+    fire three `earlier` ops into a 200ms round trip and watch the row travel
+    three places for one intent.
+
+    THIS PAGE IS THE ONLY OPTIMISTIC COPY. `SessionSetupPanel` and `QueueList`
+    are presentational and reorder nothing locally, because the correction
+    arrives here — over the WebSocket — and two optimistic copies would fight:
+    the panel's would re-apply on the frame that was already the panel's own
+    edit coming home.
+  */
+  const [questionQueue, setQuestionQueue] = useState([]);
+  const [queueVersion, setQueueVersion] = useState(0);
+  const [queueBusyKeys, setQueueBusyKeys] = useState([]);
 
   // Sign-out handler
   const handleSignOut = () => {
@@ -1428,6 +1449,23 @@ Focus on actionable business strategy insights.`;
       console.log('🔌 Question started notification:', data);
       // Fetch current game state from API
       restoreGameState();
+      /*
+        RE-READ THE RUNNING ORDER, because the round that just started may have
+        BEEN the running order. `next-question.js` pops the head it serves — and
+        discards any already-asked entries it skipped past on the way — but it
+        does NOT broadcast `questionQueueChanged` for that write. Without this
+        the question now on the room's screen also sits at #1 in the host's
+        queue, which reads as the queue having done nothing.
+
+        The phone remote needs no equivalent: it polls `/state`, and
+        `get-game-state.js` projects the queue into that payload.
+
+        `loadQueue` is safe to call from this frozen closure — it is a
+        `useCallback` over `gameId` alone, and this effect re-registers on
+        `gameId`, so the two can never be a version apart. That is not true of
+        most handlers in here, which is why they use refs.
+      */
+      loadQueue();
     });
 
     webSocketClient.onMessage('playerAnswered', (data) => {
@@ -1534,6 +1572,28 @@ Focus on actionable business strategy insights.`;
       if (beat) setResultsBeat(beat);
     });
 
+    /*
+      THE OTHER HOST SURFACE CHANGED THE RUNNING ORDER.
+
+      Queue on the phone, watch the stage follow. The frame carries the whole
+      list and its version, so this takes them verbatim rather than re-reading —
+      the payload IS the read, and a GET here would race the next op.
+
+      NO restoreGameState, for stage-beat's reason: the queue is not a game-state
+      fact and a re-sync would rewrite `currentQuestionId`, discarding the beat.
+
+      A frame with no queue is ignored rather than treated as empty. `?? null`
+      and not `|| []`: an empty array is a real running order that a host just
+      emptied, and it must land.
+    */
+    webSocketClient.onMessage('questionQueueChanged', (data) => {
+      console.log('🔌 Question queue notification:', data);
+      const list = data?.queue ?? null;
+      if (!Array.isArray(list)) return;
+      setQuestionQueue(normaliseQueue(list));
+      setQueueVersion(Number(data.version) || 0);
+    });
+
     webSocketClient.onMessage('aiSummaryReady', (data) => {
       console.log('🔌 AI Summary ready notification:', data);
       clearAITimers();
@@ -1622,6 +1682,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('votingStarted');
       webSocketClient.offMessage('authorsRevealed');
       webSocketClient.offMessage('stageBeatChanged');
+      webSocketClient.offMessage('questionQueueChanged');
       webSocketClient.offMessage('aiSummaryReady');
       webSocketClient.offMessage('aiSummaryError');
       // `gameEnded` was registered above and never removed here — a handler
@@ -2540,6 +2601,123 @@ Focus on actionable business strategy insights.`;
   useEffect(() => {
     if (setupPanelOpen) fetchQuestionsForBrowsing();
   }, [setupPanelOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /*
+    ── THE QUEUE ────────────────────────────────────────────────────────────
+
+    The other half of `selectQuestion`, and deliberately next to it: the two
+    are the same decision taken at two different moments. `selectQuestion`
+    interrupts the room now; these put the question in line.
+
+    EVERY OP IS OPTIMISTIC AND THEN RECONCILED, in that order, because the
+    alternative is a list that does not move until the server answers — and a
+    host reordering a running order in front of a room reads a 200ms lag as a
+    dead button and presses again.
+
+    The optimistic step runs the SAME functions the Lambda runs
+    (`config/questionQueue.js`, mirrored into `queue-order.js`), so the local
+    guess and the server's answer can only differ when someone else edited in
+    between. That is the case `staleView` reports and the WebSocket repairs.
+  */
+
+  /** Load the running order. Best-effort: a failure keeps whatever we have. */
+  const loadQueue = useCallback(async () => {
+    if (!gameId) return;
+    const result = await fetchQueue({ apiBase: API_BASE, gameId });
+    if (!result.ok) {
+      // Deliberately NOT an alert. The queue is a panel a host may never open,
+      // and a modal about it while they are running a round is worse than a
+      // list that is briefly stale — which the next op or frame repairs.
+      console.warn('⚠️ QUEUE: could not read the running order:', result.error);
+      return;
+    }
+    setQuestionQueue(result.queue);
+    setQueueVersion(result.version);
+  }, [gameId]);
+
+  /*
+    Read it when the panel opens, alongside the questions themselves. Not on
+    mount: a host who never opens the console never needs the list, and the
+    drain happens server-side either way.
+  */
+  useEffect(() => {
+    if (setupPanelOpen) loadQueue();
+  }, [setupPanelOpen, loadQueue]);
+
+  /**
+   * One op, applied locally, sent, then reconciled.
+   *
+   * `apply` is the matching pure function. When it refuses — the row is already
+   * first, the question is already queued — NOTHING IS SENT. That is not an
+   * optimisation: it is what keeps a double-tap on an edge button from being a
+   * request whose 200 answer arrives after the host has moved on and re-renders
+   * a list they have since changed.
+   */
+  const runQueueOp = useCallback(async (op, rawKey, apply) => {
+    const key = String(rawKey ?? '').replace(/^QUESTION#/, '').trim();
+    if (!key) return;
+
+    const before = normaliseQueue(questionQueue);
+    const local = apply(before);
+
+    if (!local.changed) {
+      // Say only what the host cannot see for themselves. `at-edge`,
+      // `duplicate` and `not-queued` are all visible in the list in front of
+      // them; a full queue is not — see REFUSALS_WORTH_SAYING.
+      if (local.refused === 'full') {
+        alert('The queue is full — 24 questions is the limit. Remove one from the running order first.');
+      }
+      return;
+    }
+
+    setQuestionQueue(local.queue);
+    setQueueBusyKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
+
+    const result = await postQueueOp({
+      apiBase: API_BASE, gameId, op, questionKey: key, expectedVersion: queueVersion,
+    });
+
+    setQueueBusyKeys((prev) => prev.filter((k) => k !== key));
+
+    if (!result.ok) {
+      // PUT THE LIST BACK. An optimistic move that failed must not stay on
+      // screen: the host would end the round expecting the question they
+      // "moved" to the top and get the one that was actually there.
+      setQuestionQueue(before);
+      alert(`Could not change the running order: ${result.error}`);
+      return;
+    }
+
+    // The server refused something the local copy accepted — only possible when
+    // the other host surface changed the list in between. Its list is the one
+    // that lands below, so this is a message, not a rollback.
+    if (result.message) alert(result.message);
+
+    // `queue: null` is a landed write whose body we could not read — re-read
+    // rather than guess. Otherwise take the server's list verbatim; it is
+    // authoritative and it already includes anything the other surface did.
+    if (result.queue === null) {
+      loadQueue();
+      return;
+    }
+    setQuestionQueue(result.queue);
+    setQueueVersion(result.version);
+  }, [gameId, questionQueue, queueVersion, loadQueue]);
+
+  const handleQueueQuestion = useCallback(
+    (question) => runQueueOp('add', question?.id, (q) => queueEnqueue(q, question?.id)),
+    [runQueueOp],
+  );
+
+  const handleQueueRemove = useCallback(
+    (key) => runQueueOp('remove', key, (q) => queueRemove(q, key)),
+    [runQueueOp],
+  );
+
+  const handleQueueMove = useCallback(
+    (key, direction) => runQueueOp(direction, key, (q) => queueMove(q, key, direction)),
+    [runQueueOp],
+  );
 
   // Select a specific question to trigger as the next question
   const selectQuestion = async (selectedQuestion) => {
@@ -5050,6 +5228,11 @@ Focus on actionable business strategy insights.`;
           loadingQuestions={loadingQuestions}
           usedQuestionIds={usedQuestionIds}
           onSelectQuestion={selectQuestion}
+          questionQueue={questionQueue}
+          queueBusyKeys={queueBusyKeys}
+          onQueueQuestion={handleQueueQuestion}
+          onQueueMove={handleQueueMove}
+          onQueueRemove={handleQueueRemove}
           gameId={gameId}
           playUrl={playUrl}
           remoteUrl={remoteUrl}

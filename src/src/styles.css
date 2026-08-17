@@ -1072,7 +1072,219 @@ body {
 .setup-qb__row.is-disabled { opacity: 0.55; }
 .setup-qb__row.is-used.is-disabled { opacity: 0.4; }
 
+/* Queued carries the AMBER, because it is the only one of the three tags that
+   describes something about to happen rather than something already true.
+   Asked is dashed-muted (a fact), Off is danger-toned (a refusal), Queued is
+   primary — and the number in the label is what makes it a position rather
+   than a state. */
+.setup-qb__tag--queued {
+  color: var(--primary, #F6A94C);
+  border-color: rgba(246, 169, 76, 0.55);
+}
+
+/* TWO ACTIONS PER ROW, and they wrap rather than compressing. Wrapping is not
+   cosmetic here: `.setup-qb__row` is a two-column grid whose second column is
+   `auto`, so an action group that refuses to wrap widens that column and eats
+   the question text — which is the one thing on the row a host is reading. */
+.setup-qb__acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
 .setup-qb__use { white-space: nowrap; }
+
+/* Queue is the SECONDARY of the pair — outlined against `Ask next`'s fill.
+   Queueing is reversible and interrupting the room is not, so the destructive
+   one keeps the weight. */
+.setup-qb__queue {
+  white-space: nowrap;
+  background: transparent;
+  border: 1px solid rgba(246, 169, 76, 0.55);
+  color: var(--primary, #F6A94C);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.setup-qb__queue:hover:not(:disabled) { background: rgba(246, 169, 76, 0.12); }
+.setup-qb__queue:disabled { opacity: 0.45; cursor: default; }
+
+/* --- The running order --------------------------------------------------- */
+/* THE QUEUE — components/stage/QueueList.jsx.
+
+   Lives in this sheet rather than a new one because `.setup-*` is already a
+   scope with a stylesheet, and the queue is a section OF the Questions tab, not
+   a new surface. Its neighbours here paint in raw hex (`#B6C2D4`) rather than
+   tokens; that is the local convention of this panel and matching it beats
+   leaving one block that reads differently from everything around it. The
+   pairings are the same ones already measured for this surface — #B6C2D4 and
+   #F4EDE4 on #111D33 — so nothing new needs deriving.
+   Contract pinned as text by __tests__/queueList.test.jsx. */
+
+.setup-q {
+  margin: 4px 0 18px;
+  padding: 12px 14px;
+  border: 1px solid rgba(246, 169, 76, 0.28);
+  border-radius: 10px;
+  background: rgba(246, 169, 76, 0.05);
+}
+
+.setup-q__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.setup-q__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--primary, #F6A94C);
+}
+
+/* `margin-left: auto` on the count, never `justify-content: space-between` on
+   the head — the head gains a third child the moment anything else is worth
+   saying here, and space-between would push it to the middle. */
+.setup-q__count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: #B6C2D4;
+  white-space: nowrap;
+}
+
+.setup-q__empty {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #B6C2D4;
+}
+
+.setup-q__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.setup-q__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(155, 168, 190, 0.16);
+}
+
+.setup-q__row:last-child { border-bottom: 0; }
+
+.setup-q__pos {
+  font-size: 12px;
+  font-weight: 800;
+  color: #B6C2D4;
+  font-variant-numeric: tabular-nums;
+  min-width: 16px;
+  text-align: right;
+}
+
+.setup-q__row.is-next .setup-q__pos { color: var(--primary, #F6A94C); }
+.setup-q__row.is-missing { opacity: 0.7; }
+
+.setup-q__main { min-width: 0; }
+
+/* A SINGLE TEXT NODE WITH min-width: 0 — hard rule 8. `text-overflow` on a
+   flex container with span children is inert and the text is silently cut
+   instead, which on this row would mean a truncated question title with no
+   ellipsis to say it had been truncated. */
+.setup-q__name {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.setup-q__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  /* The console's floor, not the 11px the neighbouring `.setup-qb__tag` uses.
+     That tag predates the ladder and is a known violation of it; matching a
+     violation is not consistency. Everything in this line — the Next flag, the
+     category, the not-in-set warning — is glanced rather than read in runs,
+     which is what 12px IS for. */
+  font-size: 12px;
+}
+
+.setup-q__flag {
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--primary, #F6A94C);
+}
+
+.setup-q__cat {
+  color: var(--secondary, #7CA7E6);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.setup-q__warn { color: var(--danger-text, #EF8C86); font-weight: 600; }
+
+.setup-q__acts {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.setup-q__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(155, 168, 190, 0.34);
+  background: transparent;
+  color: #F4EDE4;
+  cursor: pointer;
+}
+
+.setup-q__btn:hover:not(:disabled) { background: rgba(155, 168, 190, 0.14); }
+
+/* DISABLED IS VISIBLE, NOT HIDDEN. An edge button that vanished would change
+   the action column's width per row and move the remaining buttons under the
+   host's finger every time the list reorders. */
+.setup-q__btn:disabled { opacity: 0.3; cursor: default; }
+
+.setup-q__btn--drop:hover:not(:disabled) {
+  border-color: rgba(229, 100, 94, 0.55);
+  color: var(--danger-text, #EF8C86);
+}
+
+.setup-q__full {
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger-text, #EF8C86);
+}
 
 .setup-loading { color: #B6C2D4; font-size: 13px; }
 
