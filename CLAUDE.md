@@ -95,7 +95,19 @@ code and deploys nothing. See `DEPLOYMENT.md` for the full picture.
 ### Database Design
 - Single-table DynamoDB pattern
 - Key prefixes: `GAME#`, `PLAYER#`, `GAMES`
-- TTL: 90 days (creation), 7 days (active)
+- TTL: **90 days from creation, for the session itself** — and nothing moves it.
+
+  The line here used to read "90 days (creation), 7 days (active)", which reads
+  as though playing a session shortens its life. On the deployed path it does
+  not. `StartGameFunction` is `CodeUri: lambda-functions/game/`, and that
+  `start-game.js` contains no `ttl` write at all. The handler that shortens to 7
+  days — `lambda-functions/websocket/start-game.js:160` — is routed by nothing.
+
+  The 7-day TTLs that do exist are on CONTENTS, not on the session: player rows
+  (7d), vote rows (7d), one results row (7d). Score rows are 30d. So a session
+  outlives its own player rows by 83 days, which is why
+  `get-games-list.js` counts participants across every `PLAYER#` row rather than
+  the main ones — see the note there.
 
 ### Game Flow
 ```

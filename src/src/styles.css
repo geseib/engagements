@@ -1072,7 +1072,271 @@ body {
 .setup-qb__row.is-disabled { opacity: 0.55; }
 .setup-qb__row.is-used.is-disabled { opacity: 0.4; }
 
+/* Queued carries the AMBER, because it is the only one of the three tags that
+   describes something about to happen rather than something already true.
+   Asked is dashed-muted (a fact), Off is danger-toned (a refusal), Queued is
+   primary — and the number in the label is what makes it a position rather
+   than a state. */
+.setup-qb__tag--queued {
+  color: var(--primary, #F6A94C);
+  border-color: rgba(246, 169, 76, 0.55);
+}
+
+/* TWO ACTIONS PER ROW, and they wrap rather than compressing. Wrapping is not
+   cosmetic here: `.setup-qb__row` is a two-column grid whose second column is
+   `auto`, so an action group that refuses to wrap widens that column and eats
+   the question text — which is the one thing on the row a host is reading. */
+.setup-qb__acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
 .setup-qb__use { white-space: nowrap; }
+
+/* Queue is the SECONDARY of the pair — outlined against `Ask next`'s fill.
+   Queueing is reversible and interrupting the room is not, so the destructive
+   one keeps the weight. */
+.setup-qb__queue {
+  white-space: nowrap;
+  background: transparent;
+  border: 1px solid rgba(246, 169, 76, 0.55);
+  color: var(--primary, #F6A94C);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.setup-qb__queue:hover:not(:disabled) { background: rgba(246, 169, 76, 0.12); }
+.setup-qb__queue:disabled { opacity: 0.45; cursor: default; }
+
+/* --- The running order --------------------------------------------------- */
+/* THE QUEUE — components/stage/QueueList.jsx.
+
+   Lives in this sheet rather than a new one because `.setup-*` is already a
+   scope with a stylesheet, and the queue is a section OF the Questions tab, not
+   a new surface. Its neighbours here paint in raw hex (`#B6C2D4`) rather than
+   tokens; that is the local convention of this panel and matching it beats
+   leaving one block that reads differently from everything around it. The
+   pairings are the same ones already measured for this surface — #B6C2D4 and
+   #F4EDE4 on #111D33 — so nothing new needs deriving.
+   Contract pinned as text by __tests__/queueList.test.jsx. */
+
+.setup-q {
+  margin: 4px 0 18px;
+  padding: 12px 14px;
+  border: 1px solid rgba(246, 169, 76, 0.28);
+  border-radius: 10px;
+  background: rgba(246, 169, 76, 0.05);
+}
+
+.setup-q__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.setup-q__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--primary, #F6A94C);
+}
+
+/* `margin-left: auto` on the count, never `justify-content: space-between` on
+   the head — the head gains a third child the moment anything else is worth
+   saying here, and space-between would push it to the middle. */
+.setup-q__count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: #B6C2D4;
+  white-space: nowrap;
+}
+
+.setup-q__empty {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #B6C2D4;
+}
+
+.setup-q__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.setup-q__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(155, 168, 190, 0.16);
+}
+
+.setup-q__row:last-child { border-bottom: 0; }
+
+.setup-q__pos {
+  font-size: 12px;
+  font-weight: 800;
+  color: #B6C2D4;
+  font-variant-numeric: tabular-nums;
+  min-width: 16px;
+  text-align: right;
+}
+
+.setup-q__row.is-next .setup-q__pos { color: var(--primary, #F6A94C); }
+.setup-q__row.is-missing { opacity: 0.7; }
+
+.setup-q__main { min-width: 0; }
+
+/* A SINGLE TEXT NODE WITH min-width: 0 — hard rule 8. `text-overflow` on a
+   flex container with span children is inert and the text is silently cut
+   instead, which on this row would mean a truncated question title with no
+   ellipsis to say it had been truncated. */
+.setup-q__name {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.setup-q__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  /* The console's floor, not the 11px the neighbouring `.setup-qb__tag` uses.
+     That tag predates the ladder and is a known violation of it; matching a
+     violation is not consistency. Everything in this line — the Next flag, the
+     category, the not-in-set warning — is glanced rather than read in runs,
+     which is what 12px IS for. */
+  font-size: 12px;
+}
+
+.setup-q__flag {
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--primary, #F6A94C);
+}
+
+.setup-q__cat {
+  color: var(--secondary, #7CA7E6);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.setup-q__warn { color: var(--danger-text, #EF8C86); font-weight: 600; }
+
+/* ─── WHAT FOLLOWS THE QUEUE ─────────────────────────────────────────────────
+   The automatic walk, shown under the host's own running order so "up next"
+   means the whole of what is coming rather than only the part somebody typed.
+
+   SUBORDINATE, NOT DISABLED. These rows are dimmer and their numbers are grey,
+   because they are a PREDICTION and the queued rows above are a DECISION — but
+   they are not greyed to the disabled level, because nothing here is broken or
+   unavailable and 0.45 (the `.hr-btn:disabled` value) would say it was.
+
+   No action column: they are derived, so there is no stored order to reorder,
+   and rendering an arrow that cannot work is worse than rendering none. The
+   route to moving one IS to queue it, from the browser directly below. */
+.setup-q__auto {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(155, 168, 190, 0.28);
+}
+
+.setup-q__auto-head {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #B6C2D4;
+}
+
+/* TWO COLUMNS, NOT THREE. The queued row's grid ends in an action column; with
+   no buttons to put there a third track would leave every automatic row's title
+   short by the width of three missing controls, and the two lists would fail to
+   line up down the left where the eye actually reads them. */
+.setup-q__row--auto {
+  grid-template-columns: auto minmax(0, 1fr);
+  opacity: 0.82;
+}
+
+.setup-q__row--auto .setup-q__name { font-weight: 500; }
+
+/* The tag the request asked for, and it sits on THESE rows rather than the
+   queued ones: the queued rows already announce themselves by being numbered,
+   movable and under a heading that says Running order. It is the questions the
+   host did not choose that need saying so.
+
+   --muted, not --primary: the Next flag above is the one thing on this panel
+   that should catch the eye, and a second amber label competing with it would
+   flatten the distinction the colour exists to make. */
+.setup-q__flag--auto {
+  color: var(--muted, #9BA8BE);
+  font-weight: 700;
+}
+
+
+.setup-q__acts {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.setup-q__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(155, 168, 190, 0.34);
+  background: transparent;
+  color: #F4EDE4;
+  cursor: pointer;
+}
+
+.setup-q__btn:hover:not(:disabled) { background: rgba(155, 168, 190, 0.14); }
+
+/* DISABLED IS VISIBLE, NOT HIDDEN. An edge button that vanished would change
+   the action column's width per row and move the remaining buttons under the
+   host's finger every time the list reorders. */
+.setup-q__btn:disabled { opacity: 0.3; cursor: default; }
+
+.setup-q__btn--drop:hover:not(:disabled) {
+  border-color: rgba(229, 100, 94, 0.55);
+  color: var(--danger-text, #EF8C86);
+}
+
+.setup-q__full {
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger-text, #EF8C86);
+}
 
 .setup-loading { color: #B6C2D4; font-size: 13px; }
 
@@ -2870,9 +3134,29 @@ body {
    four of that screen's actions ended up the same weight. */
 
 /* Reports Modal Styles */
+/*
+  THE SESSION HISTORY IS A TABLE NOW, AND 800px COULD NOT HOLD IT.
+
+  This was sized for the card list that used to live here, where every field had
+  a whole line to itself. The table carries nine columns, and at 800px the two
+  date columns resolve to about 72px each — enough for "Aug 10," and not the
+  year. The owner's report was "many columns are cut off dates for example".
+
+  `min(..., 95vw)` rather than a flat width so the dialog still fits a laptop
+  at 1280 with the browser chrome, and the panel keeps its own scrolling: the
+  container is `overflow: hidden` and a flex column, so `.shist__scroll` is the
+  one thing that scrolls. Two nested scrollers is how a sticky table header
+  ends up scrolling away from its own rows.
+*/
 .reports-modal {
-  max-width: 800px;
-  max-height: 80vh;
+  max-width: min(1180px, 95vw);
+  width: 100%;
+  height: min(820px, 88vh);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 20px;
 }
 
 .games-list {
@@ -4367,14 +4651,38 @@ body {
   cursor: pointer;
 }
 
+/* ─── THE QUESTION, ENLARGED FOR THE ROOM ────────────────────────────────────
+   Opened by clicking the stage's `.q` heading, and reported in the same breath
+   as the response spotlight: "a modal pops up but is the same size or smaller
+   than what was shown".
+
+   Here it was literally smaller. `.q` on the stage is set in `--L-primary`
+   (Room 40-68px, TV 52-88px). Expanding it dropped the same words to a fixed
+   1.8rem — 28.8px — and greyed them to #555. So the control named "Show the
+   full question" made the question roughly a THIRD of the size it already was,
+   which is the same inversion the spotlight had and the reason both are fixed
+   together.
+
+   Sizes come from the four per-profile ladders on the root element
+   (`styles/stage.css`), never from a scalar — see the note on `.stage-spot`
+   for the `--k` incident that rule comes from.
+
+   STILL PAPER-ON-DUSK, DELIBERATELY UNCHANGED. This card is a white sheet with
+   raw #333/#555 hex on a dusk stage, which is real design debt — no theme
+   declared, no tokens — but it is a RESTYLE, not this bug, and the reported
+   fault is scale. Logged rather than smuggled in. The one colour that does move
+   is the question's own text, from #555 to #333, because "so all can really
+   read the text" is about legibility and a 7.5:1 grey for the primary content
+   of the card is part of what was wrong with it.
+   ───────────────────────────────────────────────────────────────────────── */
 .expanded-lesson-content {
   background: white;
   border-radius: 20px;
-  padding: 50px;
+  padding: clamp(32px, 4vh, 64px) clamp(36px, 4vw, 72px);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   cursor: default;
-  max-width: 75vw;
-  max-height: 90vh;
+  width: min(1600px, 92vw);
+  max-height: 92vh;
   overflow-y: auto;
   text-align: left;
 }
@@ -4386,13 +4694,16 @@ body {
   margin-bottom: 25px;
 }
 
+/* THE QUESTION ITSELF — the card's primary content, at the stage's primary
+   rung. It is the same string `.q` renders behind the overlay, so anything less
+   than `--L-primary` means the enlarge button shrank it. */
 .expanded-lesson-title {
   font-family: var(--font-display);
-  font-size: 1.8rem;
+  font-size: var(--L-primary);
   font-weight: 600;
-  color: #555;
-  margin-bottom: 30px;
-  line-height: 1.3;
+  color: #333;
+  margin-bottom: clamp(20px, 2.6vh, 36px);
+  line-height: 1.25;
 }
 
 .expanded-lesson-subtitle {
@@ -4405,8 +4716,10 @@ body {
   letter-spacing: 1px;
 }
 
+/* Supporting detail sits a rung below the question, not at a fixed 1.45rem
+   that lands under stage BODY size on every profile. */
 .expanded-lesson-detail {
-  font-size: 1.45rem;
+  font-size: var(--L-body);
   color: #555;
   line-height: 1.6;
   margin-bottom: 30px;
@@ -4417,7 +4730,7 @@ body {
 }
 
 .expanded-lesson-prompt {
-  font-size: 1.35rem;
+  font-size: var(--L-meta);
   color: var(--primary);
   font-weight: 600;
   text-align: center;
@@ -11459,6 +11772,75 @@ body {
 .answer-spotlight__tally small {
   display: block;
   opacity: 0.7;
+}
+
+/* ─── THE STAGE'S COPY: USE THE ROOM'S SCREEN ─────────────────────────────────
+   `surfaceClassName="stage-spot"` from GameHostPage. Reported:
+
+     "when clicking on a title of a question or response, a modal pops up but is
+      the same size or smaller than what was shown that not helpful it should
+      make use of the screen space and make the text large so all can really
+      read the text from a decent size room."
+
+   Exactly right, and the numbers say why. The base rules above are the PHONE's:
+   860px wide, capped at 720px tall, text capped at 1.75rem (28px). A stage card
+   at RESULTS is roughly a third of a 1920px screen — so at 860px the "expanded"
+   view was barely wider than the card, and its 28px ceiling is BELOW `--L-body`
+   on Room (22-34px) and far below TV's (28-42px). The control whose whole job
+   is "make this readable from the back of the room" was shrinking the text.
+
+   NO NEW NUMBERS. The type comes from `--L-secondary`, one of the four literal
+   per-profile ladders declared on the root element in `styles/stage.css`, so
+   this inherits Room 28-44px / TV 36-56px / Call 28-44px / Table 22-30px and
+   cannot drift from the stage it sits on. That is also why there is no scalar
+   here: `styles/stage.css` records that revision 1 multiplied a `--k` declared
+   on `:root`, which substituted against `:root`'s own value of 1 and rendered
+   all four profiles identically. Reading the ladder is immune to that by
+   construction.
+
+   `--L-secondary` and not `--L-primary`: primary is the rung the QUESTION is
+   set in, and a response typeset larger than the question it answers reads as
+   the more important of the two. Secondary sits directly under it and still
+   clears every profile's floor with room to spare.
+
+   THE SCRIM STILL SCROLLS. `.modal-overlay` carries `padding: 24px 16px`, so
+   92vh + 48px is 1041px against a 1080p stage and the card never needs the
+   scroll it would nonetheless get — the fourth recurrence of that bug is what
+   the `align-items: flex-start` + `margin: auto` pair upstairs exists to
+   prevent, and nothing here overrides it.
+
+   The player's `.plr-spot` is the same seam for the opposite constraint, and is
+   deliberately untouched: a phone has no room to give.
+   ───────────────────────────────────────────────────────────────────────── */
+.answer-spotlight.stage-spot {
+  width: min(1600px, 94vw);
+  max-height: 92vh;
+  gap: clamp(16px, 2.2vh, 28px);
+  padding: clamp(20px, 3vh, 40px) clamp(24px, 3.4vw, 56px) clamp(18px, 2.6vh, 34px);
+}
+
+/* The response itself, at the stage's own secondary rung. */
+.stage-spot .answer-spotlight__text {
+  font-size: var(--L-secondary);
+  line-height: 1.4;
+}
+
+/* The chrome rides UP with it. Left at their base sizes these read as a caption
+   bolted to a billboard — and the position counter ("2 of 7") is the one piece
+   a host reads aloud while paging, so it has to survive the back of the room
+   too. `--L-meta` is the rung the stage already uses for exactly this job. */
+.stage-spot .answer-spotlight__count,
+.stage-spot .answer-spotlight__who,
+.stage-spot .answer-spotlight__tally,
+.stage-spot .answer-spotlight__nav button {
+  font-size: var(--L-meta);
+}
+
+/* A 24px close target is a laptop control. On a stage driven from across a room
+   — or from the phone remote, with the host nowhere near the projector — it
+   wants the same weight as everything else that grew. */
+.stage-spot .answer-spotlight__close {
+  padding: clamp(8px, 1.2vh, 14px);
 }
 
 .answer-spotlight__nav {

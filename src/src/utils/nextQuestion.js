@@ -30,11 +30,17 @@
  *
  * ── WHY THIS IS A MODULE ───────────────────────────────────────────────────
  *
- * `GameHostPage.jsx` cannot be mounted in jsdom at all — its own test suite is
- * one of the five that have never run, and `sessionSetupPanel.test.jsx` was
- * written against an extracted panel for the same reason. Logic that decides
- * what a host is TOLD about a failed round transition should not be the part of
- * the codebase that no test can reach, so it lives here and is tested directly.
+ * CORRECTION, 2026-08-17. This block used to say `GameHostPage.jsx` "cannot be
+ * mounted in jsdom at all". THAT WAS NEVER TRUE. Its suite was red on one
+ * unmocked `AuthProvider` — `useAuth must be used within an AuthProvider` — and
+ * the claim grew from the red. `__tests__/GameHostPage.test.jsx` mocks that one
+ * provider, mounts the component and passes; its header records that three
+ * product-down bugs shipped behind the false version.
+ *
+ * The reason for extracting this module stands on its own and does not need the
+ * fiction: logic that decides what a host is TOLD about a failed round
+ * transition is worth testing at every input, and a 5,000-line page is a
+ * miserable place to enumerate a failure taxonomy even when it mounts fine.
  */
 
 /**

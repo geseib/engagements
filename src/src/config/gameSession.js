@@ -140,6 +140,17 @@ export function initialGameSession() {
 
     // --- panels and transient banners tied to the current game ----------
     eventTitle: '',
+    /*
+      WHEN THIS SESSION WAS CREATED, which the invite dialog needs because the
+      retention deadline is creation + 90 days.
+
+      It is per-game and belongs on this list for exactly the reason the list
+      exists: without it, switching sessions would leave the PREVIOUS session's
+      creation date in place, and the dialog would check a chosen date against
+      the wrong deadline — silently, and only in the direction that says yes.
+      __tests__/gameSession.test.js caught the omission before it shipped.
+    */
+    gameCreatedAt: null,
     lessonExpanded: false,
     showExpandedQR: false,
     // The rail's QR: null | 'preview' | 'pinned'. Session-scoped like every
@@ -155,7 +166,6 @@ export function initialGameSession() {
     // shows the next room the last game's facts.
     setupPanelOpen: false,
     browsingQuestions: [],
-    inviteCopied: false,
     isLoadingData: false,
     isRestoringState: false,
     manualStateChange: false,

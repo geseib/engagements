@@ -11,6 +11,7 @@ import {
 } from '../config/gameTypes';
 import { truncate } from '../utils/questionSetEditing';
 import './QuestionSetsPanel.css';
+import { formatWhen } from '../config/tableCells';
 
 /**
  * THE QUESTION SETS LIST.
@@ -68,14 +69,6 @@ const SORTS = {
   name: (a, b) => String(a.name || '').localeCompare(String(b.name || '')),
   questions: (a, b) => (b.totalQuestions || 0) - (a.totalQuestions || 0),
 };
-
-/** A date that is present, formatted; a date that is absent, an em dash. */
-function formatWhen(value) {
-  if (!value) return '—';
-  const when = new Date(value);
-  if (Number.isNaN(when.getTime())) return '—';
-  return when.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-}
 
 export default function QuestionSetsPanel({
   questionSets = [],

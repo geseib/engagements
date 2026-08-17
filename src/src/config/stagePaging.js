@@ -422,6 +422,31 @@ export function proseBlocks(markdown) {
  * turns, and the title is gone. Any trailing headings are carried over with the
  * block that displaced them.
  *
+ * AND A HEADING IS NEVER A PAGE ON ITS OWN, which is the same fault in its
+ * other half and shipped as a bug:
+ *
+ *     "the word summary is by itself and you have to page often, several times
+ *      there is just the title of the section: Summary, Next Steps. that makes
+ *      for a confusing experience."
+ *
+ * Reported on TV and Projector, and TV is where it bit hardest because its
+ * budget is the smallest of the four (12 lines) so the least content has to
+ * overflow before it fires. The mechanism: a heading opened a page, the very
+ * next block was bigger than what remained, the carry above popped the heading
+ * off to travel with it — and then a guard put the heading BACK and closed the
+ * page anyway, emitting the title alone. That guard's comment said it was
+ * avoiding "an empty page and an orphan pair"; it was manufacturing the orphan.
+ *
+ * When everything on the page is headings there is nothing to break AFTER, so
+ * the answer is not to break at all. The oversized block joins its title and
+ * overflows the budget by design — the fitter is still behind this — because a
+ * title with its body beats a title alone, and a block that was already over
+ * budget gains nothing from a split that cannot make it smaller.
+ *
+ * The two rules together are one invariant, and it is worth stating as one
+ * because either half alone reintroduces the other: EVERY PAGE CONTAINS AT
+ * LEAST ONE BLOCK THAT IS NOT A HEADING.
+ *
  * Returns `[{ text, section }]` — `section` being the `##` in force at the top
  * of that page, carried forward onto continuations so page 3 of Next Steps
  * still says Next Steps.
@@ -437,18 +462,38 @@ export function prosePages(markdown, budget) {
   let used = 0;
   const close = () => { if (current.length) groups.push(current); current = []; used = 0; };
 
+  /** Is there anything on this page yet that is not a title? */
+  const hasBody = () => current.some((b) => !b.heading);
+
   blocks.forEach((block) => {
     if (block.heading && block.level <= 2) {
-      close();
+      // Break only when there is a body to break AFTER. Two headings in a row —
+      // `## Next Steps` immediately followed by `### This week`, which is a
+      // shape the model does produce — would otherwise close a page holding
+      // nothing but the first of them.
+      if (hasBody()) close();
     } else if (current.length && used + block.lines > per) {
       const carried = [];
       while (current.length && current[current.length - 1].heading) carried.unshift(current.pop());
-      // A page that was ONLY headings has nothing to carry them to; keep it
-      // whole rather than emitting an empty page and an orphan pair.
-      if (!current.length) { current = carried.splice(0, carried.length); }
-      close();
-      current = carried;
-      used = carried.reduce((n, b) => n + b.lines, 0);
+      if (!current.length) {
+        /*
+          EVERYTHING WE HAD WAS HEADINGS, so there is nothing to break after and
+          we do not break. Put them back and let the oversized block join them.
+
+          This branch used to restore the headings and then `close()` anyway,
+          which is precisely how "just the title of the section: Summary, Next
+          Steps" reached a projector. The page now runs over budget instead —
+          deliberately, and harmlessly: the block was already too big for a page
+          of its own, so no boundary available here makes it fit, and the fitter
+          scales what lands. `used` is left alone because `current` is restored
+          to exactly what it was.
+        */
+        current = carried;
+      } else {
+        close();
+        current = carried;
+        used = carried.reduce((n, b) => n + b.lines, 0);
+      }
     }
     current.push(block);
     used += block.lines;

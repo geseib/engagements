@@ -4,8 +4,10 @@ import './HostRemote.css';
 import Icon from './components/Icon';
 import RemoteSessionPanel from './components/RemoteSessionPanel';
 import RemoteCategoryList from './components/RemoteCategoryList';
+import RemoteFocusPanel from './components/RemoteFocusPanel';
 import { authFetch } from './auth/authFetch';
 import { categoryRows } from './config/setupPanel';
+import { focusRequest, sameFocus, NO_FOCUS } from './config/stageFocus';
 import {
   primaryAction,
   skipAction,
@@ -102,6 +104,18 @@ function HostRemote() {
   const [snapshot, setSnapshot] = useState(null);
   const [roster, setRoster] = useState(null);
   const [aiSummary, setAiSummary] = useState(null);
+  /*
+    THE ROUND'S RESPONSES, so the host can pick one to put on the wall.
+
+    `/state?includeHostData=true` carries answer PROGRESS — how many have come
+    in, and who has not answered — but never the text, so this is a second
+    fetch. It is deliberately not folded into the state poll: the text is only
+    needed while the focus panel is open, and pulling every response every two
+    seconds for a panel nobody opened is a request per poll for nothing.
+  */
+  const [focusAnswers, setFocusAnswers] = useState([]);
+  const [focusOpen, setFocusOpen] = useState(false);
+  const [focusBusy, setFocusBusy] = useState(false);
   const [connected, setConnected] = useState(false);
 
   const [busyAction, setBusyAction] = useState(null);
@@ -220,6 +234,14 @@ function HostRemote() {
   // in primaryAction is dead code: the phone would offer "What We Heard"
   // forever and never advance.
   const stageBeat = snapshot?.stageBeat;
+  /*
+    WHAT THE ROOM IS LOOKING AT CLOSELY, from the SERVER — the same deal
+    `stageBeat` above has, for the same reason. This phone holds no WebSocket,
+    so `get-game-state`'s projection is the only way a spotlight opened on the
+    projector reaches it, and without following it the phone would offer "Show
+    the room" for a response the room is already reading.
+  */
+  const stageFocus = snapshot?.stageFocus || NO_FOCUS;
   const action = useMemo(
     () => primaryAction(snapshot?.state, gameType, stageBeat),
     [snapshot, gameType, stageBeat]
@@ -285,6 +307,92 @@ function HostRemote() {
     const timer = setInterval(load, AI_POLL_MS);
     return () => { cancelled = true; clearInterval(timer); };
   }, [gameId, onFieldNotes, notes.ready]);
+
+  /* ----------------------------------------------------------- the focus */
+
+  // A new round's responses are different rows. Dropping the old list is what
+  // stops round 4's phone offering round 3's answers to put on the wall — and
+  // the index it would send addresses round 4, so the room would get a
+  // different response from the one the host tapped.
+  useEffect(() => { setFocusAnswers([]); }, [gameId, round]);
+
+  /*
+    Only while the panel is open, and only once there is a round to have
+    responses. Same discipline as the read-back poll above: this is the second
+    request the phone makes per tick, and a panel nobody opened should cost
+    nothing.
+  */
+  useEffect(() => {
+    if (!gameId || !focusOpen || !round) return undefined;
+
+    let cancelled = false;
+    const load = async () => {
+      try {
+        // Public route, plain fetch — the same URL GameHostPage uses.
+        // `role=host` is what returns the text rather than the redacted
+        // player view.
+        const padded = String(round).padStart(3, '0');
+        const res = await fetch(`${apiBase()}games/${gameId}/answers?role=host&questionId=${padded}`);
+        if (cancelled || !res.ok || activeGameRef.current !== gameId) return;
+        const payload = await res.json();
+        setFocusAnswers(Array.isArray(payload.answers) ? payload.answers : []);
+      } catch {
+        /* the panel keeps what it has; the next tick asks again */
+      }
+    };
+
+    load();
+    const timer = setInterval(load, AI_POLL_MS);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [gameId, focusOpen, round]);
+
+  /**
+   * Put something on the room's screen — or take it off.
+   *
+   * `focusRequest` builds the body and refuses when there is no round to
+   * address, so a tap from the lobby costs no request rather than writing a
+   * ROUND#000 row nothing will ever read.
+   *
+   * A press that changes nothing sends nothing. The phone is stale by
+   * construction — two seconds of poll — so a host who taps a row that is
+   * already showing has simply tapped what they can see, and the far end is
+   * idempotent anyway; the saving is a request, and more importantly a
+   * needless repaint of the room.
+   *
+   * `authFetch`: /stage-focus carries the Cognito authorizer, like
+   * /stage-beat and /close-round. This one puts ONE NAMED PERSON'S RESPONSE
+   * full-screen on a wall, which is why it is not a public route.
+   */
+  const setStageFocus = useCallback(async (next) => {
+    if (!gameId || focusBusy) return;
+    if (sameFocus(next, stageFocus)) return;
+
+    const body = focusRequest({ ...next, state: snapshot?.state });
+    if (!body) return;
+
+    setFocusBusy(true);
+    try {
+      const res = await authFetch(`${apiBase()}games/${gameId}/stage-focus`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        setError(payload.error || 'Could not change what the room is seeing.');
+        return;
+      }
+      // Re-read rather than patching locally. The state poll is the phone's
+      // only source of truth about the focus, and an optimistic edit that a
+      // failed write left lying is exactly what this avoids — the same reason
+      // toggleCategory re-polls instead of setting the row itself.
+      await pollState(gameId);
+    } catch {
+      setError('No connection. Check signal and try again.');
+    } finally {
+      setFocusBusy(false);
+    }
+  }, [gameId, focusBusy, stageFocus, snapshot, pollState]);
 
   /* ------------------------------------------------------------ categories */
 
@@ -723,10 +831,14 @@ function HostRemote() {
                 request, not a control to wire, and a button that does nothing is
                 worse on this surface than on any other.
 
-                `Expand on stage` is the host page's `setLessonExpanded(true)`,
-                which is pure client state on the projector with no server
-                representation and no REMOTE_COMMAND case to reach it. It needs one
-                line in GameHostPage.jsx, which this change may not touch. */}
+                `Expand on stage` USED TO BE the second absence, and its note
+                here read: "pure client state on the projector with no server
+                representation and no REMOTE_COMMAND case to reach it." That is
+                now false. `POST /games/{id}/stage-focus` gives the focus a
+                durable per-round representation and a broadcast, exactly as
+                stage-beat.js did for the RESULTS beat, and `Show the room`
+                below is the control. It enlarges the question AND any single
+                response, which is what the owner asked for. */}
             <section className="hr-card" aria-label="This round">
               <h2 className="hr-card-heading">This round</h2>
               <div className="hr-grid">
@@ -738,6 +850,26 @@ function HostRemote() {
                 >
                   <Icon name="MagnifyingGlass" weight="bold" size={18} color="currentColor" />
                   Choose next question
+                </button>
+
+                {/* THE ROOM'S SCREEN, FROM THE HOST'S HAND.
+
+                    Disabled outside a round rather than hidden: unlike Skip —
+                    which can lose a round and is therefore absent where it
+                    would mean nothing — this one is the control a host reaches
+                    for while walking away from the laptop, and a button that
+                    disappears between rounds is one they have to re-find every
+                    time. `round` is null in LOBBY and after the session ends,
+                    which is exactly when there is nothing to enlarge. */}
+                <button
+                  className="hr-btn hr-btn--ghost"
+                  type="button"
+                  aria-expanded={focusOpen}
+                  disabled={!round}
+                  onClick={() => setFocusOpen((open) => !open)}
+                >
+                  <Icon name="ArrowsOut" weight="bold" size={18} color="currentColor" />
+                  Show on the big screen
                 </button>
 
                 {/* Skip keeps its own confirmation. It is the only control here
@@ -761,6 +893,35 @@ function HostRemote() {
                   </button>
                 )}
               </div>
+
+              {focusOpen && (
+                <div className="hr-card-panel">
+                  <RemoteFocusPanel
+                    focus={stageFocus}
+                    answers={focusAnswers}
+                    questionTitle={snapshot?.currentQuestionData?.title
+                      || snapshot?.currentQuestionData?.question || ''}
+                    busy={focusBusy}
+                    onFocus={setStageFocus}
+                    /*
+                      THE ROOM CAN SEE THIS PHONE'S DECISION, so the phone must
+                      not name someone the stage is deliberately not naming.
+                      The host taps a row here and that response goes on a wall
+                      — under whichever label the stage would give it. Passing a
+                      plain player name would let an anonymous round be
+                      de-anonymised by the act of enlarging one answer.
+
+                      The gate is the SERVER's: `get-game-state` redacts
+                      `playerName` out of the rows for a hidden round
+                      (message.js does the same on the socket), so an absent
+                      name here is already the answer rather than something
+                      this component decides. Positional labelling is the
+                      fallback, which is what the stage falls back to too.
+                    */
+                    labelFor={(answer, index) => answer.playerName || `Response ${index + 1}`}
+                  />
+                </div>
+              )}
             </section>
 
             {/* SESSION — 17-remote.html's second card.
@@ -842,8 +1003,11 @@ function HostRemote() {
                   type="button"
                   onClick={() => { setGameId(''); setGameIdDraft(''); setSnapshot(null); }}
                 >
-                  <Icon name="ArrowsClockwise" weight="bold" size={18} color="currentColor" />
-                  Switch game
+                  {/* House, not ArrowsClockwise: this goes back to the code
+                      entry screen, which is the remote's menu. A cycle glyph
+                      reads as "reload this session". */}
+                  <Icon name="House" weight="bold" size={18} color="currentColor" />
+                  Back to Menu
                 </button>
               </div>
 

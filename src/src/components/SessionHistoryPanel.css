@@ -1,0 +1,338 @@
+/* ============================================================================
+   THE HOST'S SESSION HISTORY — components/SessionHistoryPanel.jsx
+
+   Scoped `.shist`. The ladder, the 36px row, the chips and the token set are
+   the admin sessions screen's, unchanged — see components/SessionsPanel.css for
+   the derivation, and components/UserManagement.css for the measured ratios it
+   in turn inherits. Nothing here paints a new colour, so nothing here needs a
+   new contrast derivation: every pairing below is --text or --muted on --bg or
+   on --surface, already measured in __tests__/adminTabsPalette.test.js.
+
+   It is a SEPARATE SHEET rather than more selectors in SessionsPanel.css
+   because the two screens diverge in one structural way — this one carries up
+   to five actions per row where admin carries one — and a shared sheet would
+   mean the host's action column dictating the admin's.
+
+   TWO THINGS ARE DELIBERATELY NOT COPIED FROM `.sp`:
+
+     `.sp-rowact` is `justify-content: flex-end`, inside a `td` that is
+     `overflow: hidden`. That is the exact shape hard rule 9 forbids —
+     flex-end overflows towards the START, where a hidden overflow is
+     unreachable, so the first buttons in the group silently vanish as the
+     column narrows. __tests__/rowActionsReachable.test.js exists for this.
+     `.shist__acts` uses `margin-left: auto` on the first child instead, and
+     wraps.
+
+     `.sp-rowact` is also `opacity: 0` until the row is hovered. On this screen
+     the actions ARE the screen — a host opens session history to press one of
+     them — and hover does not exist on a touch laptop. They are always shown.
+   ========================================================================== */
+
+.shist {
+  --shist-t-floor: 12px;
+  --shist-t-label: 13px;
+  --shist-t-body: 15px;
+  --shist-t-head: 19px;
+  --shist-t-title: 24px;
+  --shist-row-h: 36px;
+
+  /* Locals, not reaches into another sheet: an undefined custom property
+     invalidates the whole declaration, so a token borrowed from a stylesheet
+     that merely happens to be in the bundle is a rule that silently does
+     nothing. Same values as `.sp`, declared here. */
+  --shist-rule: rgba(155, 168, 190, .20);
+  --shist-rule-strong: rgba(155, 168, 190, .34);
+  --shist-row-hover: rgba(155, 168, 190, .055);
+  --shist-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  display: flex;
+  flex-direction: column;
+  /* Fills the dialog, which is a flex column of a fixed height. `min-height: 0`
+     is what lets `.shist__scroll` below actually overflow — without it a flex
+     item's default `min-height: auto` resolves to content height and the
+     overflow never exists. */
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 var(--shist-t-body)/1.45 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.shist *,
+.shist *::before,
+.shist *::after { box-sizing: border-box; }
+
+/* ------------------------------------------------------------------ head --- */
+
+.shist__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 4px 2px 14px;
+  border-bottom: 1px solid var(--shist-rule-strong);
+}
+
+.shist__title {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  font-size: var(--shist-t-title);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.shist__sub {
+  margin: 4px 0 0;
+  font-size: var(--shist-t-label);
+  color: var(--muted);
+}
+
+.shist__close {
+  margin-left: auto;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 17px;
+  background: var(--surface-2);
+  border: 1px solid var(--shist-rule-strong);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.shist__close:hover { background: var(--surface); }
+
+/* --------------------------------------------------------------- filters --- */
+
+.shist__filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 2px;
+}
+
+.shist__srch { display: flex; flex-direction: column; gap: 3px; flex: 1 1 auto; min-width: 0; }
+
+.shist__srch-lab {
+  font-size: var(--shist-t-floor);
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Inputs render at BODY size, never label size. A 13px input feeding a 15px
+   table is how a dense screen ends up illegible exactly where a mistake costs
+   most — and under 16px iOS Safari zooms the page on focus. */
+.shist__srch input {
+  font: 400 var(--shist-t-body)/1.4 var(--font-ui);
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--shist-rule-strong);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.shist__count {
+  flex: 0 0 auto;
+  font-size: var(--shist-t-label);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ----------------------------------------------------------------- table --- */
+
+/* The one scrolling region. A long history scrolls its own body while the head
+   and the filters stay put. */
+.shist__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.shist__tbl {
+  width: 100%;
+  /* Fixed, always. Under auto layout a declared width is only a hint and one
+     nowrap chip sets a min-content width that grows the whole table. */
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--shist-t-body);
+}
+
+.shist__tbl th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
+  text-align: left;
+  font-size: var(--shist-t-floor);
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 10px 7px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--shist-rule-strong);
+}
+
+.shist__tbl td {
+  padding: 0 10px;
+  height: var(--shist-row-h);
+  border-bottom: 1px solid var(--shist-rule);
+  vertical-align: middle;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.shist__tbl tbody tr:hover td { background: var(--shist-row-hover); }
+.shist__row--now td { background: rgba(246, 169, 76, .07); }
+
+/* Sums to 100. The actions column is far wider than the admin table's 9%
+   because this row carries up to five controls where that one carries one. */
+.shist__c-name  { width: 22%; }
+.shist__c-id    { width: 6%; }
+.shist__c-type  { width: 10%; }
+.shist__c-state { width: 9%; }
+.shist__c-num   { width: 5%; }
+.shist__c-when  { width: 12%; }
+.shist__c-acts  { width: 19%; }
+
+/* Floor size is right for these: they are glanced, never read in runs. Tabular
+   numerals come from `.shist` so a column of counts lines up. */
+.shist__num { font-size: var(--shist-t-label); color: var(--muted); }
+
+/* A SINGLE TEXT NODE WITH min-width: 0. `text-overflow` on a flex container
+   with span children is inert and the text is silently cut instead. */
+.shist__nm {
+  font-weight: 600;
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shist__sub2 {
+  display: block;
+  font-size: var(--shist-t-label);
+  color: var(--muted);
+  max-width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shist__tbl td:first-child { padding-top: 5px; padding-bottom: 5px; height: auto; }
+.shist__when { font-size: var(--shist-t-label); color: var(--muted); white-space: nowrap; }
+.shist__mono { font-family: var(--shist-font-mono); font-size: 14px; }
+
+.shist__dim td {
+  color: var(--muted);
+  font-style: italic;
+  font-size: var(--shist-t-label);
+  height: 64px;
+}
+
+/* ----------------------------------------------------------------- chips --- */
+
+.shist__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--shist-t-floor);
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--shist-rule-strong);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.shist__chip--on { border-color: var(--success); color: var(--success); }
+.shist__chip--off { border-color: var(--shist-rule-strong); color: var(--muted); }
+.shist__chip--type { border-color: var(--shist-rule-strong); color: var(--text); }
+
+/* The two row flags. Amber for the one on stage, because that is the row a
+   host must not restart by accident; neutral for Latest, which is only a
+   convenience. Both are WORDS — the flag does not rely on its colour. */
+.shist__flag {
+  margin-left: 7px;
+  font-size: var(--shist-t-floor);
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.shist__flag--now { color: var(--primary); }
+
+/* --------------------------------------------------------------- actions --- */
+
+.shist__acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: flex-start;
+}
+
+/* HARD RULE 9. `margin-left: auto` on the FIRST child, never
+   `justify-content: flex-end` on the container: inside a cell that is
+   `overflow: hidden`, flex-end pushes the overflow towards the START of the
+   row, where it cannot be reached or scrolled to, and the leading buttons
+   disappear as the column narrows. */
+.shist__acts > :first-child { margin-left: auto; }
+
+.shist__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: 600 var(--shist-t-label)/1 var(--font-ui);
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--shist-rule-strong);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.shist__btn:hover { background: var(--surface-2); border-color: var(--muted); }
+
+.shist__btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Open and Continue are the default action for their row: the thing a host
+   came here to do. Start is deliberately NOT primary — it lets players in, and
+   it should take a decision rather than a reflex. */
+.shist__btn--primary {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.shist__btn--primary:hover {
+  background: rgba(246, 169, 76, .12);
+  border-color: var(--primary);
+}
+
+@media (max-width: 900px) {
+  /* Below this the seven columns stop fitting honestly. The table keeps its
+     own horizontal scroll (`.shist__scroll`) rather than the page gaining one,
+     and the two date columns go first because they are the least load-bearing
+     thing on the row. */
+  .shist__c-when { display: none; }
+  .shist__c-name { width: 30%; }
+  .shist__c-acts { width: 29%; }
+  .shist__tbl td:nth-child(7),
+  .shist__tbl td:nth-child(8) { display: none; }
+}

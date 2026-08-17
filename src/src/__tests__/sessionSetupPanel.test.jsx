@@ -1,10 +1,15 @@
 /**
  * The session setup panel, rendered directly.
  *
- * `GameHostPage` cannot be mounted in jsdom, but an extracted panel can —
- * `gameSetupDialog.test.jsx` is the proof. So everything below is a real render
- * with real assertions, and the only source-text checks in this stream live in
- * `setupPanelCallSite.test.js`, where they belong.
+ * Everything below is a real render with real assertions; the only source-text
+ * checks in this stream live in `setupPanelCallSite.test.js`, where they belong.
+ *
+ * CORRECTION, 2026-08-17. This block used to open "GameHostPage cannot be
+ * mounted in jsdom, but an extracted panel can". The second half is the useful
+ * half; the first was false and is gone. `GameHostPage.test.jsx` mounts the
+ * page — one mocked `AuthProvider` was the whole obstacle. Extracting the panel
+ * is still right, because a panel takes its props directly and a page has to be
+ * driven into every state through five other screens.
  *
  * jsdom has no layout engine. There is not a single geometric assertion here,
  * because every one of them would return zero and pass unconditionally. That
@@ -462,17 +467,46 @@ describe('the Settings tab', () => {
     expect(screen.getByText('https://eng.example.us/remote?gameId=4821')).toBeInTheDocument();
   });
 
-  test('the join link and Copy Invite are both there, and different', () => {
-    // rejects: collapsing them. Copy Invite is a calendar blob; the join link
-    // is a url. The mockup only drew the link.
+  test('the join link and Invite are both there, and different', () => {
+    /*
+      rejects: collapsing them. The invite is a whole document — title, type,
+      question set, categories, joining instructions — and the join link is a
+      url. The mockup only drew the link.
+
+      `onInvite` OPENS A DIALOG now rather than copying straight to the
+      clipboard, which is what makes this button and session history's the same
+      mechanism. The panel still only says WHICH session; everything else is the
+      dialog's.
+    */
     const onCopyJoinLink = jest.fn();
-    const onCopyInvite = jest.fn();
-    renderPanel({ onCopyJoinLink, onCopyInvite });
+    const onInvite = jest.fn();
+    renderPanel({ onCopyJoinLink, onInvite });
     openTab('Settings');
     fireEvent.click(screen.getByRole('button', { name: /copy join link/i }));
-    fireEvent.click(screen.getByRole('button', { name: /copy invite/i }));
+    fireEvent.click(screen.getByRole('button', { name: /invite/i }));
     expect(onCopyJoinLink).toHaveBeenCalledTimes(1);
-    expect(onCopyInvite).toHaveBeenCalledTimes(1);
+    expect(onInvite).toHaveBeenCalledTimes(1);
+  });
+
+  test('the panel stops answering Escape while a dialog it opened is on top', () => {
+    /*
+      This panel's keydown is on `document` and hand-rolled, so `Modal`'s
+      topmost-by-DOM-containment check cannot see it. Without the bail, one
+      Escape inside the invite dialog closes the dialog AND the panel beneath
+      it — and `\\` shuts the panel out from under an open dialog.
+    */
+    const onClose = jest.fn();
+    renderPanel({ onClose, suppressKeys: true });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: '\\' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  test('and answers it again once the dialog has gone', () => {
+    const onClose = jest.fn();
+    renderPanel({ onClose });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   test('the display profile picker changes the profile', () => {
@@ -507,7 +541,14 @@ describe('the Settings tab', () => {
     renderPanel(handlers);
     openTab('Settings');
     fireEvent.click(screen.getByRole('button', { name: /join code/i }));
-    fireEvent.click(screen.getByRole('button', { name: /switch game/i }));
+    /*
+      "Back to Menu", not "Switch game". The button leaves the session and shows
+      the host menu — it does NOT end the session, which stays live and
+      rejoinable through Continue — so the label names the destination and
+      claims nothing about the session's fate. ("Exit" was considered and
+      rejected for claiming a consequence the button does not have.)
+    */
+    fireEvent.click(screen.getByRole('button', { name: /back to menu/i }));
     fireEvent.click(screen.getByRole('button', { name: /sign out/i }));
     fireEvent.click(screen.getByRole('button', { name: /how this works/i }));
     for (const fn of Object.values(handlers)) expect(fn).toHaveBeenCalledTimes(1);

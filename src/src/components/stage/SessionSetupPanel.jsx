@@ -3,12 +3,14 @@ import { QRCodeSVG } from 'qrcode.react';
 import Icon from '../Icon';
 import {
   setupPanelTabs, categoryRows, questionsRemaining,
-  browserRow, filterBrowserRows, rosterRows, departedRows,
+  browserRow, filterBrowserRows, rosterRows, departedRows, questionKey,
 } from '../../config/setupPanel';
 import {
   anonymityApplies, anonymityActive, waitingNamesCaution,
 } from '../../config/anonymity';
 import { roundSubtitle, hasSummary } from '../../config/sessionHistory';
+import { queuePosition } from '../../config/questionQueue';
+import QueueList from './QueueList';
 import HelpButton from '../HelpButton';
 
 /**
@@ -94,14 +96,41 @@ export default function SessionSetupPanel({
   usedQuestionIds = [],
   onSelectQuestion = () => {},
 
+  /*
+    Questions — THE QUEUE.
+
+    Presentational like everything else on this panel: the list arrives as an
+    array of canonical keys and every action goes back out as a prop. The panel
+    never fetches and never reorders locally — `GameHostPage` owns the optimistic
+    update because it also owns the WebSocket that corrects it, and a second
+    optimistic copy in here would fight that one.
+
+    `queueBusyKeys` names the rows with a request in flight, so a host cannot
+    press ↑ three times on a 200ms round trip and send three ops for one intent.
+  */
+  questionQueue = [],
+  queueBusyKeys = [],
+  upNext = [],
+  onQueueQuestion = () => {},
+  onQueueMove = () => {},
+  onQueueRemove = () => {},
+
   // Settings
   gameId = '',
   playUrl = '',
   remoteUrl = '',
   joinLinkCopied = false,
-  inviteCopied = false,
   onCopyJoinLink = () => {},
-  onCopyInvite = () => {},
+  onInvite = () => {},
+  /*
+    Silence this panel's own document-level keydown while a dialog it opened is
+    on screen. That handler answers Escape AND `\` unconditionally, and it is
+    hand-rolled, so `Modal`'s topmost-by-DOM-containment logic cannot see it —
+    without this, Escape inside the invite dialog closes the dialog and the
+    panel underneath it, and `\` types a backslash nowhere while toggling the
+    panel shut.
+  */
+  suppressKeys = false,
   onShowJoinCode = () => {},
   profile = 'room',
   onProfileChange = () => {},
@@ -173,6 +202,11 @@ export default function SessionSetupPanel({
   // Esc and `\` both close, because `\` is what opened it.
   useEffect(() => {
     const onKeyDown = (event) => {
+      // A dialog this panel opened is on top. This listener is on `document`
+      // and hand-rolled, so `Modal`'s topmost-by-containment check cannot see
+      // it — without this bail, one Escape closes the dialog AND the panel
+      // under it, and `\` shuts the panel out from under an open dialog.
+      if (suppressKeys) return;
       if (event.key === 'Escape' || event.key === '\\') {
         event.preventDefault();
         onClose();
@@ -180,7 +214,7 @@ export default function SessionSetupPanel({
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+  }, [onClose, suppressKeys]);
 
   /**
    * Focus stays inside while it is open. Without this, Tab walks out of the
@@ -245,6 +279,19 @@ export default function SessionSetupPanel({
     })),
     [questions, usedQuestionIds, activeCategoryNames],
   );
+  /*
+    THE ROWS WITH A QUEUE REQUEST IN FLIGHT, canonicalised through the SAME
+    `questionKey` the queue itself uses. Both spellings of a question id are on
+    the wire — `QUESTION#c005#001` from `get-question.js` and the bare form from
+    the browsing endpoint — so a raw Set membership test would leave the button
+    live on exactly the surface that spells it the other way, which is the fault
+    that killed the "Unasked only" filter for its whole life (setupPanel.js:154).
+  */
+  const queueBusy = useMemo(
+    () => new Set(queueBusyKeys.map((key) => questionKey(String(key)))),
+    [queueBusyKeys],
+  );
+
   const visible = useMemo(() => {
     const filtered = filterBrowserRows(rows.map((r) => r.row), {
       search, category: filterCategory, unaskedOnly, enabledOnly,
@@ -519,6 +566,28 @@ export default function SessionSetupPanel({
                 ))}
               </div>
 
+              {/*
+                THE RUNNING ORDER, ABOVE THE BROWSER THAT FILLS IT.
+
+                This order is the reading order: what is coming up, then where
+                to add to it. Putting the queue below a list of sixty questions
+                would mean the host scrolls past everything they might add to
+                reach the thing that says what they already chose.
+
+                It renders when EMPTY too — see QueueList. A queue that appears
+                only once it is in use is a feature that has to be explained
+                somewhere else, and the empty line is where the difference
+                between Queue and Ask next is stated.
+              */}
+              <QueueList
+                queue={questionQueue}
+                questions={questions}
+                busyKeys={queueBusyKeys}
+                upNext={upNext}
+                onMove={onQueueMove}
+                onRemove={onQueueRemove}
+              />
+
               {/* THE BROWSER, AS A SECTION RATHER THAN A MODAL. Until now the
                   only way in was the per-category magnifier, which scoped the
                   fetch to one category — so a host could never see the whole
@@ -640,6 +709,24 @@ export default function SessionSetupPanel({
                                 Off
                               </span>
                             )}
+                            {/*
+                              QUEUED, AND WHERE. The position lives in the tag
+                              rather than on the button because the button has
+                              to say what pressing it DOES — a control reading
+                              "Queued #2" that removes on press is the shape
+                              that gets pressed by mistake in front of a room.
+                              Same pill treatment as Asked and Off, which is
+                              the idiom the owner picked out by name.
+                            */}
+                            {queuePosition(questionQueue, row.id) > 0 && (
+                              <span
+                                className="setup-qb__tag setup-qb__tag--queued"
+                                title="This question is in the running order"
+                                data-testid="browser-queued-tag"
+                              >
+                                {`Queued #${queuePosition(questionQueue, row.id)}`}
+                              </span>
+                            )}
                           </div>
                           {row.detail && <div className="setup-qb__detail">{row.detail}</div>}
                           <div className="setup-qb__meta">
@@ -648,13 +735,40 @@ export default function SessionSetupPanel({
                             <span className="setup-qb__kind">{row.responseKind}</span>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          className="setup-qb__use"
-                          onClick={() => onSelectQuestion(question)}
-                        >
-                          {row.used ? 'Ask again' : 'Ask next'}
-                        </button>
+                        {/*
+                          TWO ACTIONS, AND THE DIFFERENCE BETWEEN THEM IS THE
+                          FEATURE. `Ask next` interrupts — it puts the question
+                          on the room's screen now, which is what the owner
+                          described as the old behaviour: *"no matter where you
+                          are it forward to that question."* `Queue` does not
+                          touch the round in flight.
+
+                          Queue is listed FIRST and Ask next keeps the primary
+                          treatment it already had. Queueing is the safe,
+                          reversible action and the one a host will reach for
+                          most; interrupting the room stays the deliberate one.
+                        */}
+                        <div className="setup-qb__acts">
+                          <button
+                            type="button"
+                            className="setup-qb__queue"
+                            disabled={queueBusy.has(questionKey(String(row.id)))}
+                            onClick={() => (
+                              queuePosition(questionQueue, row.id) > 0
+                                ? onQueueRemove(row.id)
+                                : onQueueQuestion(question)
+                            )}
+                          >
+                            {queuePosition(questionQueue, row.id) > 0 ? 'Unqueue' : 'Queue'}
+                          </button>
+                          <button
+                            type="button"
+                            className="setup-qb__use"
+                            onClick={() => onSelectQuestion(question)}
+                          >
+                            {row.used ? 'Ask again' : 'Ask next'}
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -830,8 +944,8 @@ export default function SessionSetupPanel({
                 </button>
                 {/* A calendar-invite blob, not a url — distinct from the link
                     above, and the mockup only drew the link. */}
-                <button type="button" onClick={onCopyInvite}>
-                  {inviteCopied ? 'Copied!' : 'Copy Invite'}
+                <button type="button" onClick={onInvite}>
+                  {'Invite…'}
                 </button>
                 <button type="button" onClick={onShowJoinCode}>
                   Put the join code back on the stage
@@ -860,7 +974,27 @@ export default function SessionSetupPanel({
                     control is a different thing: it puts an explanation on the
                     PROJECTOR, for the room. */}
                 <button type="button" onClick={onShowHowToPlay}>Show how this works on the stage →</button>
-                <button type="button" onClick={onSwitchGame}>Switch game</button>
+                {/*
+                  "BACK TO MENU", NOT "EXIT", AND THE DIFFERENCE IS FACTUAL.
+
+                  The owner proposed Exit. The trouble is that this button does
+                  not end anything: `handleSwitchGame` resets this page's state
+                  and shows the welcome screen, while the SESSION STAYS LIVE on
+                  the server, keeps its game id, and is rejoinable through
+                  Continue. Nothing here writes ENDED.
+
+                  So Exit would claim a consequence the button does not have,
+                  and it would misfire in both directions — a host who wanted to
+                  step away might not press it for fear of killing the room's
+                  session, and a host who wanted to finish might press it and
+                  believe they had. "Back to Menu" names where you land and
+                  claims nothing about what happens to the session, which is
+                  exactly the amount this button knows.
+
+                  Same label on ENDED's new secondary and on the phone remote,
+                  because it is the same act on all three.
+                */}
+                <button type="button" onClick={onSwitchGame}>Back to Menu</button>
                 {/*
                   ADMIN OPENS IN A NEW TAB, AND THAT IS THE WHOLE POINT.
 

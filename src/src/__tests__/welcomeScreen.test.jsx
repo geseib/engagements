@@ -69,9 +69,9 @@ describe('the five ways out of this screen', () => {
     expect(onCreateEngagement).toHaveBeenCalledTimes(1);
   });
 
-  test('Game history raises onViewHistory', () => {
+  test('Session history raises onViewHistory', () => {
     const { onViewHistory } = setup();
-    fireEvent.click(screen.getByRole('button', { name: /game history/i }));
+    fireEvent.click(screen.getByRole('button', { name: /session history/i }));
     expect(onViewHistory).toHaveBeenCalledTimes(1);
   });
 
@@ -107,7 +107,7 @@ describe('the library controls read as buttons', () => {
     // paragraph — which is how this file draws a text LINK, and it was read as
     // one.
     const { container } = setup();
-    for (const name of ['Question sets', 'Game history']) {
+    for (const name of ['Question sets', 'Session history']) {
       const button = screen.getByRole('button', { name });
       expect(button.className).toContain('wel-btn-line');
       expect(button.className).not.toContain('wel-btn-quiet');

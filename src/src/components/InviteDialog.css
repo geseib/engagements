@@ -1,0 +1,249 @@
+/* ============================================================================
+   THE INVITE DIALOG — components/InviteDialog.jsx
+
+   Scoped `.inv`. Checked against the taken prefixes in the design skill's
+   hard-rules list and grepped clean across src/src before being claimed.
+
+   The ladder and the token set are the console's. Nothing here paints a new
+   colour: every pairing is --text or --muted on --surface / --surface-2, both
+   already measured, plus --danger-text for the strongest warning, which
+   styles.css declares precisely because --danger CANNOT carry text (4.38:1 on
+   --surface, under AA). `color: var(--danger)` appears nowhere, and a test
+   asserts it never does.
+
+   IT SITS ABOVE BOTH THINGS THAT CAN OPEN IT. `.setup-panel` is z-index 1000
+   and `.new-game-overlay` is 10000, so this scrim takes 15000 — otherwise the
+   dialog opened from session history renders UNDER the screen that opened it.
+   ========================================================================== */
+
+.inv-scrim {
+  z-index: 15000;
+}
+
+.inv {
+  --inv-t-floor: 12px;
+  --inv-t-label: 13px;
+  --inv-t-body: 15px;
+  --inv-t-title: 24px;
+
+  /* Declared here, not borrowed: an undefined custom property invalidates the
+     whole declaration, so reaching for a token that lives in another sheet is a
+     rule that silently does nothing. */
+  --inv-rule: rgba(155, 168, 190, .20);
+  --inv-rule-strong: rgba(155, 168, 190, .34);
+  --inv-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  width: min(620px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  font: 400 var(--inv-t-body)/1.45 var(--font-ui);
+}
+
+.inv *,
+.inv *::before,
+.inv *::after { box-sizing: border-box; }
+
+.inv__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.inv__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--inv-t-title);
+  font-weight: 700;
+}
+
+/* The X, and the footer Close, both route through one handler in the component
+   — a dialog needs an exit at the top AND at the bottom, and one of them being
+   dead is the failure people hit first. */
+.inv__x {
+  margin-left: auto;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--inv-rule-strong);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.inv__x:hover { background: var(--bg); }
+
+.inv__for {
+  margin: 0;
+  font-size: var(--inv-t-label);
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ when --- */
+
+.inv__when {
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--inv-rule);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.inv__when legend {
+  padding: 0 6px;
+  font-size: var(--inv-t-floor);
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.inv__when label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  /* 44px of target for a radio that may be tapped on a laptop trackpad or a
+     touch screen; the visible control stays its native size. */
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.inv__at {
+  flex-direction: column;
+  align-items: flex-start !important;
+  gap: 4px !important;
+}
+
+.inv__at span {
+  font-size: var(--inv-t-floor);
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Inputs render at BODY size, never label size — and under 16px iOS Safari
+   zooms the page on focus, which on a date field is especially disorienting. */
+.inv__at input {
+  font: 400 16px/1.4 var(--font-ui);
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--inv-rule-strong);
+  background: var(--bg);
+  color: var(--text);
+  width: 100%;
+  max-width: 320px;
+}
+
+/* --------------------------------------------------------------- warnings --- */
+
+.inv__live { min-height: 0; }
+
+.inv__note {
+  margin: 0;
+  font-size: var(--inv-t-label);
+  color: var(--muted);
+}
+
+.inv__warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: var(--inv-t-label);
+  line-height: 1.45;
+}
+
+/* Amber for "check this", the deep destructive ink for "this will not work".
+   NOT --danger, which is a border and fill colour and measures under AA as
+   text on this surface. */
+.inv__warn--warn {
+  background: rgba(246, 169, 76, .12);
+  border: 1px solid rgba(246, 169, 76, .45);
+  color: var(--text);
+}
+
+.inv__warn--bad {
+  background: rgba(229, 100, 94, .12);
+  border: 1px solid rgba(229, 100, 94, .45);
+  color: var(--danger-text);
+}
+
+/* --------------------------------------------------------------- preview --- */
+
+.inv__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.inv__preview-lab {
+  font-size: var(--inv-t-floor);
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.inv__preview textarea {
+  font: 400 var(--inv-t-label)/1.5 var(--inv-mono);
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--inv-rule-strong);
+  background: var(--bg);
+  color: var(--text);
+  resize: vertical;
+  width: 100%;
+}
+
+/* --------------------------------------------------------------- actions --- */
+
+.inv__acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+/* margin-left: auto on the first child, never justify-content: flex-end —
+   hard rule 9, and the same reason it matters in a table cell. */
+.inv__acts > :first-child { margin-left: auto; }
+
+.inv__btn {
+  font: 600 var(--inv-t-body)/1 var(--font-ui);
+  padding: 11px 16px;
+  min-height: 44px;
+  border-radius: 9px;
+  border: 1px solid var(--inv-rule-strong);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.inv__btn:hover { background: var(--surface-2); }
+
+.inv__btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.inv__btn--primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--bg);
+}
+
+.inv__btn--primary:hover { background: var(--primary-deep); border-color: var(--primary-deep); }

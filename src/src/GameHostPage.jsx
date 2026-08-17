@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import webSocketClient from './WebSocketClient';
 import { requestNextQuestion } from './utils/nextQuestion';
+import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
+import { queueEnqueue, queueMove, queueRemove, normaliseQueue } from './config/questionQueue';
+import { focusFromFrame, focusToStage, focusRequest, sameFocus } from './config/stageFocus';
 import IssueFab from './components/IssueFab';
 import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
@@ -10,6 +13,8 @@ import HostQuestionSetsDialog from './components/HostQuestionSetsDialog';
 import WavelengthWordCloud from './components/WavelengthWordCloud';
 import Icon from './components/Icon';
 import SetImageBadge from './components/SetImageBadge';
+import SessionHistoryPanel from './components/SessionHistoryPanel';
+import InviteDialog from './components/InviteDialog';
 import HostActionBar from './components/HostActionBar';
 import GameReport from './components/GameReport';
 import AISummaryStatus from './components/AISummaryStatus';
@@ -138,6 +143,36 @@ function GameHostPage() {
    */
   const gameStateRef = useRef(gameState);
   useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
+  /*
+    THE ROUND'S ANSWERS, FOR THE FROZEN CLOSURES — same reason as the line above.
+
+    `stageFocusChanged` clamps an incoming spotlight index against how many
+    responses actually exist, so that a focus for a response that has not
+    arrived opens nothing rather than an empty overlay. The WebSocket effect
+    registers ONCE, at first render, when `answers` is `[]` — so reading the
+    state directly would compare every index against 0 and the phone's spotlight
+    would never open at all.
+  */
+  const answersRef = useRef([]);
+  /*
+    A FOCUS RESTORED FROM THE SERVER, WAITING FOR ITS ANSWERS.
+
+    `restoreGameState` learns the round's focus before it fetches the round's
+    responses, and `AnswerSpotlight` reads `answers[index].points` — so applying
+    a spotlight index against an empty array throws. Parked here, drained below
+    the moment the rows land, cleared either way so a stale focus cannot reopen
+    on a later round.
+  */
+  const pendingFocusRef = useRef(null);
+  useEffect(() => {
+    answersRef.current = answers;
+
+    if (!pendingFocusRef.current) return;
+    const restored = focusToStage(pendingFocusRef.current, { answerCount: answers.length });
+    pendingFocusRef.current = null;
+    setLessonExpanded(restored.lessonExpanded);
+    setSpotlightIndex(restored.spotlightIndex);
+  }, [answers]);
   const [currentGameType, setCurrentGameType] = useState('call-and-answer'); // Track the type of the current game
   // Whether THIS game holds authorship back until reveal — the per-game flag
   // from setup (config/anonymity.js), as opposed to anonymityApplies(), which
@@ -390,6 +425,33 @@ function GameHostPage() {
    * can actually see: the questions it has watched go by. It resets on reload.
    */
   const [usedQuestionIds, setUsedQuestionIds] = useState([]);
+
+  /*
+    THE RUNNING ORDER, AND WHY IT IS THREE PIECES OF STATE.
+
+    `questionQueue` is the list; `queueVersion` is what the server had when we
+    last heard from it, sent back with every op as `expectedVersion`; and
+    `queueBusyKeys` names the rows with a request in flight so a host cannot
+    fire three `earlier` ops into a 200ms round trip and watch the row travel
+    three places for one intent.
+
+    THIS PAGE IS THE ONLY OPTIMISTIC COPY. `SessionSetupPanel` and `QueueList`
+    are presentational and reorder nothing locally, because the correction
+    arrives here — over the WebSocket — and two optimistic copies would fight:
+    the panel's would re-apply on the frame that was already the panel's own
+    edit coming home.
+  */
+  const [questionQueue, setQuestionQueue] = useState([]);
+  /*
+    The planned running order from the server, queued items and automatic picks
+    together. Held but never edited here: unlike `questionQueue` above — which
+    this page keeps an optimistic copy of so a reorder feels instant — this is
+    derived state with no local edit to be optimistic about, so it is only ever
+    replaced wholesale by `loadUpNext`.
+  */
+  const [upNext, setUpNext] = useState([]);
+  const [queueVersion, setQueueVersion] = useState(0);
+  const [queueBusyKeys, setQueueBusyKeys] = useState([]);
 
   // Sign-out handler
   const handleSignOut = () => {
@@ -703,7 +765,21 @@ function GameHostPage() {
   // control, for three or four seconds while a room waited on the host. The
   // room meter already states where the room is, continuously and without
   // taking the screen.
-  const [inviteCopied, setInviteCopied] = useState(false);
+  /*
+    WHICH SESSION THE INVITE DIALOG IS FOR, or null when it is shut. One piece
+    of state drives both buttons, which is what makes them "identical mech" —
+    the session panel and the history list each only say WHICH session, and the
+    dialog owns everything else.
+  */
+  const [inviteTarget, setInviteTarget] = useState(null);
+  /*
+    WHEN THE LIVE SESSION WAS CREATED, which the host page did not hold.
+    The retention deadline is creation + 90 days, so the invite dialog cannot
+    check a date without it. `get-game-state` already returns it as
+    `gameMetadata.createdAt` and `restoreGameState` already calls that
+    endpoint — it was simply never kept.
+  */
+  const [gameCreatedAt, setGameCreatedAt] = useState(null);
   
   // Loading overlay state
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -752,12 +828,12 @@ function GameHostPage() {
     showReport: setShowReport,
     reportData: setReportData,
     eventTitle: setEventTitle,
+    gameCreatedAt: setGameCreatedAt,
     lessonExpanded: setLessonExpanded,
     showExpandedQR: setShowExpandedQR,
     qrMode: setQrMode,
     setupPanelOpen: setSetupPanelOpen,
     browsingQuestions: setBrowsingQuestions,
-    inviteCopied: setInviteCopied,
     isLoadingData: setIsLoadingData,
     isRestoringState: setIsRestoringState,
     manualStateChange: setManualStateChange,
@@ -1412,6 +1488,25 @@ Focus on actionable business strategy insights.`;
       console.log('🔌 Question started notification:', data);
       // Fetch current game state from API
       restoreGameState();
+      /*
+        RE-READ THE RUNNING ORDER, because the round that just started may have
+        BEEN the running order. `next-question.js` pops the head it serves — and
+        discards any already-asked entries it skipped past on the way — but it
+        does NOT broadcast `questionQueueChanged` for that write. Without this
+        the question now on the room's screen also sits at #1 in the host's
+        queue, which reads as the queue having done nothing.
+
+        The phone remote needs no equivalent: it polls `/state`, and
+        `get-game-state.js` projects the queue into that payload.
+
+        `loadQueue` is safe to call from this frozen closure — it is a
+        `useCallback` over `gameId` alone, and this effect re-registers on
+        `gameId`, so the two can never be a version apart. That is not true of
+        most handlers in here, which is why they use refs.
+      */
+      loadQueue();
+      // The plan changes with the queue — the queued items lead it.
+      loadUpNext();
     });
 
     webSocketClient.onMessage('playerAnswered', (data) => {
@@ -1518,6 +1613,57 @@ Focus on actionable business strategy insights.`;
       if (beat) setResultsBeat(beat);
     });
 
+    /*
+      THE PHONE ENLARGED SOMETHING — or the other way round.
+
+      `focusFromFrame` decides whether this frame is ours, and its answer is
+      three-valued in a way that matters: a focus to apply, or NULL meaning
+      "ignore, this is not our round". NULL IS NOT `{focus:'none'}` — that would
+      CLOSE what is open, so a late frame from round 3 would shut the spotlight
+      the host just opened on round 4. config/stageFocus.js carries the argument
+      and a test named for it.
+
+      NO restoreGameState, for stage-beat's reason: restoring rewrites
+      `currentQuestionId`, whose change re-fires the beat-reset effect and
+      discards the beat. A focus is not a game-state fact and needs no re-read.
+
+      `answersRef` rather than `answers`: this effect registered once and its
+      closure is frozen at the empty first render, so the clamp inside
+      `focusToStage` would compare every index against 0 and open nothing. Same
+      trap `gameStateRef` exists for.
+    */
+    webSocketClient.onMessage('stageFocusChanged', (data) => {
+      console.log('🔌 Stage focus notification:', data);
+      const focus = focusFromFrame(data, gameStateRef.current);
+      if (!focus) return;
+
+      const next = focusToStage(focus, { answerCount: answersRef.current.length });
+      setLessonExpanded(next.lessonExpanded);
+      setSpotlightIndex(next.spotlightIndex);
+    });
+
+    /*
+      THE OTHER HOST SURFACE CHANGED THE RUNNING ORDER.
+
+      Queue on the phone, watch the stage follow. The frame carries the whole
+      list and its version, so this takes them verbatim rather than re-reading —
+      the payload IS the read, and a GET here would race the next op.
+
+      NO restoreGameState, for stage-beat's reason: the queue is not a game-state
+      fact and a re-sync would rewrite `currentQuestionId`, discarding the beat.
+
+      A frame with no queue is ignored rather than treated as empty. `?? null`
+      and not `|| []`: an empty array is a real running order that a host just
+      emptied, and it must land.
+    */
+    webSocketClient.onMessage('questionQueueChanged', (data) => {
+      console.log('🔌 Question queue notification:', data);
+      const list = data?.queue ?? null;
+      if (!Array.isArray(list)) return;
+      setQuestionQueue(normaliseQueue(list));
+      setQueueVersion(Number(data.version) || 0);
+    });
+
     webSocketClient.onMessage('aiSummaryReady', (data) => {
       console.log('🔌 AI Summary ready notification:', data);
       clearAITimers();
@@ -1606,6 +1752,8 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('votingStarted');
       webSocketClient.offMessage('authorsRevealed');
       webSocketClient.offMessage('stageBeatChanged');
+      webSocketClient.offMessage('stageFocusChanged');
+      webSocketClient.offMessage('questionQueueChanged');
       webSocketClient.offMessage('aiSummaryReady');
       webSocketClient.offMessage('aiSummaryError');
       // `gameEnded` was registered above and never removed here — a handler
@@ -1725,6 +1873,28 @@ Focus on actionable business strategy insights.`;
           beat: gameStateData.stageBeat === 'field-notes' ? 'field-notes' : 'results',
         };
 
+        /*
+          COME BACK UP ON WHATEVER THE ROOM IS LOOKING AT CLOSELY.
+
+          A reload used to drop the room out of a spotlight nobody asked to
+          close — the third of the three faults `stage-beat.js` lists, in its
+          own form. `stageFocus` is a durable per-round fact now, so a restore
+          can honour it.
+
+          PARKED, NOT APPLIED, and that is not caution — it is required.
+          `AnswerSpotlight` reads `answers[index].points`, so an index that
+          outruns the loaded answers THROWS rather than rendering nothing. The
+          answers for this round are fetched further down in this same restore
+          and `answers` is still the previous round's (or empty) right here, so
+          applying now would either open the wrong response or crash the page.
+
+          `answerProgress` is not a way out: `get-game-state` only populates it
+          for ASK#, and a spotlight is a RESULTS# thing, so it reads 0 in
+          exactly the case that matters. The effect beside `answersRef` drains
+          this once the rows are in and the count is real.
+        */
+        pendingFocusRef.current = gameStateData.stageFocus || null;
+
         // First, load question sets for the restored game
         console.log(`🔍 HOST: Loading question sets for restored game...`);
         await fetchQuestionSets(true); // true = during restoration, no auto-selection
@@ -1734,6 +1904,9 @@ Focus on actionable business strategy insights.`;
         if (gameStateData.gameMetadata) {
           setEventTitle(gameStateData.gameMetadata.title || '');
           setCurrentGameType(gameStateData.gameMetadata.gameType || 'call-and-answer');
+          // The retention deadline is creation + 90 days, and the invite dialog
+          // cannot check a chosen date without this. Already in the payload.
+          setGameCreatedAt(gameStateData.gameMetadata.createdAt || null);
           // Show the voice the game is actually set to, not a fresh default.
           setGamePersonaId(gameStateData.gameMetadata.personaId || '');
           const restoredSetId = gameStateData.gameMetadata.questionSetId || '';
@@ -2521,6 +2694,160 @@ Focus on actionable business strategy insights.`;
   useEffect(() => {
     if (setupPanelOpen) fetchQuestionsForBrowsing();
   }, [setupPanelOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /*
+    ── THE QUEUE ────────────────────────────────────────────────────────────
+
+    The other half of `selectQuestion`, and deliberately next to it: the two
+    are the same decision taken at two different moments. `selectQuestion`
+    interrupts the room now; these put the question in line.
+
+    EVERY OP IS OPTIMISTIC AND THEN RECONCILED, in that order, because the
+    alternative is a list that does not move until the server answers — and a
+    host reordering a running order in front of a room reads a 200ms lag as a
+    dead button and presses again.
+
+    The optimistic step runs the SAME functions the Lambda runs
+    (`config/questionQueue.js`, mirrored into `queue-order.js`), so the local
+    guess and the server's answer can only differ when someone else edited in
+    between. That is the case `staleView` reports and the WebSocket repairs.
+  */
+
+  /** Load the running order. Best-effort: a failure keeps whatever we have. */
+  const loadQueue = useCallback(async () => {
+    if (!gameId) return;
+    const result = await fetchQueue({ apiBase: API_BASE, gameId });
+    if (!result.ok) {
+      // Deliberately NOT an alert. The queue is a panel a host may never open,
+      // and a modal about it while they are running a round is worse than a
+      // list that is briefly stale — which the next op or frame repairs.
+      console.warn('⚠️ QUEUE: could not read the running order:', result.error);
+      return;
+    }
+    setQuestionQueue(result.queue);
+    setQueueVersion(result.version);
+  }, [gameId]);
+
+  /**
+   * WHAT THE SESSION WILL ASK NEXT, INCLUDING THE PART NOBODY QUEUED.
+   *
+   * `GET /up-next` runs the real selection forward — see question-plan.js — so
+   * this is the order the room actually gets rather than a guess about it. Read
+   * only; peeking spends nothing.
+   *
+   * FETCHED BESIDE THE QUEUE, NEVER CACHED. The plan depends on the cursors,
+   * the enabled categories and what has already been asked, so it is stale the
+   * moment any of those move. Re-asking is a handful of reads and no writes, so
+   * every caller re-fetches instead of holding a copy that quietly rots — the
+   * same discipline the remote's category rows already follow.
+   *
+   * Silent on failure. This is a panel a host may never open, and a modal about
+   * a preview while they are running a round is worse than a short list.
+   */
+  const loadUpNext = useCallback(async () => {
+    if (!gameId) return;
+    try {
+      const res = await authFetch(`${API_BASE}games/${gameId}/up-next?count=6`);
+      if (!res.ok) return;
+      const payload = await res.json();
+      setUpNext(Array.isArray(payload.upNext) ? payload.upNext : []);
+    } catch (error) {
+      console.warn('⚠️ UP NEXT: could not read what is coming:', error?.message);
+    }
+  }, [gameId]);
+
+  /*
+    Read it when the panel opens, alongside the questions themselves. Not on
+    mount: a host who never opens the console never needs the list, and the
+    drain happens server-side either way.
+  */
+  useEffect(() => {
+    if (setupPanelOpen) { loadQueue(); loadUpNext(); }
+    /*
+      AND ON EVERY ROUND, because the plan is a function of what has already
+      been asked. Without `currentQuestionId` here the panel would keep showing
+      the question the room just answered as still "coming up" — the preview
+      going stale in the one way a host would certainly notice.
+    */
+  }, [setupPanelOpen, currentQuestionId, loadQueue, loadUpNext]);
+
+  /**
+   * One op, applied locally, sent, then reconciled.
+   *
+   * `apply` is the matching pure function. When it refuses — the row is already
+   * first, the question is already queued — NOTHING IS SENT. That is not an
+   * optimisation: it is what keeps a double-tap on an edge button from being a
+   * request whose 200 answer arrives after the host has moved on and re-renders
+   * a list they have since changed.
+   */
+  const runQueueOp = useCallback(async (op, rawKey, apply) => {
+    const key = String(rawKey ?? '').replace(/^QUESTION#/, '').trim();
+    if (!key) return;
+
+    const before = normaliseQueue(questionQueue);
+    const local = apply(before);
+
+    if (!local.changed) {
+      // Say only what the host cannot see for themselves. `at-edge`,
+      // `duplicate` and `not-queued` are all visible in the list in front of
+      // them; a full queue is not — see REFUSALS_WORTH_SAYING.
+      if (local.refused === 'full') {
+        alert('The queue is full — 24 questions is the limit. Remove one from the running order first.');
+      }
+      return;
+    }
+
+    setQuestionQueue(local.queue);
+    setQueueBusyKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
+
+    const result = await postQueueOp({
+      apiBase: API_BASE, gameId, op, questionKey: key, expectedVersion: queueVersion,
+    });
+
+    setQueueBusyKeys((prev) => prev.filter((k) => k !== key));
+
+    if (!result.ok) {
+      // PUT THE LIST BACK. An optimistic move that failed must not stay on
+      // screen: the host would end the round expecting the question they
+      // "moved" to the top and get the one that was actually there.
+      setQuestionQueue(before);
+      alert(`Could not change the running order: ${result.error}`);
+      return;
+    }
+
+    // The server refused something the local copy accepted — only possible when
+    // the other host surface changed the list in between. Its list is the one
+    // that lands below, so this is a message, not a rollback.
+    if (result.message) alert(result.message);
+
+    // `queue: null` is a landed write whose body we could not read — re-read
+    // rather than guess. Otherwise take the server's list verbatim; it is
+    // authoritative and it already includes anything the other surface did.
+    if (result.queue === null) {
+      loadQueue();
+      loadUpNext();
+      return;
+    }
+    setQuestionQueue(result.queue);
+    // Queueing something changes what follows it, so the tail is re-planned.
+    loadUpNext();
+    setQueueVersion(result.version);
+  }, [gameId, questionQueue, queueVersion, loadQueue]);
+
+  const handleQueueQuestion = useCallback(
+    (question) => runQueueOp('add', question?.id, (q) => queueEnqueue(q, question?.id)),
+    [runQueueOp],
+  );
+
+  const handleQueueRemove = useCallback(
+    (key) => runQueueOp('remove', key, (q) => queueRemove(q, key)),
+    [runQueueOp],
+  );
+
+  const handleQueueMove = useCallback(
+    (key, direction) => runQueueOp(direction, key, (q) => queueMove(q, key, direction)),
+    [runQueueOp],
+  );
 
   // Select a specific question to trigger as the next question
   const selectQuestion = async (selectedQuestion) => {
@@ -3390,14 +3717,6 @@ Focus on actionable business strategy insights.`;
     });
   };
   
-  const copyInviteInfo = (game) => {
-    const inviteText = `Join the engagement!\n\nGame ID: ${game.gameId}\nURL: ${window.location.origin}/player?gameId=${game.gameId}\n\nTitle: ${game.eventTitle || 'Engagement Session'}`;
-    navigator.clipboard.writeText(inviteText).then(() => {
-      console.log('📋 Invite info copied to clipboard');
-    }).catch(err => {
-      console.error('❌ Failed to copy to clipboard:', err);
-    });
-  };
 
   /**
    * Create the engagement <GameSetupDialog> just described.
@@ -3529,65 +3848,6 @@ Focus on actionable business strategy insights.`;
   };
 
   // Create and copy comprehensive meeting invite
-  const createInvite = async () => {
-    if (!gameId || !eventTitle) {
-      console.error('Cannot create invite: missing gameId or eventTitle');
-      return;
-    }
-
-    // Derived, never hardcoded. This read `https://eng.dev.seibtribe.us` — a
-    // single environment, and the off-pipeline one being retired — so a host
-    // running a PROD session copied an invitation that sent the whole room to
-    // dev. Every other url on this page is already built this way (`playUrl`,
-    // `joinDisplayUrl`, `remoteUrl`); this one was missed because it is a
-    // string in a template rather than a value anything renders.
-    const gameUrl = `${window.location.origin}/play?gameId=${gameId}`;
-    const questionSet = questionSets.find(set => set.id === selectedSetId);
-    
-    // Get selected categories text
-    const selectedCategoriesList = categories.filter(cat => activeCategoryIds.has(cat.name));
-    const catText = selectedCategoriesList.length > 0 
-      ? selectedCategoriesList.map(cat => `${cat.name} (${cat.questionCount})`).join(', ')
-      : 'All categories';
-
-    const inviteText = `ENGAGEMENT INVITATION
-
-${eventTitle}
-
-You're invited to participate in an interactive engagement session!
-
-DETAILS:
-• Type: ${gameTypeLabel(currentGameType)} — ${gameTypeMeta(currentGameType).blurb}
-• Question Set: ${questionSet?.name || questionSet?.title || 'Unknown Set'}
-• Categories: ${catText}
-
-TO JOIN:
-Click this link or copy it to your browser:
-${gameUrl}
-
-INSTRUCTIONS:
-1. Click the link above or paste it into your browser
-2. Enter your name when prompted
-3. Wait for the host to begin
-4. Participate by answering questions and voting
-
-Ready to engage? See you there!`;
-
-    try {
-      await navigator.clipboard.writeText(inviteText);
-      // The button itself says "Copied!" for four seconds. A full-screen
-      // overlay to say the same thing is a modal in front of a live room.
-      setInviteCopied(true);
-      setTimeout(() => setInviteCopied(false), 4000);
-      
-      console.log('📋 Invite copied to clipboard');
-      console.log('Invite text:', inviteText);
-    } catch (error) {
-      console.error('Failed to copy invite to clipboard:', error);
-      // Fallback: show invite text in an alert
-      alert('Invite text (copy manually):\n\n' + inviteText);
-    }
-  };
 
   // authFetch, not fetch: GET /games now carries the Cognito authorizer and
   // requires the hosts or admins group, like /close-round and /reveal-authors.
@@ -3927,181 +4187,66 @@ Ready to engage? See you there!`;
 
   // Render the game history modal if it's being shown
   if (showReportsModal) {
-    // Sort games by creation date (newest first) and find the most recent
-    const sortedGames = [...gamesList].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    const mostRecentGameId = sortedGames.length > 0 ? sortedGames[0].gameId : null;
-    
+    /*
+      THE SESSION HISTORY. Extracted to components/SessionHistoryPanel.jsx —
+      170 lines of card markup used to live here, one card per session with a
+      title, a status badge and a four-item label/value grid. Forty sessions was
+      forty stacked blocks of chrome, which is the wall RATIONALE §4 rejects and
+      the argument the console already settled for question sets.
+
+      The panel is presentational: it fetches nothing and every action below is
+      a prop, which is what makes it mountable in jsdom instead of only
+      reachable through this 5,000-line file.
+
+      ONE BEHAVIOUR CHANGE, AND IT IS THE POINT. Owner: *"i cant edit the
+      session without starting it today."* The card had ONE primary button that
+      forked on `game.started` — an unstarted session's only door went through
+      `startGameFromHistory`, which POSTs /start and lets players in. So a
+      session could not be set up before the room arrived.
+
+      `selectGameFromHistory` already loads a session without starting it and
+      always did; it was simply never offered for an unstarted one. It is
+      `onOpen` here, for both states — Open for a session that has not started,
+      Continue for one that has. Starting is now its own separate control.
+    */
     return (
       <div className="new-game-overlay">
         <div className="new-game-dialog reports-modal">
-          <div className="modal-header">
-            <h2 className="modal-title">
-              {reportsModalMode === 'select'
-                ? <><Icon name="GameController" weight="duotone" size={24} color="var(--primary)" /> Game History</>
-                : <><Icon name="ChartBar" weight="duotone" size={24} color="var(--primary)" /> Game Reports</>}
-            </h2>
-            <div className="modal-subtitle">
-              {reportsModalMode === 'select' ? 'Select a game to start or continue' : 'View past game reports'}
-            </div>
-          </div>
-          
-          <div className="dialog-content">
-            <div className="games-list">
-              {gamesList.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-icon"><Icon name="Target" weight="duotone" size={48} color="var(--primary)" /></div>
-                  <p>No games found.</p>
-                  <small>Create your first engagement session to get started!</small>
-                </div>
-              ) : (
-                sortedGames.map((game, index) => {
-                  const isRecent = game.gameId === mostRecentGameId;
-                  const isCurrent = game.gameId === gameId;
-                  const isFirst = index === 0;
-                  const displayTitle = game.title || game.eventTitle || 'Engagement Session';
-                  
-                  return (
-                    <div 
-                      key={game.gameId} 
-                      className={`game-history-item ${isCurrent ? 'current-game' : ''} ${isRecent ? 'recent-game' : ''} ${isFirst ? 'first-game' : ''}`}
-                    >
-                      <div className="game-header">
-                        <div className="game-title-section">
-                          <h3 className="game-title">
-                            {displayTitle}
-                            {isRecent && <span className="new-badge"><Icon name="Sparkle" weight="fill" size={13} /> Latest</span>}
-                            {isCurrent && <span className="current-badge"><Icon name="MapPin" weight="fill" size={13} /> Current</span>}
-                          </h3>
-                          <div className="game-id">#{game.gameId}</div>
-                        </div>
-                        <div className="game-status-badges">
-                          {game.started ? (
-                            <span className="status-badge started"><Icon name="Play" weight="fill" size={13} /> Started</span>
-                          ) : (
-                            <span className="status-badge pending"><Icon name="Pause" weight="fill" size={13} /> Ready to Start</span>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="game-details">
-                        <div className="game-info-grid">
-                          <div className="info-item">
-                            <span className="info-label">Type:</span>
-                            <span className="info-value">
-                              <Icon
-                                name={gameTypeMeta(game.gameType).icon}
-                                weight="bold"
-                                size={15}
-                                color={gameTypeMeta(game.gameType).accent}
-                              />{' '}
-                              {gameTypeMeta(game.gameType).label}
-                            </span>
-                          </div>
-                          <div className="info-item">
-                            <span className="info-label">Question Set:</span>
-                            <span className="info-value">
-                              {game.questionSetId || 'Unknown'}
-                              <SetImageBadge hasImages={questionSets.find(s => s.id === game.questionSetId)?.hasImages} />
-                            </span>
-                          </div>
-                          <div className="info-item">
-                            <span className="info-label">Created:</span>
-                            <span className="info-value">
-                              {game.createdAt ? new Date(game.createdAt).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              }) : 'Unknown'}
-                            </span>
-                          </div>
-                          {game.lastPlayedAt && (
-                            <div className="info-item">
-                              <span className="info-label">Last Played:</span>
-                              <span className="info-value">
-                                {new Date(game.lastPlayedAt).toLocaleDateString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="game-actions">
-                        <button 
-                          className="game-action-btn category-style-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            copyPlayerUrl(game.gameId);
-                          }}
-                          title="Copy player URL"
-                        >
-                          <Icon name="LinkSimple" weight="bold" size={16} /> Player URL
-                        </button>
-                        <button 
-                          className="game-action-btn category-style-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            copyInviteInfo(game);
-                          }}
-                          title="Copy invite info"
-                        >
-                          <Icon name="ClipboardText" weight="bold" size={16} /> Invite
-                        </button>
-                        {game.started && (
-                          <button 
-                            className="game-action-btn category-style-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              generateReportForGame(game.gameId, displayTitle);
-                            }}
-                            title="View detailed game report"
-                          >
-                            <Icon name="ChartBar" weight="bold" size={16} /> Report
-                          </button>
-                        )}
-                        <button 
-                          className={`game-action-btn category-style-btn primary-action-btn ${game.started ? 'continue-btn' : 'start-btn'}`}
-                          onClick={() => {
-                            if (game.started) {
-                              // Continue existing game
-                              selectGameFromHistory(game.gameId, displayTitle);
-                            } else {
-                              // Start new game
-                              startGameFromHistory(game.gameId, displayTitle);
-                            }
-                          }}
-                        >
-                          {game.started
-                            ? <><Icon name="Play" weight="fill" size={16} /> Continue</>
-                            : <><Icon name="PlayCircle" weight="fill" size={16} /> Start Game</>}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-          
-          <div className="dialog-actions">
-            <button 
-              className="btn-secondary modal-close-btn" 
-              onClick={() => {
-                setShowReportsModal(false);
-                if (reportsModalMode === 'select' && isLobbyState(gameState) && lessonNumber === 0) {
-                  setShowWelcomeScreen(true);
-                }
-              }}
-            >
-              <Icon name="X" weight="bold" size={16} /> {reportsModalMode === 'select' ? 'Cancel' : 'Close'}
-            </button>
-          </div>
+          <SessionHistoryPanel
+            sessions={gamesList}
+            currentGameId={gameId}
+            mode={reportsModalMode}
+            questionSets={questionSets}
+            onCopyPlayerUrl={copyPlayerUrl}
+            onInvite={(session) => setInviteTarget({
+              gameId: session.gameId,
+              title: session.title || session.eventTitle,
+              gameType: session.gameType,
+              setName: (questionSets.find((set) => set.id === session.questionSetId) || {}).name
+                || session.questionSetId,
+              /* null, not [] — a history row carries no category data, and []
+                 would print "All categories" onto an invite nobody checked. */
+              categories: null,
+              createdAt: session.createdAt,
+            })}
+            onReport={generateReportForGame}
+            onOpen={selectGameFromHistory}
+            onStart={startGameFromHistory}
+            onClose={() => {
+              setShowReportsModal(false);
+              if (reportsModalMode === 'select' && isLobbyState(gameState) && lessonNumber === 0) {
+                setShowWelcomeScreen(true);
+              }
+            }}
+          />
         </div>
+        {/*
+          MOUNTED HERE TOO, AND THAT IS NOT A DUPLICATE. This branch is an early
+          `return`, so anything rendered in the main tree below is unreachable
+          from session history — a single mount there would leave the history
+          list's Invite button pressing nothing at all.
+        */}
+        <InviteDialog target={inviteTarget} onClose={() => setInviteTarget(null)} />
       </div>
     );
   }
@@ -4236,6 +4381,21 @@ Ready to engage? See you there!`;
         // pointing ENDED's primary at it would have made the one control on
         // the last screen of the session do nothing at all.
         generateReportForGame(gameId, eventTitle);
+        break;
+      case HOST_INTENTS.LEAVE:
+        /*
+          The same handler the settings panel's own control uses, deliberately.
+          Leaving is one behaviour and it resets a long list of per-game state;
+          a second implementation here would be a second chance to miss one of
+          them, and the symptom would be the next session rendering against the
+          last one's question.
+
+          IT DOES NOT END THE SESSION — `leaveCurrentGame` is a local reset and
+          the session stays live and rejoinable through Continue. That is why
+          the label is Back to Menu rather than Exit: see the note on the
+          settings panel's copy of this button.
+        */
+        handleSwitchGame();
         break;
       default:
         console.warn(`Unknown host action intent: ${action.intent}`);
@@ -4433,6 +4593,76 @@ Ready to engage? See you there!`;
   const closeSpotlight = () => {
     if (spotlightIndex !== null) setStagePageIndex(pageOf(spotlightIndex, stagePageSize));
     setSpotlightIndex(null);
+    // …and tell the phone. See publishFocus: without this the remote keeps
+    // offering "Close" for a spotlight the projector has already shut.
+    publishFocus({ focus: 'none' });
+  };
+
+  /*
+    ONE OPENER FOR ALL THREE WAYS IN — the card's click, the card's Enter/Space,
+    and the spotlight's own next/previous arrows. They were three bare
+    `setSpotlightIndex` calls, and three call sites is three chances for one of
+    them to forget to announce itself. `sameFocus` keeps the arrows from posting
+    when they land back where they already were.
+  */
+  const openSpotlight = (idx) => {
+    setSpotlightIndex(idx);
+    if (!sameFocus({ focus: 'answer', index: idx }, { focus: 'answer', index: spotlightIndex })) {
+      publishFocus({ focus: 'answer', index: idx });
+    }
+  };
+
+  /* The question, blown up for the room. Same deal as openSpotlight. */
+  const expandQuestion = () => {
+    setLessonExpanded(true);
+    publishFocus({ focus: 'question' });
+  };
+
+  const collapseQuestion = () => {
+    setLessonExpanded(false);
+    publishFocus({ focus: 'none' });
+  };
+
+  /**
+   * WHAT THE ROOM IS LOOKING AT CLOSELY, ANNOUNCED.
+   *
+   * `lessonExpanded` and `spotlightIndex` were client-only state on this page,
+   * so the phone could neither drive them nor see them. `POST /stage-focus`
+   * makes the focus a durable per-round fact and broadcasts it, exactly as
+   * `stage-beat` did for the RESULTS beat — read that handler's header for the
+   * full argument.
+   *
+   * BIDIRECTIONAL, hence this function. Tap it on the projector and the phone
+   * follows; tap it on the phone and the projector follows. Both surfaces then
+   * read one source of truth instead of two that drift.
+   *
+   * NO LOOP. The frame this produces comes back to `stageFocusChanged` below,
+   * which only ever SETS state — it never re-publishes. That asymmetry is what
+   * keeps the two directions from feeding each other.
+   *
+   * Silent on failure, deliberately. The overlay the host asked for is already
+   * open in front of them; an alert saying the announcement failed would be a
+   * modal about a thing that visibly worked, and the next tap or the next poll
+   * repairs the other surface anyway.
+   *
+   * A PLAIN FUNCTION, NOT A useCallback, and that is forced rather than
+   * stylistic: this sits BELOW an early return, and a hook after a conditional
+   * return breaks the rule that every render must call the same hooks in the
+   * same order. `closeSpotlight` immediately above carries the same note for
+   * the same reason. It runs from a click and memoising it buys nothing.
+   */
+  const publishFocus = (focus) => {
+    const body = focusRequest({ ...focus, state: gameStateRef.current });
+    // No round on screen — nothing can be focused, so there is nothing to say.
+    if (!body) return;
+
+    authFetch(`${API_BASE}games/${gameId}/stage-focus`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch((error) => {
+      console.warn('⚠️ STAGE FOCUS: the room was not told:', error?.message);
+    });
   };
 
   /**
@@ -4672,7 +4902,7 @@ Ready to engage? See you there!`;
                   className="q"
                   data-expandable="1"
                   title="Show the full question"
-                  onClick={() => setLessonExpanded(true)}
+                  onClick={expandQuestion}
                 >
                   {currentQuestion.title || currentQuestion.question}
                 </h1>
@@ -4924,11 +5154,11 @@ Ready to engage? See you there!`;
                           role="button"
                           tabIndex={0}
                           aria-label={`Read this answer in full: ${displayName}`}
-                          onClick={() => setSpotlightIndex(idx)}
+                          onClick={() => openSpotlight(idx)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
                               e.preventDefault();
-                              setSpotlightIndex(idx);
+                              openSpotlight(idx);
                             }
                           }}
                         >
@@ -5014,9 +5244,31 @@ Ready to engage? See you there!`;
                     `authorsHiddenNow` call the card behind it uses. A dialog
                     that re-derived it would be a fourth site to get wrong. */}
                 <AnswerSpotlight
+                  /*
+                    THE ROOM'S COPY OF THIS DIALOG IS A DIFFERENT SIZE FROM THE
+                    PHONE'S, and this class is the whole seam.
+
+                      "when clicking on a title of a question or response, a
+                       modal pops up but is the same size or smaller than what
+                       was shown that not helpful it should make use of the
+                       screen space and make the text large so all can really
+                       read the text from a decent size room."
+
+                    The base rules cap the dialog at 860px wide, 720px tall and
+                    1.75rem of text — sized for the phone, where this component
+                    also renders. On a 1080p projector that is under half the
+                    width and smaller type than the card it was opened FROM, so
+                    the one control whose entire job is "make this readable"
+                    made it smaller.
+
+                    `.plr-spot` is the player's own version of this seam, which
+                    is why the fix is a sibling class rather than a rewrite of
+                    the base: the phone keeps what it has, untouched.
+                  */
+                  surfaceClassName="stage-spot"
                   answers={answers}
                   index={spotlightIndex}
-                  onIndex={setSpotlightIndex}
+                  onIndex={openSpotlight}
                   onClose={closeSpotlight}
                   showPoints={standingsVisible({
                     gameType: currentGameType, anonymousUntilReveal, authorsRevealed,
@@ -5213,13 +5465,29 @@ Ready to engage? See you there!`;
           loadingQuestions={loadingQuestions}
           usedQuestionIds={usedQuestionIds}
           onSelectQuestion={selectQuestion}
+          questionQueue={questionQueue}
+          queueBusyKeys={queueBusyKeys}
+          upNext={upNext}
+          onQueueQuestion={handleQueueQuestion}
+          onQueueMove={handleQueueMove}
+          onQueueRemove={handleQueueRemove}
           gameId={gameId}
           playUrl={playUrl}
           remoteUrl={remoteUrl}
           joinLinkCopied={sidebarCopyMessage}
-          inviteCopied={inviteCopied}
           onCopyJoinLink={() => copyUrlToClipboard(playUrl, 'sidebar')}
-          onCopyInvite={createInvite}
+          onInvite={() => setInviteTarget({
+            gameId,
+            title: eventTitle,
+            gameType: currentGameType,
+            setName: (questionSets.find((set) => set.id === selectedSetId) || {}).name
+              || (questionSets.find((set) => set.id === selectedSetId) || {}).title,
+            categories: categories
+              .filter((cat) => activeCategoryIds.has(cat.name))
+              .map((cat) => ({ name: cat.name, questionCount: cat.questionCount })),
+            createdAt: gameCreatedAt,
+          })}
+          suppressKeys={Boolean(inviteTarget)}
           onShowJoinCode={() => setQrMode('pinned')}
           profile={profile}
           onProfileChange={setProfile}
@@ -5307,7 +5575,7 @@ Ready to engage? See you there!`;
 
       {/* Expanded Lesson Modal */}
       {lessonExpanded && questions.length > 0 && (
-        <div className="expanded-lesson-overlay" onClick={() => setLessonExpanded(false)}>
+        <div className="expanded-lesson-overlay" onClick={collapseQuestion}>
           <div className="expanded-lesson-content" onClick={(e) => e.stopPropagation()}>
             <div className="expanded-lesson-header">
               <div className="field-badge">
@@ -5415,7 +5683,11 @@ Ready to engage? See you there!`;
       />
 
     </div>
-    
+
+    {/* The session panel's Invite button opens the same dialog as session
+        history's — one component, one piece of state, two openers. */}
+    <InviteDialog target={inviteTarget} onClose={() => setInviteTarget(null)} />
+
     </>
   );
 }
