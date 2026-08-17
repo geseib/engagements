@@ -541,7 +541,14 @@ describe('the Settings tab', () => {
     renderPanel(handlers);
     openTab('Settings');
     fireEvent.click(screen.getByRole('button', { name: /join code/i }));
-    fireEvent.click(screen.getByRole('button', { name: /switch game/i }));
+    /*
+      "Back to Menu", not "Switch game". The button leaves the session and shows
+      the host menu — it does NOT end the session, which stays live and
+      rejoinable through Continue — so the label names the destination and
+      claims nothing about the session's fate. ("Exit" was considered and
+      rejected for claiming a consequence the button does not have.)
+    */
+    fireEvent.click(screen.getByRole('button', { name: /back to menu/i }));
     fireEvent.click(screen.getByRole('button', { name: /sign out/i }));
     fireEvent.click(screen.getByRole('button', { name: /how this works/i }));
     for (const fn of Object.values(handlers)) expect(fn).toHaveBeenCalledTimes(1);

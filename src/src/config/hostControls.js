@@ -181,7 +181,8 @@ export const HOST_INTENTS = {
   NEXT: 'next',        // handleNextQuestion(false)
   SKIP: 'skip',        // handleNextQuestion(true) — abandon this round
   FIELD_NOTES: 'field-notes', // move RESULTS on to its second beat
-  REPORT: 'report',    // open the session report — the only way out of ENDED
+  REPORT: 'report',    // open the session report
+  LEAVE: 'leave',      // leave this session and go back to the host menu
 };
 
 function primaryFor(phase, { runsVote, roundNoun, playerCount, answerCount, hasQuestionSet }) {
@@ -319,12 +320,30 @@ export function hostControlsFor({
     runsVote, roundNoun: noun, playerCount, answerCount, hasQuestionSet,
   });
 
-  // One escape hatch, in the one phase where the host may want to abandon a
-  // round that is not going anywhere. Everywhere else a second button would
-  // just be another thing to aim at while a room watches.
-  const secondary = resolvedPhase === 'ASK'
-    ? { id: 'skip', label: `Skip ${noun}`, icon: 'SkipForward', intent: HOST_INTENTS.SKIP, disabled: false, hint: '' }
-    : null;
+  /*
+    TWO PHASES GET A SECOND BUTTON, for opposite reasons.
+
+    ASK gets Skip — an escape from a round that is not going anywhere. That is
+    the only MID-ROUND second button there is, because everywhere else another
+    control is just another thing to aim at while a room watches.
+
+    ENDED gets a way out, and the argument above does not apply to it: no round
+    is running and nobody is waiting on the host's aim. Until now the only
+    action on the last screen of a session was Open Session Report — the comment
+    on HOST_INTENTS.REPORT said so in as many words, "the only way out of
+    ENDED", and it was describing a dead end rather than a design. A host who
+    did not want the report had nowhere to go but the browser's back button, and
+    the one control buried in the settings panel's Session tab.
+
+    Reported as: "when the session is done need a way to get back to the host
+    menu."
+  */
+  let secondary = null;
+  if (resolvedPhase === 'ASK') {
+    secondary = { id: 'skip', label: `Skip ${noun}`, icon: 'SkipForward', intent: HOST_INTENTS.SKIP, disabled: false, hint: '' };
+  } else if (resolvedPhase === 'ENDED') {
+    secondary = { id: 'leave', label: 'Back to Menu', icon: 'House', intent: HOST_INTENTS.LEAVE, disabled: false, hint: '' };
+  }
 
   const text = statusTextFor(resolvedPhase, {
     playerCount, answeredCount, votedCount, hasQuestionSet,

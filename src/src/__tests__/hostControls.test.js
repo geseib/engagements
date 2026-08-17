@@ -111,9 +111,21 @@ describe('every (gameType, phase) pair yields exactly one primary action', () =>
         expect(Object.values(HOST_INTENTS)).toContain(controls.primary.intent);
         expect(controls.primary.disabled).toBe(false);
 
-        // At most one secondary, and it must not be a second way to advance.
+        /*
+          At most one secondary, and it must not be a second way to advance.
+
+          TWO INTENTS ARE LEGITIMATE HERE, not one. Skip is ASK's escape from a
+          round going nowhere. Leave is ENDED's way back to the host menu —
+          added because the only action on a finished session's screen was Open
+          Session Report, which was a dead end rather than a design ("when the
+          session is done need a way to get back to the host menu").
+
+          The rule this assertion actually protects is the NEXT line: a
+          secondary must never duplicate the primary's intent. That still holds
+          for both.
+        */
         if (controls.secondary) {
-          expect(controls.secondary.intent).toBe(HOST_INTENTS.SKIP);
+          expect([HOST_INTENTS.SKIP, HOST_INTENTS.LEAVE]).toContain(controls.secondary.intent);
           expect(controls.secondary.intent).not.toBe(controls.primary.intent);
         }
 
@@ -306,9 +318,21 @@ describe('the two additions the stage needs', () => {
   });
 
   // ASK is the one phase with a secondary. Adding phases must not grow that.
-  test('the new phases add no secondary action', () => {
+  test('FIELD_NOTES adds no secondary, and ENDED adds the way out', () => {
+    // FIELD_NOTES is mid-round: a second button there is one more thing to aim
+    // at while a room reads.
     expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'FIELD_NOTES' }).secondary).toBeNull();
-    expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'ENDED' }).secondary).toBeNull();
+
+    /*
+      ENDED is not mid-round, and this assertion used to say it had no way out —
+      which was true, and was the bug. Open Session Report was the only action
+      on the last screen of a session, so a host who did not want the report had
+      nowhere to go but the browser's back button.
+    */
+    const ended = hostControlsFor({ gameType: 'call-and-answer', phase: 'ENDED' }).secondary;
+    expect(ended).not.toBeNull();
+    expect(ended.intent).toBe(HOST_INTENTS.LEAVE);
+    expect(ended.label).toBe('Back to Menu');
   });
 
   // statusTextFor is keyed on phase and falls through to the lobby's copy for

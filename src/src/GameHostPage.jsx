@@ -4382,6 +4382,21 @@ Focus on actionable business strategy insights.`;
         // the last screen of the session do nothing at all.
         generateReportForGame(gameId, eventTitle);
         break;
+      case HOST_INTENTS.LEAVE:
+        /*
+          The same handler the settings panel's own control uses, deliberately.
+          Leaving is one behaviour and it resets a long list of per-game state;
+          a second implementation here would be a second chance to miss one of
+          them, and the symptom would be the next session rendering against the
+          last one's question.
+
+          IT DOES NOT END THE SESSION — `leaveCurrentGame` is a local reset and
+          the session stays live and rejoinable through Continue. That is why
+          the label is Back to Menu rather than Exit: see the note on the
+          settings panel's copy of this button.
+        */
+        handleSwitchGame();
+        break;
       default:
         console.warn(`Unknown host action intent: ${action.intent}`);
     }

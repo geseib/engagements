@@ -974,7 +974,27 @@ export default function SessionSetupPanel({
                     control is a different thing: it puts an explanation on the
                     PROJECTOR, for the room. */}
                 <button type="button" onClick={onShowHowToPlay}>Show how this works on the stage →</button>
-                <button type="button" onClick={onSwitchGame}>Switch game</button>
+                {/*
+                  "BACK TO MENU", NOT "EXIT", AND THE DIFFERENCE IS FACTUAL.
+
+                  The owner proposed Exit. The trouble is that this button does
+                  not end anything: `handleSwitchGame` resets this page's state
+                  and shows the welcome screen, while the SESSION STAYS LIVE on
+                  the server, keeps its game id, and is rejoinable through
+                  Continue. Nothing here writes ENDED.
+
+                  So Exit would claim a consequence the button does not have,
+                  and it would misfire in both directions — a host who wanted to
+                  step away might not press it for fear of killing the room's
+                  session, and a host who wanted to finish might press it and
+                  believe they had. "Back to Menu" names where you land and
+                  claims nothing about what happens to the session, which is
+                  exactly the amount this button knows.
+
+                  Same label on ENDED's new secondary and on the phone remote,
+                  because it is the same act on all three.
+                */}
+                <button type="button" onClick={onSwitchGame}>Back to Menu</button>
                 {/*
                   ADMIN OPENS IN A NEW TAB, AND THAT IS THE WHOLE POINT.
 

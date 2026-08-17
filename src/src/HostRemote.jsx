@@ -1003,8 +1003,11 @@ function HostRemote() {
                   type="button"
                   onClick={() => { setGameId(''); setGameIdDraft(''); setSnapshot(null); }}
                 >
-                  <Icon name="ArrowsClockwise" weight="bold" size={18} color="currentColor" />
-                  Switch game
+                  {/* House, not ArrowsClockwise: this goes back to the code
+                      entry screen, which is the remote's menu. A cycle glyph
+                      reads as "reload this session". */}
+                  <Icon name="House" weight="bold" size={18} color="currentColor" />
+                  Back to Menu
                 </button>
               </div>
 
