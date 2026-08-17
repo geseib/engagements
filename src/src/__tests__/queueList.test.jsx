@@ -265,3 +265,130 @@ describe('the stylesheet contract', () => {
     expect(Math.min(...sizes)).toBeGreaterThanOrEqual(12);
   });
 });
+
+/* ========================================================================== */
+
+describe('what follows the queue — the automatic picks', () => {
+  const plan = [
+    { source: 'auto', questionId: 'QUESTION#c001#003', title: 'Third', categoryName: 'Pricing', round: 1 },
+    { source: 'auto', questionId: 'QUESTION#c002#001', title: 'Fourth', categoryName: 'Packaging', round: 2 },
+  ];
+
+  test('with an empty queue it still shows what is coming', () => {
+    /*
+      THE REQUEST, LITERALLY: "offer the up next to show the next several
+      questions even if its just the built in queue". A host who has queued
+      nothing is the COMMON case — most sessions never touch the queue — so if
+      the preview only appeared once something was queued, most hosts would
+      never see it at all.
+    */
+    render(<QueueList queue={[]} questions={questions} upNext={plan} />);
+    expect(screen.getByTestId('queue-auto')).toBeInTheDocument();
+    expect(screen.getAllByTestId('queue-auto-row')).toHaveLength(2);
+    expect(screen.getByText('Coming up')).toBeInTheDocument();
+  });
+
+  test('the empty-queue explainer survives beside it', () => {
+    // rejects: the preview replacing the empty state. That line is the only
+    // place the difference between Queue and Ask next is stated.
+    render(<QueueList queue={[]} questions={questions} upNext={plan} />);
+    expect(screen.getByTestId('queue-empty')).toBeInTheDocument();
+  });
+
+  test('with a queue it reads as the continuation, not a second list', () => {
+    render(<QueueList queue={['c001#001']} questions={questions} upNext={plan} />);
+    expect(screen.getByText('Then, automatically')).toBeInTheDocument();
+  });
+
+  test('every automatic row is tagged, and no queued row is', () => {
+    /*
+      "might create a obvious tag when the user queued it up just to
+      distinguish." The tag sits on the AUTOMATIC rows: the queued ones already
+      announce themselves by being numbered, movable, and under a heading that
+      says Running order. It is the questions the host did not pick that need
+      saying so.
+    */
+    render(<QueueList queue={['c001#001']} questions={questions} upNext={plan} />);
+    expect(screen.getAllByText('Auto')).toHaveLength(2);
+    for (const row of screen.getAllByTestId('queue-row')) {
+      expect(within(row).queryByText('Auto')).not.toBeInTheDocument();
+    }
+  });
+
+  test('the server\'s copy of the QUEUED items is not rendered a second time', () => {
+    /*
+      rejects: rendering the whole plan. The endpoint returns queued items AND
+      automatic ones; the queued half is already drawn above from the QUEUE
+      record, which is the copy the host can edit. Drawing the server's copy too
+      states one fact about one object twice — which this console's own rule
+      forbids — and the two disagree for the length of a round trip every time
+      the host reorders.
+    */
+    render(
+      <QueueList
+        queue={['c001#001']}
+        questions={questions}
+        upNext={[
+          { source: 'queued', questionId: 'QUESTION#c001#001', title: 'First', round: 1 },
+          ...plan,
+        ]}
+      />,
+    );
+    expect(screen.getAllByTestId('queue-auto-row')).toHaveLength(2);
+    expect(screen.getAllByTestId('queue-row')).toHaveLength(1);
+  });
+
+  test('automatic rows carry no reorder controls', () => {
+    // rejects: arrows that cannot work. These are DERIVED — there is no stored
+    // order to reorder — so the way to move one is to queue it.
+    render(<QueueList queue={[]} questions={questions} upNext={plan} />);
+    for (const row of screen.getAllByTestId('queue-auto-row')) {
+      expect(within(row).queryAllByRole('button')).toHaveLength(0);
+    }
+  });
+
+  test('no plan means no section at all', () => {
+    // rejects: an empty bordered box captioned "Coming up" with nothing in it.
+    render(<QueueList queue={[]} questions={questions} upNext={[]} />);
+    expect(screen.queryByTestId('queue-auto')).not.toBeInTheDocument();
+  });
+
+  test('a row with no title falls back to its id, never to a placeholder', () => {
+    // Same rule the queued rows follow: "Untitled" is a claim about the
+    // question; the id is the only true thing we hold.
+    render(<QueueList queue={[]} questions={questions} upNext={[
+      { source: 'auto', questionId: 'QUESTION#c009#404', title: '', round: 1 },
+    ]} />);
+    expect(screen.getByText('QUESTION#c009#404')).toBeInTheDocument();
+  });
+});
+
+describe('the automatic rows are subordinate, not disabled', () => {
+  test('they are dimmed well above the disabled level', () => {
+    /*
+      rejects: reusing the disabled opacity. These rows are a PREDICTION and the
+      queued ones are a DECISION, which is a difference worth showing — but
+      nothing here is broken or unavailable, and painting them at the disabled
+      value would say it was.
+    */
+    const rule = block('.setup-q__row--auto');
+    const opacity = Number((/opacity:\s*([\d.]+)/.exec(rule) || [])[1]);
+    expect(opacity).toBeGreaterThan(0.6);
+    expect(opacity).toBeLessThan(1);
+  });
+
+  test('they drop the action column rather than leaving it empty', () => {
+    // rejects: keeping the queued row's three-track grid. With no buttons to
+    // fill it, every automatic title would be short by the width of three
+    // missing controls and the two lists would not line up.
+    expect(block('.setup-q__row--auto')).toMatch(/grid-template-columns:\s*auto\s+minmax\(0,\s*1fr\)\s*;/);
+  });
+
+  test('the Auto tag does not compete with the Next flag for the eye', () => {
+    // rejects: a second --primary label. The Next flag is the one thing on this
+    // panel that should catch the eye, and a rival amber would flatten the
+    // distinction the colour exists to make.
+    expect(block('.setup-q__flag--auto')).toMatch(/var\(--muted/);
+    expect(block('.setup-q__flag--auto')).not.toMatch(/var\(--primary/);
+  });
+});

@@ -110,6 +110,7 @@ export default function SessionSetupPanel({
   */
   questionQueue = [],
   queueBusyKeys = [],
+  upNext = [],
   onQueueQuestion = () => {},
   onQueueMove = () => {},
   onQueueRemove = () => {},
@@ -582,6 +583,7 @@ export default function SessionSetupPanel({
                 queue={questionQueue}
                 questions={questions}
                 busyKeys={queueBusyKeys}
+                upNext={upNext}
                 onMove={onQueueMove}
                 onRemove={onQueueRemove}
               />

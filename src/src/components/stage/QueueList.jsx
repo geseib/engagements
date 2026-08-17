@@ -47,6 +47,7 @@ export default function QueueList({
   queue = [],
   questions = [],
   busyKeys = [],
+  upNext = [],
   onMove = () => {},
   onRemove = () => {},
 }) {
@@ -64,6 +65,16 @@ export default function QueueList({
     of its life (config/setupPanel.js:154).
   */
   const busy = new Set(busyKeys.map((key) => questionKey(String(key))));
+
+  /*
+    The plan's automatic tail only. The server returns the whole running order —
+    queued items first, then the walk — and the queued half is already rendered
+    above from the QUEUE record, which is the copy the host can edit. Showing
+    the server's copy of them too would state one fact about one object twice,
+    and the two would disagree for the length of a round trip every time the
+    host reorders.
+  */
+  const autoRows = upNext.filter((row) => row && row.source === 'auto');
 
   return (
     <section className="setup-q" aria-labelledby="setup-q-head">
@@ -160,6 +171,58 @@ export default function QueueList({
             );
           })}
         </ol>
+      )}
+
+      {/*
+        WHAT COMES AFTER THE QUEUE — the automatic walk, shown rather than left
+        to be discovered a round at a time.
+
+          "how much work to offer the up next to show the next several
+           questions even if its just the built in queue. might create a obvious
+           tag when the user queued it up just to distinguish."
+
+        THE TAG IS ON THESE ROWS, NOT ON THE QUEUED ONES, and that asymmetry is
+        deliberate. The queued rows already announce themselves: they are
+        numbered, they are movable, and they sit under a heading that says
+        Running order. It is the rows the host did NOT choose that need
+        explaining, so the label goes where the question is.
+
+        NOT MOVABLE, and not for want of effort. These are derived — the
+        automatic walk's answer given the cursors, the enabled categories and
+        what has already been asked — so there is no stored order to reorder.
+        Rendering ↑↓ here would offer a control that cannot work; the way to
+        move one of these IS to queue it, which is one click away in the browser
+        beside this panel.
+
+        IT CAN GO STALE, and cheaply: toggling a category changes which
+        questions are reachable. The caller re-fetches rather than caching, so
+        this list is as current as the last poll and no warning is needed about
+        a thing that repairs itself in two seconds.
+      */}
+      {autoRows.length > 0 && (
+        <div className="setup-q__auto" data-testid="queue-auto">
+          <p className="setup-q__auto-head">
+            {count === 0 ? 'Coming up' : 'Then, automatically'}
+          </p>
+          <ol className="setup-q__list setup-q__list--auto" start={count + 1}>
+            {autoRows.map((row) => (
+              <li
+                key={row.questionId}
+                className="setup-q__row setup-q__row--auto"
+                data-testid="queue-auto-row"
+              >
+                <span className="setup-q__pos" aria-hidden="true">{row.round}</span>
+                <span className="setup-q__main">
+                  <span className="setup-q__name">{row.title || row.questionId}</span>
+                  <span className="setup-q__meta">
+                    <span className="setup-q__flag setup-q__flag--auto">Auto</span>
+                    {row.categoryName && <span className="setup-q__cat">{row.categoryName}</span>}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
       )}
 
       {/*

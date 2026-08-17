@@ -442,6 +442,14 @@ function GameHostPage() {
     edit coming home.
   */
   const [questionQueue, setQuestionQueue] = useState([]);
+  /*
+    The planned running order from the server, queued items and automatic picks
+    together. Held but never edited here: unlike `questionQueue` above — which
+    this page keeps an optimistic copy of so a reorder feels instant — this is
+    derived state with no local edit to be optimistic about, so it is only ever
+    replaced wholesale by `loadUpNext`.
+  */
+  const [upNext, setUpNext] = useState([]);
   const [queueVersion, setQueueVersion] = useState(0);
   const [queueBusyKeys, setQueueBusyKeys] = useState([]);
 
@@ -1497,6 +1505,8 @@ Focus on actionable business strategy insights.`;
         most handlers in here, which is why they use refs.
       */
       loadQueue();
+      // The plan changes with the queue — the queued items lead it.
+      loadUpNext();
     });
 
     webSocketClient.onMessage('playerAnswered', (data) => {
@@ -2718,14 +2728,48 @@ Focus on actionable business strategy insights.`;
     setQueueVersion(result.version);
   }, [gameId]);
 
+  /**
+   * WHAT THE SESSION WILL ASK NEXT, INCLUDING THE PART NOBODY QUEUED.
+   *
+   * `GET /up-next` runs the real selection forward — see question-plan.js — so
+   * this is the order the room actually gets rather than a guess about it. Read
+   * only; peeking spends nothing.
+   *
+   * FETCHED BESIDE THE QUEUE, NEVER CACHED. The plan depends on the cursors,
+   * the enabled categories and what has already been asked, so it is stale the
+   * moment any of those move. Re-asking is a handful of reads and no writes, so
+   * every caller re-fetches instead of holding a copy that quietly rots — the
+   * same discipline the remote's category rows already follow.
+   *
+   * Silent on failure. This is a panel a host may never open, and a modal about
+   * a preview while they are running a round is worse than a short list.
+   */
+  const loadUpNext = useCallback(async () => {
+    if (!gameId) return;
+    try {
+      const res = await authFetch(`${API_BASE}games/${gameId}/up-next?count=6`);
+      if (!res.ok) return;
+      const payload = await res.json();
+      setUpNext(Array.isArray(payload.upNext) ? payload.upNext : []);
+    } catch (error) {
+      console.warn('⚠️ UP NEXT: could not read what is coming:', error?.message);
+    }
+  }, [gameId]);
+
   /*
     Read it when the panel opens, alongside the questions themselves. Not on
     mount: a host who never opens the console never needs the list, and the
     drain happens server-side either way.
   */
   useEffect(() => {
-    if (setupPanelOpen) loadQueue();
-  }, [setupPanelOpen, loadQueue]);
+    if (setupPanelOpen) { loadQueue(); loadUpNext(); }
+    /*
+      AND ON EVERY ROUND, because the plan is a function of what has already
+      been asked. Without `currentQuestionId` here the panel would keep showing
+      the question the room just answered as still "coming up" — the preview
+      going stale in the one way a host would certainly notice.
+    */
+  }, [setupPanelOpen, currentQuestionId, loadQueue, loadUpNext]);
 
   /**
    * One op, applied locally, sent, then reconciled.
@@ -2781,9 +2825,12 @@ Focus on actionable business strategy insights.`;
     // authoritative and it already includes anything the other surface did.
     if (result.queue === null) {
       loadQueue();
+      loadUpNext();
       return;
     }
     setQuestionQueue(result.queue);
+    // Queueing something changes what follows it, so the tail is re-planned.
+    loadUpNext();
     setQueueVersion(result.version);
   }, [gameId, questionQueue, queueVersion, loadQueue]);
 
@@ -5405,6 +5452,7 @@ Focus on actionable business strategy insights.`;
           onSelectQuestion={selectQuestion}
           questionQueue={questionQueue}
           queueBusyKeys={queueBusyKeys}
+          upNext={upNext}
           onQueueQuestion={handleQueueQuestion}
           onQueueMove={handleQueueMove}
           onQueueRemove={handleQueueRemove}

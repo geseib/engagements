@@ -1247,6 +1247,58 @@ body {
 
 .setup-q__warn { color: var(--danger-text, #EF8C86); font-weight: 600; }
 
+/* ─── WHAT FOLLOWS THE QUEUE ─────────────────────────────────────────────────
+   The automatic walk, shown under the host's own running order so "up next"
+   means the whole of what is coming rather than only the part somebody typed.
+
+   SUBORDINATE, NOT DISABLED. These rows are dimmer and their numbers are grey,
+   because they are a PREDICTION and the queued rows above are a DECISION — but
+   they are not greyed to the disabled level, because nothing here is broken or
+   unavailable and 0.45 (the `.hr-btn:disabled` value) would say it was.
+
+   No action column: they are derived, so there is no stored order to reorder,
+   and rendering an arrow that cannot work is worse than rendering none. The
+   route to moving one IS to queue it, from the browser directly below. */
+.setup-q__auto {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(155, 168, 190, 0.28);
+}
+
+.setup-q__auto-head {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #B6C2D4;
+}
+
+/* TWO COLUMNS, NOT THREE. The queued row's grid ends in an action column; with
+   no buttons to put there a third track would leave every automatic row's title
+   short by the width of three missing controls, and the two lists would fail to
+   line up down the left where the eye actually reads them. */
+.setup-q__row--auto {
+  grid-template-columns: auto minmax(0, 1fr);
+  opacity: 0.82;
+}
+
+.setup-q__row--auto .setup-q__name { font-weight: 500; }
+
+/* The tag the request asked for, and it sits on THESE rows rather than the
+   queued ones: the queued rows already announce themselves by being numbered,
+   movable and under a heading that says Running order. It is the questions the
+   host did not choose that need saying so.
+
+   --muted, not --primary: the Next flag above is the one thing on this panel
+   that should catch the eye, and a second amber label competing with it would
+   flatten the distinction the colour exists to make. */
+.setup-q__flag--auto {
+  color: var(--muted, #9BA8BE);
+  font-weight: 700;
+}
+
+
 .setup-q__acts {
   display: flex;
   gap: 4px;
