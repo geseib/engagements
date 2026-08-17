@@ -133,6 +133,8 @@ const advancePastAsked = ({ questionOrder, activeIndex, questionCount, categoryI
   return null;
 };
 
+const { pickIndex, seedFor } = require('./question-plan');
+
 const QUEUE_DRAIN_ATTEMPTS = 3;
 
 /**
@@ -307,7 +309,7 @@ const drainQueuedQuestion = async ({ gameId, setPk, resolvedSet, categoryState }
   only entry point and already has it, and re-querying per call would read the
   same QUESTION# rows twice for one round.
 */
-const selectNextQuestionFromCounts = async (gameId, countsState, setPk, isRandomized = true, asked = new Set()) => {
+const selectNextQuestionFromCounts = async (gameId, countsState, setPk, isRandomized = true, asked = new Set(), seed = '', roundNumber = 1) => {
   const counts1_8 = countsState['1-8'] || [];
   const counts9_16 = countsState['9-16'] || [];
   const counts17_24 = countsState['17-24'] || [];
@@ -388,9 +390,15 @@ const selectNextQuestionFromCounts = async (gameId, countsState, setPk, isRandom
   // Select category based on randomization setting
   let selectedCategory;
   if (isRandomized) {
-    // Randomly select from available categories
-    selectedCategory = availableCategories[Math.floor(Math.random() * availableCategories.length)];
-    console.log(`🎲 Selected category at position ${selectedCategory.position} (${selectedCategory.remaining} remaining) - RANDOM`);
+    /*
+      SEEDED, NOT `Math.random()`. The same arithmetic question-plan.js uses, so
+      the "Up Next" a host is shown is the order that actually arrives — see
+      that file's header. With Math.random() a preview could only ever be a
+      guess, and a screen that guesses and calls it a plan is the failure this
+      repo already treats as a bug class.
+    */
+    selectedCategory = availableCategories[pickIndex(seed, roundNumber, availableCategories.length)];
+    console.log(`🎲 Selected category at position ${selectedCategory.position} (${selectedCategory.remaining} remaining) - SEEDED`);
   } else {
     // Select the first available category (lowest position number)
     selectedCategory = availableCategories.sort((a, b) => a.position - b.position)[0];
@@ -478,7 +486,7 @@ const selectNextQuestionFromCounts = async (gameId, countsState, setPk, isRandom
 };
 
 // Helper function to select next question based on bitmasks
-const selectNextQuestion = async (gameId, categoryState, setPk, isRandomized = true, asked = new Set()) => {
+const selectNextQuestion = async (gameId, categoryState, setPk, isRandomized = true, asked = new Set(), seed = '', roundNumber = 1) => {
   console.log(`🎯 Selecting next question for game ${gameId}`);
   
   // Check if we have enhanced category counts (new feature)
@@ -490,7 +498,7 @@ const selectNextQuestion = async (gameId, categoryState, setPk, isRandomized = t
   if (countsResult.Item && (countsResult.Item['1-8'] || countsResult.Item['9-16'] || countsResult.Item['17-24'])) {
     // Use enhanced category management
     console.log(`📊 Using enhanced array-based category counts for selection`);
-    return selectNextQuestionFromCounts(gameId, countsResult.Item, setPk, isRandomized, asked);
+    return selectNextQuestionFromCounts(gameId, countsResult.Item, setPk, isRandomized, asked, seed, roundNumber);
   }
   
   // Fallback to bitmask-based selection
@@ -560,9 +568,9 @@ const selectNextQuestion = async (gameId, categoryState, setPk, isRandomized = t
   // Select category based on randomization setting
   let selectedCategory;
   if (isRandomized) {
-    // Randomly select from available categories
-    selectedCategory = availableCategories[Math.floor(Math.random() * availableCategories.length)];
-    console.log(`🎲 Selected category: ${selectedCategory.name} (${selectedCategory.categoryId}) - RANDOM`);
+    // The same seeded pick as the counts path above, through the same function.
+    selectedCategory = availableCategories[pickIndex(seed, roundNumber, availableCategories.length)];
+    console.log(`🎲 Selected category: ${selectedCategory.name} (${selectedCategory.categoryId}) - SEEDED`);
   } else {
     // Select the first available category (lowest position number)
     selectedCategory = availableCategories.sort((a, b) => a.position - b.position)[0];
@@ -972,7 +980,18 @@ exports.handler = async (event) => {
           through both selection paths — see advancePastAsked.
         */
         const alreadyAsked = await askedSourceQuestionIds(gameId);
-        nextQuestion = await selectNextQuestion(gameId, categoryState.Item, setPk, isRandomized, alreadyAsked);
+        /*
+          The seed and the round together decide the category on a randomised
+          set. The round is the one being SERVED — currentLessonNumber + 1 —
+          because that is the number the preview used when it planned this same
+          slot; keying on the round already finished would offset the whole
+          sequence by one and the two would disagree on every round.
+        */
+        const seed = seedFor({ ...gameMetadata.Item, GameId: gameId });
+        const roundNumber = currentLessonNumber + 1;
+        nextQuestion = await selectNextQuestion(
+          gameId, categoryState.Item, setPk, isRandomized, alreadyAsked, seed, roundNumber
+        );
       }
     }
 
