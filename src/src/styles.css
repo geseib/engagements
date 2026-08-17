@@ -4599,14 +4599,38 @@ body {
   cursor: pointer;
 }
 
+/* ─── THE QUESTION, ENLARGED FOR THE ROOM ────────────────────────────────────
+   Opened by clicking the stage's `.q` heading, and reported in the same breath
+   as the response spotlight: "a modal pops up but is the same size or smaller
+   than what was shown".
+
+   Here it was literally smaller. `.q` on the stage is set in `--L-primary`
+   (Room 40-68px, TV 52-88px). Expanding it dropped the same words to a fixed
+   1.8rem — 28.8px — and greyed them to #555. So the control named "Show the
+   full question" made the question roughly a THIRD of the size it already was,
+   which is the same inversion the spotlight had and the reason both are fixed
+   together.
+
+   Sizes come from the four per-profile ladders on the root element
+   (`styles/stage.css`), never from a scalar — see the note on `.stage-spot`
+   for the `--k` incident that rule comes from.
+
+   STILL PAPER-ON-DUSK, DELIBERATELY UNCHANGED. This card is a white sheet with
+   raw #333/#555 hex on a dusk stage, which is real design debt — no theme
+   declared, no tokens — but it is a RESTYLE, not this bug, and the reported
+   fault is scale. Logged rather than smuggled in. The one colour that does move
+   is the question's own text, from #555 to #333, because "so all can really
+   read the text" is about legibility and a 7.5:1 grey for the primary content
+   of the card is part of what was wrong with it.
+   ───────────────────────────────────────────────────────────────────────── */
 .expanded-lesson-content {
   background: white;
   border-radius: 20px;
-  padding: 50px;
+  padding: clamp(32px, 4vh, 64px) clamp(36px, 4vw, 72px);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   cursor: default;
-  max-width: 75vw;
-  max-height: 90vh;
+  width: min(1600px, 92vw);
+  max-height: 92vh;
   overflow-y: auto;
   text-align: left;
 }
@@ -4618,13 +4642,16 @@ body {
   margin-bottom: 25px;
 }
 
+/* THE QUESTION ITSELF — the card's primary content, at the stage's primary
+   rung. It is the same string `.q` renders behind the overlay, so anything less
+   than `--L-primary` means the enlarge button shrank it. */
 .expanded-lesson-title {
   font-family: var(--font-display);
-  font-size: 1.8rem;
+  font-size: var(--L-primary);
   font-weight: 600;
-  color: #555;
-  margin-bottom: 30px;
-  line-height: 1.3;
+  color: #333;
+  margin-bottom: clamp(20px, 2.6vh, 36px);
+  line-height: 1.25;
 }
 
 .expanded-lesson-subtitle {
@@ -4637,8 +4664,10 @@ body {
   letter-spacing: 1px;
 }
 
+/* Supporting detail sits a rung below the question, not at a fixed 1.45rem
+   that lands under stage BODY size on every profile. */
 .expanded-lesson-detail {
-  font-size: 1.45rem;
+  font-size: var(--L-body);
   color: #555;
   line-height: 1.6;
   margin-bottom: 30px;
@@ -4649,7 +4678,7 @@ body {
 }
 
 .expanded-lesson-prompt {
-  font-size: 1.35rem;
+  font-size: var(--L-meta);
   color: var(--primary);
   font-weight: 600;
   text-align: center;
@@ -11691,6 +11720,75 @@ body {
 .answer-spotlight__tally small {
   display: block;
   opacity: 0.7;
+}
+
+/* ─── THE STAGE'S COPY: USE THE ROOM'S SCREEN ─────────────────────────────────
+   `surfaceClassName="stage-spot"` from GameHostPage. Reported:
+
+     "when clicking on a title of a question or response, a modal pops up but is
+      the same size or smaller than what was shown that not helpful it should
+      make use of the screen space and make the text large so all can really
+      read the text from a decent size room."
+
+   Exactly right, and the numbers say why. The base rules above are the PHONE's:
+   860px wide, capped at 720px tall, text capped at 1.75rem (28px). A stage card
+   at RESULTS is roughly a third of a 1920px screen — so at 860px the "expanded"
+   view was barely wider than the card, and its 28px ceiling is BELOW `--L-body`
+   on Room (22-34px) and far below TV's (28-42px). The control whose whole job
+   is "make this readable from the back of the room" was shrinking the text.
+
+   NO NEW NUMBERS. The type comes from `--L-secondary`, one of the four literal
+   per-profile ladders declared on the root element in `styles/stage.css`, so
+   this inherits Room 28-44px / TV 36-56px / Call 28-44px / Table 22-30px and
+   cannot drift from the stage it sits on. That is also why there is no scalar
+   here: `styles/stage.css` records that revision 1 multiplied a `--k` declared
+   on `:root`, which substituted against `:root`'s own value of 1 and rendered
+   all four profiles identically. Reading the ladder is immune to that by
+   construction.
+
+   `--L-secondary` and not `--L-primary`: primary is the rung the QUESTION is
+   set in, and a response typeset larger than the question it answers reads as
+   the more important of the two. Secondary sits directly under it and still
+   clears every profile's floor with room to spare.
+
+   THE SCRIM STILL SCROLLS. `.modal-overlay` carries `padding: 24px 16px`, so
+   92vh + 48px is 1041px against a 1080p stage and the card never needs the
+   scroll it would nonetheless get — the fourth recurrence of that bug is what
+   the `align-items: flex-start` + `margin: auto` pair upstairs exists to
+   prevent, and nothing here overrides it.
+
+   The player's `.plr-spot` is the same seam for the opposite constraint, and is
+   deliberately untouched: a phone has no room to give.
+   ───────────────────────────────────────────────────────────────────────── */
+.answer-spotlight.stage-spot {
+  width: min(1600px, 94vw);
+  max-height: 92vh;
+  gap: clamp(16px, 2.2vh, 28px);
+  padding: clamp(20px, 3vh, 40px) clamp(24px, 3.4vw, 56px) clamp(18px, 2.6vh, 34px);
+}
+
+/* The response itself, at the stage's own secondary rung. */
+.stage-spot .answer-spotlight__text {
+  font-size: var(--L-secondary);
+  line-height: 1.4;
+}
+
+/* The chrome rides UP with it. Left at their base sizes these read as a caption
+   bolted to a billboard — and the position counter ("2 of 7") is the one piece
+   a host reads aloud while paging, so it has to survive the back of the room
+   too. `--L-meta` is the rung the stage already uses for exactly this job. */
+.stage-spot .answer-spotlight__count,
+.stage-spot .answer-spotlight__who,
+.stage-spot .answer-spotlight__tally,
+.stage-spot .answer-spotlight__nav button {
+  font-size: var(--L-meta);
+}
+
+/* A 24px close target is a laptop control. On a stage driven from across a room
+   — or from the phone remote, with the host nowhere near the projector — it
+   wants the same weight as everything else that grew. */
+.stage-spot .answer-spotlight__close {
+  padding: clamp(8px, 1.2vh, 14px);
 }
 
 .answer-spotlight__nav {

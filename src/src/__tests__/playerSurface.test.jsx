@@ -547,7 +547,26 @@ describe('the ballot', () => {
     expect(src('components', 'AnswerSpotlight.jsx')).toMatch(/surfaceClassName\s*=\s*''/);
     // The other two callers are paper and stay paper.
     expect(src('components', 'PastRound.jsx')).not.toMatch(/surfaceClassName/);
-    expect(src('GameHostPage.jsx')).not.toMatch(/surfaceClassName/);
+
+    /*
+      THE RE-TINT, NOT THE SEAM. This used to assert GameHostPage passed no
+      `surfaceClassName` at all, which was broader than the rule above it: the
+      thing that must not reach a paper caller is `plr-spot`, the PLAYER'S DUSK
+      PALETTE, not the prop that carries it.
+
+      The host now passes `stage-spot`, which sets width, height, padding and
+      type from the stage's own per-profile ladders and declares no colour at
+      all — it is how the dialog stopped opening SMALLER than the card it
+      expands ("it should make use of the screen space and make the text large
+      so all can really read the text from a decent size room"). Blocking that
+      on a colour rule would have been the assertion enforcing something it does
+      not mean.
+
+      So: name the class the rule is actually about, and keep asserting the
+      host's copy is not tinted.
+    */
+    expect(src('GameHostPage.jsx')).not.toMatch(/plr-spot/);
+    expect(src('GameHostPage.jsx')).toMatch(/surfaceClassName="stage-spot"/);
   });
 });
 

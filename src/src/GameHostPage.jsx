@@ -5182,6 +5182,28 @@ Focus on actionable business strategy insights.`;
                     `authorsHiddenNow` call the card behind it uses. A dialog
                     that re-derived it would be a fourth site to get wrong. */}
                 <AnswerSpotlight
+                  /*
+                    THE ROOM'S COPY OF THIS DIALOG IS A DIFFERENT SIZE FROM THE
+                    PHONE'S, and this class is the whole seam.
+
+                      "when clicking on a title of a question or response, a
+                       modal pops up but is the same size or smaller than what
+                       was shown that not helpful it should make use of the
+                       screen space and make the text large so all can really
+                       read the text from a decent size room."
+
+                    The base rules cap the dialog at 860px wide, 720px tall and
+                    1.75rem of text — sized for the phone, where this component
+                    also renders. On a 1080p projector that is under half the
+                    width and smaller type than the card it was opened FROM, so
+                    the one control whose entire job is "make this readable"
+                    made it smaller.
+
+                    `.plr-spot` is the player's own version of this seam, which
+                    is why the fix is a sibling class rather than a rewrite of
+                    the base: the phone keeps what it has, untouched.
+                  */
+                  surfaceClassName="stage-spot"
                   answers={answers}
                   index={spotlightIndex}
                   onIndex={openSpotlight}

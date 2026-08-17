@@ -75,6 +75,64 @@ const askedSourceQuestionIds = async (gameId) => {
   return asked;
 };
 
+/**
+ * WALK THE CATEGORY'S CURSOR PAST ANYTHING THE ROOM HAS ALREADY SEEN.
+ *
+ * Reported: *"items you queue up and ask, dont seem to get removed from the
+ * question pool and get asked again."* Exactly right, and the mechanism is a
+ * seam between this file's two ways of choosing a question.
+ *
+ * The automatic path does not track WHICH questions were asked. It walks a
+ * per-category cursor — `CATEGORY#<id>#ACTIVE`.ActiveIndex indexing into
+ * `#ORDER`.QuestionOrder — and advances it by one each round. That is a
+ * complete record only while every round comes from the cursor.
+ *
+ * A queued pick and an "Ask next" pick do NOT come from the cursor. They name a
+ * question directly, and they deliberately leave ActiveIndex alone: the long
+ * comment on `isSpecific` further down records what happened when they did not,
+ * which was that one specific pick reset the cursor to 1 and zeroed the
+ * category's AvailMask bit, costing a host the other 39 questions in a
+ * 40-question category. So the cursor is untouched, correctly — and nothing
+ * else remembered, which is the other half of the same fault. The cursor
+ * eventually walks onto the very question the host queued and serves it again.
+ *
+ * The fix is to consult the record that already exists. `askedSourceQuestionIds`
+ * reads the QUESTION#nnn#REF rows, which are written for EVERY round however it
+ * was chosen, and the queue drain has been using it to discard spent entries
+ * since the queue shipped. This is the same set, applied to the other path.
+ *
+ * RETURNS THE INDEX IT LANDED ON, not the one it started from. The caller
+ * writes `activeIndex + 1` back to ActiveIndex, so returning the original would
+ * re-walk the same run of asked questions every subsequent round — and the
+ * cursor would never get past them.
+ *
+ * Both callers pass the same three things and there is exactly one rule, so
+ * this is a function rather than a fourth copy of a loop: the two selection
+ * paths below were already near-identical, and a rule enforced in one of two
+ * near-identical blocks is a rule that holds half the time.
+ */
+const advancePastAsked = ({ questionOrder, activeIndex, questionCount, categoryId, asked }) => {
+  let index = activeIndex;
+
+  while (index < questionCount) {
+    const questionNumber = (questionOrder && questionOrder.length > index)
+      ? questionOrder[index]
+      : index + 1;
+    const questionId = `QUESTION#${categoryId}#${String(questionNumber).padStart(3, '0')}`;
+
+    if (!asked.has(questionId)) {
+      return { index, questionNumber, questionId };
+    }
+
+    console.log(`⏭️ ${questionId} was already asked — skipping it`);
+    index += 1;
+  }
+
+  // Every remaining question in this category has been asked. Exhausted — the
+  // same answer the cursor's own bounds check gives, and handled identically.
+  return null;
+};
+
 const QUEUE_DRAIN_ATTEMPTS = 3;
 
 /**
@@ -244,7 +302,12 @@ const drainQueuedQuestion = async ({ gameId, setPk, resolvedSet, categoryState }
 // versioned set, `SET#<id>` for a legacy one. It is resolved once in the
 // handler (game pin -> activeVersion -> legacy) and threaded through, so a game
 // cannot read its categories from one version and its questions from another.
-const selectNextQuestionFromCounts = async (gameId, countsState, setPk, isRandomized = true) => {
+/*
+  `asked` is threaded in rather than queried here: `selectNextQuestion` is the
+  only entry point and already has it, and re-querying per call would read the
+  same QUESTION# rows twice for one round.
+*/
+const selectNextQuestionFromCounts = async (gameId, countsState, setPk, isRandomized = true, asked = new Set()) => {
   const counts1_8 = countsState['1-8'] || [];
   const counts9_16 = countsState['9-16'] || [];
   const counts17_24 = countsState['17-24'] || [];
@@ -377,30 +440,33 @@ const selectNextQuestionFromCounts = async (gameId, countsState, setPk, isRandom
     return null;
   }
   
-  const activeIndex = categoryActiveQuery.Item.ActiveIndex || 0;
+  const storedIndex = categoryActiveQuery.Item.ActiveIndex || 0;
   const questionCount = categoryActiveQuery.Item.QuestionCount || 0;
   const questionOrder = categoryOrderQuery.Item.QuestionOrder;
-  
-  console.log(`📊 Category ${categoryId}: activeIndex=${activeIndex}, questionCount=${questionCount}`);
-  
-  if (activeIndex >= questionCount) {
+
+  console.log(`📊 Category ${categoryId}: activeIndex=${storedIndex}, questionCount=${questionCount}`);
+
+  if (storedIndex >= questionCount) {
     console.log(`❌ No more questions in category ${categoryId}`);
     return null;
   }
-  
-  // Get the question number (1-based)
-  let questionNumber;
-  if (questionOrder && questionOrder.length > activeIndex) {
-    questionNumber = questionOrder[activeIndex];
-  } else {
-    questionNumber = activeIndex + 1;
+
+  // Skip anything the room has already seen — see advancePastAsked. Without
+  // this the cursor eventually walks onto a question the host queued or picked
+  // by hand and serves it a second time.
+  const landed = advancePastAsked({
+    questionOrder, activeIndex: storedIndex, questionCount, categoryId, asked
+  });
+
+  if (!landed) {
+    console.log(`❌ Every remaining question in category ${categoryId} has been asked`);
+    return null;
   }
-  
-  const questionNumberPadded = String(questionNumber).padStart(3, '0');
-  const questionId = `QUESTION#${categoryId}#${questionNumberPadded}`;
-  
+
+  const { index: activeIndex, questionNumber, questionId } = landed;
+
   console.log(`🎯 Selected question: ${questionId}`);
-  
+
   return {
     questionId,
     categoryId: categoryId,
@@ -412,7 +478,7 @@ const selectNextQuestionFromCounts = async (gameId, countsState, setPk, isRandom
 };
 
 // Helper function to select next question based on bitmasks
-const selectNextQuestion = async (gameId, categoryState, setPk, isRandomized = true) => {
+const selectNextQuestion = async (gameId, categoryState, setPk, isRandomized = true, asked = new Set()) => {
   console.log(`🎯 Selecting next question for game ${gameId}`);
   
   // Check if we have enhanced category counts (new feature)
@@ -424,7 +490,7 @@ const selectNextQuestion = async (gameId, categoryState, setPk, isRandomized = t
   if (countsResult.Item && (countsResult.Item['1-8'] || countsResult.Item['9-16'] || countsResult.Item['17-24'])) {
     // Use enhanced category management
     console.log(`📊 Using enhanced array-based category counts for selection`);
-    return selectNextQuestionFromCounts(gameId, countsResult.Item, setPk, isRandomized);
+    return selectNextQuestionFromCounts(gameId, countsResult.Item, setPk, isRandomized, asked);
   }
   
   // Fallback to bitmask-based selection
@@ -519,27 +585,32 @@ const selectNextQuestion = async (gameId, categoryState, setPk, isRandomized = t
     return null;
   }
 
-  const activeIndex = categoryActiveQuery.Item.ActiveIndex || 0;
+  const storedIndex = categoryActiveQuery.Item.ActiveIndex || 0;
   const questionCount = categoryActiveQuery.Item.QuestionCount || 0;
   const questionOrder = categoryOrderQuery.Item.QuestionOrder;
 
-  console.log(`📊 Category ${selectedCategory.categoryId}: activeIndex=${activeIndex}, questionCount=${questionCount}`);
+  console.log(`📊 Category ${selectedCategory.categoryId}: activeIndex=${storedIndex}, questionCount=${questionCount}`);
 
-  if (activeIndex >= questionCount) {
+  if (storedIndex >= questionCount) {
     console.log(`❌ No more questions in category ${selectedCategory.categoryId}`);
     return null;
   }
 
-  // Get the question number (1-based)
-  let questionNumber;
-  if (questionOrder && questionOrder.length > activeIndex) {
-    questionNumber = questionOrder[activeIndex];
-  } else {
-    questionNumber = activeIndex + 1;
+  // The same skip as the position-mapped path above, through the same helper.
+  const landed = advancePastAsked({
+    questionOrder,
+    activeIndex: storedIndex,
+    questionCount,
+    categoryId: selectedCategory.categoryId,
+    asked
+  });
+
+  if (!landed) {
+    console.log(`❌ Every remaining question in category ${selectedCategory.categoryId} has been asked`);
+    return null;
   }
 
-  const questionNumberPadded = String(questionNumber).padStart(3, '0');
-  const questionId = `QUESTION#${selectedCategory.categoryId}#${questionNumberPadded}`;
+  const { index: activeIndex, questionNumber, questionId } = landed;
 
   console.log(`🎯 Selected question: ${questionId}`);
 
@@ -895,7 +966,13 @@ exports.handler = async (event) => {
         }
 
         // Select next question automatically
-        nextQuestion = await selectNextQuestion(gameId, categoryState.Item, setPk, isRandomized);
+        /*
+          The rounds this game has already served, so the cursor can step over
+          anything queued or hand-picked. Queried once, here, and threaded down
+          through both selection paths — see advancePastAsked.
+        */
+        const alreadyAsked = await askedSourceQuestionIds(gameId);
+        nextQuestion = await selectNextQuestion(gameId, categoryState.Item, setPk, isRandomized, alreadyAsked);
       }
     }
 
