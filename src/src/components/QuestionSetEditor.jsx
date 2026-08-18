@@ -1357,9 +1357,13 @@ export default function QuestionSetEditor({
       {/* Pinned-game delete confirmation. The ids matter: "some games are using
           this" is not enough information to decide with. */}
       {pendingDelete && (
-        <div className="modal-overlay" onClick={() => setPendingDelete(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>
+        <Modal
+          overlayClassName="modal-overlay"
+          contentClassName="modal-content"
+          labelledBy="qs-pinned-delete-title"
+          onClose={() => setPendingDelete(null)}
+        >
+            <h3 id="qs-pinned-delete-title">
               <Icon name="Warning" weight="fill" size={16} color="var(--primary)" />{' '}
               Version {pendingDelete.version} is in play
             </h3>
@@ -1386,8 +1390,7 @@ export default function QuestionSetEditor({
                 Delete it anyway
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

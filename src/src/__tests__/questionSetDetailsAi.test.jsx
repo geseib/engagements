@@ -342,15 +342,16 @@ describe('the result is a draft in the form', () => {
 
   it('leaves the form alone when the endpoint refuses', async () => {
     // rejects: applying a draft from a failed request, and rejects a 403 reported
-    // as a generic failure. The route is admins-only; a session that has expired
-    // into a non-admin must be told to sign in again, not handed an empty draft.
+    // as a generic failure. The route is admins-only; a 403 reaches a VALID
+    // session that lacks the group, so the message names the permission instead
+    // of sending the author around a sign-in loop that cannot help (#9).
     const { edits } = mockApi({ startStatus: 403 });
     renderEditor({ questionSet: WRITTEN_SET });
     await openAiPanel();
     await screen.findAllByTestId('ai-source-question');
     await draftIt();
 
-    expect(await screen.findByText(/not authorized/i)).toBeInTheDocument();
+    expect(await screen.findByText(/not permitted/i)).toBeInTheDocument();
     expect(field.description()).toHaveValue(WRITTEN_SET.description);
     expect(field.aiContext()).toHaveValue(WRITTEN_SET.aiContextInstruction);
     expect(edits).toHaveLength(0);
