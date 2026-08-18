@@ -1,6 +1,8 @@
 import React, { useMemo } from 'react';
 import Icon from './Icon';
 import { gameTypeLabel, normalizeGameType } from '../config/gameTypes';
+import { matchesListFilters } from '../config/listControls';
+import useListControls from '../hooks/useListControls';
 
 /**
  * THE PROMPT LIBRARY — the list half of the Prompts admin section.
@@ -104,32 +106,45 @@ function canonicalStatus(status) {
   return DRAFT_SYNONYMS.has(status) ? 'draft' : status;
 }
 
-/** Does this prompt survive a filter combination? One place, so the drop-counts
- *  below cannot drift from the list they describe. */
-export function matchesPromptFilters(
-  prompt,
-  { search = '', gameType = 'all', category = 'all', status = 'all' },
-  { categoryKey = 'category' } = {}
-) {
-  if (gameType !== 'all' && normalizeGameType(prompt.gameType) !== normalizeGameType(gameType)) {
-    return false;
-  }
-  if (category !== 'all' && prompt[categoryKey] !== category) return false;
-  // Filtered through the same synonym map the chip uses, so a row written with
-  // `inactive` by the old importer appears under Draft instead of under nothing.
-  // Without this the filter is a place rows go to disappear: the dropdown offers
-  // three statuses and the row holds a fourth, so it is invisible under every
-  // option except "All".
-  if (status !== 'all' && canonicalStatus(prompt.status) !== canonicalStatus(status)) return false;
+/*
+  THE LIST CONTROLS, DECLARED PER `categoryKey` — the one input the two mounts
+  disagree on (summary rows spell the second axis `category`, generation rows
+  `scenarioType`; see the props block above). Everything the old inline
+  predicate encoded survives as axis config on the shared mechanism:
 
-  const needle = search.trim().toLowerCase();
-  if (needle) {
-    const hay = [prompt.name, prompt.description, ...(prompt.tags || [])]
-      .filter(Boolean)
-      .map((v) => String(v).toLowerCase());
-    if (!hay.some((v) => v.includes(needle))) return false;
-  }
-  return true;
+  - `gameType` normalises BOTH sides. Rows written before the ids were dashed
+    store `callandanswer`, and an exact-match filter showed none of them — the
+    R3 defect. The filter value needs the same treatment because the two
+    mounts pass differently-spelled option lists.
+  - `status` compares through the same synonym map the chip uses, so a row
+    written with `inactive` by the old importer appears under Draft instead of
+    under nothing. Without this the filter is a place rows go to disappear:
+    the dropdown offers three statuses and the row holds a fourth, so it is
+    invisible under every option except "All".
+*/
+function promptListConfig(categoryKey) {
+  return {
+    searchFields: ['name', 'description', (prompt) => prompt.tags],
+    axes: {
+      gameType: {
+        get: (prompt) => prompt.gameType,
+        eq: (a, b) => normalizeGameType(a) === normalizeGameType(b),
+      },
+      category: { get: (prompt) => prompt[categoryKey] },
+      status: {
+        get: (prompt) => prompt.status,
+        eq: (a, b) => canonicalStatus(a) === canonicalStatus(b),
+      },
+    },
+  };
+}
+
+/** Does this prompt survive a filter combination? Kept as a named export with
+ *  its original signature — AIGenerationPromptEditor's header and two suites
+ *  lean on it — implemented on the shared predicate, which is also the one the
+ *  drop-counts use, so they cannot drift from the list they describe. */
+export function matchesPromptFilters(prompt, filters, { categoryKey = 'category' } = {}) {
+  return matchesListFilters(prompt, promptListConfig(categoryKey), filters);
 }
 
 // `inactive` reads as Draft rather than as the raw word, because that is what
@@ -326,13 +341,6 @@ export default function PromptLibraryPanel({
 }) {
   const { search = '', gameType = 'all', category = 'all', status = 'all' } = filters || {};
 
-  const shown = useMemo(
-    () => prompts.filter(
-      (p) => matchesPromptFilters(p, { search, gameType, category, status }, { categoryKey })
-    ),
-    [prompts, search, gameType, category, status, categoryKey]
-  );
-
   const catOptions = useMemo(() => (categoryOptions || []).map(asOption), [categoryOptions]);
   /* A row whose category is not in the currently offered list still has to
      render, so the raw value is the fallback rather than a blank. */
@@ -342,49 +350,33 @@ export default function PromptLibraryPanel({
   };
 
   /*
+    THE STATE STAYS PARENT-OWNED. The hook runs in its controlled mode:
+    `value` is the (defaulted) filters prop and every change goes out through
+    `onFilterChange`, exactly as the hand-rolled `set` did — AIPromptManager
+    still resets the category filter from outside when the game type changes,
+    and nothing here stores a second copy.
+
     THE EXITS FROM "NOTHING MATCHES" — QuestionSetsPanel's `drops`, same
-    reasoning. Dropping a filter that leads to another empty screen is not an
-    exit, so a candidate is only offered when it produces rows.
+    reasoning, same shared computeDrops. Dropping a filter that leads to
+    another empty screen is not an exit, so a candidate is only offered when it
+    produces rows, counted with the same predicate the list uses.
   */
-  const drops = useMemo(() => {
-    const base = { search, gameType, category, status };
-    const candidates = [];
-    if (search.trim()) {
-      candidates.push({ key: 'search', label: `Search “${search.trim()}”`, next: { ...base, search: '' } });
-    }
-    if (gameType !== 'all') {
-      candidates.push({ key: 'gameType', label: `Type: ${gameTypeLabel(gameType)}`, next: { ...base, gameType: 'all' } });
-    }
-    if (category !== 'all') {
-      candidates.push({
-        key: 'category',
-        label: `${categoryHeading}: ${catLabel(category)}`,
-        next: { ...base, category: 'all' },
-      });
-    }
-    if (status !== 'all') {
-      candidates.push({
-        key: 'status',
-        label: `Status: ${STATUS_LABEL[status] || status}`,
-        next: { ...base, status: 'all' },
-      });
-    }
-    return candidates
-      .map((c) => ({
-        ...c,
-        count: prompts.filter((p) => matchesPromptFilters(p, c.next, { categoryKey })).length,
-      }))
-      .filter((c) => c.count > 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prompts, search, gameType, category, status, categoryKey, categoryHeading, catOptions]);
+  const config = useMemo(() => promptListConfig(categoryKey), [categoryKey]);
+  const filterState = useMemo(
+    () => ({ search, gameType, category, status }),
+    [search, gameType, category, status]
+  );
+  const { shown, drops, activeFilterCount, set, clearAll } = useListControls(prompts, config, {
+    value: filterState,
+    onChange: onFilterChange,
+    labels: {
+      search: (needle) => `Search “${needle}”`,
+      gameType: (value) => `Type: ${gameTypeLabel(value)}`,
+      category: (value) => `${categoryHeading}: ${catLabel(value)}`,
+      status: (value) => `Status: ${STATUS_LABEL[value] || value}`,
+    },
+  });
 
-  const set = (patch) => onFilterChange && onFilterChange({ search, gameType, category, status, ...patch });
-  const clearAll = () => set({ search: '', gameType: 'all', category: 'all', status: 'all' });
-
-  const activeFilterCount = (search.trim() ? 1 : 0)
-    + (gameType !== 'all' ? 1 : 0)
-    + (category !== 'all' ? 1 : 0)
-    + (status !== 'all' ? 1 : 0);
   const nothingExists = prompts.length === 0;
 
   return (

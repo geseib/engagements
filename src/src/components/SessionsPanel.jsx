@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import { resolveGameType, gameTypeLabel } from '../config/gameTypes';
 import Icon from './Icon';
+import ListControls from './ListControls';
+import useListControls from '../hooks/useListControls';
+import { matchesListFilters } from '../config/listControls';
 import './SessionsPanel.css';
 import { formatWhen, countOrDash } from '../config/tableCells';
 
@@ -42,6 +45,41 @@ export { formatWhen, countOrDash };
 /** The phrase that has to be typed before delete-all is armed. */
 export const DELETE_ALL_PHRASE = 'delete all sessions';
 
+const SESSION_SORTS = {
+  newest: (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
+  oldest: (a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0),
+  title: (a, b) => String(a.title || '').localeCompare(String(b.title || '')),
+  lastPlayed: (a, b) => new Date(b.lastPlayedAt || 0) - new Date(a.lastPlayedAt || 0),
+};
+
+/*
+  THE LIST CONTROLS, DECLARED ONCE — the same shared mechanism as
+  QuestionSetsPanel and PromptLibraryPanel (config/listControls.js).
+
+  The id is a SEARCH FIELD on purpose: a game code is the one thing an operator
+  arrives holding, and it is what the old free-text box demanded. The set id is
+  searchable for the same reason it is printed in the sub-line.
+
+  The default sort matches what the server already sends — get-games-list.js
+  orders by createdAt descending — so the first paint is unchanged; rows with
+  no createdAt at all sink to the end rather than masquerading as newest.
+*/
+const SESSION_LIST_CONFIG = {
+  searchFields: ['title', 'gameId', 'hostName', 'questionSetId'],
+  axes: {
+    state: { get: (session) => (session.started ? 'played' : 'unstarted') },
+  },
+  sorts: SESSION_SORTS,
+  defaultSort: 'newest',
+};
+
+/** Does this session survive a filter combination? Exported like
+ *  QuestionSetsPanel's matchesFilters, and implemented on the same shared
+ *  predicate the list and the drop-counts use, so they cannot drift. */
+export function matchesSessionFilters(session, filters) {
+  return matchesListFilters(session, SESSION_LIST_CONFIG, filters);
+}
+
 export default function SessionsPanel({
   environment,
   /** How many question sets are inactive, when the page knows. Optional: an
@@ -53,8 +91,6 @@ export default function SessionsPanel({
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [search, setSearch] = useState('');
-  const [stateFilter, setStateFilter] = useState('all');
   const [busyId, setBusyId] = useState(null);
   const [confirmAll, setConfirmAll] = useState(false);
   const [typed, setTyped] = useState('');
@@ -137,19 +173,20 @@ export default function SessionsPanel({
 
   /* --------------------------------------------------------------- the list */
 
-  const shown = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return sessions.filter((session) => {
-      if (stateFilter === 'played' && !session.started) return false;
-      if (stateFilter === 'unstarted' && session.started) return false;
-      if (!needle) return true;
-      // The id is included on purpose: a game code is the one thing an operator
-      // arrives holding, and it is what the old free-text box demanded.
-      return [session.title, session.gameId, session.hostName, session.questionSetId]
-        .filter(Boolean)
-        .some((field) => String(field).toLowerCase().includes(needle));
-    });
-  }, [sessions, search, stateFilter]);
+  const {
+    state: { search, state: stateFilter, sort },
+    set,
+    shown,
+    drops,
+    activeFilterCount,
+    clearOne,
+    clearAll,
+  } = useListControls(sessions, SESSION_LIST_CONFIG, {
+    labels: {
+      search: (needle) => `Search “${needle}”`,
+      state: (value) => `State: ${value === 'played' ? 'Played' : 'Never started'}`,
+    },
+  });
 
   const armed = typed.trim() === DELETE_ALL_PHRASE;
 
@@ -194,40 +231,51 @@ export default function SessionsPanel({
 
       {sessions.length > 0 && (
         <>
-          <div className="sp-filters">
-            <div className="sp-search">
-              <Icon name="MagnifyingGlass" weight="bold" size={14} color="var(--muted)" />
-              <input
-                type="search"
-                className="sp-input"
-                aria-label="Search title, session code, host"
-                placeholder="Search title, session code, host"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </div>
-
-            <select
-              className="sp-input sp-select"
-              aria-label="Filter by state"
-              value={stateFilter}
-              onChange={(event) => setStateFilter(event.target.value)}
-            >
-              <option value="all">All states</option>
-              <option value="played">Played</option>
-              <option value="unstarted">Never started</option>
-            </select>
-
-            <span className="sp-count">
-              {sessions.length} session{sessions.length === 1 ? '' : 's'}
-              {shown.length !== sessions.length ? ` · ${shown.length} shown` : ''}
-            </span>
-
-            {/*
-              DELETE ALL. It lives beside the list rather than in a red card of
-              its own, because the list is now the thing that says what would be
-              lost. It is not rendered when there is nothing to delete.
-            */}
+          {/*
+            The bar renders through the shared ListControls under this screen's
+            own scope (.sp-filters/.sp-search/.sp-input/.sp-select/.sp-count).
+            The trailing slot is DELETE ALL: it lives beside the list rather
+            than in a red card of its own, because the list is now the thing
+            that says what would be lost. It is not rendered when there is
+            nothing to delete.
+          */}
+          <ListControls
+            scope="sp"
+            search={{
+              value: search,
+              onChange: (value) => set({ search: value }),
+              ariaLabel: 'Search title, session code, host',
+              placeholder: 'Search title, session code, host',
+            }}
+            selects={[
+              {
+                key: 'state',
+                value: stateFilter,
+                onChange: (value) => set({ state: value }),
+                ariaLabel: 'Filter by state',
+                options: [
+                  { value: 'all', label: 'All states' },
+                  { value: 'played', label: 'Played' },
+                  { value: 'unstarted', label: 'Never started' },
+                ],
+              },
+              {
+                key: 'sort',
+                value: sort,
+                onChange: (value) => set({ sort: value }),
+                ariaLabel: 'Sort order',
+                options: [
+                  { value: 'newest', label: 'Newest first' },
+                  { value: 'oldest', label: 'Oldest first' },
+                  { value: 'title', label: 'Title (A–Z)' },
+                  { value: 'lastPlayed', label: 'Recently played' },
+                ],
+              },
+            ]}
+            count={`${sessions.length} session${sessions.length === 1 ? '' : 's'}${
+              shown.length !== sessions.length ? ` · ${shown.length} shown` : ''
+            }`}
+          >
             <button
               type="button"
               className="sp-btn sp-btn--danger"
@@ -239,8 +287,45 @@ export default function SessionsPanel({
               <Icon name="Trash" weight="bold" size={14} color="currentColor" />
               Delete all sessions…
             </button>
-          </div>
+          </ListControls>
 
+          {shown.length === 0 ? (
+            /*
+              NOTHING MATCHES — a different state from "no sessions yet", with
+              different words and its own exits (the qsets idiom, design rule
+              6). This used to be a dim italic table row with no way out; now
+              each filter that is costing rows is a one-click exit with the
+              count it would recover, and a filter whose removal still yields
+              nothing is not offered — an exit to a second empty screen is not
+              an exit.
+            */
+            <div className="sp-nomatch">
+              <h3>
+                No sessions match {activeFilterCount === 1 ? 'this filter' : `these ${activeFilterCount} filters`}
+              </h3>
+              <p>
+                {sessions.length} session{sessions.length === 1 ? '' : 's'} exist
+                {sessions.length === 1 ? 's' : ''}.
+                {drops.length ? ' Removing any one of these gets you results:' : ''}
+              </p>
+              <div className="sp-drops">
+                {drops.map((drop) => (
+                  <button
+                    key={drop.key}
+                    type="button"
+                    className="sp-drop"
+                    onClick={() => clearOne(drop.key)}
+                  >
+                    <Icon name="X" weight="bold" size={12} color="currentColor" />
+                    {drop.label} <em>— {drop.count} session{drop.count === 1 ? '' : 's'}</em>
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="sp-btn sp-btn--link" onClick={clearAll}>
+                Clear all filters
+              </button>
+            </div>
+          ) : (
           <table className="sp-tbl">
             <thead>
               <tr>
@@ -256,11 +341,6 @@ export default function SessionsPanel({
               </tr>
             </thead>
             <tbody>
-              {shown.length === 0 && (
-                <tr className="sp-dimrow">
-                  <td colSpan={9}>No session matches this search.</td>
-                </tr>
-              )}
               {shown.map((session) => {
                 /*
                   resolveGameType, not normalizeGameType. The latter always
@@ -312,6 +392,7 @@ export default function SessionsPanel({
               })}
             </tbody>
           </table>
+          )}
         </>
       )}
 

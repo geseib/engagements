@@ -1,6 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React from 'react';
 import Icon from './Icon';
+import ListControls from './ListControls';
 import SetImageBadge from './SetImageBadge';
+import useListControls from '../hooks/useListControls';
+import { matchesListFilters } from '../config/listControls';
 import {
   GAME_TYPE_LIST,
   gameTypeLabel,
@@ -48,27 +51,41 @@ import { formatWhen } from '../config/tableCells';
  *    different words and different exits now (host §7.9).
  */
 
-/** Does this set survive a given filter combination? One place, so the
- *  drop-counts below cannot drift from the list they describe. */
-export function matchesFilters(set, { search = '', type = 'all', status = 'all' }) {
-  const needle = search.trim().toLowerCase();
-  if (needle) {
-    const hay = [set.name, set.description, set.customInstruction]
-      .filter(Boolean)
-      .map((v) => String(v).toLowerCase());
-    if (!hay.some((v) => v.includes(needle))) return false;
-  }
-  if (type !== 'all' && normalizeGameType(set.engagementType) !== type) return false;
-  if (status !== 'all' && Boolean(set.active) !== (status === 'active')) return false;
-  return true;
-}
-
 const SORTS = {
   newest: (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
   oldest: (a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0),
   name: (a, b) => String(a.name || '').localeCompare(String(b.name || '')),
   questions: (a, b) => (b.totalQuestions || 0) - (a.totalQuestions || 0),
 };
+
+/*
+  THE LIST CONTROLS, DECLARED ONCE. This screen was the donor for
+  config/listControls.js — its search / axes / sorts / drop-exits are now this
+  config plus the shared mechanism, and the guarantee its old comment asked for
+  ("one place, so the drop-counts cannot drift from the list they describe")
+  is structural there: the list and the counts share one predicate by
+  construction.
+
+  Only the ITEM side of the type compare is normalised, deliberately: the
+  filter's options come from GAME_TYPE_LIST, so its value is already canonical,
+  while the rows still hold the original seeds' aliases (`callandanswer`,
+  `polls`).
+*/
+const LIST_CONFIG = {
+  searchFields: ['name', 'description', 'customInstruction'],
+  axes: {
+    type: { get: (set) => normalizeGameType(set.engagementType) },
+    status: { get: (set) => (set.active ? 'active' : 'inactive') },
+  },
+  sorts: SORTS,
+  defaultSort: 'newest',
+};
+
+/** Does this set survive a given filter combination? Kept as a named export —
+ *  other suites import it — implemented on the shared predicate. */
+export function matchesFilters(set, filters) {
+  return matchesListFilters(set, LIST_CONFIG, filters);
+}
 
 export default function QuestionSetsPanel({
   questionSets = [],
@@ -87,59 +104,31 @@ export default function QuestionSetsPanel({
   createOpen = false,
   children,
 }) {
-  const [search, setSearch] = useState('');
-  const [type, setType] = useState('all');
-  const [status, setStatus] = useState('all');
-  const [sort, setSort] = useState('newest');
-
-  const filters = { search, type, status };
-
-  const shown = useMemo(
-    () => questionSets.filter((set) => matchesFilters(set, filters)).sort(SORTS[sort] || SORTS.newest),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [questionSets, search, type, status, sort]
-  );
-
   /*
-    THE EXITS FROM "NOTHING MATCHES" (mockup 03). Counting the result of
-    dropping each active filter individually is one extra pass over an array
-    already in memory, and it converts a dead end into N one-click exits. A
-    filter is only offered when dropping it actually produces rows — an exit
-    that leads to another empty screen is not an exit.
+    THE EXITS FROM "NOTHING MATCHES" (mockup 03) come back as `drops`: the
+    result of removing each active filter individually, counted with the OTHER
+    filters still applied — one extra pass over an array already in memory,
+    converting a dead end into N one-click exits. A filter is only offered when
+    dropping it actually produces rows; an exit that leads to another empty
+    screen is not an exit. computeDrops in config/listControls.js keeps that
+    contract, on the same predicate the list itself uses.
   */
-  const drops = useMemo(() => {
-    const candidates = [];
-    if (search.trim()) {
-      candidates.push({ key: 'search', label: `Search “${search.trim()}”`, next: { ...filters, search: '' } });
-    }
-    if (type !== 'all') {
-      candidates.push({ key: 'type', label: `Type: ${gameTypeLabel(type)}`, next: { ...filters, type: 'all' } });
-    }
-    if (status !== 'all') {
-      candidates.push({
-        key: 'status',
-        label: `Status: ${status === 'active' ? 'Active' : 'Inactive'}`,
-        next: { ...filters, status: 'all' },
-      });
-    }
-    return candidates
-      .map((c) => ({ ...c, count: questionSets.filter((set) => matchesFilters(set, c.next)).length }))
-      .filter((c) => c.count > 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questionSets, search, type, status]);
+  const {
+    state: { search, type, status, sort },
+    set,
+    shown,
+    drops,
+    activeFilterCount,
+    clearOne,
+    clearAll,
+  } = useListControls(questionSets, LIST_CONFIG, {
+    labels: {
+      search: (needle) => `Search “${needle}”`,
+      type: (value) => `Type: ${gameTypeLabel(value)}`,
+      status: (value) => `Status: ${value === 'active' ? 'Active' : 'Inactive'}`,
+    },
+  });
 
-  const clearOne = (key) => {
-    if (key === 'search') setSearch('');
-    if (key === 'type') setType('all');
-    if (key === 'status') setStatus('all');
-  };
-  const clearAll = () => {
-    setSearch('');
-    setType('all');
-    setStatus('all');
-  };
-
-  const activeFilterCount = (search.trim() ? 1 : 0) + (type !== 'all' ? 1 : 0) + (status !== 'all' ? 1 : 0);
   const nothingExists = questionSets.length === 0;
 
   return (
@@ -213,67 +202,66 @@ export default function QuestionSetsPanel({
             </button>
           </div>
 
-          <div className="qsets-filters">
-            <div className="qsets-search">
-              <Icon name="MagnifyingGlass" weight="bold" size={14} color="var(--muted)" />
-              <input
-                type="search"
-                className="qsets-input"
-                aria-label="Search name, description"
-                placeholder="Search name, description"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </div>
-
-            {/*
-              DERIVED, NOT HAND-WRITTEN. GAME_TYPE_LIST is the whole table, so a
-              type added there appears here without an edit. Survey is present
-              and annotated rather than dropped — see the header.
-            */}
-            <select
-              className="qsets-input qsets-select"
-              aria-label="Filter by engagement type"
-              value={type}
-              onChange={(event) => setType(event.target.value)}
-            >
-              <option value="all">All types</option>
-              {GAME_TYPE_LIST.map((meta) => (
-                <option key={meta.id} value={meta.id}>
-                  {meta.label}
-                  {isPlayableGameType(meta.id) ? '' : ` — ${NOT_PLAYABLE_LABEL.toLowerCase()}`}
-                </option>
-              ))}
-            </select>
-
-            <select
-              className="qsets-input qsets-select"
-              aria-label="Filter by status"
-              value={status}
-              onChange={(event) => setStatus(event.target.value)}
-            >
-              <option value="all">All statuses</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-
-            <select
-              className="qsets-input qsets-select"
-              aria-label="Sort order"
-              value={sort}
-              onChange={(event) => setSort(event.target.value)}
-            >
-              <option value="newest">Newest first</option>
-              <option value="oldest">Oldest first</option>
-              <option value="name">Name (A–Z)</option>
-              <option value="questions">Most questions</option>
-            </select>
-
-            <span className="qsets-count">
-              {questionSets.length} set{questionSets.length === 1 ? '' : 's'}
-              {shown.length !== questionSets.length ? ` · ${shown.length} shown` : ''}
-            </span>
-          </div>
+          {/*
+            The bar renders through the shared ListControls under this screen's
+            own scope, so .qsets-filters/.qsets-search/.qsets-input/
+            .qsets-select/.qsets-count keep styling it unchanged. The TYPE
+            options stay DERIVED, NOT HAND-WRITTEN: GAME_TYPE_LIST is the whole
+            table, so a type added there appears here without an edit. Survey is
+            present and annotated rather than dropped — see the header.
+          */}
+          <ListControls
+            scope="qsets"
+            search={{
+              value: search,
+              onChange: (value) => set({ search: value }),
+              ariaLabel: 'Search name, description',
+              placeholder: 'Search name, description',
+            }}
+            selects={[
+              {
+                key: 'type',
+                value: type,
+                onChange: (value) => set({ type: value }),
+                ariaLabel: 'Filter by engagement type',
+                options: [
+                  { value: 'all', label: 'All types' },
+                  ...GAME_TYPE_LIST.map((meta) => ({
+                    value: meta.id,
+                    label: `${meta.label}${
+                      isPlayableGameType(meta.id) ? '' : ` — ${NOT_PLAYABLE_LABEL.toLowerCase()}`
+                    }`,
+                  })),
+                ],
+              },
+              {
+                key: 'status',
+                value: status,
+                onChange: (value) => set({ status: value }),
+                ariaLabel: 'Filter by status',
+                options: [
+                  { value: 'all', label: 'All statuses' },
+                  { value: 'active', label: 'Active' },
+                  { value: 'inactive', label: 'Inactive' },
+                ],
+              },
+              {
+                key: 'sort',
+                value: sort,
+                onChange: (value) => set({ sort: value }),
+                ariaLabel: 'Sort order',
+                options: [
+                  { value: 'newest', label: 'Newest first' },
+                  { value: 'oldest', label: 'Oldest first' },
+                  { value: 'name', label: 'Name (A–Z)' },
+                  { value: 'questions', label: 'Most questions' },
+                ],
+              },
+            ]}
+            count={`${questionSets.length} set${questionSets.length === 1 ? '' : 's'}${
+              shown.length !== questionSets.length ? ` · ${shown.length} shown` : ''
+            }`}
+          />
 
           {shown.length === 0 ? (
             /*
