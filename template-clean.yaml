@@ -637,6 +637,36 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # Edit a session BEFORE it starts — narrow UpdateCommands on the whitelisted
+  # METADATA attributes, mirrored onto the GAMES index row for Title/Visibility.
+  # Refuses any session whose STATE is not CREATED (start-game's predicate).
+  # Carries the Cognito authorizer: authorizer.js requires hosts/admins for a
+  # PUT on a games path, and this route must not repeat CreateGameFunction's
+  # missing-Auth omission.
+  UpdateGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-update-game'
+      CodeUri: lambda-functions/game/
+      Handler: update-game.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        UpdateGameEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}
+            Method: PUT
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   NextQuestionFunction:
     Type: AWS::Serverless::Function
     Properties:

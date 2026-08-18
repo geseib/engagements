@@ -50,7 +50,7 @@ describe('the create call is built from the payload the dialog raised', () => {
   // precisely how a field like triviaTimer gets added and never noticed.
   test('handleStartNewGame takes the form and passes it to createGameBody', () => {
     expect(host).toMatch(/const handleStartNewGame = async \((\w+)\)/);
-    expect(host).toMatch(/import \{ createGameBody \} from '\.\/config\/createGame'/);
+    expect(host).toMatch(/import \{ createGameBody[^}]*\} from '\.\/config\/createGame'/);
     expect(host).toMatch(/JSON\.stringify\(createGameBody\(/);
   });
 
@@ -59,6 +59,29 @@ describe('the create call is built from the payload the dialog raised', () => {
   // the closure predates the reset.
   test('no longer reads activeCategoryIds out of the pre-reset closure', () => {
     expect(host).not.toMatch(/Array\.from\(activeCategoryIds\)/);
+  });
+});
+
+describe('the edit flow is wired, not just built', () => {
+  // rejects: the gap this file exists for — a finished edit dialog and a
+  // finished PUT handler with nothing joining them, shipped as dead code the
+  // way the OAuth return-path change was.
+  test('the history panel\'s Edit is wired to a handler that fetches the host prefill', () => {
+    expect(host).toMatch(/onEdit=\{editGameFromHistory\}/);
+    expect(host).toMatch(/games\/\$\{selectedGameId\}\?role=host/);
+  });
+
+  test('the dialog is mounted in edit mode from the fetched values', () => {
+    expect(host).toMatch(/mode="edit"/);
+    expect(host).toMatch(/initialValues=\{editTarget\.values\}/);
+  });
+
+  // rejects: rebuilding the PUT body inline in GameHostPage — precisely how a
+  // field drifts off the tested wire shape and is silently ignored by the
+  // backend's whitelist.
+  test('saving sends updateGameBody, and nothing hand-rolled', () => {
+    expect(host).toMatch(/import \{ createGameBody, updateGameBody \} from '\.\/config\/createGame'/);
+    expect(host).toMatch(/JSON\.stringify\(updateGameBody\(/);
   });
 });
 

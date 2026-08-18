@@ -41,7 +41,7 @@ import {
   classifyAISummaryFailure, shouldAutoRetry, autoRetryDelayMs, isOnline,
   AI_NOTIFICATION_TIMEOUT_MS, AI_POLL_ATTEMPTS, AI_POLL_INTERVAL_MS,
 } from './utils/aiSummaryRecovery';
-import { createGameBody } from './config/createGame';
+import { createGameBody, updateGameBody } from './config/createGame';
 import { gameTypeMeta, gameTypeLabel } from './config/gameTypes';
 import {
   hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
@@ -467,6 +467,14 @@ function GameHostPage() {
   
   // New Game Dialog
   const [showNewGameDialog, setShowNewGameDialog] = useState(false);
+  /*
+    THE SESSION BEING EDITED from history — `{ gameId, values }` or null, where
+    `values` is what GET /games/{id}?role=host returned (the prefill).
+    Deliberately NOT the page's own eventTitle/selectedSetId state: an edit
+    targets a session that need not be the one on stage, and must not disturb
+    it. Non-null renders <GameSetupDialog mode="edit"> over the history modal.
+  */
+  const [editTarget, setEditTarget] = useState(null);
   /*
     THE SET THE HOST WAS LAST RUNNING, held across Switch game.
 
@@ -3708,6 +3716,59 @@ Focus on actionable business strategy insights.`;
     }
   };
   
+  /*
+    EDIT A SESSION BEFORE IT STARTS, from the history list. Prefill comes from
+    the server, not from the row: the list rows carry no details/aiContext/
+    persona, and inventing a prefill from partial data would blank fields on
+    save. authFetch on both calls — GET for the host branch, PUT because the
+    update route carries the Cognito authorizer.
+  */
+  const editGameFromHistory = async (selectedGameId) => {
+    try {
+      const res = await authFetch(`${API_BASE}games/${selectedGameId}?role=host`);
+      if (!res.ok) throw new Error(`Failed to load session: ${res.status}`);
+      const values = await res.json();
+      if (values.started) {
+        // The list can lag a start made from another tab; the backend would
+        // refuse the PUT anyway, so say it before offering a form.
+        alert('That session has already started and can no longer be edited.');
+        return;
+      }
+      setEditTarget({ gameId: selectedGameId, values });
+    } catch (err) {
+      console.error('❌ Error loading session for edit:', err);
+      alert(`Failed to load session for editing: ${err.message}`);
+    }
+  };
+
+  const handleSaveGameEdits = async (form) => {
+    if (!editTarget) return;
+    const targetId = editTarget.gameId;
+    try {
+      const res = await authFetch(`${API_BASE}games/${targetId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateGameBody(form)),
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.error || `${res.status}`);
+      }
+      console.log(`✅ HOST: Session ${targetId} updated`);
+      setEditTarget(null);
+      // The edited session may be the one on stage — keep the stage's own
+      // title in step rather than showing the old name until the next load.
+      if (targetId === gameId) setEventTitle(form.title);
+      localStorage.setItem(`game_${targetId}_title`, form.title);
+      // The history table reads the GAMES index row the backend just
+      // mirrored onto; refetch so the list shows what actually landed.
+      await fetchGamesList();
+    } catch (err) {
+      console.error('❌ Error saving session edits:', err);
+      alert(`Failed to save changes: ${err.message}`);
+    }
+  };
+
   const copyPlayerUrl = (gameId) => {
     const playerUrl = `${window.location.origin}/player?gameId=${gameId}`;
     navigator.clipboard.writeText(playerUrl).then(() => {
@@ -4185,6 +4246,28 @@ Focus on actionable business strategy insights.`;
   }
 
 
+  /*
+    THE EDIT DIALOG — the same <GameSetupDialog>, pointed at an existing
+    unstarted session. BEFORE the history branch below, because both are early
+    returns and Edit is pressed from inside the history modal: this branch
+    winning is what puts the form on screen, and clearing `editTarget` is what
+    puts the history list back. The dialog stays pure-props: the prefill was
+    fetched by editGameFromHistory and travels in as `initialValues`.
+  */
+  if (editTarget) {
+    return (
+      <GameSetupDialog
+        mode="edit"
+        initialValues={editTarget.values}
+        questionSets={questionSets}
+        personas={personas}
+        onFormatChange={handleSetupFormatChange}
+        onCancel={() => setEditTarget(null)}
+        onCreate={handleSaveGameEdits}
+      />
+    );
+  }
+
   // Render the game history modal if it's being shown
   if (showReportsModal) {
     /*
@@ -4232,6 +4315,7 @@ Focus on actionable business strategy insights.`;
             onReport={generateReportForGame}
             onOpen={selectGameFromHistory}
             onStart={startGameFromHistory}
+            onEdit={editGameFromHistory}
             onClose={() => {
               setShowReportsModal(false);
               if (reportsModalMode === 'select' && isLobbyState(gameState) && lessonNumber === 0) {

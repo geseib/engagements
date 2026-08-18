@@ -49,9 +49,12 @@ import { resolveGameType, gameTypeLabel, gameTypeMeta } from '../config/gameType
 
 /** Which primary actions a row offers, given whether it has been started. */
 export function rowActions(session) {
+  // Edit exists exactly while Start does: PUT /games/{id} refuses any session
+  // whose STATE is not CREATED, so offering Edit on a started row would be a
+  // button whose only outcome is a 400.
   return session.started
-    ? { open: false, start: false, continue: true, report: true }
-    : { open: true, start: true, continue: false, report: false };
+    ? { open: false, start: false, continue: true, report: true, edit: false }
+    : { open: true, start: true, continue: false, report: false, edit: true };
 }
 
 /** Case-insensitive match over the fields a host would actually search by. */
@@ -84,6 +87,7 @@ export default function SessionHistoryPanel({
   onReport = () => {},
   onOpen = () => {},
   onStart = () => {},
+  onEdit = () => {},
   onClose = () => {},
 }) {
   const [search, setSearch] = useState('');
@@ -281,6 +285,22 @@ export default function SessionHistoryPanel({
                           title={`Read the report for "${title}"`}
                         >
                           <Icon name="ChartBar" weight="bold" size={14} /> Report
+                        </button>
+                      )}
+                      {acts.edit && (
+                        /*
+                          EDIT IS NOT OPEN. Open loads the session onto the
+                          stage; Edit changes what the session IS — title,
+                          details, voice, anonymity — via PUT /games/{id},
+                          which only a session that has not started accepts.
+                        */
+                        <button
+                          type="button"
+                          className="shist__btn shist__btn--sm"
+                          onClick={() => onEdit(session.gameId, title)}
+                          title={`Edit "${title}" — its title, details and settings`}
+                        >
+                          <Icon name="PencilSimple" weight="bold" size={14} /> Edit
                         </button>
                       )}
                       {acts.open && (

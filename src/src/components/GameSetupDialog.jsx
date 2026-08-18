@@ -60,6 +60,18 @@ import HostQuestionSetsDialog from './HostQuestionSetsDialog';
 import Modal from './Modal';
 
 export default function GameSetupDialog({
+  /*
+    'create' (default) | 'edit'. Edit is the same form pointed at an EXISTING
+    unstarted session: the page fetches `GET /games/{id}?role=host`, hands the
+    result in as `initialValues`, and this component seeds its state from it.
+    Still pure-props — no fetch enters this file — and in edit mode the fields
+    the backend's PUT whitelist refuses (format, question set, categories,
+    shuffle) are shown disabled with a note, not hidden, so the host can see
+    what the session is without being able to break its pinned rows.
+  */
+  mode = 'create',
+  /** What GET /games/{id}?role=host returned — the host branch of get-game.js. */
+  initialValues = null,
   isFirstEngagement = true,
   eventTitle = '',
   onEventTitleChange,
@@ -83,18 +95,46 @@ export default function GameSetupDialog({
   onCancel,
   onCreate,
 }) {
-  const [engagementType, setEngagementType] = useState('call-and-answer');
-  const [newGameSetId, setNewGameSetId] = useState(initialSetId || '');
-  const [eventDetails, setEventDetails] = useState('');
-  const [gameAiContext, setGameAiContext] = useState('');
-  const [newGamePersonaId, setNewGamePersonaId] = useState('');
-  const [randomizeQuestions, setRandomizeQuestions] = useState(true);
-  const [anonymousResponses, setAnonymousResponses] = useState(true);
+  const isEdit = mode === 'edit';
+  const seed = initialValues || {};
+
+  // Seeded once, not controlled — the dialog is rendered by an early return,
+  // so each open mounts fresh and the initializers run against that open's
+  // `initialValues`. Defaults match get-game.js's own default-ON rule: only an
+  // explicit false reads as off.
+  const [engagementType, setEngagementType] = useState(
+    isEdit ? (seed.gameType || 'call-and-answer') : 'call-and-answer'
+  );
+  const [newGameSetId, setNewGameSetId] = useState(
+    isEdit ? (seed.questionSetId || '') : (initialSetId || '')
+  );
+  const [eventDetails, setEventDetails] = useState(isEdit ? (seed.details || '') : '');
+  const [gameAiContext, setGameAiContext] = useState(isEdit ? (seed.aiContext || '') : '');
+  const [newGamePersonaId, setNewGamePersonaId] = useState(isEdit ? (seed.personaId || '') : '');
+  const [randomizeQuestions, setRandomizeQuestions] = useState(
+    isEdit ? seed.randomizeQuestions !== false : true
+  );
+  const [anonymousResponses, setAnonymousResponses] = useState(
+    isEdit ? seed.anonymousUntilReveal !== false : true
+  );
   const [showSetsDialog, setShowSetsDialog] = useState(false);
   /** Sets seen by <HostQuestionSetsDialog>, including any just created. */
   const [localSets, setLocalSets] = useState(null);
 
-  const canCreate = Boolean(newGameSetId) && eventTitle.trim().length > 0;
+  /*
+    In edit mode the title is LOCAL, seeded from the session being edited. The
+    create flow's `eventTitle` stays on the page because the live host screen
+    reads it (see the header) — but an edit targets a session that is NOT the
+    one on stage, and typing here must not rename the page's current session.
+  */
+  const [localTitle, setLocalTitle] = useState(isEdit ? (seed.title || '') : '');
+  const title = isEdit ? localTitle : eventTitle;
+  const changeTitle = (value) => {
+    if (isEdit) setLocalTitle(value);
+    else onEventTitleChange?.(value);
+  };
+
+  const canCreate = Boolean(newGameSetId) && title.trim().length > 0;
 
   // Merged by id, page copy first. A set the host just made exists only in
   // `localSets` until the page next re-reads; a set the page already knows about
@@ -134,7 +174,7 @@ export default function GameSetupDialog({
   const submit = () => {
     if (!canCreate) return;
     onCreate?.({
-      title: eventTitle,
+      title,
       gameType: engagementType,
       setId: newGameSetId,
       categoryIds: Array.from(activeCategoryIds || []),
@@ -170,7 +210,11 @@ export default function GameSetupDialog({
         />
       ) : null}
     >
-      <h2 id="gsd-heading">{isFirstEngagement ? 'New engagement' : 'Start a new engagement'}</h2>
+      <h2 id="gsd-heading">
+        {isEdit
+          ? 'Edit session'
+          : (isFirstEngagement ? 'New engagement' : 'Start a new engagement')}
+      </h2>
 
       <div className="dialog-content">
         <div className="form-group">
@@ -178,8 +222,8 @@ export default function GameSetupDialog({
           <input
             id="gsd-title"
             type="text"
-            value={eventTitle}
-            onChange={(e) => onEventTitleChange?.(e.target.value)}
+            value={title}
+            onChange={(e) => changeTitle(e.target.value)}
             placeholder="e.g. Q3 Leadership Offsite — Pricing Strategy"
             className="dialog-input"
           />
@@ -197,6 +241,7 @@ export default function GameSetupDialog({
                 type="button"
                 className={`gsd-pill${type.id === engagementType ? ' on' : ''}`}
                 aria-pressed={type.id === engagementType}
+                disabled={isEdit}
                 onClick={() => chooseFormat(type.id)}
               >
                 {type.label}
@@ -207,6 +252,18 @@ export default function GameSetupDialog({
               app — dead data that answers "what is Wavelength?" for the price
               of one line. */}
           <p className="gsd-blurb">{gameTypeMeta(engagementType).blurb}</p>
+          {isEdit && (
+            /* DISABLED, NOT HIDDEN, AND THE NOTE SAYS WHY. The format, set and
+               categories pin derived rows at create time (question-set version,
+               per-category order shuffles, category state); the PUT whitelist
+               refuses them, so offering live controls here would be a form
+               that lies about what saving does. Phase 2, if ever, rebuilds
+               those rows. */
+            <small className="dialog-help-text">
+              The format, question set and categories are fixed once a session is
+              created. Create a new session to change them.
+            </small>
+          )}
         </div>
 
         <div className="gsd-row">
@@ -217,6 +274,7 @@ export default function GameSetupDialog({
               value={newGameSetId}
               onChange={(e) => chooseSet(e.target.value)}
               className="dialog-select"
+              disabled={isEdit}
             >
               <option value="">Select a question set...</option>
               {setsForType.map((set) => (
@@ -224,20 +282,29 @@ export default function GameSetupDialog({
                   {set.name} ({set.totalQuestions} questions){imageMarkerSuffix(set.hasImages)}
                 </option>
               ))}
+              {/* Editing a session whose set the page's list does not carry —
+                  a retired set, or a list fetched for another format — must
+                  still DISPLAY the pinned set rather than a blank control. */}
+              {isEdit && newGameSetId && !setsForType.some((s) => s.id === newGameSetId) && (
+                <option value={newGameSetId}>{newGameSetId}</option>
+              )}
             </select>
-            {/* THE ENTRY POINT. Always offered, not only when the list is
-                empty: "I need to fix the title on the set I made last week"
-                is as common as "I have none", and an affordance that appears
-                only in the failure state is one nobody finds in the success
-                state. */}
-            <button
-              type="button"
-              className="gsd-setlink"
-              onClick={() => setShowSetsDialog(true)}
-            >
-              {setsForType.length === 0 ? 'Make a question set' : 'Your question sets'}
-            </button>
-            {setsForType.length === 0 && (
+            {/* THE ENTRY POINT. Always offered in create mode, not only when
+                the list is empty: "I need to fix the title on the set I made
+                last week" is as common as "I have none", and an affordance
+                that appears only in the failure state is one nobody finds in
+                the success state. Absent in edit mode, where the set cannot
+                be changed anyway. */}
+            {!isEdit && (
+              <button
+                type="button"
+                className="gsd-setlink"
+                onClick={() => setShowSetsDialog(true)}
+              >
+                {setsForType.length === 0 ? 'Make a question set' : 'Your question sets'}
+              </button>
+            )}
+            {!isEdit && setsForType.length === 0 && (
               /* The old copy sent the host to "the question set editor" —
                  which is the admin console, a screen most hosts cannot open.
                  It named a dead end for the exact person most likely to read
@@ -263,6 +330,7 @@ export default function GameSetupDialog({
                       type="button"
                       className={`category-button ${activeCategoryIds.has(category.name) ? 'selected' : ''}`}
                       aria-pressed={activeCategoryIds.has(category.name)}
+                      disabled={isEdit}
                       onClick={() => onToggleCategory?.(category.name)}
                     >
                       <span className="category-name">{category.name}</span>
@@ -271,9 +339,11 @@ export default function GameSetupDialog({
                   ))}
                 </div>
                 <small className="dialog-help-text">
-                  {activeCategoryIds.size === 0
-                    ? 'No categories selected - all categories will be included'
-                    : `${activeCategoryIds.size} category(ies) selected`}
+                  {isEdit
+                    ? 'Fixed once the session is created. Toggle categories live from the host screen instead.'
+                    : (activeCategoryIds.size === 0
+                      ? 'No categories selected - all categories will be included'
+                      : `${activeCategoryIds.size} category(ies) selected`)}
                 </small>
               </div>
             </div>
@@ -342,9 +412,14 @@ export default function GameSetupDialog({
 
         <div className={`gsd-opt${randomizeQuestions ? ' is-on' : ''}`}>
           <label className="gsd-opt-head">
+            {/* Disabled in edit mode: the per-category order rows were
+                shuffled (or not) when the session was created, so the PUT
+                whitelist refuses this flag — a live checkbox here would
+                toggle something that silently fails to save. */}
             <input
               type="checkbox"
               checked={randomizeQuestions}
+              disabled={isEdit}
               onChange={(e) => setRandomizeQuestions(e.target.checked)}
             />
             <span className="gsd-opt-name">Shuffle the question order</span>
@@ -356,6 +431,12 @@ export default function GameSetupDialog({
               ? 'Questions are drawn at random from the categories you picked, rather than in the order they were written.'
               : 'Questions are asked in order, completing each category before moving to the next.'}
           </p>
+          {isEdit && (
+            <p className="gsd-opt-limit">
+              Fixed once the session is created — the question order was drawn when
+              this session was set up.
+            </p>
+          )}
         </div>
 
         <h3 className="gsd-section">Context for Workie</h3>
@@ -427,7 +508,7 @@ export default function GameSetupDialog({
         {/* The guard the mockup drops. Without a set the game has no
             questions; without a title the live screen has nothing to name. */}
         <button type="button" className="btn-primary" onClick={submit} disabled={!canCreate}>
-          Create engagement
+          {isEdit ? 'Save changes' : 'Create engagement'}
         </button>
       </div>
     </Modal>

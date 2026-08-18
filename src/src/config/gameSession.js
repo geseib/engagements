@@ -28,8 +28,11 @@
  *     since the extraction they live inside components/GameSetupDialog.jsx,
  *     which unmounts when the dialog closes: engagementType, newGameSetId,
  *     randomizeQuestions, anonymousResponses, eventDetails, gameAiContext,
- *     newGamePersonaId, localSets. (This list named five and omitted three until the
- *     extraction. `__tests__/gameSession.test.js` now fails if the dialog owns
+ *     newGamePersonaId, localSets, localTitle. (This list named five and omitted three until the
+ *     extraction. `localTitle` is the edit-mode title — an edit targets a
+ *     session from history, not the one on stage, so it must not live in the
+ *     page's `eventTitle`; it seeds from `initialValues` and dies with the
+ *     dialog. `__tests__/gameSession.test.js` now fails if the dialog owns
  *     a key this file is responsible for, or owns one this list does not name.
  *     `triviaTimer` was on the old list and is deleted outright — the backend
  *     never read it. `localSets` joined that list with the host's question-set

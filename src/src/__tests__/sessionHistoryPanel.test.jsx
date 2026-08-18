@@ -43,7 +43,7 @@ const fresh = {
 const mount = (props = {}) => {
   const handlers = {
     onCopyPlayerUrl: jest.fn(), onInvite: jest.fn(), onReport: jest.fn(),
-    onOpen: jest.fn(), onStart: jest.fn(), onClose: jest.fn(),
+    onOpen: jest.fn(), onStart: jest.fn(), onEdit: jest.fn(), onClose: jest.fn(),
   };
   const utils = render(
     <SessionHistoryPanel sessions={[started, fresh]} {...handlers} {...props} />
@@ -54,16 +54,19 @@ const mount = (props = {}) => {
 const rowFor = (title) => screen.getByText(title).closest('tr');
 
 describe('§1 the pure rules', () => {
-  test('a started session offers Continue and a report, never Start', () => {
+  test('a started session offers Continue and a report, never Start or Edit', () => {
+    // No edit: PUT /games/{id} refuses any session whose STATE is not
+    // CREATED, so an Edit button here could only ever produce a 400.
     expect(rowActions(started)).toEqual({
-      open: false, start: false, continue: true, report: true,
+      open: false, start: false, continue: true, report: true, edit: false,
     });
   });
 
-  test('an unstarted session offers Open AND Start, and no report', () => {
-    // No report, because there is nothing to report on yet.
+  test('an unstarted session offers Open, Start AND Edit, and no report', () => {
+    // No report, because there is nothing to report on yet. Edit, because
+    // "edit a session before it starts" is exactly this window.
     expect(rowActions(fresh)).toEqual({
-      open: true, start: true, continue: false, report: false,
+      open: true, start: true, continue: false, report: false, edit: true,
     });
   });
 
@@ -182,6 +185,35 @@ describe('§3 a session can be opened without being started', () => {
       .toBeInTheDocument();
     expect(within(rowFor('Pricing Workshop')).queryByRole('button', { name: /Report/i }))
       .toBeNull();
+  });
+});
+
+describe('§3b a session can be edited before it starts', () => {
+  test('an unstarted session offers Edit beside Open and Start', () => {
+    mount();
+    expect(within(rowFor('Pricing Workshop')).getByRole('button', { name: /Edit/i }))
+      .toBeInTheDocument();
+  });
+
+  /*
+    THE SAME TRAP AS OPEN-WIRED-TO-START, one row over: an Edit button wired to
+    onOpen (or onStart) satisfies the render test above and reproduces the bug
+    this feature exists to fix — the only ways into an unstarted session being
+    "load it" or "let the room in".
+  */
+  test('Edit raises onEdit — not onOpen, and never onStart', () => {
+    const { onEdit, onOpen, onStart } = mount();
+    fireEvent.click(within(rowFor('Pricing Workshop')).getByRole('button', { name: /Edit/i }));
+    expect(onEdit).toHaveBeenCalledWith('9137', 'Pricing Workshop');
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(onStart).not.toHaveBeenCalled();
+  });
+
+  test('a started session has no Edit button — the backend would refuse it', () => {
+    // rejects: rendering Edit unconditionally, which offers a control whose
+    // only possible outcome on a started row is a 400 from PUT /games/{id}.
+    mount();
+    expect(within(rowFor('Q3 Offsite')).queryByRole('button', { name: /Edit/i })).toBeNull();
   });
 });
 
