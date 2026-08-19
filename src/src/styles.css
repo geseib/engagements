@@ -11191,6 +11191,37 @@ body {
    an option that is on), which is what carries the design's intent across.
    =========================================================== */
 
+/* THE DIALOG'S X. The card is the positioning context; the button sits where
+   every other dialog on this site puts its close, at top right. 34px square
+   comfortably clears the 24px minimum a pointer target needs on a laptop
+   surface, and the glyph is text so it inherits the theme. */
+.new-game-dialog { position: relative; }
+
+.gsd-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--muted, #5E6167);
+  cursor: pointer;
+}
+
+.gsd-close:hover { background: rgba(0, 0, 0, 0.07); color: var(--text, #1B2942); }
+
+.gsd-close:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .gsd .dialog-content {
   display: flex;
   flex-direction: column;

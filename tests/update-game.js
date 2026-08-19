@@ -175,6 +175,23 @@ const fakeDoc = {
         }
         return { UnprocessedItems: {} };
       }
+      case 'transact': {
+        /*
+          Item-by-item through the same engine. Atomicity is NOT emulated —
+          these tests assert final state, never isolation — but the items must
+          actually APPLY: this case was missing, the default arm returned {}
+          for every TransactWriteCommand, and toggle-category's whole write
+          (two Updates in one transaction) vanished silently. A handler under
+          test 200'd without changing a single row, and the first assertion
+          about its effect is what caught it.
+        */
+        for (const t of inp.TransactItems || []) {
+          if (t.Put) await fakeDoc.send({ type: 'put', input: t.Put });
+          if (t.Update) await fakeDoc.send({ type: 'update', input: t.Update });
+          if (t.Delete) await fakeDoc.send({ type: 'delete', input: t.Delete });
+        }
+        return {};
+      }
       default:
         return { Items: [], Count: 0 };
     }
@@ -495,6 +512,169 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
     assert.strictEqual(info.details, 'Original details');
     assert.strictEqual(info.aiContext, 'Sharper context');
     assert(!('accessCode' in info), 'accessCode came back — get-game.js:79-92 records why it must not');
+  });
+
+  loud();
+  console.log('\ncategories: the enabled subset is editable; the set is not\n');
+
+  /*
+    A REAL SET WITH REAL MASKS. The categories live in the SET# partition (in
+    SK order — that order IS the bit-position convention), and the game is
+    created through the real create handler so its STATE#CATS row is the one
+    schema-compliant-manager actually writes. A hand-built mask fixture here
+    would test my idea of the convention against my idea of the convention.
+  */
+  quiet();
+  const CATS = ['Alpha', 'Bravo', 'Charlie', 'Delta'];
+  CATS.forEach((name, i) => {
+    store.set(key('SET#set-cats', `CATEGORY#c00${i + 1}`), {
+      PK: 'SET#set-cats', SK: `CATEGORY#c00${i + 1}`, Name: name, QuestionCount: 5,
+    });
+  });
+  const catGame = await createGame({
+    eventTitle: 'Category session', gameType: 'call-and-answer',
+    questionSetId: 'set-cats', selectedCategories: ['c001', 'c002', 'c003', 'c004'],
+  });
+  const CG = catGame.body.gameId;
+  loud();
+
+  const catsRowOf = (id) => store.get(key(`GAME#${id}`, 'STATE#CATS'));
+
+  await acheck('the fixture is honest: create wrote all-enabled masks', async () => {
+    // If this fails, the test environment diverged from create's real output
+    // and every assertion below would be exercising a fiction.
+    assert.strictEqual(catsRowOf(CG)['HostMask1-8'], '11110000');
+  });
+
+  await acheck('deselecting categories rewrites the HostMask bits', async () => {
+    const res = await putGame(CG, { categoryIds: ['c001', 'c003'] });
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    // Bits are POSITIONAL in SK order: c001 -> bit 1, c003 -> bit 3.
+    assert.strictEqual(catsRowOf(CG)['HostMask1-8'], '10100000');
+  });
+
+  await acheck('…and SelectedCategories on METADATA agrees with the masks', async () => {
+    // Two representations of one fact; an edit that moves only one of them
+    // leaves the next reader to discover which is lying.
+    assert.deepStrictEqual(metadataOf(CG).SelectedCategories, ['c001', 'c003']);
+  });
+
+  await acheck('category NAMES are accepted and normalised to ids', async () => {
+    // Both spellings are live in stored sessions — create itself matches
+    // id-or-name — so the edit path must too, and must store ONE of them.
+    const res = await putGame(CG, { categoryIds: ['Bravo', 'Delta'] });
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(catsRowOf(CG)['HostMask1-8'], '01010000');
+    assert.deepStrictEqual(metadataOf(CG).SelectedCategories, ['c002', 'c004']);
+  });
+
+  await acheck('an empty list is refused — a session with no questions is not a thing to save', async () => {
+    const before = catsRowOf(CG)['HostMask1-8'];
+    const res = await putGame(CG, { categoryIds: [] });
+    assert.strictEqual(res.status, 400, JSON.stringify(res.body));
+    assert.strictEqual(catsRowOf(CG)['HostMask1-8'], before, 'the refusal still wrote');
+  });
+
+  await acheck('a list that misses the set entirely is refused, not saved as nothing-enabled', async () => {
+    // A stale tab holding another set's ids. The open-enum failure would be a
+    // 200 with every bit cleared and a session that silently has no questions.
+    const before = catsRowOf(CG)['HostMask1-8'];
+    const res = await putGame(CG, { categoryIds: ['zulu-1', 'zulu-2'] });
+    assert.strictEqual(res.status, 400, JSON.stringify(res.body));
+    assert.strictEqual(catsRowOf(CG)['HostMask1-8'], before);
+  });
+
+  await acheck('categories combine with ordinary fields in one PUT', async () => {
+    const res = await putGame(CG, { eventTitle: 'Renamed with cats', categoryIds: ['c001'] });
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(metadataOf(CG).Title, 'Renamed with cats');
+    assert.strictEqual(catsRowOf(CG)['HostMask1-8'], '10000000');
+  });
+
+  await acheck('a set with no categories at all refuses every id as unknown', async () => {
+    // 'set-none' has no CATEGORY# rows, so any id misses and the no-match 400
+    // fires before the mask write is even staged. (A first draft of this test
+    // claimed to cover the missing-STATE#CATS 409 and actually covered this —
+    // the 400 arrives earlier in the handler, so the 409 needs the NEXT test,
+    // where the set is real and only the game's row is missing.)
+    quiet();
+    const legacy = await createGame({
+      eventTitle: 'Legacy session', gameType: 'call-and-answer', questionSetId: 'set-none',
+    });
+    loud();
+    const res = await putGame(legacy.body.gameId, { categoryIds: ['c001'] });
+    assert.strictEqual(res.status, 400, JSON.stringify(res.body));
+  });
+
+  await acheck('a session whose STATE#CATS row is missing is a 409, not a conjured row', async () => {
+    // The true legacy shape: the SET is fine, the GAME predates category
+    // state. The masks write is conditioned on the row existing — refusing
+    // beats creating a bare item without the counts every reader expects.
+    quiet();
+    const preCats = await createGame({
+      eventTitle: 'Pre-cats session', gameType: 'call-and-answer',
+      questionSetId: 'set-cats', selectedCategories: ['c001'],
+    });
+    loud();
+    const preId = preCats.body.gameId;
+    store.delete(key(`GAME#${preId}`, 'STATE#CATS'));
+
+    const res = await putGame(preId, { categoryIds: ['c001'] });
+    assert.strictEqual(res.status, 409, JSON.stringify(res.body));
+    assert.strictEqual(store.get(key(`GAME#${preId}`, 'STATE#CATS')), undefined,
+      'the refusal conjured a STATE#CATS row');
+  });
+
+  loud();
+  console.log('\ntoggle-category: CREATED is a state a host can set up in\n');
+
+  const toggleHandler = require(path.join(REPO, 'lambda-functions', 'game', 'toggle-category.js')).handler;
+  const toggle = async (gameId, body) => {
+    const res = await toggleHandler({ pathParameters: { gameId }, body: JSON.stringify(body) });
+    return { status: res.statusCode, body: JSON.parse(res.body) };
+  };
+
+  await acheck('a CREATED session takes a category toggle', async () => {
+    /*
+      Reported: "going to the session/questions tab appears to let you edit
+      categories but it says you cannot. I think you should be able to."
+      The gate listed STARTED/ASK/VOTE/RESULTS and simply never considered
+      pre-start. Nothing downstream cares — the toggle flips HostMask bits on
+      STATE#CATS, which exists from create time, and start does not rebuild it.
+    */
+    quiet();
+    const fresh = await createGame({
+      eventTitle: 'Pre-start toggling', gameType: 'call-and-answer',
+      questionSetId: 'set-cats', selectedCategories: ['c001', 'c002', 'c003', 'c004'],
+    });
+    loud();
+    const freshId = fresh.body.gameId;
+    assert.strictEqual(store.get(key(`GAME#${freshId}`, 'STATE')).State, 'CREATED',
+      'fixture is not in CREATED — the test would prove nothing');
+
+    quiet();
+    const res = await toggle(freshId, { categoryId: '2', categoryName: 'Bravo', enabled: false });
+    loud();
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(catsRowOf(freshId)['HostMask1-8'], '10110000',
+      `bit 2 should be the one that cleared, got ${JSON.stringify(catsRowOf(freshId))}`);
+  });
+
+  await acheck('an ENDED session still refuses one', async () => {
+    // The masks of a finished session are part of its record.
+    quiet();
+    const done = await createGame({
+      eventTitle: 'Finished', gameType: 'call-and-answer',
+      questionSetId: 'set-cats', selectedCategories: ['c001'],
+    });
+    loud();
+    const doneId = done.body.gameId;
+    const stateRow = store.get(key(`GAME#${doneId}`, 'STATE'));
+    stateRow.State = 'ENDED';
+    quiet();
+    const res = await toggle(doneId, { categoryId: '1', categoryName: 'Alpha', enabled: false });
+    loud();
+    assert.strictEqual(res.status, 400, JSON.stringify(res.body));
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

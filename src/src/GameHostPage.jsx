@@ -3734,7 +3734,40 @@ Focus on actionable business strategy insights.`;
         alert('That session has already started and can no longer be edited.');
         return;
       }
-      setEditTarget({ gameId: selectedGameId, values });
+
+      /*
+        THE CATEGORIES, SO THE DIALOG CAN SHOW AND EDIT THEM. Reported: "the
+        edit doesnt allow chaging the categories or even see the categories" —
+        and it literally could not see them: the edit render passed no
+        `categories` prop, so the grid rendered over an empty list.
+
+        Fetched into editTarget rather than the page's shared `categories`
+        state: that state belongs to the session ON STAGE, and an edit is about
+        a different session — writing over it would repaint the live setup
+        panel with another session's set.
+
+        The selection is derived from the session's own HostMask bits with the
+        same converter the stage restore uses, so what the dialog shows checked
+        is exactly what the selector would play. A session whose masks predate
+        STATE#CATS falls back to everything-enabled, which is what the selector
+        does with it too.
+      */
+      let editCategories = [];
+      try {
+        const catRes = await fetch(`${API_BASE}question-sets/${values.questionSetId}/categories`);
+        if (catRes.ok) editCategories = (await catRes.json()).categories || [];
+      } catch (catErr) {
+        console.warn('⚠️ EDIT: could not load categories for the dialog:', catErr?.message);
+      }
+      const selectedCategoryNames = values.categoryState
+        ? convertBitmaskToCategories(values.categoryState, editCategories)
+        : editCategories.map((c) => c.name);
+
+      setEditTarget({
+        gameId: selectedGameId,
+        values: { ...values, selectedCategoryNames },
+        categories: editCategories,
+      });
     } catch (err) {
       console.error('❌ Error loading session for edit:', err);
       alert(`Failed to load session for editing: ${err.message}`);
@@ -4261,6 +4294,7 @@ Focus on actionable business strategy insights.`;
         initialValues={editTarget.values}
         questionSets={questionSets}
         personas={personas}
+        categories={editTarget.categories || []}
         onFormatChange={handleSetupFormatChange}
         onCancel={() => setEditTarget(null)}
         onCreate={handleSaveGameEdits}

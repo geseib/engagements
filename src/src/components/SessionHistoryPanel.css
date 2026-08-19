@@ -291,9 +291,20 @@
    disappear as the column narrows. */
 .shist__acts > :first-child { margin-left: auto; }
 
+/*
+  UNIFORM WIDTH IS THE ALIGNMENT FIX. Reported: "the buttons are a bit wonky
+  misaligned." The cell wraps (it must — hard rule 9's margin-left:auto pattern
+  needs somewhere to overflow to), and with three buttons of three different
+  natural widths the wrap point differed per row, so every row's buttons landed
+  somewhere slightly different. Two buttons per row now (Edit/Start,
+  Report/Continue) and a shared min-width mean every row lays out identically
+  and the two columns of buttons line up down the table.
+*/
 .shist__btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 96px;
   gap: 5px;
   font: 600 var(--shist-t-label)/1 var(--font-ui);
   padding: 7px 10px;

@@ -23,6 +23,8 @@
  *   visibility          → Visibility       (mirrored onto the GAMES row)
  *   anonymousUntilReveal→ HostPreferences.anonymousUntilReveal (nested path)
  *
+ *   - categoryIds IS accepted (see buildHostMasks) — the enabled SUBSET within
+ *     the pinned set is mask state, not derived state.
  *   - gameType / questionSetId: the create path pins derived rows to them —
  *     QuestionSetVersion on METADATA and the GAMES row, the CATEGORY#*#ORDER
  *     shuffles and STATE#CATS (schema-compliant-manager.js). Changing either
@@ -44,7 +46,8 @@
  * authorizer.js:191 already requires hosts/admins for PUT on a games path.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { resolveSetPartition } = require('./set-version');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -58,8 +61,49 @@ const reply = (statusCode, body) => ({
 
 const VISIBILITIES = ['public', 'private'];
 const EDITABLE_FIELDS = [
-  'eventTitle', 'engagementInfo', 'aiContext', 'personaId', 'visibility', 'anonymousUntilReveal'
+  'eventTitle', 'engagementInfo', 'aiContext', 'personaId', 'visibility', 'anonymousUntilReveal',
+  'categoryIds'
 ];
+
+/**
+ * Rebuild the three HostMask strings from a list of selected categories.
+ *
+ * THE SUBSET IS EDITABLE; THE SET IS NOT. The pinned-fields note above refuses
+ * `questionSetId` because the create path derives rows from it (ORDER shuffles,
+ * STATE#CATS, version pins) that an edit cannot honestly rebuild. WHICH of that
+ * set's categories are enabled is a different kind of fact: it lives entirely
+ * in the HostMask bits that toggle-category.js already flips mid-session, and
+ * in METADATA.SelectedCategories. Nothing derived depends on it — the ORDER
+ * rows exist for every category regardless — so editing it before start is the
+ * same act as toggling it after, done in one write instead of N.
+ *
+ * Reported as: *"the edit doesnt allow chaging the categories or even see the
+ * categories."*
+ *
+ * THE CONVENTION IS CREATE'S, EXACTLY (schema-compliant-manager.js:145-200):
+ * categories in SK order, bit position = index + 1, and a selection may name a
+ * category by ID or by NAME — both spellings are live in stored sessions, so
+ * accepting only one would silently deselect half of history.
+ */
+const buildHostMasks = (allCategories, selectedIds) => {
+  const masks = ['00000000', '00000000', '00000000'];
+  const matched = new Set();
+
+  allCategories.forEach((cat, i) => {
+    const categoryId = String(cat.SK).replace('CATEGORY#', '');
+    const categoryName = cat.CategoryName || cat.Name || '';
+    const isSelected = selectedIds.includes(categoryId) || selectedIds.includes(categoryName);
+    if (!isSelected) return;
+
+    matched.add(categoryId);
+    const which = Math.floor(i / 8);
+    if (which > 2) return; // beyond 24 — the cap the picker already enforces
+    const pos = i % 8;
+    masks[which] = masks[which].substring(0, pos) + '1' + masks[which].substring(pos + 1);
+  });
+
+  return { masks, matched };
+};
 
 exports.handler = async (event) => {
   try {
@@ -173,6 +217,57 @@ exports.handler = async (event) => {
       applied.anonymousUntilReveal = body.anonymousUntilReveal;
     }
 
+    /*
+      Categories are validated and staged HERE, written LAST (below, after the
+      METADATA update succeeds) — the mask write targets a different item
+      (STATE#CATS), and writing it first would leave the two disagreeing if the
+      METADATA update then failed its condition check.
+    */
+    let stagedMasks = null;
+    if ('categoryIds' in body) {
+      if (!Array.isArray(body.categoryIds) || body.categoryIds.length === 0) {
+        // No fallback-to-all here, deliberately. Create treats an empty
+        // selection as "all categories" because the host never saw a picker;
+        // an EDIT with an empty list is a host who deselected everything, and
+        // a session with no reachable questions is not a thing to save.
+        return reply(400, { error: 'categoryIds must name at least one category' });
+      }
+
+      const metadata = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
+      }));
+      if (!metadata.Item) return reply(404, { error: 'Game not found' });
+
+      const resolved = await resolveSetPartition(
+        db, process.env.TABLE_NAME, metadata.Item.QuestionSetId,
+        metadata.Item.QuestionSetVersion
+      );
+      const catQuery = await db.send(new QueryCommand({
+        TableName: process.env.TABLE_NAME,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues: { ':pk': resolved.pk, ':sk': 'CATEGORY#' }
+      }));
+      const allCategories = catQuery.Items || [];
+
+      const { masks, matched } = buildHostMasks(allCategories, body.categoryIds);
+      if (matched.size === 0) {
+        // The whole list missed. A selection from a different set (or a stale
+        // tab) must be refused out loud, not saved as "nothing enabled" — the
+        // open-enum failure where every write succeeds and the session
+        // quietly has no questions.
+        return reply(400, {
+          error: 'None of the given categoryIds exist in this session\'s question set'
+        });
+      }
+
+      names['#selectedCategories'] = 'SelectedCategories';
+      values[':selectedCategories'] = [...matched];
+      sets.push('#selectedCategories = :selectedCategories');
+      applied.categoryIds = [...matched];
+      stagedMasks = masks;
+    }
+
     if (sets.length === 0 && removes.length === 0) {
       return reply(400, {
         error: 'Nothing to update',
@@ -214,6 +309,36 @@ exports.handler = async (event) => {
         return reply(404, { error: 'Game not found', gameId });
       }
       throw err;
+    }
+
+    if (stagedMasks) {
+      /*
+        The masks land on STATE#CATS — the row toggle-category.js flips and
+        every selector reads. attribute_exists guards the legacy session whose
+        row predates the manager: refusing beats creating a bare item that
+        carries masks but none of the counts its readers expect.
+      */
+      try {
+        await db.send(new UpdateCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: 'STATE#CATS' },
+          UpdateExpression: 'SET #m1 = :m1, #m2 = :m2, #m3 = :m3',
+          ExpressionAttributeNames: {
+            '#m1': 'HostMask1-8', '#m2': 'HostMask9-16', '#m3': 'HostMask17-24'
+          },
+          ExpressionAttributeValues: {
+            ':m1': stagedMasks[0], ':m2': stagedMasks[1], ':m3': stagedMasks[2]
+          },
+          ConditionExpression: 'attribute_exists(PK)'
+        }));
+      } catch (err) {
+        if (err.name === 'ConditionalCheckFailedException') {
+          return reply(409, {
+            error: 'This session predates category state and its categories cannot be edited'
+          });
+        }
+        throw err;
+      }
     }
 
     // THE MIRROR. Title and Visibility are duplicated onto the GAMES index row

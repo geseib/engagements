@@ -320,6 +320,10 @@ describe('edit mode', () => {
     usedQuestions: [],
     playedQuestions: [],
     categoryState: null,
+    // Derived by the page from the session's HostMask bits
+    // (editGameFromHistory -> convertBitmaskToCategories) and handed in with
+    // the rest of the seed. Names, because the grid keys on names.
+    selectedCategoryNames: ['Leadership', 'Ops'],
   };
 
   const setupEdit = (values = {}) =>
@@ -352,14 +356,58 @@ describe('edit mode', () => {
   // backend ignores gameType/questionSetId/categories/shuffle, so an enabled
   // picker here would let the host "change" something that silently fails to
   // save — shown disabled, with the note saying why.
-  test('the format, set, category and shuffle controls are disabled, with a note', () => {
+  test('the format, set and shuffle controls are disabled — and categories are NOT', () => {
+    /*
+      Categories were in this locked list, and the owner called it: "the edit
+      doesnt allow chaging the categories or even see the categories... I think
+      you should be able to edit this." The lock was right for format/set/
+      shuffle — the create path pins derived rows to those — but the enabled
+      SUBSET is mask state, the same bits toggle-category flips mid-session,
+      and the PUT now rewrites it. So the grid is live here and stays live.
+    */
     setupEdit();
     expect(pill('Call & Answer')).toBeDisabled();
     expect(pill('Trivia')).toBeDisabled();
     expect(setSelect()).toBeDisabled();
-    expect(screen.getByText('Leadership').closest('button')).toBeDisabled();
+    expect(screen.getByText('Leadership').closest('button')).not.toBeDisabled();
     expect(screen.getByRole('checkbox', { name: /shuffle the question order/i })).toBeDisabled();
     expect(screen.getAllByText(/fixed once a session is created/i).length).toBeGreaterThan(0);
+  });
+
+  test('a category toggled in edit mode flips locally and lands in the payload', () => {
+    const { props } = setupEdit();
+    // Seeded from the session's own masks: Leadership arrives selected.
+    expect(screen.getByText('Leadership').closest('button')).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByText('Leadership').closest('button'));
+    expect(screen.getByText('Leadership').closest('button')).toHaveAttribute('aria-pressed', 'false');
+    // The page's own toggle handler is NOT raised — edit owns its selection,
+    // so editing session B cannot repaint the setup panel of session A on
+    // stage behind the dialog.
+    expect(props.onToggleCategory).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(props.onCreate).toHaveBeenCalledWith(expect.objectContaining({
+      categoryIds: ['Ops'],
+    }));
+  });
+
+  test('deselecting every category blocks Save instead of saving a question-less session', () => {
+    const { props } = setupEdit();
+    fireEvent.click(screen.getByText('Leadership').closest('button'));
+    fireEvent.click(screen.getByText('Ops').closest('button'));
+    expect(screen.getByText(/select at least one category/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(props.onCreate).not.toHaveBeenCalled();
+  });
+
+  test('the header X closes without saving', () => {
+    // Reported: "when editing, there is no 'x' to close the box without saving
+    // changes." Same discard Escape always offered, where people look for it.
+    const { props } = setupEdit();
+    fireEvent.click(screen.getByRole('button', { name: /close without saving/i }));
+    expect(props.onCancel).toHaveBeenCalled();
+    expect(props.onCreate).not.toHaveBeenCalled();
   });
 
   test('the question-sets entry point is absent — the set cannot change here', () => {
@@ -405,6 +453,9 @@ describe('edit mode', () => {
       aiContext: 'Mid-market SaaS.',
       personaId: '',
       anonymousResponses: true,
+      // The seeded selection travels even when untouched — an edit that only
+      // renamed the session must not silently clear its category masks.
+      categoryIds: ['Leadership', 'Ops'],
     }));
   });
 

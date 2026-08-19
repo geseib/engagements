@@ -128,6 +128,25 @@ export default function GameSetupDialog({
     one on stage, and typing here must not rename the page's current session.
   */
   const [localTitle, setLocalTitle] = useState(isEdit ? (seed.title || '') : '');
+  /*
+    EDIT OWNS ITS OWN CATEGORY SELECTION. In create mode the PAGE owns
+    `activeCategoryIds` (the live host screen reads them); an edit is about a
+    session that is not on stage, so a local Set keeps the two from
+    contaminating each other. Seeded from `seed.selectedCategoryNames`, which
+    the page derives from the session's own HostMask bits
+    (convertBitmaskToCategories) — the same bits this save will rewrite.
+  */
+  const [editCategoryNames, setEditCategoryNames] = useState(
+    () => new Set(isEdit ? (seed.selectedCategoryNames || []) : [])
+  );
+  const toggleEditCategory = (name) => {
+    setEditCategoryNames((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  };
+  const selectedCats = isEdit ? editCategoryNames : activeCategoryIds;
   const title = isEdit ? localTitle : eventTitle;
   const changeTitle = (value) => {
     if (isEdit) setLocalTitle(value);
@@ -173,11 +192,15 @@ export default function GameSetupDialog({
 
   const submit = () => {
     if (!canCreate) return;
+    // An edit that deselected every category is refused HERE, not sent and
+    // bounced: the backend would 400 it, but the host is mid-form and the
+    // helper line under the grid already says why.
+    if (isEdit && categories.length > 0 && editCategoryNames.size === 0) return;
     onCreate?.({
       title,
       gameType: engagementType,
       setId: newGameSetId,
-      categoryIds: Array.from(activeCategoryIds || []),
+      categoryIds: Array.from(selectedCats || []),
       eventDetails,
       aiContext: gameAiContext,
       personaId: newGamePersonaId,
@@ -210,6 +233,23 @@ export default function GameSetupDialog({
         />
       ) : null}
     >
+      {/*
+        THE X — reported missing: "when editing, there is no 'x' to close the
+        box without saving changes." Same exit Escape already offers (the Modal
+        wires it), surfaced where people actually look for it. It DISCARDS, and
+        that is consistent: this dialog has never confirmed an Escape either,
+        and two exits with different rules would make one of them a trap.
+        The backdrop stays inert for the reason the Modal props state.
+      */}
+      <button
+        type="button"
+        className="gsd-close"
+        onClick={() => onCancel?.()}
+        aria-label={isEdit ? 'Close without saving changes' : 'Close without creating'}
+        title={isEdit ? 'Close without saving changes' : 'Close without creating'}
+      >
+        ×
+      </button>
       <h2 id="gsd-heading">
         {isEdit
           ? 'Edit session'
@@ -328,10 +368,9 @@ export default function GameSetupDialog({
                     <button
                       key={category.name}
                       type="button"
-                      className={`category-button ${activeCategoryIds.has(category.name) ? 'selected' : ''}`}
-                      aria-pressed={activeCategoryIds.has(category.name)}
-                      disabled={isEdit}
-                      onClick={() => onToggleCategory?.(category.name)}
+                      className={`category-button ${selectedCats.has(category.name) ? 'selected' : ''}`}
+                      aria-pressed={selectedCats.has(category.name)}
+                      onClick={() => (isEdit ? toggleEditCategory(category.name) : onToggleCategory?.(category.name))}
                     >
                       <span className="category-name">{category.name}</span>
                       <span className="category-count">({category.questionCount})</span>
@@ -339,8 +378,18 @@ export default function GameSetupDialog({
                   ))}
                 </div>
                 <small className="dialog-help-text">
+                  {/*
+                    Edit and create disagree about what an empty selection MEANS,
+                    and the copy has to carry the difference. Create's empty set
+                    is "the host never opened the picker" and falls back to all;
+                    an edit that ends empty is a host who deselected everything,
+                    and the save button below refuses it rather than storing a
+                    session with no reachable questions.
+                  */}
                   {isEdit
-                    ? 'Fixed once the session is created. Toggle categories live from the host screen instead.'
+                    ? (editCategoryNames.size === 0
+                      ? 'Select at least one category — a session with none has no questions to ask.'
+                      : `${editCategoryNames.size} of ${categories.length} categories enabled`)
                     : (activeCategoryIds.size === 0
                       ? 'No categories selected - all categories will be included'
                       : `${activeCategoryIds.size} category(ies) selected`)}

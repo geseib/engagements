@@ -58,15 +58,24 @@ describe('§1 the pure rules', () => {
     // No edit: PUT /games/{id} refuses any session whose STATE is not
     // CREATED, so an Edit button here could only ever produce a 400.
     expect(rowActions(started)).toEqual({
-      open: false, start: false, continue: true, report: true, edit: false,
+      start: false, continue: true, report: true, edit: false,
     });
   });
 
-  test('an unstarted session offers Open, Start AND Edit, and no report', () => {
-    // No report, because there is nothing to report on yet. Edit, because
-    // "edit a session before it starts" is exactly this window.
+  test('an unstarted session offers Edit and Start — two actions, not three', () => {
+    /*
+      No report, because there is nothing to report on yet. Edit, because
+      "edit a session before it starts" is exactly this window.
+
+      NO OPEN, and this assertion used to demand it. The owner, on the
+      three-button row: "i think thats too many. we want to edit a session
+      without allowing players into it... and then we want to start a session."
+      Open existed so setup was reachable without /start, back when the Edit
+      dialog could not touch categories; Edit grew categories and Open's job
+      disappeared. rowActions carries the full argument.
+    */
     expect(rowActions(fresh)).toEqual({
-      open: true, start: true, continue: false, report: false, edit: true,
+      start: true, continue: false, report: false, edit: true,
     });
   });
 
@@ -142,23 +151,30 @@ describe('§2 the table', () => {
   });
 });
 
-describe('§3 a session can be opened without being started', () => {
-  test('an unstarted session offers Open', () => {
+describe('§3 a session can be prepared without being started', () => {
+  /*
+    HISTORY OF THIS SECTION, because its headline assertion INVERTED. It was
+    written to pin "Open exists and does not start" — the fix for "i cant edit
+    the session without starting it today". Open has since been retired (the
+    same owner: three buttons was "too many"), and the property it guarded
+    moved: the way to touch an unstarted session without starting it is now
+    EDIT, which opens a dialog and never loads or starts anything. The bug
+    being guarded against is unchanged — a control on an unstarted row that
+    quietly POSTs /start.
+  */
+  test('an unstarted session offers no Open — Edit is the way in', () => {
     mount();
-    expect(within(rowFor('Pricing Workshop')).getByRole('button', { name: /Open/i }))
+    expect(within(rowFor('Pricing Workshop')).queryByRole('button', { name: /Open/i })).toBeNull();
+    expect(within(rowFor('Pricing Workshop')).getByRole('button', { name: /Edit/i }))
       .toBeInTheDocument();
   });
 
-  /*
-    THE ASSERTION THIS WHOLE CHANGE EXISTS FOR. A panel that renders an Open
-    button wired to `onStart` satisfies every other test in this file and
-    reproduces the exact bug being fixed.
-  */
-  test('Open loads the session and does NOT start it', () => {
-    const { onOpen, onStart } = mount();
-    fireEvent.click(within(rowFor('Pricing Workshop')).getByRole('button', { name: /Open/i }));
-    expect(onOpen).toHaveBeenCalledWith('9137', 'Pricing Workshop');
+  test('Edit raises the edit flow and starts nothing', () => {
+    const { onEdit, onStart, onOpen } = mount();
+    fireEvent.click(within(rowFor('Pricing Workshop')).getByRole('button', { name: /Edit/i }));
+    expect(onEdit).toHaveBeenCalledWith('9137', 'Pricing Workshop');
     expect(onStart).not.toHaveBeenCalled();
+    expect(onOpen).not.toHaveBeenCalled();
   });
 
   test('Start is a separate control, and it starts', () => {

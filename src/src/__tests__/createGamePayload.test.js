@@ -93,10 +93,26 @@ describe('updateGameBody', () => {
   // would be silently ignored — the dialog shows those controls disabled, and
   // a body that carried them anyway would make this function lie about what an
   // edit can do (the same shape as the triviaTimer defect, in reverse).
-  test('sends only the phase-1 whitelist — nothing the backend pins', () => {
+  test('sends only the whitelist — nothing the backend pins', () => {
+    // categoryIds joined the whitelist when the backend grew mask support; the
+    // still-pinned fields (gameType, setId, randomizeQuestions) still vanish.
     expect(Object.keys(updateGameBody(form)).sort()).toEqual([
-      'aiContext', 'anonymousUntilReveal', 'engagementInfo', 'eventTitle', 'personaId',
+      'aiContext', 'anonymousUntilReveal', 'categoryIds', 'engagementInfo', 'eventTitle', 'personaId',
     ]);
+  });
+
+  test('categoryIds travel as given, and never travel empty or absent', () => {
+    /*
+      An EMPTY list is deliberately not a wire shape — the dialog refuses to
+      submit one ("no reachable questions" is not a thing to save), so this
+      function dropping it is belt-and-braces. An ABSENT key means "leave the
+      masks alone" to the backend's `'field' in body` builder, which is what a
+      caller that never rendered a category grid should say.
+    */
+    expect(updateGameBody(form).categoryIds).toEqual(['Leadership', 'Ops']);
+    expect('categoryIds' in updateGameBody({ ...form, categoryIds: [] })).toBe(false);
+    const { categoryIds, ...formWithout } = form;
+    expect('categoryIds' in updateGameBody(formWithout)).toBe(false);
   });
 
   // rejects: any edited field silently failing to reach the PUT body.

@@ -65,9 +65,15 @@ export function createGameBody(form = {}) {
  * visibility, anonymousUntilReveal. Deliberately NOT sent — the backend would
  * ignore them anyway, and sending them would make this function lie about
  * what an edit can do:
- *   - gameType / questionSetId / selectedCategories: pinned at create time to
- *     derived rows (QuestionSetVersion, the CATEGORY#*#ORDER shuffles,
- *     STATE#CATS); the edit dialog shows them disabled.
+ *   - gameType / questionSetId: pinned at create time to derived rows
+ *     (QuestionSetVersion, the CATEGORY#*#ORDER shuffles); the edit dialog
+ *     shows them disabled.
+ *   - categoryIds IS sent now (the backend grew support): the enabled SUBSET
+ *     within the pinned set is mask state, the same bits toggle-category flips
+ *     mid-session, not derived state. Sent only when the form actually carries
+ *     a non-empty list — an absent key means "leave the masks alone", and an
+ *     empty list is a form the dialog refuses to submit rather than a wire
+ *     shape ("no reachable questions" is not a thing to save).
  *   - randomizeQuestions: pinned for the same reason — the per-category order
  *     rows were shuffled (or not) when the session was created.
  *   - accessCode / hostName: not part of the edit surface at all.
@@ -95,6 +101,8 @@ export function updateGameBody(form = {}) {
     // '' means "adapt to the session"; the backend REMOVEs the attribute.
     personaId: personaId || '',
     ...('visibility' in form ? { visibility: form.visibility } : {}),
+    ...(Array.isArray(form.categoryIds) && form.categoryIds.length > 0
+      ? { categoryIds: form.categoryIds } : {}),
     ...createPayloadFor({ gameType, anonymousResponses }),
   };
 }
