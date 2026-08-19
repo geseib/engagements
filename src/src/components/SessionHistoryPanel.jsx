@@ -40,18 +40,42 @@ import { resolveGameType, gameTypeLabel, gameTypeMeta } from '../config/gameType
  * opens the doors to players. There was no way to set a session up before
  * letting anyone in.
  *
- * `selectGameFromHistory` already does exactly what "Open" needs and always
- * did; it was simply never offered for an unstarted session. So a session that
- * has not started gets both, with **Open** as the default and Start as the
- * deliberate one — starting is the irreversible-feeling act on this screen and
- * it should not also be the only door.
+ * `selectGameFromHistory` already does exactly what "Open" needed and Open was
+ * this panel's first answer. It lasted one review: with Edit grown to cover
+ * categories, three buttons on every unstarted row was *"too many"* (the
+ * owner's words), and Open — the only one whose job both others could do
+ * between them — is gone. rowActions carries the full argument. `onOpen`
+ * remains as a prop because Continue rides on it for started sessions.
  */
 
-/** Which primary actions a row offers, given whether it has been started. */
+/**
+ * Which actions a row offers, given whether it has been started.
+ *
+ * TWO PER ROW, DOWN FROM THREE. The owner, on the unstarted row's
+ * Edit + Open + Start: *"i think thats too many. we want to edit a session
+ * without allowing players into it... and then we want to start a session
+ * (still allow edits, but this opens up the session for joiners)."*
+ *
+ * Open was the odd one out, and it died of its own success: it existed so a
+ * host could reach a session's setup without POSTing /start, back when the
+ * Edit dialog could not touch categories. Now that Edit carries everything —
+ * title, details, voice, anonymity AND the category selection — Open's only
+ * remaining job was "look at the stage without starting", which nobody asked
+ * to keep at the cost of a three-way choice on every row.
+ *
+ * So: EDIT is the safe act (a dialog, no players, nothing on any wall) and
+ * START is the deliberate one (loads the stage and opens the doors). Both
+ * still permit change afterwards — the stage's setup panel toggles categories
+ * in every live state including pre-start CREATED (toggle-category.js).
+ *
+ * Edit exists exactly while Start does: PUT /games/{id} refuses any session
+ * whose STATE is not CREATED, so offering Edit on a started row would be a
+ * button whose only outcome is a 400.
+ */
 export function rowActions(session) {
   return session.started
-    ? { open: false, start: false, continue: true, report: true }
-    : { open: true, start: true, continue: false, report: false };
+    ? { start: false, continue: true, report: true, edit: false }
+    : { start: true, continue: false, report: false, edit: true };
 }
 
 /** Case-insensitive match over the fields a host would actually search by. */
@@ -75,7 +99,7 @@ export default function SessionHistoryPanel({
   sessions = [],
   /** The session currently loaded on the stage, flagged so it is not restarted. */
   currentGameId = null,
-  /** 'select' offers Open/Start/Continue; 'reports' is the same list, read for reports. */
+  /** 'select' offers Edit/Start/Continue; 'reports' is the same list, read for reports. */
   mode = 'select',
   /** Only for the has-images badge. Optional — an absent list simply omits it. */
   questionSets = [],
@@ -84,6 +108,7 @@ export default function SessionHistoryPanel({
   onReport = () => {},
   onOpen = () => {},
   onStart = () => {},
+  onEdit = () => {},
   onClose = () => {},
 }) {
   const [search, setSearch] = useState('');
@@ -110,7 +135,7 @@ export default function SessionHistoryPanel({
           </h2>
           <p className="shist__sub">
             {mode === 'select'
-              ? 'Open one to set it up, or start it when the room is ready.'
+              ? 'Edit one to set it up, or start it when the room is ready.'
               : 'Read a report from a session that has been played.'}
           </p>
         </div>
@@ -283,22 +308,35 @@ export default function SessionHistoryPanel({
                           <Icon name="ChartBar" weight="bold" size={14} /> Report
                         </button>
                       )}
-                      {acts.open && (
+                      {acts.edit && (
+                        /*
+                          PRIMARY, because it is the reflex act: everything it
+                          does is reversible and nothing reaches a player. It
+                          changes what the session IS — title, details, voice,
+                          anonymity, categories — via PUT /games/{id}, which
+                          only a session that has not started accepts.
+                        */
                         <button
                           type="button"
                           className="shist__btn shist__btn--sm shist__btn--primary"
-                          onClick={() => onOpen(session.gameId, title)}
-                          title={`Open "${title}" to set it up — this does not let players in`}
+                          onClick={() => onEdit(session.gameId, title)}
+                          title={`Edit "${title}" — title, settings and categories. Players cannot join yet.`}
                         >
-                          <Icon name="Gear" weight="bold" size={14} /> Open
+                          <Icon name="PencilSimple" weight="bold" size={14} /> Edit
                         </button>
                       )}
                       {acts.start && (
+                        /*
+                          NOT primary, deliberately: this is the one that lets
+                          players in, and it should take a decision rather than
+                          a reflex. (Open used to sit between these two; see
+                          rowActions for why it is gone.)
+                        */
                         <button
                           type="button"
                           className="shist__btn shist__btn--sm"
                           onClick={() => onStart(session.gameId, title)}
-                          title={`Start "${title}" — players can join from this point`}
+                          title={`Start "${title}" — puts it on the stage and players can join`}
                         >
                           <Icon name="PlayCircle" weight="fill" size={14} /> Start
                         </button>

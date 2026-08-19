@@ -1185,9 +1185,13 @@ export default function QuestionsPanel({
       )}
 
       {confirmDiscard && (
-        <div className="modal-overlay" onClick={() => setConfirmDiscard(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> Discard your changes?</h3>
+        <Modal
+          overlayClassName="modal-overlay"
+          contentClassName="modal-content"
+          labelledBy="qs-discard-title"
+          onClose={() => setConfirmDiscard(false)}
+        >
+            <h3 id="qs-discard-title"><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> Discard your changes?</h3>
             <p>
               {describeRowChanges(summary)} — none of it has been saved. Discarding puts the set
               back exactly as it was when you opened it, and there is no way to get the edits back.
@@ -1198,14 +1202,21 @@ export default function QuestionsPanel({
               </button>
               <button className="btn-danger" onClick={discard}>Discard changes</button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {newSetDialog && (
-        <div className="modal-overlay" onClick={() => setNewSetDialog(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>
+        <Modal
+          overlayClassName="modal-overlay"
+          contentClassName="modal-content"
+          labelledBy="qs-new-set-title-heading"
+          onClose={() => setNewSetDialog(null)}
+          /* Cancel is disabled mid-save; the backdrop and Escape follow it, so a
+             stray click cannot abandon a create that is already in flight. */
+          closeOnBackdrop={() => !saving}
+          closeOnEscape={() => !saving}
+        >
+            <h3 id="qs-new-set-title-heading">
               <Icon name="Plus" weight="bold" size={16} color="var(--primary)" />{' '}
               {newSetDialog.mode === 'fork' ? 'Save this as your own copy' : 'New set from your selection'}
             </h3>
@@ -1235,8 +1246,7 @@ export default function QuestionsPanel({
                 {saving ? 'Creating...' : 'Create the set'}
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </section>
   );

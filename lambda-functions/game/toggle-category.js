@@ -50,8 +50,19 @@ exports.handler = async (event) => {
       };
     }
 
-    // Only allow toggles during active game states
-    const validStates = ['STARTED', 'ASK#', 'VOTE#', 'RESULTS#'];
+    /*
+      CREATED IS A VALID STATE TO TOGGLE IN, and its absence here was reported
+      as a bug: *"going to the session/questions tab appears to let you edit
+      categories but it says you cannot. I think you should be able to."*
+
+      The original list was written for the mid-session case and simply never
+      considered pre-start. Nothing downstream cares: the toggle flips HostMask
+      bits on STATE#CATS, which exists from create time
+      (schema-compliant-manager.js), and start-game does not rebuild it — so a
+      bit flipped before start is exactly as durable as one flipped after.
+      ENDED stays excluded; a finished session's masks are part of its record.
+    */
+    const validStates = ['CREATED', 'STARTED', 'ASK#', 'VOTE#', 'RESULTS#'];
     const currentState = gameState.Item.State;
     const isValidState = validStates.some(state => 
       currentState === state || currentState.startsWith(state)

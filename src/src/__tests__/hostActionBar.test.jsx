@@ -199,3 +199,101 @@ describe('HostActionBar', () => {
     expect(screen.getByRole('button', { name: /start voting/i })).toBeInTheDocument();
   });
 });
+
+
+describe('the key may mean less than the button', () => {
+  /*
+    Reported: "host tend to skip the extra pages of the workie response by
+    hitting the right arrow." The interceptAdvance hook is how the page takes
+    → and Space for a page turn before they can advance the round; the BUTTON
+    is deliberately not intercepted — a host who clicks Next Round means it.
+  */
+  it('a consuming interceptor swallows the key and the primary does not fire', () => {
+    const onAction = jest.fn();
+    const interceptAdvance = jest.fn(() => true);
+    render(
+      <HostActionBar controls={controlsFor()} onAction={onAction} interceptAdvance={interceptAdvance} />
+    );
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(interceptAdvance).toHaveBeenCalledTimes(1);
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it('a declining interceptor lets the round advance', () => {
+    // The last Workie page: the interceptor has nothing left to turn, so the
+    // same key means what it always meant.
+    const onAction = jest.fn();
+    render(
+      <HostActionBar controls={controlsFor()} onAction={onAction} interceptAdvance={() => false} />
+    );
+    fireEvent.keyDown(window, { key: ' ' });
+    expect(onAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('the interceptor never touches the button', () => {
+    const onAction = jest.fn();
+    const interceptAdvance = jest.fn(() => true);
+    render(
+      <HostActionBar controls={controlsFor()} onAction={onAction} interceptAdvance={interceptAdvance} />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /start voting/i }));
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(interceptAdvance).not.toHaveBeenCalled();
+  });
+});
+
+describe('the backwards key', () => {
+  // "there should be a way to go backwards from the AI Workie screen to the
+  // results screen" — ← was reserved for this in the paging design and never
+  // wired until now.
+  it('ArrowLeft raises onBackKey with the same guards the advance keys carry', () => {
+    const onBackKey = jest.fn(() => true);
+    render(<HostActionBar controls={controlsFor()} onAction={() => {}} onBackKey={onBackKey} />);
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    expect(onBackKey).toHaveBeenCalledTimes(1);
+    // Held key: the beat must not walk backwards at the OS repeat rate any
+    // more than it may walk forwards.
+    fireEvent.keyDown(window, { key: 'ArrowLeft', repeat: true });
+    expect(onBackKey).toHaveBeenCalledTimes(1);
+  });
+
+  it('ArrowLeft in a text field stays a caret movement', () => {
+    const onBackKey = jest.fn(() => true);
+    render(
+      <>
+        <input aria-label="event title" />
+        <HostActionBar controls={controlsFor()} onAction={() => {}} onBackKey={onBackKey} />
+      </>
+    );
+    const input = screen.getByLabelText('event title');
+    input.focus();
+    fireEvent.keyDown(input, { key: 'ArrowLeft' });
+    expect(onBackKey).not.toHaveBeenCalled();
+  });
+
+  it('without a handler the key is left to the browser entirely', () => {
+    render(<HostActionBar controls={controlsFor()} onAction={() => {}} />);
+    // No throw, no swallow — nothing to assert beyond surviving the dispatch.
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+  });
+});
+
+describe('the key legend', () => {
+  it('renders the caller\'s sentence about what the keys do right now', () => {
+    // "should there be a visual queue on what to press" — the Space chip says
+    // a key exists; this line says what it means in THIS phase.
+    render(
+      <HostActionBar
+        controls={controlsFor()}
+        onAction={() => {}}
+        keyHint="→ next page · ← back"
+      />
+    );
+    expect(screen.getByText('→ next page · ← back')).toBeInTheDocument();
+  });
+
+  it('renders no empty legend box', () => {
+    const { container } = render(<HostActionBar controls={controlsFor()} onAction={() => {}} />);
+    expect(container.querySelector('.host-action-bar__keyhint')).toBeNull();
+  });
+});

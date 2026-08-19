@@ -97,6 +97,15 @@ exports.handler = async (event) => {
         questionSetId: gameMetadata.Item.QuestionSetId,
         aiContext: gameMetadata.Item.AIContext,
         details: gameMetadata.Item.Details,
+        // Prefill for the edit dialog (PUT /games/{gameId}). None of these is
+        // a secret — the persona is a label, and both flags describe behaviour
+        // every participant can observe. `visibility` and `anonymousUntilReveal`
+        // are already in baseGameInfo above. `accessCode` is deliberately NOT
+        // re-added; the comment above records why it was removed.
+        personaId: gameMetadata.Item.PersonaId || '',
+        // Same default-ON rule as anonymousUntilReveal above: only an explicit
+        // false means "in written order" (schema-compliant-manager.js:106).
+        randomizeQuestions: hostPreferences.randomizeQuestions !== false,
         usedQuestions: gameState.Item?.UsedQuestions || [],
         playedQuestions: gameState.Item?.PlayedQuestions || [],
         categoryState: categoryState.Item ? {

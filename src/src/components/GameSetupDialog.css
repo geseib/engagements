@@ -1,0 +1,496 @@
+/* ============================================================================
+   THE CREATE / EDIT ENGAGEMENT DIALOG — dusk, at last.
+
+   Reported: "i dont think that the create engagement modal is quite up to the
+   design of the rest of the site, its a bit dated." Correct, and the history
+   explains the mismatch: half of this dialog (the format pills, the option
+   cards, the anonymity preview) was redesigned against the host mockups and
+   carried its own commentary — but it was retinted onto the ORIGINAL dialog
+   shell, a 500px white card with 2-solid-#e1e1e1 inputs from the first weeks
+   of the project. The room around the new furniture was never rebuilt, and a
+   white card floating over the dusk stage is exactly what "dated" looks like.
+
+   This sheet converts the WHOLE dialog to dusk — the same conversion the
+   prompt admin got — and owns every rule the dialog uses. The paper-era .gsd
+   block that lived in styles.css moves here, retinted; nothing .gsd remains
+   there. The base .new-game-dialog card in styles.css is untouched (the
+   reports modal still wears it); `.gsd.new-game-dialog` overrides within this
+   scope only.
+
+   SCOPED TOKENS, NOT [data-theme]. The Modal primitive owns the content
+   element, so there is no root of ours to stamp a theme attribute on without
+   widening Modal's API. Every colour below is a --gsd-* local declared on the
+   scope itself (skill §0.5) — an undefined custom property invalidates the
+   whole declaration, so nothing here reaches for a token another stylesheet
+   happens to put in the bundle.
+
+   MEASURED CONTRAST (gameSetupPalette.test.js composites the real stacks):
+     text    #F4EDE4 on card #1B2942            12.5:1
+     muted   #A9B5C9 on card #1B2942             7.0:1  (see the token note for
+                                                  why not the site's #9BA8BE)
+     muted   on the is-on green tint              4.9:1  (the pairing that
+                                                  forced the lighter muted)
+     text    on input field #25375A               9.9:1
+     primary #F6A94C on card                      7.4:1  (chip text, ok on dusk;
+                                                  the paper block needed
+                                                  --primary-deep — dusk does not)
+     success-text #6FD0A4 on the is-on tint       5.4:1
+
+   Ladder: the laptop ladder (12/13/15/19/24) — this is a one-person surface at
+   arm's length, not a stage. Inputs render at body (15px), never label.
+   ========================================================================== */
+
+.gsd {
+  --gsd-card: #1B2942;
+  --gsd-field: #25375A;
+  --gsd-text: #F4EDE4;
+  /*
+    #A9B5C9, one step lighter than the site's #9BA8BE, and the palette test is
+    why: this scope puts muted copy on a GREEN-TINTED field (the option cards
+    default ON), and #9BA8BE measures 4.23:1 there — under AA on the shipping
+    state of that text. The site value survives on plain --surface grounds;
+    this scope's extra tint layer is what it does not survive. 4.90 on the
+    tint, 5.7 on the field, 7.0 on the card. Measured, not eyeballed — the
+    first draft of this file eyeballed it and the test caught it.
+  */
+  --gsd-muted: #A9B5C9;
+  --gsd-rule: rgba(155, 168, 190, 0.24);
+  --gsd-rule-strong: rgba(155, 168, 190, 0.38);
+  --gsd-primary: #F6A94C;
+  --gsd-secondary: #7CA7E6;
+  --gsd-success: #4FB286;
+  --gsd-success-text: #6FD0A4;   /* styles.css never declared one; every scope
+                                    redeclares it locally (skill §6) */
+  --gsd-t-floor: 12px;
+  --gsd-t-label: 13px;
+  --gsd-t-body: 15px;
+  --gsd-t-head: 19px;
+  --gsd-t-title: 24px;
+}
+
+/* The card. Wider than the old 500px — the format pills, the two-column rows
+   and the category grid were designed for room the original card never gave
+   them, which is why everything in it felt crowded. */
+.gsd.new-game-dialog {
+  position: relative;
+  background: var(--gsd-card);
+  color: var(--gsd-text);
+  border: 1px solid var(--gsd-rule);
+  border-radius: 14px;
+  max-width: 680px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.gsd h2 {
+  margin: 0 0 4px;
+  padding: 22px 26px 0;
+  font-family: var(--font-display, inherit);
+  font-size: var(--gsd-t-title);
+  font-weight: 800;
+  color: var(--gsd-text);
+}
+
+.gsd .dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 26px 22px;
+}
+
+/* ------------------------------------------------------------------- the X */
+
+.gsd-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--gsd-muted);
+  cursor: pointer;
+}
+
+.gsd-close:hover { background: rgba(155, 168, 190, 0.14); color: var(--gsd-text); }
+
+.gsd-close:focus-visible {
+  outline: 2px solid var(--gsd-primary);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------ labels + rows */
+
+.gsd .form-group { margin-bottom: 14px; }
+
+.gsd .form-group > label,
+.gsd .gsd-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: var(--gsd-t-floor);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gsd-muted);
+}
+
+/* Question set and categories share a row on a wide dialog and stack on a
+   narrow one — flex-basis, not a media query, because the dialog's own width
+   is what matters and it is not the viewport's. */
+.gsd .gsd-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.gsd .gsd-row > .form-group {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------------- the fields
+   One rule for all three controls: the old sheet styled the textarea in the
+   new idiom and left input and select on 2px #e1e1e1 — two generations of
+   field on one form is most of what read as dated. Inputs are body-size by
+   ladder rule: a 13px input producing 15px table text is the RATIONALE §3.2
+   failure. */
+.gsd .dialog-input,
+.gsd .dialog-select,
+.gsd .dialog-textarea {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1px solid var(--gsd-rule-strong);
+  border-radius: 8px;
+  background: var(--gsd-field);
+  color: var(--gsd-text);
+  font: inherit;
+  font-size: var(--gsd-t-body);
+}
+
+.gsd .dialog-textarea { resize: vertical; }
+
+.gsd .dialog-input:focus,
+.gsd .dialog-select:focus,
+.gsd .dialog-textarea:focus {
+  outline: none;
+  border-color: var(--gsd-primary);
+}
+
+.gsd .dialog-input:disabled,
+.gsd .dialog-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.gsd .dialog-select option { background: var(--gsd-field); color: var(--gsd-text); }
+
+.gsd .dialog-help-text {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--gsd-t-floor);
+  line-height: 1.45;
+  color: var(--gsd-muted);
+}
+
+/* ------------------------------------------------------------- format pills */
+
+.gsd-types {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gsd-pill {
+  font: inherit;
+  font-weight: 700;
+  font-size: var(--gsd-t-label);
+  padding: 9px 14px;
+  border-radius: 99px;
+  background: transparent;
+  border: 1px solid var(--gsd-rule-strong);
+  color: var(--gsd-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.gsd-pill:hover:not(:disabled) {
+  border-color: var(--gsd-primary);
+  color: var(--gsd-text);
+}
+
+/* On dusk, --primary carries text at 7.4:1 — the paper block's detour through
+   --primary-deep existed because #F6A94C is 1.9:1 on white, and it is exactly
+   the kind of compensation that stops being needed when the surface converts. */
+.gsd-pill.on {
+  border-color: var(--gsd-primary);
+  color: var(--gsd-primary);
+  background: rgba(246, 169, 76, 0.12);
+}
+
+.gsd-pill:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* THE WAY IN TO A HOST'S OWN QUESTION SETS, beside the picker that needs one.
+   A link rather than a button: it opens a side task, and a second filled
+   button next to "Create engagement" would compete with the one action this
+   screen exists for. */
+.gsd-setlink {
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--gsd-t-label);
+  font-weight: 600;
+  color: var(--gsd-secondary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.gsd-setlink:hover { color: var(--gsd-text); }
+
+/* `blurb` from config/gameTypes.js — one line that answers "what is
+   Wavelength?". */
+.gsd-blurb {
+  margin: 8px 0 0;
+  font-size: var(--gsd-t-label);
+  line-height: 1.5;
+  color: var(--gsd-muted);
+}
+
+.gsd-section {
+  margin: 18px 0 10px;
+  font-size: var(--gsd-t-floor);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gsd-muted);
+  border-top: 1px solid var(--gsd-rule);
+  padding-top: 16px;
+}
+
+/* ---------------------------------------------------------- category grid
+   The grid is LIVE in both modes now (the edit lock was reported and lifted),
+   so the selected state has to read as a control, not a chip: border AND tint,
+   never colour alone. */
+.gsd .category-selection { margin-top: 2px; }
+
+.gsd .category-button-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gsd .category-button {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font: inherit;
+  font-size: var(--gsd-t-label);
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--gsd-rule-strong);
+  background: transparent;
+  color: var(--gsd-text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.gsd .category-button:hover { border-color: var(--gsd-primary); }
+
+.gsd .category-button.selected {
+  border-color: var(--gsd-primary);
+  background: rgba(246, 169, 76, 0.12);
+}
+
+.gsd .category-button .category-count {
+  font-size: var(--gsd-t-floor);
+  font-weight: 700;
+  color: var(--gsd-muted);
+}
+
+/* ------------------------------------------------------------- option cards */
+
+.gsd-opt {
+  border: 1px solid var(--gsd-rule);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: var(--gsd-field);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gsd-opt.is-on {
+  border-color: var(--gsd-success);
+  background: rgba(79, 178, 134, 0.10);
+}
+
+.gsd-opt-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  margin: 0;
+}
+
+.gsd-opt-head input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex: none;
+  cursor: pointer;
+  accent-color: var(--gsd-success);
+}
+
+.gsd-opt-head input[type="checkbox"]:disabled { cursor: not-allowed; }
+
+.gsd-opt-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gsd-text);
+}
+
+.gsd-opt-state {
+  flex: none;
+  font-family: var(--font-display, inherit);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--gsd-muted);
+}
+
+/* 11px is under the 12px floor and stays DELIBERATELY: the ON/OFF word is a
+   state echo beside an 18px checkbox that already carries the fact — the same
+   glance-only dispensation the old sheet gave it. The floor protects things
+   read in runs; this is read never and glanced twice. */
+.gsd-opt.is-on .gsd-opt-state { color: var(--gsd-success-text); }
+
+.gsd-opt-does {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--gsd-text);
+}
+
+.gsd-opt-else {
+  margin: 0;
+  font-size: var(--gsd-t-label);
+  line-height: 1.5;
+  color: var(--gsd-muted);
+}
+
+.gsd-opt-else b { color: var(--gsd-text); font-weight: 700; }
+
+/* NEVER OVERCLAIM. The limits sentence is set apart rather than tucked into
+   the paragraph above, because it is the one line that qualifies the promise. */
+.gsd-opt-limit {
+  margin: 0;
+  font-size: var(--gsd-t-floor);
+  line-height: 1.5;
+  color: var(--gsd-muted);
+  border-left: 3px solid var(--gsd-secondary);
+  padding-left: 11px;
+}
+
+/* --------------------------------------------------- before/after preview */
+
+.gsd-preview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 520px) {
+  .gsd-preview { grid-template-columns: 1fr; }
+}
+
+.gsd-pv {
+  border: 1px solid var(--gsd-rule);
+  border-radius: 10px;
+  padding: 11px 12px;
+  background: var(--gsd-card);
+}
+
+.gsd-pv h6 {
+  margin: 0 0 7px;
+  font-size: 10.5px;   /* glance-only card caption; same dispensation as
+                          .gsd-opt-state, inherited from the old sheet */
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--gsd-muted);
+}
+
+.gsd-pv-ans {
+  margin: 0;
+  font-size: var(--gsd-t-floor);
+  line-height: 1.4;
+  color: var(--gsd-text);
+}
+
+.gsd-pv-who {
+  margin: 6px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gsd-muted);
+}
+
+.gsd-pv-who.named {
+  color: var(--gsd-text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ------------------------------------------------------------------ footer */
+
+.gsd .dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--gsd-rule);
+}
+
+.gsd .btn-primary,
+.gsd .btn-secondary {
+  font: inherit;
+  font-size: var(--gsd-t-body);
+  font-weight: 700;
+  padding: 10px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* Filled amber carries DARK text: white on #F6A94C is 1.9:1 in either theme. */
+.gsd .btn-primary {
+  border: 1px solid var(--gsd-primary);
+  background: var(--gsd-primary);
+  color: #1B2942;
+}
+
+.gsd .btn-primary:hover:not(:disabled) { filter: brightness(1.06); }
+
+.gsd .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.gsd .btn-secondary {
+  border: 1px solid var(--gsd-rule-strong);
+  background: transparent;
+  color: var(--gsd-text);
+}
+
+.gsd .btn-secondary:hover { border-color: var(--gsd-muted); }

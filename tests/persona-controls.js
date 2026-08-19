@@ -466,6 +466,90 @@ const metadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
       'an omitted field must never make a persona disappear from the picker');
   });
 
+  console.log('\ncontext is additive, never a competing voice\n');
+
+  const { buildContextBlock } = require(path.join(REPO, 'lambda-functions', 'game', 'personas.js'));
+  const fs2 = require('fs');
+  const summarySrc = fs2.readFileSync(
+    path.join(REPO, 'lambda-functions', 'game', 'get-ai-summary.js'), 'utf8'
+  ).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  await acheck('a persona outranks the contexts in the VOICE chain — and only there', async () => {
+    /*
+      THE REPORTED BUG, precisely bounded. resolvePersona treats the contexts
+      as fallback voices — that is the DJ fix (persona-resolution.js) and it
+      stays — so a persona rightly wins the voice here. What was broken is
+      that winning the voice also DELETED the contexts from the prompt; the
+      cure is get-ai-summary's context block (asserted below), not a change
+      to this chain. A first fix deleted the context rungs and the DJ suite
+      caught it: two owner reports, one chain, both must hold.
+    */
+    const persona = await resolvePersona({
+      hostPersonaId: 'comedian', setPersonaId: null,
+      questionSetAiContext: 'the set author context',
+      gameAiContext: 'the host context',
+      loadPersona: loadPersonaFromStore,
+    });
+    assert.strictEqual(persona.source, 'host');
+    assert(!/host context|author context/.test(persona.voice));
+  });
+
+  await acheck('a context that became the voice is not repeated in the block', async () => {
+    // get-ai-summary blanks the field that won the chain before building the
+    // block — the model must not weigh one instruction twice.
+    assert(/persona\.source === 'game_context' \? '' : gameAiContext/.test(summarySrc));
+    assert(/persona\.source === 'question_set_context' \? '' : questionSetAiContext/.test(summarySrc));
+  });
+
+  await acheck('buildContextBlock carries all three fields, labeled apart', async () => {
+    const blockText = buildContextBlock({
+      eventDetails: 'Two-day leadership offsite',
+      hostInstructions: 'Reference our Q3 pricing decision',
+      questionSetContext: 'Answers should stay team-level',
+    });
+    assert(blockText.includes('ABOUT THIS SESSION: Two-day leadership offsite'));
+    assert(blockText.includes("THE HOST'S INSTRUCTIONS: Reference our Q3 pricing decision"));
+    assert(blockText.includes("FROM THE QUESTION SET'S AUTHOR: Answers should stay team-level"));
+  });
+
+  await acheck('details and instructions are separate fields — neither shadows the other', async () => {
+    // The old read was `AIContext || EngagementInfo`: one slot, so filling the
+    // instructions ERASED the event details. Both must survive side by side.
+    const blockText = buildContextBlock({
+      eventDetails: 'the details', hostInstructions: 'the instructions',
+    });
+    assert(blockText.includes('the details') && blockText.includes('the instructions'));
+  });
+
+  await acheck('nothing to say is an empty string, not an empty ceremony', async () => {
+    assert.strictEqual(buildContextBlock({}), '');
+    assert.strictEqual(buildContextBlock({ eventDetails: '   ' }), '');
+    assert.strictEqual(buildContextBlock(), '');
+  });
+
+  await acheck('get-ai-summary reads the two metadata fields into two slots', async () => {
+    // Source-level, because the full prompt build needs a live Bedrock stub
+    // this harness does not carry: the one-slot `AIContext || EngagementInfo`
+    // read must be gone, and eventDetails must have its own.
+    assert(!/AIContext \|\| metadata\.EngagementInfo/.test(summarySrc),
+      'the shadowing read is back');
+    assert(/eventDetails: metadata\.EngagementInfo \|\| metadata\.Details/.test(summarySrc));
+  });
+
+  await acheck('the context layer is injected when the template has no placeholder', async () => {
+    /*
+      The other half of the bug: context reached the prompt only through the
+      {contextSections} template variable, which authored and imported prompts
+      mostly do not contain — so the context vanished with no error. The build
+      must now check for the placeholder and inject the block itself when it
+      is absent. One door or the other is always open.
+    */
+    assert(/templateBody\.includes\('\{contextSections\}'\)/.test(summarySrc));
+    assert(/buildContextBlock\(\{/.test(summarySrc));
+    assert(/\$\{contextLayer\}\$\{templateBody\}/.test(summarySrc),
+      'the context layer is not in the assembled prompt');
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(1); });

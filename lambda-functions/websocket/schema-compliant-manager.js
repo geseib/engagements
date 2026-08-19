@@ -41,7 +41,22 @@ const createGame = async (gameId, gameData) => {
     const pinnedVersion = resolvedSet.version;
 
     // 1. Create GAMES list entry (for efficient game listing - DATABASE_DESIGN.md requirement)
+    //
+    // THE ID RESERVATION, and it is load-bearing (issue #26). The 4-digit id
+    // is drawn at random from 9,000 values with — until this line — no
+    // uniqueness check anywhere: nine blind Puts. A collision OVERWROTE a
+    // living session in place: new METADATA, new masks, a new title on this
+    // very index row. The owner watched it from the outside: a session whose
+    // categories and questions "disappeared" after unrelated activity, and
+    // which then went missing from history — because this row now described
+    // the newer session that had silently taken its id.
+    //
+    // This row is written FIRST of the nine, so conditioning it makes it the
+    // lock: a collision fails HERE, before anything else has been touched,
+    // and the caller draws a fresh id and retries with the losing session
+    // completely unharmed.
     await db.send(new PutCommand({
+      ConditionExpression: 'attribute_not_exists(PK)',
       TableName: process.env.TABLE_NAME,
       Item: {
         PK: 'GAMES',

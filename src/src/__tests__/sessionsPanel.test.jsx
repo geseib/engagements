@@ -355,6 +355,122 @@ describe('delete all, which states consequence rather than severity', () => {
   });
 });
 
+/* --------------------------------------------- sort, and the nomatch exits */
+
+describe('the sort control', () => {
+  test('sorting reorders the loaded rows without asking the server again', async () => {
+    // rejects: the pre-change panel, which had no sort control at all (the
+    // combobox lookup below throws there), and rejects a sort wired to a
+    // refetch of an endpoint that takes no ordering parameter — the same
+    // mistake the search test above pins.
+    await mount();
+    const before = authFetch.mock.calls.length;
+    fireEvent.change(screen.getByRole('combobox', { name: /sort/i }), {
+      target: { value: 'oldest' },
+    });
+    // Oldest first: the undated legacy row reads as epoch and sorts oldest.
+    expect(rows()[0].textContent).toMatch(/Untitled engagement/);
+    expect(rows()[2].textContent).toMatch(/Q3 Leadership Offsite/);
+    expect(authFetch.mock.calls).toHaveLength(before);
+  });
+
+  test('title sort orders A to Z', () => {
+    // rejects: a sort select whose options exist but whose comparator was
+    // never wired — every option would leave the server's createdAt order.
+    return mount().then(() => {
+      fireEvent.change(screen.getByRole('combobox', { name: /sort/i }), {
+        target: { value: 'title' },
+      });
+      expect(rows().map((row) => row.textContent)).toEqual([
+        expect.stringMatching(/Nakamura Trivia Night/),
+        expect.stringMatching(/Q3 Leadership Offsite/),
+        expect.stringMatching(/Untitled engagement/),
+      ]);
+    });
+  });
+});
+
+describe('nothing matches, which is a different state from "no sessions yet"', () => {
+  /*
+    search "naka" (NAKA07 only, played) + state "Never started" intersect to
+    nothing. Dropping the search leaves the one unstarted session; dropping
+    the state leaves the one naka session. Both exits are real here.
+  */
+  const filterToNothing = async () => {
+    await mount();
+    fireEvent.change(screen.getByRole('searchbox', { name: /search/i }), {
+      target: { value: 'naka' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: /state/i }), {
+      target: { value: 'unstarted' },
+    });
+  };
+
+  test('the dim table row is gone; the state has words, counts and exits', async () => {
+    // rejects: the shipped `.sp-dimrow` — "No session matches this search." as
+    // an italic row inside a table of headers, with no exit and no mention of
+    // the state filter it also hides behind (design rule 6: two states need
+    // two exits, and an empty state must not lie about why it is empty).
+    await filterToNothing();
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.getByText(/No sessions match these 2 filters/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 sessions exist/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Search “naka” — 1 session/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /State: Never started — 1 session/ })
+    ).toBeInTheDocument();
+  });
+
+  test('it never borrows the "no sessions yet" copy, and the bar stays usable', async () => {
+    // rejects: collapsing the two empty states into one — the defect the
+    // sets and prompts screens each had to un-ship — and rejects unmounting
+    // the filter bar with the table, which would strand the operator with no
+    // controls to loosen.
+    await filterToNothing();
+    expect(screen.queryByText(/No sessions yet/i)).toBeNull();
+    expect(screen.getByRole('searchbox', { name: /search/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /delete all sessions/i })).toBeInTheDocument();
+  });
+
+  test('clicking one exit clears exactly that filter and leaves the other', async () => {
+    // rejects: an exit wired to clearAll, which throws away the search the
+    // operator meant to keep and is indistinguishable at a glance.
+    await filterToNothing();
+    fireEvent.click(screen.getByRole('button', { name: /State: Never started — 1 session/ }));
+    expect(screen.getByRole('searchbox', { name: /search/i })).toHaveValue('naka');
+    expect(screen.getByRole('combobox', { name: /state/i })).toHaveValue('all');
+    expect(rows()).toHaveLength(1);
+    expect(screen.getByText('Nakamura Trivia Night')).toBeInTheDocument();
+  });
+
+  test('an exit that leads to another empty screen is not offered', async () => {
+    // rejects: listing every active filter unconditionally (`.filter(() =>
+    // true)` in place of the count>0 gate). "zz-nope" matches nothing on its
+    // own, so dropping the state filter still shows zero rows — that exit
+    // must not be drawn, while dropping the search (leaving Played) is real.
+    await mount();
+    fireEvent.change(screen.getByRole('searchbox', { name: /search/i }), {
+      target: { value: 'zz-nope' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: /state/i }), {
+      target: { value: 'played' },
+    });
+    const offered = [...document.querySelectorAll('.sp-drop')].map((b) => b.textContent);
+    expect(offered).toHaveLength(1);
+    expect(offered[0]).toMatch(/Search “zz-nope”/);
+    expect(offered[0]).toMatch(/2 sessions/);
+    expect(offered.join(' ')).not.toMatch(/State:/);
+  });
+
+  test('clear all filters brings the whole list back', async () => {
+    await filterToNothing();
+    fireEvent.click(screen.getByRole('button', { name: /clear all filters/i }));
+    expect(rows()).toHaveLength(3);
+  });
+});
+
 /* ------------------------------------------------------------- the call site */
 
 describe('the page actually mounts the panel', () => {

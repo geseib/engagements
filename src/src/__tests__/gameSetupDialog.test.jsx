@@ -292,6 +292,189 @@ describe('creating', () => {
   });
 });
 
+describe('edit mode', () => {
+  /*
+    THE PREFILL, IN THE SHAPE THE SERVER ACTUALLY SENDS. Copied from
+    get-game.js's host branch (baseGameInfo + the host extras), not invented
+    from this component's props — the sessionHistory suite's own header records
+    what an invented fixture cost last time: every test green while the screen
+    showed nothing.
+  */
+  const HOST_INFO = {
+    gameId: '9137',
+    title: 'Pricing Workshop',
+    gameType: 'call-and-answer',
+    anonymousUntilReveal: false,
+    createdAt: '2026-08-14T09:00:00Z',
+    hostName: 'Host',
+    visibility: 'private',
+    started: false,
+    state: 'CREATED',
+    currentQuestionId: null,
+    lessonNumber: 0,
+    questionSetId: 'pricing',
+    aiContext: 'Mid-market SaaS.',
+    details: 'Pricing day.',
+    personaId: 'coach',
+    randomizeQuestions: false,
+    usedQuestions: [],
+    playedQuestions: [],
+    categoryState: null,
+    // Derived by the page from the session's HostMask bits
+    // (editGameFromHistory -> convertBitmaskToCategories) and handed in with
+    // the rest of the seed. Names, because the grid keys on names.
+    selectedCategoryNames: ['Leadership', 'Ops'],
+  };
+
+  const setupEdit = (values = {}) =>
+    setup({ mode: 'edit', initialValues: { ...HOST_INFO, ...values } });
+
+  // rejects: an edit form that opens blank — a host who pressed Save would
+  // wipe every field they did not retype.
+  test('seeds every editable field from the session being edited', () => {
+    setupEdit();
+    expect(screen.getByLabelText(/event title/i).value).toBe('Pricing Workshop');
+    expect(screen.getByLabelText(/event details/i).value).toBe('Pricing day.');
+    expect(screen.getByLabelText(/ai context/i).value).toBe('Mid-market SaaS.');
+    expect(screen.getByLabelText(/workie's voice/i).value).toBe('coach');
+    expect(setSelect().value).toBe('pricing');
+    expect(pill('Call & Answer')).toHaveAttribute('aria-pressed', 'true');
+    // anonymousUntilReveal: false must arrive as an UNCHECKED box — seeding
+    // the default instead would flip the session anonymous on the first save.
+    expect(screen.getByRole('checkbox', { name: /anonymous responses/i })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /shuffle the question order/i })).not.toBeChecked();
+  });
+
+  test('the submit button says Save changes, and the heading says Edit', () => {
+    setupEdit();
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /create engagement/i })).toBeNull();
+    expect(screen.getByRole('heading', { name: /edit session/i })).toBeInTheDocument();
+  });
+
+  // rejects: live controls for the fields the PUT whitelist refuses. The
+  // backend ignores gameType/questionSetId/categories/shuffle, so an enabled
+  // picker here would let the host "change" something that silently fails to
+  // save — shown disabled, with the note saying why.
+  test('the format, set and shuffle controls are disabled — and categories are NOT', () => {
+    /*
+      Categories were in this locked list, and the owner called it: "the edit
+      doesnt allow chaging the categories or even see the categories... I think
+      you should be able to edit this." The lock was right for format/set/
+      shuffle — the create path pins derived rows to those — but the enabled
+      SUBSET is mask state, the same bits toggle-category flips mid-session,
+      and the PUT now rewrites it. So the grid is live here and stays live.
+    */
+    setupEdit();
+    expect(pill('Call & Answer')).toBeDisabled();
+    expect(pill('Trivia')).toBeDisabled();
+    expect(setSelect()).toBeDisabled();
+    expect(screen.getByText('Leadership').closest('button')).not.toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: /shuffle the question order/i })).toBeDisabled();
+    expect(screen.getAllByText(/fixed once a session is created/i).length).toBeGreaterThan(0);
+  });
+
+  test('a category toggled in edit mode flips locally and lands in the payload', () => {
+    const { props } = setupEdit();
+    // Seeded from the session's own masks: Leadership arrives selected.
+    expect(screen.getByText('Leadership').closest('button')).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByText('Leadership').closest('button'));
+    expect(screen.getByText('Leadership').closest('button')).toHaveAttribute('aria-pressed', 'false');
+    // The page's own toggle handler is NOT raised — edit owns its selection,
+    // so editing session B cannot repaint the setup panel of session A on
+    // stage behind the dialog.
+    expect(props.onToggleCategory).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(props.onCreate).toHaveBeenCalledWith(expect.objectContaining({
+      categoryIds: ['Ops'],
+    }));
+  });
+
+  test('deselecting every category blocks Save instead of saving a question-less session', () => {
+    const { props } = setupEdit();
+    fireEvent.click(screen.getByText('Leadership').closest('button'));
+    fireEvent.click(screen.getByText('Ops').closest('button'));
+    expect(screen.getByText(/select at least one category/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(props.onCreate).not.toHaveBeenCalled();
+  });
+
+  test('the header X closes without saving', () => {
+    // Reported: "when editing, there is no 'x' to close the box without saving
+    // changes." Same discard Escape always offered, where people look for it.
+    const { props } = setupEdit();
+    fireEvent.click(screen.getByRole('button', { name: /close without saving/i }));
+    expect(props.onCancel).toHaveBeenCalled();
+    expect(props.onCreate).not.toHaveBeenCalled();
+  });
+
+  test('the question-sets entry point is absent — the set cannot change here', () => {
+    setupEdit();
+    expect(screen.queryByRole('button', { name: /your question sets|make a question set/i })).toBeNull();
+  });
+
+  // rejects: showing a blank set control when the page's list does not carry
+  // the pinned set (retired, or fetched for another format).
+  test('a set the page\'s list does not carry still displays by id', () => {
+    setupEdit({ questionSetId: 'retired-set' });
+    expect(setSelect().value).toBe('retired-set');
+  });
+
+  /*
+    THE TITLE IS LOCAL IN EDIT MODE. The page's `eventTitle` names the session
+    ON STAGE (gameSession.js); an edit targets a session from history that
+    need not be that one, so typing here must not rename the live screen.
+  */
+  test('editing the title stays local — the page\'s eventTitle is untouched', () => {
+    const { props } = setupEdit();
+    const input = screen.getByLabelText(/event title/i);
+    fireEvent.change(input, { target: { value: 'Renamed Workshop' } });
+    expect(input.value).toBe('Renamed Workshop');
+    expect(props.onEventTitleChange).not.toHaveBeenCalled();
+  });
+
+  // rejects: any edited value silently failing to reach the save call — the
+  // triviaTimer defect's shape, at the edit surface.
+  test('Save changes raises the full edited payload', () => {
+    const { props } = setupEdit();
+    fireEvent.change(screen.getByLabelText(/event title/i), { target: { value: 'Renamed Workshop' } });
+    fireEvent.change(screen.getByLabelText(/event details/i), { target: { value: 'Now two days.' } });
+    fireEvent.change(screen.getByLabelText(/workie's voice/i), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /anonymous responses/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(props.onCreate).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Renamed Workshop',
+      gameType: 'call-and-answer',
+      setId: 'pricing',
+      eventDetails: 'Now two days.',
+      aiContext: 'Mid-market SaaS.',
+      personaId: '',
+      anonymousResponses: true,
+      // The seeded selection travels even when untouched — an edit that only
+      // renamed the session must not silently clear its category masks.
+      categoryIds: ['Leadership', 'Ops'],
+    }));
+  });
+
+  test('a title blanked out disables Save rather than saving a nameless session', () => {
+    const { props } = setupEdit();
+    fireEvent.change(screen.getByLabelText(/event title/i), { target: { value: '   ' } });
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(props.onCreate).not.toHaveBeenCalled();
+  });
+
+  test('Cancel leaves without saving', () => {
+    const { props } = setupEdit();
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    expect(props.onCancel).toHaveBeenCalled();
+    expect(props.onCreate).not.toHaveBeenCalled();
+  });
+});
+
 describe('the title', () => {
   // eventTitle stays in GameHostPage: it is a per-game key the live host screen
   // reads (gameSession.js:105), so the dialog must not own it.

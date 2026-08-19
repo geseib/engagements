@@ -11,8 +11,13 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Turn an HTTP failure into a message the admin can act on.
 export const describeHttpError = (status, lambdaError, label) => {
-  if (status === 401 || status === 403) {
-    return `${label}: not authorized (HTTP ${status}). Your session may have expired - please sign in again and retry.`;
+  if (status === 401) {
+    return `${label}: not signed in (HTTP 401). Your session may have expired - please sign in again and retry.`;
+  }
+  if (status === 403) {
+    // A 403 comes back to a VALID session that lacks the group - signing in
+    // again cannot fix it, so don't send the admin around that loop.
+    return `${label}: your account is not permitted to do this (HTTP 403). An administrator must add you to the right group.`;
   }
   if (status === 429) {
     return `${label}: rate limited by the AI service (HTTP 429). Wait a minute and retry.`;
@@ -27,8 +32,9 @@ export const describeHttpError = (status, lambdaError, label) => {
 };
 
 // POST a single generation batch with automatic retry on transient failures
-// (network errors, 5xx, 429). 401/403 fail immediately since retrying an
-// expired session is pointless. Returns the parsed JSON body on success.
+// (network errors, 5xx, 429). 401/403 fail immediately since neither an
+// expired session nor a missing group fixes itself on retry. Returns the
+// parsed JSON body on success.
 export const postGenerationBatch = async (url, payload, options = {}) => {
   const { label = 'Batch 1', onStatus = () => {}, maxRetries = 2 } = options;
 

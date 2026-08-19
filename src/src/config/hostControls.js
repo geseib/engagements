@@ -341,7 +341,17 @@ export function hostControlsFor({
   let secondary = null;
   if (resolvedPhase === 'ASK') {
     secondary = { id: 'skip', label: `Skip ${noun}`, icon: 'SkipForward', intent: HOST_INTENTS.SKIP, disabled: false, hint: '' };
-  } else if (resolvedPhase === 'ENDED') {
+  } else if (resolvedPhase === 'ENDED' || resolvedPhase === 'LOBBY') {
+    /*
+      LOBBY joined ENDED here after the owner asked for "an easy way to go back
+      out to the main menu" that does not run through the settings panel. The
+      mid-round phases still refuse a second button — a room is watching and
+      the argument above holds — but the lobby is the phase where a host most
+      often realises they opened the wrong session, and ENDED is where they are
+      done. Mid-round, the settings panel's own Back to Menu remains the route,
+      and EVERY route now passes through the page's leave guard: with players
+      in the room it asks first, and staying is the default answer.
+    */
     secondary = { id: 'leave', label: 'Back to Menu', icon: 'House', intent: HOST_INTENTS.LEAVE, disabled: false, hint: '' };
   }
 

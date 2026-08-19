@@ -7,7 +7,7 @@
  * state, on the screen — and simply not be in the body. `triviaTimer` was
  * exactly that for months, which is what create-game.js:5 records.
  */
-import { createGameBody } from '../config/createGame';
+import { createGameBody, updateGameBody } from '../config/createGame';
 
 const form = {
   title: 'Q3 Leadership Offsite',
@@ -84,5 +84,79 @@ describe('createGameBody', () => {
     expect(body.gameType).toBe('call-and-answer');
     expect(body.questionSetId).toBe('strategic-pricing');
     expect(body.randomizeQuestions).toBe(false);
+  });
+});
+
+describe('updateGameBody', () => {
+  // rejects: sending the CREATE shape at the edit route. update-game.js is a
+  // whitelist, so gameType/questionSetId/randomizeQuestions/selectedCategories
+  // would be silently ignored — the dialog shows those controls disabled, and
+  // a body that carried them anyway would make this function lie about what an
+  // edit can do (the same shape as the triviaTimer defect, in reverse).
+  test('sends only the whitelist — nothing the backend pins', () => {
+    // categoryIds joined the whitelist when the backend grew mask support; the
+    // still-pinned fields (gameType, setId, randomizeQuestions) still vanish.
+    expect(Object.keys(updateGameBody(form)).sort()).toEqual([
+      'aiContext', 'anonymousUntilReveal', 'categoryIds', 'engagementInfo', 'eventTitle', 'personaId',
+    ]);
+  });
+
+  test('categoryIds travel as given, and never travel empty or absent', () => {
+    /*
+      An EMPTY list is deliberately not a wire shape — the dialog refuses to
+      submit one ("no reachable questions" is not a thing to save), so this
+      function dropping it is belt-and-braces. An ABSENT key means "leave the
+      masks alone" to the backend's `'field' in body` builder, which is what a
+      caller that never rendered a category grid should say.
+    */
+    expect(updateGameBody(form).categoryIds).toEqual(['Leadership', 'Ops']);
+    expect('categoryIds' in updateGameBody({ ...form, categoryIds: [] })).toBe(false);
+    const { categoryIds, ...formWithout } = form;
+    expect('categoryIds' in updateGameBody(formWithout)).toBe(false);
+  });
+
+  // rejects: any edited field silently failing to reach the PUT body.
+  test('carries the title, details, context and persona the host edited', () => {
+    const body = updateGameBody(form);
+    expect(body.eventTitle).toBe('Q3 Leadership Offsite');
+    expect(body.engagementInfo).toBe('Half a day on pricing.');
+    expect(body.aiContext).toBe('Pricing team, mid-market SaaS.');
+    expect(body.personaId).toBe('coach');
+  });
+
+  // rejects: deleting the key for a blanked field. The backend's `'field' in
+  // body` builder leaves an ABSENT key untouched — so a host who cleared the
+  // details would see the old text reappear on refresh. null survives
+  // JSON.stringify; undefined does not.
+  test('a cleared field is an explicit null, never a missing key', () => {
+    const body = updateGameBody({ ...form, eventDetails: '', aiContext: '' });
+    const wire = JSON.parse(JSON.stringify(body));
+    expect(wire.engagementInfo).toBeNull();
+    expect(wire.aiContext).toBeNull();
+    expect('engagementInfo' in wire).toBe(true);
+    expect('aiContext' in wire).toBe(true);
+  });
+
+  // '' means "adapt to the session" — the backend REMOVEs the attribute — so
+  // the empty string has to survive as one, exactly as on create.
+  test('an unset persona is the empty string, not undefined', () => {
+    expect(updateGameBody({ ...form, personaId: '' }).personaId).toBe('');
+  });
+
+  // rejects: dropping the createPayloadFor spread. The anonymity flag is
+  // whitelisted on PUT, and it must obey the same type rule as create — a
+  // trivia session sends false explicitly, whatever the toggle said.
+  test('carries the anonymity flag the type and the toggle agree on', () => {
+    expect(updateGameBody(form).anonymousUntilReveal).toBe(true);
+    expect(updateGameBody({ ...form, anonymousResponses: false }).anonymousUntilReveal).toBe(false);
+    expect(updateGameBody({ ...form, gameType: 'trivia' }).anonymousUntilReveal).toBe(false);
+  });
+
+  // rejects: always sending visibility. The dialog has no visibility control,
+  // and an absent key is the backend's "leave it alone" — inventing a value
+  // here would silently re-publish every private session on each save.
+  test('visibility rides along only when the form actually carries it', () => {
+    expect('visibility' in updateGameBody(form)).toBe(false);
+    expect(updateGameBody({ ...form, visibility: 'private' }).visibility).toBe('private');
   });
 });

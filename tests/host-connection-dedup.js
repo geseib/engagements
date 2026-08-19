@@ -162,17 +162,76 @@ const idsOf = () => rows().map((i) => i.ConnectionId).sort();
   // go to every HOST row — whereas picking a winner by anything other than time
   // means a coin flip over which socket the client is holding, which is the
   // silent-deafness bug this file exists for.
+/**
+ * Run `fn` with the clock stopped, so "the same millisecond" is a fact rather
+ * than a coincidence.
+ *
+ * THE FLAKE THIS EXISTS FOR — task #16, and it was the test's fault, not the
+ * product's.
+ *
+ * The simultaneous-connect check below stamped its fixture row with
+ * `new Date().toISOString()` and then let `connect.js` stamp the connecting row
+ * with its OWN `new Date().toISOString()`. That is two reads of a moving clock.
+ * They usually land in the same millisecond, and the check passes; when the
+ * millisecond ticks between them the fixture is STRICTLY OLDER, the handler
+ * correctly retires it, and the assertion fails.
+ *
+ * So the suite failed intermittently — observed three times in one day, each
+ * time passing on re-run, and each time costing somebody the work of proving it
+ * was not their regression. That cost is the whole reason to fix it: a suite
+ * that cries wolf trains people to re-run rather than read.
+ *
+ * The PRODUCT rule is right and is not touched: `ConnectedAt < connectedAt`
+ * retires strictly-older rows only, so equal stamps retire nobody. The test
+ * simply had no way to make "equal" happen on demand. Freezing the clock gives
+ * it one, and the check now exercises the case its name claims.
+ *
+ * Restored in a `finally`: a leaked global Date would silently corrupt every
+ * check after this one, which is a worse flake than the one being fixed.
+ */
+const withFrozenClock = async (iso, fn) => {
+  const RealDate = Date;
+  const fixed = new RealDate(iso);
+  class FrozenDate extends RealDate {
+    constructor(...args) {
+      // Only a bare `new Date()` is frozen. `new Date(someString)` must keep
+      // parsing, or the fixtures that build explicit timestamps break.
+      if (args.length === 0) return new RealDate(fixed);
+      return new RealDate(...args);
+    }
+    static now() { return fixed.getTime(); }
+  }
+  global.Date = FrozenDate;
+  try {
+    return await fn(iso);
+  } finally {
+    global.Date = RealDate;
+  }
+};
+
   await check('simultaneous host connects both survive rather than one going deaf', async () => {
-    store.clear();
-    const same = new Date().toISOString();
-    put({
-      PK: `GAME#${GAME}`, SK: 'CONNECTION#host-a', ConnectionId: 'host-a',
-      ConnectionType: 'HOST', GameId: GAME, PlayerName: null, ConnectedAt: same,
+    await withFrozenClock('2026-08-18T12:00:00.000Z', async (same) => {
+      store.clear();
+      put({
+        PK: `GAME#${GAME}`, SK: 'CONNECTION#host-a', ConnectionId: 'host-a',
+        ConnectionType: 'HOST', GameId: GAME, PlayerName: null, ConnectedAt: same,
+      });
+      // connect.js stamps its own row from the same frozen clock, so the two are
+      // genuinely equal — which is the case this check is named for and could
+      // previously only reach by luck.
+      await handler(connectEvent('host-b', { isHost: 'true' }));
+
+      const ids = idsOf();
+      assert.ok(ids.includes('host-b'), 'the connecting socket lost its own row');
+      assert.ok(ids.includes('host-a'), 'a same-millisecond peer was evicted on a coin flip');
+
+      // The premise itself, asserted rather than assumed. If a future change
+      // makes connect.js stamp from something other than the clock, this check
+      // would go green while testing nothing at all.
+      const stamps = rows().map((i) => i.ConnectedAt);
+      assert.deepStrictEqual([...new Set(stamps)], [same],
+        'the two rows were not actually stamped simultaneously');
     });
-    await handler(connectEvent('host-b', { isHost: 'true' }));
-    const ids = idsOf();
-    assert.ok(ids.includes('host-b'), 'the connecting socket lost its own row');
-    assert.ok(ids.includes('host-a'), 'a same-millisecond peer was evicted on a coin flip');
   });
 
   // A legacy row written before ConnectedAt existed has no claim on the future.
