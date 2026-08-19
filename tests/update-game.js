@@ -88,6 +88,12 @@ const fakeDoc = {
     sent.push({ type: cmd.type, key: inp.Key || (inp.Item && { PK: inp.Item.PK, SK: inp.Item.SK }), input: inp });
     switch (cmd.type) {
       case 'put':
+        // attribute_not_exists(PK) is the id-reservation lock (issue #26) —
+        // honour it, or the collision tests test a fake that cannot collide.
+        if (/attribute_not_exists\(PK\)/.test(inp.ConditionExpression || '')
+            && store.has(key(inp.Item.PK, inp.Item.SK))) {
+          throw conditionalFailure();
+        }
         store.set(key(inp.Item.PK, inp.Item.SK), inp.Item);
         return {};
       case 'get':
@@ -744,6 +750,80 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
       `no questions left after a category edit: ${JSON.stringify(counts)}`);
     // AvailMask is "which categories HAVE questions" and no edit may touch it.
     assert.strictEqual(catsRowOf(id)['AvailMask1-8'], '11110000');
+  });
+
+  loud();
+  console.log('\nthe 4-digit id cannot silently take over a living session (issue #26)\n');
+
+  /*
+    THE REPORTED LOSS, END TO END. "if you attempt to edit the session, it
+    appears to mess up the questions/categories... when you start there are no
+    categories, and no questions left" — and, the clincher — "it appears to be
+    missing from history now."
+
+    The mechanism was never the edit: create drew a random 4-digit id with NO
+    uniqueness check and nine blind Puts, so a later create that drew a living
+    session's id overwrote it row by row — new set, new masks, and a new title
+    on the GAMES index row, which is exactly "missing from history". The edit
+    correlated only because heavy edit-and-test days are heavy CREATE days.
+  */
+  const purge = (id) => {
+    for (const k of [...store.keys()]) {
+      if (k.startsWith(`GAME#${id}|`) || k === key('GAMES', `GAME#${id}`)) store.delete(k);
+    }
+  };
+  const realRandom = Math.random;
+
+  await acheck('a colliding draw retries, and BOTH sessions survive intact', async () => {
+    purge('1900'); purge('5500');
+    // 0.1 -> id 1900 twice (the collision), then 0.5 -> 5500. The fixed tail
+    // keeps any further draw deterministic.
+    const seq = [0.1, 0.1, 0.5];
+    let call = 0;
+    Math.random = () => seq[Math.min(call++, seq.length - 1)];
+    try {
+      quiet();
+      const original = await createGame({
+        eventTitle: 'The original', gameType: 'call-and-answer',
+        questionSetId: 'set-cats', selectedCategories: ['c001'],
+      });
+      const newcomer = await createGame({
+        eventTitle: 'The newcomer', gameType: 'call-and-answer',
+        questionSetId: 'set-cats', selectedCategories: ['c002'],
+      });
+      loud();
+
+      assert.strictEqual(original.body.gameId, '1900');
+      assert.strictEqual(newcomer.status, 201, JSON.stringify(newcomer.body));
+      assert.notStrictEqual(newcomer.body.gameId, '1900',
+        'the collision was not detected — the newcomer took the living id');
+
+      // The original is UNTOUCHED — this is the exact loss that was reported.
+      assert.strictEqual(store.get(key('GAMES', 'GAME#1900')).Title, 'The original',
+        'the history row now belongs to the newcomer: "missing from history"');
+      assert.strictEqual(catsRowOf('1900')['HostMask1-8'], '10000000',
+        'the original\'s category masks were overwritten');
+      assert.strictEqual(metadataOf('1900').Title, 'The original');
+    } finally {
+      Math.random = realRandom;
+    }
+  });
+
+  await acheck('an exhausted id space is an honest 503, never a lucky overwrite', async () => {
+    // Every draw lands on the id the previous test left living.
+    Math.random = () => 0.1;
+    try {
+      quiet();
+      const res = await createGame({
+        eventTitle: 'Cannot fit', gameType: 'call-and-answer', questionSetId: 'set-cats',
+      });
+      loud();
+      assert.strictEqual(res.status, 503, JSON.stringify(res.body));
+      assert.strictEqual(store.get(key('GAMES', 'GAME#1900')).Title, 'The original',
+        'the give-up path still overwrote the living session');
+    } finally {
+      Math.random = realRandom;
+    }
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
