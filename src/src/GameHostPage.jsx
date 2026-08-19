@@ -3860,28 +3860,29 @@ Focus on actionable business strategy insights.`;
     // in `form.setId` from here on.
     setPendingSetId('');
 
-    try {
-      // Clear all game data from database (always call, backend handles empty gameId gracefully)
-      console.log(`🗑️ HOST: Clearing old game data (gameId: ${gameId || 'none'})`);
-      const clearResponse = await authFetch(`${API_BASE}admin/clear-game/${gameId || 'empty'}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
+    /*
+      THE DESTRUCTIVE CLEAR THAT USED TO SIT HERE DELETED "80s 2" (issue #26).
 
-      if (clearResponse.ok) {
-        const clearData = await clearResponse.json();
-        console.log(`✅ HOST: Clear response:`, clearData);
-        if (clearData.status === 'no_game_id') {
-          console.log(`📝 HOST: No previous game to clear - starting fresh`);
-        } else {
-          console.log(`🗑️ HOST: Cleared ${clearData.itemsDeleted} items from previous game`);
-        }
-      }
-    } catch (e) {
-      console.error('handleStartNewGame clear error', e);
-      // Don't fail the new game creation if clear fails
-      console.log(`⚠️ HOST: Clear failed, but continuing with new game creation`);
-    }
+      It read: "Clear all game data from database (always call...)" and POSTed
+      /admin/clear-game/{gameId} — the id of WHATEVER SESSION WAS ON STAGE —
+      before every create. CloudWatch shows it plainly: 10:17:46 "Successfully
+      deleted game 9209 and all related data", 10:17:47 session "80s 3"
+      created. 9209 was "80s 2". Creating a session destroyed the one the host
+      was leaving.
+
+      It was written for the one-throwaway-demo world where the page only ever
+      held a single disposable session, and it survived into the world of
+      durable sessions with history, reports and an Edit dialog — where "make
+      a new one" must never mean "burn the old one". It also poisoned the
+      history list downstream: the deleted session lingered in the stale UI,
+      and starting that ghost produced the "no categories, and no questions
+      left" zombie.
+
+      Nothing replaces it. The LOCAL reset (leaveCurrentGame) already handles
+      page state, and the database needs no clearing — old sessions are
+      exactly what History exists to keep. Deleting a session is Delete's job,
+      behind its own confirmation.
+    */
     
     // Create the game first - let backend generate the gameId
     console.log(`🆕 HOST: Creating new game with backend-generated ID`);
