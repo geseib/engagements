@@ -368,6 +368,17 @@ body {
   font-size: 1.05rem;
 }
 
+/* The phase-specific key legend under the buttons. Muted and floor-adjacent —
+   it is a glanced legend, not copy — but never below the 12px floor: unlike
+   the ON/OFF echo it carries information nothing else on screen states. */
+.host-action-bar__keyhint {
+  margin-top: 4px;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  text-align: right;
+}
+
 .host-action-bar__kbd {
   font-family: var(--font-ui);
   font-size: 0.7rem;

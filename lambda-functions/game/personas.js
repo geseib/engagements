@@ -390,6 +390,25 @@ const resolvePersona = async ({
   const fromSet = await tryPersona(setPersonaId, 'question_set');
   if (fromSet) return fromSet;
 
+  /*
+    THE CONTEXT RUNGS SURVIVE, BUT LOSING NO LONGER MEANS SILENCE. Two owner
+    reports pull on this chain from opposite ends, and both are honored:
+
+    The DJ report (pinned by tests/persona-resolution.js, "the witty DJ beats
+    the business strategist") wants a set whose aiContext is WRITTEN AS a
+    persona — "you are a witty DJ" — to define the voice when nobody picked
+    one. So the rungs stay: with no persona anywhere, a context still speaks.
+
+    Today's report — "extra info about the event/session and instructions for
+    the AI... none of these seem to contribute, and they always should" — was
+    the other half: whichever rung fired, everything below it was DISCARDED,
+    so any persona (and most sets carry one) silently swallowed the host's
+    context. The fix for that is NOT here: get-ai-summary now appends
+    buildContextBlock for every context that did not become the voice, so
+    being outranked in this chain no longer means being unheard. A first
+    attempt deleted these rungs outright and the DJ test caught it — deleting
+    one owner's fix to implement the other's is not a fix.
+  */
   if (questionSetAiContext && questionSetAiContext.trim()) {
     return { source: 'question_set_context', voice: questionSetAiContext.trim(), inferred: false };
   }
@@ -405,6 +424,39 @@ const resolvePersona = async ({
   return { source: 'inferred', voice: INFERRED_VOICE, inferred: true, templateInstructions: templateInstructions.trim() };
 };
 
+/**
+ * WHAT THE HOST TOLD US ABOUT THIS SESSION, as one labeled block — or '' when
+ * they told us nothing.
+ *
+ * ALWAYS APPENDED, NEVER COMPETED FOR. The old design routed these through two
+ * doors and both could shut: the persona chain used them as fallback voices
+ * (so any persona silenced them), and the template variable {contextSections}
+ * carried them only into templates that happened to contain the placeholder
+ * (authored and imported prompts mostly do not). Either door closing was
+ * silent, and the host typed context into a void.
+ *
+ * Three fields, three jobs, no shadowing — `AIContext || EngagementInfo` used
+ * to funnel both into one slot, so filling in the instructions erased the
+ * event details:
+ *   eventDetails        what this session IS (the "extra info about the event")
+ *   hostInstructions    what the host wants from the AI, in their words
+ *   questionSetContext  what the set's author wanted every session to know
+ */
+const buildContextBlock = ({ eventDetails, hostInstructions, questionSetContext } = {}) => {
+  const lines = [];
+  if (eventDetails && String(eventDetails).trim()) {
+    lines.push(`ABOUT THIS SESSION: ${String(eventDetails).trim()}`);
+  }
+  if (hostInstructions && String(hostInstructions).trim()) {
+    lines.push(`THE HOST'S INSTRUCTIONS: ${String(hostInstructions).trim()}`);
+  }
+  if (questionSetContext && String(questionSetContext).trim()) {
+    lines.push(`FROM THE QUESTION SET'S AUTHOR: ${String(questionSetContext).trim()}`);
+  }
+  if (!lines.length) return '';
+  return `SESSION CONTEXT — weave this into your reading of the room:\n${lines.join('\n')}`;
+};
+
 /** Assemble the full voice + structure preamble. */
 const buildPromptPreamble = (persona, prompt) => {
   const voice = (persona && persona.voice) || INFERRED_VOICE;
@@ -414,6 +466,7 @@ const buildPromptPreamble = (persona, prompt) => {
 module.exports = {
   SEED_PERSONAS,
   INFERRED_VOICE,
+  buildContextBlock,
   DEFAULT_OUTPUT_SECTIONS,
   normalizeOutputSections,
   resolveOutputSections,

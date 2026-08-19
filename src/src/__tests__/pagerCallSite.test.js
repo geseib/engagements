@@ -138,7 +138,11 @@ describe('the stage pages its answer list, and the page keys obey the existing s
     // specifically, and TV's ladder is the one that holds least — a literal is
     // the version that keeps cutting TV off.
     expect(CODE).toMatch(/const stagePageSize = pageSizeFor\(profile\)/);
-    expect(SOURCE).toMatch(/import \{ pageSizeFor, pageSlice \} from '\.\/config\/stagePaging'/);
+    // Named imports, not the exact list: the page also imports the prose
+    // pagers from this module now (the Workie page-turn keys), and pinning the
+    // full literal made every new import from the same file read as a paging
+    // regression. The contract is that BOTH functions come from stagePaging.
+    expect(SOURCE).toMatch(/import \{[^}]*pageSizeFor[^}]*pageSlice[^}]*\} from '\.\/config\/stagePaging'/);
   });
 
   test('every card is labelled by its ABSOLUTE index, on both states', () => {

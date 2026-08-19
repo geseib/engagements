@@ -4,7 +4,7 @@ const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanComman
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
-const { resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutputShape } = require('./personas');
+const { resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutputShape, buildContextBlock } = require('./personas');
 const { normalizeGameType } = require('./game-types');
 const { isUsableSummaryPrompt, summaryPromptDefect } = require('./prompt-shape');
 const { extractVariableTokens } = require('./template-variables');
@@ -1018,7 +1018,15 @@ exports.handler = async (event) => {
     const aiData = {
       eventTitle: metadata.EventTitle || metadata.Title || 'Engagement Event',
       gameType: metadata.GameType || 'call-and-answer',
-      gameAiContext: metadata.AIContext || metadata.EngagementInfo || '',
+      /*
+        TWO FIELDS, TWO SLOTS. This read was `AIContext || EngagementInfo` —
+        one slot, so a host who filled in the AI instructions ERASED their own
+        event details from the prompt. Half of the reported "none of these
+        seem to contribute"; the other half was the persona chain discarding
+        both (see personas.js).
+      */
+      gameAiContext: metadata.AIContext || '',
+      eventDetails: metadata.EngagementInfo || metadata.Details || '',
       questionSetAiContext: questionSetAiContext,
       customInstruction: customInstruction,
       promptId: promptId,
@@ -1228,7 +1236,7 @@ exports.buildFallbackSummary = buildFallbackSummary;
 // so the direct call is now a convenience rather than a workaround.
 exports.generateAISummary = generateAISummary;
 
-async function generateAISummary({ eventTitle, gameType, gameAiContext, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults }) {
+async function generateAISummary({ eventTitle, gameType, gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults }) {
   // ANONYMITY: while hidden, nothing that ties this round's answer to its
   // author may reach the model — not just the deterministic fallback below.
   // The model's OWN generated summary is built from the template variables
@@ -1360,6 +1368,9 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
   
   // Build context sections for the AI prompt
   const contextSections = [];
+  if (eventDetails) {
+    contextSections.push(`ABOUT THIS SESSION: ${eventDetails}`);
+  }
   if (gameAiContext) {
     contextSections.push(`SESSION BACKGROUND: ${gameAiContext}`);
   }
@@ -2209,7 +2220,35 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, question
   const customShape = hasCustomOutputShape(promptData);
   console.log(`🧱 OUTPUT SHAPE: ${describeOutputShape(promptData)}${customShape ? ' (declared by prompt)' : ' (system default)'}`);
 
-  let prompt = `VOICE:\n${persona.voice}\n\n${templateBody}\n\n${buildOutputContract(promptData)}`;
+  /*
+    THE CONTEXT LAYER, GUARANTEED. Until now the host's context reached the
+    prompt only through the {contextSections} template variable — present in
+    the built-in default template and absent from most authored and imported
+    prompts, where the context silently vanished. Reported as: "you can
+    specify extra info about the event/session and instructions for the AI...
+    none of these seem to contribute to the AI workie's response, and they
+    always should."
+
+    So: a template that places {contextSections} keeps placing it (its author
+    chose where); any other template gets the block injected here, after the
+    voice and before the template body. One door or the other is always open,
+    and which one is not the host's problem.
+  */
+  const contextBlock = buildContextBlock({
+    eventDetails,
+    // A context that BECAME the voice (see the chain in personas.js) is
+    // already the loudest thing in the prompt; repeating it here as a labeled
+    // line would make the model weigh it twice. Everything that did NOT
+    // become the voice travels.
+    hostInstructions: persona.source === 'game_context' ? '' : gameAiContext,
+    questionSetContext: persona.source === 'question_set_context' ? '' : questionSetAiContext,
+  });
+  const templateCarriesContext = templateBody.includes('{contextSections}');
+  const contextLayer = (!templateCarriesContext && contextBlock)
+    ? `${contextBlock}\n\n`
+    : '';
+
+  let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}\n\n${buildOutputContract(promptData)}`;
 
   // Debug: Log key trivia variables
   if (gameType === 'trivia') {

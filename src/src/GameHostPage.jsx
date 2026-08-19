@@ -12,6 +12,7 @@ import WelcomeScreen from './components/WelcomeScreen';
 import HostQuestionSetsDialog from './components/HostQuestionSetsDialog';
 import WavelengthWordCloud from './components/WavelengthWordCloud';
 import Icon from './components/Icon';
+import Modal from './components/Modal';
 import SetImageBadge from './components/SetImageBadge';
 import SessionHistoryPanel from './components/SessionHistoryPanel';
 import InviteDialog from './components/InviteDialog';
@@ -26,7 +27,7 @@ import Dock from './components/stage/Dock';
 import Pager from './components/stage/Pager';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
 import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfile';
-import { pageSizeFor, pageSlice } from './config/stagePaging';
+import { pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor } from './config/stagePaging';
 import AnswerSpotlight from './components/AnswerSpotlight';
 import { pageOf } from './utils/answerSpotlight';
 import PastRound from './components/PastRound';
@@ -3615,6 +3616,35 @@ Focus on actionable business strategy insights.`;
   // moved into handleSwitchGame below, and clearing the title is now part of
   // the central reset.
 
+  /*
+    THE LEAVE GUARD. Owner: "if this button is always around during an actual
+    game, it needs a guard asking are you sure you want to leave, with the
+    default no."
+
+    The guard is on the ACT, not on any one button — the dock's Back to Menu
+    (lobby and ended) and the settings panel's copy both route through here, so
+    there is no unguarded door left to find. It asks only when leaving could
+    surprise someone: a session with people in the room. An empty lobby, a
+    CREATED session or a finished one leaves immediately — a confirmation with
+    nothing at stake teaches people to click through confirmations.
+
+    "Default no" is the FOCUS, not a checkbox: the Stay button takes focus on
+    open, so Enter stays and Escape stays, and leaving requires aiming at the
+    one button that leaves. Leaving is not destructive — the session stays
+    live and Continue reopens it, and the dialog says so — which is why this
+    is a small modal and not the type-to-confirm ceremony deletion gets.
+  */
+  const [confirmLeave, setConfirmLeave] = useState(false);
+
+  const requestLeave = () => {
+    const midSession = gameState !== 'CREATED' && gameState !== 'ENDED' && players.length > 0;
+    if (midSession) {
+      setConfirmLeave(true);
+      return;
+    }
+    handleSwitchGame();
+  };
+
   const handleSwitchGame = () => {
     // Leaving the game the host is watching. Every per-game value goes back to
     // its initial state HERE, before the welcome screen appears, so whichever
@@ -4513,7 +4543,7 @@ Focus on actionable business strategy insights.`;
           the label is Back to Menu rather than Exit: see the note on the
           settings panel's copy of this button.
         */
-        handleSwitchGame();
+        requestLeave();
         break;
       default:
         console.warn(`Unknown host action intent: ${action.intent}`);
@@ -4939,6 +4969,45 @@ Focus on actionable business strategy insights.`;
               onAction={runHostAction}
               bigScreen
               shortcutsEnabled={!anyOverlayOpen}
+              /*
+                → PAGES BEFORE IT ADVANCES. Reported: "host tend to skip the
+                extra pages of the workie response by hitting the right
+                arrow." On FIELD_NOTES with unread pages ahead, the advance
+                key turns the page; on the LAST page it advances the round —
+                the same mental model as a slide deck, where "next" moves
+                through the content before it moves past it. The dock BUTTON
+                always advances: a host who clicks Next Round means it.
+              */
+              interceptAdvance={() => {
+                if (hostPhase !== 'FIELD_NOTES') return false;
+                const md = currentAIInsights?.markdownResponse;
+                if (!md) return false;
+                const slice = prosePageSlice(md, stagePageIndex, proseBudgetFor(profile));
+                if (slice.page >= slice.pages - 1) return false;
+                setStagePageIndex(slice.page + 1);
+                return true;
+              }}
+              /*
+                ← STEPS BACKWARDS — pages first, then the beat. At the first
+                Workie page it returns the room to the RESULTS tally, which is
+                the "way to go backwards from the AI Workie screen to the
+                results screen" and the key config/stagePaging.js reserved for
+                exactly this. Published over /stage-beat, so the phone remote
+                follows the step back the same way it follows the step in.
+              */
+              onBackKey={() => {
+                if (hostPhase !== 'FIELD_NOTES') return false;
+                if (stagePageIndex > 0) {
+                  setStagePageIndex(stagePageIndex - 1);
+                  return true;
+                }
+                setResultsBeat('results');
+                publishStageBeat('results');
+                return true;
+              }}
+              keyHint={hostPhase === 'FIELD_NOTES'
+                ? '→ next page · ← back · at the end, → starts the next round'
+                : ''}
             />
           </Dock>
         )}
@@ -5624,13 +5693,54 @@ Focus on actionable business strategy insights.`;
           authorsRevealed={authorsRevealed}
           onViewReports={handleViewReports}
           onShowHowToPlay={() => setLessonExpanded(true)}
-          onSwitchGame={handleSwitchGame}
+          onSwitchGame={requestLeave}
           onSignOut={handleSignOut}
           // The group AdminPage's own ProtectedRoute requires. Offering the
           // link to a plain host would open a tab onto Access Denied.
           isAdmin={Boolean(currentUser?.groups?.includes('admins'))}
           issueControl={<IssueFab context="host" gameId={gameId} />}
         />
+      )}
+
+      {/*
+        THE LEAVE GUARD'S QUESTION — see requestLeave for when it opens. Stay
+        is first in DOM order and autofocused, so Enter stays, Escape stays,
+        Tab lands on it, and the only way OUT of the session is aiming at the
+        one button that says so: "with the default no", literally.
+      */}
+      {confirmLeave && (
+        <Modal
+          overlayClassName="modal-overlay"
+          contentClassName="gsd new-game-dialog leave-guard"
+          label="Leave this session?"
+          onClose={() => setConfirmLeave(false)}
+          closeOnBackdrop
+          closeOnEscape
+        >
+          <h2>Leave this session?</h2>
+          <div className="dialog-content">
+            <p className="dialog-help-text" style={{ fontSize: '15px' }}>
+              {`${players.length} ${players.length === 1 ? 'person is' : 'people are'} in the room. The session stays live — their screens keep working, and you can come back to it any time with Continue.`}
+            </p>
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="btn-primary"
+                autoFocus
+                onClick={() => setConfirmLeave(false)}
+              >
+                Stay in the session
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => { setConfirmLeave(false); handleSwitchGame(); }}
+              >
+                Back to Menu
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Expanded QR Code Modal -- also the rail's pinned/previewed QR. Same

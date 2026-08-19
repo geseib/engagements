@@ -177,7 +177,15 @@ describe('the primary action per phase', () => {
 
   it('offers the skip escape hatch only while answering', () => {
     expect(hostControlsFor({ gameType: 'poll', phase: 'ASK', ...READY }).secondary).toBeTruthy();
-    ['LOBBY', 'VOTE', 'RESULTS'].forEach((phase) => {
+    /*
+      LOBBY left this list when it grew its own secondary — Back to Menu, the
+      owner's "easy way to go back out" — so the phases with NO second button
+      are now exactly the mid-round ones, where a room is watching and a second
+      control is one more thing to aim at.
+    */
+    expect(hostControlsFor({ gameType: 'poll', phase: 'LOBBY', ...READY }).secondary)
+      .toMatchObject({ intent: 'leave', label: 'Back to Menu' });
+    ['VOTE', 'RESULTS'].forEach((phase) => {
       expect(hostControlsFor({ gameType: 'poll', phase, ...READY }).secondary).toBeNull();
     });
   });

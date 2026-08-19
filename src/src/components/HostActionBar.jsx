@@ -42,6 +42,30 @@ export default function HostActionBar({
   onAction,
   bigScreen = false,
   shortcutsEnabled = true,
+  /*
+    THE KEY MAY MEAN LESS THAN THE BUTTON. Reported: "host tend to skip the
+    extra pages of the workie response by hitting the right arrow." On
+    FIELD_NOTES the natural reading of → is "next page", but the primary is
+    Next Round — so a host paging through Workie's summary walked the room out
+    of it, unread. The page owns the paging state, so it decides: this hook
+    runs before the primary fires, and a `true` means "I consumed that press"
+    (it turned a page). The BUTTON is untouched — a host who clicks Next Round
+    means Next Round; only the ambiguous key defers.
+  */
+  interceptAdvance = null,
+  /*
+    ← steps BACKWARDS — the key the paging design reserved from day one
+    ("ArrowLeft is the clicker's other button and is reserved for stepping the
+    beat backwards", config/stagePaging.js) and nothing ever wired. Reported:
+    "there should be a way to go backwards from the AI Workie screen to the
+    results screen." Same guard set as the advance keys; returns true to
+    consume, false to leave the browser alone.
+  */
+  onBackKey = null,
+  /* One line under the buttons saying what the keys do RIGHT NOW — the
+     "visual queue on what to press". Changes with the phase, so it is the
+     caller's sentence, not this component's guess. */
+  keyHint = '',
 }) {
   const primary = controls?.primary || null;
   const secondary = controls?.secondary || null;
@@ -80,12 +104,36 @@ export default function HostActionBar({
       // Also stops the browser page-scrolling on space, and stops a *focused*
       // primary button from firing its own click on top of this handler.
       event.preventDefault();
+      // The page may take this press for itself — a Workie page turn instead
+      // of a round advance. Only when it declines does the primary fire.
+      if (typeof interceptAdvance === 'function' && interceptAdvance()) return;
       onAction(primary);
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [shortcutsEnabled, primaryId, primaryDisabled, onAction, primary]);
+  }, [shortcutsEnabled, primaryId, primaryDisabled, onAction, primary, interceptAdvance]);
+
+  // ← — the backwards key, with the exact guard set the advance keys carry.
+  // Registered only while the caller has somewhere to go back TO; when
+  // `onBackKey` is null the key stays the browser's.
+  useEffect(() => {
+    if (!shortcutsEnabled || typeof onBackKey !== 'function') return undefined;
+
+    const onKeyDown = (event) => {
+      if (event.key !== 'ArrowLeft') return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.repeat) return;
+      if (isTypingTarget(event.target)) return;
+      if (event.target?.closest?.('.setup-panel')) return;
+      // preventDefault only when the press was actually taken: an unconsumed
+      // ← (nothing to go back to) must keep scrolling a scrollable rail.
+      if (onBackKey()) event.preventDefault();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [shortcutsEnabled, onBackKey]);
 
   if (!primary) return null;
 
@@ -132,6 +180,16 @@ export default function HostActionBar({
             <kbd className="host-action-bar__kbd" aria-hidden="true">Space</kbd>
           )}
         </div>
+        {/*
+          WHAT THE KEYS DO RIGHT NOW — "should there be a visual queue on what
+          to press for different actions." The Space chip above says a key
+          exists; this line says what it means in THIS phase, which matters
+          precisely where the meaning shifts (paging inside Workie's summary
+          vs advancing out of it).
+        */}
+        {keyHint && (
+          <div className="host-action-bar__keyhint" aria-hidden="true">{keyHint}</div>
+        )}
       </div>
     </div>
   );
