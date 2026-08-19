@@ -438,3 +438,28 @@ describe('§6 the stylesheet contracts jsdom cannot measure', () => {
     expect(CSS).not.toMatch(/color:\s*var\(--danger\)/);
   });
 });
+
+
+describe('creating a session deletes nothing — issue #26, the real mechanism', () => {
+  /*
+    CloudWatch, 2026-08-19: 10:17:46 "Successfully deleted game 9209 and all
+    related data"; 10:17:47 session "80s 3" created. 9209 was "80s 2", and the
+    deleter was handleStartNewGame itself — a pre-create "clear old game data"
+    call left over from the one-throwaway-demo era, pointed at whatever session
+    was on stage. History is the feature that makes that call catastrophic:
+    sessions are durable now, and "make a new one" must never mean "burn the
+    one I was on".
+
+    Source-level, because the deletion was a side effect three layers from any
+    rendered control: the ONLY caller of the destructive endpoint must be the
+    Delete flow, which stands behind its own confirmation.
+  */
+  test('the create flow contains no clear-game call', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')      // the post-mortem comment may name it
+      .replace(/^\s*\/\/.*$/gm, '');
+    expect(src).not.toMatch(/clear-game/);
+  });
+});
