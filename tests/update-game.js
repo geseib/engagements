@@ -530,6 +530,20 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
     store.set(key('SET#set-cats', `CATEGORY#c00${i + 1}`), {
       PK: 'SET#set-cats', SK: `CATEGORY#c00${i + 1}`, Name: name, QuestionCount: 5,
     });
+    /*
+      REAL QUESTION ROWS, not just a QuestionCount attribute. create's counts
+      row is built from a per-category Query over these — an earlier version of
+      this fixture carried only the attribute, create wrote all-zero counts,
+      and the edit-then-start tests below reported "no questions left" against
+      a healthy write path. The fixture was reproducing the symptom the tests
+      exist to catch, from the other side.
+    */
+    for (let q = 1; q <= 5; q += 1) {
+      store.set(key('SET#set-cats', `QUESTION#c00${i + 1}#00${q}`), {
+        PK: 'SET#set-cats', SK: `QUESTION#c00${i + 1}#00${q}`,
+        Category: name, Title: `${name} ${q}`,
+      });
+    }
   });
   const catGame = await createGame({
     eventTitle: 'Category session', gameType: 'call-and-answer',
@@ -675,6 +689,61 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
     const res = await toggle(doneId, { categoryId: '1', categoryName: 'Alpha', enabled: false });
     loud();
     assert.strictEqual(res.status, 400, JSON.stringify(res.body));
+  });
+
+  loud();
+  console.log('\nthe reported corruption: edit, then start, then count what is left\n');
+
+  /*
+    Reported: "if you attempt to edit the session, it appears to mess up the
+    questions/categories for that session, so when you start there are no
+    categories, and no questions left."
+
+    These pin the SERVER's half of that journey — create with a real set, edit
+    (title-only, then categories), start, and then read back everything the
+    stage reads: the HostMasks, SelectedCategories, and the counts row the
+    "questions left" number comes from. If these stay green the corruption is
+    not in the write path, and the bug hunt moves to the client.
+  */
+  await acheck('edit title only, then start: masks, selection and counts all survive', async () => {
+    quiet();
+    const g = await createGame({
+      eventTitle: 'Edit-then-start', gameType: 'call-and-answer',
+      questionSetId: 'set-cats', selectedCategories: ['c001', 'c003'],
+    });
+    const id = g.body.gameId;
+    await putGame(id, { eventTitle: 'Renamed before start' });
+    await startGameHandler({ pathParameters: { gameId: id } });
+    loud();
+
+    assert.strictEqual(store.get(key(`GAME#${id}`, 'STATE')).State, 'STARTED');
+    assert.strictEqual(catsRowOf(id)['HostMask1-8'], '10100000',
+      'the masks the host chose at create did not survive an unrelated edit');
+    const counts = store.get(key(`GAME#${id}`, 'STATE#CATS#COUNTS'));
+    assert.ok(counts && counts.TotalRemaining > 0,
+      `no questions left after an edit: ${JSON.stringify(counts)}`);
+  });
+
+  await acheck('edit CATEGORIES, then start: the new masks hold and questions remain', async () => {
+    quiet();
+    const g = await createGame({
+      eventTitle: 'Recategorised', gameType: 'call-and-answer',
+      questionSetId: 'set-cats', selectedCategories: ['c001', 'c002', 'c003', 'c004'],
+    });
+    const id = g.body.gameId;
+    // The dialog sends NAMES (its grid keys on them); the round trip must
+    // normalise and land without touching the counts.
+    await putGame(id, { eventTitle: 'Renamed too', categoryIds: ['Alpha', 'Charlie'] });
+    await startGameHandler({ pathParameters: { gameId: id } });
+    loud();
+
+    assert.strictEqual(catsRowOf(id)['HostMask1-8'], '10100000');
+    assert.deepStrictEqual(metadataOf(id).SelectedCategories, ['c001', 'c003']);
+    const counts = store.get(key(`GAME#${id}`, 'STATE#CATS#COUNTS'));
+    assert.ok(counts && counts.TotalRemaining > 0,
+      `no questions left after a category edit: ${JSON.stringify(counts)}`);
+    // AvailMask is "which categories HAVE questions" and no edit may touch it.
+    assert.strictEqual(catsRowOf(id)['AvailMask1-8'], '11110000');
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
