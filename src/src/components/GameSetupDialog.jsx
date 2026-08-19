@@ -58,6 +58,7 @@ import { anonymityApplies } from '../config/anonymity';
 import { imageMarkerSuffix } from './SetImageBadge';
 import HostQuestionSetsDialog from './HostQuestionSetsDialog';
 import Modal from './Modal';
+import './GameSetupDialog.css';
 
 export default function GameSetupDialog({
   /*
