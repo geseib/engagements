@@ -104,6 +104,14 @@ function GameHostPage() {
   
   // 🎯 GAME ID MANAGEMENT: Use URL as single source of truth
   const [gameId, setGameId] = useState('');
+  /*
+    Bumped by every switchToGame(), including one that re-opens the game
+    already in `gameId`. It exists ONLY to re-fire the restore effect in that
+    same-id case — React bails out of a same-id setGameId entirely, and an
+    effect keyed on `[gameId]` alone never ran, leaving the freshly cleared
+    slate on screen as the session (game 5486). See switchToGame.
+  */
+  const [sessionEpoch, setSessionEpoch] = useState(0);
   
   // `isLobbyState` is imported from config/hostControls.js, beside
   // `phaseOfGameState`. It was a closure here, where no test could reach it,
@@ -880,20 +888,32 @@ function GameHostPage() {
   };
 
   /**
-   * Open a different game. THE choke point — every create/join/continue path
-   * goes through here, so per-game state can never be half-cleared.
+   * Open a game. THE choke point — every create/join/continue path goes
+   * through here, so per-game state can never be half-cleared.
    *
    * The reset and the `setGameId` land in the same React 18 batch, so the
    * screen never renders the new game id against the old game's data. The
-   * `[gameId]` effect then restores the new game from the server onto a clean
-   * slate — which matters because `restoreGameState()` only *adds*: a
-   * just-started game reports `currentQuestion: 0` and skips the entire
+   * restore effect then loads the game from the server onto a clean slate —
+   * which matters because `restoreGameState()` only *adds*: a just-started
+   * game reports `currentQuestion: 0` and skips the entire
    * question/answer/progress branch, so anything left behind would survive.
+   *
+   * THE EPOCH IS WHY RETURNING TO THE *SAME* SESSION WORKS — game 5486. The
+   * restore effect used to key on `[gameId]` alone, and a same-id setGameId
+   * is a state update React bails out of entirely: leaving a session (which
+   * clears every per-game value but not `gameId`) and then re-opening THAT
+   * session never re-fired the restore, so the host got the cleared slate as
+   * the session — no categories, no questions, "not able to start session".
+   * A different game changed the id and worked, which is exactly the shape
+   * the owner reported: "the issue only happens when you leave a session and
+   * come back to the same session." The epoch bumps on EVERY switch, so the
+   * effect re-fires whether or not the id changed.
    */
   const switchToGame = (nextGameId, overrides = {}) => {
     console.log(`🔁 HOST: switching to game ${nextGameId} (from ${gameId || 'none'})`);
     leaveCurrentGame(overrides);
     setGameId(nextGameId);
+    setSessionEpoch((epoch) => epoch + 1);
     setShowWelcomeScreen(false);
   };
 
@@ -1430,7 +1450,15 @@ Focus on actionable business strategy insights.`;
     };
     
     initializeGame();
-  }, [gameId]);
+    /*
+      `sessionEpoch` is a dependency BECAUSE `gameId` alone is not enough:
+      re-opening the very session the host just left keeps the id, React
+      bails out of the no-op setGameId, and without the epoch this restore
+      never ran — the cleared slate WAS the session. Game 5486's "all
+      categories and questions are missing" repro, fixed at the dependency.
+    */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId, sessionEpoch]);
 
   // REMOVED: HTTP polling - WebSocket handles all real-time updates // Include useWebSocket dependency
 
