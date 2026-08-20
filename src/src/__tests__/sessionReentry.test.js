@@ -42,6 +42,16 @@ describe('the session epoch — same-id re-entry restores', () => {
     expect(SRC).toMatch(/initializeGame\(\);[\s\S]{0,400}\}, \[gameId, sessionEpoch\]\);/);
   });
 
+  test('leaving carries NO set into the next create — the memory is retired', () => {
+    // The owner: "the create engagement should not remember or preselect that
+    // last picked question set." The mechanism was a pendingSetId captured in
+    // handleSwitchGame and fed to the dialog as initialSetId; both feeds are
+    // gone, so every create opens with the set unchosen and the Create button
+    // honestly disabled until a deliberate pick.
+    expect(SRC).not.toMatch(/pendingSetId/);
+    expect(SRC).not.toMatch(/initialSetId=\{/);
+  });
+
   test('no other dependency array quietly gained the epoch', () => {
     // The epoch exists for ONE effect. Spreading it into others would re-run
     // websocket connects and queue loads on every same-game re-entry for no

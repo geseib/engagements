@@ -31,12 +31,12 @@ Keys used in this plan: `Space` `→` `←` `↑` `↓` `\` `Esc` `Enter`.
 
 **Expected:** You land on the stage lobby with the session title on screen, a join QR, status "Waiting for players to join…", the primary button "Start First Question" (or the set's round noun) disabled with the hint "At least one player has to join first", and a **Back to Menu** secondary button on the dock.
 
-### T2 — Create pre-populated with the last-used set
+### T2 — Create starts blank, never pre-selected with the last-used set [REGRESSION]
 **Steps:**
 1. From the lobby, dock **Back to Menu** (no players yet, so no confirmation should appear).
 2. Click **Create engagement** again.
 
-**Expected:** The Question set dropdown is already set to the set you just used; the category grid is already showing. Cancel with the × or Escape — nothing is created and no confirmation is asked.
+**Expected:** The Question set dropdown is EMPTY — it must NOT show the set you just used — so no category grid shows yet and **Create engagement** is disabled until you deliberately pick a set. Cancel with the × or Escape — nothing is created and no confirmation is asked. (The dialog used to remember the last-played set; the owner retired that.)
 
 ### T3 — Edit a session before it starts (fields AND categories)
 **Steps:**

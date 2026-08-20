@@ -79,11 +79,11 @@ export default function GameSetupDialog({
   /*
     THE SET THE HOST WAS JUST USING, so Switch game reopens on it.
 
-    Seeded once rather than controlled: after mount the picker below owns this
-    value, and a prop that kept re-asserting itself would fight every change the
-    host makes. `handleSwitchGame` reads the outgoing game's set before the
-    reset clears it, which is the whole reason it is captured there and not
-    read from the page here.
+    NO CALLER PASSES THIS ANY MORE, ON PURPOSE. It existed so a create reopened
+    on the last-played set, and the owner retired that: "the create engagement
+    should not remember or preselect that last picked question set." The prop
+    survives (seeded once, never controlled) only as the seam a future caller
+    with a legitimate seed — a deep link, say — would use.
   */
   initialSetId = '',
   questionSets = [],

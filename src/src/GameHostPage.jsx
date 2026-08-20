@@ -492,16 +492,14 @@ function GameHostPage() {
   */
   const [editTarget, setEditTarget] = useState(null);
   /*
-    THE SET THE HOST WAS LAST RUNNING, held across Switch game.
-
-    Deliberately NOT on gameSession.js's per-game list, and not inside
-    GameSetupDialog either. It has to outlive the reset — its entire job is to
-    survive `leaveCurrentGame()`, which clears `selectedSetId` — and it has to
-    outlive the welcome screen the host passes through before the create dialog
-    mounts. That makes it a piece of navigation state, like the dialog flags
-    beside it, rather than either a game value or a form field.
+    THERE IS DELIBERATELY NO "LAST-USED SET" STATE HERE ANY MORE. A
+    `pendingSetId` used to survive `leaveCurrentGame()` so the create dialog
+    reopened on the set the host was just running. The owner retired it: "the
+    create engagement should not remember or preselect that last picked
+    question set." Every create now starts with the set unchosen — which also
+    keeps the Create button honestly disabled until a deliberate pick is made,
+    instead of enabled on a leftover.
   */
-  const [pendingSetId, setPendingSetId] = useState('');
   const [showQuickstartMenu, setShowQuickstartMenu] = useState(false);
   /*
     THE HOST'S SET SHELF, REACHED WITHOUT STARTING A SESSION.
@@ -3793,19 +3791,10 @@ Focus on actionable business strategy insights.`;
     // clean and there is no window where the new game id renders against the
     // old game's question, phase and answers.
     //
-    // Order matters: read selectedSetId before the reset clears it, so the
-    // create dialog still opens on the set they were just using.
-    //
-    // THIS LINE READ `setNewGameSetId(selectedSetId)` AND THAT IS WHY SWITCH
-    // GAME DID NOTHING. `newGameSetId` moved into GameSetupDialog during the
-    // extraction — gameSession.js's header names it among the keys the dialog
-    // now owns — and the setter here went with it, leaving a call to a binding
-    // that does not exist. It is the FIRST statement in the handler, so the
-    // ReferenceError took `leaveCurrentGame`, the welcome screen and the input
-    // reset with it: the button was wired, ran, threw, and changed nothing.
-    // Reported twice, the second time after a CSS fix that made the button
-    // reachable and could not make a dead handler work.
-    setPendingSetId(selectedSetId);
+    // Nothing is read out of the old game first. A `pendingSetId` used to be
+    // captured here so the next create reopened on the set just played; the
+    // owner retired that ("should not remember or preselect that last picked
+    // question set"), so the reset is the whole handler.
     leaveCurrentGame();
     setShowWelcomeScreen(true);
     // Clear continue game input
@@ -3997,10 +3986,6 @@ Focus on actionable business strategy insights.`;
       alert('Please select a question set and enter an event title.');
       return;
     }
-    // Spent — the same reason as the dialog's Cancel. The form's own answer is
-    // in `form.setId` from here on.
-    setPendingSetId('');
-
     /*
       THE DESTRUCTIVE CLEAR THAT USED TO SIT HERE DELETED "80s 2" (issue #26).
 
@@ -4551,7 +4536,6 @@ Focus on actionable business strategy insights.`;
         isFirstEngagement={isLobbyState(gameState) && lessonNumber === 0}
         eventTitle={eventTitle}
         onEventTitleChange={setEventTitle}
-        initialSetId={pendingSetId}
         questionSets={questionSets}
         personas={personas}
         categories={categories}
@@ -4561,10 +4545,6 @@ Focus on actionable business strategy insights.`;
         onQuestionSetChange={handleSetupSetChange}
         onCancel={() => {
           setShowNewGameDialog(false);
-          // Spent. Carrying it forward would pre-select a set the host has
-          // since navigated away from, on a create they started for another
-          // reason entirely.
-          setPendingSetId('');
           if (isLobbyState(gameState) && lessonNumber === 0) {
             setShowWelcomeScreen(true);
           }
