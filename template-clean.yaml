@@ -491,6 +491,47 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  QuestionExclusionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-question-exclusions'
+      CodeUri: lambda-functions/game/
+      Handler: question-exclusions.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Events:
+        # The queue's sibling: the questions the host has DISABLED for this
+        # session ("move up/move down/disable/move back out" — the third verb).
+        # Same one-function read+write shape as /queue, same reason.
+        ReadExclusions:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/exclusions
+            Method: get
+            # HOST ONLY, exactly like /queue: the list names unasked questions,
+            # which is a spoiler on any public route.
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ChangeExclusions:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/exclusions
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        # Read the row, write the row. No DeleteItem, no broadcast: unlike the
+        # queue this endpoint reaps no connections and tells no other surface —
+        # the panel that changed it reloads itself, and the drain reads the row
+        # fresh every round.
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   ### HTTP API with Simple Naming (like original GameApi)
   RestApi:
     Type: AWS::Serverless::HttpApi

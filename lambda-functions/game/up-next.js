@@ -65,25 +65,44 @@ const respond = (statusCode, body) => ({
   headers: { 'Access-Control-Allow-Origin': '*' },
 });
 
-/** Every question this game has already put on screen, by source id. */
-const askedSourceQuestionIds = async (gameId) => {
-  const res = await db.send(new QueryCommand({
-    TableName: process.env.TABLE_NAME,
-    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-    ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'QUESTION#' },
-  }));
+/**
+ * Every question this game can no longer serve: asked (QUESTION#nnn#REF rows)
+ * UNION disabled by the host (the EXCLUDED row). The exact twin of
+ * next-question.js's read — it must stay the same or the preview and the
+ * serve disagree about what is spent, which is the one failure this endpoint
+ * exists to prevent. Also returns the raw excluded keys so the response can
+ * show the host their own veto list.
+ */
+const spentSourceQuestionIds = async (gameId) => {
+  const [res, excludedRes] = await Promise.all([
+    db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'QUESTION#' },
+    })),
+    db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'EXCLUDED' },
+    })),
+  ]);
 
   const asked = new Set();
   for (const item of res.Items || []) {
-    // Only the #REF rows say "this was asked" — the sibling ANSWER#/VOTE#/
-    // RESULTS rows share the prefix and carry no SourceQuestionId. Same read as
-    // next-question.js, and it must stay the same or the preview and the serve
-    // disagree about what is spent.
     if (String(item.SK).endsWith('#REF') && item.SourceQuestionId) {
       asked.add(item.SourceQuestionId);
     }
   }
-  return asked;
+
+  const excludedKeys = [];
+  for (const key of (excludedRes.Item && Array.isArray(excludedRes.Item.Keys)
+    ? excludedRes.Item.Keys : [])) {
+    const clean = String(key ?? '').trim();
+    if (!clean) continue;
+    excludedKeys.push(clean);
+    asked.add(`QUESTION#${clean}`);
+  }
+
+  return { asked, excludedKeys };
 };
 
 /** The bit for `position` (1-based) across the three 8-bit mask strings. */
@@ -214,17 +233,21 @@ exports.handler = async (event) => {
     */
     const isRandomized = !categories.length || categories.some((c) => c.isRandom);
 
-    const asked = await askedSourceQuestionIds(gameId);
+    const { asked, excludedKeys } = await spentSourceQuestionIds(gameId);
     const roundNumber = (stateRes.Item?.LessonNumber || 0) + 1;
 
     /*
       A queued entry is a bare question key; the planner needs its category to
-      report one, its title to be worth reading, and — the part the first
-      version missed — whether the DRAIN WOULD ACTUALLY SERVE IT. The drain
-      skips-and-leaves an entry that is not in the set, has no category, or
-      whose category the host switched off; a preview that placed those anyway
+      report one, its title to be worth reading, and whether the DRAIN WOULD
+      ACTUALLY SERVE IT. The drain skips-and-leaves an entry that is not in
+      the set or has no reachable category; a preview that placed those anyway
       showed a round that was never going to happen and shifted every round
       after it, which read as "the running order listed is not actually used".
+
+      A SWITCHED-OFF CATEGORY IS NOT A SKIP ANY MORE — the owner: "it should
+      not skip it. assume its a 1 off that the host wants to add from that
+      category." The drain serves it; the preview places it; the row keeps a
+      `categoryOff` ADVISORY so the panel can still label the one-off.
       Resolved from the set rows already in hand rather than a read per item.
     */
     const resolveQueued = (key) => {
@@ -237,11 +260,14 @@ exports.handler = async (event) => {
       if (!categoryName || !enabledByName.has(categoryName)) {
         return { servable: false, reason: 'no-category', categoryId: null, title: titleOf.get(sk), categoryName };
       }
-      if (!enabledByName.get(categoryName)) {
-        return { servable: false, reason: 'category-off', categoryId: null, title: titleOf.get(sk), categoryName };
-      }
       const match = categories.find((c) => c.name === categoryName);
-      return { servable: true, categoryId: match ? match.categoryId : null, title: titleOf.get(sk), categoryName };
+      return {
+        servable: true,
+        categoryId: match ? match.categoryId : null,
+        title: titleOf.get(sk),
+        categoryName,
+        categoryOff: !enabledByName.get(categoryName),
+      };
     };
 
     const queueKeys = (queueRes.Item && queueRes.Item.Queue) || [];
@@ -256,24 +282,43 @@ exports.handler = async (event) => {
       resolveQueued,
     }, count);
 
+    const liveQueue = queueKeys
+      .filter((key) => !asked.has(`QUESTION#${key}`))
+      .map((key) => ({ key, ...resolveQueued(key) }));
+
     /*
       The queue entries the plan could NOT use, in queue order, each with why.
-      They are still queued — the drain leaves them so a re-enabled category
-      recovers them — and the host must be able to SEE that they are parked
-      rather than watch them be skipped in silence. Already-asked entries are
+      They are still queued — the drain leaves them so a restored set recovers
+      them — and the host must be able to SEE that they are parked rather than
+      watch them be skipped in silence. Already-asked and disabled entries are
       not listed: the next drain drops those for good.
     */
-    const blocked = queueKeys
-      .filter((key) => !asked.has(`QUESTION#${key}`))
-      .map((key) => ({ key, ...resolveQueued(key) }))
+    const blocked = liveQueue
       .filter((entry) => entry.servable === false)
       .map(({ key, reason, title, categoryName }) => ({
-        key,
-        questionId: `QUESTION#${key}`,
-        reason,
-        title,
-        categoryName,
+        key, questionId: `QUESTION#${key}`, reason, title, categoryName,
       }));
+
+    /*
+      Served-but-worth-a-word: a queued one-off whose category is switched
+      off. The panel labels it "Category off"; nothing skips it.
+    */
+    const advisories = liveQueue
+      .filter((entry) => entry.servable !== false && entry.categoryOff)
+      .map(({ key, title, categoryName }) => ({
+        key, questionId: `QUESTION#${key}`, reason: 'category-off', title, categoryName,
+      }));
+
+    /*
+      The host's own veto list, with titles, so the panel can render a
+      "Disabled this session" section with a way back — a veto that can only
+      be seen in DynamoDB is a veto the host cannot undo.
+    */
+    const excluded = excludedKeys.map((key) => ({
+      key,
+      questionId: `QUESTION#${key}`,
+      title: titleOf.get(`QUESTION#${key}`) || '',
+    }));
 
     return respond(200, {
       gameId,
@@ -287,6 +332,8 @@ exports.handler = async (event) => {
         categoryName: item.categoryName || nameOf.get(item.categoryId) || '',
       })),
       blocked,
+      advisories,
+      excluded,
     });
   } catch (error) {
     console.error('❌ Up next error:', error);

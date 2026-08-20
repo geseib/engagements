@@ -175,36 +175,36 @@ const ids = (body) => body.upNext.map((u) => u.questionId);
     assert.deepStrictEqual(body.upNext.slice(1).map((u) => u.source), ['auto', 'auto']);
   });
 
-  await check('a queued question in a SWITCHED-OFF category takes no round, and is reported parked', async () => {
+  await check('a queued one-off from a SWITCHED-OFF category is previewed, flagged, and first', async () => {
     /*
-      The drain skips-and-leaves such an entry (next-question.js), so a preview
-      that placed it advertised a round that never happens and shifted every
-      later round by one. Reported: "if i queue a question that is in a
-      category that is disabled, it will stay in the queue but not get asked,
-      just skipped... the running order queue listed is not actually used."
+      THE RULE, INVERTED ONCE BY THE OWNER: "it should not skip it. assume its
+      a 1 off that the host wants to add from that category. (still leave it
+      labeled as category off, but dont skip)." So it takes its round in the
+      preview exactly as the drain will serve it, and the label travels as an
+      ADVISORY rather than a block.
     */
     seed({ hostMask: '10000000' });   // c002 off
     put({ PK, SK: 'QUEUE', Queue: ['c002#003'], Version: 1 });
     const { body } = await peek(3);
-    assert.ok(!ids(body).includes('QUESTION#c002#003'),
-      `parked question previewed as a round: ${JSON.stringify(ids(body))}`);
-    assert.deepStrictEqual(body.blocked, [{
+    assert.strictEqual(body.upNext[0].questionId, 'QUESTION#c002#003',
+      `the one-off lost its round: ${JSON.stringify(ids(body))}`);
+    assert.strictEqual(body.upNext[0].source, 'queued');
+    assert.deepStrictEqual(body.blocked, [], 'a served one-off is not blocked');
+    assert.deepStrictEqual(body.advisories, [{
       key: 'c002#003',
       questionId: 'QUESTION#c002#003',
       reason: 'category-off',
       title: 'Packaging 003',
       categoryName: 'Packaging',
     }]);
-    // And the rounds that ARE shown are the ones the serve will take — the
-    // parked entry must not offset the seeded walk.
-    assert.strictEqual(body.upNext[0].source, 'auto');
   });
 
-  await check('a parked queued question does not desync preview from serve', async () => {
+  await check('the one-off is served exactly where the preview put it', async () => {
     seed({ isRandom: true, hostMask: '10000000' });
     put({ PK, SK: 'QUEUE', Queue: ['c002#002'], Version: 1 });
     const { body } = await peek(2);
     const predicted = ids(body);
+    assert.strictEqual(predicted[0], 'QUESTION#c002#002');
 
     const served = [];
     for (let i = 0; i < 2; i += 1) {
@@ -216,7 +216,65 @@ const ids = (body) => body.upNext.map((u) => u.questionId);
       put({ PK, SK: 'STATE', State: `RESULTS#${round}`, LessonNumber: Number(round) });
     }
     assert.deepStrictEqual(served, predicted,
-      'the parked entry offset the preview from what the room got');
+      'the one-off desynced the preview from what the room got');
+  });
+
+  console.log('\n§3b  a DISABLED question is invisible to the plan and the serve alike');
+
+  await check('an excluded question takes no round, and is listed for restore', async () => {
+    seed();
+    put({ PK, SK: 'EXCLUDED', Keys: ['c001#001'], Version: 1 });
+    const { body } = await peek(3);
+    assert.ok(!ids(body).includes('QUESTION#c001#001'),
+      `a disabled question was previewed: ${JSON.stringify(ids(body))}`);
+    // With its title, because the Disabled section is the veto's only way back.
+    assert.deepStrictEqual(body.excluded, [{
+      key: 'c001#001', questionId: 'QUESTION#c001#001', title: 'Pricing 001',
+    }]);
+  });
+
+  await check('an excluded QUEUED entry is dropped by the drain, not served', async () => {
+    // The defensive half of disable-on-a-queued-row being two client calls:
+    // if the un-queue half was lost, the veto still holds at the drain.
+    seed();
+    put({ PK, SK: 'QUEUE', Queue: ['c001#002'], Version: 1 });
+    put({ PK, SK: 'EXCLUDED', Keys: ['c001#002'], Version: 1 });
+    await nextQuestion.handler({
+      pathParameters: { gameId: GAME }, body: JSON.stringify({}),
+    });
+    const round = String(get('STATE').LessonNumber).padStart(3, '0');
+    assert.notStrictEqual(get(`QUESTION#${round}#REF`).SourceQuestionId,
+      'QUESTION#c001#002', 'a disabled question reached the room');
+    assert.deepStrictEqual(get('QUEUE').Queue, [], 'the dead entry was not tidied away');
+  });
+
+  await check('a category exhausted only by exclusions does not end the session, and preview matches serve', async () => {
+    /*
+      The premature-END edge the availability filter exists for: c001's four
+      questions all disabled, c002 fully live. The old serve picked a category
+      by counts alone, walked c001 to nothing, and called the WHOLE GAME over;
+      the planner would meanwhile have planned c002. Both now filter to
+      categories that can actually serve, so they agree — and the room plays on.
+    */
+    seed({ isRandom: true });
+    put({ PK, SK: 'EXCLUDED', Keys: ['c001#001', 'c001#002', 'c001#003', 'c001#004'], Version: 1 });
+    const { body } = await peek(2);
+    const predicted = ids(body);
+    assert.ok(predicted.length === 2 && predicted.every((id) => id.includes('#c002#')),
+      `the plan should be all c002: ${JSON.stringify(predicted)}`);
+
+    const served = [];
+    for (let i = 0; i < 2; i += 1) {
+      const res = await nextQuestion.handler({
+        pathParameters: { gameId: GAME }, body: JSON.stringify({}),
+      });
+      assert.notStrictEqual(JSON.parse(res.body).state, 'ENDED',
+        'a category of disabled questions ended the whole session');
+      const round = String(get('STATE').LessonNumber).padStart(3, '0');
+      served.push(get(`QUESTION#${round}#REF`).SourceQuestionId);
+      put({ PK, SK: 'STATE', State: `RESULTS#${round}`, LessonNumber: Number(round) });
+    }
+    assert.deepStrictEqual(served, predicted);
   });
 
   await check('a queued question is not ALSO shown as an automatic pick', async () => {

@@ -50,14 +50,26 @@ export default function QueueList({
   upNext = [],
   /*
     Queue entries the SERVER says it will pass over — `blocked` from
-    GET /up-next: the category is off, or the question is not in the loaded
-    set. The server leaves them queued (re-enabling the category recovers
-    them), and this list is how the host finds out they are parked instead of
-    watching them be skipped in silence. Reported: "if i queue a question that
-    is in a category that is disabled, it will stay in the queue but not get
-    asked, just skipped."
+    GET /up-next: not in the loaded set, or no reachable category. The server
+    leaves them queued (restoring the set recovers them), and this list is how
+    the host finds out they are parked instead of watching them be skipped in
+    silence.
   */
   blocked = [],
+  /*
+    Queue entries that WILL be served but deserve a word — `advisories` from
+    GET /up-next. Today that is one case: a one-off from a switched-off
+    category. The owner: "it should not skip it. assume its a 1 off that the
+    host wants to add from that category. (still leave it labeled as category
+    off, but dont skip)."
+  */
+  advisories = [],
+  /*
+    The questions the host has DISABLED for this session — `excluded` from
+    GET /up-next, with titles. Rendered as their own section with a way back:
+    a veto with no undo is a trap, not a control.
+  */
+  excludedRows = [],
   onMove = () => {},
   onRemove = () => {},
   /*
@@ -67,6 +79,14 @@ export default function QueueList({
     press means: the displayed plan becomes queued rows, then the move applies.
   */
   onAutoMove = null,
+  /*
+    The third and fourth verbs of the owner's four-button column ("move
+    up/move down/disable/move back out of the immediate queue"). `onDisable`
+    receives (key, { queued }) so the caller knows whether to un-queue first;
+    `onRestore` lifts a veto. Null = the disable column is not drawn.
+  */
+  onDisable = null,
+  onRestore = null,
 }) {
   const rows = queueRows(queue, { questions });
   const { count, full } = queueSummary(queue);
@@ -74,6 +94,11 @@ export default function QueueList({
     blocked
       .filter((b) => b && b.key)
       .map((b) => [questionKey(String(b.key)), b.reason || 'blocked'])
+  );
+  // Served-but-labeled — the "Category off" one-offs. A key, not a reason:
+  // there is exactly one advisory today and the tag is its whole payload.
+  const advisoryKeys = new Set(
+    advisories.filter((a) => a && a.key).map((a) => questionKey(String(a.key)))
   );
   const isParked = (row) => {
     const reason = blockedByKey.get(row.key);
@@ -180,21 +205,37 @@ export default function QueueList({
                       <span
                         className="setup-q__warn"
                         data-testid="queue-parked"
-                        title={parked === 'category-off'
-                          ? 'Its category is switched off, so rounds skip this question. It stays queued — switch the category back on to serve it, or remove it.'
-                          : 'This question has no category the session can reach, so rounds skip it. It stays queued.'}
+                        title="This question has no category the session can reach, so rounds skip it. It stays queued."
                       >
-                        {parked === 'category-off' ? 'Category off — skipped' : 'Unreachable — skipped'}
+                        Unreachable — skipped
+                      </span>
+                    )}
+                    {/* Served anyway, said anyway. The owner: queueing is
+                        reaching past the category toggles by name — "assume
+                        its a 1 off". The tag keeps the fact visible without
+                        threatening the round. */}
+                    {advisoryKeys.has(row.key) && !row.missing && (
+                      <span
+                        className="setup-q__warn"
+                        data-testid="queue-category-off"
+                        title="Its category is switched off for automatic picks, but you queued this one by name, so it will be asked as a one-off."
+                      >
+                        Category off
                       </span>
                     )}
                   </span>
                 </span>
                 <span className="setup-q__acts">
                   {/*
-                    DISABLED AT THE EDGES rather than absent, and the two are not
-                    interchangeable: a control that disappears on the first row
-                    makes every row's action column a different width and the
-                    buttons move under the finger as the list reorders. The
+                    THE FOUR-SLOT COLUMN, the owner's spec: "move up/move
+                    down/disable/move back out of the immediate queue" — the
+                    SAME four slots the auto rows carry, so the two lists'
+                    buttons align down the panel.
+
+                    DISABLED AT THE EDGES rather than absent, and the two are
+                    not interchangeable: a control that disappears on the first
+                    row makes every row's action column a different width and
+                    the buttons move under the finger as the list reorders. The
                     predicate is `queueRows`', which is `queueMove`'s clamp —
                     not a second opinion about where the edges are.
                   */}
@@ -216,12 +257,25 @@ export default function QueueList({
                   >
                     <Icon name="ArrowDown" weight="bold" size={14} />
                   </button>
+                  {onDisable && (
+                    <button
+                      type="button"
+                      className="setup-q__btn setup-q__btn--drop"
+                      disabled={pending}
+                      onClick={() => onDisable(row.key, { queued: true })}
+                      title="Don't ask this question at all this session. It moves to the Disabled list below, where you can bring it back."
+                      aria-label={`Disable ${row.title || row.key} for this session`}
+                    >
+                      <Icon name="EyeSlash" weight="bold" size={14} />
+                    </button>
+                  )}
                   <button
                     type="button"
-                    className="setup-q__btn setup-q__btn--drop"
+                    className="setup-q__btn"
                     disabled={pending}
                     onClick={() => onRemove(row.key)}
-                    aria-label={`Remove ${row.title || row.key} from the queue`}
+                    title="Take it out of the queue. It goes back to the automatic order, wherever the walk puts it."
+                    aria-label={`Move ${row.title || row.key} out of the queue`}
                   >
                     <Icon name="X" weight="bold" size={14} />
                   </button>
@@ -317,11 +371,75 @@ export default function QueueList({
                       >
                         <Icon name="ArrowDown" weight="bold" size={14} />
                       </button>
+                      {onDisable && (
+                        <button
+                          type="button"
+                          className="setup-q__btn setup-q__btn--drop"
+                          onClick={() => onDisable(row.questionId, { queued: false })}
+                          title="Don't ask this question at all this session. It moves to the Disabled list below, where you can bring it back."
+                          aria-label={`Disable ${label} for this session`}
+                        >
+                          <Icon name="EyeSlash" weight="bold" size={14} />
+                        </button>
+                      )}
+                      {/* The fourth slot, INERT here on purpose: an auto row
+                          is not in the queue, so there is nothing to move it
+                          back out of — but the slot exists so the four
+                          buttons align with the queued rows above, which is
+                          the owner's report ("the up down buttons dont align
+                          ... they should"). */}
+                      <button
+                        type="button"
+                        className="setup-q__btn"
+                        disabled
+                        title="Not in the queue — nothing to move out."
+                        aria-label={`${label} is not in the queue`}
+                      >
+                        <Icon name="X" weight="bold" size={14} />
+                      </button>
                     </span>
                   )}
                 </li>
               );
             })}
+          </ol>
+        </div>
+      )}
+
+      {/*
+        THE VETO LIST, WITH ITS WAY BACK. A disabled question is invisible to
+        the queue, the automatic walk and the preview — this section is the
+        only place it still exists on screen, so hiding it would make Disable
+        a delete wearing a softer name. Rendered only when non-empty: unlike
+        the queue's empty line, the disable control explains itself on every
+        row above, so an empty section here would teach nothing.
+      */}
+      {excludedRows.length > 0 && onRestore && (
+        <div className="setup-q__auto" data-testid="queue-disabled">
+          <p className="setup-q__auto-head">Disabled this session</p>
+          <ol className="setup-q__list setup-q__list--auto">
+            {excludedRows.map((row) => (
+              <li key={row.key} className="setup-q__row setup-q__row--auto" data-testid="queue-disabled-row">
+                <span className="setup-q__pos" aria-hidden="true">·</span>
+                <span className="setup-q__main">
+                  <span className="setup-q__name">{row.title || row.key}</span>
+                  <span className="setup-q__meta">
+                    <span className="setup-q__warn">Will not be asked</span>
+                  </span>
+                </span>
+                <span className="setup-q__acts">
+                  <button
+                    type="button"
+                    className="setup-q__btn"
+                    onClick={() => onRestore(row.key)}
+                    title="Put it back into play — the automatic order picks it up again."
+                    aria-label={`Restore ${row.title || row.key}`}
+                  >
+                    <Icon name="Eye" weight="bold" size={14} />
+                  </button>
+                </span>
+              </li>
+            ))}
           </ol>
         </div>
       )}

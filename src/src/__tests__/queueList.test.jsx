@@ -92,22 +92,84 @@ describe('a populated running order', () => {
 
   test('a parked head loses the Next flag to the first servable row, and says why', () => {
     /*
-      Reported: "if i queue a question that is in a category that is disabled,
-      it will stay in the queue but not get asked, just skipped." The server's
-      `blocked` list is the same rule the serve runs, so the row the host sees
-      carries the truth: the head is parked, the flag moves to the row the
-      drain will actually take, and the reason is a word on the row.
+      `blocked` now carries only what the serve truly passes over — no
+      reachable category, or not in the loaded set. The head is parked, the
+      flag moves to the row the drain will actually take, and the reason is a
+      word on the row. (A switched-off category is no longer a block — see the
+      one-off test below.)
     */
-    renderQueue({ blocked: [{ key: 'c001#002', reason: 'category-off' }] });
+    renderQueue({ blocked: [{ key: 'c001#002', reason: 'no-category' }] });
     const rows = screen.getAllByTestId('queue-row');
 
     const parked = within(rows[0]).getByTestId('queue-parked');
-    expect(parked).toHaveTextContent(/category off/i);
+    expect(parked).toHaveTextContent(/unreachable/i);
     expect(within(rows[0]).queryByTestId('queue-next-flag')).toBeNull();
 
     const flags = screen.getAllByTestId('queue-next-flag');
     expect(flags).toHaveLength(1);
     expect(rows[1]).toContainElement(flags[0]);
+  });
+
+  test('a one-off from a switched-off category keeps its round AND its label', () => {
+    /*
+      The owner's correction, verbatim: "it should not skip it. assume its a
+      1 off that the host wants to add from that category. (still leave it
+      labeled as category off, but dont skip)." So the tag shows and the Next
+      flag STAYS — the serve will take this row.
+    */
+    renderQueue({ advisories: [{ key: 'c001#002', reason: 'category-off' }] });
+    const rows = screen.getAllByTestId('queue-row');
+
+    expect(within(rows[0]).getByTestId('queue-category-off')).toHaveTextContent(/category off/i);
+    expect(within(rows[0]).queryByTestId('queue-parked')).toBeNull();
+    expect(within(rows[0]).getByTestId('queue-next-flag')).toBeInTheDocument();
+  });
+
+  test('the four-slot column: disable and move-out ride beside the arrows on every queued row', () => {
+    // "ideally there are 4 buttons move up/move down/disable/move back out of
+    // the immediate queue" — and the same four slots on the auto rows, so the
+    // two lists' buttons align down the panel.
+    const onDisable = jest.fn();
+    renderQueue({ onDisable });
+    const rows = screen.getAllByTestId('queue-row');
+    for (const row of rows) {
+      expect(within(row).getAllByRole('button')).toHaveLength(4);
+    }
+    fireEvent.click(within(rows[0]).getByRole('button', { name: /disable .* for this session/i }));
+    expect(onDisable).toHaveBeenCalledWith('c001#002', { queued: true });
+  });
+
+  test('auto rows carry the same four slots, with move-out inert', () => {
+    const onDisable = jest.fn();
+    renderQueue({
+      upNext: [{ questionId: 'QUESTION#c009#001', source: 'auto', title: 'Auto One', round: 4 }],
+      onAutoMove: jest.fn(),
+      onDisable,
+    });
+    const auto = screen.getAllByTestId('queue-auto-row')[0];
+    expect(within(auto).getAllByRole('button')).toHaveLength(4);
+    // The fourth slot exists for alignment and says why it does nothing.
+    expect(within(auto).getByRole('button', { name: /is not in the queue/i })).toBeDisabled();
+    fireEvent.click(within(auto).getByRole('button', { name: /disable auto one/i }));
+    expect(onDisable).toHaveBeenCalledWith('QUESTION#c009#001', { queued: false });
+  });
+
+  test('the veto list renders with its way back', () => {
+    const onRestore = jest.fn();
+    renderQueue({
+      excludedRows: [{ key: 'c002#001', title: 'Which bundle wins?' }],
+      onRestore,
+    });
+    const section = screen.getByTestId('queue-disabled');
+    expect(section).toHaveTextContent(/disabled this session/i);
+    expect(section).toHaveTextContent('Which bundle wins?');
+    fireEvent.click(within(section).getByRole('button', { name: /restore/i }));
+    expect(onRestore).toHaveBeenCalledWith('c002#001');
+  });
+
+  test('no restore handler, no veto section — a list with no way back is a trap', () => {
+    renderQueue({ excludedRows: [{ key: 'c002#001', title: 'X' }] });
+    expect(screen.queryByTestId('queue-disabled')).toBeNull();
   });
 
   test('auto rows are movable when a handler is given, and report key + direction', () => {
@@ -164,10 +226,10 @@ describe('a populated running order', () => {
     expect(within(autos[0]).queryAllByRole('button')).toHaveLength(0);
   });
 
-  test('a parked row keeps its controls — the way out is remove or re-enable, not a dead row', () => {
-    renderQueue({ blocked: [{ key: 'c001#002', reason: 'category-off' }] });
+  test('a parked row keeps its controls — the way out is move-out or restore, not a dead row', () => {
+    renderQueue({ blocked: [{ key: 'c001#002', reason: 'no-category' }] });
     const rows = screen.getAllByTestId('queue-row');
-    expect(within(rows[0]).getByRole('button', { name: /remove .* from the queue/i })).toBeEnabled();
+    expect(within(rows[0]).getByRole('button', { name: /move .* out of the queue/i })).toBeEnabled();
   });
 
   test('the head cannot move earlier and the tail cannot move later', () => {
@@ -204,7 +266,7 @@ describe('a populated running order', () => {
     fireEvent.click(within(rows[0]).getByRole('button', { name: /move .* later/i }));
     expect(onMove).toHaveBeenCalledWith('c001#002', 'later');
 
-    fireEvent.click(within(rows[2]).getByRole('button', { name: /remove .* from the queue/i }));
+    fireEvent.click(within(rows[2]).getByRole('button', { name: /move .* out of the queue/i }));
     expect(onRemove).toHaveBeenCalledWith('c001#001');
   });
 
@@ -227,7 +289,7 @@ describe('a populated running order', () => {
     // so a busy key arriving prefixed must still find its row.
     renderQueue({ busyKeys: ['QUESTION#c001#002'] });
     const rows = screen.getAllByTestId('queue-row');
-    expect(within(rows[0]).getByRole('button', { name: /remove/i })).toBeDisabled();
+    expect(within(rows[0]).getByRole('button', { name: /move .* out of the queue/i })).toBeDisabled();
   });
 });
 
@@ -249,7 +311,7 @@ describe('a queued question we cannot resolve', () => {
     // stale entry permanent — the one row a host most needs to clear.
     const onRemove = jest.fn();
     render(<QueueList queue={['c009#404']} questions={questions} onRemove={onRemove} />);
-    fireEvent.click(screen.getByRole('button', { name: /remove .* from the queue/i }));
+    fireEvent.click(screen.getByRole('button', { name: /move .* out of the queue/i }));
     expect(onRemove).toHaveBeenCalledWith('c009#404');
   });
 });

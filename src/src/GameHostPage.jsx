@@ -3,6 +3,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import webSocketClient from './WebSocketClient';
 import { requestNextQuestion } from './utils/nextQuestion';
 import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
+import { postExclusionOp } from './utils/questionExclusionsClient';
 import { queueEnqueue, queueMove, queueRemove, normaliseQueue, materializePlanOps } from './config/questionQueue';
 import { focusFromFrame, focusToStage, focusRequest, sameFocus } from './config/stageFocus';
 import IssueFab from './components/IssueFab';
@@ -452,6 +453,11 @@ function GameHostPage() {
   */
   const [upNext, setUpNext] = useState([]);
   const [upNextBlocked, setUpNextBlocked] = useState([]);
+  // Served-but-labeled one-offs (category off) and the host's veto list, both
+  // straight from GET /up-next — the panel renders them, the ops below edit
+  // the veto, and the reload after each op is what keeps the three in step.
+  const [upNextAdvisories, setUpNextAdvisories] = useState([]);
+  const [upNextExcluded, setUpNextExcluded] = useState([]);
   const [queueVersion, setQueueVersion] = useState(0);
   const [queueBusyKeys, setQueueBusyKeys] = useState([]);
 
@@ -2761,10 +2767,14 @@ Focus on actionable business strategy insights.`;
       if (!res.ok) return;
       const payload = await res.json();
       setUpNext(Array.isArray(payload.upNext) ? payload.upNext : []);
-      // The queue entries the plan cannot use — category off, or not in this
-      // set — reported so the panel can say "parked" instead of letting the
-      // host watch their own choice be skipped in silence.
+      // The queue entries the plan cannot use — not in this set, no reachable
+      // category — reported so the panel can say "parked" instead of letting
+      // the host watch their own choice be skipped in silence.
       setUpNextBlocked(Array.isArray(payload.blocked) ? payload.blocked : []);
+      // Served-but-labeled (a one-off from a switched-off category), and the
+      // questions the host has disabled for this session.
+      setUpNextAdvisories(Array.isArray(payload.advisories) ? payload.advisories : []);
+      setUpNextExcluded(Array.isArray(payload.excluded) ? payload.excluded : []);
     } catch (error) {
       console.warn('⚠️ UP NEXT: could not read what is coming:', error?.message);
     }
@@ -2915,6 +2925,51 @@ Focus on actionable business strategy insights.`;
     loadQueue();
     loadUpNext();
   }, [gameId, questionQueue, queueVersion, upNext, loadQueue, loadUpNext]);
+
+  /**
+   * DISABLE — the third of the owner's four queue verbs: this question is not
+   * asked at all this session. For a QUEUED row it is two calls, un-queue then
+   * veto, deliberately not a compound server op: each half is independently
+   * safe, and a half-done pair leaves the question visible for a second press
+   * instead of wedged. The serve honours the veto by union with the asked set
+   * (next-question.js), so the drain also defends against the half-done case.
+   */
+  const handleDisableQuestion = useCallback(async (rawKey, { queued = false } = {}) => {
+    const key = String(rawKey ?? '').replace(/^QUESTION#/, '').trim();
+    if (!key) return;
+    setQueueBusyKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
+
+    let failed = null;
+    if (queued) {
+      const removed = await postQueueOp({
+        apiBase: API_BASE, gameId, op: 'remove', questionKey: key, expectedVersion: queueVersion,
+      });
+      if (!removed.ok) failed = removed.error;
+    }
+    if (!failed) {
+      const vetoed = await postExclusionOp({
+        apiBase: API_BASE, gameId, op: 'add', questionKey: key,
+      });
+      if (!vetoed.ok) failed = vetoed.error;
+    }
+
+    setQueueBusyKeys((prev) => prev.filter((k) => k !== key));
+    if (failed) alert(`Could not disable that question: ${failed}`);
+    loadQueue();
+    loadUpNext();
+  }, [gameId, queueVersion, loadQueue, loadUpNext]);
+
+  /** The way back from Disable — the veto lifts and the walk picks it up. */
+  const handleRestoreQuestion = useCallback(async (rawKey) => {
+    const key = String(rawKey ?? '').replace(/^QUESTION#/, '').trim();
+    if (!key) return;
+    const result = await postExclusionOp({
+      apiBase: API_BASE, gameId, op: 'remove', questionKey: key,
+    });
+    if (!result.ok) alert(`Could not restore that question: ${result.error}`);
+    loadQueue();
+    loadUpNext();
+  }, [gameId, loadQueue, loadUpNext]);
 
   // Select a specific question to trigger as the next question
   const selectQuestion = async (selectedQuestion) => {
@@ -5715,10 +5770,14 @@ Focus on actionable business strategy insights.`;
           queueBusyKeys={queueBusyKeys}
           upNext={upNext}
           upNextBlocked={upNextBlocked}
+          upNextAdvisories={upNextAdvisories}
+          upNextExcluded={upNextExcluded}
           onQueueQuestion={handleQueueQuestion}
           onQueueMove={handleQueueMove}
           onQueueRemove={handleQueueRemove}
           onAutoMove={handleAutoMove}
+          onDisableQuestion={handleDisableQuestion}
+          onRestoreQuestion={handleRestoreQuestion}
           gameId={gameId}
           playUrl={playUrl}
           remoteUrl={remoteUrl}

@@ -111,10 +111,14 @@ export default function SessionSetupPanel({
   questionQueue = [],
   queueBusyKeys = [],
   upNext = [],
-  /* Queue entries the plan cannot serve right now (category off, not in this
-     set), straight from GET /up-next. QueueList turns each into a visible
-     "parked" tag on the row the host already sees. */
+  /* Queue entries the plan cannot serve right now (not in this set, no
+     reachable category), straight from GET /up-next. QueueList turns each
+     into a visible "parked" tag on the row the host already sees. */
   upNextBlocked = [],
+  /* Served-but-labeled one-offs (category off) and the host's veto list —
+     the other two GET /up-next projections QueueList renders. */
+  upNextAdvisories = [],
+  upNextExcluded = [],
   onQueueQuestion = () => {},
   onQueueMove = () => {},
   onQueueRemove = () => {},
@@ -122,6 +126,9 @@ export default function SessionSetupPanel({
      and applies the move. The semantics and the ops live in
      config/questionQueue.js:materializePlanOps. */
   onAutoMove = () => {},
+  /* The disable/restore pair for the per-session veto list. */
+  onDisableQuestion = () => {},
+  onRestoreQuestion = () => {},
 
   // Settings
   gameId = '',
@@ -593,9 +600,13 @@ export default function SessionSetupPanel({
                 busyKeys={queueBusyKeys}
                 upNext={upNext}
                 blocked={upNextBlocked}
+                advisories={upNextAdvisories}
+                excludedRows={upNextExcluded}
                 onMove={onQueueMove}
                 onRemove={onQueueRemove}
                 onAutoMove={onAutoMove}
+                onDisable={onDisableQuestion}
+                onRestore={onRestoreQuestion}
               />
 
               {/* THE BROWSER, AS A SECTION RATHER THAN A MODAL. Until now the

@@ -282,33 +282,39 @@ const bodyOf = (res) => JSON.parse(res.body);
     assert.match(get('STATE').State, /^ASK#/, 'the automatic path did not take over');
   });
 
-  console.log('\n4. a switched-off category is SKIPPED — and stays queued');
+  console.log('\n4. a switched-off category is a ONE-OFF — served, never skipped');
 
-  await check('a question in a disabled category is not served', async () => {
-    // Only c001 (Pricing) is on. 031 is Packaging.
+  await check('a queued question from a switched-off category IS served', async () => {
+    /*
+      THE RULE INVERTED, BY THE OWNER. The first version skipped-and-left
+      these, and the owner overruled it: "it should not skip it. assume its a
+      1 off that the host wants to add from that category." Queueing names a
+      question directly — the category toggles govern only the automatic
+      walk, and an explicit pick outranks them.
+
+      Only c001 (Pricing) is on. 031 is Packaging, and it is served anyway.
+    */
     seed({ queue: ['031', '018'], hostMask: '10000000' });
     const res = await ask({});
-    assert.strictEqual(bodyOf(res).questionId, 'QUESTION#018', res.body);
+    assert.strictEqual(bodyOf(res).questionId, 'QUESTION#031', res.body);
+    assert.strictEqual(bodyOf(res).fromQueue, true);
   });
 
-  await check('...and it is STILL THERE afterwards', async () => {
+  await check('...and it is popped like any served entry', async () => {
     seed({ queue: ['031', '018'], hostMask: '10000000' });
     await ask({});
-    // The chip goes back on with one tap. The host's queued choice does not
-    // come back at all, so it is never deleted for a reason they can undo.
-    assert.deepStrictEqual(queueRow().Queue, ['031'],
+    assert.deepStrictEqual(queueRow().Queue, ['018'],
       `queue is ${JSON.stringify(queueRow().Queue)}`);
   });
 
-  await check('turning the category back on makes it servable again', async () => {
+  await check('serving the one-off does not switch its category back on', async () => {
+    // The toggle is the host's setting, not a side effect of a serve: the
+    // automatic walk must still avoid Packaging after 031 has been asked.
     seed({ queue: ['031'], hostMask: '10000000' });
-    await ask({});                                   // skipped; auto-selected
-    assert.deepStrictEqual(queueRow().Queue, ['031']);
-
-    store.get(table.keyOf(PK, 'STATE')).State = 'RESULTS#002';
-    store.get(table.keyOf(PK, 'STATE#CATS'))['HostMask1-8'] = '11000000';
-    const res = await ask({});
-    assert.strictEqual(bodyOf(res).questionId, 'QUESTION#031', res.body);
+    await ask({});
+    assert.strictEqual(
+      store.get(table.keyOf(PK, 'STATE#CATS'))['HostMask1-8'], '10000000',
+      'serving a one-off flipped the host mask');
   });
 
   await check('a queued key that is not in the set is skipped and left alone', async () => {
@@ -322,19 +328,19 @@ const bodyOf = (res) => JSON.parse(res.body);
   console.log('\n5. everything blocked falls through — it does NOT end the session');
 
   await check('a fully blocked queue still serves a question automatically', async () => {
-    seed({ queue: ['031'], hostMask: '10000000' });
+    seed({ queue: ['999'] });                        // not in the set at all
     const res = await ask({});
     assert.strictEqual(res.statusCode, 200, res.body);
     assert.notStrictEqual(bodyOf(res).state, 'ENDED',
-      'a queue full of switched-off categories closed the room down');
+      'a queue full of unservable entries closed the room down');
     assert.match(get('STATE').State, /^ASK#/);
   });
 
   await check('the blocked entry survives that round untouched', async () => {
-    seed({ queue: ['031'], hostMask: '10000000' });
+    seed({ queue: ['999'] });
     const before = queueRow().Version;
     await ask({});
-    assert.deepStrictEqual(queueRow().Queue, ['031']);
+    assert.deepStrictEqual(queueRow().Queue, ['999']);
     assert.strictEqual(queueRow().Version, before,
       'a round where nothing was drained still moved the queue version');
   });
