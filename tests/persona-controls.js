@@ -550,6 +550,64 @@ const metadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
       'the context layer is not in the assembled prompt');
   });
 
+  console.log('\nthe host\'s instructions carry authority — game 1935\'s fix\n');
+
+  const { buildHostDirective } = require(path.join(REPO, 'lambda-functions', 'game', 'personas.js'));
+
+  await acheck('the directive names its precedence over material-only rules', async () => {
+    /*
+      CloudWatch, game 1935: the host's "what would Steve Jobs do" was
+      delivered as the VOICE and then out-ranked by the template's "use only
+      the listed material". The cure is a second statement at the position
+      that wins, saying explicitly WHICH earlier rules it overrides.
+    */
+    const directive = buildHostDirective('add a comment with Steve Jobs\'s creative spirit');
+    assert(directive.includes("THE HOST'S INSTRUCTIONS"));
+    assert(/outrank every rule and instruction above/.test(directive));
+    assert(/only the listed material/.test(directive), 'must name the rule class it overrides');
+    assert(/Only the FORMAT block below outranks them/.test(directive),
+      'the headings the parser keys on must stay sovereign');
+    assert(directive.includes("Steve Jobs's creative spirit"));
+  });
+
+  await acheck('no instructions, no directive — not an empty ceremony', async () => {
+    assert.strictEqual(buildHostDirective(''), '');
+    assert.strictEqual(buildHostDirective('   '), '');
+    assert.strictEqual(buildHostDirective(null), '');
+    assert.strictEqual(buildHostDirective(undefined), '');
+  });
+
+  await acheck('the directive sits between the template and the contract', async () => {
+    // Position IS the fix: after the template's rules (so it is the more
+    // recent instruction) and before the contract (which must stay last —
+    // the heading list is what parseAIResponse and the projector key on).
+    assert(/buildHostDirective\(gameAiContext\)/.test(summarySrc));
+    assert(/\$\{contextLayer\}\$\{templateBody\}\$\{hostLayer\}\\n\\n\$\{buildOutputContract/.test(summarySrc),
+      'the assembled prompt must read template → host directive → contract');
+  });
+
+  console.log('\nthe reply is prefilled with its own first heading\n');
+
+  await acheck('the model call carries an assistant prefill of the first heading', async () => {
+    /*
+      Source-level, as the metadata-read pins above are. The prefill kills the
+      "Here's a summary…" preamble and the invented document title (game 7971's
+      breakage) mechanically. Verified live against the exact Bedrock model
+      before shipping: the completion continues "\n\nThe room…" and never
+      contaminates the heading line.
+    */
+    assert(/const prefill = `## \$\{firstHeading\}`/.test(summarySrc));
+    assert(/\{ role: 'assistant', content: prefill \}/.test(summarySrc));
+    // And the stored/parsed reply is prefill + completion, never the
+    // completion alone — the parser and the projector need the heading.
+    assert(/prefill \+ responseBody\.content\[0\]\.text/.test(summarySrc));
+  });
+
+  await acheck('temperature is 0.7 — variety, fenced by material-only rules', async () => {
+    assert(/temperature: 0\.7/.test(summarySrc));
+    assert(!/temperature: 0\.5/.test(summarySrc), 'the flattening 0.5 is back');
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(1); });

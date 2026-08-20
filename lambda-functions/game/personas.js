@@ -322,6 +322,20 @@ const FORMATTING_BLOCK =
   'as a headline and the rest as its caption beneath it, which is what makes a point readable from ' +
   'the back of the room. Keep what follows the colon to one sentence.';
 
+/*
+  THE TELLS, BANNED CENTRALLY. Each of these is a register a small model falls
+  into under a heavy rule load, and each reads as machinery the moment it hits
+  a projector. In the CONTRACT rather than in any one template so the legacy
+  prompts — which nobody is editing — get it too, and so a persona cannot
+  accidentally un-ban them: the contract supersedes.
+*/
+const REGISTER_BLOCK =
+  'SOUND LIKE A PERSON, NOT A REPORT. Never open a section with "Overall", "It\'s clear that", ' +
+  '"Great discussion", "In summary", or a restatement of the question the room just saw — start ' +
+  'with the most specific thing you have. One exclamation mark is plenty for a whole reply. Do ' +
+  'not summarise your own summary, do not sign off, and never describe what you are about to do — ' +
+  'do it.';
+
 const buildOutputContract = (prompt) => {
   const sections = resolveOutputSections(prompt);
   const count = COUNT_WORD[sections.length] || String(sections.length);
@@ -334,10 +348,49 @@ const buildOutputContract = (prompt) => {
     'FORMAT (this part is not negotiable, and it supersedes any formatting or output-structure ' +
     'instruction that appeared earlier in this prompt):\n\n' +
     `${FORMATTING_BLOCK}\n\n` +
+    `${REGISTER_BLOCK}\n\n` +
     `Reply using exactly these ${count} headings, in this order, spelled exactly as shown, and add no other headings:\n\n` +
     `${body}\n\n` +
     'The voice guidance above governs the words inside these sections. It does not govern the ' +
     'headings, which must appear exactly as written. Do not add a title above the first heading.'
+  );
+};
+
+/**
+ * THE HOST'S INSTRUCTIONS, WITH AUTHORITY — the fix for game 1935.
+ *
+ * CloudWatch closed the argument: the host's AIContext ("We always want to
+ * hear what Steve Jobs would do...") was saved, resolved, and delivered as the
+ * VOICE — a hundred characters at the top of a 10,722-character prompt — and
+ * then out-ranked by the template's own rules ("Every claim comes from the
+ * material listed at the end... You know nothing else about this room") and a
+ * locked section list. Haiku obeyed the specific over the general, exactly as
+ * trained, and the host's instruction left no trace. A control experiment with
+ * the same voice over a SMALL prompt produced the Steve Jobs comment
+ * immediately — position and mass were the whole problem.
+ *
+ * So the instruction is stated a second time, DELIBERATELY, at the position
+ * that wins: after the template's rules, right beside the format contract,
+ * with its precedence spelled out. This is not the double-weighing the context
+ * block guards against (a context that became the voice competing with itself
+ * as a second voice) — the directive is not a voice, it is a permission slip
+ * that names which earlier rules it overrides. Under-weighting was the failure
+ * being fixed; the owner's standing requirement is "they always should"
+ * (issue #27) contribute.
+ *
+ * The FORMAT contract still outranks it, by both position (the contract is
+ * appended after this) and text (said here explicitly) — a host instruction
+ * may add Steve Jobs to the words inside the sections; it may not change the
+ * headings the parser and the projector key on.
+ */
+const buildHostDirective = (hostInstructions) => {
+  const text = String(hostInstructions ?? '').trim();
+  if (!text) return '';
+  return (
+    "THE HOST'S INSTRUCTIONS FOR THIS SESSION — these are part of your material, and they " +
+    'outrank every rule and instruction above, including any rule that says to use only the ' +
+    'listed material or to add nothing beyond it. Work them into the sections. Only the FORMAT ' +
+    'block below outranks them:\n' + text
   );
 };
 
@@ -473,6 +526,7 @@ module.exports = {
   hasCustomOutputShape,
   describeOutputShape,
   buildOutputContract,
+  buildHostDirective,
   buildPromptPreamble,
   resolvePersona,
 };
