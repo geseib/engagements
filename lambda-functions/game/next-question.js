@@ -56,13 +56,29 @@ const locateCategory = async (setPk, categoryName) => {
   return null;
 };
 
-/** Every question this game has already put on screen, by source id. */
+/**
+ * Every question this game can no longer serve, by source id: the ones already
+ * put on screen (QUESTION#nnn#REF rows) UNION the ones the host has DISABLED
+ * for this session (the EXCLUDED row, written by question-exclusions.js).
+ *
+ * One set on purpose. The exclusions are honoured by the same mechanism the
+ * asked-skip uses — everywhere this set flows (the queue drain, the cursor
+ * walk, and up-next.js's twin of this function) a disabled question behaves
+ * exactly like one the room has already seen, so the serve and the preview
+ * cannot disagree about it.
+ */
 const askedSourceQuestionIds = async (gameId) => {
-  const res = await db.send(new QueryCommand({
-    TableName: process.env.TABLE_NAME,
-    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-    ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'QUESTION#' }
-  }));
+  const [res, excludedRes] = await Promise.all([
+    db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'QUESTION#' }
+    })),
+    db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'EXCLUDED' }
+    })),
+  ]);
 
   const asked = new Set();
   for (const item of res.Items || []) {
@@ -71,6 +87,9 @@ const askedSourceQuestionIds = async (gameId) => {
     if (String(item.SK).endsWith('#REF') && item.SourceQuestionId) {
       asked.add(item.SourceQuestionId);
     }
+  }
+  for (const key of normaliseQueue(excludedRes.Item && excludedRes.Item.Keys)) {
+    asked.add(`QUESTION#${key}`);
   }
   return asked;
 };
@@ -152,22 +171,25 @@ const QUEUE_DRAIN_ATTEMPTS = 3;
  * to remove it because it is already gone. Serving is the irreversible half, so
  * the reversible half goes first.
  *
- * THE THREE WAYS A QUEUED QUESTION CAN BE UNSERVABLE, and they do NOT get the
+ * THE WAYS A QUEUED QUESTION CAN BE UNSERVABLE, and they do NOT get the
  * same treatment, because only one of them is spent:
  *
- *   ALREADY ASKED (a `QUESTION#<nnn>#REF` row names it) — DROPPED. The host
- *   queued it and then asked it directly, or queued it twice across a rebuild.
- *   It can never be served again, so leaving it in the list means the host
- *   watches a row that will silently be skipped forever.
+ *   ALREADY ASKED (a `QUESTION#<nnn>#REF` row names it), OR DISABLED by the
+ *   host (the EXCLUDED row) — DROPPED. Neither can ever be served, so leaving
+ *   either in the list means the host watches a row that will silently be
+ *   skipped forever.
  *
- *   ITS CATEGORY IS SWITCHED OFF — SKIPPED, AND LEFT WHERE IT IS. A skipped
- *   question was never asked. Deleting a host's explicit choice because they
- *   toggled a category chip is a reduction with no recovery: the chip goes back
- *   on with one tap, and the queue does not come back at all.
+ *   NOT IN THE SET, OR IN NO CATEGORY — SKIPPED AND LEFT. A set replaced
+ *   underneath a session is recoverable by putting the set back; a queue
+ *   quietly emptied by that replacement is not.
  *
- *   NOT IN THE SET, OR IN NO CATEGORY — SKIPPED AND LEFT, same reasoning. A set
- *   replaced underneath a session is recoverable by putting the set back; a
- *   queue quietly emptied by that replacement is not.
+ *   ITS CATEGORY BEING SWITCHED OFF IS NOT ONE OF THEM ANY MORE. The first
+ *   version skipped-and-left those, and the owner overruled it: "it should
+ *   not skip it. assume its a 1 off that the host wants to add from that
+ *   category." Queueing a question is the host reaching PAST the category
+ *   toggles by name — the toggles govern the automatic walk, and an explicit
+ *   pick outranks them. The panel still labels the row "Category off" so the
+ *   host can see it is a one-off; it is served like any other queued entry.
  *
  * EVERYTHING BLOCKED IS NOT THE END OF THE GAME. The caller falls through to
  * the ordinary automatic selection, which is exactly what would have happened
@@ -247,9 +269,10 @@ const drainQueuedQuestion = async ({ gameId, setPk, resolvedSet, categoryState }
         continue;
       }
 
+      // A switched-off category does NOT block a queued entry — see the header.
+      // The host named this question; the toggles govern only the automatic walk.
       if (!isHostEnabled(categoryState, located.categoryPosition)) {
-        console.log(`⏭️ QUEUE: ${key} is in a switched-off category — skipping, leaving it queued`);
-        continue;
+        console.log(`ℹ️ QUEUE: ${key} is a one-off from switched-off category '${categoryName}' — serving it anyway`);
       }
 
       candidate = { questionKey: key, questionId: sourceQuestionId, ...located };
@@ -381,30 +404,12 @@ const selectNextQuestionFromCounts = async (gameId, countsState, setPk, isRandom
   }
   
   console.log(`🎯 Available categories from array counts:`, availableCategories.map(c => `Position ${c.position} (${c.remaining} left)`));
-  
+
   if (availableCategories.length === 0) {
     console.log(`❌ No available categories with remaining questions`);
     return null;
   }
-  
-  // Select category based on randomization setting
-  let selectedCategory;
-  if (isRandomized) {
-    /*
-      SEEDED, NOT `Math.random()`. The same arithmetic question-plan.js uses, so
-      the "Up Next" a host is shown is the order that actually arrives — see
-      that file's header. With Math.random() a preview could only ever be a
-      guess, and a screen that guesses and calls it a plan is the failure this
-      repo already treats as a bug class.
-    */
-    selectedCategory = availableCategories[pickIndex(seed, roundNumber, availableCategories.length)];
-    console.log(`🎲 Selected category at position ${selectedCategory.position} (${selectedCategory.remaining} remaining) - SEEDED`);
-  } else {
-    // Select the first available category (lowest position number)
-    selectedCategory = availableCategories.sort((a, b) => a.position - b.position)[0];
-    console.log(`📋 Selected category at position ${selectedCategory.position} (${selectedCategory.remaining} remaining) - IN ORDER`);
-  }
-  
+
   // Get all categories from question set for position to categoryId mapping
   const categoriesQuery = await db.send(new QueryCommand({
     TableName: process.env.TABLE_NAME,
@@ -416,71 +421,90 @@ const selectNextQuestionFromCounts = async (gameId, countsState, setPk, isRandom
   }));
 
   const allCategories = categoriesQuery.Items || [];
-  
-  // Find categoryId by position (existing logic expects position to match array index)
-  if (selectedCategory.position > allCategories.length) {
-    console.log(`❌ Category position ${selectedCategory.position} exceeds available categories (${allCategories.length})`);
-    return null;
-  }
-  
-  const categoryInfo = allCategories[selectedCategory.position - 1];
-  if (!categoryInfo) {
-    console.log(`❌ No category found at position ${selectedCategory.position}`);
-    return null;
-  }
-  
-  const categoryId = categoryInfo.SK.replace('CATEGORY#', '');
-  console.log(`📋 Mapped position ${selectedCategory.position} to categoryId: ${categoryId}`);
-  
-  // Get the next question from this category using existing logic
-  const categoryOrderQuery = await db.send(new GetCommand({
-    TableName: process.env.TABLE_NAME,
-    Key: { PK: `GAME#${gameId}`, SK: `CATEGORY#${categoryId}#ORDER` }
-  }));
-  
-  const categoryActiveQuery = await db.send(new GetCommand({
-    TableName: process.env.TABLE_NAME,
-    Key: { PK: `GAME#${gameId}`, SK: `CATEGORY#${categoryId}#ACTIVE` }
-  }));
-  
-  if (!categoryOrderQuery.Item || !categoryActiveQuery.Item) {
-    console.log(`❌ Category order/active data not found for ${categoryId}`);
-    return null;
-  }
-  
-  const storedIndex = categoryActiveQuery.Item.ActiveIndex || 0;
-  const questionCount = categoryActiveQuery.Item.QuestionCount || 0;
-  const questionOrder = categoryOrderQuery.Item.QuestionOrder;
 
-  console.log(`📊 Category ${categoryId}: activeIndex=${storedIndex}, questionCount=${questionCount}`);
+  /*
+    ONLY A CATEGORY THAT CAN ACTUALLY SERVE A QUESTION MAY BE PICKED.
 
-  if (storedIndex >= questionCount) {
-    console.log(`❌ No more questions in category ${categoryId}`);
-    return null;
-  }
+    The old shape picked a category first — by counts and mask alone — and
+    only then walked its cursor; a category whose remaining questions were all
+    spent (asked out of order, or DISABLED via the EXCLUDED row) walked to
+    nothing, this returned null, and the handler read null as THE WHOLE GAME
+    ENDING — with live questions still sitting in every other category. It
+    also made the preview diverge: question-plan.js's planAhead filters its
+    pool by "has a next question" before picking, so the two chose from
+    different lists and the seeded index landed differently.
 
-  // Skip anything the room has already seen — see advancePastAsked. Without
-  // this the cursor eventually walks onto a question the host queued or picked
-  // by hand and serves it a second time.
-  const landed = advancePastAsked({
-    questionOrder, activeIndex: storedIndex, questionCount, categoryId, asked
-  });
+    So the walk happens for every candidate BEFORE the pick, exactly as the
+    planner simulates it, and the pick chooses among categories proven live.
+  */
+  const liveCategories = [];
+  for (const candidate of availableCategories) {
+    const categoryInfo = allCategories[candidate.position - 1];
+    if (!categoryInfo) continue;
+    const categoryId = categoryInfo.SK.replace('CATEGORY#', '');
 
-  if (!landed) {
-    console.log(`❌ Every remaining question in category ${categoryId} has been asked`);
-    return null;
+    const [categoryOrderQuery, categoryActiveQuery] = await Promise.all([
+      db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: `CATEGORY#${categoryId}#ORDER` }
+      })),
+      db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: `CATEGORY#${categoryId}#ACTIVE` }
+      })),
+    ]);
+
+    if (!categoryOrderQuery.Item || !categoryActiveQuery.Item) continue;
+
+    const storedIndex = categoryActiveQuery.Item.ActiveIndex || 0;
+    const questionCount = categoryActiveQuery.Item.QuestionCount || 0;
+    if (storedIndex >= questionCount) continue;
+
+    // Skip anything the room has already seen or the host has disabled — see
+    // advancePastAsked. Without this the cursor eventually walks onto a
+    // question the host queued or picked by hand and serves it a second time.
+    const landed = advancePastAsked({
+      questionOrder: categoryOrderQuery.Item.QuestionOrder,
+      activeIndex: storedIndex, questionCount, categoryId, asked
+    });
+    if (!landed) continue;
+
+    liveCategories.push({ ...candidate, categoryId, questionCount, landed });
   }
 
-  const { index: activeIndex, questionNumber, questionId } = landed;
+  if (liveCategories.length === 0) {
+    console.log(`❌ No category can serve an unasked, enabled question`);
+    return null;
+  }
+
+  // Select category based on randomization setting
+  let selectedCategory;
+  if (isRandomized) {
+    /*
+      SEEDED, NOT `Math.random()`. The same arithmetic question-plan.js uses, so
+      the "Up Next" a host is shown is the order that actually arrives — see
+      that file's header. With Math.random() a preview could only ever be a
+      guess, and a screen that guesses and calls it a plan is the failure this
+      repo already treats as a bug class.
+    */
+    selectedCategory = liveCategories[pickIndex(seed, roundNumber, liveCategories.length)];
+    console.log(`🎲 Selected category at position ${selectedCategory.position} (${selectedCategory.remaining} remaining) - SEEDED`);
+  } else {
+    // Select the first available category (lowest position number)
+    selectedCategory = liveCategories.sort((a, b) => a.position - b.position)[0];
+    console.log(`📋 Selected category at position ${selectedCategory.position} (${selectedCategory.remaining} remaining) - IN ORDER`);
+  }
+
+  const { index: activeIndex, questionNumber, questionId } = selectedCategory.landed;
 
   console.log(`🎯 Selected question: ${questionId}`);
 
   return {
     questionId,
-    categoryId: categoryId,
+    categoryId: selectedCategory.categoryId,
     categoryPosition: selectedCategory.position,
     activeIndex,
-    questionCount,
+    questionCount: selectedCategory.questionCount,
     questionNumber
   };
 };

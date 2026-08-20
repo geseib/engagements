@@ -3,6 +3,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import webSocketClient from './WebSocketClient';
 import { requestNextQuestion } from './utils/nextQuestion';
 import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
+import { postExclusionOp } from './utils/questionExclusionsClient';
 import { queueEnqueue, queueMove, queueRemove, normaliseQueue, materializePlanOps } from './config/questionQueue';
 import { focusFromFrame, focusToStage, focusRequest, sameFocus } from './config/stageFocus';
 import IssueFab from './components/IssueFab';
@@ -103,6 +104,14 @@ function GameHostPage() {
   
   // 🎯 GAME ID MANAGEMENT: Use URL as single source of truth
   const [gameId, setGameId] = useState('');
+  /*
+    Bumped by every switchToGame(), including one that re-opens the game
+    already in `gameId`. It exists ONLY to re-fire the restore effect in that
+    same-id case — React bails out of a same-id setGameId entirely, and an
+    effect keyed on `[gameId]` alone never ran, leaving the freshly cleared
+    slate on screen as the session (game 5486). See switchToGame.
+  */
+  const [sessionEpoch, setSessionEpoch] = useState(0);
   
   // `isLobbyState` is imported from config/hostControls.js, beside
   // `phaseOfGameState`. It was a closure here, where no test could reach it,
@@ -452,6 +461,11 @@ function GameHostPage() {
   */
   const [upNext, setUpNext] = useState([]);
   const [upNextBlocked, setUpNextBlocked] = useState([]);
+  // Served-but-labeled one-offs (category off) and the host's veto list, both
+  // straight from GET /up-next — the panel renders them, the ops below edit
+  // the veto, and the reload after each op is what keeps the three in step.
+  const [upNextAdvisories, setUpNextAdvisories] = useState([]);
+  const [upNextExcluded, setUpNextExcluded] = useState([]);
   const [queueVersion, setQueueVersion] = useState(0);
   const [queueBusyKeys, setQueueBusyKeys] = useState([]);
 
@@ -478,16 +492,14 @@ function GameHostPage() {
   */
   const [editTarget, setEditTarget] = useState(null);
   /*
-    THE SET THE HOST WAS LAST RUNNING, held across Switch game.
-
-    Deliberately NOT on gameSession.js's per-game list, and not inside
-    GameSetupDialog either. It has to outlive the reset — its entire job is to
-    survive `leaveCurrentGame()`, which clears `selectedSetId` — and it has to
-    outlive the welcome screen the host passes through before the create dialog
-    mounts. That makes it a piece of navigation state, like the dialog flags
-    beside it, rather than either a game value or a form field.
+    THERE IS DELIBERATELY NO "LAST-USED SET" STATE HERE ANY MORE. A
+    `pendingSetId` used to survive `leaveCurrentGame()` so the create dialog
+    reopened on the set the host was just running. The owner retired it: "the
+    create engagement should not remember or preselect that last picked
+    question set." Every create now starts with the set unchosen — which also
+    keeps the Create button honestly disabled until a deliberate pick is made,
+    instead of enabled on a leftover.
   */
-  const [pendingSetId, setPendingSetId] = useState('');
   const [showQuickstartMenu, setShowQuickstartMenu] = useState(false);
   /*
     THE HOST'S SET SHELF, REACHED WITHOUT STARTING A SESSION.
@@ -810,6 +822,7 @@ function GameHostPage() {
     currentGameType: setCurrentGameType,
     anonymousUntilReveal: setAnonymousUntilReveal,
     questions: setQuestions,
+    usedQuestionIds: setUsedQuestionIds,
     currentQuestionId: setCurrentQuestionId,
     currentQuestionIndex: setCurrentQuestionIndex,
     lessonNumber: setLessonNumber,
@@ -874,20 +887,32 @@ function GameHostPage() {
   };
 
   /**
-   * Open a different game. THE choke point — every create/join/continue path
-   * goes through here, so per-game state can never be half-cleared.
+   * Open a game. THE choke point — every create/join/continue path goes
+   * through here, so per-game state can never be half-cleared.
    *
    * The reset and the `setGameId` land in the same React 18 batch, so the
    * screen never renders the new game id against the old game's data. The
-   * `[gameId]` effect then restores the new game from the server onto a clean
-   * slate — which matters because `restoreGameState()` only *adds*: a
-   * just-started game reports `currentQuestion: 0` and skips the entire
+   * restore effect then loads the game from the server onto a clean slate —
+   * which matters because `restoreGameState()` only *adds*: a just-started
+   * game reports `currentQuestion: 0` and skips the entire
    * question/answer/progress branch, so anything left behind would survive.
+   *
+   * THE EPOCH IS WHY RETURNING TO THE *SAME* SESSION WORKS — game 5486. The
+   * restore effect used to key on `[gameId]` alone, and a same-id setGameId
+   * is a state update React bails out of entirely: leaving a session (which
+   * clears every per-game value but not `gameId`) and then re-opening THAT
+   * session never re-fired the restore, so the host got the cleared slate as
+   * the session — no categories, no questions, "not able to start session".
+   * A different game changed the id and worked, which is exactly the shape
+   * the owner reported: "the issue only happens when you leave a session and
+   * come back to the same session." The epoch bumps on EVERY switch, so the
+   * effect re-fires whether or not the id changed.
    */
   const switchToGame = (nextGameId, overrides = {}) => {
     console.log(`🔁 HOST: switching to game ${nextGameId} (from ${gameId || 'none'})`);
     leaveCurrentGame(overrides);
     setGameId(nextGameId);
+    setSessionEpoch((epoch) => epoch + 1);
     setShowWelcomeScreen(false);
   };
 
@@ -1424,7 +1449,15 @@ Focus on actionable business strategy insights.`;
     };
     
     initializeGame();
-  }, [gameId]);
+    /*
+      `sessionEpoch` is a dependency BECAUSE `gameId` alone is not enough:
+      re-opening the very session the host just left keeps the id, React
+      bails out of the no-op setGameId, and without the epoch this restore
+      never ran — the cleared slate WAS the session. Game 5486's "all
+      categories and questions are missing" repro, fixed at the dependency.
+    */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId, sessionEpoch]);
 
   // REMOVED: HTTP polling - WebSocket handles all real-time updates // Include useWebSocket dependency
 
@@ -2761,10 +2794,28 @@ Focus on actionable business strategy insights.`;
       if (!res.ok) return;
       const payload = await res.json();
       setUpNext(Array.isArray(payload.upNext) ? payload.upNext : []);
-      // The queue entries the plan cannot use — category off, or not in this
-      // set — reported so the panel can say "parked" instead of letting the
-      // host watch their own choice be skipped in silence.
+      // The queue entries the plan cannot use — not in this set, no reachable
+      // category — reported so the panel can say "parked" instead of letting
+      // the host watch their own choice be skipped in silence.
       setUpNextBlocked(Array.isArray(payload.blocked) ? payload.blocked : []);
+      // Served-but-labeled (a one-off from a switched-off category), and the
+      // questions the host has disabled for this session.
+      setUpNextAdvisories(Array.isArray(payload.advisories) ? payload.advisories : []);
+      setUpNextExcluded(Array.isArray(payload.excluded) ? payload.excluded : []);
+      /*
+        THE SERVER'S OWN ASKED LIST corrects the watched one. Locally-watched
+        ids stay (union, not replace — the round on screen is asked before the
+        next poll), but the base truth is the REF rows, which is what makes
+        the tags right after re-entering a played session and immune to what
+        some other browser watched.
+      */
+      if (Array.isArray(payload.asked) && payload.asked.length) {
+        setUsedQuestionIds((prev) => {
+          const merged = new Set(prev);
+          for (const id of payload.asked) merged.add(id);
+          return merged.size === prev.length ? prev : [...merged];
+        });
+      }
     } catch (error) {
       console.warn('⚠️ UP NEXT: could not read what is coming:', error?.message);
     }
@@ -2915,6 +2966,51 @@ Focus on actionable business strategy insights.`;
     loadQueue();
     loadUpNext();
   }, [gameId, questionQueue, queueVersion, upNext, loadQueue, loadUpNext]);
+
+  /**
+   * DISABLE — the third of the owner's four queue verbs: this question is not
+   * asked at all this session. For a QUEUED row it is two calls, un-queue then
+   * veto, deliberately not a compound server op: each half is independently
+   * safe, and a half-done pair leaves the question visible for a second press
+   * instead of wedged. The serve honours the veto by union with the asked set
+   * (next-question.js), so the drain also defends against the half-done case.
+   */
+  const handleDisableQuestion = useCallback(async (rawKey, { queued = false } = {}) => {
+    const key = String(rawKey ?? '').replace(/^QUESTION#/, '').trim();
+    if (!key) return;
+    setQueueBusyKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
+
+    let failed = null;
+    if (queued) {
+      const removed = await postQueueOp({
+        apiBase: API_BASE, gameId, op: 'remove', questionKey: key, expectedVersion: queueVersion,
+      });
+      if (!removed.ok) failed = removed.error;
+    }
+    if (!failed) {
+      const vetoed = await postExclusionOp({
+        apiBase: API_BASE, gameId, op: 'add', questionKey: key,
+      });
+      if (!vetoed.ok) failed = vetoed.error;
+    }
+
+    setQueueBusyKeys((prev) => prev.filter((k) => k !== key));
+    if (failed) alert(`Could not disable that question: ${failed}`);
+    loadQueue();
+    loadUpNext();
+  }, [gameId, queueVersion, loadQueue, loadUpNext]);
+
+  /** The way back from Disable — the veto lifts and the walk picks it up. */
+  const handleRestoreQuestion = useCallback(async (rawKey) => {
+    const key = String(rawKey ?? '').replace(/^QUESTION#/, '').trim();
+    if (!key) return;
+    const result = await postExclusionOp({
+      apiBase: API_BASE, gameId, op: 'remove', questionKey: key,
+    });
+    if (!result.ok) alert(`Could not restore that question: ${result.error}`);
+    loadQueue();
+    loadUpNext();
+  }, [gameId, loadQueue, loadUpNext]);
 
   // Select a specific question to trigger as the next question
   const selectQuestion = async (selectedQuestion) => {
@@ -3710,19 +3806,10 @@ Focus on actionable business strategy insights.`;
     // clean and there is no window where the new game id renders against the
     // old game's question, phase and answers.
     //
-    // Order matters: read selectedSetId before the reset clears it, so the
-    // create dialog still opens on the set they were just using.
-    //
-    // THIS LINE READ `setNewGameSetId(selectedSetId)` AND THAT IS WHY SWITCH
-    // GAME DID NOTHING. `newGameSetId` moved into GameSetupDialog during the
-    // extraction — gameSession.js's header names it among the keys the dialog
-    // now owns — and the setter here went with it, leaving a call to a binding
-    // that does not exist. It is the FIRST statement in the handler, so the
-    // ReferenceError took `leaveCurrentGame`, the welcome screen and the input
-    // reset with it: the button was wired, ran, threw, and changed nothing.
-    // Reported twice, the second time after a CSS fix that made the button
-    // reachable and could not make a dead handler work.
-    setPendingSetId(selectedSetId);
+    // Nothing is read out of the old game first. A `pendingSetId` used to be
+    // captured here so the next create reopened on the set just played; the
+    // owner retired that ("should not remember or preselect that last picked
+    // question set"), so the reset is the whole handler.
     leaveCurrentGame();
     setShowWelcomeScreen(true);
     // Clear continue game input
@@ -3914,10 +4001,6 @@ Focus on actionable business strategy insights.`;
       alert('Please select a question set and enter an event title.');
       return;
     }
-    // Spent — the same reason as the dialog's Cancel. The form's own answer is
-    // in `form.setId` from here on.
-    setPendingSetId('');
-
     /*
       THE DESTRUCTIVE CLEAR THAT USED TO SIT HERE DELETED "80s 2" (issue #26).
 
@@ -4468,7 +4551,6 @@ Focus on actionable business strategy insights.`;
         isFirstEngagement={isLobbyState(gameState) && lessonNumber === 0}
         eventTitle={eventTitle}
         onEventTitleChange={setEventTitle}
-        initialSetId={pendingSetId}
         questionSets={questionSets}
         personas={personas}
         categories={categories}
@@ -4478,10 +4560,6 @@ Focus on actionable business strategy insights.`;
         onQuestionSetChange={handleSetupSetChange}
         onCancel={() => {
           setShowNewGameDialog(false);
-          // Spent. Carrying it forward would pre-select a set the host has
-          // since navigated away from, on a create they started for another
-          // reason entirely.
-          setPendingSetId('');
           if (isLobbyState(gameState) && lessonNumber === 0) {
             setShowWelcomeScreen(true);
           }
@@ -5715,10 +5793,14 @@ Focus on actionable business strategy insights.`;
           queueBusyKeys={queueBusyKeys}
           upNext={upNext}
           upNextBlocked={upNextBlocked}
+          upNextAdvisories={upNextAdvisories}
+          upNextExcluded={upNextExcluded}
           onQueueQuestion={handleQueueQuestion}
           onQueueMove={handleQueueMove}
           onQueueRemove={handleQueueRemove}
           onAutoMove={handleAutoMove}
+          onDisableQuestion={handleDisableQuestion}
+          onRestoreQuestion={handleRestoreQuestion}
           gameId={gameId}
           playUrl={playUrl}
           remoteUrl={remoteUrl}

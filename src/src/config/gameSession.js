@@ -81,6 +81,16 @@ export function initialGameSession() {
     // safe (hidden) state rather than the open one.
     anonymousUntilReveal: true,
     questions: [],
+    /*
+      The rounds THIS game has served, feeding the question browser's "asked"
+      tags. Its absence from this list was a live bug: it survived Back to
+      Menu, and because CSV imports reuse the same c001#001 numbering per set,
+      a brand-new session opened with the PREVIOUS session's rounds marked
+      asked — questions "not in the queue" and "not in the rounds", exactly as
+      reported. Reset here per game, and refilled from the server's own REF
+      rows via GET /up-next whenever the setup panel opens.
+    */
+    usedQuestionIds: [],
     currentQuestionId: '',
     currentQuestionIndex: -1,
     lessonNumber: 0,

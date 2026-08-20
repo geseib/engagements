@@ -322,6 +322,20 @@ const FORMATTING_BLOCK =
   'as a headline and the rest as its caption beneath it, which is what makes a point readable from ' +
   'the back of the room. Keep what follows the colon to one sentence.';
 
+/*
+  THE TELLS, BANNED CENTRALLY. Each of these is a register a small model falls
+  into under a heavy rule load, and each reads as machinery the moment it hits
+  a projector. In the CONTRACT rather than in any one template so the legacy
+  prompts — which nobody is editing — get it too, and so a persona cannot
+  accidentally un-ban them: the contract supersedes.
+*/
+const REGISTER_BLOCK =
+  'SOUND LIKE A PERSON, NOT A REPORT. Never open a section with "Overall", "It\'s clear that", ' +
+  '"Great discussion", "In summary", or a restatement of the question the room just saw — start ' +
+  'with the most specific thing you have. One exclamation mark is plenty for a whole reply. Do ' +
+  'not summarise your own summary, do not sign off, and never describe what you are about to do — ' +
+  'do it.';
+
 const buildOutputContract = (prompt) => {
   const sections = resolveOutputSections(prompt);
   const count = COUNT_WORD[sections.length] || String(sections.length);
@@ -334,10 +348,82 @@ const buildOutputContract = (prompt) => {
     'FORMAT (this part is not negotiable, and it supersedes any formatting or output-structure ' +
     'instruction that appeared earlier in this prompt):\n\n' +
     `${FORMATTING_BLOCK}\n\n` +
+    `${REGISTER_BLOCK}\n\n` +
     `Reply using exactly these ${count} headings, in this order, spelled exactly as shown, and add no other headings:\n\n` +
     `${body}\n\n` +
     'The voice guidance above governs the words inside these sections. It does not govern the ' +
     'headings, which must appear exactly as written. Do not add a title above the first heading.'
+  );
+};
+
+/**
+ * THE HOST'S INSTRUCTIONS, WITH AUTHORITY — the fix for game 1935.
+ *
+ * CloudWatch closed the argument: the host's AIContext ("We always want to
+ * hear what Steve Jobs would do...") was saved, resolved, and delivered as the
+ * VOICE — a hundred characters at the top of a 10,722-character prompt — and
+ * then out-ranked by the template's own rules ("Every claim comes from the
+ * material listed at the end... You know nothing else about this room") and a
+ * locked section list. Haiku obeyed the specific over the general, exactly as
+ * trained, and the host's instruction left no trace. A control experiment with
+ * the same voice over a SMALL prompt produced the Steve Jobs comment
+ * immediately — position and mass were the whole problem.
+ *
+ * So the instruction is stated a second time, DELIBERATELY, at the position
+ * that wins: after the template's rules, right beside the format contract,
+ * with its precedence spelled out. This is not the double-weighing the context
+ * block guards against (a context that became the voice competing with itself
+ * as a second voice) — the directive is not a voice, it is a permission slip
+ * that names which earlier rules it overrides. Under-weighting was the failure
+ * being fixed; the owner's standing requirement is "they always should"
+ * (issue #27) contribute.
+ *
+ * The FORMAT contract still outranks it, by both position (the contract is
+ * appended after this) and text (said here explicitly) — a host instruction
+ * may add Steve Jobs to the words inside the sections; it may not change the
+ * headings the parser and the projector key on.
+ */
+const buildHostDirective = ({ hostInstructions, eventDetails } = {}) => {
+  const instructions = String(hostInstructions ?? '').trim();
+  const details = String(eventDetails ?? '').trim();
+  if (!instructions && !details) return '';
+
+  /*
+    MEASURED, NOT GUESSED — game 4567 was the counter-example that killed two
+    politer versions of this block. The first sat between the template and the
+    contract and said the instructions "outrank every rule above"; CloudWatch
+    shows it in the live prompt, correctly placed, and shows the model
+    ignoring it — the contract that follows opens with "this part is not
+    negotiable and supersedes any instruction that appeared earlier", and the
+    model took that at its word. A rerun of the exact failing prompt with the
+    directive moved AFTER the contract, phrased as authority, complied about
+    half the time. This shape — a formatting requirement OF the format block,
+    with per-section force and a self-check — complied on every measured run.
+    If this wording is ever softened, re-run the 4567 prompt before believing
+    the softer version.
+
+    Both host-authored fields ride it, labeled apart, per the owner: "the
+    engagement event details, and the AI context should always be added to AI
+    prompt as important details." Details are facts to weave in where they
+    matter; instructions carry the per-section demand.
+  */
+  const lines = [];
+  if (details) lines.push(`ABOUT THIS SESSION: ${details}`);
+  if (instructions) lines.push(`THE HOST'S INSTRUCTIONS: ${instructions}`);
+
+  const enforcement = instructions
+    ? 'EVERY section must contain at least one sentence that delivers the host\'s instructions, ' +
+      'woven into that section\'s own content. A section without it is malformed, exactly as a ' +
+      'misspelled heading would be. Weave the session facts in wherever they sharpen a point. ' +
+      'Before you reply, re-read each section and confirm the instructions are present in all of them.'
+    : 'Weave these facts into the sections wherever they sharpen a point — a reply that reads as ' +
+      'though it could be about any session is malformed.';
+
+  return (
+    "THE HOST'S REQUIRED ADDITIONS — a formatting requirement of the FORMAT block above, " +
+    'identical in force to the headings:\n' +
+    `${lines.join('\n')}\n` +
+    enforcement
   );
 };
 
@@ -473,6 +559,7 @@ module.exports = {
   hasCustomOutputShape,
   describeOutputShape,
   buildOutputContract,
+  buildHostDirective,
   buildPromptPreamble,
   resolvePersona,
 };

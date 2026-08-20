@@ -354,9 +354,18 @@ const TRIAD = ['## Summary', '## Discussion Questions', '## Next Steps'];
   s3Override = null;
 
   realLog('\n6. an unrecognised response shape never yields an empty panel\n');
+  /*
+    THE REPLIES ARE COMPLETIONS NOW, NOT WHOLE DOCUMENTS. The model call
+    prefills the first section heading (get-ai-summary.js), so the stored
+    markdown is mechanically `## <first heading>` + whatever the model wrote —
+    a reply that "forgets" its first heading can no longer exist on the wire.
+    These fixtures are what a model writes AFTER the prefill when it then goes
+    off-shape anyway, leading \n\n included, exactly as the live model
+    continues (verified against Bedrock before shipping).
+  */
   for (const [label, reply] of [
-    ['prose with no headings', 'Everyone reached for a joke and the joke that won was the shortest one on the board.'],
-    ['leading H1 plus an unknown section', '# Gallery Report\n\n## Verdict\nThe room was kinder to the painting than it was to each other, which is a first.'],
+    ['prose with no headings', '\n\nEveryone reached for a joke and the joke that won was the shortest one on the board.'],
+    ['a wandering unknown section', '\n\nSo far so good.\n\n## Verdict\nThe room was kinder to the painting than it was to each other, which is a first.'],
   ]) {
     seed({ promptId: ART_PROMPT_ID, questionAnswerDetails: REVEAL });
     cannedReply = reply;
@@ -365,8 +374,11 @@ const TRIAD = ['## Summary', '## Discussion Questions', '## Next Steps'];
     loud();
     check(`${label}: summaryText non-empty`, () =>
       assert(odd && odd.SummaryText && odd.SummaryText.length > 20, JSON.stringify(odd && odd.SummaryText)));
-    check(`${label}: raw markdown retained`, () =>
-      assert(odd.MarkdownResponse === reply, 'the model\'s own markdown must always survive'));
+    check(`${label}: raw markdown retained, under the prefilled heading`, () => {
+      assert(odd.MarkdownResponse.startsWith('## '), 'the prefilled heading must open the document');
+      assert(odd.MarkdownResponse.endsWith(reply.trimStart()),
+        'the model\'s own markdown must always survive, verbatim, after the prefill');
+    });
   }
 
   realLog('\n7. the shipped art prompt is a working reference example\n');

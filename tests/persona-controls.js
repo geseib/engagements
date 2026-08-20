@@ -550,6 +550,94 @@ const metadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
       'the context layer is not in the assembled prompt');
   });
 
+  console.log('\nthe host\'s instructions carry authority — game 1935\'s fix\n');
+
+  const { buildHostDirective } = require(path.join(REPO, 'lambda-functions', 'game', 'personas.js'));
+
+  await acheck('the additions are a formatting requirement, with per-section force', async () => {
+    /*
+      MEASURED WORDING — do not soften without re-measuring. Games 1935 and
+      4567: two politer versions were ignored by the live model (the contract
+      "supersedes any instruction that appeared earlier", and the model took
+      it at its word). The shape that complied on every replay of 4567's
+      exact failing prompt: a requirement OF the format block, per-section
+      force, and a self-check. personas.js carries the experiment log.
+    */
+    const directive = buildHostDirective({
+      hostInstructions: 'add a star wars related character perspective to each summary',
+    });
+    assert(directive.includes("THE HOST'S REQUIRED ADDITIONS"));
+    assert(/formatting requirement of the FORMAT block above/.test(directive));
+    assert(/identical in force to the headings/.test(directive));
+    assert(/EVERY section must contain at least one sentence/.test(directive));
+    assert(/malformed, exactly as a misspelled heading/.test(directive));
+    assert(/Before you reply, re-read each section/.test(directive), 'the self-check is load-bearing');
+    assert(directive.includes('star wars related character perspective'));
+  });
+
+  await acheck('the event details ride the additions too — labeled apart', async () => {
+    /*
+      The owner: "i think the engagement event details, and the AI context
+      should always be added to AI prompt as important details." Details are
+      facts to weave in where they sharpen a point; only the INSTRUCTIONS
+      carry the per-section demand — four sections each restating the event
+      title would be the fix overshooting.
+    */
+    const factsOnly = buildHostDirective({
+      eventDetails: 'team is about to take on new projects',
+    });
+    assert(factsOnly.includes('ABOUT THIS SESSION: team is about to'));
+    assert(/identical in force to the headings/.test(factsOnly));
+    assert(!/EVERY section must contain/.test(factsOnly),
+      'facts alone must not demand a sentence per section');
+
+    const both = buildHostDirective({
+      hostInstructions: 'the orders', eventDetails: 'the facts',
+    });
+    assert(both.indexOf('ABOUT THIS SESSION: the facts')
+      < both.indexOf("THE HOST'S INSTRUCTIONS: the orders"),
+      'facts frame first, orders follow');
+  });
+
+  await acheck('nothing to say, no directive — not an empty ceremony', async () => {
+    assert.strictEqual(buildHostDirective({}), '');
+    assert.strictEqual(buildHostDirective({ hostInstructions: '   ', eventDetails: '' }), '');
+    assert.strictEqual(buildHostDirective(), '');
+  });
+
+  await acheck('the additions come AFTER the contract — the measured position', async () => {
+    // Position IS the fix, the second time: between template and contract the
+    // directive lost to the contract's "supersedes any instruction that
+    // appeared earlier" opener. Last is the only spot nothing else claims to
+    // supersede.
+    assert(/hostInstructions: gameAiContext/.test(summarySrc));
+    assert(/eventDetails,/.test(summarySrc));
+    assert(/\$\{contextLayer\}\$\{templateBody\}\\n\\n\$\{buildOutputContract\(promptData\)\}\$\{hostLayer\}/.test(summarySrc),
+      'the assembled prompt must read template → contract → host additions');
+  });
+
+  console.log('\nthe reply is prefilled with its own first heading\n');
+
+  await acheck('the model call carries an assistant prefill of the first heading', async () => {
+    /*
+      Source-level, as the metadata-read pins above are. The prefill kills the
+      "Here's a summary…" preamble and the invented document title (game 7971's
+      breakage) mechanically. Verified live against the exact Bedrock model
+      before shipping: the completion continues "\n\nThe room…" and never
+      contaminates the heading line.
+    */
+    assert(/const prefill = `## \$\{firstHeading\}`/.test(summarySrc));
+    assert(/\{ role: 'assistant', content: prefill \}/.test(summarySrc));
+    // And the stored/parsed reply is prefill + completion, never the
+    // completion alone — the parser and the projector need the heading.
+    assert(/prefill \+ responseBody\.content\[0\]\.text/.test(summarySrc));
+  });
+
+  await acheck('temperature is 0.7 — variety, fenced by material-only rules', async () => {
+    assert(/temperature: 0\.7/.test(summarySrc));
+    assert(!/temperature: 0\.5/.test(summarySrc), 'the flattening 0.5 is back');
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(1); });

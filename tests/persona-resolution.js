@@ -183,6 +183,25 @@ const loadPersona = async (id) => STORE[id] || null;
       'MarkdownRenderer splits `**Lead**: rest` into a headline over a caption ' +
       'on the projector, and nothing anywhere told a prompt author it exists'));
 
+  check('the contract bans the tells that make a reply read as machinery', () => {
+    /*
+      In the CONTRACT rather than in any one template, so the legacy prompts
+      nobody edits get it too, and a persona cannot un-ban them. Each phrase
+      named is a register a small model falls into under heavy rule load.
+    */
+    assert(/SOUND LIKE A PERSON/.test(contract), 'the register block is missing');
+    assert(/"Overall"/.test(contract) && /"Great discussion"/.test(contract),
+      'the openers worth banning are banned by name');
+    assert(/restatement of the question/.test(contract));
+    assert(/exclamation mark/.test(contract));
+  });
+
+  check('the register block sits above the headings mandate, like all advice', () => {
+    const block = contract.indexOf('SOUND LIKE A PERSON');
+    assert(block > -1 && block < contract.indexOf('Reply using exactly these'),
+      'the heading list must stay the contract\'s last word');
+  });
+
   check('the formatting block does not displace the headings mandate', () => {
     const block = contract.indexOf('WHAT THE SCREEN CAN DRAW');
     assert(block > -1, 'the formatting block is missing entirely');

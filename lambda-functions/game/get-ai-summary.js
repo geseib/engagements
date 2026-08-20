@@ -4,7 +4,10 @@ const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanComman
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
-const { resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutputShape, buildContextBlock } = require('./personas');
+const {
+  resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutputShape,
+  buildContextBlock, buildHostDirective, resolveOutputSections,
+} = require('./personas');
 const { normalizeGameType } = require('./game-types');
 const { isUsableSummaryPrompt, summaryPromptDefect } = require('./prompt-shape');
 const { extractVariableTokens } = require('./template-variables');
@@ -265,7 +268,7 @@ const fetchPromptFromS3 = async (promptId) => {
         id: 'lessons-learned',
         name: 'Lessons Learned - Strategic Insights',
         category: 'callandanswer',
-        template: `You are an expert business strategist analyzing team responses from {sessionContext}.
+        template: `You are reading back one round of {sessionContext} to the room that just played it. You are speaking, not writing a report.
 
 The team wrote answers and then ranked them, and the ranking is their collective judgement. Your job is to say what they chose, why that choice is interesting, and what somebody should do about it.
 
@@ -2248,7 +2251,25 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, eventDet
     ? `${contextBlock}\n\n`
     : '';
 
-  let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}\n\n${buildOutputContract(promptData)}`;
+  /*
+    THE HOST'S REQUIRED ADDITIONS, AFTER THE CONTRACT — games 1935 and 4567,
+    in that order. Delivery was never the problem (the context layer above
+    carries the same facts); POSITION was, twice. First the instructions sat
+    only at the top and lost to the template's rule mass (1935). Then a
+    directive between the template and the contract lost to the contract's
+    own "supersedes any instruction that appeared earlier" opener (4567 —
+    CloudWatch shows the directive in the prompt and the model ignoring it).
+    The measured fix is this order: the additions come LAST, as part of the
+    format block's own requirements. personas.js:buildHostDirective carries
+    the experiment log.
+  */
+  const hostDirective = buildHostDirective({
+    hostInstructions: gameAiContext,
+    eventDetails,
+  });
+  const hostLayer = hostDirective ? `\n\n${hostDirective}` : '';
+
+  let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}\n\n${buildOutputContract(promptData)}${hostLayer}`;
 
   // Debug: Log key trivia variables
   if (gameType === 'trivia') {
@@ -2338,17 +2359,33 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, eventDet
   console.log('🤖 BEDROCK: Calling Claude Haiku 4.5 (primary)…', haikuModelId);
   console.log('🤖 BEDROCK: Prompt length:', prompt.length);
 
+  /*
+    THE REPLY IS PREFILLED WITH ITS OWN FIRST HEADING. The completion then
+    begins INSIDE the content — no "Here's a summary…" preamble, no invented
+    document title (the shape that broke game 7971), and the parser's anchor
+    is guaranteed mechanically instead of by instruction. Verified live
+    against this exact model before shipping: the completion continues
+    "\n\nThe room…", never contaminating the heading line. The prefill must
+    not end in whitespace — Bedrock rejects a trailing-space assistant turn —
+    so the newline arrives from the completion, and the two are concatenated
+    verbatim below before parsing or storing.
+  */
+  const firstHeading = resolveOutputSections(promptData)[0].heading;
+  const prefill = `## ${firstHeading}`;
+
   const invokeHaiku = async () => bedrock.send(new InvokeModelCommand({
     modelId: haikuModelId,
     body: JSON.stringify({
       anthropic_version: 'bedrock-2023-05-31',
       max_tokens: 1024,     // content is ~600–1000 tok; caps tail latency (bump to 1536 only if stop_reason:"max_tokens")
-      temperature: 0.5,     // tighter/shorter, still a natural summary
+      // 0.7, up from 0.5. Every fact the reply may state is IN the prompt and
+      // fenced by the material-only rules, so temperature buys phrasing
+      // variety, not hallucination risk — and 0.5 flattened exactly the
+      // "real, vivid, natural" quality the owner asked this pass to restore.
+      temperature: 0.7,
       messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
+        { role: 'user', content: prompt },
+        { role: 'assistant', content: prefill }
       ]
     })
   }));
@@ -2367,7 +2404,10 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, eventDet
     }
 
     const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-    const aiResponse = responseBody.content[0].text.trim();
+    // Prefill + completion IS the reply — the model wrote everything after the
+    // heading, and everything downstream (the parser, the stored markdown, the
+    // projector) must see the whole document, heading included.
+    const aiResponse = (prefill + responseBody.content[0].text).trim();
 
     console.log('✅ CLAUDE SUCCESS: Real AI response received');
     console.log('📝 AI Response preview:', aiResponse.substring(0, 200) + '...');
