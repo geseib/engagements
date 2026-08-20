@@ -14,6 +14,13 @@ const { extractVariableTokens } = require('./template-variables');
 const { resolveSetPartition } = require('./set-version');
 const { isHidden } = require('./anonymity');
 const { consensusLabel } = require('./consensus');
+// buildWavelengthProse lives in wavelength.js WITH the engine, not here.
+// promptPreflight.test.js extracts "the hardcoded fallback" by slicing from
+// this file's FIRST backtick character, so nothing above the real fallback
+// template may contain one — not a template literal, not even a comment —
+// or the preflight reads the sliced text's interpolations as unknown
+// brace-tokens and goes red.
+const { analyzeWavelength, buildWavelengthProse } = require('./wavelength');
 
 /**
  * Voice attribution carried out of generateAISummary() and onto the stored
@@ -1597,9 +1604,11 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, eventDet
     ).join(', ');
   
   // Initialize wavelength variables early to avoid undefined errors
-  let commonWords = [];
-  let connectionScore = 0;
+  let commonWords = [];        // the LANDED tier: on every submitter's list
+  let connectionScore = 0;     // legacy template variable, re-derived as landed ÷ distinct
   let totalUniqueWords = 0;
+  let wavelengthSubmitters = 0; // THE denominator — submitters, never the room
+  let wavelengthNearMiss = [];
 
   // Calculate consensus level. See lambda-functions/game/consensus.js — the
   // previous inline version compared maxScore against itself, a tautology that
@@ -1613,7 +1622,8 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, eventDet
     gameType,
     sortedAnswers,
     maxScore: results.maxScore,
-    connectionScore,
+    landedCount: commonWords.length,
+    submitterCount: wavelengthSubmitters,
   });
 
   // Format final results (different for trivia vs voting)
@@ -1643,7 +1653,10 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, eventDet
       `${winners.length}-way tie for first place with ${winners[0].score} points each` :
       'No correct answers';
   } else if (gameType === 'wavelength') {
-    resultsSummary = `Team found ${commonWords.length} common words with ${connectionScore}% connection rate`;
+    // Provisional — the wavelength branch below overwrites this once the real
+    // analysis is in hand. Kept in the new vocabulary so a future refactor
+    // that drops the overwrite cannot resurrect the connection-rate claim.
+    resultsSummary = `${commonWords.length} words were on every list (all ${wavelengthSubmitters} who answered)`;
   } else {
     resultsSummary = winners.length === 1 ? 
       `Clear winner with ${Math.round((winners[0].score / (results.totalVotes * 3)) * 100)}% of possible vote points` :
@@ -1902,15 +1915,24 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, eventDet
     // Get the topic/prompt from the question
     wavelengthTopic = question.title || question.topic || 'Word Association';
     
-    // Use stored results data if available (contains pre-calculated commonWords)
+    // Use stored results data if available. Since the convergence rework this
+    // carries the UNANIMITY analysis (commonWords = on every submitter's list,
+    // clustered when the worker ran) — the stored round is the round's answer
+    // and must not be second-guessed here.
     if (storedResults && storedResults.wordAnalysis && storedResults.wordAnalysis.commonWords) {
       console.log('✅ Using stored wavelength results data for AI summary');
-      
+
       commonWords = storedResults.wordAnalysis.commonWords;
-      const wordCounts = storedResults.wordAnalysis.wordCounts || {};
       totalUniqueWords = storedResults.wordAnalysis.totalUniqueWords || 0;
-      connectionScore = storedResults.wordAnalysis.connectionScore || 0;
-      
+      wavelengthSubmitters = storedResults.wordAnalysis.submitterCount
+        || storedResults.wordAnalysis.totalAnswers
+        || answers.length;
+      wavelengthNearMiss = storedResults.wordAnalysis.nearMiss || [];
+      // Legacy template variable: the share of distinct words that landed.
+      connectionScore = totalUniqueWords > 0
+        ? Math.round((commonWords.length / totalUniqueWords) * 100)
+        : 0;
+
       // Extract player word lists from stored data. This reads a separately
       // persisted QUESTION#...#RESULTS record — it is NOT part of the
       // `answers`/`results` parameters redacted at the top of this function,
@@ -1925,8 +1947,13 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, eventDet
       // per-participant identity (that would be the stable-answerId feature,
       // out of scope here) — the placeholder can simply repeat.
       const playerWordEntries = [];
-      if (storedResults.playerAnswers) {
-        storedResults.playerAnswers.forEach(playerAnswer => {
+      // The stored round names this list `answers` (get-results.js writes it);
+      // `playerAnswers` was the field this branch always read and NO writer
+      // ever produced, so wavelengthWords was silently empty on every stored
+      // round. Both names accepted so neither era of stored rows goes blank.
+      const storedPlayerAnswers = storedResults.playerAnswers || storedResults.answers;
+      if (storedPlayerAnswers) {
+        storedPlayerAnswers.forEach(playerAnswer => {
           const rawName = playerAnswer.playerName || playerAnswer.PlayerName;
           const playerName = hidden ? AUTHOR_PLACEHOLDER : rawName;
           const answerText = playerAnswer.answer || playerAnswer.Answer || '';
@@ -1942,75 +1969,70 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, eventDet
         .map(({ playerName, words }) => `${playerName}: [${words.join(', ')}]`)
         .join('; ');
       
-      wordAnalysis = `${commonWords.length} common words found out of ${totalUniqueWords} unique words (${connectionScore}% connection rate). ` +
-        `Common words: ${commonWords.map(w => `${w.word} (${w.count}x)`).join(', ')}`;
-      
+      wordAnalysis = buildWavelengthProse(commonWords, wavelengthNearMiss, totalUniqueWords, wavelengthSubmitters);
+
       console.log('🌊 Using stored wavelength analysis:', {
         commonWordsCount: commonWords.length,
         totalUniqueWords,
-        connectionScore
+        submitterCount: wavelengthSubmitters,
+        matching: storedResults.wordAnalysis.matching || 'legacy'
       });
-      
+
     } else {
       console.log('⚠️ No stored results found, calculating wavelength data from scratch');
-      
-      // Fallback: Process all player words to find common ones. `answers` was
+
+      // Fallback: exact-match unanimity via the SAME engine the results
+      // handler uses (lambda-functions/game/wavelength.js), so the two paths
+      // cannot drift back apart — this branch used to keep its own count>1
+      // rule, which was the game the convergence spec retired. `answers` was
       // already redacted to the shared placeholder at the top of this
       // function when hidden, so `playerName` below is safe as-is — but an
-      // array of entries, not an object keyed by player name, same reason as
-      // the stored-results branch above: keying by name collapses every
-      // redacted row onto the same placeholder key and drops every
-      // participant but the last from wavelengthWords.
-      const wordCounts = {};
-      const playerWordEntries = [];
-      let totalWordsSubmitted = 0;
-
-      answers.forEach(answer => {
-        const playerName = answer.PlayerName || answer.playerName;
-        const answerText = answer.Answer || answer.answer || '';
-
-        // Parse words (should already be normalized from message.js processing)
-        const words = answerText.split(',')
+      // array of entries, not an object keyed by player name: keying by name
+      // collapses every redacted row onto the same placeholder key and drops
+      // every participant but the last from wavelengthWords.
+      const playerWordEntries = answers.map(answer => ({
+        playerName: answer.PlayerName || answer.playerName,
+        words: (answer.Answer || answer.answer || '').split(',')
           .map(w => w.trim().toLowerCase())
-          .filter(w => w.length > 0);
+          .filter(w => w.length > 0),
+      }));
 
-        playerWordEntries.push({ playerName, words });
-        totalWordsSubmitted += words.length;
-
-        // Count word frequencies
-        words.forEach(word => {
-          wordCounts[word] = (wordCounts[word] || 0) + 1;
-        });
-      });
-
-      // Find common words (mentioned by 2+ players)
-      commonWords = Object.entries(wordCounts)
-        .filter(([word, count]) => count > 1)
-        .sort((a, b) => b[1] - a[1]) // Sort by frequency
-        .map(([word, count]) => ({ word, count }));
-
-      totalUniqueWords = Object.keys(wordCounts).length;
-      connectionScore = Math.round((commonWords.length / totalUniqueWords) * 100) || 0;
+      const analysis = analyzeWavelength(
+        playerWordEntries.map(({ playerName, words }) => ({ player: playerName, words }))
+      );
+      commonWords = analysis.commonWords;
+      wavelengthNearMiss = analysis.nearMiss;
+      totalUniqueWords = analysis.totalUniqueWords;
+      wavelengthSubmitters = analysis.submitterCount;
+      connectionScore = totalUniqueWords > 0
+        ? Math.round((commonWords.length / totalUniqueWords) * 100)
+        : 0;
 
       // Format wavelength data for AI
       wavelengthWords = playerWordEntries
         .map(({ playerName, words }) => `${playerName}: [${words.join(', ')}]`)
         .join('; ');
-      
-      wordAnalysis = `${commonWords.length} common words found out of ${totalUniqueWords} unique words (${connectionScore}% connection rate). ` +
-        `Common words: ${commonWords.map(w => `${w.word} (${w.count}x)`).join(', ')}`;
-      
+
+      wordAnalysis = buildWavelengthProse(commonWords, wavelengthNearMiss, totalUniqueWords, wavelengthSubmitters);
+
       console.log('🌊 Fallback wavelength analysis complete:', {
         topic: wavelengthTopic,
         commonWordsCount: commonWords.length,
         totalUniqueWords: totalUniqueWords,
-        connectionScore: connectionScore
+        submitterCount: wavelengthSubmitters
       });
     }
-    
-    // Update wavelength-specific summary variables now that we have the real values
-    resultsSummary = `Team found ${commonWords.length} common words with ${connectionScore}% connection rate`;
-    consensusLevel = `Team collaboration - ${connectionScore}% word connection rate`;
+
+    // Update wavelength-specific summary variables now that we have the real
+    // values. The claim carries its denominator — "11 words" is defensible
+    // only next to "all 12 who answered" — and no bare connection-rate
+    // percentage goes into a live prompt.
+    resultsSummary = `${commonWords.length} of ${totalUniqueWords} distinct words were on every list (all ${wavelengthSubmitters} who answered)`;
+    consensusLevel = consensusLabel({
+      gameType,
+      landedCount: commonWords.length,
+      submitterCount: wavelengthSubmitters,
+    });
   }
   
   // Player answers formatted

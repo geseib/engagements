@@ -48,13 +48,19 @@
  * @param {string}  args.gameType
  * @param {Array}   args.sortedAnswers    entries of [index, {totalScore}], score-descending
  * @param {number}  args.maxScore         highest vote-point total in the round
- * @param {number}  args.connectionScore  wavelength only
+ * @param {number}  args.landedCount      wavelength only — words on EVERY submitted list
+ * @param {number}  args.submitterCount   wavelength only — people who answered, the denominator
  * @returns {string} a label safe to interpolate into a prompt
  */
-function consensusLabel({ gameType, sortedAnswers = [], maxScore = 0, connectionScore = 0 } = {}) {
+function consensusLabel({ gameType, sortedAnswers = [], maxScore = 0, landedCount = 0, submitterCount = 0 } = {}) {
   if (gameType === 'trivia') return 'Trivia results - no consensus voting';
   if (gameType === 'wavelength') {
-    return `Team collaboration - ${connectionScore}% word connection rate`;
+    // The convergence model (2026-08-09 spec): the claim is the count of
+    // unanimous words WITH its denominator in words. The old label here was a
+    // connection-rate percentage — words ÷ words, a figure nobody could
+    // interpret, read aloud by hosts. Never a bare percentage.
+    const words = landedCount === 1 ? 'word' : 'words';
+    return `Team convergence - ${landedCount} ${words} on every list (all ${submitterCount} who answered)`;
   }
 
   // Nobody voted. Note the callers cannot infer this from the tally: voteTallies
