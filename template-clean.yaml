@@ -849,6 +849,27 @@ Resources:
             Action:
               - execute-api:ManageConnections
             Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+        # Wavelength clustering: closing a wavelength round fires an
+        # InvocationType:'Event' self-invoke (the get-ai-summary worker pattern)
+        # whose worker asks Bedrock which words are the same term (plurals,
+        # misspellings, abbreviations) before re-running the unanimity analysis.
+        # Without these the dispatch fails and every round stands on exact
+        # matching — announced on screen, but never the clustered result the
+        # spec (docs/superpowers/specs/2026-08-09-wavelength-convergence-design.md)
+        # calls for.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-get-results'
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource:
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
       Events:
         # THE READ. Public, and it has to be: PlayerPage calls this with a
         # plain fetch the moment the room enters RESULTS, so an authorizer
