@@ -90,6 +90,32 @@ describe('a populated running order', () => {
     expect(rows[0]).toContainElement(flags[0]);
   });
 
+  test('a parked head loses the Next flag to the first servable row, and says why', () => {
+    /*
+      Reported: "if i queue a question that is in a category that is disabled,
+      it will stay in the queue but not get asked, just skipped." The server's
+      `blocked` list is the same rule the serve runs, so the row the host sees
+      carries the truth: the head is parked, the flag moves to the row the
+      drain will actually take, and the reason is a word on the row.
+    */
+    renderQueue({ blocked: [{ key: 'c001#002', reason: 'category-off' }] });
+    const rows = screen.getAllByTestId('queue-row');
+
+    const parked = within(rows[0]).getByTestId('queue-parked');
+    expect(parked).toHaveTextContent(/category off/i);
+    expect(within(rows[0]).queryByTestId('queue-next-flag')).toBeNull();
+
+    const flags = screen.getAllByTestId('queue-next-flag');
+    expect(flags).toHaveLength(1);
+    expect(rows[1]).toContainElement(flags[0]);
+  });
+
+  test('a parked row keeps its controls — the way out is remove or re-enable, not a dead row', () => {
+    renderQueue({ blocked: [{ key: 'c001#002', reason: 'category-off' }] });
+    const rows = screen.getAllByTestId('queue-row');
+    expect(within(rows[0]).getByRole('button', { name: /remove .* from the queue/i })).toBeEnabled();
+  });
+
   test('the head cannot move earlier and the tail cannot move later', () => {
     // rejects: an unclamped move. `queueMove` refuses both, and a button that
     // is live while the server refuses is a button that does nothing.

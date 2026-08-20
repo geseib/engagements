@@ -451,6 +451,7 @@ function GameHostPage() {
     replaced wholesale by `loadUpNext`.
   */
   const [upNext, setUpNext] = useState([]);
+  const [upNextBlocked, setUpNextBlocked] = useState([]);
   const [queueVersion, setQueueVersion] = useState(0);
   const [queueBusyKeys, setQueueBusyKeys] = useState([]);
 
@@ -2760,6 +2761,10 @@ Focus on actionable business strategy insights.`;
       if (!res.ok) return;
       const payload = await res.json();
       setUpNext(Array.isArray(payload.upNext) ? payload.upNext : []);
+      // The queue entries the plan cannot use — category off, or not in this
+      // set — reported so the panel can say "parked" instead of letting the
+      // host watch their own choice be skipped in silence.
+      setUpNextBlocked(Array.isArray(payload.blocked) ? payload.blocked : []);
     } catch (error) {
       console.warn('⚠️ UP NEXT: could not read what is coming:', error?.message);
     }
@@ -5656,6 +5661,7 @@ Focus on actionable business strategy insights.`;
           questionQueue={questionQueue}
           queueBusyKeys={queueBusyKeys}
           upNext={upNext}
+          upNextBlocked={upNextBlocked}
           onQueueQuestion={handleQueueQuestion}
           onQueueMove={handleQueueMove}
           onQueueRemove={handleQueueRemove}

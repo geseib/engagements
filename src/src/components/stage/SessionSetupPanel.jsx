@@ -111,6 +111,10 @@ export default function SessionSetupPanel({
   questionQueue = [],
   queueBusyKeys = [],
   upNext = [],
+  /* Queue entries the plan cannot serve right now (category off, not in this
+     set), straight from GET /up-next. QueueList turns each into a visible
+     "parked" tag on the row the host already sees. */
+  upNextBlocked = [],
   onQueueQuestion = () => {},
   onQueueMove = () => {},
   onQueueRemove = () => {},
@@ -584,6 +588,7 @@ export default function SessionSetupPanel({
                 questions={questions}
                 busyKeys={queueBusyKeys}
                 upNext={upNext}
+                blocked={upNextBlocked}
                 onMove={onQueueMove}
                 onRemove={onQueueRemove}
               />

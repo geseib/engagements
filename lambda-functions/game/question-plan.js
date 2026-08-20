@@ -191,6 +191,22 @@ function planAhead(snapshot, count) {
       if (spent.has(questionId)) continue;
 
       const resolved = resolveQueued(key) || {};
+      /*
+        A QUEUED ENTRY THE SERVE WOULD SKIP TAKES NO ROUND IN THE PLAN.
+
+        drainQueuedQuestion() passes over an entry whose category is switched
+        off (or which is not in the set at all) and LEAVES IT QUEUED — so a
+        plan that counts it advertises a round that will never happen, and
+        every round after it is shifted by one, which un-anchors the seeded
+        picks too. Reported as: "the running order queue listed is not
+        actually used anyway."
+
+        `servable === false` is the caller saying "the drain would skip this";
+        it comes from the same mask the drain reads. An entry the resolver
+        knows nothing about (null, or no flag) is still placed — an unknown
+        must not silently vanish from the host's own list.
+      */
+      if (resolved.servable === false) continue;
       placed = {
         source: 'queued',
         questionId,
