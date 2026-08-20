@@ -257,7 +257,7 @@ describe('§4 the other row actions', () => {
 
   test('close is reachable by its accessible name', () => {
     const { onClose } = mount();
-    fireEvent.click(screen.getByRole('button', { name: /Close session history/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Close your sessions/i }));
     expect(onClose).toHaveBeenCalled();
   });
 });
@@ -354,14 +354,28 @@ describe('§6 the stylesheet contracts jsdom cannot measure', () => {
     .readFileSync(path.join(__dirname, '..', 'components', 'SessionHistoryPanel.css'), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '');
 
-  test('the action group uses margin-left:auto, never justify-content:flex-end', () => {
-    // Hard rule 9. Inside an overflow:hidden cell, flex-end pushes the overflow
-    // towards the START of the row, where it cannot be reached — the leading
-    // buttons silently disappear as the column narrows. `.sp-rowact` in the
-    // admin sheet does exactly this, which is why it was not copied.
-    expect(CSS).toMatch(/\.shist__acts\s*>\s*:first-child\s*\{[^}]*margin-left:\s*auto/);
+  test('the action group is a fixed two-track grid, never a wrapping flex row', () => {
+    /*
+      SECOND ALIGNMENT REPORT. The first fix assumed two buttons per row and
+      kept a wrapping flex with margin-left:auto on the first child; every row
+      actually carries FOUR buttons, so the wrap point differed per row and
+      auto-margin shoved whichever button led the first line. A grid of two
+      equal tracks sized FROM the cell cannot wrap and cannot vary, and hard
+      rule 9 is satisfied by construction — nothing can overflow towards the
+      cell's hidden start.
+    */
     const group = CSS.slice(CSS.indexOf('.shist__acts {'));
-    expect(group.slice(0, group.indexOf('}'))).not.toMatch(/justify-content:\s*flex-end/);
+    const body = group.slice(0, group.indexOf('}'));
+    expect(body).toMatch(/display:\s*grid/);
+    expect(body).toMatch(/grid-template-columns:\s*repeat\(2,/);
+    expect(body).not.toMatch(/justify-content:\s*flex-end/);
+    expect(CSS).not.toMatch(/\.shist__acts[^{]*\{[^}]*flex-wrap/);
+  });
+
+  test('the actions cell can grow to hold both grid rows', () => {
+    // Every other td is a fixed 36px with overflow:hidden — two rows of
+    // buttons inside that would clip the second row in half.
+    expect(CSS).toMatch(/\.shist__tbl td:last-child\s*\{[^}]*height:\s*auto/);
   });
 
   test('the actions are always visible, not revealed on hover', () => {

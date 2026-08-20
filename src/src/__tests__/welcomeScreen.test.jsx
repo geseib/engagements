@@ -69,9 +69,13 @@ describe('the five ways out of this screen', () => {
     expect(onCreateEngagement).toHaveBeenCalledTimes(1);
   });
 
-  test('Session history raises onViewHistory', () => {
+  test('Sessions raises onViewHistory', () => {
+    // The control was "Session history" until the owner asked whether that was
+    // the right name — it was not: the list's first job is sessions that have
+    // not happened yet. The handler keeps its historical name; the label the
+    // host reads is what changed.
     const { onViewHistory } = setup();
-    fireEvent.click(screen.getByRole('button', { name: /session history/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^sessions$/i }));
     expect(onViewHistory).toHaveBeenCalledTimes(1);
   });
 
@@ -107,7 +111,7 @@ describe('the library controls read as buttons', () => {
     // paragraph — which is how this file draws a text LINK, and it was read as
     // one.
     const { container } = setup();
-    for (const name of ['Question sets', 'Session history']) {
+    for (const name of ['Question sets', 'Sessions']) {
       const button = screen.getByRole('button', { name });
       expect(button.className).toContain('wel-btn-line');
       expect(button.className).not.toContain('wel-btn-quiet');
