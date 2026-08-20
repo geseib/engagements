@@ -137,6 +137,36 @@ describe('one engagement-type control, once', () => {
     expect(onOpenBuilder).toHaveBeenCalledWith('trivia');
   });
 
+  test('the AI authoring prompt copies for the two scoped types, and only those', async () => {
+    /*
+      The owner: "if you clicked the button, would copy to clipboard AI
+      instructions that i could pass along to an AI tool like Claude or Chat
+      gpt with the template and ask it to fill out the csv... for now just do
+      call and answer and trivia."
+    */
+    const { authoringPrompt } = require('../config/aiAuthoringPrompt');
+    const writeText = jest.fn().mockResolvedValue();
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    const { unmount } = mount({ engagementType: 'trivia' });
+    fireEvent.click(screen.getByRole('button', { name: /copy ai authoring prompt/i }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(authoringPrompt('trivia')));
+    // The status says where to paste it — a copy with no destination is a
+    // clipboard full of mystery.
+    expect(await screen.findByText(/paste it into Claude or ChatGPT/i)).toBeInTheDocument();
+    unmount();
+
+    // Call-and-answer gets it too; poll does not — authoringPrompt() is null
+    // there and a button that copies null is worse than no button.
+    mount({ engagementType: 'call-and-answer' });
+    expect(screen.getByRole('button', { name: /copy ai authoring prompt/i })).toBeInTheDocument();
+  });
+
+  test('no authoring-prompt button for a type without a prompt', () => {
+    mount({ engagementType: 'poll' });
+    expect(screen.queryByRole('button', { name: /copy ai authoring prompt/i })).toBeNull();
+  });
+
   test('changing the type is reported upwards rather than kept locally', () => {
     // The AI builder modals live in AdminPage and read this state. rejects:
     // a local copy here, which would reintroduce two sources of truth — the

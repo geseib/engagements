@@ -12,6 +12,7 @@ import {
 } from '../config/gameTypes';
 import { selectableSummaryPrompts } from '../utils/questionSetEditing';
 import { preflight, describePreflight } from '../utils/csvPreflight';
+import { authoringPrompt } from '../config/aiAuthoringPrompt';
 import './QuestionSetsPanel.css';
 
 /**
@@ -216,6 +217,40 @@ export default function QuestionSetUploadPanel({
     }
   };
 
+  /*
+    THE PROMPT FOR SOMEBODY ELSE'S AI. The owner: "if you clicked the button,
+    would copy to clipboard AI instructions that i could pass along to an AI
+    tool like Claude or Chat gpt with the template and ask it to fill out the
+    csv." The text lives in config/aiAuthoringPrompt.js beside its contracts;
+    this only moves it to the clipboard and says where to paste it.
+
+    The execCommand fallback exists because navigator.clipboard is
+    secure-context only — a host on a plain-http lab screen still gets a copy
+    instead of a dead button.
+  */
+  const copyAuthoringPrompt = async () => {
+    const text = authoringPrompt(engagementType);
+    if (!text) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const scratch = document.createElement('textarea');
+        scratch.value = text;
+        document.body.appendChild(scratch);
+        scratch.select();
+        document.execCommand('copy');
+        document.body.removeChild(scratch);
+      }
+      setStatus({
+        text: 'AI authoring prompt copied. Paste it into Claude or ChatGPT together with the downloaded template, fill in the [BRACKETS] at the top, and upload the CSV it returns here.',
+        tone: 'success',
+      });
+    } catch (error) {
+      setStatus({ text: `Could not copy the prompt: ${error.message}`, tone: 'error' });
+    }
+  };
+
   const upload = async () => {
     if (!file || !title.trim()) return;
     setIsUploading(true);
@@ -318,6 +353,20 @@ export default function QuestionSetUploadPanel({
             <Icon name="FileText" weight="bold" size={14} color="currentColor" />
             Download {gameTypeLabel(engagementType)} template
           </button>
+          {/* Beside the template it pairs with, and only for the types whose
+              prompt exists — authoringPrompt() returns null for the rest, so
+              adding a type later is a config entry, not panel surgery. */}
+          {authoringPrompt(engagementType) && (
+            <button
+              type="button"
+              className="qsets-btn"
+              onClick={copyAuthoringPrompt}
+              title="Copy instructions you can paste into Claude or ChatGPT, together with the downloaded template, to have it write the CSV for you. The bits you fill in (topic, count, difficulty…) are marked in [BRACKETS]."
+            >
+              <Icon name="ClipboardText" weight="bold" size={14} color="currentColor" />
+              Copy AI authoring prompt
+            </button>
+          )}
           {engagementType === 'call-and-answer' && (
             <button
               type="button"
