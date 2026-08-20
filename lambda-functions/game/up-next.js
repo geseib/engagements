@@ -87,9 +87,15 @@ const spentSourceQuestionIds = async (gameId) => {
   ]);
 
   const asked = new Set();
+  // The TRULY asked ids, kept apart from the union: the response reports them
+  // so the panel's "asked" tags can come from the server instead of from what
+  // one browser happened to watch — a disabled question is spent for the
+  // planner but has NOT been asked, and tagging it asked would be a lie.
+  const askedIds = [];
   for (const item of res.Items || []) {
     if (String(item.SK).endsWith('#REF') && item.SourceQuestionId) {
       asked.add(item.SourceQuestionId);
+      askedIds.push(item.SourceQuestionId);
     }
   }
 
@@ -102,7 +108,7 @@ const spentSourceQuestionIds = async (gameId) => {
     asked.add(`QUESTION#${clean}`);
   }
 
-  return { asked, excludedKeys };
+  return { asked, askedIds, excludedKeys };
 };
 
 /** The bit for `position` (1-based) across the three 8-bit mask strings. */
@@ -233,7 +239,7 @@ exports.handler = async (event) => {
     */
     const isRandomized = !categories.length || categories.some((c) => c.isRandom);
 
-    const { asked, excludedKeys } = await spentSourceQuestionIds(gameId);
+    const { asked, askedIds, excludedKeys } = await spentSourceQuestionIds(gameId);
     const roundNumber = (stateRes.Item?.LessonNumber || 0) + 1;
 
     /*
@@ -334,6 +340,17 @@ exports.handler = async (event) => {
       blocked,
       advisories,
       excluded,
+      /*
+        THE ROUNDS THIS GAME HAS ACTUALLY SERVED, by source id — the honest
+        feed for the question browser's "asked" tags. The client used to
+        derive those from what one browser session happened to watch, which
+        both leaked across sessions (the state survived Back to Menu, and CSV
+        imports reuse the same c001#001 numbering per set, so a NEW session
+        opened with another session's rounds marked asked) and went blank on
+        re-entering a played session. Truly asked only — never the disabled
+        list, which is spent for the planner but was not asked.
+      */
+      asked: askedIds,
     });
   } catch (error) {
     console.error('❌ Up next error:', error);

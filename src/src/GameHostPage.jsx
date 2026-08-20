@@ -822,6 +822,7 @@ function GameHostPage() {
     currentGameType: setCurrentGameType,
     anonymousUntilReveal: setAnonymousUntilReveal,
     questions: setQuestions,
+    usedQuestionIds: setUsedQuestionIds,
     currentQuestionId: setCurrentQuestionId,
     currentQuestionIndex: setCurrentQuestionIndex,
     lessonNumber: setLessonNumber,
@@ -2801,6 +2802,20 @@ Focus on actionable business strategy insights.`;
       // questions the host has disabled for this session.
       setUpNextAdvisories(Array.isArray(payload.advisories) ? payload.advisories : []);
       setUpNextExcluded(Array.isArray(payload.excluded) ? payload.excluded : []);
+      /*
+        THE SERVER'S OWN ASKED LIST corrects the watched one. Locally-watched
+        ids stay (union, not replace — the round on screen is asked before the
+        next poll), but the base truth is the REF rows, which is what makes
+        the tags right after re-entering a played session and immune to what
+        some other browser watched.
+      */
+      if (Array.isArray(payload.asked) && payload.asked.length) {
+        setUsedQuestionIds((prev) => {
+          const merged = new Set(prev);
+          for (const id of payload.asked) merged.add(id);
+          return merged.size === prev.length ? prev : [...merged];
+        });
+      }
     } catch (error) {
       console.warn('⚠️ UP NEXT: could not read what is coming:', error?.message);
     }

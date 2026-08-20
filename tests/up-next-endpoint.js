@@ -221,6 +221,32 @@ const ids = (body) => body.upNext.map((u) => u.questionId);
 
   console.log('\n§3b  a DISABLED question is invisible to the plan and the serve alike');
 
+  await check('the response reports what was ASKED — and disabled is not asked', async () => {
+    /*
+      The browser's "asked" tags feed from this. They used to feed from what
+      one browser watched, which leaked across sessions (per-set c001#001
+      numbering made a NEW session open with the previous session's rounds
+      marked asked). The server's REF rows are the truth — and an excluded
+      question is spent for the planner but must NOT be reported asked.
+    */
+    seed();
+    put({
+      PK, SK: 'QUESTION#001#REF',
+      SourceQuestionId: 'QUESTION#c001#001', SetId: SET, QuestionNumber: '001',
+    });
+    put({ PK, SK: 'EXCLUDED', Keys: ['c002#004'], Version: 1 });
+    const { body } = await peek(2);
+    assert.deepStrictEqual(body.asked, ['QUESTION#c001#001']);
+    assert.ok(!body.asked.includes('QUESTION#c002#004'),
+      'a disabled question was reported as asked');
+  });
+
+  await check('a fresh game reports an EMPTY asked list, never an inherited one', async () => {
+    seed();
+    const { body } = await peek(2);
+    assert.deepStrictEqual(body.asked, []);
+  });
+
   await check('an excluded question takes no round, and is listed for restore', async () => {
     seed();
     put({ PK, SK: 'EXCLUDED', Keys: ['c001#001'], Version: 1 });
