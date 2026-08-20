@@ -2555,6 +2555,16 @@ function PlayerPage() {
           <>
             {questionBlock}
             {taskBlock}
+            {/* WHAT THE ROUND IS FOR, stated before the form (convergence spec
+                §5): a word only counts when everyone who answers says it, so
+                the winning move is the OBVIOUS word, not the cleverest one.
+                Without this line the ten blank fields read as a brainstorm,
+                which is the opposite game. */}
+            <p className="plr-detail plr-muted">
+              Aim for ten. A word counts only when everyone says it — go for
+              the words the rest of the room will think of too, not the
+              cleverest one.
+            </p>
             {/* TEN STACKED INPUTS, EACH WITH A `Word N` LABEL *AND* A `Word N`
                 PLACEHOLDER — twenty strings for ten values, ~900px of form on a
                 375px phone. The labels stay (a placeholder is not a label) and
@@ -2585,7 +2595,9 @@ function PlayerPage() {
         dock = (
           <>
             <p className="plr-note">
-              {wordCount} of 10 added. Any number is fine — one is a valid answer.
+              {/* Ten asked for, fewer accepted — nobody gets stuck in front of
+                  a room because they ran dry at six (spec §2.1). */}
+              {wordCount} of 10 added. Fewer is fine — submit when you run dry.
             </p>
             <button
               type="button"
@@ -2697,7 +2709,11 @@ function PlayerPage() {
           <LookUpCue>
             {gameType === 'trivia'
               ? 'The room’s answers go up on the main screen when the round closes.'
-              : 'The host will bring every response up on the main screen when the round closes, without names.'}
+              : gameType === 'wavelength'
+                /* Nothing is revealed until everyone is in — a player watching
+                   words accumulate would change what they wrote (spec §5). */
+                ? 'Nothing shows until everyone is in. When the round closes, the words the whole room shares light up on the main screen.'
+                : 'The host will bring every response up on the main screen when the round closes, without names.'}
           </LookUpCue>
         </>
       );

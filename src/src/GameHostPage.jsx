@@ -11,7 +11,7 @@ import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
 import WelcomeScreen from './components/WelcomeScreen';
 import HostQuestionSetsDialog from './components/HostQuestionSetsDialog';
-import WavelengthWordCloud from './components/WavelengthWordCloud';
+import WavelengthConvergence from './components/stage/WavelengthConvergence';
 import Icon from './components/Icon';
 import Modal from './components/Modal';
 import SetImageBadge from './components/SetImageBadge';
@@ -133,6 +133,11 @@ function GameHostPage() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1);
   const [currentQuestionId, setCurrentQuestionId] = useState('');
   const [answers, setAnswers] = useState([]);
+  /* Wavelength RESULTS payload (wordAnalysis): landed words, near-miss tier,
+     denominator, matching mode. Set from the close-round/get-results response,
+     upgraded in place by the `wavelengthAnalysisReady` frame when the
+     clustering worker finishes, cleared with the rest of the round state. */
+  const [wavelengthAnalysis, setWavelengthAnalysis] = useState(null);
   const [gameState, setGameStateRaw] = useState('CREATED'); // CREATED, STARTED, ASK#001, VOTE#001, RESULTS#001, etc.
   
   // Debug wrapper for setGameState
@@ -1749,6 +1754,18 @@ Focus on actionable business strategy insights.`;
       }
     });
 
+    // Beat two of the wavelength reveal: the clustering worker re-ran the
+    // unanimity analysis with the model's merges and wrote it back before
+    // broadcasting, so this frame is display-ready. A failed run arrives on
+    // the SAME frame with clustering:'failed' — the stage then annotates
+    // "matched on exact wording only" instead of waiting on the watchdog.
+    webSocketClient.onMessage('wavelengthAnalysisReady', (data) => {
+      console.log('🔌 Wavelength analysis ready:', data?.wordAnalysis?.matching, data?.wordAnalysis?.clustering);
+      if (data && data.wordAnalysis) {
+        setWavelengthAnalysis(data.wordAnalysis);
+      }
+    });
+
     // Async generation failed on the worker — say so, rather than leaving the
     // stage on a placeholder that reads as "still writing".
     webSocketClient.onMessage('aiSummaryError', (data) => {
@@ -1797,6 +1814,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('stageBeatChanged');
       webSocketClient.offMessage('stageFocusChanged');
       webSocketClient.offMessage('questionQueueChanged');
+      webSocketClient.offMessage('wavelengthAnalysisReady');
       webSocketClient.offMessage('aiSummaryReady');
       webSocketClient.offMessage('aiSummaryError');
       // `gameEnded` was registered above and never removed here — a handler
@@ -2126,6 +2144,21 @@ Focus on actionable business strategy insights.`;
                     basePoints: answer.basePoints || 0,
                     submittedAt: answer.submittedAt
                   }));
+                } else if (resultsData.gameType === 'wavelength') {
+                  // This branch did not exist: a refresh mid-RESULTS fell
+                  // through to the call-and-answer arm, found no voteTallies,
+                  // and the stage rendered an empty cloud. The stored round
+                  // carries everything — including the clustered analysis if
+                  // the worker has already finished.
+                  console.log(`🌊 HOST STATE RESTORE: Processing wavelength results with ${resultsData.answers?.length || 0} answers`);
+                  formattedAnswers = (resultsData.answers || []).map(answer => ({
+                    player: answer.playerName,
+                    playerName: answer.playerName, // for displayLabelFor
+                    answer: answer.answer || answer.words?.join(',') || '',
+                    points: 0, // No points in wavelength
+                    submittedAt: answer.submittedAt
+                  }));
+                  setWavelengthAnalysis(resultsData.wordAnalysis || null);
                 } else {
                   // Call-and-answer results format: { voteTallies: {...} }
                   console.log(`📊 HOST STATE RESTORE: Processing call-and-answer results with voteTallies`);
@@ -2167,6 +2200,7 @@ Focus on actionable business strategy insights.`;
           setCurrentQuestionIndex(-1);
           setLessonNumber(0);
           setAnswers([]);
+          setWavelengthAnalysis(null);
           setPlayersWhoAnswered([]);
           setVotes([]);
           setPlayersWhoVoted([]);
@@ -3273,6 +3307,7 @@ Focus on actionable business strategy insights.`;
       // Clear all answer/voting state for new question
       console.log(`🧹 HOST: Clearing state for new question - resetting answers and players`);
       setAnswers([]);
+      setWavelengthAnalysis(null);
       setPlayersWhoAnswered([]);
       setVotes([]);
       setPlayersWhoVoted([]);
@@ -3551,19 +3586,21 @@ Focus on actionable business strategy insights.`;
           formattedAnswers.map(a => `${a.player}: ${a.answer} (${a.isCorrect ? 'correct' : 'incorrect'}, ${a.points} pts)`));
         
       } else if (resultsData.gameType === 'wavelength' || currentGameType === 'wavelength') {
-        // Wavelength results format: Just the raw answers with words
+        // Wavelength: the analysis (landed words, near-miss, denominator,
+        // matching mode) is the result; the answers ride along for the meter.
         console.log(`🌊 HOST: Processing wavelength results with ${resultsData.answers?.length || 0} answers`);
-        
+
         formattedAnswers = (resultsData.answers || []).map(answer => ({
           player: answer.playerName,
           playerName: answer.playerName, // for displayLabelFor
-          answer: answer.answer || answer.ProcessedWords?.join(',') || '', // Comma-separated words
+          answer: answer.answer || answer.words?.join(',') || '', // Comma-separated words
           points: 0, // No points in wavelength
           submittedAt: answer.submittedAt
         }));
-        
-        console.log(`🌊 HOST: Formatted ${formattedAnswers.length} wavelength answers for word cloud`);
-        
+        setWavelengthAnalysis(resultsData.wordAnalysis || null);
+
+        console.log(`🌊 HOST: Formatted ${formattedAnswers.length} wavelength answers`);
+
       } else {
         // Call-and-answer results format: { voteTallies: {...} }
         console.log(`💬 HOST: Processing call-and-answer results with voteTallies`);
@@ -5000,6 +5037,14 @@ Focus on actionable business strategy insights.`;
         ? 'Ready when you are'
         : hostControls.status.text;
 
+  // Wavelength's two-beat reveal: beat one is a sentence, beat two a terms
+  // flow of a different height, and the clustered upgrade can change the flow
+  // again — three renders the fitter must re-measure. Derived here rather than
+  // inline in fitKey so the <Stage> element stays small enough to read (and to
+  // fit stageShell.test.jsx's composition window).
+  const wavelengthFitKey = wavelengthAnalysis
+    ? `${wavelengthAnalysis.matching}:${wavelengthAnalysis.clustering}:${wavelengthAnalysis.totalUniqueWords}`
+    : '';
 
   return (
     <>
@@ -5047,6 +5092,7 @@ Focus on actionable business strategy insights.`;
           // FIELD_NOTES' own page: answerPage.page clamps to 0 there.
           stagePageIndex,
           loadingAIInsights, currentAIInsights ? 1 : 0,
+          wavelengthFitKey,
         ].join('|')}
         rail={(
           <Rail
@@ -5407,17 +5453,17 @@ Focus on actionable business strategy insights.`;
                       })}
                   </div>
                 ) : currentGameType === 'wavelength' ? (
-                  /* `stage` drops the white card, the panel's own name and the
-                     duplicate word list, and lets styles/stage.css cap the
-                     drawing so it cannot be clipped by .content's overflow.
-                     The cloud itself is unchanged and still provisional —
-                     .terms replaces it in plan 4. */
-                  <WavelengthWordCloud
-                    stage
-                    answers={answers}
-                    promptWord={currentQuestion?.topic || currentQuestion?.title || 'WAVELENGTH'}
-                    gameState={gameState}
-                  />
+                  /* The ranked .terms flow the mockup drew, carrying the
+                     convergence spec's semantics: landed words (on EVERY
+                     submitter's list) at full weight, everything else dimmer
+                     with its count, one figure with its denominator in words.
+                     Two beats — the exact analysis lands with the round close;
+                     the clustered upgrade arrives over the socket
+                     (wavelengthAnalysisReady) or the watchdog annotates the
+                     exact result honestly. The packed word cloud is gone from
+                     the stage: a packed cloud cannot guarantee the floor, and
+                     raw frequency was the wrong claim anyway. */
+                  <WavelengthConvergence analysis={wavelengthAnalysis} />
                 ) : (
                   <div className="cards">
                     {answerPage.items.map((answer, i) => {

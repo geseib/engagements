@@ -798,27 +798,11 @@ body{
    rather than content on a wall, so the ladder does not apply to it. If any
    anonymity control ever returns to .content, it needs a rule here again. */
 
-/* WAVELENGTH RESULTS, CAPPED SO IT CANNOT CLIP.
-   WavelengthWordCloud draws a fixed 800x400 SVG. Fixed means the scale search
-   cannot shrink it — --fit moves only --t-* values — so on RESULTS, which has
-   no meter and no drop groups, every rung of the search returned null, the
-   sacrifice loop had nothing to sacrifice, and the terminal search left
-   --fit at .55 with [data-clamped] clamping nothing that was rendered. The
-   bottom of the cloud was then cut off by .content{overflow:hidden} with no
-   truncation the room could see — a silent clip, which §7 forbids outright.
-
-   The cap is .stage-art's, for the same reason: the fitter can shrink type,
-   but it cannot shrink a raster or a fixed-size drawing, so the drawing has to
-   agree to be shrunk. The component supplies the viewBox that makes width:100%
-   actually scale the contents rather than crop them.
-
-   NOT the real fix. The real fix is .terms above — a ranked, weighted flow
-   that reads at 25ft and can state its own reduction — which is plan 4's. */
-.content .wavelength-word-cloud{width:100%;min-width:0;text-align:center}
-.content .wavelength-word-cloud svg{display:block;margin:0 auto;
-  width:100%;max-width:100%;height:auto;max-height:44vh}
-.content .wavelength-word-cloud .cloud-caption{font-size:var(--t-meta);
-  color:var(--muted);margin:.6em 0 0}
+/* The wavelength word cloud's stage cap used to live here. The packed cloud is
+   off the stage — wavelength RESULTS now renders the ranked .terms flow via
+   WavelengthConvergence (see the .wl-conv block at the end of this file), which
+   is type on the profile ladder and needs no cap. WavelengthWordCloud itself
+   survives on the /wordcloud dev route only. */
 
 /* ===========================================================================
    TOKENS THE PORT ASSUMED AND THE APP DOES NOT HAVE.
@@ -881,3 +865,28 @@ body{
    fallback for the first paint, and 76px behind it for a surface that mounts
    this FAB without a stage at all. */
 .issue-fab-container{bottom:calc(var(--dock-measured, var(--dock-h, 76px)) + 16px)}
+
+/* wavelength convergence — the two-beat reveal wrapped around the ranked
+   .terms flow above (docs/superpowers/specs/2026-08-09-wavelength-convergence-design.md
+   §4–§5). Landed words ride .w1 (hero size, --primary); everything else is
+   dimmer with its count. All type reads the profile ladder, so the fitter's
+   scale search and the profile floors apply unchanged. Colour is tokens only;
+   --muted on the dusk stage is the same pairing .terms .w5 already ships. */
+.wl-conv{display:flex;flex-direction:column;gap:calc(1.1vh + 4px);min-width:0}
+.wl-headline{font-family:var(--font-display);font-weight:800;
+  font-size:max(var(--floor),calc(var(--t-primary) * .9));
+  line-height:1.12;margin:0;max-width:26ch}
+.wl-headline b{color:var(--primary)}
+.wl-sub{font-size:var(--t-body);color:var(--muted);margin:0}
+/* Beat one: a sentence, not a spinner — the host is standing in front of
+   people, and silence with a throbber is how that moment goes awkward. */
+.wl-wait{font-family:var(--font-display);font-weight:800;
+  font-size:max(var(--floor),calc(var(--t-secondary) * .9));
+  line-height:1.2;margin:0;max-width:30ch}
+/* The honesty lines: a stated reduction, and "matched on exact wording only"
+   when the model never ran. Meta-tier, muted — present, not shouting. */
+.wl-note{font-size:var(--t-meta);color:var(--muted);font-weight:600;
+  letter-spacing:.04em;margin:0}
+/* The offered tier dims by colour, not by dropping below the profile floor —
+   .w4/.w5 already sit on the ladder's bottom rungs. */
+.terms .t.wl-dim{color:var(--muted)}

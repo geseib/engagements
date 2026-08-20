@@ -55,7 +55,10 @@ export const GAME_TYPES = {
     // wavelength straight to results; the word cloud IS the result, there is
     // nothing to vote on. This table used to claim a vote phase that never ran.
     phases: ['ASK', 'RESULTS'],
-    blurb: 'Word association — the room converges on a shared cloud.',
+    // The group-size caveat is the spec's whole answer to large rooms: no
+    // team-splitting mechanic is built; the guidance is copy, stated where the
+    // type is chosen (2026-08-09 wavelength convergence spec §2.2).
+    blurb: 'Word association — a word counts when everyone says it. Works best with groups of ten or less.',
     answerType: 'wavelength',
     roundNoun: 'Subject',
   },
