@@ -561,7 +561,9 @@ const metadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
       the listed material". The cure is a second statement at the position
       that wins, saying explicitly WHICH earlier rules it overrides.
     */
-    const directive = buildHostDirective('add a comment with Steve Jobs\'s creative spirit');
+    const directive = buildHostDirective({
+      hostInstructions: 'add a comment with Steve Jobs\'s creative spirit',
+    });
     assert(directive.includes("THE HOST'S INSTRUCTIONS"));
     assert(/outrank every rule and instruction above/.test(directive));
     assert(/only the listed material/.test(directive), 'must name the rule class it overrides');
@@ -570,18 +572,41 @@ const metadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
     assert(directive.includes("Steve Jobs's creative spirit"));
   });
 
-  await acheck('no instructions, no directive — not an empty ceremony', async () => {
-    assert.strictEqual(buildHostDirective(''), '');
-    assert.strictEqual(buildHostDirective('   '), '');
-    assert.strictEqual(buildHostDirective(null), '');
-    assert.strictEqual(buildHostDirective(undefined), '');
+  await acheck('the event details ride the directive too — game 4567\'s class', async () => {
+    /*
+      The owner, after "mention something from star wars" never surfaced:
+      "i think the engagement event details, and the AI context should always
+      be added to AI prompt as important details." Details are facts to weave
+      in; instructions are orders; both get the winning position, labeled
+      apart so the model knows which is which.
+    */
+    const directive = buildHostDirective({
+      eventDetails: 'We are demoing to the team; mention something from star wars',
+    });
+    assert(directive.includes('ABOUT THIS SESSION: We are demoing'));
+    assert(/outrank every rule and instruction above/.test(directive),
+      'details alone must still carry the authority text');
+
+    const both = buildHostDirective({
+      hostInstructions: 'the orders', eventDetails: 'the facts',
+    });
+    assert(both.indexOf('ABOUT THIS SESSION: the facts')
+      < both.indexOf("THE HOST'S INSTRUCTIONS: the orders"),
+      'facts frame first, orders follow');
+  });
+
+  await acheck('nothing to say, no directive — not an empty ceremony', async () => {
+    assert.strictEqual(buildHostDirective({}), '');
+    assert.strictEqual(buildHostDirective({ hostInstructions: '   ', eventDetails: '' }), '');
+    assert.strictEqual(buildHostDirective(), '');
   });
 
   await acheck('the directive sits between the template and the contract', async () => {
     // Position IS the fix: after the template's rules (so it is the more
     // recent instruction) and before the contract (which must stay last —
     // the heading list is what parseAIResponse and the projector key on).
-    assert(/buildHostDirective\(gameAiContext\)/.test(summarySrc));
+    assert(/hostInstructions: gameAiContext/.test(summarySrc));
+    assert(/eventDetails,/.test(summarySrc));
     assert(/\$\{contextLayer\}\$\{templateBody\}\$\{hostLayer\}\\n\\n\$\{buildOutputContract/.test(summarySrc),
       'the assembled prompt must read template → host directive → contract');
   });

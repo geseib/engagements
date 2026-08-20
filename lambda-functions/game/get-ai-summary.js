@@ -2261,7 +2261,10 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, eventDet
     precedence spelled out — so "add what Steve Jobs would say" survives a
     template that says to add nothing.
   */
-  const hostDirective = buildHostDirective(gameAiContext);
+  const hostDirective = buildHostDirective({
+    hostInstructions: gameAiContext,
+    eventDetails,
+  });
   const hostLayer = hostDirective ? `\n\n${hostDirective}` : '';
 
   let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}${hostLayer}\n\n${buildOutputContract(promptData)}`;

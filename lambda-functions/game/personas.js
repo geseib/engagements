@@ -383,14 +383,27 @@ const buildOutputContract = (prompt) => {
  * may add Steve Jobs to the words inside the sections; it may not change the
  * headings the parser and the projector key on.
  */
-const buildHostDirective = (hostInstructions) => {
-  const text = String(hostInstructions ?? '').trim();
-  if (!text) return '';
+const buildHostDirective = ({ hostInstructions, eventDetails } = {}) => {
+  const instructions = String(hostInstructions ?? '').trim();
+  const details = String(eventDetails ?? '').trim();
+  if (!instructions && !details) return '';
+
+  /*
+    BOTH host-authored fields, not just the instructions — the owner, after a
+    session whose event details never surfaced: "i think the engagement event
+    details, and the AI context should always be added to AI prompt as
+    important details." The details are facts to weave in; the instructions
+    are orders to follow; both ride the position that wins.
+  */
+  const lines = [];
+  if (details) lines.push(`ABOUT THIS SESSION: ${details}`);
+  if (instructions) lines.push(`THE HOST'S INSTRUCTIONS: ${instructions}`);
+
   return (
-    "THE HOST'S INSTRUCTIONS FOR THIS SESSION — these are part of your material, and they " +
-    'outrank every rule and instruction above, including any rule that says to use only the ' +
-    'listed material or to add nothing beyond it. Work them into the sections. Only the FORMAT ' +
-    'block below outranks them:\n' + text
+    'FROM THE HOST — important details and instructions for this session. These are part of ' +
+    'your material, and they outrank every rule and instruction above, including any rule that ' +
+    'says to use only the listed material or to add nothing beyond it. Work them into the ' +
+    'sections. Only the FORMAT block below outranks them:\n' + lines.join('\n')
   );
 };
 
