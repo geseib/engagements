@@ -554,38 +554,42 @@ const metadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
 
   const { buildHostDirective } = require(path.join(REPO, 'lambda-functions', 'game', 'personas.js'));
 
-  await acheck('the directive names its precedence over material-only rules', async () => {
+  await acheck('the additions are a formatting requirement, with per-section force', async () => {
     /*
-      CloudWatch, game 1935: the host's "what would Steve Jobs do" was
-      delivered as the VOICE and then out-ranked by the template's "use only
-      the listed material". The cure is a second statement at the position
-      that wins, saying explicitly WHICH earlier rules it overrides.
+      MEASURED WORDING — do not soften without re-measuring. Games 1935 and
+      4567: two politer versions were ignored by the live model (the contract
+      "supersedes any instruction that appeared earlier", and the model took
+      it at its word). The shape that complied on every replay of 4567's
+      exact failing prompt: a requirement OF the format block, per-section
+      force, and a self-check. personas.js carries the experiment log.
     */
     const directive = buildHostDirective({
-      hostInstructions: 'add a comment with Steve Jobs\'s creative spirit',
+      hostInstructions: 'add a star wars related character perspective to each summary',
     });
-    assert(directive.includes("THE HOST'S INSTRUCTIONS"));
-    assert(/outrank every rule and instruction above/.test(directive));
-    assert(/only the listed material/.test(directive), 'must name the rule class it overrides');
-    assert(/Only the FORMAT block below outranks them/.test(directive),
-      'the headings the parser keys on must stay sovereign');
-    assert(directive.includes("Steve Jobs's creative spirit"));
+    assert(directive.includes("THE HOST'S REQUIRED ADDITIONS"));
+    assert(/formatting requirement of the FORMAT block above/.test(directive));
+    assert(/identical in force to the headings/.test(directive));
+    assert(/EVERY section must contain at least one sentence/.test(directive));
+    assert(/malformed, exactly as a misspelled heading/.test(directive));
+    assert(/Before you reply, re-read each section/.test(directive), 'the self-check is load-bearing');
+    assert(directive.includes('star wars related character perspective'));
   });
 
-  await acheck('the event details ride the directive too — game 4567\'s class', async () => {
+  await acheck('the event details ride the additions too — labeled apart', async () => {
     /*
-      The owner, after "mention something from star wars" never surfaced:
-      "i think the engagement event details, and the AI context should always
-      be added to AI prompt as important details." Details are facts to weave
-      in; instructions are orders; both get the winning position, labeled
-      apart so the model knows which is which.
+      The owner: "i think the engagement event details, and the AI context
+      should always be added to AI prompt as important details." Details are
+      facts to weave in where they sharpen a point; only the INSTRUCTIONS
+      carry the per-section demand — four sections each restating the event
+      title would be the fix overshooting.
     */
-    const directive = buildHostDirective({
-      eventDetails: 'We are demoing to the team; mention something from star wars',
+    const factsOnly = buildHostDirective({
+      eventDetails: 'team is about to take on new projects',
     });
-    assert(directive.includes('ABOUT THIS SESSION: We are demoing'));
-    assert(/outrank every rule and instruction above/.test(directive),
-      'details alone must still carry the authority text');
+    assert(factsOnly.includes('ABOUT THIS SESSION: team is about to'));
+    assert(/identical in force to the headings/.test(factsOnly));
+    assert(!/EVERY section must contain/.test(factsOnly),
+      'facts alone must not demand a sentence per section');
 
     const both = buildHostDirective({
       hostInstructions: 'the orders', eventDetails: 'the facts',
@@ -601,14 +605,15 @@ const metadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
     assert.strictEqual(buildHostDirective(), '');
   });
 
-  await acheck('the directive sits between the template and the contract', async () => {
-    // Position IS the fix: after the template's rules (so it is the more
-    // recent instruction) and before the contract (which must stay last —
-    // the heading list is what parseAIResponse and the projector key on).
+  await acheck('the additions come AFTER the contract — the measured position', async () => {
+    // Position IS the fix, the second time: between template and contract the
+    // directive lost to the contract's "supersedes any instruction that
+    // appeared earlier" opener. Last is the only spot nothing else claims to
+    // supersede.
     assert(/hostInstructions: gameAiContext/.test(summarySrc));
     assert(/eventDetails,/.test(summarySrc));
-    assert(/\$\{contextLayer\}\$\{templateBody\}\$\{hostLayer\}\\n\\n\$\{buildOutputContract/.test(summarySrc),
-      'the assembled prompt must read template → host directive → contract');
+    assert(/\$\{contextLayer\}\$\{templateBody\}\\n\\n\$\{buildOutputContract\(promptData\)\}\$\{hostLayer\}/.test(summarySrc),
+      'the assembled prompt must read template → contract → host additions');
   });
 
   console.log('\nthe reply is prefilled with its own first heading\n');

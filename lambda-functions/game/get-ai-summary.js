@@ -2252,14 +2252,16 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, eventDet
     : '';
 
   /*
-    THE HOST'S INSTRUCTIONS, RESTATED WHERE THEY WIN — game 1935's fix. The
-    context layer above delivers them; delivery was not the problem. Position
-    was: a hundred characters at the top of a 10,722-character prompt lost to
-    the template's own "use only the listed material" rules, CloudWatch shows
-    it happening, and personas.js:buildHostDirective carries the full account.
-    Stated after the template's rules and before the contract, with its
-    precedence spelled out — so "add what Steve Jobs would say" survives a
-    template that says to add nothing.
+    THE HOST'S REQUIRED ADDITIONS, AFTER THE CONTRACT — games 1935 and 4567,
+    in that order. Delivery was never the problem (the context layer above
+    carries the same facts); POSITION was, twice. First the instructions sat
+    only at the top and lost to the template's rule mass (1935). Then a
+    directive between the template and the contract lost to the contract's
+    own "supersedes any instruction that appeared earlier" opener (4567 —
+    CloudWatch shows the directive in the prompt and the model ignoring it).
+    The measured fix is this order: the additions come LAST, as part of the
+    format block's own requirements. personas.js:buildHostDirective carries
+    the experiment log.
   */
   const hostDirective = buildHostDirective({
     hostInstructions: gameAiContext,
@@ -2267,7 +2269,7 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, eventDet
   });
   const hostLayer = hostDirective ? `\n\n${hostDirective}` : '';
 
-  let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}${hostLayer}\n\n${buildOutputContract(promptData)}`;
+  let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}\n\n${buildOutputContract(promptData)}${hostLayer}`;
 
   // Debug: Log key trivia variables
   if (gameType === 'trivia') {

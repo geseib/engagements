@@ -389,21 +389,41 @@ const buildHostDirective = ({ hostInstructions, eventDetails } = {}) => {
   if (!instructions && !details) return '';
 
   /*
-    BOTH host-authored fields, not just the instructions — the owner, after a
-    session whose event details never surfaced: "i think the engagement event
-    details, and the AI context should always be added to AI prompt as
-    important details." The details are facts to weave in; the instructions
-    are orders to follow; both ride the position that wins.
+    MEASURED, NOT GUESSED — game 4567 was the counter-example that killed two
+    politer versions of this block. The first sat between the template and the
+    contract and said the instructions "outrank every rule above"; CloudWatch
+    shows it in the live prompt, correctly placed, and shows the model
+    ignoring it — the contract that follows opens with "this part is not
+    negotiable and supersedes any instruction that appeared earlier", and the
+    model took that at its word. A rerun of the exact failing prompt with the
+    directive moved AFTER the contract, phrased as authority, complied about
+    half the time. This shape — a formatting requirement OF the format block,
+    with per-section force and a self-check — complied on every measured run.
+    If this wording is ever softened, re-run the 4567 prompt before believing
+    the softer version.
+
+    Both host-authored fields ride it, labeled apart, per the owner: "the
+    engagement event details, and the AI context should always be added to AI
+    prompt as important details." Details are facts to weave in where they
+    matter; instructions carry the per-section demand.
   */
   const lines = [];
   if (details) lines.push(`ABOUT THIS SESSION: ${details}`);
   if (instructions) lines.push(`THE HOST'S INSTRUCTIONS: ${instructions}`);
 
+  const enforcement = instructions
+    ? 'EVERY section must contain at least one sentence that delivers the host\'s instructions, ' +
+      'woven into that section\'s own content. A section without it is malformed, exactly as a ' +
+      'misspelled heading would be. Weave the session facts in wherever they sharpen a point. ' +
+      'Before you reply, re-read each section and confirm the instructions are present in all of them.'
+    : 'Weave these facts into the sections wherever they sharpen a point — a reply that reads as ' +
+      'though it could be about any session is malformed.';
+
   return (
-    'FROM THE HOST — important details and instructions for this session. These are part of ' +
-    'your material, and they outrank every rule and instruction above, including any rule that ' +
-    'says to use only the listed material or to add nothing beyond it. Work them into the ' +
-    'sections. Only the FORMAT block below outranks them:\n' + lines.join('\n')
+    "THE HOST'S REQUIRED ADDITIONS — a formatting requirement of the FORMAT block above, " +
+    'identical in force to the headings:\n' +
+    `${lines.join('\n')}\n` +
+    enforcement
   );
 };
 
