@@ -110,6 +110,60 @@ describe('a populated running order', () => {
     expect(rows[1]).toContainElement(flags[0]);
   });
 
+  test('auto rows are movable when a handler is given, and report key + direction', () => {
+    /*
+      The owner, confirming the semantics before this existed: moving an auto
+      row makes the displayed plan manual. The component only raises the
+      gesture; materialising is config/questionQueue.js's job at the call site.
+    */
+    const onAutoMove = jest.fn();
+    renderQueue({
+      upNext: [
+        { questionId: 'QUESTION#c009#001', source: 'auto', title: 'Auto One', round: 4 },
+        { questionId: 'QUESTION#c009#002', source: 'auto', title: 'Auto Two', round: 5 },
+      ],
+      onAutoMove,
+    });
+    const autos = screen.getAllByTestId('queue-auto-row');
+
+    // First auto CAN move earlier here — three queued rows sit above it.
+    fireEvent.click(within(autos[0]).getByRole('button', { name: /move auto one earlier/i }));
+    expect(onAutoMove).toHaveBeenCalledWith('QUESTION#c009#001', 'earlier');
+
+    // The last shown auto cannot move later: beyond the displayed plan nothing
+    // has been planned, so there is nothing to swap with.
+    expect(within(autos[1]).getByRole('button', { name: /move auto two later/i })).toBeDisabled();
+    expect(within(autos[1]).getByRole('button', { name: /move auto two earlier/i })).toBeEnabled();
+  });
+
+  test('with an empty queue, the first auto row cannot move earlier', () => {
+    const onAutoMove = jest.fn();
+    render(
+      <QueueList
+        queue={[]}
+        questions={questions}
+        upNext={[
+          { questionId: 'QUESTION#c009#001', source: 'auto', title: 'Auto One', round: 1 },
+          { questionId: 'QUESTION#c009#002', source: 'auto', title: 'Auto Two', round: 2 },
+        ]}
+        onAutoMove={onAutoMove}
+      />,
+    );
+    const autos = screen.getAllByTestId('queue-auto-row');
+    expect(within(autos[0]).getByRole('button', { name: /move auto one earlier/i })).toBeDisabled();
+    expect(within(autos[0]).getByRole('button', { name: /move auto one later/i })).toBeEnabled();
+  });
+
+  test('without a handler, auto rows draw no controls at all', () => {
+    // rejects: buttons that cannot work — a caller with no way to materialise
+    // must not offer the gesture.
+    renderQueue({
+      upNext: [{ questionId: 'QUESTION#c009#001', source: 'auto', title: 'Auto One', round: 4 }],
+    });
+    const autos = screen.getAllByTestId('queue-auto-row');
+    expect(within(autos[0]).queryAllByRole('button')).toHaveLength(0);
+  });
+
   test('a parked row keeps its controls — the way out is remove or re-enable, not a dead row', () => {
     renderQueue({ blocked: [{ key: 'c001#002', reason: 'category-off' }] });
     const rows = screen.getAllByTestId('queue-row');

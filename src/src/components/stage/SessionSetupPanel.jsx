@@ -118,6 +118,10 @@ export default function SessionSetupPanel({
   onQueueQuestion = () => {},
   onQueueMove = () => {},
   onQueueRemove = () => {},
+  /* Rearranging an AUTO row — materialises the displayed plan into the queue
+     and applies the move. The semantics and the ops live in
+     config/questionQueue.js:materializePlanOps. */
+  onAutoMove = () => {},
 
   // Settings
   gameId = '',
@@ -591,6 +595,7 @@ export default function SessionSetupPanel({
                 blocked={upNextBlocked}
                 onMove={onQueueMove}
                 onRemove={onQueueRemove}
+                onAutoMove={onAutoMove}
               />
 
               {/* THE BROWSER, AS A SECTION RATHER THAN A MODAL. Until now the

@@ -3,7 +3,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import webSocketClient from './WebSocketClient';
 import { requestNextQuestion } from './utils/nextQuestion';
 import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
-import { queueEnqueue, queueMove, queueRemove, normaliseQueue } from './config/questionQueue';
+import { queueEnqueue, queueMove, queueRemove, normaliseQueue, materializePlanOps } from './config/questionQueue';
 import { focusFromFrame, focusToStage, focusRequest, sameFocus } from './config/stageFocus';
 import IssueFab from './components/IssueFab';
 import QuickstartMenu from './components/QuickstartMenu';
@@ -2863,6 +2863,59 @@ Focus on actionable business strategy insights.`;
     [runQueueOp],
   );
 
+  /**
+   * MOVING AN AUTO ROW MAKES THE WHOLE DISPLAYED PLAN MANUAL — the owner's own
+   * semantics ("in a way all of them now are manually adjusted. that may not
+   * make a difference"). config/questionQueue.js's materializePlanOps decides
+   * the burst; this executes it as ordinary sequential ops, each one replayed
+   * server-side against a fresh read, so a phone edit that interleaves is not
+   * lost — the same property every single-op press already has.
+   *
+   * Optimistic like runQueueOp, but reconciled by RELOAD rather than by taking
+   * one response verbatim: the burst's final state is the composition of
+   * several writes, and the phone may have interleaved its own between them.
+   */
+  const handleAutoMove = useCallback(async (rawKey, direction) => {
+    const key = String(rawKey ?? '').replace(/^QUESTION#/, '').trim();
+    if (!key) return;
+
+    const autoKeys = upNext
+      .filter((row) => row && row.source === 'auto')
+      .map((row) => String(row.questionId || '').replace(/^QUESTION#/, ''));
+
+    const plan = materializePlanOps(questionQueue, autoKeys, key, direction);
+    if (!plan.ops.length) {
+      if (plan.refused === 'full') {
+        alert('The queue is full — 24 questions is the limit. Remove one from the running order first.');
+      }
+      return;
+    }
+
+    setQuestionQueue(plan.queue);
+    setQueueBusyKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
+
+    let version = queueVersion;
+    let failed = null;
+    for (const op of plan.ops) {
+      // Sequential on purpose: each op's meaning depends on the queue the one
+      // before it produced, and the server applies each against what it just
+      // read. Parallel posts would race each other for the version.
+      // eslint-disable-next-line no-await-in-loop
+      const result = await postQueueOp({
+        apiBase: API_BASE, gameId, op: op.op, questionKey: op.questionKey, expectedVersion: version,
+      });
+      if (!result.ok) { failed = result.error; break; }
+      if (result.version !== null) version = result.version;
+    }
+
+    setQueueBusyKeys((prev) => prev.filter((k) => k !== key));
+    if (failed) alert(`Could not rearrange the running order: ${failed}`);
+    // Authoritative state after a multi-write burst is the server's, not any
+    // single response — re-read both halves of the panel.
+    loadQueue();
+    loadUpNext();
+  }, [gameId, questionQueue, queueVersion, upNext, loadQueue, loadUpNext]);
+
   // Select a specific question to trigger as the next question
   const selectQuestion = async (selectedQuestion) => {
     try {
@@ -5665,6 +5718,7 @@ Focus on actionable business strategy insights.`;
           onQueueQuestion={handleQueueQuestion}
           onQueueMove={handleQueueMove}
           onQueueRemove={handleQueueRemove}
+          onAutoMove={handleAutoMove}
           gameId={gameId}
           playUrl={playUrl}
           remoteUrl={remoteUrl}

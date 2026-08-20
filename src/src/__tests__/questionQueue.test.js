@@ -27,6 +27,7 @@ import {
   queuePosition,
   queueRows,
   queueSummary,
+  materializePlanOps,
 } from '../config/questionQueue';
 import { questionKey } from '../config/setupPanel';
 
@@ -150,5 +151,65 @@ describe('the read-only projections a panel will render from', () => {
   test('drop is the server\'s removal and takes several at once', () => {
     expect(queueDrop(['a', 'b', 'c'], ['a', 'c']).queue).toEqual(['b']);
     expect(queueRemove(['a', 'b'], 'a').queue).toEqual(['b']);
+  });
+});
+
+describe('moving an auto row materialises the plan — the owner\'s own semantics', () => {
+  /*
+    "if there was Q1 - A Q2 - B and Q3 - C. and i move B to the bottom in a way
+    all of them now are manually adjusted. that may not make a difference."
+    The auto rows are a simulation with no stored order, so the gesture turns
+    the DISPLAYED plan into queued rows and then applies the one-step move —
+    expressed as ordinary QUEUE_OPS so the server's race handling still holds.
+  */
+  test('an empty queue: A,B,C with B moved later becomes adds then the move', () => {
+    const { ops, queue, refused } = materializePlanOps([], ['a', 'b', 'c'], 'b', 'later');
+    expect(refused).toBeNull();
+    expect(ops).toEqual([
+      { op: 'add', questionKey: 'a' },
+      { op: 'add', questionKey: 'b' },
+      { op: 'add', questionKey: 'c' },
+      { op: 'later', questionKey: 'b' },
+    ]);
+    expect(queue).toEqual(['a', 'c', 'b']);
+  });
+
+  test('existing queued rows stay ahead, and are not re-added', () => {
+    const { ops, queue } = materializePlanOps(['q1'], ['a', 'b'], 'a', 'later');
+    expect(ops).toEqual([
+      { op: 'add', questionKey: 'a' },
+      { op: 'add', questionKey: 'b' },
+      { op: 'later', questionKey: 'a' },
+    ]);
+    expect(queue).toEqual(['q1', 'b', 'a']);
+  });
+
+  test('the first auto row CAN move earlier when a queued row sits above it', () => {
+    // Its swap partner is the queue's tail — the whole point of one running order.
+    const { queue, refused } = materializePlanOps(['q1'], ['a', 'b'], 'a', 'earlier');
+    expect(refused).toBeNull();
+    expect(queue).toEqual(['a', 'q1', 'b']);
+  });
+
+  test('a refused move materialises NOTHING', () => {
+    // rejects: adds followed by an at-edge move, which would freeze the plan
+    // into the queue without performing the gesture the host asked for.
+    const edge = materializePlanOps([], ['a', 'b'], 'a', 'earlier');
+    expect(edge.ops).toEqual([]);
+    expect(edge.refused).toBe('at-edge');
+    expect(edge.queue).toEqual([]);
+  });
+
+  test('a materialisation that would burst the cap is refused whole', () => {
+    const nearFull = Array.from({ length: QUEUE_MAX - 1 }, (_, i) => `q${i + 1}`);
+    const { ops, refused } = materializePlanOps(nearFull, ['a', 'b'], 'a', 'later');
+    expect(ops).toEqual([]);
+    expect(refused).toBe('full');
+  });
+
+  test('keys arrive in either spelling and leave canonical', () => {
+    const { ops } = materializePlanOps([], ['QUESTION#c001#001', 'c001#002'], 'QUESTION#c001#001', 'later');
+    expect(ops[0]).toEqual({ op: 'add', questionKey: 'c001#001' });
+    expect(ops[ops.length - 1]).toEqual({ op: 'later', questionKey: 'c001#001' });
   });
 });
