@@ -206,6 +206,40 @@ const ids = (plan) => plan.map((p) => p.questionId);
     assert.strictEqual(new Set(ids(plan)).size, 4);
   });
 
+  check('a queued item the drain would skip takes no round in the plan', () => {
+    /*
+      `servable: false` is the resolver saying "the serve will pass over this
+      and leave it queued" — its category is off, or it is not in the set. The
+      drain does exactly that (next-question.js), so a plan that placed it
+      advertised a phantom round and shifted every later one. Reported: "the
+      running order queue listed is not actually used anyway."
+    */
+    const plan = planAhead({
+      seed: 's',
+      queue: ['c009#001', 'c001#002'],
+      categories: [cat('c001', 1, 3)],
+      isRandomized: false,
+      resolveQueued: (k) => (k === 'c009#001'
+        ? { servable: false, categoryId: null, title: 'Parked' }
+        : { categoryId: 'c001', title: 'T' }),
+    }, 2);
+    assert.deepStrictEqual(ids(plan), ['QUESTION#c001#002', 'QUESTION#c001#001']);
+    assert.deepStrictEqual(plan.map((p) => p.source), ['queued', 'auto']);
+  });
+
+  check('a resolver that says nothing keeps the old meaning — placed, not vanished', () => {
+    // rejects: treating "unknown" as "unservable". An entry the resolver cannot
+    // identify must not silently disappear from the host's own list.
+    const plan = planAhead({
+      seed: 's',
+      queue: ['c001#002'],
+      categories: [cat('c001', 1, 3)],
+      isRandomized: false,
+      resolveQueued: () => null,
+    }, 1);
+    assert.deepStrictEqual(ids(plan), ['QUESTION#c001#002']);
+  });
+
   check('a queued item already asked is dropped, not listed', () => {
     // rejects: advertising a round that will never happen. The drain discards
     // spent entries, so showing them would promise something it then skips.

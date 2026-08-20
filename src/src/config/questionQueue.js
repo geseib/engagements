@@ -249,6 +249,65 @@ export function applyQueueOp(queue, operation = {}) {
 }
 
 /**
+ * MOVING AN AUTO ROW MAKES THE PLAN MANUAL — the ops that do it, in order.
+ *
+ * The owner, on rearranging the automatic tail of the running order: "if there
+ * was Q1 - A Q2 - B and Q3 - C. and i move B to the bottom in a way all of
+ * them now are manually adjusted. that may not make a difference." Exactly the
+ * semantics implemented here: the automatic rows are a simulation with no
+ * stored order to edit, so touching one MATERIALISES the displayed plan into
+ * the queue (every shown auto pick becomes a queued row, in plan order) and
+ * then applies the requested one-step move.
+ *
+ * FRONTEND ONLY, deliberately — this is not mirrored into queue-order.js. The
+ * server never materialises anything; it receives the result as ordinary
+ * `add`/`earlier`/`later` ops from QUEUE_OPS, each replayed against a fresh
+ * read, so a phone edit that interleaves with the burst still lands. A bulk
+ * "replace the queue" op is exactly the whole-array write the header forbids.
+ *
+ * Returns `{ ops, queue, refused }`:
+ *   ops     what to POST, in order — adds first, the move last. Empty when
+ *           nothing needs doing.
+ *   queue   the list as it will stand after the ops, for the optimistic render.
+ *   refused the simulated move's refusal (`at-edge`, `not-queued`…), so the
+ *           caller can decline BEFORE materialising — adds followed by a
+ *           refused move would freeze the plan without performing the gesture
+ *           the host asked for, which is the worst of both.
+ */
+export function materializePlanOps(queue, autoKeys, targetKey, direction) {
+  const list = normaliseQueue(queue);
+  const target = canonical(targetKey);
+
+  const additions = [];
+  const seen = new Set(list);
+  for (const raw of Array.isArray(autoKeys) ? autoKeys : []) {
+    const key = canonical(raw);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    additions.push(key);
+  }
+
+  const materialized = [...list, ...additions];
+  if (materialized.length > QUEUE_MAX) {
+    // Refused whole rather than truncated: a half-materialised plan reorders
+    // some rows and silently abandons others, and which ones is invisible.
+    return { ops: [], queue: list, refused: 'full' };
+  }
+
+  const moved = queueMove(materialized, target, direction);
+  if (!moved.changed) return { ops: [], queue: list, refused: moved.refused };
+
+  return {
+    ops: [
+      ...additions.map((key) => ({ op: 'add', questionKey: key })),
+      { op: direction, questionKey: target },
+    ],
+    queue: moved.queue,
+    refused: null,
+  };
+}
+
+/**
  * Where a question sits, 1-based, or 0 when it is not queued.
  *
  * 0 rather than -1 or null so that "is this queued?" and "which number is it?"

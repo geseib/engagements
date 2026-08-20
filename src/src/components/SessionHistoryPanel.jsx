@@ -131,7 +131,10 @@ export default function SessionHistoryPanel({
               size={22}
               color="var(--primary)"
             />
-            {mode === 'select' ? ' Session history' : ' Session reports'}
+            {/* "Your sessions", not "Session history": half this list's job
+                is sessions that have not happened yet — Edit and Start act on
+                the future, and "history" told hosts the opposite. */}
+            {mode === 'select' ? ' Your sessions' : ' Session reports'}
           </h2>
           <p className="shist__sub">
             {mode === 'select'
@@ -143,7 +146,7 @@ export default function SessionHistoryPanel({
           type="button"
           className="shist__close"
           onClick={onClose}
-          aria-label="Close session history"
+          aria-label="Close your sessions"
         >
           ✕
         </button>
@@ -274,30 +277,14 @@ export default function SessionHistoryPanel({
                   <td className="shist__when">{formatWhen(session.lastPlayedAt)}</td>
                   <td>
                     {/*
-                      `margin-left: auto` on the first child, NEVER
-                      `justify-content: flex-end` — hard rule 9. Inside a cell
-                      with `overflow: hidden`, flex-end overflows towards the
-                      START, where the hidden overflow is unreachable and the
-                      first buttons simply vanish. Plus `flex-wrap`, because
-                      this row carries up to five actions.
+                      A FIXED 2×2 GRID, deliberately: four buttons in a
+                      wrapping flex row broke at a different point per row and
+                      read as misaligned twice over. The verbs (Report/Edit,
+                      Start/Continue) take the top row because they are why
+                      the screen exists; Link and Invite sit beneath them in
+                      every row. See .shist__acts in the stylesheet.
                     */}
                     <div className="shist__acts">
-                      <button
-                        type="button"
-                        className="shist__btn shist__btn--sm"
-                        onClick={() => onCopyPlayerUrl(session.gameId)}
-                        title={`Copy the player link for "${title}"`}
-                      >
-                        <Icon name="LinkSimple" weight="bold" size={14} /> Link
-                      </button>
-                      <button
-                        type="button"
-                        className="shist__btn shist__btn--sm"
-                        onClick={() => onInvite(session)}
-                        title={`Invite people to "${title}"`}
-                      >
-                        <Icon name="ClipboardText" weight="bold" size={14} /> Invite…
-                      </button>
                       {acts.report && (
                         <button
                           type="button"
@@ -351,6 +338,25 @@ export default function SessionHistoryPanel({
                           <Icon name="Play" weight="fill" size={14} /> Continue
                         </button>
                       )}
+                      {/* The utilities take the second grid row, under the
+                          verbs — every row has exactly these two, so the
+                          bottom row never varies and the grid never staggers. */}
+                      <button
+                        type="button"
+                        className="shist__btn shist__btn--sm"
+                        onClick={() => onCopyPlayerUrl(session.gameId)}
+                        title={`Copy the player link for "${title}"`}
+                      >
+                        <Icon name="LinkSimple" weight="bold" size={14} /> Link
+                      </button>
+                      <button
+                        type="button"
+                        className="shist__btn shist__btn--sm"
+                        onClick={() => onInvite(session)}
+                        title={`Invite people to "${title}"`}
+                      >
+                        <Icon name="ClipboardText" weight="bold" size={14} /> Invite…
+                      </button>
                     </div>
                   </td>
                 </tr>

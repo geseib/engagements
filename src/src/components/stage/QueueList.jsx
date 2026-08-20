@@ -48,11 +48,47 @@ export default function QueueList({
   questions = [],
   busyKeys = [],
   upNext = [],
+  /*
+    Queue entries the SERVER says it will pass over — `blocked` from
+    GET /up-next: the category is off, or the question is not in the loaded
+    set. The server leaves them queued (re-enabling the category recovers
+    them), and this list is how the host finds out they are parked instead of
+    watching them be skipped in silence. Reported: "if i queue a question that
+    is in a category that is disabled, it will stay in the queue but not get
+    asked, just skipped."
+  */
+  blocked = [],
   onMove = () => {},
   onRemove = () => {},
+  /*
+    Rearranging an AUTO row. Null/omitted = the controls are not drawn — a
+    caller with no way to materialise the plan must not offer buttons that
+    cannot work. See config/questionQueue.js:materializePlanOps for what a
+    press means: the displayed plan becomes queued rows, then the move applies.
+  */
+  onAutoMove = null,
 }) {
   const rows = queueRows(queue, { questions });
   const { count, full } = queueSummary(queue);
+  const blockedByKey = new Map(
+    blocked
+      .filter((b) => b && b.key)
+      .map((b) => [questionKey(String(b.key)), b.reason || 'blocked'])
+  );
+  const isParked = (row) => {
+    const reason = blockedByKey.get(row.key);
+    // The extra warn is for the reasons `missing` does not already cover —
+    // `not-in-set` keeps the local "Not in this set" warn as its only label.
+    return Boolean(reason && reason !== 'not-in-set' && !row.missing);
+  };
+  /*
+    THE "Next" FLAG FOLLOWS THE FIRST ROW THE SERVE WILL ACTUALLY TAKE. With a
+    parked head, position 1 is precisely NOT what the next end-of-round serves,
+    and this flag exists to answer "what happens when I press Next?". Any
+    server-blocked row is passed over here — including `not-in-set`, whose warn
+    is rendered by `missing` instead.
+  */
+  const nextKey = (rows.find((row) => !blockedByKey.has(row.key)) || {}).key;
   /*
     CANONICALISED, because `busyKeys` comes from whatever the caller had in
     hand and both spellings of a question id are on the wire —
@@ -101,10 +137,18 @@ export default function QueueList({
         <ol className="setup-q__list" data-testid="queue-list">
           {rows.map((row) => {
             const pending = busy.has(row.key);
+            /*
+              PARKED, BY THE SERVER'S OWN RULE. The reason comes from the same
+              resolver the plan runs, so this tag and the serve can never
+              disagree. `not-in-set` is left to the local `missing` warn below,
+              which already covers it from the browser rows.
+            */
+            const parked = blockedByKey.get(row.key);
+            const parkedHere = isParked(row);
             return (
               <li
                 key={row.key}
-                className={`setup-q__row ${row.position === 1 ? 'is-next' : ''} ${row.missing ? 'is-missing' : ''}`}
+                className={`setup-q__row ${row.key === nextKey ? 'is-next' : ''} ${row.missing ? 'is-missing' : ''}`}
                 data-testid="queue-row"
               >
                 <span className="setup-q__pos" aria-hidden="true">{row.position}</span>
@@ -119,13 +163,28 @@ export default function QueueList({
                     {row.missing ? row.key : (row.title || row.key)}
                   </span>
                   <span className="setup-q__meta">
-                    {row.position === 1 && (
+                    {/* A parked head is NOT next — the serve passes over it, so
+                        the flag saying otherwise would be the panel lying about
+                        the one thing it exists to answer. The flag follows the
+                        first row the drain will actually take. */}
+                    {row.key === nextKey && (
                       <span className="setup-q__flag" data-testid="queue-next-flag">Next</span>
                     )}
                     {row.category && <span className="setup-q__cat">{row.category}</span>}
                     {row.missing && (
                       <span className="setup-q__warn" title="This question is not in the set now loaded. It stays queued, and the round will skip it if it cannot be served.">
                         Not in this set
+                      </span>
+                    )}
+                    {parkedHere && (
+                      <span
+                        className="setup-q__warn"
+                        data-testid="queue-parked"
+                        title={parked === 'category-off'
+                          ? 'Its category is switched off, so rounds skip this question. It stays queued — switch the category back on to serve it, or remove it.'
+                          : 'This question has no category the session can reach, so rounds skip it. It stays queued.'}
+                      >
+                        {parked === 'category-off' ? 'Category off — skipped' : 'Unreachable — skipped'}
                       </span>
                     )}
                   </span>
@@ -187,12 +246,15 @@ export default function QueueList({
         Running order. It is the rows the host did NOT choose that need
         explaining, so the label goes where the question is.
 
-        NOT MOVABLE, and not for want of effort. These are derived — the
-        automatic walk's answer given the cursors, the enabled categories and
-        what has already been asked — so there is no stored order to reorder.
-        Rendering ↑↓ here would offer a control that cannot work; the way to
-        move one of these IS to queue it, which is one click away in the browser
-        beside this panel.
+        MOVABLE NOW, BY MATERIALISING. These are derived — the automatic
+        walk's answer given the cursors, the enabled categories and what has
+        already been asked — so there is no stored order to edit in place.
+        What a press on ↑↓ does instead is turn the DISPLAYED plan into queued
+        rows and then apply the move, which is the owner's own reading of the
+        gesture: "if there was Q1 - A Q2 - B and Q3 - C. and i move B to the
+        bottom in a way all of them now are manually adjusted." The rows
+        re-render as queued (numbered, fully editable) on the next fetch,
+        because that is genuinely what they have become.
 
         IT CAN GO STALE, and cheaply: toggling a category changes which
         questions are reachable. The caller re-fetches rather than caching, so
@@ -205,22 +267,61 @@ export default function QueueList({
             {count === 0 ? 'Coming up' : 'Then, automatically'}
           </p>
           <ol className="setup-q__list setup-q__list--auto" start={count + 1}>
-            {autoRows.map((row) => (
-              <li
-                key={row.questionId}
-                className="setup-q__row setup-q__row--auto"
-                data-testid="queue-auto-row"
-              >
-                <span className="setup-q__pos" aria-hidden="true">{row.round}</span>
-                <span className="setup-q__main">
-                  <span className="setup-q__name">{row.title || row.questionId}</span>
-                  <span className="setup-q__meta">
-                    <span className="setup-q__flag setup-q__flag--auto">Auto</span>
-                    {row.categoryName && <span className="setup-q__cat">{row.categoryName}</span>}
+            {autoRows.map((row, autoIndex) => {
+              /*
+                THE EDGES, in the materialised list this press will create:
+                [...queue, ...autos]. The first auto can still move EARLIER
+                when there are queued rows above it to swap past; the last
+                shown auto cannot move LATER, because what lies beyond the
+                displayed plan has not been planned and cannot be swapped with.
+              */
+              const canEarlier = autoIndex > 0 || count > 0;
+              const canLater = autoIndex < autoRows.length - 1;
+              const label = row.title || row.questionId;
+              return (
+                <li
+                  key={row.questionId}
+                  className="setup-q__row setup-q__row--auto"
+                  data-testid="queue-auto-row"
+                >
+                  <span className="setup-q__pos" aria-hidden="true">{row.round}</span>
+                  <span className="setup-q__main">
+                    <span className="setup-q__name">{label}</span>
+                    <span className="setup-q__meta">
+                      <span className="setup-q__flag setup-q__flag--auto">Auto</span>
+                      {row.categoryName && <span className="setup-q__cat">{row.categoryName}</span>}
+                    </span>
                   </span>
-                </span>
-              </li>
-            ))}
+                  {onAutoMove && (
+                    <span className="setup-q__acts">
+                      {/* Disabled at the edges, never removed — the same rule
+                          the queued rows follow, for the same
+                          buttons-move-under-the-finger reason. */}
+                      <button
+                        type="button"
+                        className="setup-q__btn"
+                        disabled={!canEarlier}
+                        onClick={() => onAutoMove(row.questionId, 'earlier')}
+                        title="Moving this makes the whole listed order manual — every Auto row above becomes a queued row you can edit."
+                        aria-label={`Move ${label} earlier`}
+                      >
+                        <Icon name="ArrowUp" weight="bold" size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        className="setup-q__btn"
+                        disabled={!canLater}
+                        onClick={() => onAutoMove(row.questionId, 'later')}
+                        title="Moving this makes the whole listed order manual — every Auto row shown becomes a queued row you can edit."
+                        aria-label={`Move ${label} later`}
+                      >
+                        <Icon name="ArrowDown" weight="bold" size={14} />
+                      </button>
+                    </span>
+                  )}
+                </li>
+              );
+            })}
           </ol>
         </div>
       )}

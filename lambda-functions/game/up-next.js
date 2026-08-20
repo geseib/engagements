@@ -194,6 +194,18 @@ exports.handler = async (event) => {
     const nameOf = new Map(categories.map((c) => [c.categoryId, c.name]));
 
     /*
+      EVERY category's enabled state, by name — including the switched-off ones
+      `cursors` deliberately dropped. The queue resolver below needs both
+      halves: a queued question in an OFF category must be reported as blocked,
+      not previewed as the next round, because the drain will skip it and leave
+      it queued (next-question.js states the three skip-and-leave rules).
+    */
+    const enabledByName = new Map(categoryRows.map((row, i) => [
+      row.Name || row.name || '',
+      !catStateRes.Item || maskBit(catStateRes.Item, i + 1),
+    ]));
+
+    /*
       One flag for the session, taken from the ORDER records — which is how
       next-question.js decides too (it reads the first one). `some` rather than
       `every`: the selector applies a single randomised/in-order rule to the
@@ -205,27 +217,63 @@ exports.handler = async (event) => {
     const asked = await askedSourceQuestionIds(gameId);
     const roundNumber = (stateRes.Item?.LessonNumber || 0) + 1;
 
+    /*
+      A queued entry is a bare question key; the planner needs its category to
+      report one, its title to be worth reading, and — the part the first
+      version missed — whether the DRAIN WOULD ACTUALLY SERVE IT. The drain
+      skips-and-leaves an entry that is not in the set, has no category, or
+      whose category the host switched off; a preview that placed those anyway
+      showed a round that was never going to happen and shifted every round
+      after it, which read as "the running order listed is not actually used".
+      Resolved from the set rows already in hand rather than a read per item.
+    */
+    const resolveQueued = (key) => {
+      const sk = `QUESTION#${key}`;
+      if (!titleOf.has(sk)) {
+        return { servable: false, reason: 'not-in-set', categoryId: null, title: '', categoryName: '' };
+      }
+      const row = questionRows.find((r) => r.SK === sk);
+      const categoryName = (row && (row.Category || row.category)) || '';
+      if (!categoryName || !enabledByName.has(categoryName)) {
+        return { servable: false, reason: 'no-category', categoryId: null, title: titleOf.get(sk), categoryName };
+      }
+      if (!enabledByName.get(categoryName)) {
+        return { servable: false, reason: 'category-off', categoryId: null, title: titleOf.get(sk), categoryName };
+      }
+      const match = categories.find((c) => c.name === categoryName);
+      return { servable: true, categoryId: match ? match.categoryId : null, title: titleOf.get(sk), categoryName };
+    };
+
+    const queueKeys = (queueRes.Item && queueRes.Item.Queue) || [];
+
     const plan = planAhead({
       seed: seedFor({ ...metaRes.Item, GameId: gameId }),
       roundNumber,
       isRandomized,
-      queue: (queueRes.Item && queueRes.Item.Queue) || [],
+      queue: queueKeys,
       asked,
       categories,
-      /*
-        A queued entry is a bare question key; the planner needs its category to
-        report one, and its title to be worth reading. Resolved from the set
-        rows already in hand rather than a read per queued item.
-      */
-      resolveQueued: (key) => {
-        const sk = `QUESTION#${key}`;
-        if (!titleOf.has(sk)) return null;
-        const row = questionRows.find((r) => r.SK === sk);
-        const categoryName = row && (row.Category || row.category);
-        const match = categories.find((c) => c.name === categoryName);
-        return { categoryId: match ? match.categoryId : null, title: titleOf.get(sk) };
-      },
+      resolveQueued,
     }, count);
+
+    /*
+      The queue entries the plan could NOT use, in queue order, each with why.
+      They are still queued — the drain leaves them so a re-enabled category
+      recovers them — and the host must be able to SEE that they are parked
+      rather than watch them be skipped in silence. Already-asked entries are
+      not listed: the next drain drops those for good.
+    */
+    const blocked = queueKeys
+      .filter((key) => !asked.has(`QUESTION#${key}`))
+      .map((key) => ({ key, ...resolveQueued(key) }))
+      .filter((entry) => entry.servable === false)
+      .map(({ key, reason, title, categoryName }) => ({
+        key,
+        questionId: `QUESTION#${key}`,
+        reason,
+        title,
+        categoryName,
+      }));
 
     return respond(200, {
       gameId,
@@ -236,8 +284,9 @@ exports.handler = async (event) => {
       upNext: plan.map((item) => ({
         ...item,
         title: item.title || titleOf.get(item.questionId) || '',
-        categoryName: nameOf.get(item.categoryId) || '',
+        categoryName: item.categoryName || nameOf.get(item.categoryId) || '',
       })),
+      blocked,
     });
   } catch (error) {
     console.error('❌ Up next error:', error);

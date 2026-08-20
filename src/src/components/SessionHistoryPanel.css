@@ -1,5 +1,5 @@
 /* ============================================================================
-   THE HOST'S SESSION HISTORY — components/SessionHistoryPanel.jsx
+   THE HOST'S SESSIONS LIST ("Your sessions") — components/SessionHistoryPanel.jsx
 
    Scoped `.shist`. The ladder, the 36px row, the chips and the token set are
    the admin sessions screen's, unchanged — see components/SessionsPanel.css for
@@ -20,12 +20,12 @@
      flex-end overflows towards the START, where a hidden overflow is
      unreachable, so the first buttons in the group silently vanish as the
      column narrows. __tests__/rowActionsReachable.test.js exists for this.
-     `.shist__acts` uses `margin-left: auto` on the first child instead, and
-     wraps.
+     `.shist__acts` is a fixed two-track GRID sized from the cell instead —
+     it cannot overflow towards the start because nothing in it can wrap.
 
      `.sp-rowact` is also `opacity: 0` until the row is hovered. On this screen
-     the actions ARE the screen — a host opens session history to press one of
-     them — and hover does not exist on a touch laptop. They are always shown.
+     the actions ARE the screen — a host opens their sessions list to press one
+     of them — and hover does not exist on a touch laptop. They are always shown.
    ========================================================================== */
 
 .shist {
@@ -195,14 +195,14 @@
 .shist__row--now td { background: rgba(246, 169, 76, .07); }
 
 /* Sums to 100. The actions column is far wider than the admin table's 9%
-   because this row carries up to five controls where that one carries one. */
-.shist__c-name  { width: 22%; }
+   because this row carries four controls where that one carries one. */
+.shist__c-name  { width: 20%; }
 .shist__c-id    { width: 6%; }
 .shist__c-type  { width: 10%; }
 .shist__c-state { width: 9%; }
 .shist__c-num   { width: 5%; }
 .shist__c-when  { width: 12%; }
-.shist__c-acts  { width: 19%; }
+.shist__c-acts  { width: 21%; }
 
 /* Floor size is right for these: they are glanced, never read in runs. Tabular
    numerals come from `.shist` so a column of counts lines up. */
@@ -277,34 +277,41 @@
 
 /* --------------------------------------------------------------- actions --- */
 
+/*
+  A FIXED 2×2 GRID IS THE ALIGNMENT FIX — second report: "still has an issue
+  with the button alignment." The first fix assumed two buttons per row; every
+  row actually carries FOUR (Link and Invite ride along), and four 96px-min
+  buttons cannot fit a 19% column, so the old wrapping flex broke at a
+  different point per row — worse, `margin-left: auto` on the first child
+  right-shoved whichever button led the first wrapped line while later lines
+  sat left. Wonky was the correct word.
+
+  A grid of two equal tracks filling the cell cannot wrap and cannot vary:
+  every row is the same 2×2, verbs on top (the reason the screen exists),
+  Link/Invite beneath, and the buttons form clean columns down the table.
+  Hard rule 9 is satisfied by construction — nothing overflows towards the
+  hidden start because the tracks are sized FROM the cell width, and jsdom's
+  §6 contract test now pins this shape instead of the margin-left:auto one.
+*/
 .shist__acts {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 5px;
-  justify-content: flex-start;
 }
 
-/* HARD RULE 9. `margin-left: auto` on the FIRST child, never
-   `justify-content: flex-end` on the container: inside a cell that is
-   `overflow: hidden`, flex-end pushes the overflow towards the START of the
-   row, where it cannot be reached or scrolled to, and the leading buttons
-   disappear as the column narrows. */
-.shist__acts > :first-child { margin-left: auto; }
+/* The one cell tall enough for two button rows: like the name cell above, it
+   trades the fixed 36px row height for its own vertical padding. */
+.shist__tbl td:last-child { height: auto; padding-top: 6px; padding-bottom: 6px; }
 
-/*
-  UNIFORM WIDTH IS THE ALIGNMENT FIX. Reported: "the buttons are a bit wonky
-  misaligned." The cell wraps (it must — hard rule 9's margin-left:auto pattern
-  needs somewhere to overflow to), and with three buttons of three different
-  natural widths the wrap point differed per row, so every row's buttons landed
-  somewhere slightly different. Two buttons per row now (Edit/Start,
-  Report/Continue) and a shared min-width mean every row lays out identically
-  and the two columns of buttons line up down the table.
-*/
+/* No min-width: the grid track is the width, identical in every row because
+   the table layout is fixed. `overflow: hidden` so a translation or a zoom
+   level that outgrows the track clips inside the button instead of smearing
+   across the gap. */
 .shist__btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 96px;
+  overflow: hidden;
   gap: 5px;
   font: 600 var(--shist-t-label)/1 var(--font-ui);
   padding: 7px 10px;

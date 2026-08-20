@@ -233,11 +233,16 @@ export default function WelcomeScreen({
                 </div>
 
                 <div className="wel-link">
+                  {/* "Sessions", not "Session history": the list's first job
+                      is sessions that have not happened yet — the owner's
+                      point when asking for the rename. Parallel in form to
+                      the "Question sets" control above it. */}
                   <button type="button" className="wel-btn wel-btn-line" onClick={() => onViewHistory?.()}>
-                    Session history
+                    Sessions
                   </button>
                   <p className="wel-meta">
-                    Every session you have run, with its report — and anything you left part-way.
+                    Every session you have created or run — edit one before anyone joins, start
+                    it, or read its report.
                   </p>
                 </div>
               </div>

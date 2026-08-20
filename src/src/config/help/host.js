@@ -39,6 +39,12 @@ const quickStart = {
           title: 'The fastest possible start',
           text: 'The welcome screen has a Quick start menu of ready-made sessions. One tap and you are at step 3 with a room that can already join.',
         },
+        {
+          t: 'note',
+          tone: 'info',
+          title: 'Coming back to a session',
+          text: 'Everything you have made is under Sessions on the welcome screen — edit a session before anyone joins, start it when the room is ready, continue one you left part-way, or read the report of one already played.',
+        },
       ],
     },
     {

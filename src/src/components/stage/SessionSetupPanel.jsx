@@ -111,9 +111,17 @@ export default function SessionSetupPanel({
   questionQueue = [],
   queueBusyKeys = [],
   upNext = [],
+  /* Queue entries the plan cannot serve right now (category off, not in this
+     set), straight from GET /up-next. QueueList turns each into a visible
+     "parked" tag on the row the host already sees. */
+  upNextBlocked = [],
   onQueueQuestion = () => {},
   onQueueMove = () => {},
   onQueueRemove = () => {},
+  /* Rearranging an AUTO row — materialises the displayed plan into the queue
+     and applies the move. The semantics and the ops live in
+     config/questionQueue.js:materializePlanOps. */
+  onAutoMove = () => {},
 
   // Settings
   gameId = '',
@@ -584,8 +592,10 @@ export default function SessionSetupPanel({
                 questions={questions}
                 busyKeys={queueBusyKeys}
                 upNext={upNext}
+                blocked={upNextBlocked}
                 onMove={onQueueMove}
                 onRemove={onQueueRemove}
+                onAutoMove={onAutoMove}
               />
 
               {/* THE BROWSER, AS A SECTION RATHER THAN A MODAL. Until now the

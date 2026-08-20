@@ -175,6 +175,50 @@ const ids = (body) => body.upNext.map((u) => u.questionId);
     assert.deepStrictEqual(body.upNext.slice(1).map((u) => u.source), ['auto', 'auto']);
   });
 
+  await check('a queued question in a SWITCHED-OFF category takes no round, and is reported parked', async () => {
+    /*
+      The drain skips-and-leaves such an entry (next-question.js), so a preview
+      that placed it advertised a round that never happens and shifted every
+      later round by one. Reported: "if i queue a question that is in a
+      category that is disabled, it will stay in the queue but not get asked,
+      just skipped... the running order queue listed is not actually used."
+    */
+    seed({ hostMask: '10000000' });   // c002 off
+    put({ PK, SK: 'QUEUE', Queue: ['c002#003'], Version: 1 });
+    const { body } = await peek(3);
+    assert.ok(!ids(body).includes('QUESTION#c002#003'),
+      `parked question previewed as a round: ${JSON.stringify(ids(body))}`);
+    assert.deepStrictEqual(body.blocked, [{
+      key: 'c002#003',
+      questionId: 'QUESTION#c002#003',
+      reason: 'category-off',
+      title: 'Packaging 003',
+      categoryName: 'Packaging',
+    }]);
+    // And the rounds that ARE shown are the ones the serve will take — the
+    // parked entry must not offset the seeded walk.
+    assert.strictEqual(body.upNext[0].source, 'auto');
+  });
+
+  await check('a parked queued question does not desync preview from serve', async () => {
+    seed({ isRandom: true, hostMask: '10000000' });
+    put({ PK, SK: 'QUEUE', Queue: ['c002#002'], Version: 1 });
+    const { body } = await peek(2);
+    const predicted = ids(body);
+
+    const served = [];
+    for (let i = 0; i < 2; i += 1) {
+      await nextQuestion.handler({
+        pathParameters: { gameId: GAME }, body: JSON.stringify({}),
+      });
+      const round = String(get('STATE').LessonNumber).padStart(3, '0');
+      served.push(get(`QUESTION#${round}#REF`).SourceQuestionId);
+      put({ PK, SK: 'STATE', State: `RESULTS#${round}`, LessonNumber: Number(round) });
+    }
+    assert.deepStrictEqual(served, predicted,
+      'the parked entry offset the preview from what the room got');
+  });
+
   await check('a queued question is not ALSO shown as an automatic pick', async () => {
     seed();
     put({ PK, SK: 'QUEUE', Queue: ['c001#002'], Version: 1 });

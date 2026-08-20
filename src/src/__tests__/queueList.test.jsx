@@ -90,6 +90,86 @@ describe('a populated running order', () => {
     expect(rows[0]).toContainElement(flags[0]);
   });
 
+  test('a parked head loses the Next flag to the first servable row, and says why', () => {
+    /*
+      Reported: "if i queue a question that is in a category that is disabled,
+      it will stay in the queue but not get asked, just skipped." The server's
+      `blocked` list is the same rule the serve runs, so the row the host sees
+      carries the truth: the head is parked, the flag moves to the row the
+      drain will actually take, and the reason is a word on the row.
+    */
+    renderQueue({ blocked: [{ key: 'c001#002', reason: 'category-off' }] });
+    const rows = screen.getAllByTestId('queue-row');
+
+    const parked = within(rows[0]).getByTestId('queue-parked');
+    expect(parked).toHaveTextContent(/category off/i);
+    expect(within(rows[0]).queryByTestId('queue-next-flag')).toBeNull();
+
+    const flags = screen.getAllByTestId('queue-next-flag');
+    expect(flags).toHaveLength(1);
+    expect(rows[1]).toContainElement(flags[0]);
+  });
+
+  test('auto rows are movable when a handler is given, and report key + direction', () => {
+    /*
+      The owner, confirming the semantics before this existed: moving an auto
+      row makes the displayed plan manual. The component only raises the
+      gesture; materialising is config/questionQueue.js's job at the call site.
+    */
+    const onAutoMove = jest.fn();
+    renderQueue({
+      upNext: [
+        { questionId: 'QUESTION#c009#001', source: 'auto', title: 'Auto One', round: 4 },
+        { questionId: 'QUESTION#c009#002', source: 'auto', title: 'Auto Two', round: 5 },
+      ],
+      onAutoMove,
+    });
+    const autos = screen.getAllByTestId('queue-auto-row');
+
+    // First auto CAN move earlier here — three queued rows sit above it.
+    fireEvent.click(within(autos[0]).getByRole('button', { name: /move auto one earlier/i }));
+    expect(onAutoMove).toHaveBeenCalledWith('QUESTION#c009#001', 'earlier');
+
+    // The last shown auto cannot move later: beyond the displayed plan nothing
+    // has been planned, so there is nothing to swap with.
+    expect(within(autos[1]).getByRole('button', { name: /move auto two later/i })).toBeDisabled();
+    expect(within(autos[1]).getByRole('button', { name: /move auto two earlier/i })).toBeEnabled();
+  });
+
+  test('with an empty queue, the first auto row cannot move earlier', () => {
+    const onAutoMove = jest.fn();
+    render(
+      <QueueList
+        queue={[]}
+        questions={questions}
+        upNext={[
+          { questionId: 'QUESTION#c009#001', source: 'auto', title: 'Auto One', round: 1 },
+          { questionId: 'QUESTION#c009#002', source: 'auto', title: 'Auto Two', round: 2 },
+        ]}
+        onAutoMove={onAutoMove}
+      />,
+    );
+    const autos = screen.getAllByTestId('queue-auto-row');
+    expect(within(autos[0]).getByRole('button', { name: /move auto one earlier/i })).toBeDisabled();
+    expect(within(autos[0]).getByRole('button', { name: /move auto one later/i })).toBeEnabled();
+  });
+
+  test('without a handler, auto rows draw no controls at all', () => {
+    // rejects: buttons that cannot work — a caller with no way to materialise
+    // must not offer the gesture.
+    renderQueue({
+      upNext: [{ questionId: 'QUESTION#c009#001', source: 'auto', title: 'Auto One', round: 4 }],
+    });
+    const autos = screen.getAllByTestId('queue-auto-row');
+    expect(within(autos[0]).queryAllByRole('button')).toHaveLength(0);
+  });
+
+  test('a parked row keeps its controls — the way out is remove or re-enable, not a dead row', () => {
+    renderQueue({ blocked: [{ key: 'c001#002', reason: 'category-off' }] });
+    const rows = screen.getAllByTestId('queue-row');
+    expect(within(rows[0]).getByRole('button', { name: /remove .* from the queue/i })).toBeEnabled();
+  });
+
   test('the head cannot move earlier and the tail cannot move later', () => {
     // rejects: an unclamped move. `queueMove` refuses both, and a button that
     // is live while the server refuses is a button that does nothing.
