@@ -169,6 +169,13 @@ export default function SessionSetupPanel({
   onAnonymousUntilRevealChange = () => {},
   nameWaitingWhenAnonymous = true,
   onNameWaitingChange = () => {},
+  /* AUTO-MODE — the session advances itself when everyone has responded,
+     paging through responses and Workie prose at reading pace first. The
+     decisions live in config/autoMode.js and the timer in GameHostPage; this
+     panel only renders the switch, presentational by the same rule as
+     everything else here. */
+  autoMode = false,
+  onAutoModeChange = () => {},
   // The round's response count and reveal state — the caution's quantity, never
   // a threshold that decides anything. See config/anonymity.js's
   // MIN_ANONYMOUS_ANSWERS for what this used to gate.
@@ -942,6 +949,27 @@ export default function SessionSetupPanel({
                   )}
                 </>
               )}
+
+              {/* PACE, between Names and Display: it changes what the room
+                  experiences, not what a colleague can be identified by, so it
+                  ranks below Names — but it is not plumbing either. */}
+              <h3 className="setup-h">Pace</h3>
+              <label className="setup-toggle">
+                <input
+                  type="checkbox"
+                  data-testid="auto-mode"
+                  checked={autoMode === true}
+                  onChange={(e) => onAutoModeChange(e.target.checked)}
+                />
+                <span>Auto-advance when everyone has responded</span>
+              </label>
+              <p className="setup-note">
+                Once every player has answered — and voted, on formats that vote — the
+                session moves forward on its own after a short beat. Responses and the
+                AI summary page through at reading pace before the next round starts.
+                Opening anything (a response, the QR, a dialog) pauses it, and your own
+                controls always work.
+              </p>
 
               <h3 className="setup-h">Display</h3>
               <label className="setup-field">

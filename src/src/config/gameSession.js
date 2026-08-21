@@ -117,6 +117,14 @@ export function initialGameSession() {
     // sensitivity, and carrying it into the next session's first round would be
     // the same "one stale panel" failure this module exists to stop.
     nameWaitingWhenAnonymous: true,
+    // AUTO-MODE — the session advances itself when everyone has responded,
+    // paging through responses and Workie's summary at reading pace first
+    // (config/autoMode.js holds the arithmetic; the host page holds the one
+    // timer). Default OFF and per-game by the same logic as
+    // `nameWaitingWhenAnonymous`: it is a judgement about THIS room's pace, and
+    // a session that starts advancing itself because the LAST room wanted that
+    // is exactly the "one stale panel" failure this module exists to stop.
+    autoMode: false,
 
     // --- the room ------------------------------------------------------
     players: [],

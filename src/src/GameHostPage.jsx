@@ -30,6 +30,7 @@ import SessionSetupPanel from './components/stage/SessionSetupPanel';
 import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfile';
 import { pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor } from './config/stagePaging';
 import { assignPlacements, placeLabel } from './config/podium';
+import { autoDecision } from './config/autoMode';
 import AnswerSpotlight from './components/AnswerSpotlight';
 import { pageOf } from './utils/answerSpotlight';
 import PastRound from './components/PastRound';
@@ -401,6 +402,18 @@ function GameHostPage() {
   // below five responses with no override — dead for a whole session in a room
   // of four, which is the room the owner runs.
   const [nameWaitingWhenAnonymous, setNameWaitingWhenAnonymous] = useState(true);
+
+  // AUTO-MODE — the session advances itself when everyone has responded,
+  // dwelling on each page of responses and Workie prose first. The decisions
+  // are config/autoMode.js's; the one timer that acts on them lives in the
+  // effect just above the early returns, and it presses the SAME primary the
+  // SPACE key does, so auto-mode cannot reach a state the host could not.
+  const [autoMode, setAutoMode] = useState(false);
+  // What the timer needs from the bottom of the render — hostControls' primary,
+  // runHostAction, the stage pager — captured by plain assignment down where
+  // they exist. A ref rather than deps because those are derived per render,
+  // hundreds of lines below the first early return, where no hook may live.
+  const autoActRef = useRef(null);
 
   // Custom instruction state for question set instructions
   const [customInstruction, setCustomInstruction] = useState(null);
@@ -834,6 +847,7 @@ function GameHostPage() {
     lessonNumber: setLessonNumber,
     authorsRevealed: setAuthorsRevealed,
     nameWaitingWhenAnonymous: setNameWaitingWhenAnonymous,
+    autoMode: setAutoMode,
     players: setPlayers,
     removedPlayers: setRemovedPlayers,
     answers: setAnswers,
@@ -4408,6 +4422,100 @@ Focus on actionable business strategy insights.`;
     }
   };
 
+  /**
+   * AUTO-MODE'S ONE TIMER.
+   *
+   * config/autoMode.js decides WHAT a patient host would do next and after how
+   * long; this effect is the only thing that DOES it. One decision, one
+   * setTimeout, cleared whenever any input changes — so a late answer, a page
+   * turn, or the host acting first simply restarts the clock rather than
+   * racing it.
+   *
+   * IT LIVES ABOVE THE EARLY RETURNS AND MUST STAY THERE (hookDepOrder.test.js
+   * fails the build otherwise), which is why it recomputes the phase and the
+   * page arithmetic from raw state instead of reading `hostPhase` /
+   * `stagePageIndex` — those are derived below the returns. The ACTIONS are
+   * also derived down there, so they arrive through `autoActRef`, assigned by
+   * the same render that draws the stage: whatever the timer fires against is
+   * exactly what the host is looking at.
+   *
+   * Two layers of "the host has implicitly pressed pause":
+   *   - the full-screen surfaces that replace the stage entirely (welcome,
+   *     quickstart, dialogs, the report) — while one is up, the ref is stale
+   *     and the room cannot see the stage, so nothing may move it;
+   *   - `shortcutsSuppressed`, the same gate the SPACE key obeys, so a pinned
+   *     QR or an open spotlight holds auto-mode exactly as it holds the
+   *     keyboard.
+   */
+  useEffect(() => {
+    if (!autoMode) return undefined;
+    if (showQuickstartMenu || showWelcomeScreen || showNewGameDialog
+        || showReport || showReportsModal || editTarget) return undefined;
+    if (shortcutsSuppressed({
+      showConfirmModal, showExpandedQR, showReportsModal,
+      lessonExpanded, isLoadingData, qrMode,
+      spotlightOpen: spotlightIndex !== null,
+      pastRoundOpen: pastRoundIndex !== null,
+    })) return undefined;
+
+    const roundPhase = phaseOfGameState(gameState);
+    const phase = gameState === 'ENDED'
+      ? 'ENDED'
+      : (roundPhase === 'RESULTS' && resultsBeat === 'field-notes' ? 'FIELD_NOTES' : roundPhase);
+
+    // The stage's own page arithmetic, re-derived the way the render derives
+    // it: the shared index keyed by phase#round, cut by the same slicers.
+    const pageKey = `${phase}#${lessonNumber}`;
+    const rawIndex = stagePage && stagePage.key === pageKey ? stagePage.index : 0;
+    let page = 0;
+    let pages = 1;
+    let pageText = '';
+    let notesReady = false;
+    if (phase === 'RESULTS') {
+      const slice = pageSlice(answers, rawIndex, pageSizeFor(profile));
+      page = slice.page;
+      pages = slice.pages;
+    } else if (phase === 'FIELD_NOTES') {
+      const md = currentAIInsights && currentAIInsights.markdownResponse;
+      notesReady = Boolean(md) && !loadingAIInsights;
+      if (notesReady) {
+        const slice = prosePageSlice(md, rawIndex, proseBudgetFor(profile));
+        page = slice.page;
+        pages = slice.pages;
+        pageText = slice.content;
+      }
+    }
+
+    const decision = autoDecision({
+      enabled: true,
+      phase,
+      playerCount: players.length,
+      answeredCount,
+      votedCount: playersWhoVoted.length,
+      page, pages, pageText, notesReady,
+    });
+    if (!decision) return undefined;
+
+    const timer = setTimeout(() => {
+      const hands = autoActRef.current;
+      if (!hands) return;
+      if (decision.kind === 'page') {
+        hands.turnTo(page + 1);
+        return;
+      }
+      // The dock's own primary, through the dock's own runner — disabled means
+      // disabled for auto-mode too (e.g. RESULTS with zero answers).
+      if (!hands.primary || hands.primary.disabled) return;
+      hands.run(hands.primary);
+    }, decision.delayMs);
+    return () => clearTimeout(timer);
+  }, [autoMode, gameState, resultsBeat, lessonNumber, stagePage, answers,
+    currentAIInsights, loadingAIInsights, profile, players.length, answeredCount,
+    playersWhoVoted.length, showQuickstartMenu, showWelcomeScreen,
+    showNewGameDialog, showReport, showReportsModal, editTarget,
+    showConfirmModal, showExpandedQR, lessonExpanded, isLoadingData, qrMode,
+    spotlightIndex, pastRoundIndex]);
+
   // Render the quickstart menu if it's being shown
   if (showQuickstartMenu) {
     return (
@@ -4907,6 +5015,16 @@ Focus on actionable business strategy insights.`;
   const stagePageIndex = stagePage && stagePage.key === pageKey ? stagePage.index : 0;
   const setStagePageIndex = (index) => setStagePage({ key: pageKey, index });
   const answerPage = pageSlice(answers, stagePageIndex, stagePageSize);
+
+  // AUTO-MODE'S HANDS — see the effect above the early returns. Assigned by
+  // the same render that draws the stage, so when the timer fires it presses
+  // exactly the primary the dock is showing, through the same runner, and
+  // turns the same shared page index the arrow keys turn.
+  autoActRef.current = {
+    primary: hostControls.primary,
+    run: runHostAction,
+    turnTo: setStagePageIndex,
+  };
 
   /*
     Closing returns the grid to the page holding whatever was reached, so a host
@@ -5885,6 +6003,8 @@ Focus on actionable business strategy insights.`;
           onAnonymousUntilRevealChange={setAnonymousUntilReveal}
           nameWaitingWhenAnonymous={nameWaitingWhenAnonymous}
           onNameWaitingChange={setNameWaitingWhenAnonymous}
+          autoMode={autoMode}
+          onAutoModeChange={setAutoMode}
           answerCount={answers.length}
           authorsRevealed={authorsRevealed}
           onViewReports={handleViewReports}
