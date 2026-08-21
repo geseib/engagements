@@ -87,6 +87,41 @@ export const calculatePlayerRankings = (players) => {
 };
 
 /**
+ * A place, said as a place: 1 → "1st", 2 → "2nd", 3 → "3rd", 11 → "11th".
+ * 0/undefined — "no place", an unvoted answer — stays the quiet dot the card
+ * has always drawn.
+ */
+export const placeLabel = (n) => {
+  const place = Number(n) || 0;
+  if (place <= 0) return '·';
+  const tail = place % 100;
+  const suffix = (tail >= 11 && tail <= 13) ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[place % 10] || 'th');
+  return `${place}${suffix}`;
+};
+
+/**
+ * An answer's PLACE in the round's standings, by total points, ties shared.
+ *
+ * The owner, watching three cards all badged "1": that badge was
+ * `firstPlace > 0 ? 1 : …` — "the best rank any single voter gave it" — so any
+ * answer with one first-choice vote wore a 1 regardless of where it actually
+ * finished. It only ever looked right when totals happened to agree with it.
+ * This is the same shared-tie arithmetic as calculatePlayerRankings, applied
+ * to answers: equal points share a place, and a genuine three-way tie is
+ * three 1sts — the display refusing to invent a winner the vote did not pick.
+ */
+export const assignPlacements = (answers) => {
+  const order = [...answers].sort((a, b) => (b.points || 0) - (a.points || 0));
+  const placeOf = new Map();
+  let currentRank = 1;
+  order.forEach((row, i) => {
+    if (i > 0 && (row.points || 0) !== (order[i - 1].points || 0)) currentRank = i + 1;
+    placeOf.set(row, currentRank);
+  });
+  return answers.map((row) => ({ ...row, placement: (row.points || 0) > 0 ? placeOf.get(row) : 0 }));
+};
+
+/**
  * What to call the top card.
  *
  * NAMED BY WHAT THE NUMBER IS. On a voted format the points are votes other

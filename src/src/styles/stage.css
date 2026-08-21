@@ -603,8 +603,10 @@ body{
   text-transform:uppercase;font-family:var(--font-ui);font-weight:700}
 .card.lead{border-color:var(--primary);border-width:2px}
 .card.lead .fill{background:rgba(246,169,76,.16)}
+/* 2.3em, not 1.4em: the badge says "1st" now (the owner's word for it), and
+   three glyphs in a 1.4em box shear into the quote beside them. */
 .card .rank{flex:none;font-family:var(--font-display);font-weight:800;
-  font-size:max(var(--floor),calc(var(--t-secondary)*.78));color:var(--muted);width:1.4em;text-align:center}
+  font-size:max(var(--floor),calc(var(--t-secondary)*.78));color:var(--muted);width:2.3em;text-align:center}
 .card.lead .rank{color:var(--primary)}
 
 /* ------------------------------------------------------------------- PAGER

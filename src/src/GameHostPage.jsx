@@ -29,6 +29,7 @@ import Pager from './components/stage/Pager';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
 import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfile';
 import { pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor } from './config/stagePaging';
+import { assignPlacements, placeLabel } from './config/podium';
 import AnswerSpotlight from './components/AnswerSpotlight';
 import { pageOf } from './utils/answerSpotlight';
 import PastRound from './components/PastRound';
@@ -2162,18 +2163,21 @@ Focus on actionable business strategy insights.`;
                 } else {
                   // Call-and-answer results format: { voteTallies: {...} }
                   console.log(`📊 HOST STATE RESTORE: Processing call-and-answer results with voteTallies`);
+                  // `placement` comes from assignPlacements — the answer's
+                  // PLACE in the round by total points, ties shared. The old
+                  // inline derivation was "best rank any voter gave it", which
+                  // badged every answer with one first-choice vote as 1.
                   formattedAnswers = resultsData.voteTallies && Object.keys(resultsData.voteTallies).length > 0
-                    ? Object.values(resultsData.voteTallies).map((tally, index) => {
+                    ? assignPlacements(Object.values(resultsData.voteTallies).map((tally, index) => {
                         console.log(`📊 HOST: Formatting tally ${index}:`, tally);
                         return {
                           player: tally.playerName,
                           playerName: tally.playerName, // for displayLabelFor
                           answer: tally.answerText,
                           points: tally.totalScore,
-                          placement: tally.firstPlace > 0 ? 1 : tally.secondPlace > 0 ? 2 : tally.thirdPlace > 0 ? 3 : 0,
                           votes: tally.firstPlace + tally.secondPlace + tally.thirdPlace
                         };
-                      })
+                      }))
                     : [];
                 }
                 
@@ -3605,15 +3609,17 @@ Focus on actionable business strategy insights.`;
         // Call-and-answer results format: { voteTallies: {...} }
         console.log(`💬 HOST: Processing call-and-answer results with voteTallies`);
         
+        // Same placement rule as the restore path above — one definition, in
+        // config/podium.js, so the two sites cannot disagree about what a
+        // place is.
         formattedAnswers = resultsData.voteTallies && Object.keys(resultsData.voteTallies).length > 0
-          ? Object.values(resultsData.voteTallies).map(tally => ({
+          ? assignPlacements(Object.values(resultsData.voteTallies).map(tally => ({
               player: tally.playerName,
               playerName: tally.playerName, // for displayLabelFor
               answer: tally.answerText,
               points: tally.totalScore,
-              placement: tally.firstPlace > 0 ? 1 : tally.secondPlace > 0 ? 2 : tally.thirdPlace > 0 ? 3 : 0,
               votes: tally.firstPlace + tally.secondPlace + tally.thirdPlace
-            }))
+            })))
           : []; // Empty array if no votes
       }
       
@@ -5532,7 +5538,8 @@ Focus on actionable business strategy insights.`;
                             }
                           }}
                         >
-                          <span className="rank">{answer.placement || '·'}</span>
+                          {/* "1st", not "1" — the owner's word for it. */}
+                          <span className="rank">{placeLabel(answer.placement)}</span>
                           <div className="body">
                             <div className="ans">{`“${answer.answer}”`}</div>
                             <span className="who revealed">{displayName}</span>
