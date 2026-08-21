@@ -368,8 +368,9 @@ export function proseBlocks(markdown) {
 
     // A rule is tested before a table row so a `| --- |` separator is never
     // eaten as one — the same ordering MarkdownRenderer uses, for the same
-    // reason.
-    if (RULE_RE.test(trimmed)) { flush(); blocks.push({ text: trimmed, lines: 1, heading: false, level: 0 }); continue; }
+    // reason. `rule: true` marks it for prosePages, which must never let a
+    // rule OPEN a page — see the blank-page note there.
+    if (RULE_RE.test(trimmed)) { flush(); blocks.push({ text: trimmed, lines: 1, heading: false, level: 0, rule: true }); continue; }
 
     if (ROW_RE.test(trimmed) && trimmed.length > 2) {
       if (!run || run.kind !== 'table') { flush(); run = { kind: 'table', lines: [] }; }
@@ -462,10 +463,22 @@ export function prosePages(markdown, budget) {
   let used = 0;
   const close = () => { if (current.length) groups.push(current); current = []; used = 0; };
 
-  /** Is there anything on this page yet that is not a title? */
-  const hasBody = () => current.some((b) => !b.heading);
+  /** Is there anything on this page yet that is not a title or a rule? */
+  const hasBody = () => current.some((b) => !b.heading && !b.rule);
 
   blocks.forEach((block) => {
+    /*
+      A RULE NEVER OPENS A PAGE. `---` between sections is decoration, and the
+      overflow path handed it a page of its own: a section body that filled its
+      page pushed the trailing rule over the budget, the rule became the whole
+      of the next page, and the heading behind it opened the page after that —
+      so the room turned to a page containing one thin line. Reported as
+      "sometimes there is a blank page between sections of the workie
+      response". A rule that would start a page is dropped instead: the next
+      section starts its own page anyway, so nothing the rule was separating
+      is lost. Rules that land mid-page still render exactly as before.
+    */
+    if (block.rule && !current.length) return;
     if (block.heading && block.level <= 2) {
       // Break only when there is a body to break AFTER. Two headings in a row —
       // `## Next Steps` immediately followed by `### This week`, which is a

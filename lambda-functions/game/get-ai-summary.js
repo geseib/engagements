@@ -6,7 +6,7 @@ const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const {
   resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutputShape,
-  buildContextBlock, buildHostDirective, resolveOutputSections,
+  buildContextBlock, buildHostDirective, resolveOutputSections, pickOpeningMove,
 } = require('./personas');
 const { normalizeGameType } = require('./game-types');
 const { isUsableSummaryPrompt, summaryPromptDefect } = require('./prompt-shape');
@@ -2291,7 +2291,18 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, eventDet
   });
   const hostLayer = hostDirective ? `\n\n${hostDirective}` : '';
 
-  let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}\n\n${buildOutputContract(promptData)}${hostLayer}`;
+  /*
+    ONE OPENING MOVE PER ROUND — the anti-template device (personas.js:
+    OPENING_MOVES carries the argument). Drawn here, at generation time, so
+    every round gets a different way into its first section and a Redo gets a
+    fresh one; without it the model settles into a single compliant opener
+    ("We asked one question...") and repeats it every round, which reads as
+    machinery.
+  */
+  const openingMove = pickOpeningMove();
+  console.log(`🎬 OPENING MOVE: ${openingMove}`);
+
+  let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}\n\n${buildOutputContract(promptData, { openingMove })}${hostLayer}`;
 
   // Debug: Log key trivia variables
   if (gameType === 'trivia') {

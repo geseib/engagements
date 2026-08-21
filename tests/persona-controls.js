@@ -612,8 +612,8 @@ const metadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
     // supersede.
     assert(/hostInstructions: gameAiContext/.test(summarySrc));
     assert(/eventDetails,/.test(summarySrc));
-    assert(/\$\{contextLayer\}\$\{templateBody\}\\n\\n\$\{buildOutputContract\(promptData\)\}\$\{hostLayer\}/.test(summarySrc),
-      'the assembled prompt must read template → contract → host additions');
+    assert(/\$\{contextLayer\}\$\{templateBody\}\\n\\n\$\{buildOutputContract\(promptData, \{ openingMove \}\)\}\$\{hostLayer\}/.test(summarySrc),
+      'the assembled prompt must read template → contract (with the round\'s opening move) → host additions');
   });
 
   console.log('\nthe reply is prefilled with its own first heading\n');
@@ -636,6 +636,53 @@ const metadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
   await acheck('temperature is 0.7 — variety, fenced by material-only rules', async () => {
     assert(/temperature: 0\.7/.test(summarySrc));
     assert(!/temperature: 0\.5/.test(summarySrc), 'the flattening 0.5 is back');
+  });
+
+  console.log('\nthe opening moves — every round gets a different way in\n');
+
+  const personas = require(path.join(REPO, 'lambda-functions', 'game', 'personas.js'));
+  const { OPENING_MOVES, pickOpeningMove } = personas;
+
+  await acheck('the deck is real: enough distinct moves that rounds do not echo', async () => {
+    // rejects: a two-entry list, which alternates and reads as its own
+    // template within three rounds. The owner's report was exactly a repeated
+    // opener ("it always start 'We asked one question...' ... over and over").
+    assert(Array.isArray(OPENING_MOVES) && OPENING_MOVES.length >= 8,
+      `need at least 8 moves, found ${OPENING_MOVES && OPENING_MOVES.length}`);
+    assert.strictEqual(new Set(OPENING_MOVES).size, OPENING_MOVES.length, 'duplicate moves');
+    for (const move of OPENING_MOVES) {
+      assert(/^Open/.test(move), `a move must be an instruction to open: ${move}`);
+    }
+  });
+
+  await acheck('pickOpeningMove draws from the deck, and does not always draw the same card', async () => {
+    const seen = new Set();
+    for (let i = 0; i < 200; i += 1) {
+      const move = pickOpeningMove();
+      assert(OPENING_MOVES.includes(move));
+      seen.add(move);
+    }
+    // 200 draws from 10 cards missing 9 of them is a broken picker, not luck.
+    assert(seen.size > 1, 'every draw returned the same move');
+  });
+
+  await acheck('a supplied move rides inside the contract, with the recap ban beside it', async () => {
+    const withMove = personas.buildOutputContract({}, { openingMove: OPENING_MOVES[0] });
+    assert(withMove.includes('THE OPENING, for this round only:'));
+    assert(withMove.includes(OPENING_MOVES[0]));
+    assert(withMove.includes('no "We asked"'), 'the recap ban must travel with the move');
+    // Register instruction, not structure: the heading mandate still comes
+    // AFTER it, so the parser's contract stays last-stated and loudest.
+    assert(withMove.indexOf('THE OPENING') < withMove.indexOf('Reply using exactly these'));
+  });
+
+  await acheck('no move supplied, no opening block — existing contract text is byte-stable', async () => {
+    const bare = personas.buildOutputContract({});
+    assert(!bare.includes('THE OPENING'), 'an opener leaked into the bare contract');
+  });
+
+  await acheck('the worker draws one move per generation', async () => {
+    assert(/const openingMove = pickOpeningMove\(\)/.test(summarySrc));
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

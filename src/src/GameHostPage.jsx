@@ -28,7 +28,9 @@ import Dock from './components/stage/Dock';
 import Pager from './components/stage/Pager';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
 import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfile';
-import { pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor } from './config/stagePaging';
+import {
+  pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
+} from './config/stagePaging';
 import { assignPlacements, placeLabel } from './config/podium';
 import { autoDecision } from './config/autoMode';
 import AnswerSpotlight from './components/AnswerSpotlight';
@@ -4741,6 +4743,28 @@ Focus on actionable business strategy insights.`;
     ? 'ENDED'
     : (roundPhase === 'RESULTS' && resultsBeat === 'field-notes' ? 'FIELD_NOTES' : roundPhase);
 
+  /*
+    WHERE THE READ-BACK IS, for the dock. On FIELD_NOTES the primary is a page
+    turn until the last page is up (config/hostControls.js carries the
+    argument), so the dock needs the same page arithmetic the stage itself
+    uses — the shared beat-keyed index, cut by the same slicers, covering both
+    of Workie's shapes. One page (or nothing yet) leaves the classic Next
+    Round primary untouched.
+  */
+  const notesIndexRaw = stagePage && stagePage.key === `FIELD_NOTES#${lessonNumber}`
+    ? stagePage.index : 0;
+  let notesPages = 1;
+  if (currentAIInsights && currentAIInsights.markdownResponse) {
+    notesPages = prosePageSlice(
+      currentAIInsights.markdownResponse, notesIndexRaw, proseBudgetFor(profile),
+    ).pages;
+  } else if (currentAIInsights) {
+    const notePoints = (currentAIInsights.discussionTopics || []).length
+      + (currentAIInsights.nextSteps || []).length;
+    notesPages = pageCount(notePoints, pageSizeFor(profile));
+  }
+  const notesPage = clampPage(notesIndexRaw, notesPages);
+
   const hostControls = hostControlsFor({
     gameType: currentGameType,
     phase: hostPhase,
@@ -4750,6 +4774,8 @@ Focus on actionable business strategy insights.`;
     votedCount: playersWhoVoted.length,
     answerCount: answers.length,
     hasQuestionSet: Boolean(selectedSetId),
+    notesPage,
+    notesPages,
   });
 
   // A keyboard shortcut must never fire underneath something the host is
@@ -4786,12 +4812,21 @@ Focus on actionable business strategy insights.`;
 
   const runHostAction = (action) => {
     if (!action) return;
-    // Advancing clears the room-facing chrome: the Game Info / How to Play
-    // rails are inspection surfaces, not part of the round.
-    closeAllSidePanels();
-    // A pinned QR is chrome too -- advancing the round clears it the same way.
-    setQrMode(null);
+    // A page turn is a content move, not a round advance — it must not close
+    // the panel the host is reading beside, nor unpin anything.
+    if (action.intent !== HOST_INTENTS.PAGE) {
+      // Advancing clears the room-facing chrome: the Game Info / How to Play
+      // rails are inspection surfaces, not part of the round.
+      closeAllSidePanels();
+      // A pinned QR is chrome too -- advancing the round clears it the same way.
+      setQrMode(null);
+    }
     switch (action.intent) {
+      case HOST_INTENTS.PAGE:
+        // The dock's Next Page — the same shared beat-keyed index the ↑↓ keys
+        // and the pips move, so the three routes cannot disagree.
+        setStagePageIndex(stagePageIndex + 1);
+        break;
       case HOST_INTENTS.START:
       case HOST_INTENTS.NEXT:
         handleNextQuestion(false);
