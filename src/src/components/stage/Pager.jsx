@@ -36,9 +36,20 @@ import {
  * because RESUME.md records that deleting an argument at a call site
  * reinstates a defect with the whole suite green.
  *
- * NOTHING RENDERS WHEN NOTHING IS HIDDEN. One page is not a page; a room with
- * three responses sees the list it always saw, with no pips and no instruction
- * about a control that would do nothing.
+ * NOTHING RENDERS WHEN NOTHING IS HIDDEN — for LISTS. One page is not a page;
+ * a room with three responses sees the list it always saw, with no pips and no
+ * instruction about a control that would do nothing.
+ *
+ * `showWhenSingle` IS THE PROSE EXCEPTION, and it exists because the silence
+ * was reported as a broken keyboard — twice. On Field Notes the host cannot
+ * see whether Workie's document has more pages: a short summary renders, the
+ * arrows correctly do nothing, and "nothing to page" is indistinguishable
+ * from "the keys are dead" (the round before or after, with a longer summary,
+ * pages fine — which reads as intermittent breakage). A caller that pages
+ * PROSE passes this flag and a single page renders the row with its one pip
+ * and "all on one page" — no key hint, because there is nothing the keys
+ * would do. The state becomes legible instead of silent. List callers keep
+ * the silence: their content is visibly complete on its own.
  *
  * `caption` IS FOR THE CONTENT THAT CANNOT BE COUNTED. Field Notes pages PROSE,
  * not items, and "lines 18–34 of 61" tells a room nothing it can use. Passing a
@@ -62,6 +73,7 @@ import {
  */
 export default function Pager({
   total, page = 0, pageSize, noun = 'Responses', caption = '', onPage, enabled = true,
+  showWhenSingle = false,
 }) {
   // Normalised ONCE, and never re-derived from `total / pages`. `Math.ceil(4/2)`
   // is 2, not the 3 the slice actually took, so a re-derived size prints
@@ -100,7 +112,15 @@ export default function Pager({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [enabled, movable, current, pages, onPage]);
 
-  if (pages <= 1) return null;
+  if (pages <= 1) {
+    if (!showWhenSingle) return null;
+    return (
+      <div className="pager" data-pager="" data-pages={1} data-page={0}>
+        <span className="pip on" aria-hidden="true" />
+        <span className="pgr-label">{`${caption || noun} · all on one page`}</span>
+      </div>
+    );
+  }
 
   const from = current * per + 1;
   const to = Math.min(total, from + per - 1);

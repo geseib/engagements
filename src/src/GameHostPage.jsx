@@ -32,6 +32,7 @@ import { pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor } from './config
 import { assignPlacements, placeLabel } from './config/podium';
 import { autoDecision } from './config/autoMode';
 import AnswerSpotlight from './components/AnswerSpotlight';
+import ConfirmDialog from './components/ConfirmDialog';
 import { pageOf } from './utils/answerSpotlight';
 import PastRound from './components/PastRound';
 import { roundsFrom } from './config/sessionHistory';
@@ -6167,32 +6168,18 @@ Focus on actionable business strategy insights.`;
         </div>
       )}
       
-      {/* Custom Confirmation Modal */}
+      {/* The are-you-sure dialog, now components/ConfirmDialog.jsx: ← cancels,
+          → carries the advance through, and the buttons wear their keys — the
+          owner's own gesture, since the hand that triggered this was already
+          on the arrows. */}
       {showConfirmModal && (
-        <div className="expanded-qr-overlay" onClick={confirmModalProps.onCancel}>
-          <div className="expanded-qr-content confirmation-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="confirmation-header">
-              <h2>{confirmModalProps.title}</h2>
-            </div>
-            <div className="confirmation-message">
-              {confirmModalProps.message}
-            </div>
-            <div className="dialog-actions">
-              <button 
-                className="btn-secondary" 
-                onClick={confirmModalProps.onCancel}
-              >
-                Cancel
-              </button>
-              <button 
-                className="btn-primary" 
-                onClick={confirmModalProps.onConfirm}
-              >
-                {confirmModalProps.confirmText}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title={confirmModalProps.title}
+          message={confirmModalProps.message}
+          confirmText={confirmModalProps.confirmText}
+          onConfirm={confirmModalProps.onConfirm}
+          onCancel={confirmModalProps.onCancel}
+        />
       )}
 
       {/* GOING BACK THROUGH A ROUND THAT ALREADY HAPPENED.

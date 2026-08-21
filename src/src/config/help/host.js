@@ -111,9 +111,15 @@ const quickStart = {
           items: [
             { keys: 'Space  →', text: 'Advance to the next beat.' },
             { keys: '←', text: 'Step back a beat.' },
+            { keys: '↑ ↓', text: 'Page through responses and the AI read-back when there is more than one page.' },
+            { keys: 'U', text: 'Show or hide the names on the room meter, top right.' },
             { keys: '\\', text: 'Open and close the session panel.' },
             { keys: 'Esc', text: 'Close whatever is open.' },
           ],
+        },
+        {
+          t: 'p',
+          text: 'If you advance early, a dialog checks first — ← keeps the round where it is, → goes ahead anyway. The keys are printed on its buttons.',
         },
         {
           t: 'note',

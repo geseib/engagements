@@ -60,6 +60,43 @@ describe('the pager renders a position, or nothing at all', () => {
     expect(onPage).toHaveBeenCalledWith(4);
   });
 
+  test('a prose caller can ask the single page to say so', () => {
+    // rejects: silence on a one-page Field Notes summary — reported TWICE as
+    // broken arrow keys, because a short summary pages nowhere while the next
+    // round's longer one pages fine, and nothing on screen distinguishes
+    // "nothing to page" from "the keys are dead".
+    const { container } = render(
+      <Pager total={1} page={0} pageSize={1} caption="What we heard" onPage={() => {}} showWhenSingle />
+    );
+    expect(container.querySelector('[data-pager]')).not.toBeNull();
+    expect(container.querySelector('.pgr-label').textContent).toBe('What we heard · all on one page');
+    // No key hint: there is nothing the keys would do, and advertising one is
+    // the exact lie the list-callers' silence avoids.
+    expect(container.querySelector('.pgr-label').textContent).not.toContain('↑');
+    // The pip is a marker, not a control — no button on a page you are on.
+    expect(container.querySelectorAll('button.pip')).toHaveLength(0);
+    expect(container.querySelectorAll('.pip.on')).toHaveLength(1);
+  });
+
+  test('showWhenSingle changes nothing once there are real pages', () => {
+    // rejects: the single-page state leaking into the multi-page render.
+    const { container } = render(
+      <Pager total={3} page={0} pageSize={1} caption="Summary" onPage={() => {}} showWhenSingle />
+    );
+    expect(container.querySelectorAll('button.pip')).toHaveLength(3);
+    expect(container.querySelector('.pgr-label').textContent).toContain('↑ ↓ to page');
+  });
+
+  test('list callers keep the silence — the flag is opt-in', () => {
+    // rejects: flipping the default. A room with three responses sees a
+    // visibly complete list; "all on one page" over it is a line of stage
+    // spent on nothing.
+    const { container } = render(
+      <Pager total={3} page={0} pageSize={3} onPage={() => {}} />
+    );
+    expect(container.querySelector('[data-pager]')).toBeNull();
+  });
+
   test('it is not in the fitter\'s sacrifice list', () => {
     // rejects: copying 05-vote.html's data-drop="1" across. The mockup's pager
     // annotates a cut the FITTER made; this one announces a cut the PAGER made,

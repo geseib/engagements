@@ -654,6 +654,9 @@ body{
    the margin for error. */
 .pager .pip::after{content:"";position:absolute;inset:-8px -14px}
 .pager .pip.on{background:var(--primary)}
+/* The single-page pip (Pager's showWhenSingle state) is a <span>, not a
+   button — it marks "all on one page" and presses nowhere, so no pointer. */
+.pager span.pip{cursor:default}
 .pgr-label{min-width:0}
 
 /* join block — exactly one QR exists in the product and it lives here */
