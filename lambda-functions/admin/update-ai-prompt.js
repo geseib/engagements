@@ -71,7 +71,7 @@ exports.handler = async (event) => {
       description,
       category,
       scenario,
-      template,
+      template: rawTemplate,
       instructions,
       outputFormat,
       // Declared output shape. Omit to leave whatever the prompt already has;
@@ -83,6 +83,22 @@ exports.handler = async (event) => {
       tags,
       createNewVersion = false
     } = updateData;
+
+    /*
+      A LEGACY `template` OUTRANKS BOTH HALVES — get-ai-summary.js takes
+      `promptData.template` outright and never reads instructions or
+      outputFormat when it is set. So an update that rewrites both halves but
+      not the template has not changed what runs: the dev repair of the Art &
+      Creative Titles prompt passed every guard and would still have served
+      the old bracketed layout, because the old text survived in `template`.
+      When a caller supplies BOTH halves they are plainly authoring the
+      two-field shape, so the stale single-field one is cleared for them —
+      exactly as if they had sent template: ''. A caller that supplies
+      `template` explicitly still wins unchanged.
+    */
+    const template = (rawTemplate === undefined
+      && instructions !== undefined && outputFormat !== undefined)
+      ? '' : rawTemplate;
 
     console.log(`✏️ Updating AI prompt: ${promptId}, createNewVersion: ${createNewVersion}`);
 

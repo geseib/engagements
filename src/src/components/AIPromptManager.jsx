@@ -1325,7 +1325,19 @@ function AIPromptManager() {
     setIsLoading(true);
     setNotice('');
     try {
-      const response = await authFetch(`${API_BASE}admin/ai-prompts?includeContent=true`);
+      /*
+        promptType=analysis, because THIS IS THE SUMMARY LIBRARY. Without the
+        filter every question-GENERATION preset (the scenario builder's topic
+        menu — 22 rows on dev) landed in this list too, each wearing the
+        "Not a summary prompt" badge and a Retire button. The badge was true
+        of all of them, which made it a watermark, and Retire was a trap: the
+        owner saw "a ton marked 'not a summary prompt'" and nearly retired
+        the builder's whole topic menu. Generation prompts have their own
+        screen (AIGenerationPromptEditor); the backend filter is
+        inferPromptType-aware, so analysis rows mislabeled 'generation' by
+        the old default are still listed here.
+      */
+      const response = await authFetch(`${API_BASE}admin/ai-prompts?includeContent=true&promptType=analysis`);
       if (!response.ok) {
         throw new Error('Failed to fetch prompts');
       }

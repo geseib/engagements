@@ -110,6 +110,15 @@ check('update-ai-prompt gates stored-analysis prompts, and only on content edits
   assert(/template !== undefined \? template : \(base\.template \|\| ''\)/.test(updateSrc));
 });
 
+check('supplying both halves clears a stale legacy template', () => {
+  // The near-miss that proved it: the dev repair of Art & Creative Titles
+  // rewrote instructions and outputFormat, passed every guard — and the old
+  // bracketed layout survived in `template`, which get-ai-summary takes
+  // OUTRIGHT and never reads past. An update that authors the two-field
+  // shape must retire the single-field one, exactly as if it sent ''.
+  assert(/const template = \(rawTemplate === undefined\s*&& instructions !== undefined && outputFormat !== undefined\)\s*\? '' : rawTemplate;/.test(updateSrc));
+});
+
 check('both guards run before anything is written', () => {
   for (const [name, src] of [['create', createSrc], ['update', updateSrc]]) {
     const guard = src.indexOf('assertNoBracketDirections(');
