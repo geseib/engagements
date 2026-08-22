@@ -331,3 +331,29 @@ describe('sample ideas follow the chosen direction', () => {
     expect(screen.getByText(/What type of trivia questions do you want to create/i)).toBeInTheDocument();
   });
 });
+
+describe('proceeding without selecting anything', () => {
+  test('the continue button lands on step 2 with a blank canvas', async () => {
+    // rejects: a step whose only exits are other people's framings — the
+    // owner: "they need to be able to proceed without selecting something
+    // else." Direction chosen, nothing else wanted, straight through.
+    await open();
+    fireEvent.click(screen.getByRole('radio', { name: /Apply/i }));
+    fireEvent.click(screen.getByTestId('scenario-continue-blank'));
+    expect(await screen.findByText(/Configure Your Scenarios/i)).toBeInTheDocument();
+  });
+
+  test('an incomplete custom direction still blocks it, like every card', async () => {
+    // rejects: the blank door skipping the kindGaps refusal — an empty custom
+    // brief is not recoverable from step 2, where the picker does not live.
+    await open();
+    fireEvent.click(screen.getByRole('radio', { name: /Something else/i }));
+    expect(screen.getByTestId('scenario-continue-blank')).toBeDisabled();
+  });
+
+  test('types without a direction picker get the door too', async () => {
+    await open({ engagementType: 'trivia' });
+    fireEvent.click(screen.getByTestId('scenario-continue-blank'));
+    expect(await screen.findByText(/Configure Your Trivia Questions/i)).toBeInTheDocument();
+  });
+});

@@ -1421,3 +1421,11 @@
   border: 2px solid #ffc107 !important;
   box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3);
 }
+/* The no-card door out of step 1 (AIScenarioBuilder) — "Or just continue".
+   Its own row under the template grid, right-aligned like a step control,
+   not styled as a card: it is the absence of a choice, not another one. */
+.scenario-continue-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}

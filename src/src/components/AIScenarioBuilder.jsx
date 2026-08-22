@@ -1081,6 +1081,36 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                   </div>
                 ))}
               </div>
+
+              {/*
+                THE DOOR THAT NEEDS NO CARD. The owner: "they need to be able
+                to proceed without selecting something else." Until now the
+                only way off this step was clicking a sample or a template —
+                an operator who had picked their direction and just wanted to
+                describe things themselves was forced through somebody else's
+                framing first. This continues with the bare custom canvas:
+                nothing prefilled, next step empty and theirs. Same kindGaps
+                refusal as every card — an incomplete custom direction is not
+                recoverable from step 2.
+              */}
+              {(() => {
+                const blank = scenarioTypes.find((t) => t.id === 'custom')
+                  || scenarioTypes.find((t) => /custom/.test(t.id));
+                if (!blank) return null;
+                return (
+                  <div className="scenario-continue-row">
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      data-testid="scenario-continue-blank"
+                      disabled={kindGaps.length > 0}
+                      onClick={() => handleTypeSelection(blank.id)}
+                    >
+                      {'Or just continue — describe it yourself on the next step →'}
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
