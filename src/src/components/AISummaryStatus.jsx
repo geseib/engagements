@@ -112,6 +112,11 @@ export default function AISummaryStatus({
             can use the name of the section it is looking at, which the
             summary's own heading supplies. The fallback names the state rather
             than leaving the line to open on a bare "· page 2 of 4". */}
+        {/* `showWhenSingle`: a one-page summary prints "all on one page"
+            instead of nothing. Twice reported as broken arrow keys — a short
+            summary pages nowhere, the next round's longer one pages fine, and
+            the difference is invisible without this line. Prose only; the
+            structured list below keeps the silence. */}
         {paged && (
           <Pager
             total={slice.pages}
@@ -120,6 +125,7 @@ export default function AISummaryStatus({
             caption={slice.section || 'What we heard'}
             onPage={onPage}
             enabled={enabled}
+            showWhenSingle
           />
         )}
       </>

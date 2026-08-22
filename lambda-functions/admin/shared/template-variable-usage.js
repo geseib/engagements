@@ -16,6 +16,8 @@ const {
   VARIABLE_CATEGORY_ORDER,
   variablesForGameType,
   unknownVariableTokens,
+  extractVariableTokens,
+  extractBracketDirections,
 } = require('./template-variables');
 
 /**
@@ -90,8 +92,99 @@ function assertTemplateVariablesExist(fields) {
   );
 }
 
+/*
+ * THE TWO GUARDS FROM THE LEADERSHIP PRINCIPLES FAILURE (game 4856). That
+ * prompt saved cleanly, attached cleanly, ran cleanly — and put "I don't see
+ * the actual response in your setup... the [Summary of the core idea/response
+ * being analyzed] placeholder is empty" on a projector. Two defects, neither
+ * of which anything refused:
+ *
+ *   1. Its outputFormat was written with [square-bracket placeholders], which
+ *      LOOK like variables and are prose — nothing substitutes them, so the
+ *      model receives a fill-in-the-blank form and answers it.
+ *   2. Nothing in it named a response-bearing variable, so the model was asked
+ *      to review answers it was never shown.
+ *
+ * An audit found 26 more stored prompts carrying the same defects across the
+ * three tiers, so this is a class, not an incident. These assertions are the
+ * wall; utils/promptPreflight.js is the same rules as advice in the editor.
+ */
+
+/**
+ * The variables that carry what the room actually said or did this round.
+ *
+ * COPIED FROM src/src/utils/promptPreflight.js's ANSWER_TOKENS, deliberately,
+ * because that list has already paid for its lessons: an earlier version
+ * listed three names that were variables of nothing (`answerCount`,
+ * `topAnswer`, `winningAnswer`) and omitted the three the shipped defaults
+ * actually use — which blocked all nineteen of them at once. Change one copy
+ * and change the other; a prompt the editor calls clean must not be refused
+ * here, and vice versa.
+ */
+const ANSWER_TOKENS = [
+  'responsesText', 'triviaResponses', 'uniqueAnswers',
+  'voteTally', 'votingBreakdown',
+  'playerResponses', 'playerAnswers', 'wavelengthWords',
+];
+
+/**
+ * Throws when any analysis field carries a [square-bracket direction].
+ *
+ * Brackets read like placeholders and are prose: the substitution loop fills
+ * only {braced} names, so bracketed text reaches the model verbatim — and the
+ * model does the only sensible thing, which is to answer it. Markdown links
+ * are already excluded by extractBracketDirections.
+ */
+function assertNoBracketDirections(fields) {
+  const found = [];
+  for (const [field, value] of Object.entries(fields || {})) {
+    for (const span of extractBracketDirections(value)) {
+      found.push({ field, span });
+      if (found.length >= 3) break;
+    }
+    if (found.length >= 3) break;
+  }
+  if (found.length === 0) return;
+
+  const shown = found.map(({ field, span }) => `${field}: [${span}]`).join(' · ');
+  throw new Error(
+    'Square-bracket placeholders are prose, not variables — nothing fills them, so the model '
+    + 'receives them as literal text and replies to them, which is exactly what put '
+    + '"the [Summary of the response] placeholder is empty" on a projector. '
+    + `Found: ${shown}. `
+    + 'Use a {variable} from the editor\'s palette where data should appear, or write the words out.'
+  );
+}
+
+/**
+ * Throws when an analysis prompt names no response-bearing variable anywhere —
+ * a prompt asked to review answers it will never be shown. `texts` is every
+ * piece of the prompt a token can live in (template, instructions,
+ * outputFormat, and any declared section guidance), already merged by the
+ * caller so a partial update is judged on what the prompt will BE, not on the
+ * delta.
+ */
+function assertReceivesResponses(texts) {
+  const names = new Set();
+  for (const value of Object.values(texts || {})) {
+    for (const name of extractVariableTokens(value)) names.add(name);
+  }
+  if (ANSWER_TOKENS.some((t) => names.has(t))) return;
+
+  throw new Error(
+    'This analysis prompt never receives the responses it is asked to review — none of the '
+    + `variables that carry what participants said appear anywhere in it (${ANSWER_TOKENS
+      .slice(0, 3).map((t) => `{${t}}`).join(', ')}, …). It would run, cost a Bedrock call, and `
+    + 'show the room a reply addressed to whoever wrote the prompt. Add {responsesText} where '
+    + 'the responses should appear — {triviaResponses} for trivia, {uniqueAnswers} for a poll.'
+  );
+}
+
 module.exports = {
   variablesToOffer,
   describeVariablesForPrompt,
   assertTemplateVariablesExist,
+  ANSWER_TOKENS,
+  assertNoBracketDirections,
+  assertReceivesResponses,
 };

@@ -109,9 +109,20 @@ check('trivia is excluded by name', () =>
   assert(/no consensus voting/i.test(
     consensusLabel({ ...round([9, 1]), gameType: 'trivia' }))));
 
-check('wavelength reports its own measure', () =>
-  assert(/word connection rate/i.test(
-    consensusLabel({ gameType: 'wavelength', connectionScore: 42, sortedAnswers: [], maxScore: 0 }))));
+// The convergence model: the claim is the unanimous-word count WITH its
+// denominator in words — never the old connection-rate percentage, which was
+// words ÷ words read aloud by hosts.
+check('wavelength reports the landed count with its denominator', () =>
+  assert(/3 words on every list \(all 9 who answered\)/.test(
+    consensusLabel({ gameType: 'wavelength', landedCount: 3, submitterCount: 9, sortedAnswers: [], maxScore: 0 }))));
+
+check('wavelength never emits a bare percentage', () =>
+  assert(!/%/.test(
+    consensusLabel({ gameType: 'wavelength', landedCount: 0, submitterCount: 4, sortedAnswers: [], maxScore: 0 }))));
+
+check('one landed word is singular', () =>
+  assert(/1 word on every list/.test(
+    consensusLabel({ gameType: 'wavelength', landedCount: 1, submitterCount: 2, sortedAnswers: [], maxScore: 0 }))));
 
 // ---- The call site actually uses it, AND is fed real data ------------------
 //

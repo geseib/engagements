@@ -195,14 +195,24 @@ describe('AISummaryStatus paging', () => {
     expect(pagesAt('tv')).toBeGreaterThan(pagesAt('table'));
   });
 
-  it('a summary that fits gets no pager at all', () => {
-    // rejects: an unconditional pager. One page is not a page: a line of stage
-    // spent telling a room about a control that would do nothing.
+  it('a summary that fits says so instead of going silent', () => {
+    /*
+      THIS TEST USED TO PIN THE OPPOSITE ("a summary that fits gets no pager
+      at all"), and that silence shipped as a bug report — twice. A one-page
+      summary with nothing under it is indistinguishable from dead arrow
+      keys, and the round before or after pages fine, which reads as
+      intermittent breakage ("the arrows didnt work on the first question but
+      did for the second"). Prose gets the single-page line; the key hint
+      stays absent because there is still nothing the keys would do.
+    */
     const { container } = render(
       <AISummaryStatus insights={{ markdownResponse: '## Summary\n\nShort.' }}
         profile="room" page={0} onPage={() => {}} />
     );
-    expect(container.querySelector('[data-pager]')).toBeNull();
+    const label = container.querySelector('.pgr-label');
+    expect(label.textContent).toBe('Summary · all on one page');
+    expect(label.textContent).not.toContain('↑');
+    expect(container.querySelectorAll('button.pip')).toHaveLength(0);
   });
 
   it('without an onPage nothing is sliced and nothing is drawn', () => {

@@ -6,6 +6,7 @@ import { normalizeTags, tagsToCsvCell } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
 import Icon from './Icon';
 import RoundKindPicker from './RoundKindPicker';
+import { samplesForKind } from '../config/scenarioSamples';
 import {
   roundKindApplies,
   roundKindParticipantInstruction,
@@ -424,10 +425,31 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     // the next one — the picker does not live there.
     if (kindGaps.length > 0) return;
     const templateDefaults = getTemplateDefaults(type);
-    setScenarioConfig(prev => ({ 
-      ...prev, 
+    setScenarioConfig(prev => ({
+      ...prev,
       type,
       ...templateDefaults
+    }));
+    setStep(2);
+  };
+
+  /*
+    A SAMPLE IDEA is a template selection plus a prefilled brief. The card the
+    operator tapped picks the best-fitting template under the hood
+    (sample.templateId — a database template with that scenarioType supersedes
+    the hardcoded one automatically) and lands them on step 2 with the
+    sample's context already written, all of it editable. Its title becomes
+    the working title; the template's own name would be record-speak here.
+  */
+  const handleSampleSelection = (sample) => {
+    if (kindGaps.length > 0) return;
+    const templateDefaults = getTemplateDefaults(sample.templateId);
+    setScenarioConfig(prev => ({
+      ...prev,
+      type: sample.templateId,
+      ...templateDefaults,
+      context: sample.context,
+      customTitle: sample.title,
     }));
     setStep(2);
   };
@@ -971,7 +993,55 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                 </section>
               )}
 
-              <h3>What type of {engagementType === 'trivia' ? 'trivia questions' : engagementType === 'poll' ? 'poll questions' : engagementType === 'wavelength' ? 'wavelength topics' : 'scenarios'} do you want to create?</h3>
+              {/*
+                THE SECOND QUESTION NOW ANSWERS THE FIRST. This heading used to
+                read "What type of scenarios do you want to create?" over a
+                wall of template cards that ignored the direction just chosen —
+                two abstract taxonomies in a row, the second in record-speak
+                ("Lessons Learned - Strategic Insights"). The owner: "those
+                seem odd after you pick produce/apply/improve... these could
+                be sample idea, so they understand."
+
+                On call-and-answer the samples lead: three concrete briefs per
+                direction (config/scenarioSamples.js), switching with the kind,
+                each prefilling the next step. The templates remain below as
+                the quieter second route — they are real (admins tune them)
+                but they are a means, not the question. Other engagement types
+                have no direction picker and keep the template cards as their
+                primary, unchanged.
+              */}
+              {roundKindApplies(engagementType)
+                && samplesForKind(scenarioConfig.roundKind).length > 0 && (
+                <section className="scenario-samples" data-testid="scenario-samples">
+                  <h3>Some ideas for this kind of round — tap one to start from it</h3>
+                  <p className="step-lede">
+                    Each one prefills the next step. Everything stays editable.
+                  </p>
+                  <div className={`scenario-types-grid${kindGaps.length > 0 ? ' is-blocked' : ''}`}>
+                    {samplesForKind(scenarioConfig.roundKind).map((sample) => (
+                      <div
+                        key={sample.id}
+                        className="scenario-type-card"
+                        data-testid="scenario-sample-card"
+                        aria-disabled={kindGaps.length > 0 || undefined}
+                        onClick={() => handleSampleSelection(sample)}
+                      >
+                        <h4>{sample.title}</h4>
+                        <p>{sample.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              <h3>
+                {/* "Or" only when samples are actually above it — the custom
+                    direction shows none (its author has already said what
+                    they want), and an "Or" with no first option reads broken. */}
+                {roundKindApplies(engagementType)
+                  ? `${samplesForKind(scenarioConfig.roundKind).length > 0 ? 'Or start' : 'Start'} from a template`
+                  : `What type of ${engagementType === 'trivia' ? 'trivia questions' : engagementType === 'poll' ? 'poll questions' : engagementType === 'wavelength' ? 'wavelength topics' : 'scenarios'} do you want to create?`}
+              </h3>
 
               {loadingPrompts ? (
                 <div className="loading-prompts">

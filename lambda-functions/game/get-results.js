@@ -1,13 +1,29 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const { resolveSetPartition } = require('./set-version');
+const { analyzeWavelength, buildMergePrompt, parseMergeReply } = require('./wavelength');
+
+// @aws-sdk/client-lambda exists in the Lambda Node 22 runtime but is NOT in
+// lambda-functions/package.json (the standing landmine client-s3 already has).
+// Guarded so local test suites that stub the other SDK modules do not have to
+// know about this one: with no Lambda client, clustering dispatch fails and the
+// round stands on exact matching — announced on screen, never silent.
+let LambdaClient, InvokeCommand;
+try {
+  ({ LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda'));
+} catch {
+  console.log('⚠️ @aws-sdk/client-lambda unavailable — wavelength clustering dispatch disabled');
+}
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
 const apigateway = new ApiGatewayManagementApiClient({
   endpoint: process.env.WEBSOCKET_API_ENDPOINT
 });
+const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
+const lambda = LambdaClient ? new LambdaClient({}) : null;
 
 // Helper function to check if a bit is set in a bitmask
 const isBitSet = (mask, position) => {
@@ -39,8 +55,7 @@ const isBitSet = (mask, position) => {
  * Never throws: a broadcast failure must not turn a round that scored correctly
  * into a 500 that the host reads as "results failed".
  */
-const broadcastResultsReady = async (gameId, paddedQuestionId) => {
-  if (!gameId || !paddedQuestionId) return;
+const broadcastToGame = async (gameId, messageObject, label = 'RESULTS BROADCAST') => {
   try {
     const connectionsResult = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
@@ -53,18 +68,11 @@ const broadcastResultsReady = async (gameId, paddedQuestionId) => {
 
     const connections = connectionsResult.Items || [];
     if (connections.length === 0) {
-      console.log(`⚠️ RESULTS BROADCAST: no active connections for game ${gameId}`);
+      console.log(`⚠️ ${label}: no active connections for game ${gameId}`);
       return;
     }
 
-    const message = JSON.stringify({
-      type: 'gameStateChanged',
-      gameId: gameId,
-      state: `GAME#${gameId} RESULTS#${paddedQuestionId}`,
-      newState: `RESULTS#${paddedQuestionId}`,
-      questionNumber: paddedQuestionId,
-      timestamp: new Date().toISOString()
-    });
+    const message = JSON.stringify(messageObject);
 
     await Promise.all(connections.map(async (connection) => {
       try {
@@ -83,15 +91,27 @@ const broadcastResultsReady = async (gameId, paddedQuestionId) => {
             Key: { PK: connection.PK, SK: connection.SK }
           })).catch(() => {});
         } else {
-          console.error(`❌ RESULTS BROADCAST: failed for ${connection.ConnectionId}:`, error.message);
+          console.error(`❌ ${label}: failed for ${connection.ConnectionId}:`, error.message);
         }
       }
     }));
 
-    console.log(`✅ RESULTS BROADCAST: RESULTS#${paddedQuestionId} sent to ${connections.length} connection(s)`);
+    console.log(`✅ ${label}: ${messageObject.type} sent to ${connections.length} connection(s)`);
   } catch (error) {
-    console.error('❌ RESULTS BROADCAST: failed entirely (continuing):', error);
+    console.error(`❌ ${label}: failed entirely (continuing):`, error);
   }
+};
+
+const broadcastResultsReady = async (gameId, paddedQuestionId) => {
+  if (!gameId || !paddedQuestionId) return;
+  await broadcastToGame(gameId, {
+    type: 'gameStateChanged',
+    gameId: gameId,
+    state: `GAME#${gameId} RESULTS#${paddedQuestionId}`,
+    newState: `RESULTS#${paddedQuestionId}`,
+    questionNumber: paddedQuestionId,
+    timestamp: new Date().toISOString()
+  });
 };
 
 /**
@@ -220,6 +240,13 @@ const enterResultsState = async (event, gameId, paddedQuestionId) => {
 };
 
 exports.handler = async (event) => {
+  // Wavelength clustering worker: the round-close path fires an
+  // InvocationType:'Event' self-invoke (the get-ai-summary pattern) so the
+  // Bedrock call runs off the API Gateway 30s ceiling. Delivery is over the
+  // WebSocket; the HTTP path has already returned the exact-match analysis.
+  if (event && event.__wavelengthClusterWorker === true) {
+    return runWavelengthClusterWorker(event);
+  }
   try {
     // Handle POST request with body containing gameId and questionNumber.
     // The host route is nested under the game (/games/{gameId}/close-round) and
@@ -852,15 +879,52 @@ async function handleTriviaResults(event, gameId, questionId) {
 }
 
 /**
- * Handle Wavelength Results - Word Association Analysis
- * Returns team-based scoring with common word analysis
+ * Handle Wavelength Results — what the room had in common.
+ *
+ * The model is the owner's, spec'd in
+ * docs/superpowers/specs/2026-08-09-wavelength-convergence-design.md:
+ * a word LANDS when everyone who submitted said it; everything else still
+ * shows, dimmer, with its count; the denominator is submitters, not the room;
+ * players have no scores and never did. `count > 1` — the rule this branch
+ * shipped with — was a different game, and `connectionScore` (common ÷ unique)
+ * measured nothing anyone asked; both are gone rather than left at zero.
+ *
+ * Matching is two-stage: exact (deterministic, computed here, returned
+ * immediately) and clustered (Bedrock merges plurals/misspellings/
+ * abbreviations in a self-invoked worker, delivered over the WebSocket).
+ * `wordAnalysis.matching` says which one the payload carries, and
+ * `wordAnalysis.clustering` says whether the upgrade is pending/done/failed —
+ * the stage prints "matched on exact wording only" when the model never ran,
+ * because a degraded claim about agreement that does not announce itself is
+ * worse than no claim.
  */
 async function handleWavelengthResults(event, gameId, questionId) {
   try {
     console.log(`🌊 Handling wavelength results for game ${gameId}, question ${questionId}`);
-    
+
     const paddedQuestionId = String(questionId).padStart(3, '0');
-    
+
+    // A RE-READ MUST NEVER RE-CLUSTER (spec §3): the same round asked twice has
+    // to give the same answer, or a host who refreshes gets a different result
+    // than the room saw. The stored RESULTS row IS the round's answer — for the
+    // host resolving it a second time as much as for a player fetching it.
+    const storedRound = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${paddedQuestionId}#RESULTS` }
+    }));
+    if (storedRound.Item && storedRound.Item.wordAnalysis) {
+      // Still idempotently (re-)announce the transition when the HOST asked;
+      // enterResultsState declines on the public route by itself.
+      await enterResultsState(event, gameId, paddedQuestionId);
+      const { PK, SK, ttl, ...resultsData } = storedRound.Item;
+      console.log(`🌊 Returning stored wavelength analysis (${resultsData.wordAnalysis.matching})`);
+      return {
+        statusCode: 200,
+        body: JSON.stringify(resultsData),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
     // Get the question data for wavelength results
     console.log(`🔍 Fetching question data for wavelength results`);
     let question = null;
@@ -913,88 +977,61 @@ async function handleWavelengthResults(event, gameId, questionId) {
     const allAnswers = answersQuery.Items || [];
     console.log(`📝 Found ${allAnswers.length} wavelength answers`);
 
-    // Process word analysis
-    let wordCounts = {};
-    let playerWords = {};
-    let totalWordsSubmitted = 0;
-    let totalUniqueWords = 0;
-    
-    // Process each player's answer
-    allAnswers.forEach(answerItem => {
-      const playerName = answerItem.PlayerName;
-      const answer = answerItem.Answer || '';
-      const processedWords = answerItem.ProcessedWords || answer.split(',').map(w => w.trim().toLowerCase()).filter(w => w);
-      
-      playerWords[playerName] = processedWords;
-      totalWordsSubmitted += processedWords.length;
-      
-      // Count occurrences of each word
-      processedWords.forEach(word => {
-        wordCounts[word] = (wordCounts[word] || 0) + 1;
-      });
-    });
+    // One submission per answer row. Surfaces keep their original casing —
+    // matchKey folds case/punctuation/spacing, and the canonical label rule
+    // picks what the wall prints.
+    const submissions = allAnswers.map(answerItem => ({
+      player: answerItem.PlayerName,
+      words: answerItem.ProcessedWords
+        || String(answerItem.Answer || '').split(',').map(w => w.trim()).filter(Boolean)
+    }));
 
-    // Find common words (mentioned by 2+ players)
-    const commonWords = Object.entries(wordCounts)
-      .filter(([word, count]) => count > 1)
-      .sort((a, b) => b[1] - a[1]) // Sort by frequency
-      .map(([word, count]) => ({ word, count }));
+    const analysis = analyzeWavelength(submissions);
+    console.log(`🤝 ${analysis.commonWords.length} of ${analysis.totalUniqueWords} words on every list (all ${analysis.submitterCount} who answered)`);
 
-    totalUniqueWords = Object.keys(wordCounts).length;
-    
-    console.log(`🤝 Found ${commonWords.length} common words out of ${totalUniqueWords} unique words`);
+    // Nothing to cluster below two submitters or two distinct ideas — the
+    // exact result is already the final result there.
+    const clusteringPlanned = Boolean(lambda)
+      && analysis.submitterCount >= 2
+      && analysis.totalUniqueWords >= 2;
 
-    // Calculate team-based scoring
-    const teamScore = commonWords.length; // Simple scoring: 1 point per common word
-    const connectionScore = Math.round((commonWords.length / totalUniqueWords) * 100) || 0; // Percentage of words that were common
-    
-    // Team scoring - everyone gets the same score
-    const teamScoring = {};
-    allAnswers.forEach(answerItem => {
-      const playerName = answerItem.PlayerName;
-      teamScoring[playerName] = {
-        roundScore: teamScore,
-        totalScore: 0, // Will be calculated elsewhere
-        wordsSubmitted: playerWords[playerName]?.length || 0,
-        commonWordsFound: playerWords[playerName]?.filter(word => wordCounts[word] > 1).length || 0
-      };
-    });
+    const wordAnalysis = {
+      totalAnswers: allAnswers.length,
+      submitterCount: analysis.submitterCount,
+      totalWordsSubmitted: analysis.totalWordsSubmitted,
+      totalUniqueWords: analysis.totalUniqueWords,
+      // The LANDED tier — kept under its historical name because the AI
+      // summary and the stored-results readers already speak it. The meaning
+      // is the spec's: on EVERY submitter's list, not merely on two.
+      commonWords: analysis.commonWords,
+      nearMiss: analysis.nearMiss,
+      words: analysis.words,
+      matching: 'exact',
+      clustering: clusteringPlanned ? 'pending' : 'skipped'
+    };
 
     const resultsData = {
       gameId,
       questionId: paddedQuestionId,
       gameType: 'wavelength',
       question,
-      answers: allAnswers.map(answer => ({
-        playerName: answer.PlayerName,
-        name: answer.PlayerName, // For compatibility
-        answer: answer.Answer,
-        words: playerWords[answer.PlayerName] || [],
-        submittedAt: answer.SubmittedAt
+      answers: submissions.map((s, i) => ({
+        playerName: s.player,
+        name: s.player, // For compatibility
+        answer: allAnswers[i].Answer,
+        words: s.words,
+        submittedAt: allAnswers[i].SubmittedAt
       })),
-      wordAnalysis: {
-        totalAnswers: allAnswers.length,
-        totalWordsSubmitted,
-        totalUniqueWords,
-        commonWords,
-        wordCounts,
-        connectionScore
-      },
-      teamScore,
-      teamScoring,
+      wordAnalysis,
+      // The one figure on the wall. There is no per-player scoring and no
+      // Winners array — wavelength measures the team, deliberately.
+      teamScore: analysis.teamScore,
       timestamp: new Date().toISOString()
     };
 
-    console.log(`🏆 Wavelength results calculated: ${commonWords.length} common words, team score: ${teamScore}`);
-
-    // This branch never wrote the state at all — the word cloud was computed and
-    // returned while the game stayed on ASK#nnn. Only the host page's local
-    // React state moved, so a refresh (or the Host Remote, which reads the state
-    // back rather than remembering what it asked for) put the room back on the
-    // answering screen.
-    await enterResultsState(event, gameId, paddedQuestionId);
-
-    // Store results for future retrieval
+    // Store BEFORE announcing the transition: players fetch the moment the
+    // gameStateChanged frame lands, and the row being there first is what
+    // keeps their read on the stored path instead of a recompute.
     await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
       Item: {
@@ -1004,6 +1041,25 @@ async function handleWavelengthResults(event, gameId, questionId) {
         ttl: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // 7 days TTL
       }
     }));
+
+    // This branch never wrote the state at all — the word cloud was computed and
+    // returned while the game stayed on ASK#nnn. Only the host page's local
+    // React state moved, so a refresh (or the Host Remote, which reads the state
+    // back rather than remembering what it asked for) put the room back on the
+    // answering screen.
+    await enterResultsState(event, gameId, paddedQuestionId);
+
+    // Beat two leaves over the socket; this response is beat one's payload.
+    // A failed dispatch downgrades the row to clustering:'failed' so the stage
+    // announces the exact-match fallback instead of waiting for a frame that
+    // will never come.
+    if (clusteringPlanned) {
+      const dispatched = await dispatchWavelengthClustering(gameId, paddedQuestionId);
+      if (!dispatched) {
+        wordAnalysis.clustering = 'failed';
+        await markWavelengthClustering(gameId, paddedQuestionId, 'failed');
+      }
+    }
 
     return {
       statusCode: 200,
@@ -1021,6 +1077,152 @@ async function handleWavelengthResults(event, gameId, questionId) {
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }
     };
+  }
+}
+
+/**
+ * Fire-and-forget self-invoke for the clustering pass. Never throws — a
+ * dispatch failure means the round stands on exact matching, which is a
+ * complete (announced) result, not an error.
+ */
+const dispatchWavelengthClustering = async (gameId, questionId) => {
+  try {
+    await lambda.send(new InvokeCommand({
+      FunctionName: process.env.AWS_LAMBDA_FUNCTION_NAME, // auto-set by the runtime
+      InvocationType: 'Event',
+      Payload: Buffer.from(JSON.stringify({
+        __wavelengthClusterWorker: true,
+        gameId,
+        questionId
+      }))
+    }));
+    console.log(`🚀 WAVELENGTH: clustering worker dispatched for ${gameId}:${questionId}`);
+    return true;
+  } catch (error) {
+    console.error('❌ WAVELENGTH: clustering dispatch failed (standing on exact matching):', error.message);
+    return false;
+  }
+};
+
+/** Stamp the clustering status on the stored round. Best-effort. */
+const markWavelengthClustering = async (gameId, questionId, status) => {
+  try {
+    await db.send(new UpdateCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionId}#RESULTS` },
+      UpdateExpression: 'SET wordAnalysis.clustering = :status',
+      ExpressionAttributeValues: { ':status': status }
+    }));
+  } catch (error) {
+    console.error(`❌ WAVELENGTH: could not mark clustering ${status}:`, error.message);
+  }
+};
+
+/**
+ * Ask the model which entries are the same term in different clothes.
+ * Temperature 0 and the contract prompt — "when in doubt, do not merge" is
+ * the entire safety mechanism, because there is no host review step.
+ */
+const proposeWavelengthMerges = async (labels) => {
+  const modelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`;
+  const response = await bedrock.send(new InvokeModelCommand({
+    modelId,
+    body: JSON.stringify({
+      anthropic_version: 'bedrock-2023-05-31',
+      max_tokens: 1024,
+      temperature: 0,
+      messages: [{ role: 'user', content: buildMergePrompt(labels) }]
+    })
+  }));
+  const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+  return parseMergeReply(responseBody.content?.[0]?.text);
+};
+
+/**
+ * The clustering worker. Reads the stored round, proposes merges, re-runs the
+ * unanimity analysis over the SAME submissions, writes the upgraded analysis
+ * back, and tells the room over the WebSocket.
+ *
+ * Idempotent: a round whose clustering is not 'pending' is left exactly as it
+ * is — a retry or double-dispatch must not produce a second, different answer.
+ * On model failure the exact-match result stands, the row says
+ * clustering:'failed', and the SAME frame goes out so the stage's beat one
+ * resolves instead of waiting forever.
+ */
+async function runWavelengthClusterWorker(event) {
+  const { gameId, questionId } = event;
+  console.log(`🛠️ WAVELENGTH WORKER: clustering ${gameId}:${questionId}`);
+  const resultsKey = { PK: `GAME#${gameId}`, SK: `QUESTION#${questionId}#RESULTS` };
+
+  const stored = await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: resultsKey
+  }));
+  if (!stored.Item || !stored.Item.wordAnalysis) {
+    console.error('❌ WAVELENGTH WORKER: no stored round to cluster');
+    return { statusCode: 404 };
+  }
+  const round = stored.Item;
+  if (round.wordAnalysis.clustering !== 'pending') {
+    console.log(`ℹ️ WAVELENGTH WORKER: clustering already ${round.wordAnalysis.clustering} — leaving it alone`);
+    return { statusCode: 200 };
+  }
+
+  const submissions = (round.answers || []).map((a) => ({
+    player: a.playerName,
+    words: a.words || []
+  }));
+
+  try {
+    const labels = (round.wordAnalysis.words || []).map((w) => w.word);
+    const merges = await proposeWavelengthMerges(labels);
+    console.log(`🤖 WAVELENGTH WORKER: model proposed ${merges.length} merge group(s)`);
+
+    const analysis = analyzeWavelength(submissions, { merges });
+    const wordAnalysis = {
+      ...round.wordAnalysis,
+      submitterCount: analysis.submitterCount,
+      totalWordsSubmitted: analysis.totalWordsSubmitted,
+      totalUniqueWords: analysis.totalUniqueWords,
+      commonWords: analysis.commonWords,
+      nearMiss: analysis.nearMiss,
+      words: analysis.words,
+      matching: 'clustered',
+      clustering: 'done'
+    };
+
+    await db.send(new UpdateCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: resultsKey,
+      UpdateExpression: 'SET wordAnalysis = :wa, teamScore = :ts',
+      ExpressionAttributeValues: { ':wa': wordAnalysis, ':ts': analysis.teamScore }
+    }));
+
+    // WRITE BEFORE BROADCAST (the aiSummaryReady lesson): a lost frame costs a
+    // watchdog delay, never the result — any later read finds the upgrade.
+    await broadcastToGame(gameId, {
+      type: 'wavelengthAnalysisReady',
+      gameId,
+      questionId,
+      wordAnalysis,
+      teamScore: analysis.teamScore,
+      timestamp: new Date().toISOString()
+    }, 'WAVELENGTH BROADCAST');
+
+    return { statusCode: 200 };
+  } catch (error) {
+    console.error('❌ WAVELENGTH WORKER: clustering failed — exact matching stands:', error);
+    const wordAnalysis = { ...round.wordAnalysis, clustering: 'failed' };
+    await markWavelengthClustering(gameId, questionId, 'failed');
+    await broadcastToGame(gameId, {
+      type: 'wavelengthAnalysisReady',
+      gameId,
+      questionId,
+      wordAnalysis,
+      teamScore: round.teamScore || 0,
+      timestamp: new Date().toISOString()
+    }, 'WAVELENGTH BROADCAST');
+    return { statusCode: 200 };
   }
 }
 

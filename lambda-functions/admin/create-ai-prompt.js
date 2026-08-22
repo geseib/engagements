@@ -3,7 +3,9 @@ const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, UpdateComm
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { normalizeGameType, isKnownGameType, GAME_TYPE_IDS } = require('./shared/game-types');
 const { inferPromptType, normalizeOutputSections } = require('./shared/prompt-shape');
-const { assertTemplateVariablesExist } = require('./shared/template-variable-usage');
+const {
+  assertTemplateVariablesExist, assertNoBracketDirections, assertReceivesResponses,
+} = require('./shared/template-variable-usage');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -119,6 +121,24 @@ exports.handler = async (event) => {
     // different vocabulary entirely.
     if (promptType === 'analysis') {
       assertTemplateVariablesExist({ template, instructions, outputFormat });
+    }
+
+    /*
+      THE TWO GUARDS FROM THE LP FAILURE (see template-variable-usage.js for
+      the incident). EXPLICITLY-DECLARED analysis prompts only, narrower than
+      the gate above on purpose: the shipped question-GENERATION prompts carry
+      no promptType and use the legacy single template field, so inferPromptType
+      calls them analysis — and they have no responses to receive because they
+      run before anyone has answered anything. promptPreflight.js paid for
+      this lesson when its first version lit up all ten of them at once.
+    */
+    if (requestedPromptType === 'analysis') {
+      const sectionTexts = {};
+      (Array.isArray(rawOutputSections) ? rawOutputSections : []).forEach((s, i) => {
+        if (s && typeof s.guidance === 'string') sectionTexts[`outputSections[${i}].guidance`] = s.guidance;
+      });
+      assertNoBracketDirections({ template, instructions, outputFormat, ...sectionTexts });
+      assertReceivesResponses({ template, instructions, outputFormat, ...sectionTexts });
     }
 
     const promptId = generatePromptId();

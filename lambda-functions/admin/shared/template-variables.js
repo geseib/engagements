@@ -713,15 +713,17 @@ const TEMPLATE_VARIABLES = [
     example: 'Alice: [creativity, solutions]; Bob: [change, ideas]',
   },
   {
+    // The unanimity rule (2026-08-09 wavelength convergence spec): a word
+    // counts when EVERYONE who submitted said it, not when two people did.
     name: 'commonWords',
-    description: 'Words that two or more players thought of — the team alignment',
+    description: 'Words that were on every submitted list — the room’s shared vocabulary',
     category: 'Wavelength',
     gameTypes: ['wavelength'],
     example: 'creativity, innovation, ideas, solutions',
   },
   {
     name: 'commonWordsCount',
-    description: 'How many words showed team alignment',
+    description: 'How many words were on every submitted list',
     category: 'Wavelength',
     gameTypes: ['wavelength'],
     example: '4, 7',
@@ -734,18 +736,21 @@ const TEMPLATE_VARIABLES = [
     example: '23, 41',
   },
   {
+    // Kept for prompts already in the wild; re-derived under the unanimity
+    // rule. The stage itself never prints a bare percentage — this exists only
+    // for prompt authors who want one.
     name: 'connectionScore',
-    description: "Percentage showing how aligned the team's thinking was",
+    description: 'Share of the room’s distinct words that were on every list',
     category: 'Wavelength',
     gameTypes: ['wavelength'],
-    example: '65%, 42%',
+    example: '17%, 0%',
   },
   {
     name: 'wordAnalysis',
-    description: 'Prose summary of the common words and the connection rate',
+    description: 'Prose summary: the words on every list, the denominator, and what came closest',
     category: 'Wavelength',
     gameTypes: ['wavelength'],
-    example: '4 common words found out of 23 unique words (17% connection rate). Common words: ideas (3x)...',
+    example: '2 of 23 distinct words were on every list (all 12 who answered). Shared: trust, candor.',
   },
   {
     name: 'teamScore',

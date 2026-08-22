@@ -336,7 +336,39 @@ const REGISTER_BLOCK =
   'not summarise your own summary, do not sign off, and never describe what you are about to do — ' +
   'do it.';
 
-const buildOutputContract = (prompt) => {
+/*
+  THE OPENING MOVES — the anti-template device, and why it is a LIST and not a
+  rule. The owner, on the LP set's read-backs: "it always start 'We asked one
+  question...' but it does that over and over. which is weird. need more
+  natural relaxed intro that is randomish."
+
+  The REGISTER_BLOCK above already bans the worst openers, and banning alone
+  does not produce variety — a small model under a heavy rule load falls into
+  ONE compliant groove and stays in it, round after round, which is its own
+  tell. So each round is HANDED a different way in, chosen at generation time
+  (get-ai-summary.js draws one per round; a Redo draws again). The moves are
+  deliberately content-neutral — they must work for a Bar Raiser panel, an art
+  reveal, and a plain summary alike — and every one of them points AT the
+  round's specifics, so the variety cannot come at the price of the
+  genericness the register block exists to stop.
+*/
+const OPENING_MOVES = [
+  'Open mid-thought, as if the mic caught you already reacting to the strongest response.',
+  'Open with the single best phrase a participant wrote, quoted verbatim, then react to it.',
+  'Open with a number that jumps out of this round, and why it matters.',
+  'Open with a short, punchy verdict on the round — a few words — then spend the section earning it.',
+  'Open by naming the tension: where two responses pulled in opposite directions.',
+  'Open with the thing that genuinely surprised you in these responses.',
+  'Open by speaking to the room about what they just did, not about what was asked.',
+  'Open with the one idea this round kept circling back to.',
+  'Open on the gap, kindly: the thing nobody\'s response quite reached.',
+  'Open as if resuming a conversation the room was already having.',
+];
+
+/** One move for this round. Random per call, so a Redo gets a fresh way in. */
+const pickOpeningMove = () => OPENING_MOVES[Math.floor(Math.random() * OPENING_MOVES.length)];
+
+const buildOutputContract = (prompt, { openingMove } = {}) => {
   const sections = resolveOutputSections(prompt);
   const count = COUNT_WORD[sections.length] || String(sections.length);
 
@@ -344,11 +376,20 @@ const buildOutputContract = (prompt) => {
     .map(({ heading, guidance }) => `## ${heading}${guidance ? `\n${guidance}` : ''}`)
     .join('\n\n');
 
+  // Placed between the register rules and the heading list: it is a register
+  // instruction (how to sound), so it must not outrank the headings — the one
+  // thing the parser and the projector key on stays last-stated and loudest.
+  const openingBlock = openingMove
+    ? `THE OPENING, for this round only: ${openingMove} However you get in, never a recap formula — ` +
+      'no "We asked", no "The question was", no restating the prompt. The room was there.\n\n'
+    : '';
+
   return (
     'FORMAT (this part is not negotiable, and it supersedes any formatting or output-structure ' +
     'instruction that appeared earlier in this prompt):\n\n' +
     `${FORMATTING_BLOCK}\n\n` +
     `${REGISTER_BLOCK}\n\n` +
+    `${openingBlock}` +
     `Reply using exactly these ${count} headings, in this order, spelled exactly as shown, and add no other headings:\n\n` +
     `${body}\n\n` +
     'The voice guidance above governs the words inside these sections. It does not govern the ' +
@@ -559,6 +600,8 @@ module.exports = {
   hasCustomOutputShape,
   describeOutputShape,
   buildOutputContract,
+  OPENING_MOVES,
+  pickOpeningMove,
   buildHostDirective,
   buildPromptPreamble,
   resolvePersona,

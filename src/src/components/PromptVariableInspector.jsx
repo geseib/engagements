@@ -246,10 +246,13 @@ export function sampleTemplateVars(rawGameType, sizeId = DEFAULT_ROOM_SIZE) {
   const uniqueAnswers = [...new Set(ranked.map((a) => a.answer))];
   const leaderboard = ranked.map((a, i) => ({ name: a.player, score: a.totalScore + (10 - i) }));
 
+  // The convergence model: commonWords is the LANDED tier — on every
+  // submitted list, so each carries the full submitter count. connectionScore
+  // survives as a legacy variable, re-derived as landed ÷ distinct.
   const wavelengthWords = ranked.map((a) => `${a.player}: [${a.words.join(', ')}]`).join('; ');
-  const commonWords = count === 0 ? [] : [{ word: 'handover', count: 3 }, { word: 'trust', count: 3 }, { word: 'review', count: 2 }];
+  const commonWords = count === 0 ? [] : [{ word: 'handover', count }, { word: 'trust', count }];
   const totalUniqueWords = count === 0 ? 0 : 9;
-  const connectionScore = count === 0 ? 0 : 45;
+  const connectionScore = totalUniqueWords === 0 ? 0 : Math.round((commonWords.length / totalUniqueWords) * 100);
 
   return {
     // SET INFO
@@ -346,7 +349,7 @@ export function sampleTemplateVars(rawGameType, sizeId = DEFAULT_ROOM_SIZE) {
     commonWordsCount: commonWords.length,
     totalUniqueWords,
     connectionScore: `${connectionScore}%`,
-    wordAnalysis: count === 0 ? '' : `${commonWords.length} common words found out of ${totalUniqueWords} unique words (${connectionScore}% connection rate). Common words: ${commonWords.map((w) => `${w.word} (${w.count}x)`).join(', ')}`,
+    wordAnalysis: count === 0 ? '' : `${commonWords.length} of ${totalUniqueWords} distinct words were on every list (all ${count} who answered). Shared: ${commonWords.map((w) => w.word).join(', ')}`,
     teamScore: commonWords.length,
 
     // CONTEXT

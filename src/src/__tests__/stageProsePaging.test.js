@@ -260,6 +260,44 @@ describe('the slice the component actually renders', () => {
   });
 });
 
+describe('a rule never gets a page of its own', () => {
+  // THE BLANK PAGE, reported live: "sometimes there is a blank page between
+  // section of the workie response." The mechanism: a section body fills its
+  // page to the budget, the decorative `---` after it overflows onto a page
+  // of its own, and the next heading opens the page after that — so the room
+  // turns to a page containing one thin line.
+  test('an overflowing rule is dropped, not promoted to a page', () => {
+    const md = ['## Jeff', lines(30), '---', '## Andy', lines(2)].join('\n\n');
+    const pages = prosePages(md, 12);
+    for (const page of pages) {
+      expect(page.text.trim()).not.toBe('---');
+    }
+    // The sections on either side of the dropped rule are both intact.
+    const all = pages.map((p) => p.text).join('\n');
+    expect(all).toContain('## Jeff');
+    expect(all).toContain('## Andy');
+  });
+
+  test('a rule that lands mid-page still renders exactly as before', () => {
+    // rejects: fixing the blank page by deleting rules everywhere — an author
+    // who drew a rule inside a section under budget keeps it.
+    const md = ['## Notes', lines(2), '---', lines(2)].join('\n\n');
+    const pages = prosePages(md, 18);
+    expect(pages).toHaveLength(1);
+    expect(pages[0].text).toContain('---');
+  });
+
+  test('two headings sandwiching a rule do not close a heading-only page', () => {
+    // hasBody must not count a rule as body, or `## A / --- / ## B` would
+    // close a page holding a title and a line — the orphan-title defect in a
+    // new costume.
+    const md = ['## A', '---', '## B', lines(2)].join('\n\n');
+    const pages = prosePages(md, 18);
+    expect(pages.every((p) => !/^## A[\s\S]*---\s*$/.test(p.text.trim()) || p.text.includes('## B'))).toBe(true);
+    expect(pages[pages.length - 1].text).toContain(lines(2).slice(0, 10));
+  });
+});
+
 describe('the pager line, when the items cannot be counted', () => {
   test('a caption replaces the range and keeps the position and the key hint', () => {
     // rejects: printing "lines 18–34 of 61" at a room, which is a number nobody

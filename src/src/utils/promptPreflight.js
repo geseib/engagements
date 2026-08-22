@@ -64,6 +64,7 @@ import {
   extractVariableTokens,
   unknownVariableTokens,
   isKnownTemplateVariable,
+  extractBracketDirections,
 } from '../config/templateVariables';
 
 /* --------------------------------------------------------------- sizing -- */
@@ -997,6 +998,37 @@ export function preflightPrompt(input = {}) {
           + 'variable does — a new one is a change to get-ai-summary.js and all three copies of '
           + 'template-variables.js.'
       ));
+    }
+  }
+
+  /*
+    A [SQUARE-BRACKET DIRECTION] — the other half of the LP failure, and the
+    half that made it look nearly right. Brackets read like placeholders and
+    are prose: the engine fills only {braced} names, so "[Summary of the
+    response]" reaches the model verbatim, and the model answers it — on the
+    reported round, by asking whoever wrote the prompt to paste the response
+    in. Scoped to explicit analysis prompts exactly as no-answer-variable is,
+    and for the same cried-wolf reason. The save gate
+    (assertNoBracketDirections, admin/shared/template-variable-usage.js)
+    refuses these, so this finding is the same wall as advice.
+  */
+  if (String(input.promptType || '') === 'analysis') {
+    for (const source of sources) {
+      for (const span of extractBracketDirections(source.text).slice(0, 3)) {
+        blocking.push(finding(
+          'bracket-direction',
+          `"[${span.length > 60 ? `${span.slice(0, 59)}…` : span}]" is not a placeholder — the model receives it as text.`,
+          'Nothing substitutes square brackets. The engine fills only {braced} variables, so a '
+            + 'bracketed direction arrives at the model as literal prose — and the model answers '
+            + 'it. This is the exact mechanism that put "the [Summary of the response] placeholder '
+            + 'is empty" on a projector: the prompt shipped a fill-in-the-blank form, and the '
+            + 'model asked who was supposed to fill it in. The save gate refuses this prompt.',
+          `${source.field}: [${span}]`,
+          'Where data should appear, use a {variable} from the palette. Where the bracket was an '
+            + 'instruction ("[2-3 paragraphs]"), write it as a sentence — the model follows prose '
+            + 'better than it follows a form.'
+        ));
+      }
     }
   }
 

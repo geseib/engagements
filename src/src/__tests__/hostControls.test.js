@@ -328,7 +328,9 @@ describe('the two additions the stage needs', () => {
   // ASK is the one phase with a secondary. Adding phases must not grow that.
   test('FIELD_NOTES adds no secondary, and ENDED adds the way out', () => {
     // FIELD_NOTES is mid-round: a second button there is one more thing to aim
-    // at while a room reads.
+    // at while a room reads. (The ONE exception is the read-back mid-document,
+    // tested in its own block below — there the second button exists precisely
+    // because the single button was the worse aim.)
     expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'FIELD_NOTES' }).secondary).toBeNull();
 
     /*
@@ -540,5 +542,73 @@ describe('GameHostPage listens for the beat, and lets go of it', () => {
     expect(body).toContain('/stage-beat');
     expect(body).toContain('authFetch');
     expect(body).toContain("method: 'POST'");
+  });
+});
+
+/**
+ * THE READ-BACK'S PAGE-VS-SKIP CONTROLS — the owner: "there should be a clear
+ * way to go to next page of workie vs skip the rest of the workie response."
+ *
+ * The → key had paged before advancing since the pager shipped; the dock
+ * button said "Next Round" throughout, so CLICKING it mid-document silently
+ * threw away the unread pages. Mid-document the primary is now the page turn
+ * (the same act as the key) and the skip is an explicit secondary; on the
+ * last page one button suffices again.
+ */
+describe('FIELD_NOTES pages before it advances', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const HOST_PAGE_SRC = path.join(__dirname, '..', 'GameHostPage.jsx');
+
+  test('mid-document: the primary turns the page and the skip is explicit', () => {
+    const controls = hostControlsFor({
+      gameType: 'call-and-answer', phase: 'FIELD_NOTES', notesPage: 0, notesPages: 3,
+    });
+    expect(controls.primary.intent).toBe(HOST_INTENTS.PAGE);
+    expect(controls.primary.label).toBe('Next Page');
+    expect(controls.secondary).not.toBeNull();
+    expect(controls.secondary.intent).toBe(HOST_INTENTS.NEXT);
+    expect(controls.secondary.label).toContain('Skip to Next');
+    // The dock's own answer to "am I about to skip something unread?"
+    expect(controls.status.text).toBe('Reading page 1 of 3');
+  });
+
+  test('last page: back to one button, and it is Next Round', () => {
+    // rejects: a Next Page button on the last page — a control that would do
+    // nothing — and rejects the skip surviving where there is nothing left to
+    // skip.
+    const controls = hostControlsFor({
+      gameType: 'call-and-answer', phase: 'FIELD_NOTES', notesPage: 2, notesPages: 3,
+    });
+    expect(controls.primary.intent).toBe(HOST_INTENTS.NEXT);
+    expect(controls.secondary).toBeNull();
+  });
+
+  test('one page (or callers that pass nothing): unchanged Next Round', () => {
+    // rejects: the defaults changing any existing caller — the phone remote
+    // and every test above call without page inputs and must see what they
+    // always saw.
+    const bare = hostControlsFor({ gameType: 'call-and-answer', phase: 'FIELD_NOTES' });
+    expect(bare.primary.intent).toBe(HOST_INTENTS.NEXT);
+    expect(bare.secondary).toBeNull();
+    expect(bare.status.text).toBe('Discussion prompt on screen');
+  });
+
+  test('the page dispatches PAGE without clearing the chrome', () => {
+    // A page turn is a content move: it must not close the setup panel the
+    // host is reading beside, nor unpin the QR — the round-advance intents
+    // still do both.
+    const code = fs.readFileSync(HOST_PAGE_SRC, 'utf8');
+    expect(code).toContain('case HOST_INTENTS.PAGE:');
+    expect(code).toMatch(/if \(action\.intent !== HOST_INTENTS\.PAGE\) \{/);
+  });
+
+  test('the dock is fed the same page arithmetic the stage uses', () => {
+    // rejects: a second, drifting computation — the call site must hand
+    // hostControlsFor the notesPage/notesPages pair derived from the shared
+    // beat-keyed index.
+    const code = fs.readFileSync(HOST_PAGE_SRC, 'utf8');
+    expect(code).toMatch(/notesPage,\s*notesPages,\s*\}\)/);
+    expect(code).toContain('prosePageSlice(');
   });
 });

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import CompletionFlag from './CompletionFlag';
 
 /**
@@ -177,10 +177,43 @@ const NAMES_SHOWN = 8;
 export default function RoomMeter({
   phase, heading, body, complete = false, waiting = null,
 }) {
-  if (!heading && !body) return null;
-
   const names = (waiting && waiting.names) || [];
   const interactive = Boolean(names.length && waiting && typeof waiting.onPreview === 'function');
+  const onPin = waiting && waiting.onPin;
+
+  /*
+    U SHOWS AND HIDES THE NAMES — the owner: "for the main screen a shortcut
+    to show hide the users in the upper right." Same act as clicking the
+    count (onPin toggles), so the shortcut cannot drift from the pointer path.
+
+    Bound only while the list is actually offerable (`interactive` — a phase
+    with no names, or a session whose settings withhold them, binds nothing),
+    and refused the same three ways the page keys are refused in
+    config/stagePaging.js pageIntentFor: modifiers are someone else's gesture,
+    a typing target owns its own letters, and the setup panel's fields must
+    not toggle the stage behind them. U is sent by no presenter clicker and
+    bound nowhere else in the product.
+
+    The hook runs before the empty-meter return below — a hook after an early
+    return is the #310 blank page hookDepOrder.test.js exists to stop.
+  */
+  useEffect(() => {
+    if (!interactive || typeof onPin !== 'function') return undefined;
+    const onKeyDown = (event) => {
+      if (event.key !== 'u' && event.key !== 'U') return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      const target = event.target;
+      if (target && target.tagName && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) return;
+      if (target && target.isContentEditable) return;
+      if (target && typeof target.closest === 'function' && target.closest('.setup-panel')) return;
+      event.preventDefault();
+      onPin();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [interactive, onPin]);
+
+  if (!heading && !body) return null;
   const revealed = interactive && (waiting.mode === 'preview' || waiting.mode === 'pinned');
   const phaseKey = String(phase ?? '').toUpperCase();
   const label = REVEAL_LABEL[phaseKey] || 'Still waiting';
@@ -193,7 +226,8 @@ export default function RoomMeter({
       tabIndex: 0,
       role: 'button',
       'aria-expanded': revealed,
-      'aria-label': `${label}: ${names.length}. Show the names.`,
+      'aria-label': `${label}: ${names.length}. Show the names. Press U.`,
+      title: 'U shows or hides the names',
       onMouseEnter: waiting.onPreview,
       onMouseLeave: waiting.onPreviewEnd,
       onFocus: waiting.onPreview,

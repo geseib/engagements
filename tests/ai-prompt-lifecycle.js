@@ -215,7 +215,9 @@ const list = (qs) => getPrompts.handler({ queryStringParameters: qs || {} })
     gameType: 'polls',                   // legacy plural — the spelling that never matched
     promptType: 'analysis',
     category: 'opinion',
-    instructions: 'Analyse the poll.',
+    // {uniqueAnswers} keeps the fixture clean under the receives-responses
+    // guard (tests/prompt-save-guards.js) — the spelling is what is under test.
+    instructions: 'Analyse the poll: {uniqueAnswers}.',
     outputFormat: '## Summary',
   })).body);
 
@@ -323,7 +325,8 @@ const list = (qs) => getPrompts.handler({ queryStringParameters: qs || {} })
     name: 'Disposable',
     gameType: 'trivia',
     promptType: 'analysis',
-    instructions: 'x', outputFormat: 'y',
+    // {triviaResponses}: clean under the receives-responses guard.
+    instructions: 'Judge {triviaResponses}.', outputFormat: 'y',
   })).body);
 
   const softRes = await del(disposable.promptId);
@@ -360,7 +363,7 @@ const list = (qs) => getPrompts.handler({ queryStringParameters: qs || {} })
     gameType: 'call-and-answer',
     promptType: 'analysis',
     category: 'team-building',          // DIFFERENT category — used to dodge the clear
-    instructions: 'Summarise.', outputFormat: '## Summary',
+    instructions: 'Summarise {responsesText}.', outputFormat: '## Summary',
     isDefault: true,
   })).body);
 

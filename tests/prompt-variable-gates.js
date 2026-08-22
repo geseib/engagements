@@ -344,8 +344,10 @@ const putUpdate = async (promptId, body) => {
       name: 'Uses Internal Aliases',
       gameType: 'trivia',
       promptType: 'analysis',
+      // {triviaResponses} keeps the fixture clean under the receives-responses
+      // guard (tests/prompt-save-guards.js) — the aliases are what is under test.
       instructions: 'There were {totalPlayers} players in {gameContext}.',
-      outputFormat: '## Summary\n{triviaCorrectness}',
+      outputFormat: '## Summary\n{triviaResponses}\n{triviaCorrectness}',
     });
     assert.strictEqual(res.statusCode, 201,
       `totalPlayers and gameContext resolve; a gate built off the advertised list alone ` +
@@ -370,7 +372,8 @@ const putUpdate = async (promptId, body) => {
       name: 'Shows JSON',
       gameType: 'trivia',
       promptType: 'analysis',
-      instructions: 'Reply as { "verdict": "..." } — no other keys.',
+      // {triviaResponses}: same reason as the aliases fixture above.
+      instructions: 'Reply as { "verdict": "..." } — no other keys. Judge {triviaResponses}.',
       outputFormat: '## Summary\n{triviaCorrectness}',
     });
     assert.strictEqual(res.statusCode, 201,

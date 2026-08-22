@@ -181,11 +181,14 @@ export const HOST_INTENTS = {
   NEXT: 'next',        // handleNextQuestion(false)
   SKIP: 'skip',        // handleNextQuestion(true) — abandon this round
   FIELD_NOTES: 'field-notes', // move RESULTS on to its second beat
+  PAGE: 'notes-page',  // turn to the next page of the read-back, not a new round
   REPORT: 'report',    // open the session report
   LEAVE: 'leave',      // leave this session and go back to the host menu
 };
 
-function primaryFor(phase, { runsVote, roundNoun, playerCount, answerCount, hasQuestionSet }) {
+function primaryFor(phase, {
+  runsVote, roundNoun, playerCount, answerCount, hasQuestionSet, notesPage, notesPages,
+}) {
   switch (phase) {
     case 'LOBBY': {
       let hint = '';
@@ -252,6 +255,40 @@ function primaryFor(phase, { runsVote, roundNoun, playerCount, answerCount, hasQ
         hint: '',
       };
     case 'FIELD_NOTES':
+      /*
+        THE BUTTON NOW SAYS WHAT THE KEY ALREADY DID. The → key has paged
+        through the read-back before advancing since the pager shipped
+        (GameHostPage's onAdvanceKey), but the dock button said "Next Round"
+        throughout — so a host who clicked it mid-document skipped the rest of
+        Workie with no warning, and a host who wanted the next page had no
+        button at all. The owner: "there should be a clear way to go to next
+        page of workie vs skip the rest of the workie response."
+
+        With pages left, the primary IS the page turn — same act as the key —
+        and the skip becomes an explicit, separately-aimed secondary. On the
+        last page (or a one-page read-back) the primary is Next Round again
+        and the secondary disappears. Auto-mode is unaffected: it presses the
+        primary only when its own arithmetic says the last page has been
+        dwelt on, at which point the primary is Next Round.
+      */
+      if (Number(notesPages) > 1 && Number(notesPage) < Number(notesPages) - 1) {
+        return {
+          id: 'notes-page',
+          label: 'Next Page',
+          icon: 'ArrowRight',
+          intent: HOST_INTENTS.PAGE,
+          disabled: false,
+          hint: '',
+        };
+      }
+      return {
+        id: 'next',
+        label: `Next ${roundNoun}`,
+        icon: 'ArrowRight',
+        intent: HOST_INTENTS.NEXT,
+        disabled: false,
+        hint: '',
+      };
     default:
       return {
         id: 'next',
@@ -264,7 +301,9 @@ function primaryFor(phase, { runsVote, roundNoun, playerCount, answerCount, hasQ
   }
 }
 
-function statusTextFor(phase, { playerCount, answeredCount, votedCount, hasQuestionSet }) {
+function statusTextFor(phase, {
+  playerCount, answeredCount, votedCount, hasQuestionSet, notesPage, notesPages,
+}) {
   switch (phase) {
     case 'LOBBY':
       if (!hasQuestionSet) return 'Please select a question set to begin';
@@ -284,7 +323,11 @@ function statusTextFor(phase, { playerCount, answeredCount, votedCount, hasQuest
     // default is the LOBBY branch's neighbour and a fall-through would tell a
     // room that has just finished that it is waiting for players to join.
     case 'FIELD_NOTES':
-      return 'Discussion prompt on screen';
+      // The position, when there is one — the dock's own answer to "am I
+      // about to skip something the room has not read?"
+      return Number(notesPages) > 1
+        ? `Reading page ${Number(notesPage) + 1} of ${notesPages}`
+        : 'Discussion prompt on screen';
     case 'ENDED':
       return 'All rounds played';
     case 'RESULTS':
@@ -311,13 +354,18 @@ export function hostControlsFor({
   votedCount = 0,
   answerCount = 0,
   hasQuestionSet = true,
+  // Where the FIELD_NOTES read-back is: the stage's page index and page
+  // count, defaulting to the one-page shape so every existing caller keeps
+  // its Next Round primary unchanged.
+  notesPage = 0,
+  notesPages = 1,
 } = {}) {
   const resolvedPhase = HOST_PHASES.includes(phase) ? phase : 'LOBBY';
   const runsVote = hostRunsVotePhase(gameType);
   const noun = String(roundNoun || 'Question').trim() || 'Question';
 
   const primary = primaryFor(resolvedPhase, {
-    runsVote, roundNoun: noun, playerCount, answerCount, hasQuestionSet,
+    runsVote, roundNoun: noun, playerCount, answerCount, hasQuestionSet, notesPage, notesPages,
   });
 
   /*
@@ -341,6 +389,24 @@ export function hostControlsFor({
   let secondary = null;
   if (resolvedPhase === 'ASK') {
     secondary = { id: 'skip', label: `Skip ${noun}`, icon: 'SkipForward', intent: HOST_INTENTS.SKIP, disabled: false, hint: '' };
+  } else if (resolvedPhase === 'FIELD_NOTES' && primary.intent === HOST_INTENTS.PAGE) {
+    /*
+      THE ONE OTHER MID-ROUND SECOND BUTTON, and only while the primary is a
+      page turn. "Another control is just another thing to aim at" still
+      holds; what changed is that WITHOUT this button the aim was worse — the
+      only way past a long read-back was a primary that silently threw away
+      its unread pages. The skip is now the explicitly-labelled act, and it
+      vanishes the moment the last page is up (the primary becomes Next Round
+      and one button suffices again).
+    */
+    secondary = {
+      id: 'skip-notes',
+      label: `Skip to Next ${noun}`,
+      icon: 'SkipForward',
+      intent: HOST_INTENTS.NEXT,
+      disabled: false,
+      hint: '',
+    };
   } else if (resolvedPhase === 'ENDED' || resolvedPhase === 'LOBBY') {
     /*
       LOBBY joined ENDED here after the owner asked for "an easy way to go back
@@ -356,7 +422,7 @@ export function hostControlsFor({
   }
 
   const text = statusTextFor(resolvedPhase, {
-    playerCount, answeredCount, votedCount, hasQuestionSet,
+    playerCount, answeredCount, votedCount, hasQuestionSet, notesPage, notesPages,
   });
 
   return {

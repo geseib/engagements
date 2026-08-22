@@ -11,7 +11,7 @@ import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
 import WelcomeScreen from './components/WelcomeScreen';
 import HostQuestionSetsDialog from './components/HostQuestionSetsDialog';
-import WavelengthWordCloud from './components/WavelengthWordCloud';
+import WavelengthConvergence from './components/stage/WavelengthConvergence';
 import Icon from './components/Icon';
 import Modal from './components/Modal';
 import SetImageBadge from './components/SetImageBadge';
@@ -28,8 +28,13 @@ import Dock from './components/stage/Dock';
 import Pager from './components/stage/Pager';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
 import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfile';
-import { pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor } from './config/stagePaging';
+import {
+  pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
+} from './config/stagePaging';
+import { assignPlacements, placeLabel } from './config/podium';
+import { autoDecision } from './config/autoMode';
 import AnswerSpotlight from './components/AnswerSpotlight';
+import ConfirmDialog from './components/ConfirmDialog';
 import { pageOf } from './utils/answerSpotlight';
 import PastRound from './components/PastRound';
 import { roundsFrom } from './config/sessionHistory';
@@ -133,6 +138,11 @@ function GameHostPage() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1);
   const [currentQuestionId, setCurrentQuestionId] = useState('');
   const [answers, setAnswers] = useState([]);
+  /* Wavelength RESULTS payload (wordAnalysis): landed words, near-miss tier,
+     denominator, matching mode. Set from the close-round/get-results response,
+     upgraded in place by the `wavelengthAnalysisReady` frame when the
+     clustering worker finishes, cleared with the rest of the round state. */
+  const [wavelengthAnalysis, setWavelengthAnalysis] = useState(null);
   const [gameState, setGameStateRaw] = useState('CREATED'); // CREATED, STARTED, ASK#001, VOTE#001, RESULTS#001, etc.
   
   // Debug wrapper for setGameState
@@ -395,6 +405,18 @@ function GameHostPage() {
   // below five responses with no override — dead for a whole session in a room
   // of four, which is the room the owner runs.
   const [nameWaitingWhenAnonymous, setNameWaitingWhenAnonymous] = useState(true);
+
+  // AUTO-MODE — the session advances itself when everyone has responded,
+  // dwelling on each page of responses and Workie prose first. The decisions
+  // are config/autoMode.js's; the one timer that acts on them lives in the
+  // effect just above the early returns, and it presses the SAME primary the
+  // SPACE key does, so auto-mode cannot reach a state the host could not.
+  const [autoMode, setAutoMode] = useState(false);
+  // What the timer needs from the bottom of the render — hostControls' primary,
+  // runHostAction, the stage pager — captured by plain assignment down where
+  // they exist. A ref rather than deps because those are derived per render,
+  // hundreds of lines below the first early return, where no hook may live.
+  const autoActRef = useRef(null);
 
   // Custom instruction state for question set instructions
   const [customInstruction, setCustomInstruction] = useState(null);
@@ -828,6 +850,7 @@ function GameHostPage() {
     lessonNumber: setLessonNumber,
     authorsRevealed: setAuthorsRevealed,
     nameWaitingWhenAnonymous: setNameWaitingWhenAnonymous,
+    autoMode: setAutoMode,
     players: setPlayers,
     removedPlayers: setRemovedPlayers,
     answers: setAnswers,
@@ -1749,6 +1772,18 @@ Focus on actionable business strategy insights.`;
       }
     });
 
+    // Beat two of the wavelength reveal: the clustering worker re-ran the
+    // unanimity analysis with the model's merges and wrote it back before
+    // broadcasting, so this frame is display-ready. A failed run arrives on
+    // the SAME frame with clustering:'failed' — the stage then annotates
+    // "matched on exact wording only" instead of waiting on the watchdog.
+    webSocketClient.onMessage('wavelengthAnalysisReady', (data) => {
+      console.log('🔌 Wavelength analysis ready:', data?.wordAnalysis?.matching, data?.wordAnalysis?.clustering);
+      if (data && data.wordAnalysis) {
+        setWavelengthAnalysis(data.wordAnalysis);
+      }
+    });
+
     // Async generation failed on the worker — say so, rather than leaving the
     // stage on a placeholder that reads as "still writing".
     webSocketClient.onMessage('aiSummaryError', (data) => {
@@ -1797,6 +1832,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('stageBeatChanged');
       webSocketClient.offMessage('stageFocusChanged');
       webSocketClient.offMessage('questionQueueChanged');
+      webSocketClient.offMessage('wavelengthAnalysisReady');
       webSocketClient.offMessage('aiSummaryReady');
       webSocketClient.offMessage('aiSummaryError');
       // `gameEnded` was registered above and never removed here — a handler
@@ -2126,21 +2162,39 @@ Focus on actionable business strategy insights.`;
                     basePoints: answer.basePoints || 0,
                     submittedAt: answer.submittedAt
                   }));
+                } else if (resultsData.gameType === 'wavelength') {
+                  // This branch did not exist: a refresh mid-RESULTS fell
+                  // through to the call-and-answer arm, found no voteTallies,
+                  // and the stage rendered an empty cloud. The stored round
+                  // carries everything — including the clustered analysis if
+                  // the worker has already finished.
+                  console.log(`🌊 HOST STATE RESTORE: Processing wavelength results with ${resultsData.answers?.length || 0} answers`);
+                  formattedAnswers = (resultsData.answers || []).map(answer => ({
+                    player: answer.playerName,
+                    playerName: answer.playerName, // for displayLabelFor
+                    answer: answer.answer || answer.words?.join(',') || '',
+                    points: 0, // No points in wavelength
+                    submittedAt: answer.submittedAt
+                  }));
+                  setWavelengthAnalysis(resultsData.wordAnalysis || null);
                 } else {
                   // Call-and-answer results format: { voteTallies: {...} }
                   console.log(`📊 HOST STATE RESTORE: Processing call-and-answer results with voteTallies`);
+                  // `placement` comes from assignPlacements — the answer's
+                  // PLACE in the round by total points, ties shared. The old
+                  // inline derivation was "best rank any voter gave it", which
+                  // badged every answer with one first-choice vote as 1.
                   formattedAnswers = resultsData.voteTallies && Object.keys(resultsData.voteTallies).length > 0
-                    ? Object.values(resultsData.voteTallies).map((tally, index) => {
+                    ? assignPlacements(Object.values(resultsData.voteTallies).map((tally, index) => {
                         console.log(`📊 HOST: Formatting tally ${index}:`, tally);
                         return {
                           player: tally.playerName,
                           playerName: tally.playerName, // for displayLabelFor
                           answer: tally.answerText,
                           points: tally.totalScore,
-                          placement: tally.firstPlace > 0 ? 1 : tally.secondPlace > 0 ? 2 : tally.thirdPlace > 0 ? 3 : 0,
                           votes: tally.firstPlace + tally.secondPlace + tally.thirdPlace
                         };
-                      })
+                      }))
                     : [];
                 }
                 
@@ -2167,6 +2221,7 @@ Focus on actionable business strategy insights.`;
           setCurrentQuestionIndex(-1);
           setLessonNumber(0);
           setAnswers([]);
+          setWavelengthAnalysis(null);
           setPlayersWhoAnswered([]);
           setVotes([]);
           setPlayersWhoVoted([]);
@@ -3273,6 +3328,7 @@ Focus on actionable business strategy insights.`;
       // Clear all answer/voting state for new question
       console.log(`🧹 HOST: Clearing state for new question - resetting answers and players`);
       setAnswers([]);
+      setWavelengthAnalysis(null);
       setPlayersWhoAnswered([]);
       setVotes([]);
       setPlayersWhoVoted([]);
@@ -3551,32 +3607,36 @@ Focus on actionable business strategy insights.`;
           formattedAnswers.map(a => `${a.player}: ${a.answer} (${a.isCorrect ? 'correct' : 'incorrect'}, ${a.points} pts)`));
         
       } else if (resultsData.gameType === 'wavelength' || currentGameType === 'wavelength') {
-        // Wavelength results format: Just the raw answers with words
+        // Wavelength: the analysis (landed words, near-miss, denominator,
+        // matching mode) is the result; the answers ride along for the meter.
         console.log(`🌊 HOST: Processing wavelength results with ${resultsData.answers?.length || 0} answers`);
-        
+
         formattedAnswers = (resultsData.answers || []).map(answer => ({
           player: answer.playerName,
           playerName: answer.playerName, // for displayLabelFor
-          answer: answer.answer || answer.ProcessedWords?.join(',') || '', // Comma-separated words
+          answer: answer.answer || answer.words?.join(',') || '', // Comma-separated words
           points: 0, // No points in wavelength
           submittedAt: answer.submittedAt
         }));
-        
-        console.log(`🌊 HOST: Formatted ${formattedAnswers.length} wavelength answers for word cloud`);
-        
+        setWavelengthAnalysis(resultsData.wordAnalysis || null);
+
+        console.log(`🌊 HOST: Formatted ${formattedAnswers.length} wavelength answers`);
+
       } else {
         // Call-and-answer results format: { voteTallies: {...} }
         console.log(`💬 HOST: Processing call-and-answer results with voteTallies`);
         
+        // Same placement rule as the restore path above — one definition, in
+        // config/podium.js, so the two sites cannot disagree about what a
+        // place is.
         formattedAnswers = resultsData.voteTallies && Object.keys(resultsData.voteTallies).length > 0
-          ? Object.values(resultsData.voteTallies).map(tally => ({
+          ? assignPlacements(Object.values(resultsData.voteTallies).map(tally => ({
               player: tally.playerName,
               playerName: tally.playerName, // for displayLabelFor
               answer: tally.answerText,
               points: tally.totalScore,
-              placement: tally.firstPlace > 0 ? 1 : tally.secondPlace > 0 ? 2 : tally.thirdPlace > 0 ? 3 : 0,
               votes: tally.firstPlace + tally.secondPlace + tally.thirdPlace
-            }))
+            })))
           : []; // Empty array if no votes
       }
       
@@ -4365,6 +4425,100 @@ Focus on actionable business strategy insights.`;
     }
   };
 
+  /**
+   * AUTO-MODE'S ONE TIMER.
+   *
+   * config/autoMode.js decides WHAT a patient host would do next and after how
+   * long; this effect is the only thing that DOES it. One decision, one
+   * setTimeout, cleared whenever any input changes — so a late answer, a page
+   * turn, or the host acting first simply restarts the clock rather than
+   * racing it.
+   *
+   * IT LIVES ABOVE THE EARLY RETURNS AND MUST STAY THERE (hookDepOrder.test.js
+   * fails the build otherwise), which is why it recomputes the phase and the
+   * page arithmetic from raw state instead of reading `hostPhase` /
+   * `stagePageIndex` — those are derived below the returns. The ACTIONS are
+   * also derived down there, so they arrive through `autoActRef`, assigned by
+   * the same render that draws the stage: whatever the timer fires against is
+   * exactly what the host is looking at.
+   *
+   * Two layers of "the host has implicitly pressed pause":
+   *   - the full-screen surfaces that replace the stage entirely (welcome,
+   *     quickstart, dialogs, the report) — while one is up, the ref is stale
+   *     and the room cannot see the stage, so nothing may move it;
+   *   - `shortcutsSuppressed`, the same gate the SPACE key obeys, so a pinned
+   *     QR or an open spotlight holds auto-mode exactly as it holds the
+   *     keyboard.
+   */
+  useEffect(() => {
+    if (!autoMode) return undefined;
+    if (showQuickstartMenu || showWelcomeScreen || showNewGameDialog
+        || showReport || showReportsModal || editTarget) return undefined;
+    if (shortcutsSuppressed({
+      showConfirmModal, showExpandedQR, showReportsModal,
+      lessonExpanded, isLoadingData, qrMode,
+      spotlightOpen: spotlightIndex !== null,
+      pastRoundOpen: pastRoundIndex !== null,
+    })) return undefined;
+
+    const roundPhase = phaseOfGameState(gameState);
+    const phase = gameState === 'ENDED'
+      ? 'ENDED'
+      : (roundPhase === 'RESULTS' && resultsBeat === 'field-notes' ? 'FIELD_NOTES' : roundPhase);
+
+    // The stage's own page arithmetic, re-derived the way the render derives
+    // it: the shared index keyed by phase#round, cut by the same slicers.
+    const pageKey = `${phase}#${lessonNumber}`;
+    const rawIndex = stagePage && stagePage.key === pageKey ? stagePage.index : 0;
+    let page = 0;
+    let pages = 1;
+    let pageText = '';
+    let notesReady = false;
+    if (phase === 'RESULTS') {
+      const slice = pageSlice(answers, rawIndex, pageSizeFor(profile));
+      page = slice.page;
+      pages = slice.pages;
+    } else if (phase === 'FIELD_NOTES') {
+      const md = currentAIInsights && currentAIInsights.markdownResponse;
+      notesReady = Boolean(md) && !loadingAIInsights;
+      if (notesReady) {
+        const slice = prosePageSlice(md, rawIndex, proseBudgetFor(profile));
+        page = slice.page;
+        pages = slice.pages;
+        pageText = slice.content;
+      }
+    }
+
+    const decision = autoDecision({
+      enabled: true,
+      phase,
+      playerCount: players.length,
+      answeredCount,
+      votedCount: playersWhoVoted.length,
+      page, pages, pageText, notesReady,
+    });
+    if (!decision) return undefined;
+
+    const timer = setTimeout(() => {
+      const hands = autoActRef.current;
+      if (!hands) return;
+      if (decision.kind === 'page') {
+        hands.turnTo(page + 1);
+        return;
+      }
+      // The dock's own primary, through the dock's own runner — disabled means
+      // disabled for auto-mode too (e.g. RESULTS with zero answers).
+      if (!hands.primary || hands.primary.disabled) return;
+      hands.run(hands.primary);
+    }, decision.delayMs);
+    return () => clearTimeout(timer);
+  }, [autoMode, gameState, resultsBeat, lessonNumber, stagePage, answers,
+    currentAIInsights, loadingAIInsights, profile, players.length, answeredCount,
+    playersWhoVoted.length, showQuickstartMenu, showWelcomeScreen,
+    showNewGameDialog, showReport, showReportsModal, editTarget,
+    showConfirmModal, showExpandedQR, lessonExpanded, isLoadingData, qrMode,
+    spotlightIndex, pastRoundIndex]);
+
   // Render the quickstart menu if it's being shown
   if (showQuickstartMenu) {
     return (
@@ -4589,6 +4743,28 @@ Focus on actionable business strategy insights.`;
     ? 'ENDED'
     : (roundPhase === 'RESULTS' && resultsBeat === 'field-notes' ? 'FIELD_NOTES' : roundPhase);
 
+  /*
+    WHERE THE READ-BACK IS, for the dock. On FIELD_NOTES the primary is a page
+    turn until the last page is up (config/hostControls.js carries the
+    argument), so the dock needs the same page arithmetic the stage itself
+    uses — the shared beat-keyed index, cut by the same slicers, covering both
+    of Workie's shapes. One page (or nothing yet) leaves the classic Next
+    Round primary untouched.
+  */
+  const notesIndexRaw = stagePage && stagePage.key === `FIELD_NOTES#${lessonNumber}`
+    ? stagePage.index : 0;
+  let notesPages = 1;
+  if (currentAIInsights && currentAIInsights.markdownResponse) {
+    notesPages = prosePageSlice(
+      currentAIInsights.markdownResponse, notesIndexRaw, proseBudgetFor(profile),
+    ).pages;
+  } else if (currentAIInsights) {
+    const notePoints = (currentAIInsights.discussionTopics || []).length
+      + (currentAIInsights.nextSteps || []).length;
+    notesPages = pageCount(notePoints, pageSizeFor(profile));
+  }
+  const notesPage = clampPage(notesIndexRaw, notesPages);
+
   const hostControls = hostControlsFor({
     gameType: currentGameType,
     phase: hostPhase,
@@ -4598,6 +4774,8 @@ Focus on actionable business strategy insights.`;
     votedCount: playersWhoVoted.length,
     answerCount: answers.length,
     hasQuestionSet: Boolean(selectedSetId),
+    notesPage,
+    notesPages,
   });
 
   // A keyboard shortcut must never fire underneath something the host is
@@ -4634,12 +4812,21 @@ Focus on actionable business strategy insights.`;
 
   const runHostAction = (action) => {
     if (!action) return;
-    // Advancing clears the room-facing chrome: the Game Info / How to Play
-    // rails are inspection surfaces, not part of the round.
-    closeAllSidePanels();
-    // A pinned QR is chrome too -- advancing the round clears it the same way.
-    setQrMode(null);
+    // A page turn is a content move, not a round advance — it must not close
+    // the panel the host is reading beside, nor unpin anything.
+    if (action.intent !== HOST_INTENTS.PAGE) {
+      // Advancing clears the room-facing chrome: the Game Info / How to Play
+      // rails are inspection surfaces, not part of the round.
+      closeAllSidePanels();
+      // A pinned QR is chrome too -- advancing the round clears it the same way.
+      setQrMode(null);
+    }
     switch (action.intent) {
+      case HOST_INTENTS.PAGE:
+        // The dock's Next Page — the same shared beat-keyed index the ↑↓ keys
+        // and the pips move, so the three routes cannot disagree.
+        setStagePageIndex(stagePageIndex + 1);
+        break;
       case HOST_INTENTS.START:
       case HOST_INTENTS.NEXT:
         handleNextQuestion(false);
@@ -4865,6 +5052,16 @@ Focus on actionable business strategy insights.`;
   const setStagePageIndex = (index) => setStagePage({ key: pageKey, index });
   const answerPage = pageSlice(answers, stagePageIndex, stagePageSize);
 
+  // AUTO-MODE'S HANDS — see the effect above the early returns. Assigned by
+  // the same render that draws the stage, so when the timer fires it presses
+  // exactly the primary the dock is showing, through the same runner, and
+  // turns the same shared page index the arrow keys turn.
+  autoActRef.current = {
+    primary: hostControls.primary,
+    run: runHostAction,
+    turnTo: setStagePageIndex,
+  };
+
   /*
     Closing returns the grid to the page holding whatever was reached, so a host
     who pages forward inside the dialog and then closes is not dropped back
@@ -5000,6 +5197,14 @@ Focus on actionable business strategy insights.`;
         ? 'Ready when you are'
         : hostControls.status.text;
 
+  // Wavelength's two-beat reveal: beat one is a sentence, beat two a terms
+  // flow of a different height, and the clustered upgrade can change the flow
+  // again — three renders the fitter must re-measure. Derived here rather than
+  // inline in fitKey so the <Stage> element stays small enough to read (and to
+  // fit stageShell.test.jsx's composition window).
+  const wavelengthFitKey = wavelengthAnalysis
+    ? `${wavelengthAnalysis.matching}:${wavelengthAnalysis.clustering}:${wavelengthAnalysis.totalUniqueWords}`
+    : '';
 
   return (
     <>
@@ -5047,6 +5252,7 @@ Focus on actionable business strategy insights.`;
           // FIELD_NOTES' own page: answerPage.page clamps to 0 there.
           stagePageIndex,
           loadingAIInsights, currentAIInsights ? 1 : 0,
+          wavelengthFitKey,
         ].join('|')}
         rail={(
           <Rail
@@ -5407,17 +5613,17 @@ Focus on actionable business strategy insights.`;
                       })}
                   </div>
                 ) : currentGameType === 'wavelength' ? (
-                  /* `stage` drops the white card, the panel's own name and the
-                     duplicate word list, and lets styles/stage.css cap the
-                     drawing so it cannot be clipped by .content's overflow.
-                     The cloud itself is unchanged and still provisional —
-                     .terms replaces it in plan 4. */
-                  <WavelengthWordCloud
-                    stage
-                    answers={answers}
-                    promptWord={currentQuestion?.topic || currentQuestion?.title || 'WAVELENGTH'}
-                    gameState={gameState}
-                  />
+                  /* The ranked .terms flow the mockup drew, carrying the
+                     convergence spec's semantics: landed words (on EVERY
+                     submitter's list) at full weight, everything else dimmer
+                     with its count, one figure with its denominator in words.
+                     Two beats — the exact analysis lands with the round close;
+                     the clustered upgrade arrives over the socket
+                     (wavelengthAnalysisReady) or the watchdog annotates the
+                     exact result honestly. The packed word cloud is gone from
+                     the stage: a packed cloud cannot guarantee the floor, and
+                     raw frequency was the wrong claim anyway. */
+                  <WavelengthConvergence analysis={wavelengthAnalysis} />
                 ) : (
                   <div className="cards">
                     {answerPage.items.map((answer, i) => {
@@ -5486,7 +5692,8 @@ Focus on actionable business strategy insights.`;
                             }
                           }}
                         >
-                          <span className="rank">{answer.placement || '·'}</span>
+                          {/* "1st", not "1" — the owner's word for it. */}
+                          <span className="rank">{placeLabel(answer.placement)}</span>
                           <div className="body">
                             <div className="ans">{`“${answer.answer}”`}</div>
                             <span className="who revealed">{displayName}</span>
@@ -5832,6 +6039,8 @@ Focus on actionable business strategy insights.`;
           onAnonymousUntilRevealChange={setAnonymousUntilReveal}
           nameWaitingWhenAnonymous={nameWaitingWhenAnonymous}
           onNameWaitingChange={setNameWaitingWhenAnonymous}
+          autoMode={autoMode}
+          onAutoModeChange={setAutoMode}
           answerCount={answers.length}
           authorsRevealed={authorsRevealed}
           onViewReports={handleViewReports}
@@ -5994,32 +6203,18 @@ Focus on actionable business strategy insights.`;
         </div>
       )}
       
-      {/* Custom Confirmation Modal */}
+      {/* The are-you-sure dialog, now components/ConfirmDialog.jsx: ← cancels,
+          → carries the advance through, and the buttons wear their keys — the
+          owner's own gesture, since the hand that triggered this was already
+          on the arrows. */}
       {showConfirmModal && (
-        <div className="expanded-qr-overlay" onClick={confirmModalProps.onCancel}>
-          <div className="expanded-qr-content confirmation-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="confirmation-header">
-              <h2>{confirmModalProps.title}</h2>
-            </div>
-            <div className="confirmation-message">
-              {confirmModalProps.message}
-            </div>
-            <div className="dialog-actions">
-              <button 
-                className="btn-secondary" 
-                onClick={confirmModalProps.onCancel}
-              >
-                Cancel
-              </button>
-              <button 
-                className="btn-primary" 
-                onClick={confirmModalProps.onConfirm}
-              >
-                {confirmModalProps.confirmText}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title={confirmModalProps.title}
+          message={confirmModalProps.message}
+          confirmText={confirmModalProps.confirmText}
+          onConfirm={confirmModalProps.onConfirm}
+          onCancel={confirmModalProps.onCancel}
+        />
       )}
 
       {/* GOING BACK THROUGH A ROUND THAT ALREADY HAPPENED.

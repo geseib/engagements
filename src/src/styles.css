@@ -4767,6 +4767,19 @@ body {
   text-align: center;
 }
 
+/* The arrow hints on the dialog's two buttons (components/ConfirmDialog.jsx):
+   ← cancels, → proceeds. A quiet plate, not a second label — the key rides
+   along with the word, it does not compete with it. */
+.confirmation-modal .dialog-actions kbd {
+  font-family: inherit;
+  font-size: 0.85em;
+  line-height: 1;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(127, 127, 127, 0.18);
+  border: 1px solid rgba(127, 127, 127, 0.35);
+}
+
 .confirmation-header h2 {
   font-family: var(--font-display);
   font-size: 1.8rem;
