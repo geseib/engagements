@@ -443,10 +443,25 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   */
   const handleSampleSelection = (sample) => {
     if (kindGaps.length > 0) return;
-    const templateDefaults = getTemplateDefaults(sample.templateId);
+    /*
+      THE templateId NAMES A KIND OF TEMPLATE, NOT A CARD ID — and the two
+      diverge exactly when a database template exists: getScenarioTypes gives
+      each db prompt a unique `db-<SK>` id and REMOVES the hardcoded card it
+      supersedes, so `type: 'lessons-learned'` matched nothing at generate
+      time and the run died on `selectedType.prompt` of undefined ("Lost
+      contact with the job", live on dev, produce / Hard-won lessons).
+      Resolve through the same supersession: the db card whose scenarioType
+      matches, else the surviving hardcoded card, else the custom canvas.
+    */
+    const resolved = scenarioTypes.find((t) => t.dbPrompt?.scenarioType === sample.templateId)
+      || scenarioTypes.find((t) => t.id === sample.templateId)
+      || scenarioTypes.find((t) => t.id === 'custom')
+      || scenarioTypes.find((t) => /custom/.test(t.id));
+    if (!resolved) return;
+    const templateDefaults = getTemplateDefaults(resolved.id);
     setScenarioConfig(prev => ({
       ...prev,
-      type: sample.templateId,
+      type: resolved.id,
       ...templateDefaults,
       context: sample.context,
       customTitle: sample.title,
@@ -588,8 +603,12 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         basePrompt += `\n\n${levelLabel}: ${scenarioConfig.difficulty}`;
         
       } else {
-        // Fallback to hardcoded prompt structure
-        basePrompt = selectedType.prompt;
+        // Fallback to hardcoded prompt structure. `selectedType?.` and a
+        // last-resort instruction, so a type id that matches no card degrades
+        // to a custom-style run instead of killing the job on `.prompt` of
+        // undefined — the "Lost contact with the job" failure.
+        basePrompt = (selectedType && selectedType.prompt)
+          || 'Create scenarios based on the custom requirements provided';
         if (scenarioConfig.context) {
           basePrompt += `\n\nContext: ${scenarioConfig.context}`;
         }

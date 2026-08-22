@@ -357,3 +357,52 @@ describe('proceeding without selecting anything', () => {
     expect(await screen.findByText(/Configure Your Trivia Questions/i)).toBeInTheDocument();
   });
 });
+
+describe('samples resolve through database supersession', () => {
+  // THE LIVE FAILURE: on dev a database template with scenarioType
+  // 'lessons-learned' exists, so getScenarioTypes REMOVES the hardcoded card
+  // the sample's templateId named and gives the db card a unique db-<SK> id.
+  // The sample then selected a type id matching no card, and Generate died on
+  // `selectedType.prompt` of undefined — reported as "Lost contact with the
+  // job / Cannot read properties of undefined (reading 'prompt')" from
+  // produce / Hard-won lessons.
+  const dbLessons = {
+    SK: 'AIPROMPT#gen-ca-lessons',
+    promptId: 'gen-ca-lessons',
+    name: 'Lessons Learned Scenarios',
+    description: 'db-tuned lessons template',
+    basePrompt: 'DB LESSONS BASE PROMPT',
+    scenarioType: 'lessons-learned',
+    gameType: 'call-and-answer',
+    promptType: 'generation',
+    status: 'active',
+  };
+
+  test('a sample whose hardcoded template was superseded still generates', async () => {
+    const { posted } = await open({ api: { prompts: [dbLessons], job: completeJob() } });
+
+    // Wait for the template list to settle, as a human necessarily does —
+    // clicking mid-load resolves against the hardcoded deck and the request
+    // then degrades to the custom fallback (gracefully, but not this test).
+    await screen.findByText('db-tuned lessons template');
+    fireEvent.click(screen.getByText('Hard-won lessons'));
+    fireEvent.click(await screen.findByRole('button', { name: /Generate/i }));
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    // Resolved to the db card: its scenarioType travels, and its tuned base
+    // prompt is what the request is built on.
+    expect(posted[0].scenarioType).toBe('lessons-learned');
+    expect(posted[0].prompt).toContain('DB LESSONS BASE PROMPT');
+    // The sample's brief still rode along as the editable context.
+    expect(posted[0].prompt).toContain('recounts a real experience');
+  });
+
+  test('with no database templates the hardcoded card still serves the sample', async () => {
+    const { posted } = await open({ api: { job: completeJob() } });
+    await screen.findByText('Lessons Learned Scenarios');
+    fireEvent.click(screen.getByText('Hard-won lessons'));
+    fireEvent.click(await screen.findByRole('button', { name: /Generate/i }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0].scenarioType).toBe('lessons-learned');
+  });
+});
