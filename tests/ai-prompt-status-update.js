@@ -216,7 +216,9 @@ async function seed(overrides = {}) {
     promptType: 'analysis',
     category: 'lessons-learned',
     instructions: 'Here is what the room said: {responsesText}',
-    outputFormat: '## Summary\n[what was asked, and what the room said]',
+    // Prose, not [brackets]: the bracket-direction guard
+    // (tests/prompt-save-guards.js) refuses bracketed placeholders at save.
+    outputFormat: '## Summary\nWhat was asked, and what the room said.',
     status: 'active',
     ...overrides,
   });
@@ -329,7 +331,7 @@ async function seed(overrides = {}) {
   const rebuilt = await put(p3, {
     status: 'draft',
     instructions: 'Here is what the room said: {responsesText}',
-    outputFormat: '## Summary\n[what was asked]',
+    outputFormat: '## Summary\nWhat was asked.',
   });
   check('supplying the text again is still allowed, so this is not a lock-out', () => {
     /*

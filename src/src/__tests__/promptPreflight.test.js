@@ -835,3 +835,56 @@ describe('a prompt with nothing to analyse', () => {
     expect(codes(report)).not.toContain('no-answer-variable');
   });
 });
+
+/**
+ * THE BRACKET-DIRECTION FINDING — the other half of the LP failure, and the
+ * half that made the prompt look nearly right: [Summary of the response]
+ * reads like a slot and is prose, so the model receives a fill-in-the-blank
+ * form and answers it. The server refuses these at save
+ * (assertNoBracketDirections); this finding is the same wall as advice.
+ */
+describe('a [bracket direction] is flagged before it reaches a model', () => {
+  const codes = (report) => [
+    ...report.blocking, ...report.silent, ...report.advisory,
+  ].map((f) => f.code);
+
+  test('the LP prompt\'s own placeholder blocks, quoting field and span', () => {
+    const report = preflightPrompt({
+      promptType: 'analysis',
+      instructions: 'You are a reviewer. Use {responsesText}.',
+      outputFormat: '**REVIEWED:**\n[Summary of the core idea/response being analyzed]',
+    });
+    expect(codes(report)).toContain('bracket-direction');
+    const f = report.blocking.find((x) => x.code === 'bracket-direction');
+    expect(f.evidence).toContain('outputFormat');
+    expect(f.evidence).toContain('Summary of the core idea');
+  });
+
+  test('a markdown link is not a direction', () => {
+    const report = preflightPrompt({
+      promptType: 'analysis',
+      instructions: 'Read [the docs](https://example.com) then use {responsesText}.',
+      outputFormat: 'Plain format.',
+    });
+    expect(codes(report)).not.toContain('bracket-direction');
+  });
+
+  test('generation prompts are out of scope, same as no-answer-variable', () => {
+    // rejects: flagging the shipped generation prompts, whose templates use
+    // bracket conventions of their own and never drive a summary.
+    const report = preflightPrompt({
+      template: 'Generate questions like [topic here] for the audience.',
+    });
+    expect(codes(report)).not.toContain('bracket-direction');
+  });
+
+  test('supplied section guidance is scanned too', () => {
+    const report = preflightPrompt({
+      promptType: 'analysis',
+      instructions: 'Use {responsesText}.',
+      outputFormat: 'Plain.',
+      outputSections: [{ heading: 'Verdict', guidance: 'Write [the verdict] here.' }],
+    });
+    expect(codes(report)).toContain('bracket-direction');
+  });
+});

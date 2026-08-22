@@ -472,8 +472,11 @@ describe('failures are reported on the surface they happened to', () => {
     fireEvent.change(screen.getByTestId('prompt-input-textarea'), {
       target: { value: 'You are a consultant.\n\nResponses: {topVotedAnswers}\n{voteTally}' },
     });
+    // Prose, not [brackets]: the bracket-direction preflight finding blocks
+    // the save button, and this test is about the FAILED-SAVE banner, not the
+    // guard — the fixture has to be clean to reach the save at all.
     fireEvent.change(screen.getByTestId('prompt-output-textarea'), {
-      target: { value: '## Summary\n[What was asked, and what the room said]' },
+      target: { value: '## Summary\nWhat was asked, and what the room said.' },
     });
     // By DOM, not by label: the editor's labels are not `htmlFor`-associated,
     // which is its own defect and not one this change is fixing.

@@ -205,7 +205,13 @@ describe('the preflight rule written for this bug can now actually fire', () => 
     fireEvent.change(given(), {
       target: { value: `${BROKEN_INSTRUCTIONS}\n\nResponses: {topVotedAnswers}\n{voteTally}` },
     });
-    fireEvent.change(writes(), { target: { value: BROKEN_OUTPUT } });
+    // The output must lose its [brackets] too: the bracket-direction rule
+    // (the OTHER half of the same LP failure) blocks on them independently,
+    // so clearing the save means fixing both defects — exactly what a real
+    // author now has to do.
+    fireEvent.change(writes(), {
+      target: { value: '## Leadership Review\nThe core idea of the responses.\n\n## Principle Alignment\nWhich principle this maps to.' },
+    });
 
     await waitFor(() => expect(given().value).toContain('topVotedAnswers'));
     expect(document.body.textContent).not.toMatch(/never receives the responses/i);

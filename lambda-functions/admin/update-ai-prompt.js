@@ -3,7 +3,9 @@ const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryComm
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { normalizeGameType } = require('./shared/game-types');
 const { normalizeOutputSections, inferPromptType } = require('./shared/prompt-shape');
-const { assertTemplateVariablesExist } = require('./shared/template-variable-usage');
+const {
+  assertTemplateVariablesExist, assertNoBracketDirections, assertReceivesResponses,
+} = require('./shared/template-variable-usage');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -176,6 +178,48 @@ exports.handler = async (event) => {
       if (instructions !== undefined) supplied.instructions = instructions;
       if (outputFormat !== undefined) supplied.outputFormat = outputFormat;
       assertTemplateVariablesExist(supplied);
+    }
+
+    /*
+      THE TWO GUARDS FROM THE LP FAILURE — see template-variable-usage.js for
+      the incident and create-ai-prompt.js for the create-side twin. Scope here
+      is explicitly-stored analysis prompts, and only on requests that touch
+      content: a metadata-only edit (name, status, archive) of a legacy broken
+      prompt still saves, but any content edit must leave the prompt clean.
+
+      Brackets are judged on the SUPPLIED fields (the same scoping as the gate
+      above — an untouched legacy field must not make the prompt uneditable).
+      The response check is judged on what the prompt will BE after the merge:
+      a single field may legitimately carry no response variable so long as
+      another one does.
+    */
+    const touchesContent = template !== undefined || instructions !== undefined
+      || outputFormat !== undefined || rawOutputSections !== undefined;
+    if (currentPrompt.promptType === 'analysis' && touchesContent) {
+      const suppliedContent = {};
+      if (template !== undefined) suppliedContent.template = template;
+      if (instructions !== undefined) suppliedContent.instructions = instructions;
+      if (outputFormat !== undefined) suppliedContent.outputFormat = outputFormat;
+      if (outputSectionsSupplied) {
+        (outputSections || []).forEach((s, i) => {
+          if (s && typeof s.guidance === 'string') suppliedContent[`outputSections[${i}].guidance`] = s.guidance;
+        });
+      }
+      assertNoBracketDirections(suppliedContent);
+
+      const base = currentContent || currentPrompt || {};
+      const mergedSections = outputSectionsSupplied
+        ? (outputSections || [])
+        : (Array.isArray(base.outputSections) ? base.outputSections : []);
+      const merged = {
+        template: template !== undefined ? template : (base.template || ''),
+        instructions: instructions !== undefined ? instructions : (base.instructions || ''),
+        outputFormat: outputFormat !== undefined ? outputFormat : (base.outputFormat || ''),
+      };
+      mergedSections.forEach((s, i) => {
+        if (s && typeof s.guidance === 'string') merged[`section${i}`] = s.guidance;
+      });
+      assertReceivesResponses(merged);
     }
 
     /*
