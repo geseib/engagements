@@ -278,3 +278,56 @@ describe('an incomplete custom direction cannot leave step 1', () => {
     expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
   });
 });
+
+/**
+ * THE SAMPLE IDEAS ANSWER THE DIRECTION — the owner, on the old step 1:
+ * "it has these cards that say what kind of scenario do you want to build.
+ * those seem odd after you pick produce/apply/improve/etc... these could be
+ * sample idea, so they understand." Two taxonomies became one question and
+ * three concrete briefs that switch with the kind.
+ */
+describe('sample ideas follow the chosen direction', () => {
+  test('call-and-answer leads with samples for the current kind, templates demoted to "Or"', async () => {
+    await open();
+    expect(screen.getByTestId('scenario-samples')).toBeInTheDocument();
+    expect(screen.getByText('Hard-won lessons')).toBeInTheDocument();
+    expect(screen.getByText('Or start from a template')).toBeInTheDocument();
+  });
+
+  test('switching the kind switches the samples', async () => {
+    // rejects: cards that ignore the choice just made — the exact confusion
+    // reported.
+    await open();
+    fireEvent.click(screen.getByRole('radio', { name: /Apply/i }));
+    expect(screen.getByText('A case, landed on us')).toBeInTheDocument();
+    expect(screen.queryByText('Hard-won lessons')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: /Judge/i }));
+    expect(screen.getByText('Ready or not')).toBeInTheDocument();
+  });
+
+  test('tapping a sample prefills the next step and stays editable', async () => {
+    await open();
+    fireEvent.click(screen.getByRole('radio', { name: /Apply/i }));
+    fireEvent.click(screen.getByText('A case, landed on us'));
+    // Step 2, with the sample's brief already in the context field.
+    const context = screen.getByDisplayValue(/land it on OUR situation/i);
+    expect(context.tagName).toBe('TEXTAREA');
+    fireEvent.change(context, { target: { value: 'my own words' } });
+    expect(screen.getByDisplayValue('my own words')).toBeInTheDocument();
+  });
+
+  test('the custom direction gets no samples — its author already said what they want', async () => {
+    await open();
+    fireEvent.click(screen.getByRole('radio', { name: /Something else/i }));
+    expect(screen.queryByTestId('scenario-samples')).not.toBeInTheDocument();
+    // And no orphaned "Or" with nothing above it.
+    expect(screen.getByText('Start from a template')).toBeInTheDocument();
+    expect(screen.queryByText('Or start from a template')).not.toBeInTheDocument();
+  });
+
+  test('types with no direction picker keep their template cards as the question', async () => {
+    await open({ engagementType: 'trivia' });
+    expect(screen.queryByTestId('scenario-samples')).not.toBeInTheDocument();
+    expect(screen.getByText(/What type of trivia questions do you want to create/i)).toBeInTheDocument();
+  });
+});
