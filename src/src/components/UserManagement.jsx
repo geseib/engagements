@@ -56,10 +56,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * The role a person is in. ONE predicate, used by the counts, the filter, the
  * chip and the queue alike — see the header note on why that matters.
  *
- * `enabled` is Cognito's account flag; `disabled` is a group this product moves
- * people into. Either one means somebody has already decided about this person,
- * which is why disabled outranks pending: an account that has been switched off
- * is not waiting for a decision.
+ * `enabled` is Cognito's account flag, and it is what a reject actually sets
+ * now — the backend disables the ACCOUNT (manage-users.js), because a group
+ * named 'disabled' never existed in any pool and group membership would not
+ * stop a sign-in anyway. The group spelling is still honoured for any row a
+ * stale payload delivers. Either signal means somebody has already decided
+ * about this person, which is why disabled outranks pending: an account that
+ * has been switched off is not waiting for a decision.
  */
 export function roleOf(user) {
   const groups = Array.isArray(user.groups) ? user.groups : [];
@@ -231,7 +234,13 @@ const UserManagement = () => {
           ? prev.filter((user) => user.username !== username)
           : prev.map((user) =>
               user.username === username
-                ? { ...user, groups: [newState], state: newState, status: newState, enabled: true }
+                // Mirror what the backend just did: a reject disables the
+                // account and leaves it in no group; any other move re-enables
+                // it and lands it in exactly the one group. `enabled: true` on
+                // a disable would flip the row back on the next roleOf() read.
+                ? (newState === 'disabled'
+                    ? { ...user, groups: [], state: 'disabled', status: 'disabled', enabled: false }
+                    : { ...user, groups: [newState], state: newState, status: newState, enabled: true })
                 : user
             )
       );
