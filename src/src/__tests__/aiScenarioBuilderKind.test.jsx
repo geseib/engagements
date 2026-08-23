@@ -114,6 +114,20 @@ async function open(props = {}) {
   return { posted, onScenariosGenerated, unmount: view.unmount };
 }
 
+/**
+ * Where the sample ideas lead, the saved-template deck sits folded behind one
+ * disclosure line — a test that wants a template card has to open it first,
+ * exactly as a person does. A no-op on surfaces where the deck is primary
+ * (trivia, poll, wavelength, the custom direction) and permanently open.
+ */
+function openTemplates() {
+  const disclosure = screen.queryByTestId('template-disclosure');
+  if (disclosure) fireEvent.click(disclosure);
+}
+
+/** The prompt list has settled when the disclosure line can say how many. */
+const templatesSettled = () => screen.findByText(/Or start from a saved template \(\d+\)/);
+
 describe('the direction is a control of its own, beside the topic', () => {
   test('a call-and-answer builder asks what the room will DO before what it is about', async () => {
     // rejects: leaving the topic cards as the only steering. Every built-in
@@ -143,6 +157,7 @@ describe('the direction reaches the generator', () => {
     const { posted } = await open({ api: { job: completeJob() } });
 
     fireEvent.click(screen.getByRole('radio', { name: /Apply/i }));
+    openTemplates();
     fireEvent.click(screen.getByText('Lessons Learned Scenarios'));
     fireEvent.click(await screen.findByRole('button', { name: /Generate/i }));
 
@@ -157,6 +172,7 @@ describe('the direction reaches the generator', () => {
     // read back in a log; a silent omission cannot.
     const { posted } = await open({ api: { job: completeJob() } });
 
+    openTemplates();
     fireEvent.click(screen.getByText('Lessons Learned Scenarios'));
     fireEvent.click(await screen.findByRole('button', { name: /Generate/i }));
 
@@ -177,6 +193,7 @@ describe('the participant instruction follows the KIND and not the topic', () =>
   async function generateWith({ kind, topic }) {
     const { posted, onScenariosGenerated, unmount } = await open({ api: { job: completeJob() } });
     if (kind) fireEvent.click(screen.getByRole('radio', { name: new RegExp(kind, 'i') }));
+    openTemplates();
     fireEvent.click(screen.getByText(topic));
     fireEvent.click(await screen.findByRole('button', { name: /Generate/i }));
     await waitFor(() => expect(posted).toHaveLength(1));
@@ -245,6 +262,7 @@ describe('the generic fallback is gone', () => {
     });
 
     fireEvent.click(screen.getByRole('radio', { name: /Apply/i }));
+    openTemplates();
     fireEvent.click(await screen.findByText('Onboarding Deep Dive'));
     fireEvent.click(await screen.findByRole('button', { name: /Generate/i }));
     await waitFor(() => expect(posted).toHaveLength(1));
@@ -287,11 +305,54 @@ describe('an incomplete custom direction cannot leave step 1', () => {
  * three concrete briefs that switch with the kind.
  */
 describe('sample ideas follow the chosen direction', () => {
-  test('call-and-answer leads with samples for the current kind, templates demoted to "Or"', async () => {
+  test('call-and-answer leads with samples for the current kind, templates folded to one line', async () => {
     await open();
     expect(screen.getByTestId('scenario-samples')).toBeInTheDocument();
     expect(screen.getByText('Hard-won lessons')).toBeInTheDocument();
-    expect(screen.getByText('Or start from a template')).toBeInTheDocument();
+    // The deck is one quiet line, shut — nine tuned cards under three sample
+    // ideas read as a second wall, which is what "still needs work" meant.
+    const disclosure = screen.getByTestId('template-disclosure');
+    expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Lessons Learned Scenarios')).not.toBeInTheDocument();
+  });
+
+  test('the folded deck opens on its line, without the custom card', async () => {
+    await open();
+    await templatesSettled();
+    fireEvent.click(screen.getByTestId('template-disclosure'));
+    expect(screen.getByText('Lessons Learned Scenarios')).toBeInTheDocument();
+    // The continue button below IS the custom route — one door, one handle.
+    const cards = document.querySelectorAll('.scenario-type-card');
+    for (const card of cards) {
+      expect(card.textContent).not.toMatch(/something else/i);
+    }
+    // And no card announces being "Built-in" — a chip saying "nothing special".
+    expect(screen.queryByText(/Built-in Template/)).not.toBeInTheDocument();
+  });
+
+  test('a record-speak template name is trimmed on the card, kept on title=', async () => {
+    await open({
+      api: {
+        prompts: [{
+          SK: 'AIPROMPT#gen-ca-lessons',
+          promptId: 'gen-ca-lessons',
+          name: 'Lessons Learned - Strategic Insights',
+          description: 'What the room took away',
+          basePrompt: 'base',
+          scenarioType: 'lessons-learned',
+          gameType: 'call-and-answer',
+          promptType: 'generation',
+          status: 'active',
+        }],
+      },
+    });
+    await templatesSettled();
+    fireEvent.click(screen.getByTestId('template-disclosure'));
+
+    const card = screen.getByText('Lessons Learned');
+    // A reduction with no recovery is a deletion — the stored name rides along.
+    expect(card).toHaveAttribute('title', 'Lessons Learned - Strategic Insights');
+    expect(screen.queryByText('Lessons Learned - Strategic Insights')).not.toBeInTheDocument();
   });
 
   test('switching the kind switches the samples', async () => {
@@ -320,9 +381,11 @@ describe('sample ideas follow the chosen direction', () => {
     await open();
     fireEvent.click(screen.getByRole('radio', { name: /Something else/i }));
     expect(screen.queryByTestId('scenario-samples')).not.toBeInTheDocument();
-    // And no orphaned "Or" with nothing above it.
+    // No samples above means the deck is the primary route again: a plain
+    // heading, permanently open, no disclosure to find.
     expect(screen.getByText('Start from a template')).toBeInTheDocument();
-    expect(screen.queryByText('Or start from a template')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('template-disclosure')).not.toBeInTheDocument();
+    expect(screen.getByText('Lessons Learned Scenarios')).toBeInTheDocument();
   });
 
   test('types with no direction picker keep their template cards as the question', async () => {
@@ -384,7 +447,8 @@ describe('samples resolve through database supersession', () => {
     // Wait for the template list to settle, as a human necessarily does —
     // clicking mid-load resolves against the hardcoded deck and the request
     // then degrades to the custom fallback (gracefully, but not this test).
-    await screen.findByText('db-tuned lessons template');
+    // The deck itself is folded shut now, so the settle signal is its count.
+    await templatesSettled();
     fireEvent.click(screen.getByText('Hard-won lessons'));
     fireEvent.click(await screen.findByRole('button', { name: /Generate/i }));
 
@@ -399,7 +463,7 @@ describe('samples resolve through database supersession', () => {
 
   test('with no database templates the hardcoded card still serves the sample', async () => {
     const { posted } = await open({ api: { job: completeJob() } });
-    await screen.findByText('Lessons Learned Scenarios');
+    await templatesSettled();
     fireEvent.click(screen.getByText('Hard-won lessons'));
     fireEvent.click(await screen.findByRole('button', { name: /Generate/i }));
     await waitFor(() => expect(posted).toHaveLength(1));

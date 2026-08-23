@@ -398,7 +398,9 @@ describe('4. the padlocks in the real builder', () => {
     mockDraft(completeJob(DRAFT), { prompts: [] });
     render(<AIScenarioBuilder onClose={() => {}} onScenariosGenerated={() => {}} engagementType="call-and-answer" />);
     await waitFor(() => expect(authFetch).toHaveBeenCalled());
-    fireEvent.click(screen.getByText('Custom Scenarios'));
+    // The custom card is withheld from the folded deck — the blank-canvas
+    // continue button is that route now.
+    fireEvent.click(screen.getByTestId('scenario-continue-blank'));
     await screen.findByText(/Configure Your Scenarios/i);
   }
 
@@ -465,7 +467,9 @@ describe('4. the padlocks in the real builder', () => {
     const posted = mockDraft(completeJob(DRAFT));
     render(<AIScenarioBuilder onClose={() => {}} onScenariosGenerated={() => {}} engagementType="call-and-answer" />);
     await waitFor(() => expect(authFetch).toHaveBeenCalled());
-    fireEvent.click(screen.getByText('Custom Scenarios'));
+    // The custom card is withheld from the folded deck — the blank-canvas
+    // continue button is that route now.
+    fireEvent.click(screen.getByTestId('scenario-continue-blank'));
     await screen.findByText(/Configure Your Scenarios/i);
 
     fireEvent.change(screen.getByPlaceholderText(/Describe the context, industry/i), {
