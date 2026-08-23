@@ -101,6 +101,16 @@ describe('turning a report into a list of rounds', () => {
     expect(roundsFrom(report([q('1')])).map((r) => r.ordinal)).toEqual([1]);
   });
 
+  // rejects: dropping the field in normalisation — the ENDED wavelength
+  //          vocabulary aggregates it, and a round that loses its stored
+  //          analysis here reads as "no analysed rounds" on the stage.
+  test('a wavelength round keeps its stored word analysis', () => {
+    const wa = { submitterCount: 2, words: [{ word: 'ocean', count: 2 }], commonWords: [] };
+    const rounds = roundsFrom(report([{ ...q('1'), wordAnalysis: wa }]));
+    expect(rounds[0].wordAnalysis).toEqual(wa);
+    expect(roundsFrom(report([q('2')]))[0].wordAnalysis).toBeNull();
+  });
+
   // rejects: fixing the envelope by hard-coding the OTHER shape. The stored
   //          REPORT row is the inner object, so GET hands back the unwrapped
   //          form and a reader that insists on the wrapper breaks on it.

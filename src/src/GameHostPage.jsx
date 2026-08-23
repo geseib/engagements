@@ -24,6 +24,7 @@ import Stage from './components/stage/Stage';
 import Rail from './components/stage/Rail';
 import RoomMeter from './components/stage/RoomMeter';
 import Podium from './components/stage/Podium';
+import WavelengthSessionVocabulary from './components/stage/WavelengthSessionVocabulary';
 import Dock from './components/stage/Dock';
 import Pager from './components/stage/Pager';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
@@ -386,6 +387,14 @@ function GameHostPage() {
   useEffect(() => {
     if (setupPanelOpen) loadRounds();
   }, [setupPanelOpen, lessonNumber, loadRounds]);
+  // The ENDED stage for wavelength aggregates every round's stored word
+  // analysis into the session vocabulary — which lives in the report the
+  // Sessions panel also reads. Fetch it on arrival at ENDED, or the band
+  // would only appear for a host who happened to open that panel first.
+  useEffect(() => {
+    if (gameState === 'ENDED' && currentGameType === 'wavelength') loadRounds();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState, currentGameType]);
   // SERVER TRUTH: has this round's AuthorsRevealed been set? It flips
   // automatically when the round enters RESULTS (get-results.js's
   // enterResultsState); handleRevealAuthors is the override for a host who
@@ -5942,13 +5951,22 @@ Focus on actionable business strategy insights.`;
                     happened is the point — a podium is a score table for the
                     whole session, and a session with an unrevealed round would
                     attribute it retroactively. */}
-                <Podium
-                  phase="ENDED"
-                  gameType={currentGameType}
-                  anonymousUntilReveal={anonymousUntilReveal}
-                  authorsRevealed={authorsRevealed}
-                  players={players}
-                />
+                {currentGameType === 'wavelength' ? (
+                  /* No podium here and never was — wavelength writes no scores
+                     and no Winners, and a podium would invent its numbers
+                     (ended-screen review §1.4). The slot carries the one thing
+                     the session actually produced: the words the whole room
+                     said, combined from every round's stored analysis. */
+                  <WavelengthSessionVocabulary rounds={rounds} loading={historyLoading} />
+                ) : (
+                  <Podium
+                    phase="ENDED"
+                    gameType={currentGameType}
+                    anonymousUntilReveal={anonymousUntilReveal}
+                    authorsRevealed={authorsRevealed}
+                    players={players}
+                  />
+                )}
               </>
             )}
 

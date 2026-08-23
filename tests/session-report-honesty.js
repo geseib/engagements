@@ -472,6 +472,39 @@ await check('the column distinguishes voters from non-voters at all', () => {
     `every player has the same votesGiven (${values.join(', ')}), so the column carries no information`);
 });
 
+// ---------------------------------------------------------------------------
+// 5. Wavelength rounds carry their STORED word analysis into the report
+// ---------------------------------------------------------------------------
+//
+// The ENDED session vocabulary aggregates each round's wordAnalysis from the
+// report. The stored copy is what the room saw (a re-read never re-clusters),
+// so the report must pass it through untouched — and only for wavelength;
+// every other type's rounds must not sprout the field.
+say('\n5. the report carries wavelength word analysis through');
+
+const WA = {
+  submitterCount: 2, totalWordsSubmitted: 4, totalUniqueWords: 3,
+  words: [{ word: 'ocean', count: 2, members: ['ocean'] }],
+  commonWords: [{ word: 'ocean', count: 2, members: ['ocean'] }],
+  nearMiss: [], matching: 'clustered', clustering: 'done',
+};
+seedWavelength('w-rep', { storedWordAnalysis: WA });
+const waveReport = JSON.parse((await createReport({ pathParameters: { gameId: 'w-rep' } })).body).report;
+
+await check('the stored analysis reaches the round, verbatim', () => {
+  const rd = (waveReport.detailedQuestions || []).find((q) => q.questionNumber === '001');
+  assert.ok(rd, 'the wavelength round is missing from the report entirely');
+  assert.deepStrictEqual(rd.wordAnalysis, WA,
+    'wordAnalysis must pass through untouched — the stored copy is what the room saw');
+});
+
+await check('non-wavelength rounds do not sprout the field', () => {
+  const rounds = voteReport.detailedQuestions || [];
+  assert.ok(rounds.length > 0, 'the vote report has no rounds to check');
+  assert.ok(rounds.every((q) => q.wordAnalysis === undefined),
+    'a call-and-answer round is carrying wordAnalysis');
+});
+
 say(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
 
