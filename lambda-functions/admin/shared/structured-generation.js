@@ -52,7 +52,15 @@ const PROMPT_OVERHEAD_TOKENS = 600;
  * explanation, a survey question is mostly a scale or a placeholder.
  */
 const PER_ITEM_TOKENS = {
-  wavelength: 110,
+  // 110 was measured against the SUBJECT alone and it truncated every real
+  // run: the tool schema REQUIRES five fields per item (title, category,
+  // detail, customInstructions, tags), and that JSON costs ~140-180 tokens
+  // even when the subject is two words. 600 + 5×110 = the exact "1150-token
+  // output limit" failure the owner hit; the halved retry then truncated the
+  // same way, so wavelength generation produced nothing at all. Budgeted like
+  // poll — short prose, several fields — because that is what the wire shape
+  // actually is. Twenty subjects still fit one call (600 + 20×260 < 8000).
+  wavelength: 260,
   survey: 200,
   poll: 260,
   trivia: 380,

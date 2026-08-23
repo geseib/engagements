@@ -529,6 +529,20 @@ async function runJob(body, workerCtx = ctx()) {
       'tiny wavelength items should batch larger than scenarios');
   });
 
+  await test('the wavelength budget pays for the WIRE shape, not just the subject', () => {
+    // THE INCIDENT: 110 tokens/item priced the two-word subject and ignored
+    // that the emit_items schema REQUIRES five fields per item, whose JSON
+    // costs ~140-180 tokens however short the subject is. A 5-subject run got
+    // exactly 600 + 5×110 = 1150 tokens, truncated, halved, truncated again,
+    // and the owner saw "Nothing was produced". A realistic item must fit its
+    // own budget with headroom.
+    const PER_ITEM_JSON_FLOOR = 180;
+    const budget = maxTokensFor('wavelength', 5);
+    assert.ok(budget >= 600 + 5 * PER_ITEM_JSON_FLOOR,
+      `5 wavelength items get ${budget} tokens — below the ~${PER_ITEM_JSON_FLOOR}/item the tool JSON actually costs`);
+    assert.ok(budget > 1150, 'the exact budget that produced the incident must never come back');
+  });
+
   console.log('\njob records carry an optional set-level meta');
 
   await test('a job with no meta polls cleanly as meta: null', async () => {
