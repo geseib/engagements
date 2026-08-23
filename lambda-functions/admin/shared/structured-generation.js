@@ -117,11 +117,18 @@ function maxTokensFor(engagementType, count) {
  */
 function lengthGuidance(engagementType, roundKind) {
   if (engagementType === 'wavelength') {
+    // No framing sentence, and that is the game, not thrift. A wavelength
+    // round asks the room what a term means TO THEM; a stored sentence about
+    // its meaning, background or purpose seeds the very words the round
+    // exists to compare. The owner, off the AI Jargon set: "givien them even
+    // a few word about its meaning ... messes up the purpose."
     return [
       '',
       'LENGTH LIMITS (hard limits, not targets):',
       '- title: a subject of 1-4 words.',
-      '- detail: ONE sentence of framing, 140 characters maximum.',
+      '- detail: LEAVE EMPTY (""). Never describe, define or hint at the',
+      '  subject — the players supply the meaning; any framing contaminates',
+      '  their answers.',
       '- customInstructions: one sentence telling the player what to enter.',
       'Write only what the content needs; do not pad to reach a limit.',
     ].join('\n');
@@ -192,7 +199,7 @@ function buildItemsTool(engagementType, roundKind) {
               detail: {
                 type: 'string',
                 description: isWavelength
-                  ? 'One sentence of framing, 140 characters maximum.'
+                  ? 'Leave empty. Never describe or define the subject — the players supply the meaning.'
                   : `The scenario itself, ${detailSentences}, ${detailMax} characters maximum.`,
               },
               customInstructions: {

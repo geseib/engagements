@@ -529,6 +529,29 @@ async function runJob(body, workerCtx = ctx()) {
       'tiny wavelength items should batch larger than scenarios');
   });
 
+  await test('a wavelength subject carries NO detail — the room supplies the meaning', async () => {
+    // THE AI JARGON REPORT: a stored framing sentence is a definition, and a
+    // definition seeds the very words the round exists to compare. The prompt
+    // orders the field empty, and a model that writes one anyway is stripped
+    // on normalisation — the guarantee, not the request.
+    reset({ seedCurated: false });
+    bedrockHandler = () => toolResponse(makeItems(3, 'jargon')); // fixture WRITES details
+    const { job } = await runJob({ scenarioType: 'custom', engagementType: 'wavelength', count: 3 });
+    assert.match(bedrockCalls[0].prompt, /LEAVE EMPTY/,
+      'the prompt must order the detail field empty for wavelength');
+    assert.ok(job.items.length > 0, 'the run produced nothing to check');
+    for (const item of job.items) {
+      assert.strictEqual(item.detail, '',
+        `subject "${item.title}" kept a detail: "${item.detail}"`);
+    }
+    // And only wavelength: a call-and-answer scenario still keeps its body.
+    reset({ seedCurated: false });
+    bedrockHandler = () => toolResponse(makeItems(2, 'scenario'));
+    const ca = await runJob({ scenarioType: 'custom', engagementType: 'call-and-answer', count: 2 });
+    assert.ok(ca.job.items.every((i) => i.detail.length > 0),
+      'stripping detail must not leak into other engagement types');
+  });
+
   await test('the wavelength budget pays for the WIRE shape, not just the subject', () => {
     // THE INCIDENT: 110 tokens/item priced the two-word subject and ignored
     // that the emit_items schema REQUIRES five fields per item, whose JSON

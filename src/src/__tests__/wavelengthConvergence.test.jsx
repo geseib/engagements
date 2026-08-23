@@ -238,3 +238,28 @@ describe('the call sites — GameHostPage actually wires all of this', () => {
     expect(host).toMatch(/setAnswers\(\[\]\);\s*setWavelengthAnalysis\(null\)/);
   });
 });
+
+describe('ASK shows the term and NOTHING about it — the AI Jargon report', () => {
+  // The owner, off the AI Jargon set: "we dont want to give them ideas of the
+  // meaning, we are looking to them to share their meaning." A stored detail
+  // sentence is a definition, so no wavelength ASK surface may render one —
+  // whatever the set carries. Source-scanned because neither page mounts in
+  // jsdom (auth provider), following this file's call-sites pattern.
+  const host = stripComments(fs.readFileSync(src('GameHostPage.jsx'), 'utf8'));
+  const player = stripComments(fs.readFileSync(src('PlayerPage.jsx'), 'utf8'));
+
+  test('the host stage detail line is gated off wavelength', () => {
+    expect(host).toMatch(/currentGameType !== 'wavelength'\s*&&\s*\(currentQuestion\.questionDetail/);
+  });
+
+  test('no screen renders the retired topic field', () => {
+    // rejects: reintroducing `currentQuestion.topic` — it printed the
+    // subject's framing on the projector and on phones.
+    expect(host).not.toMatch(/\.topic\b/);
+    expect(player).not.toMatch(/\.topic\b/);
+  });
+
+  test('the player detail chain resolves wavelength to null', () => {
+    expect(player).toMatch(/gameType === 'wavelength'\s*\?\s*null/);
+  });
+});
