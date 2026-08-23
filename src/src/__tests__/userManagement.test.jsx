@@ -318,13 +318,27 @@ describe('the members table, and the badge that used to lie about it', () => {
     // different predicates.
     await mount();
     const filters = screen.getByRole('group', { name: /filter members/i });
-    for (const [name, expected] of [['Admins', 2], ['Hosts', 2], ['Disabled', 1], ['All', 5]]) {
+    for (const [name, expected] of [['Admins', 2], ['Hosts', 2], ['Disabled', 1], ['Active', 4]]) {
       const button = within(filters).getByRole('button', { name: new RegExp(`^${name}`, 'i') });
       expect(button).toHaveTextContent(String(expected));
       fireEvent.click(button);
       const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1);
       expect(rows).toHaveLength(expected);
     }
+  });
+
+  test('disabled accounts are out of the default view — noise, per the owner', async () => {
+    // rejects: an "All" default that surfaces every rejected account forever.
+    // The default tab is Active and is honestly NAMED Active — a tab labelled
+    // All that withheld rows would be the badge-that-lies defect again. The
+    // Disabled tab (asserted above) is where they live.
+    await mount();
+    const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(4);
+    const filters = screen.getByRole('group', { name: /filter members/i });
+    expect(within(filters).getByRole('button', { name: /^Active/i }))
+      .toHaveAttribute('aria-pressed', 'true');
+    expect(within(filters).queryByRole('button', { name: /^All/i })).toBeNull();
   });
 
   test('Joined shows the date the account was created', async () => {
@@ -373,6 +387,10 @@ describe('the members table, and the badge that used to lie about it', () => {
     // ("cannot be undone") instead of consequence (RATIONALE §8).
     const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false);
     await mount();
+    // Sam is the disabled fixture, and disabled rows live behind their own
+    // tab now — which is also where a permanent removal actually happens.
+    fireEvent.click(within(screen.getByRole('group', { name: /filter members/i }))
+      .getByRole('button', { name: /^Disabled/i }));
     const row = within(screen.getByRole('table')).getByText('Sam Okonkwo').closest('tr');
     fireEvent.click(within(row).getByRole('button', { name: /remove sam okonkwo/i }));
 
@@ -393,6 +411,8 @@ describe('the members table, and the badge that used to lie about it', () => {
     // makes a 500 look exactly like a success until the next reload.
     const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
     await mount({ stateStatus: 500 });
+    fireEvent.click(within(screen.getByRole('group', { name: /filter members/i }))
+      .getByRole('button', { name: /^Disabled/i }));
     const row = within(screen.getByRole('table')).getByText('Sam Okonkwo').closest('tr');
     fireEvent.click(within(row).getByRole('button', { name: /remove sam okonkwo/i }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/nope/i));

@@ -168,7 +168,9 @@ const UserManagement = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
+  // 'active' — everyone but the disabled accounts. The owner: rejected
+  // accounts in the default view are "mostly noise"; they keep their own tab.
+  const [roleFilter, setRoleFilter] = useState('active');
   const [actionInProgress, setActionInProgress] = useState(new Set());
 
   const { isAdmin } = useAuth();
@@ -282,13 +284,19 @@ const UserManagement = () => {
 
   /** Counts and filter share `roleOf`. That is the whole fix for the badge. */
   const memberCounts = useMemo(() => {
-    const counts = { all: members.length, admins: 0, hosts: 0, disabled: 0 };
+    const counts = { admins: 0, hosts: 0, disabled: 0 };
     for (const user of members) counts[roleOf(user)] += 1;
+    // The default tab. Deliberately NOT named "All": a tab labelled All that
+    // withheld the disabled rows would be a badge that lies, which is the
+    // defect this block's predicate-sharing exists to prevent.
+    counts.active = members.length - counts.disabled;
     return counts;
   }, [members]);
 
   const shownMembers = useMemo(
-    () => (roleFilter === 'all' ? members : members.filter((user) => roleOf(user) === roleFilter)),
+    () => (roleFilter === 'active'
+      ? members.filter((user) => roleOf(user) !== 'disabled')
+      : members.filter((user) => roleOf(user) === roleFilter)),
     [members, roleFilter]
   );
 
@@ -450,7 +458,7 @@ const UserManagement = () => {
 
         <div className="um-seg" role="group" aria-label="Filter members by role">
           {[
-            ['all', 'All'],
+            ['active', 'Active'],
             ['admins', 'Admins'],
             ['hosts', 'Hosts'],
             ['disabled', 'Disabled'],
@@ -486,7 +494,7 @@ const UserManagement = () => {
           {!loading && shownMembers.length === 0 && (
             <tr className="um-dimrow">
               <td colSpan={5}>
-                {searchTerm.trim() || roleFilter !== 'all'
+                {searchTerm.trim() || roleFilter !== 'active'
                   ? 'No member matches this search and filter.'
                   : 'No accounts have been approved yet.'}
               </td>
