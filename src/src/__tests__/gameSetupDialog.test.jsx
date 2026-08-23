@@ -488,3 +488,33 @@ describe('the title', () => {
     expect(props.onEventTitleChange).toHaveBeenCalledWith('Renamed');
   });
 });
+
+describe('the zero-setup plan line', () => {
+  // The owner's redesign brief: a session should work well with none of the
+  // optional Workie fields touched. The line states the plan; these pin that
+  // it tells the truth about WHERE the summary approach comes from.
+  test('absent until a set is picked — there is no plan to describe yet', () => {
+    setup();
+    expect(screen.queryByTestId('gsd-workie-plan')).toBeNull();
+  });
+
+  test('a set with no prompt of its own promises the format standard', () => {
+    setup();
+    fireEvent.change(setSelect(), { target: { value: 'pricing' } });
+    const plan = screen.getByTestId('gsd-workie-plan');
+    expect(plan.textContent).toMatch(/standard Call & Answer way/);
+    expect(plan.textContent).toMatch(/nothing above needs setting up/i);
+  });
+
+  test('a set that names its own prompt is followed, and says so', () => {
+    setup({
+      questionSets: [
+        { id: 'lp', name: 'Leadership Principles', totalQuestions: 10, engagementType: 'call-and-answer', hasImages: false, promptId: 'lp-behavioral' },
+      ],
+    });
+    fireEvent.change(setSelect(), { target: { value: 'lp' } });
+    const plan = screen.getByTestId('gsd-workie-plan');
+    expect(plan.textContent).toMatch(/brings its own summary approach/i);
+    expect(plan.textContent).not.toMatch(/standard/i);
+  });
+});

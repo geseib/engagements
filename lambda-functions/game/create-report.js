@@ -518,9 +518,10 @@ exports.handler = async (event) => {
     const playerPerformance = uniquePlayers.map(player => {
       const playerName = player.PlayerName || player.playerName;
       const playerAnswers = answers.filter(a => (a.PlayerName || a.playerName) === playerName);
-      // VoterName first: BOTH writers of a VOTE# row stamp the voter as
-      // `VoterName` (game/submit-vote.js:61, websocket/submit-votes.js:28) and
-      // neither writes PlayerName. Filtering on PlayerName alone matched
+      // VoterName first: the writer of a VOTE# row stamps the voter as
+      // `VoterName` (game/submit-vote.js:61 — the dead second writer,
+      // websocket/submit-votes.js, wrote the same field and is deleted) and
+      // never writes PlayerName. Filtering on PlayerName alone matched
       // nothing, so every player's votesGiven was 0 in every report ever
       // produced. get-votes.js:79 already reads it in this order; this line was
       // the outlier. The later fallbacks are kept for any legacy row shape.

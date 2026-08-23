@@ -117,22 +117,14 @@ const ws = new WebSocket('wss://api.engagements.sb.seibtribe.us');
 **Validation**: Answer format, time limits, duplicate submissions
 
 #### Submit Vote
-```json
-{
-  "action": "submit-vote",
-  "data": {
-    "gameId": "string",
-    "playerId": "string",
-    "voteTarget": "string",
-    "voteType": "up|down|rank",
-    "value": "number"
-  }
-}
-```
-**Handler**: `submit-votes.js`  
-**Purpose**: Processes vote submissions for collaborative exercises  
-**Response**: Vote confirmation and updated tallies  
-**Features**: Duplicate vote prevention, weighted voting
+
+Voting is **not a WebSocket action**. Votes are submitted over REST:
+`POST /games/{gameId}/votes`, handled by `lambda-functions/game/submit-vote.js`
+(`SubmitVoteFunction` in `template-clean.yaml`). This section previously
+documented a `submit-vote` WebSocket action backed by
+`websocket/submit-votes.js` — that file was never routed by any deployed
+function, wrote `VOTE#` rows in a shape incompatible with the real handler's,
+and has been deleted.
 
 ---
 

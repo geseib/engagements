@@ -549,6 +549,23 @@ export default function GameSetupDialog({
               : 'Workie reads the room and picks its own register — playful for an icebreaker, analytical for a retro.'}
           </small>
         </div>
+
+        {/*
+          THE ZERO-SETUP PROMISE, STATED. Everything above this line is
+          optional, and the owner's redesign brief says the session should
+          work well with none of it touched — but a screen of optional fields
+          reads as homework unless it says so. One sentence names the plan:
+          the summary approach comes from the set when the set names one, and
+          from the format's standard otherwise, with no third state where the
+          host must go configure a prompt somewhere first.
+        */}
+        {newGameSetId && (
+          <p className="gsd-workie-plan" data-testid="gsd-workie-plan">
+            {allSets.find((s) => s.id === newGameSetId)?.promptId
+              ? 'This question set brings its own summary approach — Workie follows it. Everything above is optional.'
+              : `Workie summarizes each round the standard ${gameTypeMeta(engagementType).label} way — nothing above needs setting up.`}
+          </p>
+        )}
       </div>
 
       <div className="dialog-actions">
