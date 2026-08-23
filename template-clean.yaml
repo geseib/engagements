@@ -3080,6 +3080,26 @@ Resources:
               <p>Enter it on the sign-in screen to finish. The code expires shortly.</p>
               <p>If this wasn't you, no action is needed — the code is useless on its own
               and nothing has changed on your account.</p>
+      # THE ACCOUNT THE EMAIL LEAVES THROUGH.
+      #
+      # Without this block the pool sends via COGNITO_DEFAULT: a shared Cognito
+      # sender with a hard daily cap (~50/day), a no-reply@verificationemail.com
+      # From address no one recognises, and no DKIM tied to our domain — which
+      # is exactly the "is this phishing?" half of the generic-email report the
+      # VerificationMessageTemplate above fixed the wording half of.
+      #
+      # DEVELOPER routes the same messages through this account's SES instead.
+      # Verified before this shipped (2026-08-23): the seibtribe.us DOMAIN
+      # identity is Verified=true with DKIM SUCCESS, and the account has SES
+      # production access (50k/day) — NOT sandbox, which would silently refuse
+      # every unverified recipient and break password reset for everyone.
+      # Same-account SES needs no sender-authorization policy; Cognito uses its
+      # email service-linked role. The From address needs no separate identity —
+      # the domain identity covers every address at seibtribe.us.
+      EmailConfiguration:
+        EmailSendingAccount: DEVELOPER
+        SourceArn: !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/seibtribe.us'
+        From: 'Engage <no-reply@seibtribe.us>'
       # PostConfirmation trigger will be configured after deployment to avoid circular dependency
       UserPoolTags:
         Environment: !Ref Environment
