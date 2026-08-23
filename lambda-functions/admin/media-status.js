@@ -20,12 +20,26 @@
  *
  * ── WHAT IS DELIBERATELY NOT CHECKED ──────────────────────────────────────
  *
- * `remote` (http/https) and `asset` (/-rooted) values are counted and reported
- * but never looked for in the bucket. They are stored verbatim by
- * `toMediaKey` (upload-questions.js:73) and they live somewhere this function
- * has no business reaching: Wikimedia's servers, and `dist/` inside the website
- * bucket. Reporting them as "missing" because they are not in the media bucket
- * would condemn the entire Art set, which works.
+ * `asset` (/-rooted) values are counted and reported but never looked for in
+ * the bucket — they live in `dist/` inside the website bucket, shipped by the
+ * build, and a report reaching in there would be checking the deploy rather
+ * than the set.
+ *
+ * ── REMOTE URLS ARE NOW CHECKED TOO ───────────────────────────────────────
+ *
+ * This header used to say remote (http/https) values were "never looked for",
+ * and the Art set is why that stopped being good enough: an AI-drafted CSV
+ * pointed 26 of 60 questions at Wikimedia files that do not exist, the import
+ * said nothing (remote was stored verbatim, unverified by design), and the
+ * blanks were discovered on a projector mid-round. A dead link is the same
+ * defect to a room as a missing bucket key, so it belongs in the same report.
+ *
+ * Checked with HEAD (falling back to a 1-byte ranged GET on hosts that refuse
+ * HEAD), a short per-request timeout, bounded concurrency, and a hard cap —
+ * this must finish inside API Gateway's ceiling, and a slow art host degrades
+ * to "unchecked", never to a hung report. A timeout is reported as
+ * unreachable rather than dead: to an author, "replace it" and "try again"
+ * are different advice.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
@@ -61,6 +75,73 @@ async function listPrefix(bucket, prefix) {
     pages += 1;
   } while (token && pages < 20);
   return keys;
+}
+
+/* ── remote URL verification ─────────────────────────────────────────────── */
+
+/** Per-request timeout. Wikimedia answers a HEAD in well under a second. */
+const REMOTE_TIMEOUT_MS = 3500;
+/** Concurrent checks. 60 URLs at 12 wide is five waves — seconds, not the ceiling. */
+const REMOTE_CONCURRENCY = 12;
+/** Hard cap. Past this the rest report as unchecked rather than risk the 30s budget. */
+const REMOTE_CHECK_CAP = 120;
+
+/**
+ * One URL's verdict: 'ok' | 'dead' | 'unreachable'.
+ *
+ * 'dead' is a server that answered and said no (404 and friends) — replace the
+ * link. 'unreachable' is no answer inside the timeout — maybe the host, maybe
+ * the moment; try again before rewriting anything. Redirects are followed, so
+ * a Special:FilePath 301 is judged by where it lands.
+ */
+async function checkRemote(url) {
+  const attempt = async (method, extraHeaders) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REMOTE_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, {
+        method,
+        redirect: 'follow',
+        signal: controller.signal,
+        headers: extraHeaders,
+      });
+      return res.status;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  try {
+    let status = await attempt('HEAD');
+    // A host that refuses HEAD has not said the FILE is absent. One more try,
+    // asking for a single byte so a dead link cannot cost a whole download.
+    if (status === 405 || status === 501) {
+      status = await attempt('GET', { Range: 'bytes=0-0' });
+    }
+    return status < 400 ? { verdict: 'ok', status } : { verdict: 'dead', status };
+  } catch (e) {
+    return { verdict: 'unreachable', status: 0 };
+  }
+}
+
+/** All verdicts, `REMOTE_CONCURRENCY` at a time, capped at `REMOTE_CHECK_CAP`. */
+async function checkRemotes(entries) {
+  const toCheck = entries.slice(0, REMOTE_CHECK_CAP);
+  const results = new Array(toCheck.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < toCheck.length) {
+      const i = next;
+      next += 1;
+      results[i] = await checkRemote(toCheck[i].image);
+    }
+  };
+  await Promise.all(Array.from(
+    { length: Math.min(REMOTE_CONCURRENCY, toCheck.length) }, worker,
+  ));
+  return {
+    checked: toCheck.map((entry, i) => ({ ...entry, ...results[i] })),
+    unchecked: entries.length - toCheck.length,
+  };
 }
 
 exports.handler = async (event) => {
@@ -99,11 +180,20 @@ exports.handler = async (event) => {
     const missing = [];
     const referenced = new Set();
 
+    const remoteEntries = [];
     const sorted = [...items].sort((a, b) => (a.QuestionNumber || 0) - (b.QuestionNumber || 0));
     for (const item of sorted) {
       const image = String(item.Image ?? item.image ?? '').trim();
       const kind = classifyImage(image);
       counts[kind] += 1;
+      if (kind === 'remote') {
+        remoteEntries.push({
+          sk: item.SK,
+          questionNumber: item.QuestionNumber ?? null,
+          title: item.Title || item.title || '(untitled)',
+          image,
+        });
+      }
       if (kind !== 'key') continue;
       referenced.add(image);
       if (!present.has(image)) {
@@ -115,6 +205,10 @@ exports.handler = async (event) => {
         });
       }
     }
+
+    // The dead-link half of the report — see the header for why remote joined.
+    const { checked: remoteChecked, unchecked: remoteUnchecked } = await checkRemotes(remoteEntries);
+    const deadRemote = remoteChecked.filter((r) => r.verdict !== 'ok');
 
     // Files in the bucket nothing points at. Reported, never deleted: an author
     // may be part-way through renaming CSV cells, and a verification report
@@ -131,9 +225,19 @@ exports.handler = async (event) => {
       missingCount: missing.length,
       missing,
       unused,
-      // Named so a reader of the JSON knows why their Wikimedia URLs are not
-      // in `missing` — this endpoint checked what it could check.
-      unverifiable: counts.remote + counts.asset,
+      /*
+        Remote links, verified live. `deadRemote` rows carry a `verdict` —
+        'dead' (the server answered and said no: replace the link) or
+        'unreachable' (no answer inside the timeout: try again first) — and
+        the HTTP status where there was one. `remoteUnchecked` counts URLs
+        past the safety cap, so silence past it cannot read as "all fine".
+      */
+      deadRemoteCount: deadRemote.length,
+      deadRemote,
+      remoteChecked: remoteChecked.length,
+      remoteUnchecked,
+      // Only /-rooted repo assets remain unverifiable — remote is checked now.
+      unverifiable: counts.asset,
     });
   } catch (error) {
     console.error('Error reading question set media:', error);

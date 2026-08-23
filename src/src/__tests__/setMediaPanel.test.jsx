@@ -54,6 +54,10 @@ const EMPTY_REPORT = {
   missingCount: 0,
   missing: [],
   unused: [],
+  deadRemoteCount: 0,
+  deadRemote: [],
+  remoteChecked: 0,
+  remoteUnchecked: 0,
   unverifiable: 0,
 };
 
@@ -121,13 +125,13 @@ describe('the verification report', () => {
 
   test('a set of nothing but web links is not condemned', async () => {
     // The Art set. Every Image is a Wikimedia https:// URL, none of them is in
-    // the bucket, and every one of them works.
+    // the bucket, and every one of them answered the live check.
     mockApi({
       reports: [{
         ...EMPTY_REPORT,
         totalQuestions: 7,
         counts: { none: 0, remote: 7, asset: 0, key: 0 },
-        unverifiable: 7,
+        remoteChecked: 7,
       }],
     });
 
@@ -135,8 +139,70 @@ describe('the verification report', () => {
 
     expect(await screen.findByTestId('smed-allgood')).toBeInTheDocument();
     expect(screen.queryByTestId('smed-missing')).not.toBeInTheDocument();
-    expect(screen.getByText(/7 web links/)).toBeInTheDocument();
+    expect(screen.queryByTestId('smed-dead-remote')).not.toBeInTheDocument();
+    expect(screen.getByText(/7 web links checked/)).toBeInTheDocument();
+    expect(screen.getByText(/7 web links answered/)).toBeInTheDocument();
     expect(screen.queryByTestId('set-image-badge-missing')).not.toBeInTheDocument();
+  });
+
+  test('a dead web link is named, and the set is NOT declared fine', async () => {
+    // The Art set regression the check exists for: 26 of 60 AI-drafted
+    // Wikimedia links answered 404 and the blanks debuted on a projector.
+    mockApi({
+      reports: [{
+        ...EMPTY_REPORT,
+        totalQuestions: 2,
+        counts: { none: 0, remote: 2, asset: 0, key: 0 },
+        remoteChecked: 2,
+        deadRemoteCount: 1,
+        deadRemote: [{
+          sk: 'QUESTION#002',
+          questionNumber: 2,
+          title: 'A ghost on Wikimedia',
+          image: 'https://commons.wikimedia.org/wiki/Special:FilePath/No_Such_Painting.jpg',
+          verdict: 'dead',
+          status: 404,
+        }],
+      }],
+    });
+
+    render(<SetMediaPanel setId={SET_ID} />);
+
+    const dead = await screen.findByTestId('smed-dead-remote');
+    expect(within(dead).getByText('A ghost on Wikimedia')).toBeInTheDocument();
+    expect(within(dead).getByText(/dead \(404\)/)).toBeInTheDocument();
+    // The chip turns, and the all-good banner must NOT render beside the list —
+    // missing.length is 0 here, which is exactly the case that used to slip.
+    expect(screen.getByText(/1 of 2 web links broken/)).toBeInTheDocument();
+    expect(screen.queryByTestId('smed-allgood')).not.toBeInTheDocument();
+  });
+
+  test('an unreachable link reads as unreachable, not as dead', async () => {
+    // 'dead' advises replacing the link; 'unreachable' advises trying again.
+    mockApi({
+      reports: [{
+        ...EMPTY_REPORT,
+        totalQuestions: 1,
+        counts: { none: 0, remote: 1, asset: 0, key: 0 },
+        remoteChecked: 1,
+        deadRemoteCount: 1,
+        deadRemote: [{
+          sk: 'QUESTION#001',
+          questionNumber: 1,
+          title: 'Slow art host',
+          image: 'https://glacial-art-host.example/x.jpg',
+          verdict: 'unreachable',
+          status: 0,
+        }],
+      }],
+    });
+
+    render(<SetMediaPanel setId={SET_ID} />);
+
+    const dead = await screen.findByTestId('smed-dead-remote');
+    // The explainer paragraph also says the word; the verdict lives in a cell.
+    expect(within(dead).getByRole('cell', { name: 'unreachable' })).toBeInTheDocument();
+    expect(within(dead).queryByText(/dead \(/)).not.toBeInTheDocument();
   });
 
   test('files nothing points at are reported, and nothing offers to delete them', async () => {

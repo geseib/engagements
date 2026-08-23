@@ -119,6 +119,21 @@ stub('@aws-sdk/s3-request-presigner', {
 process.env.TABLE_NAME = TABLE;
 process.env.MEDIA_BUCKET = BUCKET;
 
+// media-status.js verifies remote URLs with the runtime's own global fetch.
+// Routed by URL: { status } answers with that status, an Error rejects (the
+// shape a timeout or DNS failure takes), a function decides per call — which
+// is how the HEAD-refusing host is played. '*' is the fallback route.
+const fetchCalls = [];
+const fetchRoutes = new Map();
+global.fetch = async (url, options = {}) => {
+  fetchCalls.push({ url, method: options.method, headers: options.headers || {} });
+  const route = fetchRoutes.get(url) ?? fetchRoutes.get('*');
+  if (!route) throw new Error(`unstubbed fetch ${url}`);
+  if (route instanceof Error) throw route;
+  if (typeof route === 'function') return route({ url, options });
+  return { status: route.status };
+};
+
 const presign = require(path.join(REPO, 'lambda-functions/admin/media-upload-urls.js'));
 const status = require(path.join(REPO, 'lambda-functions/admin/media-status.js'));
 const media = require(path.join(REPO, 'lambda-functions/admin/shared/set-media.js'));
@@ -137,6 +152,9 @@ function reset() {
   store.clear();
   bucket.clear();
   signed.length = 0;
+  fetchCalls.length = 0;
+  fetchRoutes.clear();
+  fetchRoutes.set('*', { status: 200 });
   store.set(`SETS|SET#${SET}`, {
     PK: 'SETS', SK: `SET#${SET}`, name: 'Famous art', createdBy: OWNER_SUB, activeVersion: 2,
     versions: [{ version: 1 }, { version: 2 }],
@@ -380,11 +398,72 @@ async function test(name, fn) {
     reset();
     question(1, 'https://commons.wikimedia.org/wiki/Special:FilePath/Mona_Lisa.jpg');
     question(2, 'http://example.com/a.png');
-    // Nothing at all in the bucket.
+    // Nothing at all in the bucket — both answer 200 live (the '*' route).
     const out = body(await verify());
     assert.strictEqual(out.missingCount, 0, 'the whole art set would have gone red');
     assert.strictEqual(out.counts.remote, 2);
-    assert.strictEqual(out.unverifiable, 2);
+    assert.strictEqual(out.remoteChecked, 2);
+    assert.strictEqual(out.deadRemoteCount, 0);
+    assert.strictEqual(out.remoteUnchecked, 0);
+    assert.strictEqual(out.unverifiable, 0,
+      'remote is verified live now — only /-rooted assets remain unverifiable');
+  });
+
+  await test('a dead web link is reported with its status — the Art set regression', async () => {
+    reset();
+    const ghost = 'https://commons.wikimedia.org/wiki/Special:FilePath/No_Such_Painting.jpg';
+    const real = 'https://commons.wikimedia.org/wiki/Special:FilePath/Mona_Lisa.jpg';
+    question(1, real, { title: 'The one that works' });
+    question(2, ghost, { title: 'The ghost' });
+    fetchRoutes.set(ghost, { status: 404 });
+
+    const out = body(await verify());
+    assert.strictEqual(out.missingCount, 0, 'a dead link is not a missing bucket key');
+    assert.strictEqual(out.deadRemoteCount, 1);
+    assert.strictEqual(out.deadRemote[0].image, ghost);
+    assert.strictEqual(out.deadRemote[0].title, 'The ghost');
+    assert.strictEqual(out.deadRemote[0].verdict, 'dead');
+    assert.strictEqual(out.deadRemote[0].status, 404);
+  });
+
+  await test('a host that refuses HEAD gets one ranged GET before being condemned', async () => {
+    reset();
+    const url = 'https://example.com/refuses-head.jpg';
+    question(1, url);
+    fetchRoutes.set(url, ({ options }) => (
+      options.method === 'HEAD' ? { status: 405 } : { status: 200 }
+    ));
+
+    const out = body(await verify());
+    assert.strictEqual(out.deadRemoteCount, 0, 'a 405 to HEAD is not a verdict on the file');
+    const calls = fetchCalls.filter((c) => c.url === url);
+    assert.deepStrictEqual(calls.map((c) => c.method), ['HEAD', 'GET']);
+    assert.strictEqual(calls[1].headers.Range, 'bytes=0-0',
+      'the fallback GET must ask for one byte, not the whole file');
+  });
+
+  await test('no answer is unreachable, not dead — different advice to the author', async () => {
+    reset();
+    const url = 'https://glacial-art-host.example/x.jpg';
+    question(1, url);
+    fetchRoutes.set(url, new Error('socket hang up'));
+
+    const out = body(await verify());
+    assert.strictEqual(out.deadRemoteCount, 1);
+    assert.strictEqual(out.deadRemote[0].verdict, 'unreachable');
+    assert.strictEqual(out.deadRemote[0].status, 0);
+  });
+
+  await test('past the cap the rest count as unchecked, never as silently fine', async () => {
+    reset();
+    // The cap (120) lives inside the handler; drive it with 125 questions.
+    for (let i = 1; i <= 125; i += 1) {
+      question(i, `https://example.com/art-${i}.jpg`);
+    }
+    const out = body(await verify());
+    assert.strictEqual(out.remoteChecked, 120);
+    assert.strictEqual(out.remoteUnchecked, 5);
+    assert.strictEqual(fetchCalls.length, 120, 'the overflow must not be fetched at all');
   });
 
   await test('a /-rooted repo asset is never reported missing either', async () => {
@@ -393,6 +472,7 @@ async function test(name, fn) {
     const out = body(await verify());
     assert.strictEqual(out.missingCount, 0);
     assert.strictEqual(out.counts.asset, 1);
+    assert.strictEqual(out.unverifiable, 1, 'shipped with the app; nothing to check live');
   });
 
   await test('a question with no image is not a missing image', async () => {
