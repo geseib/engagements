@@ -567,7 +567,9 @@ describe('a host edits the questions in a set they own', () => {
     await openDialog();
     await openEditor();
     expect(screen.getByRole('button', { name: /close the editor/i })).toBeTruthy();
-    expect(screen.getByTestId('qs-editor-cancel')).toHaveTextContent('Cancel');
+    // "Close", not "Cancel": with nothing unsaved, leaving abandons nothing,
+    // and the owner read Cancel-after-a-landed-CSV-import as "undo that".
+    expect(screen.getByTestId('qs-editor-cancel')).toHaveTextContent('Close');
   });
 
   test('the × closes the editor and leaves the shelf standing', async () => {
