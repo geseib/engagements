@@ -215,13 +215,17 @@ function isNearDuplicate(title, keptTokenSets) {
   });
 }
 
-function normalizeItem(raw) {
+function normalizeItem(raw, engagementType) {
   return {
     id: Date.now() + Math.random(),
     active: true,
     title: String(raw?.title || '').trim(),
     category: String(raw?.category || '').trim(),
-    detail: String(raw?.detail || '').trim(),
+    // A wavelength subject carries NO detail, whatever the model wrote — a
+    // sentence about the term's meaning seeds the very answers the round
+    // exists to compare (the owner, off the AI Jargon set). The prompt says
+    // leave it empty; this is the guarantee when the model doesn't listen.
+    detail: engagementType === 'wavelength' ? '' : String(raw?.detail || '').trim(),
     customInstructions: String(raw?.customInstructions || '').trim(),
     // Normalised on write; readers tolerate legacy casing. See shared/tags.js.
     tags: normalizeTags(raw?.tags),
@@ -386,7 +390,7 @@ async function runWorker(event, context) {
       let added = 0;
       for (const raw of batch) {
         if (produced.length >= total) break;
-        const item = normalizeItem(raw);
+        const item = normalizeItem(raw, engagementType);
         if (!item.title) continue;
         if (isNearDuplicate(item.title, keptTokenSets)) {
           console.warn(`⚠️ Dropping near-duplicate: "${item.title}"`);

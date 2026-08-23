@@ -5453,11 +5453,17 @@ Focus on actionable business strategy insights.`;
                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
                   />
                 )}
-                {(currentQuestion.questionDetail || currentQuestion.detail || currentQuestion.topic) && (
+                {/* WAVELENGTH SHOWS THE TERM AND NOTHING ABOUT IT. The owner,
+                    off the AI Jargon set: "we dont want to give them ideas of
+                    the meaning, we are looking to them to share their meaning."
+                    A stored detail sentence IS a definition, so for wavelength
+                    this line never renders — whatever the set carries. The
+                    subject is the headline above; the how-to-answer line below
+                    is the only other thing the room needs. */}
+                {currentGameType !== 'wavelength'
+                  && (currentQuestion.questionDetail || currentQuestion.detail) && (
                   <p className="qdetail" data-drop="4" data-drop-note="Full prompt">
-                    {currentGameType === 'wavelength' && currentQuestion.topic
-                      ? currentQuestion.topic
-                      : (currentQuestion.questionDetail || currentQuestion.detail)}
+                    {currentQuestion.questionDetail || currentQuestion.detail}
                   </p>
                 )}
                 {currentGameType === 'trivia' && (
@@ -6207,11 +6213,12 @@ Focus on actionable business strategy insights.`;
                 {questions[0].detail}
               </div>
             )}
-            {currentGameType === 'wavelength' && (questions[0].topic || questions[0].detail) && (
+            {/* Wavelength: the term and nothing about it — a stored detail is
+                a definition, and definitions are the players' job. The
+                expanded view adds only the reminder of what to do. */}
+            {currentGameType === 'wavelength' && (
               <div className="expanded-lesson-detail wavelength-topic-expanded">
-                {questions[0].topic
-                  ? (<><strong>Topic:</strong> {questions[0].topic}</>)
-                  : questions[0].detail}
+                Everyone lists up to ten words or short phrases this term brings to mind.
               </div>
             )}
             <div className="expanded-lesson-prompt">

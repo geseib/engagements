@@ -2461,14 +2461,12 @@ function PlayerPage() {
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
             )}
+            {/* No wavelength branch here, deliberately. The wavelength
+                `detail` (like the deleted Topic line) described the subject —
+                and any words about its meaning seed the very answers the game
+                exists to compare. The term is the headline; the words form's
+                own copy says what to do (the owner, off the AI Jargon set). */}
             {detail && <p className="plr-detail plr-muted">{detail}</p>}
-            {gameType === 'wavelength' && (currentQuestion.topic || currentQuestion.detail) && (
-              <p className="plr-detail plr-muted">
-                {currentQuestion.topic
-                  ? (<><b>Topic:</b> {currentQuestion.topic}</>)
-                  : currentQuestion.detail}
-              </p>
-            )}
           </>
         )}
       </>
