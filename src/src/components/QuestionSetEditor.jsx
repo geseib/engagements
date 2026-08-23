@@ -10,6 +10,7 @@ import { authFetch } from '../auth/authFetch';
 import { GAME_TYPE_LIST, gameTypeLabel, normalizeGameType } from '../config/gameTypes';
 import {
   editableSnapshot,
+  EDITABLE_SET_FIELDS,
   buildEditPayload,
   summarizeEditResult,
   selectableSummaryPrompts,
@@ -173,8 +174,12 @@ export default function QuestionSetEditor({
   const [roundKind, setRoundKind] = useState('');
   const [roundKindBrief, setRoundKindBrief] = useState('');
   // Snapshot of the set as it was when the editor opened; the save payload is a
-  // diff against this.
+  // diff against this. Rebaselined on every successful save, so "dirty" always
+  // means "differs from what the server now holds", not "differs from open".
   const [original, setOriginal] = useState({});
+  // The title as last saved, tracked separately: `questionSet.name` goes stale
+  // the moment a save renames the set, and stays stale until the list refetches.
+  const [savedTitle, setSavedTitle] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
   // Success/failure is explicit state. It used to be inferred by sniffing the
   // status string for a checkmark, which silently broke when the copy changed.
@@ -260,6 +265,7 @@ export default function QuestionSetEditor({
     setRoundKind(snapshot.roundKind);
     setRoundKindBrief(snapshot.roundKindBrief);
     setOriginal(snapshot);
+    setSavedTitle(questionSet?.name || '');
     setSaveStatus('');
     setSaveOk(null);
     setVersionStatus({ text: '', tone: '' });
@@ -519,6 +525,38 @@ export default function QuestionSetEditor({
 
   /* --------------------------------------------------------------- save --- */
 
+  // The form as it stands, normalised the way the save normalises it. One
+  // object serving two readers: the save diffs it against `original`, and the
+  // exit label below asks whether that diff is empty.
+  const currentDetails = {
+    description: description.trim(),
+    customInstruction: instructions.trim(),
+    aiContextInstruction: aiContext.trim(),
+    promptId: promptId.trim(),
+    engagementType: normalizeGameType(engagementType),
+    roundNoun: roundNoun.trim(),
+    personaId: personaId.trim(),
+    roundKind: roundKind.trim(),
+    // Only meaningful for `custom`; cleared when the kind moves off it, so a
+    // set cannot keep steering the generator with a brief for a direction it
+    // no longer has.
+    roundKindBrief: roundKind === 'custom' ? roundKindBrief.trim() : ''
+  };
+
+  const detailsDirty = title.trim() !== savedTitle.trim()
+    || Object.keys(EDITABLE_SET_FIELDS).some((f) => currentDetails[f] !== (original[f] ?? ''));
+
+  /*
+   * WHAT THE WAY OUT IS CALLED. Reported by the owner: after replacing the
+   * questions from a CSV — a change that has already LANDED, version written,
+   * banner shown — the only button out of the modal still said "Cancel", which
+   * reads as "undo that". So the exit is "Close" whenever leaving abandons
+   * nothing, and "Cancel" only while something typed here is still unsaved —
+   * where leaving really does discard it (the Questions copy after a
+   * confirmation, the Details form silently).
+   */
+  const exitLabel = (questionsDirty || detailsDirty) ? 'Cancel' : 'Close';
+
   const handleSave = async () => {
     if (!title.trim()) {
       setSaveOk(false);
@@ -526,20 +564,7 @@ export default function QuestionSetEditor({
       return;
     }
 
-    const current = {
-      description: description.trim(),
-      customInstruction: instructions.trim(),
-      aiContextInstruction: aiContext.trim(),
-      promptId: promptId.trim(),
-      engagementType: normalizeGameType(engagementType),
-      roundNoun: roundNoun.trim(),
-      personaId: personaId.trim(),
-      roundKind: roundKind.trim(),
-      // Only meaningful for `custom`; cleared when the kind moves off it, so a
-      // set cannot keep steering the generator with a brief for a direction it
-      // no longer has.
-      roundKindBrief: roundKind === 'custom' ? roundKindBrief.trim() : ''
-    };
+    const current = currentDetails;
 
     // Only send what actually changed. An omitted key means "leave it alone";
     // an empty string means "clear it". The backend guards on `!== undefined`,
@@ -564,6 +589,10 @@ export default function QuestionSetEditor({
         // Report what the backend says it wrote, not what we hoped it wrote.
         setSaveOk(true);
         setSaveStatus(summarizeEditResult(savedName, result.updated || changed));
+        // Rebaseline: what was just saved is the new "unchanged", so the exit
+        // reads Close again and a second Save has nothing phantom to re-send.
+        setOriginal(current);
+        setSavedTitle(savedName);
         if (onSaved) onSaved(summarizeEditResult(savedName, result.updated || changed));
       } else {
         setSaveOk(false);
@@ -1122,7 +1151,7 @@ export default function QuestionSetEditor({
                 `onCancel && onCancel()`. */}
             {onCancel && (
               <button className="btn-secondary" onClick={requestClose}>
-                Cancel
+                {exitLabel}
               </button>
             )}
           </div>
@@ -1307,7 +1336,7 @@ export default function QuestionSetEditor({
             onClick={requestClose}
             data-testid="qs-editor-cancel"
           >
-            Cancel
+            {exitLabel}
           </button>
         </div>
       )}

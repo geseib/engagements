@@ -208,6 +208,7 @@ export default function SetMediaPanel({
   };
 
   const missing = report?.missing || [];
+  const deadRemote = report?.deadRemote || [];
   const unused = report?.unused || [];
   const counts = report?.counts || { none: 0, remote: 0, asset: 0, key: 0 };
   const done = batch.filter((r) => r.state === 'ok' || r.state === 'bad').length;
@@ -327,8 +328,15 @@ export default function SetMediaPanel({
                 : `${counts.key} uploaded image${counts.key === 1 ? '' : 's'} in place`}
             </span>
             {counts.remote > 0 && (
-              <span className="smed-chip" title="Full https:// addresses. Served by whoever hosts them; not checked here.">
-                {counts.remote} web link{counts.remote === 1 ? '' : 's'}
+              <span
+                className={`smed-chip${deadRemote.length ? ' smed-chip--bad' : ''}`}
+                title={deadRemote.length
+                  ? 'Full https:// addresses — checked live, and some did not answer with an image.'
+                  : 'Full https:// addresses — each one checked live and answering.'}
+              >
+                {deadRemote.length
+                  ? `${deadRemote.length} of ${counts.remote} web link${counts.remote === 1 ? '' : 's'} broken`
+                  : `${counts.remote} web link${counts.remote === 1 ? '' : 's'} checked`}
               </span>
             )}
             {counts.asset > 0 && (
@@ -347,6 +355,49 @@ export default function SetMediaPanel({
               </span>
             )}
           </div>
+
+          {/*
+            DEAD WEB LINKS, beside the missing files — the Art set regression:
+            an AI-drafted CSV pointed 26 questions at Wikimedia files that do
+            not exist, nothing checked, and the blanks debuted on a projector.
+            The endpoint now verifies every remote URL; this is where the
+            verdicts land. 'dead' means the server answered and said no —
+            replace the link; 'unreachable' means no answer inside the
+            timeout — try the check again before rewriting anything.
+          */}
+          {deadRemote.length > 0 && (
+            <div className="smed-report smed-report--bad" data-testid="smed-dead-remote">
+              <h4>
+                {deadRemote.length} web image link{deadRemote.length === 1 ? '' : 's'} did not answer with an image
+              </h4>
+              <p>
+                These addresses were checked just now. A <b>dead</b> link got an answer like 404 —
+                the file is not there under that name; fix the Image field on the question.
+                An <b>unreachable</b> one got no answer in time — run the check again before
+                changing anything.
+              </p>
+              <table className="smed-tbl">
+                <thead>
+                  <tr>
+                    <th className="smed-col-q">#</th>
+                    <th className="smed-col-title">Question</th>
+                    <th className="smed-col-key">Link</th>
+                    <th>Verdict</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {deadRemote.map((row) => (
+                    <tr key={row.sk || row.image}>
+                      <td className="smed-num">{row.questionNumber ?? '—'}</td>
+                      <td><span className="smed-file" title={row.title}>{row.title}</span></td>
+                      <td><span className="smed-file" title={row.image}>{row.image}</span></td>
+                      <td>{row.verdict === 'dead' ? `dead (${row.status})` : 'unreachable'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {missing.length > 0 ? (
             <div className="smed-report smed-report--bad" data-testid="smed-missing">
@@ -378,17 +429,20 @@ export default function SetMediaPanel({
                 </tbody>
               </table>
             </div>
-          ) : (
+          ) : deadRemote.length === 0 ? (
             <div className="smed-report smed-report--ok" data-testid="smed-allgood">
               <h4>Every image this set names is in place</h4>
               <p>
                 {counts.key} uploaded file{counts.key === 1 ? '' : 's'} checked
+                {counts.remote > 0
+                  ? `, and ${report.remoteChecked ?? counts.remote} web link${counts.remote === 1 ? '' : 's'} answered`
+                  : ''}
                 {report.unverifiable > 0
-                  ? `. ${report.unverifiable} question${report.unverifiable === 1 ? '' : 's'} use a web address or a built-in file, which are not checked here.`
+                  ? `. ${report.unverifiable} question${report.unverifiable === 1 ? '' : 's'} use a built-in file, which is shipped with the app and not checked here.`
                   : '.'}
               </p>
             </div>
-          )}
+          ) : null}
 
           {unused.length > 0 && (
             <div className="smed-report" data-testid="smed-unused">

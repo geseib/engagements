@@ -507,9 +507,10 @@ describe('closing the editor', () => {
     return onCancel;
   };
 
-  /** The Cancel that has always been here, beside Save Changes in Details. */
+  /** The exit that has always been here, beside Save Changes in Details.
+      Reads "Close" when leaving abandons nothing, "Cancel" when it would. */
   const detailsCancel = () =>
-    within(document.querySelector('.edit-form .form-actions')).getByRole('button', { name: /^Cancel$/ });
+    within(document.querySelector('.edit-form .form-actions')).getByRole('button', { name: /^(Cancel|Close)$/ });
 
   /** Make the Questions panel hold something that only exists in this tab. */
   const dirty = () =>
@@ -542,6 +543,34 @@ describe('closing the editor', () => {
     await ready();
 
     expect(screen.getByRole('button', { name: /close the editor/i })).toBeTruthy();
+    // With nothing unsaved, the exit says Close — the owner replaced a set's
+    // questions from a CSV (a change that had already LANDED) and the only way
+    // out said "Cancel", which read as "undo the import".
+    expect(screen.getByTestId('qs-editor-cancel')).toHaveTextContent('Close');
+  });
+
+  it('the exit reads Close when leaving loses nothing, Cancel while something is unsaved', async () => {
+    mockApi();
+    renderEditor();
+    await ready();
+
+    expect(screen.getByTestId('qs-editor-cancel')).toHaveTextContent('Close');
+    expect(detailsCancel()).toHaveTextContent('Close');
+
+    // An unsaved working copy in the Questions panel: leaving now discards it.
+    dirty();
+    expect(screen.getByTestId('qs-editor-cancel')).toHaveTextContent('Cancel');
+    expect(detailsCancel()).toHaveTextContent('Cancel');
+  });
+
+  it('editing a Details field flips the exit to Cancel too', async () => {
+    // The other half of the owner's report: for the set-info form, leaving
+    // really does drop what was typed, so there Cancel is the honest word.
+    mockApi();
+    renderEditor();
+    await ready();
+
+    fireEvent.change(screen.getByLabelText(/description/i), { target: { value: 'now different' } });
     expect(screen.getByTestId('qs-editor-cancel')).toHaveTextContent('Cancel');
   });
 
