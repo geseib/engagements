@@ -37,6 +37,12 @@ const WAVELENGTH_SPEC = 'Create wavelength subjects for a team word-association 
 
 function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'call-and-answer' }) {
   const [step, setStep] = useState(1);
+  // The saved-template deck, folded shut where the sample ideas lead. The
+  // owner, after the samples landed: "it can still use more work in dealing
+  // with the old sample [templates]" — nine admin-tuned cards under three
+  // sample ideas read as a second question, when they are an alternative
+  // answer to the same one. Shut by default, remembered while the modal lives.
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [scenarioConfig, setScenarioConfig] = useState({
     type: '',
     context: '',
@@ -1053,53 +1059,99 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                 </section>
               )}
 
-              <h3>
-                {/* "Or" only when samples are actually above it — the custom
-                    direction shows none (its author has already said what
-                    they want), and an "Or" with no first option reads broken. */}
-                {roundKindApplies(engagementType)
-                  ? `${samplesForKind(scenarioConfig.roundKind).length > 0 ? 'Or start' : 'Start'} from a template`
-                  : `What type of ${engagementType === 'trivia' ? 'trivia questions' : engagementType === 'poll' ? 'poll questions' : engagementType === 'wavelength' ? 'wavelength topics' : 'scenarios'} do you want to create?`}
-              </h3>
+              {/*
+                THE SAVED TEMPLATES, BEHIND ONE QUIET LINE where the samples
+                lead. Nine tuned cards under three sample ideas read as a
+                second wall — the owner's "still needs work" after the samples
+                shipped. Where the samples ARE the question this folds them to
+                one line with a count; everywhere else (trivia, poll,
+                wavelength, the custom direction) the templates stay the
+                primary, permanently open, exactly as before.
 
-              {loadingPrompts ? (
-                <div className="loading-prompts">
-                  <div className="spinner"></div>
-                  <p>Loading available prompt templates...</p>
-                </div>
-              ) : promptsError ? (
-                <div className="prompts-error">
-                  <p><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> {promptsError}</p>
-                  <p>Using default templates as fallback.</p>
-                  <button onClick={fetchAvailablePrompts} className="btn-secondary">
-                    Retry Loading
-                  </button>
-                </div>
-              ) : availablePrompts.length === 0 ? (
-                <div className="no-prompts">
-                  <p><Icon name="Info" weight="fill" size={16} color="var(--secondary)" /> No database prompts found for {engagementType}. Using default templates.</p>
-                </div>
-              ) : null}
-              
-              <div className={`scenario-types-grid${kindGaps.length > 0 ? ' is-blocked' : ''}`}>
-                {scenarioTypes.map(type => (
-                  <div
-                    key={type.id}
-                    className="scenario-type-card"
-                    aria-disabled={kindGaps.length > 0 || undefined}
-                    onClick={() => handleTypeSelection(type.id)}
-                  >
-                    <h4>{type.title}</h4>
-                    <p>{type.description}</p>
-                    {type.source === 'database' && (
-                      <span className="prompt-source"><Icon name="ChartBar" weight="duotone" size={16} color="var(--primary)" /> Database Template</span>
+                The custom "Something else…" card is withheld from the deck in
+                that folded mode only — the continue button below IS that
+                route, and one door with two handles reads as two doors.
+              */}
+              {(() => {
+                const samplesLead = roundKindApplies(engagementType)
+                  && samplesForKind(scenarioConfig.roundKind).length > 0;
+                const deck = samplesLead
+                  ? scenarioTypes.filter((t) => !(t.id === 'custom' || /custom/.test(t.id)))
+                  : scenarioTypes;
+                // "Lessons Learned - Strategic Insights" is record-speak on a
+                // card; the qualifier's job is done by the description. The
+                // full stored name rides on title= — a reduction with no
+                // recovery would be a deletion.
+                const displayTitle = (name) => {
+                  const head = String(name || '').split(/\s+[-–—]\s+/)[0].trim();
+                  return head || name;
+                };
+                const deckOpen = !samplesLead || templatesOpen;
+                return (
+                  <>
+                    {samplesLead ? (
+                      <button
+                        type="button"
+                        className="scenario-tpl-disclosure"
+                        aria-expanded={templatesOpen}
+                        data-testid="template-disclosure"
+                        onClick={() => setTemplatesOpen((o) => !o)}
+                      >
+                        <Icon name={templatesOpen ? 'CaretDown' : 'CaretRight'} weight="bold" size={14} color="currentColor" />{' '}
+                        Or start from a saved template{loadingPrompts ? '…' : ` (${deck.length})`}
+                      </button>
+                    ) : (
+                      <h3>
+                        {roundKindApplies(engagementType)
+                          ? 'Start from a template'
+                          : `What type of ${engagementType === 'trivia' ? 'trivia questions' : engagementType === 'poll' ? 'poll questions' : engagementType === 'wavelength' ? 'wavelength topics' : 'scenarios'} do you want to create?`}
+                      </h3>
                     )}
-                    {type.source === 'hardcoded' && (
-                      <span className="prompt-source"><Icon name="Buildings" weight="bold" size={16} color="currentColor" /> Built-in Template</span>
+
+                    {deckOpen && (
+                      <>
+                        {loadingPrompts ? (
+                          <div className="loading-prompts">
+                            <div className="spinner"></div>
+                            <p>Loading available prompt templates...</p>
+                          </div>
+                        ) : promptsError ? (
+                          <div className="prompts-error">
+                            <p><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> {promptsError}</p>
+                            <p>Using default templates as fallback.</p>
+                            <button onClick={fetchAvailablePrompts} className="btn-secondary">
+                              Retry Loading
+                            </button>
+                          </div>
+                        ) : availablePrompts.length === 0 ? (
+                          <div className="no-prompts">
+                            <p><Icon name="Info" weight="fill" size={16} color="var(--secondary)" /> No database prompts found for {engagementType}. Using default templates.</p>
+                          </div>
+                        ) : null}
+
+                        <div className={`scenario-types-grid${kindGaps.length > 0 ? ' is-blocked' : ''}`}>
+                          {deck.map(type => (
+                            <div
+                              key={type.id}
+                              className="scenario-type-card"
+                              aria-disabled={kindGaps.length > 0 || undefined}
+                              onClick={() => handleTypeSelection(type.id)}
+                            >
+                              <h4 title={type.title}>{displayTitle(type.title)}</h4>
+                              <p>{type.description}</p>
+                              {/* Only the tuned deck earns a mark — "Built-in
+                                  Template" was a chip saying "nothing special". */}
+                              {type.source === 'database' && (
+                                <span className="prompt-source"><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> Tuned in your library</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </>
                     )}
-                  </div>
-                ))}
-              </div>
+                  </>
+                );
+              })()}
 
               {/*
                 THE DOOR THAT NEEDS NO CARD. The owner: "they need to be able

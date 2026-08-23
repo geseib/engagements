@@ -227,3 +227,26 @@
   opacity: 0.45;
   pointer-events: none;
 }
+
+/* The saved-template deck folded to one line, where the sample ideas lead.
+   A quiet text control, not a card: it is the SECOND route and must read
+   quieter than the three samples above it. Same measured palette as the rest
+   of this step: #5b6b7c on white is 5.47:1, #2c3e50 on hover 10.98:1. */
+.scenario-tpl-disclosure {
+  display: block;
+  margin: 4px auto 20px;
+  padding: 8px 14px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1.4;
+  color: #5b6b7c;
+}
+
+.scenario-tpl-disclosure:hover,
+.scenario-tpl-disclosure:focus-visible {
+  color: #2c3e50;
+  background: #f8f9fa;
+}

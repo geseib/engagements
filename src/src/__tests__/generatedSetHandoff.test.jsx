@@ -100,6 +100,8 @@ async function generate(job) {
     />
   );
   await waitFor(() => expect(authFetch).toHaveBeenCalled());
+  // The saved-template deck is folded behind one line where the samples lead.
+  fireEvent.click(screen.getByTestId('template-disclosure'));
   fireEvent.click(screen.getByText('Lessons Learned Scenarios'));
   fireEvent.click(await screen.findByRole('button', { name: /Generate/i }));
   await waitFor(() => expect(posted).toHaveLength(1));
