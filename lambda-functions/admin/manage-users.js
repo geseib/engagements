@@ -1,10 +1,12 @@
-const { 
-  CognitoIdentityProviderClient, 
+const {
+  CognitoIdentityProviderClient,
   ListUsersCommand,
   AdminListGroupsForUserCommand,
   AdminAddUserToGroupCommand,
   AdminRemoveUserFromGroupCommand,
-  AdminDeleteUserCommand
+  AdminDeleteUserCommand,
+  AdminDisableUserCommand,
+  AdminEnableUserCommand
 } = require('@aws-sdk/client-cognito-identity-provider');
 
 const cognito = new CognitoIdentityProviderClient({ region: 'us-east-1' });
@@ -53,6 +55,15 @@ async function listUsers(event) {
         }
       } catch (error) {
         console.log(`Could not get groups for user ${user.Username}:`, error.message);
+      }
+
+      // A rejected account is DISABLED at the Cognito account level and holds
+      // no groups (see changeUserState). Enabled=false outranks whatever the
+      // groups say: an account that has been switched off is off, and without
+      // this override a rejected user would read as 'pending' (the group-less
+      // default) and reappear in the approval queue wearing a Reject button.
+      if (user.Enabled === false) {
+        userState = 'disabled';
       }
       
       return {
@@ -148,27 +159,57 @@ async function changeUserState(event) {
       }
     }
     
-    // Add to new group (all states correspond to group names)
-    await cognito.send(new AdminAddUserToGroupCommand({
-      UserPoolId: USER_POOL_ID,
-      Username: username,
-      GroupName: newState
-    }));
-    
-    console.log(`Added ${username} to group ${newState}`);
-    
+    /*
+      'disabled' IS NOT A GROUP, AND NEVER WAS. This used to fall through to
+      AdminAddUserToGroup with GroupName 'disabled' — a group no template has
+      ever created (only admins/hosts/pending exist) — so EVERY reject failed
+      with Cognito's raw "Group not found". And a group could never keep the
+      confirm dialog's promise anyway: membership does not stop a sign-in.
+      Cognito's account flag does. So a reject disables the ACCOUNT — which
+      works whether or not the person ever verified their email — and moving
+      someone back to a real state switches the account on again, or a
+      re-approved host would hold the hosts group and still be locked out.
+    */
+    if (newState === 'disabled') {
+      await cognito.send(new AdminDisableUserCommand({
+        UserPoolId: USER_POOL_ID,
+        Username: username
+      }));
+      console.log(`Disabled account for ${username}`);
+    } else {
+      await cognito.send(new AdminEnableUserCommand({
+        UserPoolId: USER_POOL_ID,
+        Username: username
+      }));
+      await cognito.send(new AdminAddUserToGroupCommand({
+        UserPoolId: USER_POOL_ID,
+        Username: username,
+        GroupName: newState
+      }));
+      console.log(`Added ${username} to group ${newState}`);
+    }
+
     return {
       statusCode: 200,
       headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
       body: JSON.stringify({ success: true, message: `User moved to ${newState}` })
     };
-    
+
   } catch (error) {
     console.error('Error changing user state:', error);
+    // The one failure an admin can actually act on gets its own answer: the
+    // account is gone (deleted in another tab, or the list is stale).
+    if (error.name === 'UserNotFoundException') {
+      return {
+        statusCode: 404,
+        headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'That account no longer exists. Refresh the list.' })
+      };
+    }
     return {
       statusCode: 500,
       headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: error.message })
+      body: JSON.stringify({ error: `Could not change that account's state: ${error.message}` })
     };
   }
 }

@@ -39,18 +39,32 @@ Module._load = function (request, parent, isMain) {
 };
 
 let sent = [];
+// Per-test stub state: accounts the pool "contains", each account's groups,
+// and accounts every Admin* call must fail to find (the stale-row case).
+let poolUsers = [];
+let groupsByUser = {};
+let missingUsers = new Set();
 class ListUsersCommand { constructor(i) { this.input = i; this.type = 'listUsers'; } }
 class AdminListGroupsForUserCommand { constructor(i) { this.input = i; this.type = 'listGroups'; } }
 class AdminAddUserToGroupCommand { constructor(i) { this.input = i; this.type = 'addToGroup'; } }
 class AdminRemoveUserFromGroupCommand { constructor(i) { this.input = i; this.type = 'removeFromGroup'; } }
 class AdminDeleteUserCommand { constructor(i) { this.input = i; this.type = 'deleteUser'; } }
+class AdminDisableUserCommand { constructor(i) { this.input = i; this.type = 'disableUser'; } }
+class AdminEnableUserCommand { constructor(i) { this.input = i; this.type = 'enableUser'; } }
 
 stubs.set('@aws-sdk/client-cognito-identity-provider', {
   CognitoIdentityProviderClient: class {
     async send(cmd) {
       sent.push(cmd);
-      if (cmd.type === 'listUsers') return { Users: [] };
-      if (cmd.type === 'listGroups') return { Groups: [] };
+      if (cmd.input?.Username && missingUsers.has(cmd.input.Username)) {
+        const e = new Error('User does not exist.');
+        e.name = 'UserNotFoundException';
+        throw e;
+      }
+      if (cmd.type === 'listUsers') return { Users: poolUsers };
+      if (cmd.type === 'listGroups') {
+        return { Groups: (groupsByUser[cmd.input.Username] || []).map((g) => ({ GroupName: g })) };
+      }
       return {};
     }
   },
@@ -59,6 +73,8 @@ stubs.set('@aws-sdk/client-cognito-identity-provider', {
   AdminAddUserToGroupCommand,
   AdminRemoveUserFromGroupCommand,
   AdminDeleteUserCommand,
+  AdminDisableUserCommand,
+  AdminEnableUserCommand,
 });
 
 process.env.USER_POOL_ID = 'us-east-1_TEST';
@@ -199,6 +215,63 @@ const jwtEventAs = (groups, { method = 'POST', path: p = '/admin/users/list' } =
   });
   check('OPTIONS preflight is answered, not refused', () =>
     assert.ok(res.statusCode >= 200 && res.statusCode < 300));
+
+  say('\n6. Reject disables the ACCOUNT — there is no group named "disabled"');
+
+  // REJECTS: AdminAddUserToGroup with GroupName 'disabled'. No template has
+  // ever created that group (only admins/hosts/pending exist), so every
+  // reject answered Cognito's raw "Group not found" — the owner's report.
+  // And a group could not keep the confirm dialog's "cannot sign in" promise
+  // anyway; only the account flag does. Nothing in this path reads
+  // email_verified, which is why an unverified registrant is just as
+  // rejectable — the owner's other half of the report.
+  sent = []; groupsByUser = { mallory: ['pending'] };
+  res = await handler(eventAs('admins', {
+    method: 'PUT', path: '/admin/users/mallory/state', body: { newState: 'disabled' },
+  }));
+  check('reject answers 200', () => assert.strictEqual(res.statusCode, 200));
+  check('the account is disabled at the Cognito level', () =>
+    assert.strictEqual(sent.filter((c) => c.type === 'disableUser').length, 1));
+  check('no group write is attempted for the phantom "disabled" group', () =>
+    assert.strictEqual(sent.filter((c) => c.type === 'addToGroup').length, 0));
+  check('the pending membership is removed', () =>
+    assert.ok(sent.some((c) => c.type === 'removeFromGroup' && c.input.GroupName === 'pending')));
+
+  // REJECTS: leaving a re-approved account switched off — the hosts group
+  // with Enabled=false is a person who was told they were approved and still
+  // cannot sign in.
+  sent = []; groupsByUser = {};
+  res = await handler(eventAs('admins', {
+    method: 'PUT', path: '/admin/users/mallory/state', body: { newState: 'hosts' },
+  }));
+  check('moving back to hosts re-enables the account', () =>
+    assert.strictEqual(sent.filter((c) => c.type === 'enableUser').length, 1));
+  check('...and lands exactly the one group', () =>
+    assert.deepStrictEqual(
+      sent.filter((c) => c.type === 'addToGroup').map((c) => c.input.GroupName),
+      ['hosts'],
+    ));
+
+  // REJECTS: the raw 500 for a row that outlived its account.
+  sent = []; missingUsers = new Set(['mallory']);
+  res = await handler(eventAs('admins', {
+    method: 'PUT', path: '/admin/users/mallory/state', body: { newState: 'disabled' },
+  }));
+  check('a vanished account answers 404, not a raw 500', () =>
+    assert.strictEqual(res.statusCode, 404));
+  check('...and tells the admin to refresh', () =>
+    assert.match(JSON.parse(res.body).error, /no longer exists/i));
+  missingUsers = new Set();
+
+  // REJECTS: a rejected (group-less, disabled) account defaulting to
+  // 'pending' in the list and reappearing in the approval queue.
+  sent = []; poolUsers = [
+    { Username: 'rejected-one', Enabled: false, Attributes: [{ Name: 'email', Value: 'r@x.com' }] },
+  ];
+  res = await handler(eventAs('admins'));
+  check('a disabled account lists as disabled, never as pending', () =>
+    assert.strictEqual(JSON.parse(res.body).users[0].state, 'disabled'));
+  poolUsers = [];
 
   say(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
