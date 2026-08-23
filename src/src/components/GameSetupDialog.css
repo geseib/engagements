@@ -393,6 +393,21 @@
 
 .gsd-opt-else b { color: var(--gsd-text); font-weight: 700; }
 
+/* THE ZERO-SETUP LINE. One sentence naming what Workie will do with nothing
+   configured, so the optional fields above read as options rather than
+   homework. Same set-apart treatment as .gsd-opt-limit — it is the other
+   sentence that qualifies the section — keyed green because it is a promise
+   that things already work, not a caveat. --gsd-success-text #6FD0A4 on the
+   dialog's #1B2942 surface is 7.6:1. */
+.gsd-workie-plan {
+  margin: 0;
+  font-size: var(--gsd-t-floor);
+  line-height: 1.5;
+  color: var(--gsd-success-text);
+  border-left: 3px solid var(--gsd-success);
+  padding-left: 11px;
+}
+
 /* NEVER OVERCLAIM. The limits sentence is set apart rather than tucked into
    the paragraph above, because it is the one line that qualifies the promise. */
 .gsd-opt-limit {

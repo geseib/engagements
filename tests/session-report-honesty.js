@@ -412,8 +412,9 @@ await check('the rest of gameStats is unchanged', () => {
 // 4. DEFECT 4 — votesGiven was 0 for everybody, in every report ever produced
 // ---------------------------------------------------------------------------
 //
-// BOTH writers of a VOTE# row stamp the voter as `VoterName`
-// (game/submit-vote.js:61, websocket/submit-votes.js:28). Neither writes
+// The writer of a VOTE# row stamps the voter as `VoterName`
+// (game/submit-vote.js:61; the dead websocket/submit-votes.js wrote the same
+// field with an incompatible row shape and has been deleted). It never writes
 // PlayerName. create-report.js filtered `v.PlayerName || v.playerName`, which
 // matched nothing, so the per-player `votesGiven` column was structurally zero
 // — not "nobody voted", but "this number cannot be anything else".
