@@ -483,7 +483,15 @@ exports.handler = async (event) => {
         
         // Results metadata
         processedAt: questionResults?.ProcessedAt,
-        completedAt: questionResults?.CompletedAt
+        completedAt: questionResults?.CompletedAt,
+
+        // Wavelength rounds carry their stored word analysis — the ENDED
+        // screen's session vocabulary aggregates these client-side, and the
+        // stored copy is the one the room saw (a re-read never re-clusters,
+        // get-results.js). Absent for every other game type on purpose.
+        ...(gameMetadata.Item.GameType === 'wavelength' && questionResults?.wordAnalysis
+          ? { wordAnalysis: questionResults.wordAnalysis }
+          : {})
       });
     }
 

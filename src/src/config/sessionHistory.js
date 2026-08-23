@@ -224,6 +224,9 @@ export function roundsFrom(payload) {
           .filter(Boolean),
         correctAnswer: q.correctAnswer ?? null,
         answerDetails: textOf(q.answerDetails) || '',
+        // Wavelength rounds only: the stored word analysis the room saw,
+        // passed through untouched for the ENDED session vocabulary.
+        wordAnalysis: round.wordAnalysis || null,
       };
     })
     .sort((a, b) => a.ordinal - b.ordinal);
