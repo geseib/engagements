@@ -327,6 +327,38 @@ function requiredGroupsForRoute(method, path) {
     return ['hosts', 'admins'];
   }
 
+  // ── THE PLATFORM CONSOLE ─────────────────────────────────────────────────
+  //
+  // Engage staff only, and this is the SECOND of two checks, not the only one:
+  // platform-orgs.js re-asks `tenant.isPlatformAdmin` on every call. Both exist
+  // because they answer different questions — this one decides who may knock,
+  // that one decides who is answered — and because a route whose only guard is
+  // a group named here would be one edit away from being open.
+  //
+  // Anchored, and not `startsWith('platform')`, for the reason recorded on the
+  // question-set block below: a prefix silently swallows every future
+  // `platform/...` route, including one somebody meant to be public.
+  const PLATFORM_ROUTE = /^platform\/orgs(\/[^/]+\/status)?$/;
+  if (PLATFORM_ROUTE.test(path)) {
+    return ['admins'];
+  }
+
+  // ── COPYING A SHARED SET INTO YOUR OWN ORGANISATION ──────────────────────
+  //
+  // Hosts and admins both: copying is how an ordinary member adapts something
+  // from the shared library, and refusing it to hosts would leave the library
+  // read-only for exactly the people it is for. WHICH set may be copied FROM is
+  // decided in the handler — platform and public only, never another
+  // organisation's partition.
+  //
+  // Named here explicitly rather than left to the trailing default, because two
+  // rules sit between this point and that default, and one of them is the
+  // `path.includes('answer')` clause that a set id can satisfy by accident.
+  const COPY_ROUTE = /^question-sets\/[^/]+\/copy$/;
+  if (path === 'question-sets/{setId}/copy' || COPY_ROUTE.test(path)) {
+    return ['hosts', 'admins'];
+  }
+
   // ── THE QUESTION-SET ROUTES, WHICH WERE PUBLIC ───────────────────────────
   //
   // These three carry the product's content — the questions, the answers, the

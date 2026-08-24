@@ -14,6 +14,7 @@ import sectionsFor, {
   sectionById,
   FOOT_SECTIONS,
   PLATFORM_GROUP,
+  PLATFORM_MODE,
 } from '../config/consoleSections';
 
 const ids = (input) => sectionsFor(input).flatMap((g) => g.items.map((s) => s.id));
@@ -22,7 +23,10 @@ const labels = (input) => sectionsFor(input).map((g) => g.label);
 const TEAM_ADMIN = { groups: ['hosts'], orgRole: 'admin', orgType: 'team', orgName: 'Northwind Learning' };
 const TEAM_MEMBER = { ...TEAM_ADMIN, orgRole: 'member' };
 const PERSONAL = { groups: ['hosts'], orgRole: 'owner', orgType: 'personal', orgName: 'Amara Reyes' };
-const PLATFORM = { groups: [PLATFORM_GROUP], orgRole: '', orgType: '' };
+// PLATFORM IS NOW A MODE THAT IS ASKED FOR, not the absence of an org. This
+// fixture used to be "staff with no active organisation", which stopped being
+// reachable the moment every account got a personal org automatically.
+const PLATFORM = { groups: [PLATFORM_GROUP], mode: PLATFORM_MODE };
 const NO_ORG = { groups: ['hosts'], orgRole: '', orgType: '' };
 
 test('the default export is the same function as the named one', () => {
@@ -64,19 +68,30 @@ describe('platform staff (mockups 10 and 11)', () => {
     rejects: making the platform group exclusive again, which hides the platform
     console from every member of staff.
   */
-  test('an Engage operator inside an organisation reaches BOTH', () => {
+  // rejects: THE ADDITIVE CONSOLE, which this test used to REQUIRE.
+  //
+  // It read "an Engage operator inside an organisation reaches BOTH" and
+  // asserted that Organisations and Moderation rendered beside that operator's
+  // own question sets. That was a deliberate fix for a real problem — platform
+  // mode had become unreachable — and it traded one defect for a worse one:
+  // there was then nothing on the screen saying which hat the operator had on.
+  // The owner asked for the distinction explicitly. The switcher now carries
+  // the mode, and the two consoles never appear together.
+  test('an Engage operator inside an organisation sees ONLY that organisation', () => {
     const inside = { ...TEAM_ADMIN, groups: [PLATFORM_GROUP] };
-    expect(ids(inside)).toContain('questionsets');   // their own org's content
-    expect(ids(inside)).toContain('orgs');           // and the platform console
-    expect(ids(inside)).toContain('moderation');
-    expect(labels(inside)).toContain('Engage');      // under its own heading
+    expect(ids(inside)).toContain('questionsets');
+    expect(ids(inside)).not.toContain('orgs');
+    expect(ids(inside)).not.toContain('moderation');
+    expect(labels(inside)).not.toContain('Engage');
   });
 
-  // rejects: an ordinary host acquiring the platform console by having an org
-  test('an ordinary host never reaches the platform console', () => {
+  test('an ordinary host never reaches the platform console, even asking for it', () => {
     expect(ids(TEAM_ADMIN)).not.toContain('orgs');
     expect(ids(TEAM_ADMIN)).not.toContain('moderation');
     expect(ids(TEAM_ADMIN)).not.toContain('users');
+    // Asking for the mode is not the same as being allowed it. The mode is a
+    // view; `admins` is the permission, and every platform route re-checks it.
+    expect(sectionsFor({ ...TEAM_ADMIN, mode: PLATFORM_MODE })).toEqual([]);
   });
 
   // rejects: relabelling the platform group heading back to an org name
@@ -106,9 +121,12 @@ describe('a personal space (mockup 12)', () => {
   });
 
   // rejects: the nav drifting from the three places mockup 12 draws
+  // Prompts joined this group after it was reported missing from dev: an
+  // Engage admin's home is always personal, so excluding it there removed the
+  // section from the person most likely to be editing prompts.
   test('is Your space then Account, exactly as drawn', () => {
     expect(labels(PERSONAL)).toEqual(['Your space', 'Account']);
-    expect(ids(PERSONAL)).toEqual(['questionsets', 'games', 'library', 'billing', 'privacy']);
+    expect(ids(PERSONAL)).toEqual(['questionsets', 'games', 'library', 'prompts', 'billing', 'privacy']);
   });
 
   // rejects: heading the personal group with the person's own name

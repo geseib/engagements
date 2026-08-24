@@ -1,0 +1,216 @@
+/* ============================================================================
+   THE PLATFORM'S ORGANISATION LIST — components/PlatformOrgsPanel.jsx
+
+   Derived from docs/design/tenancy-redesign/10-platform-orgs.html, and scoped
+   under `.porgs` for the reason `.team`, `.qsets`, `.um` and `.sp` are scoped:
+   the mockups' unnamespaced `.tbl`, `.chip`, `.btn` and `.panel` belong to
+   styles.css, and a component stylesheet declaring a global class hands it to
+   every screen that imports after it.
+
+   THE MOST IMPORTANT THING ON THIS SCREEN IS A SENTENCE, NOT A CONTROL.
+   The mockup's own note: "There is no 'view their sets' button, and that is
+   the change." Being an Engage administrator used to mean being able to open
+   any question set in the system; it now means accounts, plans and moderation.
+   `.porgs-note` is that paragraph, and it is styled to be read rather than
+   skipped — it is the only place in the product where the isolation guarantee
+   is explained to the people it constrains.
+
+   A TABLE, NOT CARDS. A tenant list is one-line facts per row and it is read by
+   scanning one column at a time (which plan, how many members, which are
+   suspended). `table-layout: fixed`, rows 36px, ladder 12/13/15/19/24.
+
+   COLOUR is tokens only, and the values below are the dusk set this console
+   already uses — lifted verbatim from TeamPanel.css rather than re-picked, so
+   the two staff screens cannot drift apart and the measured ratios there hold
+   here. Mounted with contentTheme="dark"; this root declares data-theme itself
+   rather than inheriting it, because public/index.html puts light on <html>.
+
+     --text        #F4EDE4 on --bg #0F1A2E        14.97:1  names, row values
+     --muted       #9BA8BE on --bg                 7.24:1  dates, heads, meta
+     --primary     #F6A94C on --bg                 9.14:1  pending
+     --danger-text #EF8C86 on --bg                 7.26:1  suspended, Suspend
+     --text        #F4EDE4 on --surface #1B2942   12.53:1  the note
+     --muted       #9BA8BE on --surface            6.06:1
+
+   `--danger` is never text: 4.38:1 on --surface is under AA. Borders and tints
+   only. Every pairing is asserted in __tests__/platformOrgsPalette.test.js.
+   ========================================================================== */
+
+.porgs {
+  --porgs-t-floor: 12px;
+  --porgs-t-label: 13px;
+  --porgs-t-body: 15px;
+  --porgs-t-head: 19px;
+  --porgs-row-h: 36px;
+
+  /* Not a styles.css token; every screen declares its own, because an
+     undefined custom property invalidates the WHOLE declaration and a colour
+     borrowed from a stylesheet that merely happens to be in the bundle
+     disappears the day that import moves. */
+  --porgs-success-text: #6FD0A4;
+
+  --porgs-rule: rgba(155, 168, 190, .20);
+  --porgs-rule-strong: rgba(155, 168, 190, .34);
+  --porgs-row-hover: rgba(155, 168, 190, .055);
+  --porgs-tint-warn: rgba(246, 169, 76, .06);
+  --porgs-tint-danger: rgba(229, 100, 94, .09);
+  --porgs-tint-ok: rgba(79, 178, 134, .10);
+
+  color: var(--text);
+  font: 400 var(--porgs-t-body)/1.45 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.porgs *,
+.porgs *::before,
+.porgs *::after { box-sizing: border-box; }
+
+.porgs :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+
+/* --------------------------------------------------------------- messages -- */
+
+.porgs-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 12px;
+  margin: 0 0 14px;
+  border: 1px solid rgba(229, 100, 94, .5);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--porgs-tint-danger);
+  color: var(--danger-text);
+  font-size: var(--porgs-t-body);
+}
+.porgs-alert--ok {
+  border-color: rgba(79, 178, 134, .5);
+  background: var(--porgs-tint-ok);
+  color: var(--porgs-success-text);
+}
+.porgs-alert-text { flex: 1 1 auto; min-width: 0; }
+
+.porgs-loading { color: var(--muted); margin: 0 0 14px; }
+
+/* ---------------------------------------------------------------- summary -- */
+
+.porgs-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 0 0 12px;
+}
+.porgs-count {
+  color: var(--muted);
+  font-size: var(--porgs-t-label);
+}
+.porgs-count strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ table -- */
+
+.porgs-tablewrap { overflow-x: auto; }
+
+.porgs-tbl {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.porgs-tbl th {
+  text-align: left;
+  font: 600 var(--porgs-t-label)/1 var(--font-ui);
+  color: var(--muted);
+  padding: 0 10px 8px;
+  border-bottom: 1px solid var(--porgs-rule-strong);
+  white-space: nowrap;
+}
+.porgs-tbl td {
+  height: var(--porgs-row-h);
+  padding: 0 10px;
+  border-bottom: 1px solid var(--porgs-rule);
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.porgs-tbl tbody tr:hover { background: var(--porgs-row-hover); }
+
+.porgs-col-num { width: 92px; text-align: right; }
+.porgs-col-plan { width: 108px; }
+.porgs-col-status { width: 118px; }
+.porgs-col-acts { width: 168px; }
+
+.porgs-name { color: var(--text); font-weight: 600; }
+.porgs-meta { color: var(--muted); font-size: var(--porgs-t-floor); }
+
+/* A personal space is somebody's home rather than a customer, and the list is
+   mostly homes by construction — every account has one. Marked, not hidden:
+   staff still need to find one to help its owner. */
+.porgs-kind {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--porgs-rule-strong);
+  color: var(--muted);
+  font-size: var(--porgs-t-floor);
+  font-weight: 600;
+}
+
+.porgs-status {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: var(--porgs-t-floor);
+  font-weight: 600;
+  border: 1px solid currentColor;
+}
+.porgs-status--active { color: var(--porgs-success-text); }
+.porgs-status--pending { color: var(--primary); background: var(--porgs-tint-warn); }
+.porgs-status--suspended { color: var(--danger-text); background: var(--porgs-tint-danger); }
+
+/* ---------------------------------------------------------------- actions -- */
+
+.porgs-acts { display: flex; gap: 6px; justify-content: flex-end; }
+
+.porgs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 6px;
+  border: 1px solid var(--porgs-rule-strong);
+  background: transparent;
+  color: var(--text);
+  font: 600 var(--porgs-t-floor)/1 var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.porgs-btn:hover:not(:disabled) { background: var(--porgs-row-hover); border-color: var(--muted); }
+.porgs-btn:disabled { opacity: .42; cursor: not-allowed; }
+.porgs-btn--danger { color: var(--danger-text); border-color: rgba(229, 100, 94, .5); }
+.porgs-btn--danger:hover:not(:disabled) { background: var(--porgs-tint-danger); }
+
+/* ------------------------------------------------------------------- note -- */
+
+.porgs-note {
+  margin: 18px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--porgs-rule);
+  border-left: 3px solid var(--primary);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--porgs-t-label);
+  line-height: 1.55;
+}
+.porgs-note strong { color: var(--text); font-weight: 600; }
+
+.porgs-empty {
+  color: var(--muted);
+  padding: 18px 10px;
+}

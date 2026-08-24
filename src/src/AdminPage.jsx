@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AIScenarioBuilder from './components/AIScenarioBuilder';
 import TriviaAIBuilder from './components/TriviaAIBuilder';
 import PollAIBuilder from './components/PollAIBuilder';
@@ -10,6 +10,7 @@ import UserManagement from './components/UserManagement';
 import SessionsPanel from './components/SessionsPanel';
 import HelpButton from './components/HelpButton';
 import IssueFab from './components/IssueFab';
+import PlatformOrgsPanel from './components/PlatformOrgsPanel';
 import { useAuth } from './auth/AuthContext';
 import './BuilderPage.css';
 import { authFetch } from './auth/authFetch';
@@ -25,6 +26,7 @@ import BillingPanel from './components/BillingPanel';
 import PrivacyPanel from './components/PrivacyPanel';
 import {
   sectionsFor, sectionIdsFor, defaultSectionIdFor, sectionById, FOOT_SECTIONS,
+  PLATFORM_GROUP, PLATFORM_MODE,
 } from './config/consoleSections';
 import { getActiveOrgId, setActiveOrgId } from './auth/authFetch';
 import { adminApiUrl } from './utils/adminApi';
@@ -229,6 +231,18 @@ function AdminPage() {
           chip is showing.
         */
         const remembered = getActiveOrgId();
+        /* Platform mode is a legitimate remembered value and is NOT an org, so
+           it must survive this reconciliation. Without this it fails the
+           membership test on every load, gets replaced by the personal org, and
+           the console silently drops out of the mode one page after entering
+           it — which reads as the switcher not working. Staff only: a stored
+           mode on an account that has since lost the group falls through to an
+           organisation rather than to a console every route refuses. */
+        const staff = (currentUser?.groups || []).includes(PLATFORM_GROUP);
+        if (staff && remembered === PLATFORM_MODE) {
+          setActiveOrgIdState(PLATFORM_MODE);
+          return;
+        }
         const valid = list.some((o) => o.orgId === remembered);
         const next = valid ? remembered : (list.find((o) => o.type === 'personal') || list[0])?.orgId || '';
         if (next !== remembered) setActiveOrgId(next);
@@ -240,9 +254,53 @@ function AdminPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+    /*
+      MOUNT ONLY, and `currentUser?.groups` is deliberately not a dependency.
 
-  const activeOrg = orgs.find((o) => o.orgId === activeOrgId) || null;
+      It is read inside — the platform-mode branch needs to know whether this
+      account is still staff — and the rule would have it listed. It must not
+      be: `groups` is a fresh array on every render, so listing it re-runs this
+      effect on every render, and this effect is the one that PROVISIONS a
+      personal organisation and refetches the list. That is a request loop, on
+      the request that writes.
+    */
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /*
+    ── WHO THIS PERSON IS RIGHT NOW ──────────────────────────────────────────
+
+    Three values, and each one was a defect before it was a variable.
+
+    `onPlatform` — Engage staff acting AS Engage rather than inside any org.
+    An exclusive mode chosen in the switcher; see config/consoleSections.js for
+    why it is not a group of links stacked onto the org nav.
+
+    `activeOrg` — null in platform mode ON PURPOSE. Every org-scoped panel is
+    gated on it, so the mode cannot half-apply: there is no state where the nav
+    says Engage and a panel below it is still showing an organisation's rows.
+
+    `orgRole` — reads `yourRole` FIRST, and that is a bug fix, not a preference.
+    `GET /orgs` answers with `yourRole` (admin/orgs/list-my-orgs.js) because
+    `role` on an org row would read as the org's role rather than the caller's.
+    This read `activeOrg.role`, got undefined for everybody, and undefined is
+    not an admin role — so EVERY team owner was rendered the member nav and lost
+    Plan & usage and Data & privacy while still being the person who pays. It
+    was reported as "missing most of the menu items". `role` is kept as a
+    fallback because the switcher's own fixtures and mockups use it.
+  */
+  const isStaff = (currentUser?.groups || []).includes(PLATFORM_GROUP);
+  const onPlatform = isStaff && activeOrgId === PLATFORM_MODE;
+  const activeOrg = onPlatform
+    ? null
+    : (orgs.find((o) => o.orgId === activeOrgId) || null);
+  const orgRole = activeOrg ? (activeOrg.yourRole || activeOrg.role || '') : '';
+  const consoleIdentity = {
+    groups: currentUser?.groups || [],
+    orgRole,
+    orgType: activeOrg?.type,
+    orgName: activeOrg?.name,
+    mode: onPlatform ? PLATFORM_MODE : '',
+  };
 
   // Usage is fetched only when the Plan & usage section is actually open —
   // it is a per-org read nobody needs while looking at question sets.
@@ -267,6 +325,37 @@ function AdminPage() {
     })();
     return () => { cancelled = true; };
   }, [activeTab, activeOrgId]);
+
+  /**
+   * Take this organisation's own copy of a set Engage or another org publishes.
+   *
+   * The list is refetched rather than patched: the copy arrives with a server-
+   * minted id (a slug that may have been suffixed to avoid colliding with a set
+   * this org already had), so guessing it here would show a row that does not
+   * exist under a name that is not its own.
+   */
+  const handleCopySet = async (set) => {
+    setNotice({ kind: 'info', text: `Copying ${set.name}…` });
+    try {
+      const res = await authFetch(
+        adminApiUrl(`question-sets/${encodeURIComponent(set.id)}/copy`),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scope: set.scope || 'platform' }),
+        },
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `The server answered ${res.status}.`);
+      await fetchQuestionSets();
+      setNotice({
+        kind: 'success',
+        text: `${body.name} is now yours to change. It is a copy — editing it does not touch the original.`,
+      });
+    } catch (err) {
+      setNotice({ kind: 'error', text: err.message || 'Could not copy that set.' });
+    }
+  };
 
   const handleSwitchOrg = (orgId) => {
     setActiveOrgId(orgId);
@@ -418,14 +507,42 @@ function AdminPage() {
    * segment. pushState does not fire popstate, so the listener below cannot
    * loop with this.
    */
+  /*
+    THE LANDING SECTION IS NOW PER-PERSON, AND THE URL HAS TO KNOW.
+
+    It used to be the constant `questionsets` for everybody, so the two places
+    below could name that constant directly. With a computed nav it is the first
+    item of the first group — `orgs` for Engage staff in platform mode, and
+    `questionsets` inside an organisation — and canonicalising against the wrong
+    one writes `?section=orgs` for a URL that is ALREADY the landing screen.
+    That is precisely the defect the canonicaliser exists to prevent: two URLs
+    rendering the same screen, so Back needs two presses to leave it.
+
+    A ref rather than the value, because these callbacks are defined above the
+    point where `fallbackSection` is computed and must read it at CALL time.
+  */
+  const landingRef = useRef(DEFAULT_ADMIN_SECTION);
+  /* Set the moment the person navigates. The canonicaliser below must never run
+     after that: it uses replaceState, and replacing an entry pushState has just
+     created deletes the history that feature exists to build. */
+  const navigatedRef = useRef(false);
+  /* Canonicalise once, and once only. */
+  const canonicalisedRef = useRef(false);
+  /* The section actually ON SCREEN, which is not always `activeTab`: a URL
+     naming a section this account cannot address falls back, and the address
+     bar has to be canonicalised against what the person is looking at rather
+     than against what they asked for. */
+  const resolvedRef = useRef(DEFAULT_ADMIN_SECTION);
+
   const handleNavigate = (sectionId) => {
     if (sectionId !== activeTab) {
       setEditMode(false);
       setEditingSetId('');
     }
     setActiveTab(sectionId);
+    navigatedRef.current = true;
     if (typeof window !== 'undefined' && window.history?.pushState) {
-      const search = searchForSection(window.location.search, sectionId, DEFAULT_ADMIN_SECTION);
+      const search = searchForSection(window.location.search, sectionId, landingRef.current);
       window.history.pushState({ [SECTION_PARAM]: sectionId }, '', `${window.location.pathname}${search}`);
     }
   };
@@ -474,15 +591,29 @@ function AdminPage() {
   */
   useEffect(() => {
     if (typeof window === 'undefined' || !window.history?.replaceState) return;
-    if (searchMatchesSection(window.location.search, activeTab, DEFAULT_ADMIN_SECTION)) return;
-    const search = searchForSection(window.location.search, activeTab, DEFAULT_ADMIN_SECTION);
+    /*
+      WAITS FOR THE ORGANISATIONS, THEN RUNS EXACTLY ONCE.
+
+      Until they arrive the landing section is a guess, and canonicalising
+      against a guess rewrites the address bar twice per load — once wrongly.
+      But waiting means this effect has a dependency, and an effect that re-runs
+      here is worse than one that runs early: it calls replaceState, so a second
+      run lands on the entry `handleNavigate` has just pushed and silently
+      deletes it. Both guards are load-bearing.
+    */
+    if (!orgsLoaded || canonicalisedRef.current || navigatedRef.current) return;
+    canonicalisedRef.current = true;
+    const landing = landingRef.current;
+    const showing = resolvedRef.current;
+    if (searchMatchesSection(window.location.search, showing, landing)) return;
+    const search = searchForSection(window.location.search, showing, landing);
     window.history.replaceState(
-      { [SECTION_PARAM]: activeTab }, '', `${window.location.pathname}${search}`,
+      { [SECTION_PARAM]: showing }, '', `${window.location.pathname}${search}`,
     );
     // Mount only: after this, handleNavigate owns the URL. Re-running on
     // activeTab would replace the entry pushState just created and delete the
     // history this feature exists to build.
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [orgsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCancelEdit = () => {
     setEditMode(false);
@@ -1066,22 +1197,11 @@ function AdminPage() {
     sets without a logged, expiring grant. `config/consoleSections.js` owns
     that decision as a pure function so it can be tested without React.
   */
-  const navGroups = sectionsFor({
-    groups: currentUser?.groups || [],
-    orgRole: activeOrg?.role,
-    orgType: activeOrg?.type,
-    orgName: activeOrg?.name,
-  });
-  const visibleIds = sectionIdsFor({
-    groups: currentUser?.groups || [],
-    orgRole: activeOrg?.role,
-    orgType: activeOrg?.type,
-  });
-  const fallbackSection = defaultSectionIdFor({
-    groups: currentUser?.groups || [],
-    orgRole: activeOrg?.role,
-    orgType: activeOrg?.type,
-  }) || DEFAULT_ADMIN_SECTION;
+  const navGroups = sectionsFor(consoleIdentity);
+  const visibleIds = sectionIdsFor(consoleIdentity);
+  const fallbackSection = defaultSectionIdFor(consoleIdentity) || DEFAULT_ADMIN_SECTION;
+  /* Published to the callbacks above, which run after this line has. */
+  landingRef.current = orgsLoaded ? fallbackSection : DEFAULT_ADMIN_SECTION;
   /*
     A bookmarked `?section=billing` on an account that no longer has billing
     lands on the default rather than on a blank work area. The old list was
@@ -1101,6 +1221,7 @@ function AdminPage() {
   const resolvedTab = (!orgsLoaded || visibleIds.includes(activeTab))
     ? activeTab
     : fallbackSection;
+  resolvedRef.current = resolvedTab;
 
   /*
     THE WORK-HEAD DESCRIPTOR — title, subtitle and content theme.
@@ -1133,11 +1254,7 @@ function AdminPage() {
     },
   };
 
-  const navSection = sectionById({
-    groups: currentUser?.groups || [],
-    orgRole: activeOrg?.role,
-    orgType: activeOrg?.type,
-  }, resolvedTab);
+  const navSection = sectionById(consoleIdentity, resolvedTab);
 
   /*
     THE NAV LABEL IS THE NAME OF THE SCREEN, and the heading follows it.
@@ -1175,10 +1292,19 @@ function AdminPage() {
         footNavItems={FOOT_SECTIONS.length ? FOOT_SECTIONS : ADMIN_FOOT_SECTIONS}
         orgSwitcher={
           orgsLoaded ? (
+            /* PROP NAMES MATTER MORE THAN THEY LOOK. This passed `orgs` and
+               `onSwitch`; the component's props are `organisations` and
+               `onSelect`, so it received an empty list, took its "nothing to
+               name" branch and rendered NOTHING — on dev there was no switcher
+               on the page at all, and therefore no way to change organisation
+               or reach the platform console. React says nothing about a prop
+               that is simply not there, which is why adminOrgWiring.test.jsx
+               now mounts this and looks. */
             <OrgSwitcher
-              orgs={orgs}
+              organisations={orgs}
               activeOrgId={activeOrgId}
-              onSwitch={handleSwitchOrg}
+              platform={isStaff}
+              onSelect={handleSwitchOrg}
               onCreate={() => { window.location.href = '/admin?section=members'; }}
             />
           ) : null
@@ -1201,7 +1327,15 @@ function AdminPage() {
           #333 body copy on #0F1A2E is 1.4:1.
         */
         contentTheme={editingSet ? 'light' : section.contentTheme || 'light'}
-        actions={<HelpButton section="admin" variant="header" size="medium" />}
+        actions={(
+          <>
+            {/* IN THE HEADER, BESIDE HELP — not floating over the console.
+                These two are the same kind of thing (ask for something, get
+                help), so they belong in the same place and look alike. */}
+            <IssueFab context="admin" placement="inline" />
+            <HelpButton section="admin" variant="header" size="medium" />
+          </>
+        )}
       >
         {editingSet ? (
           /*
@@ -1356,6 +1490,9 @@ function AdminPage() {
               onToggleActive={(set) => handleToggleActive(set.id, set.active)}
               onToggleQuickstart={(set, next) => handleToggleQuickstart(set.id, next)}
               onCreate={handleCreatePath}
+              /* Only inside an organisation: there is nowhere to copy TO in
+                 platform mode, and the endpoint refuses without an org. */
+              onCopy={activeOrg ? handleCopySet : undefined}
               createOpen={isCreateOpen}
             >
               {(isCreateOpen || questionSets.length === 0) && (
@@ -1416,6 +1553,25 @@ function AdminPage() {
               Each is a pure props/callbacks component so it can be mounted in
               jsdom on its own — AdminPage cannot be (`useAuth` hard-throws),
               which is why every panel on this page is built that way. */}
+          {/* ── The platform console ──────────────────────────────────────
+              Gated on `onPlatform`, not merely on the section id: the id is
+              reachable from a bookmarked ?section=orgs, and a staff screen must
+              be a thing you are DOING rather than a URL you kept. The server
+              re-checks the group on every call regardless. */}
+          {resolvedTab === 'orgs' && onPlatform && <PlatformOrgsPanel />}
+
+          {resolvedTab === 'moderation' && onPlatform && (
+            <div className="tab-content">
+              <p style={{ maxWidth: '62ch' }}>
+                Nothing reaches this queue yet. Sets become public by being
+                submitted for review, and that pipeline — the safety pass and the
+                approve/reject decision — is not built. This screen is here so the
+                nav matches what the platform console will hold; it is not an
+                empty queue meaning everything has been reviewed.
+              </p>
+            </div>
+          )}
+
           {resolvedTab === 'members' && activeOrg && (
             <TeamPanel orgId={activeOrg.orgId} orgName={activeOrg.name} />
           )}
@@ -1583,7 +1739,6 @@ function AdminPage() {
       */}
 
       {/* GitHub Issue Reporting FAB */}
-      <IssueFab context="admin" />
     </>
   );
 }

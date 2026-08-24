@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
+import { PLATFORM_MODE } from '../config/consoleSections';
 import './OrgSwitcher.css';
 
 /**
@@ -70,11 +71,20 @@ export default function OrgSwitcher({
   activeOrgId = '',
   onSelect,
   onCreate,
+  /* TRUE WHEN THIS CALLER IS ENGAGE STAFF — which now means "offer the platform
+     MODE in the menu", not "render an inert chip".
+
+     It used to render a locked, unclickable chip, on the reasoning that Engage
+     is not an organisation and so cannot be switched to. That reasoning is
+     right about the data and wrong about the control: once the platform links
+     stopped being stacked onto the org nav, the switcher became the only place
+     the mode could be chosen, and an inert chip left staff with no route to
+     their own console. The old comment follows. */
   /* The platform console's chip (mockups 10/11). "Engage staff" is not an
      organisation and cannot be switched into a section inside one, so it is
      the single, inert chip with a lock rather than a menu with a fourth row. */
   platform = false,
-  platformLabel = 'Engage staff',
+  platformLabel = 'Engage',
 }) {
   const [open, setOpen] = useState(false);
   const chipRef = useRef(null);
@@ -173,26 +183,23 @@ export default function OrgSwitcher({
     if (onCreate) onCreate();
   };
 
-  if (platform) {
-    return (
-      <div className="orgsw" data-theme="dark">
-        <span className="orgsw-chip orgsw-chip--single" title={platformLabel}>
-          <span className="orgsw-tile" aria-hidden="true">
-            <Icon name="Lock" size={12} weight="bold" color="var(--secondary)" />
-          </span>
-          <span className="orgsw-name">{platformLabel}</span>
-        </span>
-      </div>
-    );
-  }
+  const chooseMode = () => {
+    setOpen(false);
+    if (chipRef.current) chipRef.current.focus();
+    if (onSelect && activeOrgId !== PLATFORM_MODE) onSelect(PLATFORM_MODE, null);
+  };
 
   const list = Array.isArray(organisations) ? organisations : [];
-  /* No organisation at all: nothing to name, so nothing is drawn. An empty chip
-     saying "—" is an empty state that lies. */
-  if (!list.length) return null;
+  const onPlatform = activeOrgId === PLATFORM_MODE;
+  /* No organisation at all and not staff: nothing to name, so nothing is drawn.
+     An empty chip saying "—" is an empty state that lies. Staff always have
+     somewhere to go, so the chip stays. */
+  if (!list.length && !platform) return null;
 
-  const active = list.find((org) => org.orgId === activeOrgId) || list[0];
-  const single = list.length === 1;
+  const active = list.find((org) => org.orgId === activeOrgId) || list[0] || null;
+  /* A menu with one row is noise — but "staff" is always a second destination,
+     so the single-chip form is only right for one org and no platform mode. */
+  const single = list.length === 1 && !platform;
 
   if (single) {
     return (
@@ -218,14 +225,22 @@ export default function OrgSwitcher({
         className="orgsw-chip"
         data-testid="orgsw-chip"
         ref={chipRef}
-        title={active.name}
+        title={onPlatform || !active ? platformLabel : active.name}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((was) => !was)}
         onKeyDown={onChipKeyDown}
       >
-        <span className="orgsw-tile" aria-hidden="true">{initialsOf(active.name)}</span>
-        <span className="orgsw-name">{active.name}</span>
+        {/* WHAT THE CHIP SAYS IS THE ONLY THING ON SCREEN NAMING THE CURRENT
+            HAT. In platform mode it must say Engage — showing an org name while
+            the console is actually Engage's is precisely the ambiguity the mode
+            was introduced to remove. */}
+        <span className="orgsw-tile" aria-hidden="true">
+          {onPlatform
+            ? <Icon name="Lock" size={12} weight="bold" color="var(--secondary)" />
+            : initialsOf(active ? active.name : '')}
+        </span>
+        <span className="orgsw-name">{onPlatform ? platformLabel : (active ? active.name : platformLabel)}</span>
         <Icon name="CaretDown" size={12} weight="bold" className="orgsw-caret" />
       </button>
 
@@ -241,7 +256,7 @@ export default function OrgSwitcher({
           <div className="orgsw-heading" aria-hidden="true">Your organisations</div>
 
           {list.map((org) => {
-            const current = org.orgId === active.orgId;
+            const current = !onPlatform && !!active && org.orgId === active.orgId;
             return (
               <button
                 key={org.orgId}
@@ -261,6 +276,32 @@ export default function OrgSwitcher({
               </button>
             );
           })}
+
+          {platform && (
+            <>
+              <div className="orgsw-sep" />
+              {/* NOT under "Your organisations" — Engage is not one, and filing
+                  it there would say the operator is a member of a tenant called
+                  Engage, which is the confusion this whole mode exists to end. */}
+              <div className="orgsw-heading" aria-hidden="true">Act as</div>
+              <button
+                type="button"
+                role="menuitem"
+                className="orgsw-item"
+                aria-current={onPlatform ? 'true' : undefined}
+                onClick={chooseMode}
+              >
+                <span className="orgsw-tile" aria-hidden="true">
+                  <Icon name="Lock" size={12} weight="bold" color="var(--secondary)" />
+                </span>
+                <span className="orgsw-label">{platformLabel}</span>
+                {onPlatform && (
+                  <Icon name="Check" size={13} weight="bold" className="orgsw-check" />
+                )}
+                <span className="orgsw-role">Platform</span>
+              </button>
+            </>
+          )}
 
           {onCreate && (
             <>

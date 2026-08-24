@@ -857,6 +857,99 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # ── THE PLATFORM CONSOLE ───────────────────────────────────────────────
+  # Engage staff only (tenant.isPlatformAdmin, never an org role). It lists
+  # organisations and changes one's status; there is deliberately no route from
+  # here into any organisation's content, which is the isolation guarantee
+  # expressed as an API surface rather than as a promise.
+  PlatformOrgsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-platform-orgs'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: orgs/platform-orgs.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        # NO kms:Decrypt. This function reads the ORGS index and MEMBER counts,
+        # both of which are plaintext by design, and it must not be able to
+        # unwrap any organisation's data key — the absence of this statement is
+        # part of the guarantee, not an oversight. tests/kms-grants-match-code.js
+        # derives the grant set from the require graph and will fail if this
+        # function ever pulls tenant-crypto in.
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        ListOrgs:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/orgs
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        SetOrgStatus:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/orgs/{orgId}/status
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  # ── COPY A SHARED SET INTO AN ORGANISATION ─────────────────────────────
+  # The missing middle step: every org can READ the platform and public
+  # libraries and may not CHANGE them, so without this the only answer to
+  # "can I adapt this?" was no. The copy is independent of its source.
+  CopyQuestionSetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-copy-question-set'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 60
+      Handler: copy-question-set.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        # DECRYPT ONLY, NEVER GenerateDataKey.
+        #
+        # It does need the key — the questions are encrypted on the way in, or
+        # the copy would sit in the clear inside a partition whose owner
+        # believes it is not. But it writes into an organisation that already
+        # EXISTS, so it unwraps that org's stored data key and never mints one.
+        # Minting is reserved to the two paths that create organisations
+        # (create-org.js and personal-org.js), and tests/tenant-infrastructure.js
+        # §3 plus tests/kms-grants-match-code.js both fail the moment a third
+        # function can mint — which is how this line got narrowed: it shipped
+        # with both actions and they caught it.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        CopySet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /question-sets/{setId}/copy
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   OrgGetFunction:
     Type: AWS::Serverless::Function
     Properties:

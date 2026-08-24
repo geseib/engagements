@@ -6083,7 +6083,7 @@ Focus on actionable business strategy insights.`;
           // The group AdminPage's own ProtectedRoute requires. Offering the
           // link to a plain host would open a tab onto Access Denied.
           isAdmin={Boolean(currentUser?.groups?.includes('admins'))}
-          issueControl={<IssueFab context="host" gameId={gameId} />}
+          issueControl={<IssueFab context="host" gameId={gameId} placement="inline" />}
         />
       )}
 

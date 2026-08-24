@@ -51,7 +51,20 @@ jest.mock('../auth/AuthContext', () => ({
 // they drive is sent from there. A mock that stubs only `authFetch` leaves
 // `getActiveOrgId` undefined and AdminPage dies on its first render — which is
 // what happened, and reads as a component bug rather than a mock gap.
-let mockActiveOrg = '';
+/*
+  THE PLATFORM MODE, because Accounts is a PLATFORM section and this suite is
+  about reaching it by URL.
+
+  It used to be reachable from anywhere: the platform links were stacked onto
+  whatever organisation you were standing in. That was replaced by an exclusive
+  mode (config/consoleSections.js) after the owner asked to be able to tell
+  "acting as Engage" from "acting as an org admin", so an account inside an
+  organisation no longer has an Accounts entry at all — and every assertion here
+  started failing with "Received: Question sets", which is the fallback doing
+  its job rather than the deep link being broken.
+*/
+const PLATFORM_MODE = '~platform';
+let mockActiveOrg = PLATFORM_MODE;
 jest.mock('../auth/authFetch', () => ({
   __esModule: true,
   authFetch: (...args) => global.fetch(...args),
@@ -190,8 +203,11 @@ describe('moving between sections writes the URL', () => {
     render(<AdminPage />);
     await waitFor(() => expect(openSection()).toBe('Accounts'));
 
+    /* Organisations, not Question sets: in platform mode the landing section is
+       the first item of the platform group, and this suite runs in that mode
+       because Accounts only exists there. */
     await act(async () => {
-      fireEvent.click(await screen.findByRole('button', { name: /^question sets$/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /^organisations$/i }));
     });
 
     expect(lastUrl(pushState)).toBe('/admin');
@@ -207,7 +223,7 @@ describe('moving between sections writes the URL', () => {
     const replacesBefore = replaceState.mock.calls.length;
 
     await act(async () => {
-      fireEvent.click(await screen.findByRole('button', { name: /^sessions$/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /^moderation$/i }));
     });
 
     expect(pushState).toHaveBeenCalled();
@@ -243,7 +259,7 @@ describe('Back returns to the previous section', () => {
     await act(async () => { fireEvent.click(await screen.findByRole('button', { name: /^accounts$/i })); });
     await act(async () => { window.history.back(); });
 
-    await waitFor(() => expect(openSection()).toBe('Question sets'));
+    await waitFor(() => expect(openSection()).toBe('Organisations'));
     expect(window.location.search).toBe('');
   });
 

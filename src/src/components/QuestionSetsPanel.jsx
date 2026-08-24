@@ -95,6 +95,13 @@ export default function QuestionSetsPanel({
   onDismissNotice,
   onEdit,
   onDelete,
+  /**
+   * Take a copy of a set this organisation may read but not change.
+   *
+   * Optional: the host's own picker reuses this panel and has nowhere to put a
+   * copy, so a Copy control only appears where the page can actually honour it.
+   */
+  onCopy,
   onToggleActive,
   onToggleQuickstart,
   /** The three ranked creation paths from mockup 02. */
@@ -358,27 +365,80 @@ export default function QuestionSetsPanel({
                               AI
                             </span>
                           )}
+                          {/* WHOSE IT IS. Only the rows that are NOT this
+                              organisation's own are badged — the common case is
+                              the quiet one, or every row shouts and none of
+                              them reads. Without this the refusal above has no
+                              explanation anywhere on screen. */}
+                          {set.scope === 'platform' && (
+                            <span
+                              className="qsets-chip"
+                              title="Managed by Engage and shared with every organisation. Copy it to make changes."
+                            >
+                              Engage
+                            </span>
+                          )}
+                          {set.scope === 'public' && (
+                            <span
+                              className="qsets-chip"
+                              title="Published by another organisation. Copy it to make changes."
+                            >
+                              Public
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="qsets-when">{formatWhen(set.updatedAt || set.createdAt)}</td>
                       <td>
                         <div className="qsets-rowact">
-                          <button
-                            type="button"
-                            className="qsets-btn qsets-btn--sm"
-                            onClick={() => onEdit && onEdit(set)}
-                            title="Edit this question set"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            className="qsets-btn qsets-btn--sm qsets-btn--ghostdanger"
-                            onClick={() => onDelete && onDelete(set)}
-                            title="Delete this question set"
-                          >
-                            Delete
-                          </button>
+                          {/*
+                            THE SERVER ALREADY DECIDED THIS. `canManage` comes
+                            from admin/get-question-sets.js, which asks
+                            `canManageSet` per row — Engage's own library and
+                            the public one are readable by every organisation
+                            and changeable by none of them.
+
+                            This panel used to render Edit and Delete on every
+                            row regardless, so a host clicked Edit on an Engage
+                            set and got a 403. A control that is always refused
+                            reads as a broken product rather than as a boundary,
+                            which is why the fix is to remove the control and
+                            offer the one that DOES work.
+
+                            `!== false` and not a bare truthiness test: rows
+                            from surfaces that do not project ownership carry no
+                            `canManage` at all, and those must keep behaving as
+                            they did rather than silently losing their controls.
+                          */}
+                          {set.canManage !== false ? (
+                            <>
+                              <button
+                                type="button"
+                                className="qsets-btn qsets-btn--sm"
+                                onClick={() => onEdit && onEdit(set)}
+                                title="Edit this question set"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="qsets-btn qsets-btn--sm qsets-btn--ghostdanger"
+                                onClick={() => onDelete && onDelete(set)}
+                                title="Delete this question set"
+                              >
+                                Delete
+                              </button>
+                            </>
+                          ) : onCopy && (
+                            <button
+                              type="button"
+                              className="qsets-btn qsets-btn--sm"
+                              onClick={() => onCopy(set)}
+                              title="Make this organisation's own copy, which you can then change"
+                            >
+                              Copy to my organisation
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

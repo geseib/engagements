@@ -38,15 +38,32 @@
  * the words "one more thing before you can build anything", which is a
  * contradiction a reader spots immediately.
  *
- * ── HOW THE PLATFORM CONSOLE IS SELECTED ───────────────────────────────────
+ * ── PLATFORM IS A MODE, NOT A GROUP OF LINKS ──────────────────────────────
  *
- * By the ABSENCE of an active organisation, not by a group alone. `GET /orgs`
- * provisions a personal org on first call, so every ordinary signed-in person
- * has one; a platform operator asks for the platform console by leaving the
- * org switcher (the "Engage staff" chip on 10/11 is not an org and cannot be
- * switched to a section inside one). Selecting on `groups` alone would give
- * every Engage employee the platform nav *while they are standing inside a
- * customer's organisation*, which is exactly the mixing this set exists to end.
+ * This has now been wrong in both directions, so the reasoning is worth the
+ * space.
+ *
+ * FIRST CUT: the platform console was selected by the ABSENCE of an active
+ * organisation. Correct in spirit and unreachable in practice — every approved
+ * account is given a personal organisation automatically, so staff always had
+ * one and Organisations/Moderation/Accounts/Archive could not be opened at all.
+ *
+ * SECOND CUT: bolt the platform links on ADDITIVELY, beside the org's own. That
+ * made them reachable and reintroduced exactly the mixing the split exists to
+ * end — an Engage admin looked at Moderation and their own question sets on one
+ * screen, with nothing on the page saying which hat they had on. The owner
+ * named it: "we likely need a way to distinguish when engage admins have taken
+ * the role as engage admin vs org admin."
+ *
+ * SO: an explicit MODE, chosen in the switcher, which is the one control that
+ * already means "who am I right now". `mode: PLATFORM_MODE` gives the platform
+ * console and nothing else; any other value gives the active organisation's
+ * console and no platform links. The two never appear together.
+ *
+ * The mode is a VIEW and the Cognito group is the PERMISSION. Asking for
+ * platform mode without being in `admins` returns no sections, because a nav is
+ * not an access-control decision — every platform route checks the group
+ * server-side and would refuse regardless.
  *
  * ── SECTION IDS ARE THE CONSOLE'S EXISTING ONES WHERE ONE EXISTS ───────────
  *
@@ -61,6 +78,15 @@
 
 /** Cognito group that means "works on Engage", not "runs an organisation". */
 export const PLATFORM_GROUP = 'admins';
+
+/**
+ * The switcher's value for "I am acting as Engage, not as a member of any
+ * organisation". Deliberately not a possible org id — `isOrgId` requires the
+ * `org_` prefix — so a stored mode and a stored org id can never be confused,
+ * and a stale value from either side falls back to org mode rather than
+ * silently granting the platform console.
+ */
+export const PLATFORM_MODE = '~platform';
 
 /* Icons are names from components/Icon.jsx's ICONS map. An unknown name falls
    back to Circle rather than crashing, which is why designSystem.test.jsx
@@ -192,57 +218,58 @@ const group = (id, label, items) => ({ id, label, items });
  *                                  say "Your space" and "Engage".
  * @returns {Array<{id:string,label:string,items:Array<object>}>}
  */
-export function sectionsFor({ groups = [], orgRole = '', orgType = '', orgName = '' } = {}) {
+export function sectionsFor({
+  groups = [], orgRole = '', orgType = '', orgName = '', mode = '',
+} = {}) {
   const memberships = Array.isArray(groups) ? groups : [];
+  const isStaff = memberships.includes(PLATFORM_GROUP);
   const type = String(orgType || '');
   const role = String(orgRole || '').toLowerCase();
 
   /*
-    THE PLATFORM GROUP IS ADDITIVE, not an alternative. Read this before
-    "simplifying" it.
-    
-    The first cut selected the platform console by the ABSENCE of an active
-    organisation, on the reasoning that an Engage employee standing inside a
-    customer's org should not be looking at platform tools. That is a good
-    instinct and it produced a console nobody could reach: EVERY approved
-    account is now given a personal organisation automatically
-    (admin/orgs/shared/personal-org.js), so an Engage admin always has an
-    active org, and Organisations / Moderation / Accounts / Archive became
-    permanently unreachable the moment provisioning ran.
-    
-    So staff get their own space AND the platform group, kept apart by the
-    headings — which is what the headings are for. It does NOT widen access to
-    anything: `tenant.readableScopes` gives a platform admin no extra scope, and
-    reading a customer's content still takes a logged, expiring grant. This
-    decides which LINKS appear, never what may be opened.
+    PLATFORM MODE IS EXCLUSIVE AND IT IS ASKED FOR. See the header for the two
+    ways this was previously wrong. `isStaff` is checked here as well as on
+    every platform route because a nav that lists a place the server will refuse
+    is worse than no link at all — but the server is the authority, not this.
   */
-  const platformGroup = memberships.includes(PLATFORM_GROUP)
-    ? [group('platform', 'Engage', [
+  if (mode === PLATFORM_MODE) {
+    if (!isStaff) return [];
+    return [group('platform', 'Engage', [
       SECTION.orgs,
       SECTION.moderation,
       SECTION.accounts,
       SECTION.archive,
-    ])]
-    : [];
+    ])];
+  }
 
   if (!type) {
-    /* No active organisation yet — either staff, or somebody who has not
-       joined one, and then there are no places at all (mockup 09). */
-    return platformGroup;
+    /* No active organisation and not asking for platform — an approved account
+       that has not joined one yet (mockup 09). No sections; every one of them
+       is a place inside an org. */
+    return [];
   }
 
   if (type === 'personal') {
+    /*
+      PROMPTS IS HERE ON PURPOSE, and it was not at first. A personal space was
+      given three sections on the reasoning that it has no team to manage — but
+      Prompts is not a team control, it is the library that shapes what the AI
+      writes, and every org reads the platform prompts. Leaving it out meant an
+      Engage admin, whose home is always personal, lost the section entirely the
+      moment provisioning ran. That was reported from dev as prompts
+      disappearing, and it was this line.
+    */
     return [
       group('space', 'Your space', [
         SECTION.questionsets,
         SECTION.games,
         SECTION.library,
+        SECTION.prompts,
       ]),
       group('account', 'Account', [
         SECTION.billing,
         SECTION.privacy,
       ]),
-      ...platformGroup,
     ];
   }
 
@@ -255,13 +282,12 @@ export function sectionsFor({ groups = [], orgRole = '', orgType = '', orgName =
 
   if (!ADMIN_ROLES.includes(role)) {
     /* A member sees who else is here and nothing that would refuse them. */
-    return [content, group('team', 'Team', [SECTION.members]), ...platformGroup];
+    return [content, group('team', 'Team', [SECTION.members])];
   }
 
   return [
     content,
     group('team', 'Team', [SECTION.members, SECTION.billing, SECTION.privacy]),
-    ...platformGroup,
   ];
 }
 

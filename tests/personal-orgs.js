@@ -396,7 +396,24 @@ const TEAM_ORG = 'org_2222222222222222222222';
     const { orgId } = await ensurePersonalOrg(evt({ sub: 'u_fed', email: 'dev.mensah@x.example' }));
     // rejects: naming it '' for a federated identity that carries no `name`.
     // An organisation called '' is unpickable in the switcher for ever.
-    assert.strictEqual(metaOf(orgId).name, 'dev.mensah');
+    //
+    // It asserted the raw local part `dev.mensah` until dev showed what the
+    // fallback actually looks like on screen — this is the heading of the
+    // switcher chip, so the separators read as word breaks and the words are
+    // capitalised. See tests/personal-org-naming.js, which owns that rule and
+    // the federated-username case that made the fallback matter at all.
+    assert.strictEqual(metaOf(orgId).name, 'Dev Mensah');
+  });
+
+  await check('a federated username is never used as the name', async () => {
+    reset();
+    // rejects: THE DEV DEFECT — `callerName` falls back to `username`, and for
+    // a Google identity that is `Google_<21 digits>`. The first space this
+    // product ever provisioned was called Google_113956208956782440356.
+    const { orgId } = await ensurePersonalOrg(evt({
+      sub: 'u_g', username: 'Google_113956208956782440356', email: 'george.seib@gmail.com',
+    }));
+    assert.strictEqual(metaOf(orgId).name, 'George Seib');
   });
 
   say('\n2. and only ONE, however many times it is asked');

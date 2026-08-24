@@ -122,5 +122,60 @@ console.log('\n3. the clause exists rather than relying on the trailing default'
       'a prefix match would silently close routes nobody has written yet'));
 }
 
+console.log('\n4. the platform console, and the copy route');
+{
+  /*
+    THE STAFF ROUTES ARE `admins` ALONE — never ['hosts','admins'].
+
+    This is the one place in the API where the two groups must NOT be
+    interchangeable. Every other admin-ish route lets hosts through because
+    hosts manage their own content; these list and suspend OTHER PEOPLE'S
+    organisations, and a host reaching them would be a tenant administering
+    tenants.
+  */
+  check('GET /platform/orgs is Engage staff only', () =>
+    assert.deepStrictEqual(requiredGroupsForRoute('GET', 'platform/orgs'), ['admins']));
+  check('the status route is Engage staff only', () =>
+    assert.deepStrictEqual(
+      requiredGroupsForRoute('POST', 'platform/orgs/{orgId}/status'), ['admins']));
+  check('and so is the concrete form the rawPath fallback produces', () =>
+    assert.deepStrictEqual(
+      requiredGroupsForRoute('POST', 'platform/orgs/org_9xK4Fq7Pz2mNbVc8dQwLxR/status'),
+      ['admins']));
+
+  // rejects: a host being refused the copy route. Copying is how an ordinary
+  // member adapts something from the shared library; refusing it to hosts would
+  // leave that library read-only for exactly the people it exists for.
+  check('copying a shared set is open to hosts as well as admins', () => {
+    assert.deepStrictEqual(
+      requiredGroupsForRoute('POST', 'question-sets/{setId}/copy'), ['hosts', 'admins']);
+    assert.deepStrictEqual(
+      requiredGroupsForRoute('POST', 'question-sets/80strivia/copy'), ['hosts', 'admins']);
+  });
+
+  /*
+    THE SET-ID TRAP, AGAIN, ON A NEW ROUTE.
+
+    `requiredGroupsForRoute` has a generic clause reading
+    `path.includes('answer') || path.includes('vote') || path.includes('join')`,
+    and a setId is a slug of its title (upload-questions.js:298). A set called
+    "Lessons and Answers" slugs to `lessonsandanswers`. Any new route carrying a
+    set id has to be decided BEFORE that clause or it is public by accident —
+    which is exactly how question-sets/{setId}/questions was once public.
+  */
+  check('a set whose title contains "answers" does not make its copy route public', () =>
+    assert.deepStrictEqual(
+      requiredGroupsForRoute('POST', 'question-sets/lessonsandanswers/copy'),
+      ['hosts', 'admins']));
+
+  const fs2 = require('fs');
+  const src2 = fs2.readFileSync(path.join(REPO, 'lambda-functions/auth/authorizer.js'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+  check('the platform clause is anchored, not a prefix', () =>
+    assert.ok(!/(startsWith|includes)\(\s*['"]platform/.test(src2),
+      'a prefix would swallow every future platform/... route, including a public one'));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

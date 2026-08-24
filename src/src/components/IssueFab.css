@@ -1,12 +1,60 @@
-/* Floating Action Button for Issue Reporting */
+/* ── PLACEMENT ─────────────────────────────────────────────────────────────
+   Two variants, because this used to have one and it was the wrong one. The
+   container was `position: fixed; z-index: 20000` unconditionally, so a 56px
+   circle sat over every screen — including the panels that were already
+   passing it in as a slotted control and having their layout ignored.
+
+   Nothing here is `position: fixed` any more except the explicit floating
+   variant, so a caller that writes it into a header gets a header control. */
 .issue-fab-container {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 20000; /* Higher than all other elements to ensure visibility */
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+}
+
+.issue-fab-container--inline {
+  position: relative;
+}
+
+/* The old behaviour, kept for any surface with no chrome to host the control.
+   The z-index stays absurd on purpose: if something IS going to float over a
+   live session, being half-covered is worse than being fully visible. */
+.issue-fab-container--floating {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 20000;
+}
+
+/* Inline, it is a header control and matches the Help button beside it rather
+   than shouting over it: same 32px box, same radius, no drop shadow. */
+.issue-fab-container--inline .issue-fab-main {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  box-shadow: none;
+  background: transparent;
+  color: var(--secondary, #b9b2a6);
+}
+
+.issue-fab-container--inline .issue-fab-main:hover {
+  transform: none;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+  color: var(--text, #f4efe6);
+}
+
+.issue-fab-container--inline .issue-fab-main.active {
+  transform: none;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* The menu hangs off the button rather than off the viewport corner. */
+.issue-fab-container--inline .issue-fab-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
 }
 
 .issue-fab-main {

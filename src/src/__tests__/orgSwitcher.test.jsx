@@ -204,11 +204,29 @@ describe('keyboard and focus', () => {
 });
 
 describe('the platform chip', () => {
-  // rejects: drawing Engage staff as a switchable organisation
-  test('is inert, named, and has no menu', () => {
-    render(<OrgSwitcher platform />);
-    expect(screen.getByText('Engage staff')).toBeInTheDocument();
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  /*
+    THIS TEST USED TO REQUIRE THE OPPOSITE, and the reversal is the point.
+
+    It read "is inert, named, and has no menu" and asserted the staff chip drew
+    no button at all — correct while the platform LINKS were stacked onto the
+    org nav, because the chip was then only a label saying which tier you were
+    on. Once those links became an exclusive mode (config/consoleSections.js),
+    the switcher became the only way to enter it, and an inert chip meant Engage
+    staff could not reach their own console. Engage is still not an organisation
+    — it sits under its own "Act as" heading, never under "Your organisations".
+  */
+  // rejects: an inert staff chip, which is a platform console with no door.
+  test('offers the mode rather than merely naming it', () => {
+    render(<OrgSwitcher platform organisations={[]} onSelect={jest.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /Engage/ }));
+    expect(screen.getByRole('menuitem', { name: /Engage/ })).toBeInTheDocument();
+  });
+
+  // rejects: filing Engage under "Your organisations", which would say the
+  // operator is a member of a tenant called Engage.
+  test('files it under Act as, not under Your organisations', () => {
+    render(<OrgSwitcher platform organisations={[{ orgId: 'org_a', name: 'Amara', type: 'personal' }]} onSelect={jest.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /Amara/ }));
+    expect(screen.getByText('Act as')).toBeInTheDocument();
   });
 });

@@ -107,12 +107,59 @@ function isApproved(event) {
  * arrive with no `name` attribute at all, and an organisation called '' is
  * unpickable in a dropdown for ever (the same argument as `validateName`).
  */
+/**
+ * DOES THIS "NAME" ACTUALLY NAME A PERSON, OR A FEDERATED IDENTITY?
+ *
+ * Cognito's username for a social sign-in is `<Provider>_<opaque id>` —
+ * `Google_113956208956782440356`, `Facebook_1016…`, `SignInWithApple_0012…`,
+ * `LoginWithAmazon_amzn1.account.…`. `callerName` falls back to `username`, so
+ * on dev the first auto-provisioned space came out called
+ * `Google_113956208956782440356`, and that string became the switcher chip, the
+ * organisation list and the org's slug.
+ *
+ * Matched on the PROVIDER PREFIX, not on "has an underscore" or "has digits".
+ * Real names contain both — `amara_reyes`, `user123` — and a pattern loose
+ * enough to catch the machine ids would quietly rename people, which is a worse
+ * failure than the one being fixed.
+ */
+function looksFederated(value) {
+  return /^(Google|Facebook|SignInWithApple|LoginWithAmazon|AzureAD|Okta)_/i
+    .test(String(value || '').trim());
+}
+
+/** `george.seib` -> `George Seib`. Separators are word breaks, not characters. */
+function titleiseLocalPart(local) {
+  return String(local || '')
+    .split(/[._\-+]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+/**
+ * "Amara Reyes · Personal" — the name is the PERSON, and the "· Personal" half
+ * is rendered from `type`, not stored in the name. So this is just their name.
+ *
+ * The order is deliberate: a real display name, then the email local part, then
+ * a constant. A federated username is skipped entirely rather than used as a
+ * fallback, because a name nobody recognises is worse than a generic one.
+ */
 function personalOrgName(event) {
   const display = G.callerName(event);
-  if (display) return display.slice(0, G.NAME_MAX);
+  if (display && !looksFederated(display)) return display.slice(0, G.NAME_MAX);
+
   const email = G.callerEmail(event);
-  const local = email.split('@')[0].trim();
+  const local = titleiseLocalPart(String(email).split('@')[0].trim());
   return (local || 'Personal').slice(0, G.NAME_MAX);
+}
+
+/** One org's stored name, or '' when it cannot be read. */
+async function readOrgName(orgId) {
+  const res = await G.db.send(new GetCommand({
+    TableName: G.tableName(),
+    Key: { PK: tenant.orgPk(orgId), SK: 'METADATA' },
+  }));
+  return G.clean(res.Item && res.Item.name);
 }
 
 async function readProfile(sub) {
@@ -152,7 +199,67 @@ async function ensurePersonalOrg(event) {
   }
 
   const existing = G.clean(profile && profile.personalOrgId);
-  if (existing) return { orgId: existing, created: false, reason: 'exists' };
+  if (existing) {
+    /*
+      SELF-HEAL A SPACE NAMED AFTER A MACHINE.
+
+      Everything provisioned before `looksFederated` existed is called
+      `Google_113956208956782440356` or a sibling of it, and that name is on the
+      switcher chip of the account that owns it. There is no backfill script
+      because there does not need to be one: this runs on every page load, so
+      the row repairs itself the next time its owner opens the console, on every
+      tier, with nothing to schedule and nothing to remember.
+
+      Conditioned so it can only ever rewrite a name that is STILL the bad one —
+      a person who has since renamed their own space must not have that undone,
+      and two tabs racing here must not fight.
+    */
+    try {
+      const current = await readOrgName(existing);
+      if (looksFederated(current)) {
+        const repaired = personalOrgName(event);
+        if (repaired && repaired !== current) {
+          /* BOTH ROWS, IN ONE TRANSACTION. The name is denormalised onto the
+             platform's index row (ORGS / ORG#{id}) so the staff console can
+             list every organisation without opening each METADATA — so
+             repairing only METADATA would leave Engage staff still looking at
+             `Google_1139…` in the one place the whole tenant list is drawn. */
+          await G.db.send(new TransactWriteCommand({
+            TransactItems: [
+              {
+                Update: {
+                  TableName: G.tableName(),
+                  Key: { PK: tenant.orgPk(existing), SK: 'METADATA' },
+                  UpdateExpression: 'SET #n = :name, slug = :slug',
+                  ConditionExpression: '#n = :current',
+                  ExpressionAttributeNames: { '#n': 'name' },
+                  ExpressionAttributeValues: {
+                    ':name': repaired, ':slug': G.slugify(repaired), ':current': current,
+                  },
+                },
+              },
+              {
+                Update: {
+                  TableName: G.tableName(),
+                  Key: { PK: tenant.ORGS_INDEX_PK, SK: tenant.orgPk(existing) },
+                  UpdateExpression: 'SET #n = :name',
+                  ExpressionAttributeNames: { '#n': 'name' },
+                  ExpressionAttributeValues: { ':name': repaired },
+                },
+              },
+            ],
+          }));
+          console.log(`renamed personal organisation ${existing}: ${current} -> ${repaired}`);
+        }
+      }
+    } catch (error) {
+      // A failed repair is cosmetic. It must never cost anybody their console.
+      if (error.name !== 'ConditionalCheckFailedException') {
+        console.warn('ensurePersonalOrg: could not repair the name:', error.message);
+      }
+    }
+    return { orgId: existing, created: false, reason: 'exists' };
+  }
 
   const orgId = G.mintOrgId();
   const now = new Date().toISOString();
@@ -294,4 +401,6 @@ async function ensurePersonalOrg(event) {
   return { orgId, created: true, reason: 'created' };
 }
 
-module.exports = { ensurePersonalOrg, personalOrgName, isApproved, APPROVED_GROUPS };
+module.exports = {
+  ensurePersonalOrg, personalOrgName, looksFederated, isApproved, APPROVED_GROUPS,
+};

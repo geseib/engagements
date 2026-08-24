@@ -40,20 +40,36 @@ beforeEach(() => {
 
 const headersOf = () => global.fetch.mock.calls[0][1].headers;
 
+/*
+  REAL-SHAPED ORG IDS. `authFetch` now sends the header ONLY for a value that
+  looks like a minted id (`org_` + base58), because storage also holds the
+  platform-mode sentinel and whatever stale values earlier shapes of this key
+  left behind — and sending one of those means acting unscoped while the chip
+  on screen names an organisation.
+
+  These fixtures were `o-nw` / `o-one` / `o-two` and started failing with
+  "Received: undefined", which reads as the header being dropped. It was: the
+  guard is right and the fixtures were never shaped like anything `mintOrgId`
+  produces. See platformModeWiring.test.jsx for the guard's own tests.
+*/
+const NW = 'org_9xK4Fq7Pz2mNbVc8dQwLxR';
+const ONE = 'org_3JtYs6WgHn5RkMqZaB7uEv';
+const TWO = 'org_Tb2VnQ8sLxK4WmC7gRdYpF';
+
 describe('the accessor', () => {
   // rejects: renaming the key, which silently signs everyone back into no org
   test('stores under engage.activeOrg', () => {
     const m = load();
     expect(m.ACTIVE_ORG_STORAGE_KEY).toBe('engage.activeOrg');
-    m.setActiveOrgId('o-nw');
-    expect(window.localStorage.getItem('engage.activeOrg')).toBe('o-nw');
-    expect(m.getActiveOrgId()).toBe('o-nw');
+    m.setActiveOrgId(NW);
+    expect(window.localStorage.getItem('engage.activeOrg')).toBe(NW);
+    expect(m.getActiveOrgId()).toBe(NW);
   });
 
   // rejects: a falsy set leaving the previous org in place
   test('clearing it means no org, not the last org', () => {
     const m = load();
-    m.setActiveOrgId('o-nw');
+    m.setActiveOrgId(NW);
     m.setActiveOrgId('');
     expect(m.getActiveOrgId()).toBe('');
     expect(window.localStorage.getItem('engage.activeOrg')).toBeNull();
@@ -62,12 +78,12 @@ describe('the accessor', () => {
   // rejects: caching the id at module load, so a switch needs a page reload
   test('it is read at call time, not cached', async () => {
     const m = load();
-    m.setActiveOrgId('o-one');
+    m.setActiveOrgId(ONE);
     await m.authFetch('/x');
-    expect(global.fetch.mock.calls[0][1].headers['X-Engage-Org']).toBe('o-one');
-    m.setActiveOrgId('o-two');
+    expect(global.fetch.mock.calls[0][1].headers['X-Engage-Org']).toBe(ONE);
+    m.setActiveOrgId(TWO);
     await m.authFetch('/x');
-    expect(global.fetch.mock.calls[1][1].headers['X-Engage-Org']).toBe('o-two');
+    expect(global.fetch.mock.calls[1][1].headers['X-Engage-Org']).toBe(TWO);
   });
 
   // rejects: letting a Safari-private storage throw take the console down
@@ -84,17 +100,17 @@ describe('the header', () => {
   // rejects: dropping the org header, which puts every request back in one shared world
   test('rides along with the token', async () => {
     const m = load();
-    m.setActiveOrgId('o-nw');
+    m.setActiveOrgId(NW);
     await m.authFetch('/admin/x');
     expect(headersOf().Authorization).toBe('Bearer tok-123');
-    expect(headersOf()[m.ORG_HEADER]).toBe('o-nw');
+    expect(headersOf()[m.ORG_HEADER]).toBe(NW);
     expect(m.ORG_HEADER).toBe('X-Engage-Org');
   });
 
   // rejects: sending an org on a participant's unauthenticated join
   test('is never sent without a token', async () => {
     const m = load();
-    m.setActiveOrgId('o-nw');
+    m.setActiveOrgId(NW);
     signedOut();
     await m.authFetch('/games/abc');
     expect(headersOf().Authorization).toBeUndefined();
@@ -111,7 +127,7 @@ describe('the header', () => {
   // rejects: the stored org overriding a call that deliberately names one
   test('an explicit header on the call wins', async () => {
     const m = load();
-    m.setActiveOrgId('o-nw');
+    m.setActiveOrgId(NW);
     await m.authFetch('/admin/x', { headers: { 'X-Engage-Org': 'o-other' } });
     expect(headersOf()['X-Engage-Org']).toBe('o-other');
   });
@@ -119,7 +135,7 @@ describe('the header', () => {
   // rejects: clobbering headers the caller passed, e.g. Content-Type on a POST
   test('the caller’s other headers survive', async () => {
     const m = load();
-    m.setActiveOrgId('o-nw');
+    m.setActiveOrgId(NW);
     await m.authFetch('/admin/x', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
     expect(headersOf()['Content-Type']).toBe('application/json');
     expect(global.fetch.mock.calls[0][1].method).toBe('POST');

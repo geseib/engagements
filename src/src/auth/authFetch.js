@@ -81,8 +81,20 @@ export const authFetch = async (url, options = {}) => {
     /* An explicit header on the call wins: a screen acting on a named org —
        the switcher's own GET /orgs, a platform grant — must not be silently
        redirected to whatever this browser last selected. */
+    /* ONLY A MINTED ORG ID TRAVELS. Storage also holds the platform-mode
+       sentinel (`~platform`, config/consoleSections.js), and it will hold stale
+       values from any earlier shape this key ever had. Sending one of those
+       happens to work today — the authorizer resolves an org the caller is not
+       a member of to NO org — and it is a fail-open waiting for the first
+       person who adds a fallback there, at which point the platform console
+       would quietly be acting inside whichever organisation that fallback
+       picked. Anything not shaped like `org_…` sends no org, which is the safe
+       direction: unscoped refuses, mis-scoped does not. `isOrgId` in
+       admin/orgs/shared/org-guards.js is the server's copy of this rule. */
     const orgId = getActiveOrgId();
-    if (orgId && !headers[ORG_HEADER]) headers[ORG_HEADER] = orgId;
+    if (/^org_[1-9A-HJ-NP-Za-km-z]+$/.test(orgId) && !headers[ORG_HEADER]) {
+      headers[ORG_HEADER] = orgId;
+    }
   }
   return fetch(url, { ...options, headers });
 };
