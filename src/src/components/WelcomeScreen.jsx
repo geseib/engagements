@@ -1,4 +1,5 @@
 import React from 'react';
+import ActiveOrgSwitcher from './ActiveOrgSwitcher';
 import PendingInvites from './PendingInvites';
 import './WelcomeScreen.css';
 
@@ -95,6 +96,13 @@ export default function WelcomeScreen({
 
           {currentUser && (
             <div className="wel-who">
+              {/* WHICH ORGANISATION'S SETS AM I ABOUT TO PICK FROM? This screen
+                  never said. `GET /question-sets` is scoped by the header the
+                  switcher writes, so a host in two teams was choosing from one
+                  of them blind, with no way to change it without a trip through
+                  the console. It draws nothing at all for somebody with a
+                  single space, which is most people. */}
+              <ActiveOrgSwitcher />
               <span className="wel-who-name">{currentUser.attributes?.name || 'Signed in'}</span>
               {isAdmin && <span className="wel-badge">Administrator</span>}
               {/* THE LINK BACK, WHICH ONLY EXISTED IN ONE DIRECTION.
@@ -112,11 +120,14 @@ export default function WelcomeScreen({
                   A real <a href>, so middle-click and "open in new tab" work.
                   App.jsx routes on pathname, so this is a page load either way
                   and an onClick would only take that choice away. */}
-              {isAdmin && (
-                <a className="wel-btn wel-btn-quiet" href="/admin">
-                  Admin console
-                </a>
-              )}
+              {/* NOT `isAdmin` ANY MORE. `/admin` used to require the `admins`
+                  group and now accepts hosts, because that console is where a
+                  host manages their question sets, their team and their plan.
+                  Gating the link on staff kept every customer out of the screen
+                  built for them. */}
+              <a className="wel-btn wel-btn-quiet" href="/admin">
+                {isAdmin ? 'Admin console' : 'Question sets & team'}
+              </a>
               <button type="button" className="wel-btn wel-btn-quiet" onClick={() => onSignOut?.()}>
                 Sign out
               </button>

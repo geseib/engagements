@@ -22,6 +22,16 @@ jest.mock('../auth/AuthContext', () => ({
 jest.mock('../auth/authFetch', () => ({
   __esModule: true,
   authFetch: (...args) => global.fetch(...args),
+  /* The active-organisation accessors live beside `authFetch` because the
+     header they drive is sent from there. A mock that stubs only `authFetch`
+     leaves these undefined, and the host screen now mounts
+     `ActiveOrgSwitcher` — which calls `getActiveOrgId()` in a `useState`
+     initialiser and takes the whole page down. It reads as a component bug and
+     is a mock gap; AdminPage.test.jsx carries the same note. */
+  getActiveOrgId: () => '',
+  setActiveOrgId: () => {},
+  ORG_HEADER: 'X-Engage-Org',
+  ACTIVE_ORG_STORAGE_KEY: 'engage.activeOrg',
 }));
 
 import GameHostPage from '../GameHostPage';

@@ -3303,8 +3303,17 @@ Focus on actionable business strategy insights.`;
         nothing below may tell the host to press again. Pressing again skips a
         question, live, in front of a room.
       */
+      /* `authFetch`, NOT the bare global. `POST /games/{id}/next-question` was
+         closed in Phase 0 — before that anyone holding a four-digit code could
+         drive somebody else's live session — and this call site was missed
+         because the fetch is not CALLED here, it is PASSED AS A VALUE. Grepping
+         this line for `fetch(` finds `requestNextQuestion(`.
+
+         It shipped as a 401 on the main control of the host page: start a
+         quickstart, press next, "Unauthorized". __tests__/closedRoutesUseAuthFetch
+         now scans for both shapes. */
       const attempt = await requestNextQuestion({
-        fetchFn: fetch, apiBase: API_BASE, gameId, body: requestBody,
+        fetchFn: authFetch, apiBase: API_BASE, gameId, body: requestBody,
       });
 
       if (!attempt.advanced) {
