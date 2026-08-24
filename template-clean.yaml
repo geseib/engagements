@@ -650,7 +650,23 @@ Resources:
       CorsConfiguration:
         AllowOrigins: ["*"]
         AllowMethods: ["OPTIONS","GET","POST","PUT","DELETE"]
-        AllowHeaders: ["Content-Type", "Authorization"]
+        # X-Engage-Org IS LOAD-BEARING AND ITS ABSENCE IS A TOTAL OUTAGE.
+        #
+        # `authFetch` attaches it to every authenticated request. A custom
+        # header makes the request non-simple, so the browser preflights — and
+        # a preflight naming a header that is not on this list is answered 204
+        # with NO access-control-allow-* headers at all. The browser then blocks
+        # the real request and reports a NETWORK ERROR to the page.
+        #
+        # Nothing outside a browser can see it: the API is healthy, the logs are
+        # empty because the request never arrives, and every curl smoke check
+        # passes. It is also intermittent in the worst way — until an
+        # organisation has been stored, authFetch sends no org header and
+        # everything works, so it presents as "some screens are broken".
+        #
+        # tests/cors-allows-sent-headers.js reads this list and the headers
+        # authFetch actually sends, and fails if they drift apart.
+        AllowHeaders: ["Content-Type", "Authorization", "X-Engage-Org"]
         ExposeHeaders: ["Content-Length", "X-Request-Id"]
       # Lambda authorizer (UserPoolV2 JWTs). No DefaultAuthorizer on purpose:
       # player and host game routes stay public; admin routes opt in per-event

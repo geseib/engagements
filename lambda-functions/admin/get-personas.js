@@ -24,7 +24,7 @@ const dynamodb = DynamoDBDocumentClient.from(dynamoClient, {
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Engage-Org',
   'Access-Control-Allow-Methods': 'GET, OPTIONS'
 };
 

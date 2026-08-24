@@ -81,7 +81,7 @@ exports.handler = async (event) => {
     if (event?.requestContext?.http?.method === 'OPTIONS') {
       return {
         statusCode: 200,
-        headers: { ...cors, 'Access-Control-Allow-Headers': 'Content-Type,Authorization', 'Access-Control-Allow-Methods': 'GET, OPTIONS' },
+        headers: { ...cors, 'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Engage-Org', 'Access-Control-Allow-Methods': 'GET, OPTIONS' },
         body: '',
       };
     }

@@ -1,0 +1,131 @@
+/* ============================================================================
+   CREATE A TEAM — components/CreateOrgDialog.jsx
+
+   Scoped under `.corg`, for the reason `.team`, `.porgs` and `.qsets` are: the
+   mockups' unnamespaced `.btn`, `.panel` and `.input` belong to styles.css, and
+   a component stylesheet declaring a global class hands it to every screen that
+   imports after it.
+
+   Colour is tokens only, resolved from the dusk set this console uses, and the
+   values are the same ones TeamPanel.css measured rather than re-picked:
+
+     --text        #F4EDE4 on --surface #1B2942   12.53:1  title, input text
+     --muted       #9BA8BE on --surface            6.06:1  the sentence, label
+     --danger-text #EF8C86 on --surface            5.32:1  the refusal
+     --bg          #0F1A2E on --primary            8.86:1  Create team, filled
+
+   THE INPUT RENDERS AT BODY SIZE, not label size (RATIONALE §3.2): a 13px field
+   feeding a 15px screen is illegible exactly where a mistake is most expensive,
+   and this field becomes the name of a partition.
+   ========================================================================== */
+
+.corg {
+  --corg-t-floor: 12px;
+  --corg-t-label: 13px;
+  --corg-t-body: 15px;
+  --corg-t-head: 19px;
+
+  --corg-rule: rgba(155, 168, 190, .20);
+  --corg-rule-strong: rgba(155, 168, 190, .34);
+  --corg-row-hover: rgba(155, 168, 190, .055);
+}
+
+.corg *,
+.corg *::before,
+.corg *::after { box-sizing: border-box; }
+
+.corg :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+
+.corg-dialog {
+  width: min(420px, calc(100vw - 32px));
+  background: var(--surface);
+  border: 1px solid var(--corg-rule-strong);
+  border-radius: 10px;
+  color: var(--text);
+  font: 400 var(--corg-t-body)/1.45 var(--font-ui);
+}
+
+.corg-form { padding: 16px 18px 18px; }
+
+.corg-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.corg-title {
+  margin: 0;
+  flex: 1 1 auto;
+  font: 600 var(--corg-t-head)/1.25 var(--font-ui);
+  color: var(--text);
+}
+.corg-x {
+  flex: none;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: 400 20px/1 var(--font-ui);
+  padding: 2px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.corg-x:hover:not(:disabled) { color: var(--text); background: var(--corg-row-hover); }
+
+.corg-sub {
+  margin: 8px 0 16px;
+  color: var(--muted);
+  font-size: var(--corg-t-label);
+  line-height: 1.55;
+}
+
+.corg-label {
+  display: block;
+  margin: 0 0 6px;
+  color: var(--muted);
+  font: 600 var(--corg-t-label)/1 var(--font-ui);
+}
+
+.corg-input {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--corg-rule-strong);
+  background: var(--bg);
+  color: var(--text);
+  font: 400 var(--corg-t-body)/1.4 var(--font-ui);
+}
+.corg-input::placeholder { color: var(--muted); opacity: .8; }
+.corg-input:disabled { opacity: .5; }
+
+.corg-error {
+  margin: 10px 0 0;
+  color: var(--danger-text);
+  font-size: var(--corg-t-label);
+}
+
+.corg-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.corg-btn {
+  min-height: 30px;
+  padding: 0 14px;
+  border-radius: 6px;
+  border: 1px solid var(--corg-rule-strong);
+  background: transparent;
+  color: var(--text);
+  font: 600 var(--corg-t-label)/1 var(--font-ui);
+  cursor: pointer;
+}
+.corg-btn:hover:not(:disabled) { background: var(--corg-row-hover); border-color: var(--muted); }
+.corg-btn:disabled { opacity: .42; cursor: not-allowed; }
+
+.corg-btn--go {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--bg);
+}
+.corg-btn--go:hover:not(:disabled) { filter: brightness(1.06); background: var(--primary); }

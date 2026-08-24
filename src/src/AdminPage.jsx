@@ -11,6 +11,7 @@ import SessionsPanel from './components/SessionsPanel';
 import HelpButton from './components/HelpButton';
 import IssueFab from './components/IssueFab';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
+import CreateOrgDialog from './components/CreateOrgDialog';
 import { useAuth } from './auth/AuthContext';
 import './BuilderPage.css';
 import { authFetch } from './auth/authFetch';
@@ -209,6 +210,7 @@ function AdminPage() {
     entry surfaces too, and a participant joining a session must not be made to
     fetch a list of organisations they do not have.
   */
+  const [creatingOrg, setCreatingOrg] = useState(false);
   const [orgs, setOrgs] = useState([]);
   const [orgsLoaded, setOrgsLoaded] = useState(false);
   const [activeOrgId, setActiveOrgIdState] = useState(() => getActiveOrgId());
@@ -307,6 +309,13 @@ function AdminPage() {
   const [orgUsage, setOrgUsage] = useState(null);
   const [orgUsageError, setOrgUsageError] = useState('');
   useEffect(() => {
+    /* `activeTab`, not `resolvedTab`, and this is the ONE exception to the
+       rule stated at the section gates below. This effect is declared above the
+       line that computes `resolvedTab`, so naming it in the dependency array is
+       a temporal-dead-zone ReferenceError during render. It is also a FETCH
+       guard rather than a render gate: the cost of being wrong here is one
+       unnecessary usage request for a section that is not on screen, not two
+       screens at once. */
     if (activeTab !== 'billing' || !activeOrgId) return undefined;
     let cancelled = false;
     (async () => {
@@ -1222,6 +1231,29 @@ function AdminPage() {
     ? activeTab
     : fallbackSection;
   resolvedRef.current = resolvedTab;
+  /*
+    ── EVERY SECTION GATE BELOW READS `resolvedTab`. NOT `activeTab`. ────────
+
+    This is the one rule in this file that cannot be relaxed, and breaking it
+    does not produce an error — it produces TWO SCREENS AT ONCE.
+
+    `activeTab` is what the person ASKED for; `resolvedTab` is what they can be
+    SHOWN. They differ whenever a URL or a stale click names a section this
+    account's nav does not contain, which for Engage staff is the normal state
+    from the first paint: `activeTab` starts at the constant `questionsets`, and
+    platform mode has no such section.
+
+    When the tenancy panels were added they used `resolvedTab` and the six older
+    sections were left on `activeTab`. Both branches were then true at once, so
+    the head read "Organisations" while Question sets rendered underneath it —
+    reported from dev as "goes to the Organizations menu item, but lists
+    question sets". Nothing could catch it: both are strings in scope and the
+    result is a working program that draws two screens.
+
+    `activeTab` stays correct for the URL sync and the setter — those are about
+    what was requested, and rewriting them would break the history feature.
+    __tests__/adminOneSection.test.jsx mounts the page and counts.
+  */
 
   /*
     THE WORK-HEAD DESCRIPTOR — title, subtitle and content theme.
@@ -1305,7 +1337,11 @@ function AdminPage() {
               activeOrgId={activeOrgId}
               platform={isStaff}
               onSelect={handleSwitchOrg}
-              onCreate={() => { window.location.href = '/admin?section=members'; }}
+              /* WAS: window.location.href = '/admin?section=members' — a link
+                 to the members of the org you are already in, and in platform
+                 mode to a section that does not exist. `POST /orgs` had been
+                 wired and authorized the whole time with nothing calling it. */
+              onCreate={() => setCreatingOrg(true)}
             />
           ) : null
         }
@@ -1360,7 +1396,7 @@ function AdminPage() {
         ) : (
           <>
           {/* Tab Content */}
-          {activeTab === 'prompts' && (
+          {resolvedTab === 'prompts' && (
             /*
               THE PROMPTS SECTION: A CHOOSER, AND TWO PLACES IT LEADS TO.
 
@@ -1467,7 +1503,7 @@ function AdminPage() {
             </div>
           )}
 
-          {activeTab === 'questionsets' && (
+          {resolvedTab === 'questionsets' && (
             /*
               THE LIST AND THE CREATION PANEL. No `.tab-content` wrapper: that
               class carries a 500px min-height and a fade-in written for the
@@ -1513,7 +1549,7 @@ function AdminPage() {
             </QuestionSetsPanel>
           )}
 
-          {activeTab === 'games' && (
+          {resolvedTab === 'games' && (
             /*
               THE SESSIONS LIST. What used to be here: one red card with a
               Single/All radio pair, a free-text "Enter Game ID" box and a
@@ -1538,7 +1574,7 @@ function AdminPage() {
             />
           )}
 
-          {activeTab === 'archive' && (
+          {resolvedTab === 'archive' && (
             <div className="tab-content">
               <ArchivePanel />
             </div>
@@ -1547,7 +1583,7 @@ function AdminPage() {
           {/* No .tab-content wrapper: that class carries a 500px min-height and
               a fade-in written for the paper tabs, and the converted screens
               own their own frame. */}
-          {activeTab === 'users' && <UserManagement />}
+          {resolvedTab === 'users' && <UserManagement />}
 
           {/* ── The tenancy sections ──────────────────────────────────────
               Each is a pure props/callbacks component so it can be mounted in
@@ -1599,7 +1635,7 @@ function AdminPage() {
             <PrivacyPanel org={{ id: activeOrg.orgId, name: activeOrg.name }} />
           )}
 
-          {activeTab === 'settings' && (
+          {resolvedTab === 'settings' && (
             <div className="tab-content">
               {/* WebSocket Mode Toggle */}
               <div className="admin-section debug-section">
@@ -1693,6 +1729,10 @@ function AdminPage() {
           onDeleted={handleSetDeleted}
           onDeactivate={handleDeactivateInstead}
         />
+      )}
+
+      {creatingOrg && (
+        <CreateOrgDialog onClose={() => setCreatingOrg(false)} />
       )}
 
       {/* AI Scenario Builder Modal */}
