@@ -6,7 +6,8 @@ const {
   AdminRemoveUserFromGroupCommand,
   AdminDeleteUserCommand,
   AdminDisableUserCommand,
-  AdminEnableUserCommand
+  AdminEnableUserCommand,
+  ListUsersInGroupCommand
 } = require('@aws-sdk/client-cognito-identity-provider');
 
 const cognito = new CognitoIdentityProviderClient({ region: 'us-east-1' });
@@ -126,15 +127,40 @@ async function isEngageAdmin(username) {
   return (res.Groups || []).some((g) => g.GroupName === ENGAGE_ADMIN_GROUP);
 }
 
-/** How many Engage admins the pool has, counted rather than remembered. */
+/**
+ * How many Engage admins the pool has, counted rather than remembered.
+ *
+ * ASKS THE GROUP, not the pool. The first cut listed every user with
+ * `Limit: 60` and then called AdminListGroupsForUser on each — an N+1 that also
+ * silently stopped counting at the 61st account. That fails in the annoying
+ * direction rather than the dangerous one (an admin past the cap goes uncounted,
+ * so the guard refuses a demotion it should allow), but it is wrong either way
+ * and it gets worse as the pool grows.
+ *
+ * `ListUsersInGroup` answers the actual question in one call. Paginated,
+ * because the guard's whole job is to be right about the number 1: stopping at
+ * a page boundary could report zero remaining admins for a pool that has
+ * plenty, and refuse every change on this screen.
+ *
+ * Disabled accounts are NOT counted. An account that cannot sign in is not a
+ * way back into the platform console, so leaving one disabled admin behind is
+ * the same lockout the guard exists to prevent.
+ */
 async function engageAdminCount() {
-  const res = await cognito.send(new ListUsersCommand({
-    UserPoolId: USER_POOL_ID,
-    Limit: 60,
-  }));
-  const users = res.Users || [];
-  const flags = await Promise.all(users.map((u) => isEngageAdmin(u.Username)));
-  return flags.filter(Boolean).length;
+  let count = 0;
+  let NextToken;
+  do {
+    // eslint-disable-next-line no-await-in-loop
+    const page = await cognito.send(new ListUsersInGroupCommand({
+      UserPoolId: USER_POOL_ID,
+      GroupName: ENGAGE_ADMIN_GROUP,
+      Limit: 60,
+      NextToken,
+    }));
+    count += (page.Users || []).filter((u) => u.Enabled !== false).length;
+    NextToken = page.NextToken;
+  } while (NextToken);
+  return count;
 }
 
 /**

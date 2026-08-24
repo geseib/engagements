@@ -40,6 +40,7 @@ const pool = new Map();          // username -> { groups:Set, enabled:bool }
 const calls = [];
 
 class ListUsersCommand { constructor(i) { this.input = i; this.name = 'ListUsers'; } }
+class ListUsersInGroupCommand { constructor(i) { this.input = i; this.name = 'ListUsersInGroup'; } }
 class AdminListGroupsForUserCommand { constructor(i) { this.input = i; this.name = 'AdminListGroupsForUser'; } }
 class AdminAddUserToGroupCommand { constructor(i) { this.input = i; this.name = 'AdminAddUserToGroup'; } }
 class AdminRemoveUserFromGroupCommand { constructor(i) { this.input = i; this.name = 'AdminRemoveUserFromGroup'; } }
@@ -58,6 +59,20 @@ class CognitoIdentityProviderClient {
             Username, Enabled: r.enabled, Attributes: [], UserStatus: 'CONFIRMED',
           })),
         };
+      case 'ListUsersInGroup': {
+        /* Paginated on purpose: the handler's count must survive a page
+           boundary, and a stub that returns everything at once would let a
+           single-page implementation pass. One user per page. */
+        const all = [...pool.entries()]
+          .filter(([, r]) => r.groups.has(cmd.input.GroupName))
+          .map(([Username, r]) => ({ Username, Enabled: r.enabled }));
+        const from = Number(cmd.input.NextToken || 0);
+        const slice = all.slice(from, from + 1);
+        return {
+          Users: slice,
+          NextToken: from + 1 < all.length ? String(from + 1) : undefined,
+        };
+      }
       case 'AdminListGroupsForUser':
         return { Groups: [...(pool.get(u)?.groups || [])].map((GroupName) => ({ GroupName })) };
       case 'AdminAddUserToGroup':
@@ -79,6 +94,7 @@ class CognitoIdentityProviderClient {
 const stubExports = {
   CognitoIdentityProviderClient,
   ListUsersCommand,
+  ListUsersInGroupCommand,
   AdminListGroupsForUserCommand,
   AdminAddUserToGroupCommand,
   AdminRemoveUserFromGroupCommand,
@@ -226,7 +242,29 @@ const bodyOf = (res) => JSON.parse(res.body || '{}');
     assert.strictEqual(pool.get('u_host').enabled, false);
   });
 
-  console.log('\n4. promoting is unaffected');
+  console.log('\n4. the count is right past a page boundary, and ignores disabled admins');
+
+  // rejects: a single-page count. The stub above returns ONE admin per page, so
+  // an implementation that reads only the first page sees 1 and refuses every
+  // change on this screen for a pool that has plenty of admins.
+  await check('three admins across three pages still allows a demotion', async () => {
+    seed([['u_a', ['admins']], ['u_b', ['admins']], ['u_c', ['admins']]]);
+    const res = await handler(req('u_b', 'hosts', 'u_a'));
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.deepStrictEqual(groupsOf('u_b'), ['hosts']);
+  });
+
+  // rejects: counting an account that cannot sign in. A disabled admin is not a
+  // way back into the platform console, so leaving one behind is the same
+  // lockout this guard exists to prevent.
+  await check('a DISABLED admin does not count as the one holding the door', async () => {
+    seed([['u_boss', ['admins']], ['u_ghost', ['admins'], false]]);
+    const res = await handler(req('u_boss', 'hosts', 'u_other'));
+    assert.strictEqual(res.statusCode, 409, res.body);
+    assert.match(bodyOf(res).error, /last Engage admin/i);
+  });
+
+  console.log('\n5. promoting is unaffected');
 
   await check('a host can be made an Engage admin', async () => {
     seed([['u_boss', ['admins']], ['u_host', ['hosts']]]);
