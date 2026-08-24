@@ -1,17 +1,156 @@
 # Handoff — Engage as a multi-tenant SaaS
 
-**Branch:** `dev`. First pass `6730ce9a`; **second pass `1e6ff843`** — read §0 first,
-it is the one that answers what dev actually showed.
-**Status:** deployed to dev 2026-08-23, twice. Test and prod have not seen either.
-
-**Baselines at the second push:** frontend **172 suites / 4104 tests** green · backend
-**91 node suites** green · lint 0 errors / 11 known `exhaustive-deps` warnings · build
-clean with the 2 known size warnings · `tests/template-validates.js` 2 passed.
+**Branch:** `dev`, live as **`d5d0c4d9`**. Read §0 first — it carries the rules
+that are easy to break again, what is still open, and the test data left behind.
 
 **Still unbuilt, and named in §7:** the public library and its moderation
 pipeline (mockups 05, 06, 07, 11), Stripe, the access-log WRITER — the Data &
 privacy page renders the log but nothing writes rows to it yet — the
 break-glass grant, and org export/delete.
+
+---
+
+## 0. WHERE THIS STANDS — read this first
+
+**Live on `dev` as `d5d0c4d9`.** Test and prod have seen none of it.
+
+Baselines at the last push: backend **98 node suites**, frontend **186 suites /
+4612 tests**, lint 0 errors / 11 known `exhaustive-deps` warnings, clean build
+with the 2 known size warnings, `tests/template-validates.js` 2 passed.
+
+Four QA agents drove the live deployment on 2026-08-24. **The partition scheme
+held; the handlers on top of it did not.** Everything in §0c came from that.
+
+### The rules that are easy to break again
+
+1. **Adding a request header is a TEMPLATE change.** `X-Engage-Org` was not on
+   the API's `AllowHeaders`, so every browser request was blocked with a
+   *network error* while the API looked healthy and the Lambda logs were empty.
+   `tests/cors-allows-sent-headers.js` guards it.
+2. **Every section gate in `AdminPage.jsx` reads `resolvedTab`, never
+   `activeTab`.** Mixing them mounts two screens at once and nothing catches it
+   — both are strings in scope. `__tests__/adminOneSection.test.jsx` counts.
+3. **`admins` is the PLATFORM group, not "may use the admin screens".**
+   Customers are `hosts`; an org role is a DynamoDB fact on `GET /orgs` as
+   `yourRole`. Gating anything host-facing on `admins` locks out every customer.
+4. **Writing Engage's library needs the staff group AND platform mode**
+   (`isPlatformAdmin && !callerOrgId`). "No active org" is only reachable
+   because the `~platform` sentinel travels in the header — `pickActiveOrg`
+   otherwise falls back to `defaultOrgId` and nobody is ever org-less.
+5. **Session routes must call `tenant.callerMayDriveSession`.** Only
+   `get-games-list` used the org partitions; everything else read `orgId` off
+   the row and never compared it.
+6. **A bare `fetch` can hide as a VALUE.** `requestNextQuestion({ fetchFn: fetch })`
+   evaded the Phase 0 sweep entirely — grepping the line for `fetch(` finds
+   `requestNextQuestion(`. `__tests__/closedRoutesUseAuthFetch.test.js` scans
+   for both shapes. (The mirror is already recorded: `authFetch` has a capital
+   F, so `/fetch\(/` matches nothing.)
+7. **jsdom has no layout engine, so check the CAUSE.** A class named in markup
+   and never declared in CSS renders invisibly — `Modal` applies the caller's
+   class and nothing else, so a missing `.corg-scrim` was a dialog nobody could
+   see with four green tests.
+   `__tests__/scopedClassesDeclared.test.js` checks every scoped class exists.
+
+### Fixture traps that cost real time
+
+- **Org ids in fixtures must be `org_` + 22 base58**, or `isOrgId` refuses them
+  and assertions pass for the wrong reason.
+- **`tests/helpers/tenant-crypto-stub.js` has two incompatible modes.**
+  `mintOrg` generates a RANDOM key; `installTestKeyLoader` derives one from the
+  orgId. `plainRow` only matches the second. Mixing them fails as *"Unsupported
+  state or unable to authenticate data"*, which reads like a crypto bug.
+- **A borrowed harness may declare a command it does not implement.**
+  `BatchWriteCommand` was in one stub's class list with no `case`, so every
+  batched Put silently did nothing and the handler reported success.
+- **`waitFor`'s default 1000ms is a race, not a limit**, for anything behind
+  `pollGenerationJob` — `POLL_INTERVAL_MS` is 2000ms of real time. Green on
+  every developer machine, red on a loaded CI container.
+
+### Still open, in the order worth taking
+
+From the session agent's live run, none fixed:
+
+1. **Sessions built from an org's own set are silently unplayable.** The client
+   never sends `questionSetScope`, so it defaults to platform and the game gets
+   no category state; `next-question` then 400s.
+2. **`GET /games/{id}?role=host` needs no auth at all** — plain curl returns the
+   private briefing. `role=host` is an unverified query param.
+3. **`GET /games/{id}/state` is public and leaks `correctAnswer` mid-round.**
+4. **Nothing is ever billed.** `recordBillableSession` is exported from four
+   copies of `usage.js` and imported by none; zero `LEDGER#` rows exist. The
+   free-plan cap therefore cannot fire either.
+5. **No way to end a session.** `ENDED` is only written when the question pool
+   runs dry (`next-question.js`), so a 6-round session on a 100-question set
+   sits in `RESULTS#006` for ever and the report screen is unreachable.
+6. **Re-closing a round re-awards points**, and re-closing an OLDER round
+   rewinds the session.
+
+Unbuilt from the original plan: the public library and its moderation pipeline,
+Stripe, the access-log WRITER (the Data & privacy page renders a log nothing
+writes to), the break-glass grant, org export/delete.
+
+### Test data left on dev
+
+QA orgs from the agents — `QA Meridian Delivery`, `QA Halcyon Institute`,
+`QA Session Co`, two `QA Sets` orgs — plus sessions 9000 / 6386 / 7986 / 2833 /
+7397 / 2083. And one org literally named **`t1u_bo`**: an auto-provisioned
+personal space that was handed off and left behind, the artifact of the
+zero-org bug in §0c. None of it is load-bearing; deleting it is safe.
+
+---
+
+## 0c. THE SECOND DAY — what the live agents found, 2026-08-24
+
+Ranked by consequence. Each is fixed and has a test that was watched failing.
+
+**Sessions were not isolated at all.** Exactly one route used the org
+partitions, which is why it was invisible: a rival's LIST is correctly empty.
+Every other session route read `orgId` off the row and never compared it to the
+caller. Driven live — a host in another org, holding only a four-digit code,
+read a session's private briefing, wrote its results, ADVANCED A LIVE ROOM,
+renamed it and started it, and the rival's title was written back encrypted
+under the victim's key. The real boundary was "any `hosts` account plus one of
+9,000 ids".
+
+**"Delete all sessions" deleted every organisation's.** `clear-all-games`
+Scanned the whole table and matched `/^ORG#.+#GAMES$/`, under a list that IS
+org-scoped, behind a dialog reading "Delete all 3 sessions". It now Queries the
+caller's own index and refuses outright without one. The existing test REQUIRED
+the cross-tenant wipe; its assertion is inverted.
+
+**The console was staff-only.** `/admin` sat behind `requireAdmin`. Three of the
+four consoles `sectionsFor` computes had never been seen by anybody they were
+computed for. Every test mounts `AdminPage` DIRECTLY, so nothing exercised the
+router in front of it.
+
+**Nobody could create a team.** `setCreatingOrg` has one caller — the switcher's
+menu — and the switcher collapses to an inert label when you have one
+organisation, which every new account does. There was no route to the paid
+product. The mockup agrees with the old code and is wrong: it was never asked
+what happens to Create.
+
+**An approved account could end up with nowhere.** `ensurePersonalOrg` returned
+the moment PROFILE named a home, never checking it still existed or still held
+the caller. Accept-into-a-personal-space → flip to team → hand over → leave →
+leave again produced `{orgs: []}` for ever. Every step answered 200.
+
+**Engage's library was writable from inside any org** — the owner hit this:
+renaming a set while acting as a host in TeamG changed what every organisation
+reads. See rule 4 above.
+
+**An invitation had no end.** No email was ever sent, the token was returned by
+the API and shown to nobody, and `POST /invites/{token}/accept` had never once
+been invoked on any tier. Now: sign in with the address you were invited at and
+accept from the landing screen, found through an `INVITEE#{email}` pointer row
+written beside the invitation. Invitations that predate the pointer are repaired
+when an admin opens Members.
+
+**Smaller, all real:** the Create-organisation dialog had no scrim and opened
+invisibly; the last Engage admin could be demoted, disabled or deleted, locking
+the platform console shut with no way back through the product; a failed "Copy
+to my organisation" rendered a green tick announced as `role="status"`; Public
+library was in every nav with no renderer; the invitations prompt was a second
+flex child and took half the new-session screen.
 
 ---
 
