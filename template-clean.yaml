@@ -873,6 +873,42 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # ── WHICH ORGANISATIONS ARE WAITING FOR ME ─────────────────────────────
+  # Read by the landing screen after sign-in. An invitation is matched to the
+  # caller's own Cognito email, which is the check accept-invite.js already
+  # made — so no link has to be delivered for somebody who already has an
+  # account. See lambda-functions/admin/orgs/list-my-invites.js.
+  MyInvitesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-org-list-my-invites'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: orgs/list-my-invites.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        # No kms:Decrypt. An invitation carries an email address, a role and the
+        # inviting organisation's NAME — all plaintext by design, because the
+        # invitee is not a member of that organisation and could not decrypt
+        # anything of its content even if this handed them some.
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        ListMyInvites:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /invites
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   # ── THE PLATFORM CONSOLE ───────────────────────────────────────────────
   # Engage staff only (tenant.isPlatformAdmin, never an org role). It lists
   # organisations and changes one's status; there is deliberately no route from

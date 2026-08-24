@@ -275,6 +275,20 @@ function seedInvite(orgId, email, role, daysLeft, token) {
   return tok;
 }
 
+/*
+  COUNTS THE ORGANISATION'S OWN INVITATION ROWS, not every row whose SK starts
+  `INVITE#`.
+
+  An invitation is now written TWICE — once in the inviting org's partition and
+  once at `INVITEE#{email}` so the invited person can find it without a GSI
+  (org-guards.invitePointer). A blanket count therefore reports two rows for one
+  invitation, which read as "Resend minted a second token" when nothing of the
+  sort had happened.
+*/
+const orgInviteRows = () => [...store.values()].filter(
+  (i) => String(i.SK).startsWith('INVITE#') && String(i.PK).startsWith('ORG#'),
+);
+
 const ORG_A = 'org_1111111111111111111111';
 const ORG_B = 'org_2222222222222222222222';
 const admin = (orgId) => ({ sub: 'u_amara', email: 'amara@northwind.example', orgId, role: 'admin' });
@@ -331,7 +345,7 @@ const admin = (orgId) => ({ sub: 'u_amara', email: 'amara@northwind.example', or
     }));
     assert.strictEqual(res.statusCode, 403, res.body);
     assert.strictEqual(G.ownersOf([...store.values()]).length, 0);
-    assert.strictEqual([...store.values()].filter((i) => String(i.SK).startsWith('INVITE#')).length, 0);
+    assert.strictEqual(orgInviteRows().length, 0);
   });
 
   await check('an admin of ANOTHER org cannot invite into this one', async () => {
@@ -372,7 +386,7 @@ const admin = (orgId) => ({ sub: 'u_amara', email: 'amara@northwind.example', or
     // stay live and revoking would mean finding all of them.
     assert.strictEqual(second.invite.token, first.invite.token);
     assert.strictEqual(second.created, false);
-    const rows = [...store.values()].filter((i) => String(i.SK).startsWith('INVITE#'));
+    const rows = orgInviteRows();
     assert.strictEqual(rows.length, 1, `${rows.length} invitations for one address`);
   });
 
@@ -386,7 +400,7 @@ const admin = (orgId) => ({ sub: 'u_amara', email: 'amara@northwind.example', or
     assert.strictEqual(res.statusCode, 201, res.body);
     assert.strictEqual(store.get(key(`ORG#${ORG_A}`, `INVITE#${dead}`)), undefined,
       'the expired row survived');
-    const rows = [...store.values()].filter((i) => String(i.SK).startsWith('INVITE#'));
+    const rows = orgInviteRows();
     assert.strictEqual(rows.length, 1);
   });
 
@@ -399,7 +413,7 @@ const admin = (orgId) => ({ sub: 'u_amara', email: 'amara@northwind.example', or
     assert.strictEqual((await inviteMember(evt({ ...admin(ORG_A), pathParams: p, body: { email: 'd@x.example', role: 'owner' } }))).statusCode, 400);
     assert.strictEqual((await inviteMember(evt({ ...admin(ORG_A), pathParams: p, body: { email: 'd@x.example', role: 'wizard' } }))).statusCode, 400);
     assert.strictEqual((await inviteMember(evt({ ...admin(ORG_A), pathParams: p, body: { email: 'not an address' } }))).statusCode, 400);
-    assert.strictEqual([...store.values()].filter((i) => String(i.SK).startsWith('INVITE#')).length, 0);
+    assert.strictEqual(orgInviteRows().length, 0);
   });
 
   await check('OPTIONS answers 200 with no credentials at all', async () => {

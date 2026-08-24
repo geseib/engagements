@@ -379,6 +379,28 @@
 }
 .team-notebox b { color: var(--text); }
 
+/* ── The invitation link ───────────────────────────────────────────────────
+   Shown after a successful invite for the case the accept prompt cannot cover:
+   somebody with no account here yet. The field is read-only and selects itself
+   on focus, because its only job is to be taken. */
+.team-linkrow { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.team-linklabel { color: var(--muted); font: 600 var(--team-t-label)/1 var(--font-ui); }
+.team-linkbox { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.team-linkinput {
+  flex: 1 1 220px;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 9px;
+  border-radius: 6px;
+  border: 1px solid var(--team-rule-strong);
+  background: var(--bg);
+  color: var(--text);
+  font: 400 var(--team-t-body)/1.4 var(--font-ui);
+}
+/* The mailto is an <a> so it opens the person's own mail app; it has to look
+   like the Copy button beside it rather than like body copy. */
+a.team-btn { text-decoration: none; }
+
 /* The role notice sits ABOVE the roster rather than below it, and is the first
    thing a host sees on this screen — so it takes the top margin off and the
    amber edge, which is the console's "this is about you" colour rather than

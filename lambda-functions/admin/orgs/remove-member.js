@@ -57,11 +57,29 @@ const G = require('./shared/org-guards');
 async function removeMember(event) {
   const orgId = G.clean(event?.pathParameters?.orgId);
 
-  const auth = await G.authorizeOrg(event, orgId, 'admin');
-  if (auth.denied) return auth.denied;
-
   const targetSub = G.clean(event?.pathParameters?.sub);
   if (!targetSub) return G.fail(400, 'Which member?');
+
+  /*
+    ── REMOVING SOMEBODY ELSE IS AN ADMIN POWER. LEAVING IS NOT. ────────────
+
+    This route required `admin` for EVERY caller, so a plain member of a team
+    had no way out of it at all: the Members screen showed them a roster with
+    "An admin can change this" on every row including their own, and the only
+    exit was asking an admin to remove them. The owner asked for the obvious
+    missing half — "i guess they need a way to leave the org too".
+
+    So the role required depends on WHO IS BEING REMOVED. Everything below is
+    unchanged and still applies to somebody leaving: a personal space cannot be
+    left (it is the account's home), and the last owner cannot walk out of an
+    organisation nobody else could then administer.
+
+    `authorizeOrg` is still what proves membership, so leaving is not a way to
+    reach an organisation you were never in.
+  */
+  const leaving = targetSub === G.clean(G.callerSub(event));
+  const auth = await G.authorizeOrg(event, orgId, leaving ? 'member' : 'admin');
+  if (auth.denied) return auth.denied;
 
   /*
     A PERSONAL ORGANISATION CANNOT BE LEFT, AND ITS ONE MEMBER CANNOT BE

@@ -108,6 +108,18 @@ function ageWords(days) {
  */
 export const EXPIRY_WARNING_DAYS = 5;
 
+/**
+ * The address somebody with no account yet would open.
+ *
+ * Anybody who ALREADY has an account never needs this: they sign in with the
+ * address they were invited at and the invitation is waiting on their landing
+ * screen. This is the "you do not have an account here yet" path, and it is
+ * handed to the admin to pass on however they like — nothing mails it.
+ */
+export function inviteUrl(token, origin = (typeof window !== 'undefined' ? window.location.origin : '')) {
+  return `${origin}/invite/${encodeURIComponent(token)}`;
+}
+
 export function sentWords(invite, now = Date.now()) {
   const ago = ageWords(daysSince(invite?.invitedAt, now));
   if (invite?.expired) return { ago, tail: 'expired', dead: true };
@@ -134,6 +146,7 @@ async function readOrThrow(response, fallbackVerb) {
 function InviteDialog({ orgName, onCancel, onInvited, sendInvite }) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('member');
+  const [link, setLink] = useState('');
   const [phase, setPhase] = useState('form'); // form | sending | failed | done
   const [message, setMessage] = useState('');
   const [discardAsk, setDiscardAsk] = useState(false);
@@ -168,10 +181,23 @@ function InviteDialog({ orgName, onCancel, onInvited, sendInvite }) {
       // `created: false` is the backend REFUSING to mint a second token for an
       // address that already has a live one. Saying "Invitation sent" there
       // would be a lie the Invited list immediately contradicts by not growing.
+      /*
+        NO MAIL IS SENT, AND THE COPY USED TO SAY OTHERWISE.
+
+        `invite-member.js` never sent an email — its own header says so — and
+        the delivery it was waiting for was never wired. This said "mail the
+        same link again", which was simply false.
+
+        What actually happens: the person signs in with the address they were
+        invited at and presses Accept on their landing screen. The link below is
+        for somebody who has no account yet, and it is handed to the admin
+        rather than to the void.
+      */
+      setLink(data?.invite?.token ? inviteUrl(data.invite.token) : '');
       setMessage(
         data.created === false
           ? `${address} already has an invitation that has not expired, so it was left alone. `
-            + 'Use Resend on their row to mail the same link again.'
+            + 'It is the same invitation, with the same expiry.'
           : `Invited ${address} as a ${roleLabel(data?.invite?.role || role).toLowerCase()}. `
             + 'Nothing is created for them until they accept.'
       );
@@ -265,6 +291,49 @@ function InviteDialog({ orgName, onCancel, onInvited, sendInvite }) {
               color="currentColor"
             />
             <span className="team-alert-text">{message}</span>
+          </div>
+        )}
+
+        {/*
+          THE LINK, HANDED TO THE ADMIN RATHER THAN TO NOBODY.
+
+          Most invitees never need it — they sign in with the address they were
+          invited at and press Accept on their landing screen. This is the path
+          for somebody who has no account here yet, and it exists because the
+          API has always returned the token and this screen has never shown it,
+          while telling the admin it had been mailed.
+        */}
+        {link && phase === 'done' && (
+          <div className="team-linkrow">
+            <label className="team-linklabel" htmlFor="team-invite-link">
+              If they have no account yet, send them this
+            </label>
+            <div className="team-linkbox">
+              <input
+                id="team-invite-link"
+                className="team-linkinput"
+                readOnly
+                value={link}
+                onFocus={(event) => event.target.select()}
+              />
+              <button
+                type="button"
+                className="team-btn team-btn--sm"
+                onClick={() => navigator.clipboard?.writeText(link)}
+              >
+                Copy
+              </button>
+              <a
+                className="team-btn team-btn--sm"
+                href={`mailto:${encodeURIComponent(email)}`
+                  + `?subject=${encodeURIComponent(`Join ${orgName || 'our team'} on Engage`)}`
+                  + `&body=${encodeURIComponent(`Open this to join:\n\n${link}\n\n`
+                    + `If you already have an Engage account, just sign in with ${email} `
+                    + 'and the invitation will be waiting on your home screen.')}`}
+              >
+                Email it
+              </a>
+            </div>
           </div>
         )}
 
@@ -527,8 +596,10 @@ export default function TeamPanel({
     setNotice(null);
     try {
       await sendInvite(invite.email, invite.role);
-      setNotice(`The invitation to ${invite.email} was mailed again. It is the same link, `
-        + 'with the same expiry — a second one is never minted.');
+      /* NOT "mailed again" — nothing mails it. Resend exists so an admin can
+         confirm the invitation is still live and take its link again. */
+      setNotice(`The invitation to ${invite.email} is still open — the same one, with the `
+        + `same expiry. They can accept it by signing in as ${invite.email}.`);
       setError(null);
       await load();
     } catch (err) {
@@ -571,7 +642,22 @@ export default function TeamPanel({
   /** Only an owner may change or remove another owner — the server enforces it,
    *  and a button that is going to be refused is a button that should not be
    *  drawn. */
-  const mayActOn = (member) => canAdminister && (member.role !== 'owner' || youAreOwner);
+  /*
+    LEAVING IS NOT AN ADMIN POWER.
+
+    This was `canAdminister && …` for every row including your own, so a host
+    had no way out of a team at all — the roster showed them "An admin can
+    change this" on their own line and the only exit was asking somebody. The
+    server now agrees: remove-member.js requires `admin` to remove SOMEBODY
+    ELSE and `member` to remove yourself.
+
+    The last-owner and personal-space refusals still apply and are still made by
+    the server, so the button can be wrong here without being dangerous — it
+    comes back as a message rather than as a departure.
+  */
+  const mayActOn = (member) => (member.you
+    ? true
+    : canAdminister && (member.role !== 'owner' || youAreOwner));
 
   const closeDialog = () => setDialog(null);
   const afterWrite = async () => { setDialog(null); await load(); };
@@ -843,7 +929,13 @@ export default function TeamPanel({
                           <span className="team-lock">{lock}</span>
                         ) : actionable ? (
                           <>
-                            {member.canDemote !== false && member.role === 'member' && (
+                            {/* CHANGING A ROLE IS STILL AN ADMIN POWER, and
+                                `actionable` is now true for your OWN row so
+                                that Leave can appear there. Without this extra
+                                gate a host saw "Make admin" on themselves — a
+                                button the server refuses, offering exactly the
+                                promotion they are not allowed to give. */}
+                            {canAdminister && member.canDemote !== false && member.role === 'member' && (
                               <button
                                 type="button"
                                 className="team-btn team-btn--sm"
@@ -853,7 +945,7 @@ export default function TeamPanel({
                                 {busy ? 'Working…' : 'Make admin'}
                               </button>
                             )}
-                            {member.canDemote !== false && member.role !== 'member' && (
+                            {canAdminister && member.canDemote !== false && member.role !== 'member' && (
                               <button
                                 type="button"
                                 className="team-btn team-btn--sm"
@@ -863,7 +955,9 @@ export default function TeamPanel({
                                 {busy ? 'Working…' : 'Make member'}
                               </button>
                             )}
-                            {member.canRemove !== false && (
+                            {/* Leaving is yours; removing somebody else is an
+                                admin power. remove-member.js agrees. */}
+                            {member.canRemove !== false && (canAdminister || member.you) && (
                               <button
                                 type="button"
                                 className="team-btn team-btn--sm team-btn--ghostdanger"

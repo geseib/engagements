@@ -396,10 +396,16 @@ describe('resending', () => {
     const row = (await screen.findByText('rosa.iglesias@contractor.example')).closest('tr');
     fireEvent.click(within(row).getByRole('button', { name: 'Resend' }));
 
-    await waitFor(() => expect(screen.getByText(/mailed again/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/still open/)).toBeInTheDocument());
     const post = calls.find(([, method]) => method === 'POST');
     expect(post[0]).toMatch(/orgs\/org_nw\/invites$/);
-    expect(screen.getByText(/same link, with the same expiry/)).toBeInTheDocument();
+    /* The point of Resend is that it is IDEMPOTENT — one address, one live
+       token — and the copy has to say so. It used to say "the same link" beside
+       a claim that the link had been mailed; the claim is gone and the
+       idempotence is still what matters. */
+    expect(screen.getByText(/same one, with the same expiry/)).toBeInTheDocument();
+    expect(screen.getByText(/signing in as rosa\.iglesias@contractor\.example/))
+      .toBeInTheDocument();
   });
 });
 

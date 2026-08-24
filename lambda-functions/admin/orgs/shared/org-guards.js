@@ -311,9 +311,63 @@ async function queryPartition(pk, skPrefix) {
 
 const memberSk = (sub) => `MEMBER#${clean(sub)}`;
 const inviteSk = (token) => `INVITE#${clean(token)}`;
+
+/**
+ * THE REVERSE ROW FOR AN INVITATION — `INVITEE#{email}` / `INVITE#{token}`.
+ *
+ * An invitation lives in the INVITING organisation's partition, and the person
+ * invited is by definition not a member of it — they cannot read that partition
+ * and they do not know the org id. So "which invitations are waiting for me?"
+ * has no answer from the forward row, and this table has ZERO GSIs.
+ *
+ * The same fact is therefore stored twice, exactly as a membership is
+ * (`ORG#{org}/MEMBER#{sub}` and `USER#{sub}/ORG#{org}`): once where the
+ * organisation reads it, once where the person does. Both are written in one
+ * transaction and both carry the same `ttl`, so an expiry cannot leave a
+ * pointer to an invitation that is gone.
+ *
+ * Keyed on the EMAIL rather than the Cognito sub, because the whole point is to
+ * invite somebody who may not have an account yet — there is no sub to key on
+ * until they sign up. Lower-cased at both ends; addresses are compared
+ * case-insensitively everywhere in this file.
+ */
+const inviteePk = (email) => `INVITEE#${clean(email).toLowerCase()}`;
 /** The reverse row's SK is `ORG#{orgId}` — the same string `tenant.orgPk`
  *  builds for the forward partition. One helper, so they cannot diverge. */
 const userOrgSk = (orgId) => tenant.orgPk(orgId);
+
+/**
+ * The reverse row for one invitation.
+ *
+ * Denormalises the organisation's NAME, and that is deliberate: the prompt the
+ * invitee sees has to say which organisation is asking, and they cannot read
+ * that organisation's METADATA — they are not a member of it. Copying the name
+ * here is what keeps the accept prompt from needing a hole in the isolation
+ * boundary. It can go stale if the org is renamed before the invitation is
+ * accepted; a fortnight-old name on a prompt is a far smaller problem than a
+ * cross-tenant read.
+ */
+function invitePointer(invite, orgName) {
+  return {
+    PK: inviteePk(invite.email),
+    SK: inviteSk(invite.token),
+    token: invite.token,
+    orgId: invite.orgId,
+    orgName: clean(orgName),
+    email: clean(invite.email).toLowerCase(),
+    role: invite.role,
+    invitedByEmail: invite.invitedByEmail || '',
+    invitedAt: invite.invitedAt,
+    expiresAt: invite.expiresAt,
+    ttl: invite.ttl,
+  };
+}
+
+/** Every invitation waiting for one email address, expired ones dropped. */
+async function listInvitesFor(email, nowMs = Date.now()) {
+  const rows = await queryPartition(inviteePk(email), 'INVITE#');
+  return rows.filter((row) => !isExpired(row, nowMs));
+}
 
 async function getOrgMetadata(orgId) {
   const res = await db.send(new GetCommand({
@@ -553,4 +607,5 @@ module.exports = {
   publicMember, publicInvite, publicOrg,
   PERSONAL, TEAM, ORG_TYPES, orgType, isPersonalOrg, personalOrgRefusal,
   slugify, validateName, NAME_MAX, INVITABLE_ROLES,
+  inviteePk, invitePointer, listInvitesFor,
 };

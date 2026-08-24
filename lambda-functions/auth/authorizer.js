@@ -322,8 +322,14 @@ function requiredGroupsForRoute(method, path) {
   // decided per row by admin/orgs/shared/org-guards.js, which additionally
   // requires a MEMBER row and the right role.
   const ORG_ROUTE = /^orgs(\/[^/]+)*$/;
+  // `invites` on its own is "which organisations are waiting for me" — the
+  // route the landing screen reads. Signed in is the only requirement; the
+  // handler answers with the caller's OWN address and nothing else, so there is
+  // no org to be a member of yet. That is the whole point: the person being
+  // invited is by definition not in the organisation inviting them.
+  const MY_INVITES_ROUTE = /^invites$/;
   const INVITE_ROUTE = /^invites\/[^/]+\/accept$/;
-  if (ORG_ROUTE.test(path) || INVITE_ROUTE.test(path)) {
+  if (ORG_ROUTE.test(path) || INVITE_ROUTE.test(path) || MY_INVITES_ROUTE.test(path)) {
     return ['hosts', 'admins'];
   }
 

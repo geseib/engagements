@@ -194,10 +194,21 @@ describe('a bare key resolves against the site root, which is why no resolver is
 
     expect(routes.length).toBeGreaterThan(3);
     const multiSegment = routes.filter((r) => r.replace(/^\//, '').includes('/'));
-    // '/test/wordcloud' and '/auth/callback' are exact-match dev/OAuth routes
-    // that never render a question, so they are named exceptions rather than
-    // silent ones.
-    expect(multiSegment.sort()).toEqual(['/auth/callback', '/test/wordcloud']);
+    /*
+      NAMED EXCEPTIONS, NOT SILENT ONES. Each of these is nested and each is
+      safe for the same specific reason: it never renders a question, so no
+      `sets/<id>/x.jpg` is ever resolved against its directory.
+
+        /auth/callback   — OAuth handoff, redirects immediately
+        /test/wordcloud  — a dev harness
+        /invite/         — components/InviteAcceptPage.jsx: one line of text
+                           and a button, for somebody who followed an invitation
+                           link before they had an account
+
+      Adding to this list is a decision. A nested route that DOES render a
+      question breaks every uploaded image on it, and nothing else would say so.
+    */
+    expect(multiSegment.sort()).toEqual(['/auth/callback', '/invite/', '/test/wordcloud']);
   });
 
   test('no route that renders a question is multi-segment', () => {

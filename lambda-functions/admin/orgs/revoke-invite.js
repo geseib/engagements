@@ -17,7 +17,7 @@
  * they must agree.
  */
 
-const { DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
 
 const tenant = require('../shared/tenant');
 const G = require('./shared/org-guards');
@@ -38,18 +38,41 @@ async function revokeInvite(event) {
     return G.fail(404, 'That invitation does not exist.');
   }
 
+  /* READ IT FIRST, because the invitee's pointer row is keyed on their EMAIL
+     and only the invitation itself knows what that is. A revoke that removed
+     the forward row alone would leave the invitee's accept prompt offering an
+     invitation that no longer exists — and the accept route would refuse it,
+     so the prompt would be a button that only ever fails. */
+  const invite = await G.getInvite(orgId, token);
+  if (!invite) return G.fail(404, 'That invitation is already gone. Refresh the list.');
+
   try {
-    await G.db.send(new DeleteCommand({
-      TableName: G.tableName(),
-      Key: { PK: tenant.orgPk(orgId), SK: G.inviteSk(token) },
-      // Present so a revoke of something already gone is reported as such
-      // rather than as a success. Two admins clicking Revoke on the same row
-      // should not both be told they did it — the list they are looking at is
-      // stale and they should refresh.
-      ConditionExpression: 'attribute_exists(SK)',
+    await G.db.send(new TransactWriteCommand({
+      TransactItems: [
+        {
+          Delete: {
+            TableName: G.tableName(),
+            Key: { PK: tenant.orgPk(orgId), SK: G.inviteSk(token) },
+            // Present so a revoke of something already gone is reported as such
+            // rather than as a success. Two admins clicking Revoke on the same
+            // row should not both be told they did it — the list they are
+            // looking at is stale and they should refresh.
+            ConditionExpression: 'attribute_exists(SK)',
+          },
+        },
+        {
+          /* No condition: the pointer is a derived row and its absence is not
+             an error worth failing a revoke over. */
+          Delete: {
+            TableName: G.tableName(),
+            Key: { PK: G.inviteePk(invite.email), SK: G.inviteSk(token) },
+          },
+        },
+      ],
     }));
   } catch (error) {
-    if (error.name === 'ConditionalCheckFailedException') {
+    if (error.name === 'ConditionalCheckFailedException'
+      || error.name === 'TransactionCanceledException') {
       return G.fail(404, 'That invitation is already gone. Refresh the list.');
     }
     console.error('revoke-invite failed:', error);

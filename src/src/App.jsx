@@ -5,6 +5,7 @@ import OAuthCallback from './auth/OAuthCallback';
 import PrivacyPolicyPage from './PrivacyPolicyPage';
 import TermsOfServicePage from './TermsOfServicePage';
 import GameHostPage from './GameHostPage';
+import InviteAcceptPage from './components/InviteAcceptPage';
 import PlayerPage from './PlayerPage';
 import AdminPage from './AdminPage';
 import BuilderPage from './BuilderPage';
@@ -192,6 +193,19 @@ function AppRouter() {
   // Test routes (no authentication required for development)
   if (path === '/test/wordcloud') {
     return <WordCloudTest />;
+  }
+
+  /* AN INVITATION LINK. Behind ProtectedRoute on purpose: this page exists for
+     somebody who has no account yet, so being bounced to sign in or register
+     and returned here afterwards IS the flow, not an obstacle. Everybody who
+     already has an account accepts from their landing screen instead and never
+     sees this. */
+  if (path.startsWith('/invite/')) {
+    return (
+      <ProtectedRoute>
+        <InviteAcceptPage />
+      </ProtectedRoute>
+    );
   }
 
   // OAuth callback route

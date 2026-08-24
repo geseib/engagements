@@ -1,4 +1,5 @@
 import React from 'react';
+import PendingInvites from './PendingInvites';
 import './WelcomeScreen.css';
 
 /**
@@ -125,6 +126,15 @@ export default function WelcomeScreen({
       </header>
 
       <main className="wel-grow wel-pad wel-main">
+        {/* ABOVE THE FOLD AND ABOVE THE SPLIT, because an invitation is
+            time-limited and everything below it is not. It draws nothing at all
+            when there is nothing waiting, which is almost always — a card that
+            is permanently present and permanently empty is one you stop
+            seeing. */}
+        <div className="wel-shell">
+          <PendingInvites />
+        </div>
+
         <div className="wel-shell wel-split">
 
           {/* Starting something is why a host opens this page, so it is first

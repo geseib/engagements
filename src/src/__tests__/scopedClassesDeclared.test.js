@@ -49,6 +49,7 @@ const SURFACES = [
   ['CreateOrgDialog', 'corg'],
   ['PlatformOrgsPanel', 'porgs'],
   ['ActingAsBanner', 'pmode'],
+  ['PendingInvites', 'pinv'],
   ['OrgSwitcher', 'orgsw'],
   ['TeamPanel', 'team'],
   ['BillingPanel', 'bill'],

@@ -114,6 +114,13 @@ async function acceptInvite(event) {
             TableName: G.tableName(),
             Key: { PK: tenant.orgPk(orgId), SK: G.inviteSk(token) },
           },
+        }, {
+          /* The invitee's own pointer goes with it, or the accept prompt keeps
+             offering an invitation that has already been taken. */
+          Delete: {
+            TableName: G.tableName(),
+            Key: { PK: G.inviteePk(invite.email), SK: G.inviteSk(token) },
+          },
         }],
       }));
     } catch (error) {
@@ -216,6 +223,16 @@ async function acceptInvite(event) {
             TableName: G.tableName(),
             Key: { PK: tenant.orgPk(orgId), SK: G.inviteSk(token) },
             ConditionExpression: 'attribute_exists(SK)',
+          },
+        },
+        {
+          /* Same reason as above: the prompt reads the pointer, so leaving it
+             behind means the invitation appears unaccepted for another
+             fortnight. No condition — the pointer is a derived row and its
+             absence is not an error. */
+          Delete: {
+            TableName: G.tableName(),
+            Key: { PK: G.inviteePk(invite.email), SK: G.inviteSk(token) },
           },
         },
         {

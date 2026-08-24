@@ -110,6 +110,12 @@ async function inviteMember(event) {
     ttl,
   };
 
+  /* BOTH ROWS, ONE TRANSACTION. The invitee cannot read this organisation's
+     partition and does not know its id, and this table has no GSIs — so
+     without the reverse row there is no answer to "which invitations are
+     waiting for me?". See org-guards.invitePointer. */
+  const pointer = G.invitePointer(invite, auth.org && auth.org.name);
+
   try {
     await G.db.send(new TransactWriteCommand({
       TransactItems: [
@@ -123,15 +129,31 @@ async function inviteMember(event) {
             ConditionExpression: 'attribute_not_exists(SK)',
           },
         },
-        // The expired rows for this address go with it, in the same
-        // transaction: either this address has one live invitation, or the
-        // table is untouched.
-        ...stale.map((i) => ({
-          Delete: {
+        {
+          Put: {
             TableName: G.tableName(),
-            Key: { PK: i.PK, SK: i.SK },
+            Item: pointer,
           },
-        })),
+        },
+        /* The expired rows for this address go with it, in the same
+           transaction: either this address has one live invitation, or the
+           table is untouched. Their POINTERS go too — one left behind is a
+           prompt offering an invitation the accept route refuses as expired, a
+           button that exists only to fail. */
+        ...stale.flatMap((i) => [
+          {
+            Delete: {
+              TableName: G.tableName(),
+              Key: { PK: i.PK, SK: i.SK },
+            },
+          },
+          {
+            Delete: {
+              TableName: G.tableName(),
+              Key: { PK: G.inviteePk(i.email), SK: G.inviteSk(i.token) },
+            },
+          },
+        ]),
       ],
     }));
   } catch (error) {

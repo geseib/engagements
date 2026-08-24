@@ -1,0 +1,94 @@
+/* ============================================================================
+   THE INVITATION PROMPT — components/PendingInvites.jsx
+
+   Scoped under `.pinv`, like `.pmode`, `.porgs` and `.team`, so it declares no
+   global class a later import would inherit.
+
+   Colour is tokens only, from the dusk set this app already uses. The values
+   are the ones TeamPanel.css measured — same surfaces, so the same ratios:
+
+     --text        #F4EDE4 on --bg #0F1A2E, over the amber tint    > AA
+     --muted       #9BA8BE on the same stack                       > AA
+     --primary     #F6A94C on --bg                        9.14:1   the icon
+     --bg          #0F1A2E on --primary                   8.86:1   Accept
+     --danger-text #EF8C86 on --bg                        7.26:1   a refusal
+
+   Asserted in __tests__/pendingInvitesPalette.test.js.
+
+   ONE ROW PER INVITATION, not a card. This sits above somebody's own work on
+   the screen they use to start a session; it has to be answerable at a glance
+   and then gone, rather than occupying the top of the page.
+   ========================================================================== */
+
+.pinv {
+  --pinv-t-floor: 12px;
+  --pinv-t-label: 13px;
+  --pinv-t-body: 15px;
+  --pinv-rule: rgba(246, 169, 76, .38);
+  --pinv-tint: rgba(246, 169, 76, .08);
+
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.pinv *,
+.pinv *::before,
+.pinv *::after { box-sizing: border-box; }
+
+.pinv :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+
+.pinv-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--pinv-rule);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--pinv-tint);
+  color: var(--muted);
+  font: 400 var(--pinv-t-label)/1.5 var(--font-ui);
+}
+
+.pinv-icon { flex: none; display: inline-flex; }
+
+.pinv-text { flex: 1 1 260px; min-width: 0; }
+.pinv-text b { color: var(--text); font-weight: 600; }
+
+.pinv-when { color: var(--muted); }
+
+.pinv-btn {
+  flex: none;
+  min-height: 28px;
+  padding: 0 14px;
+  border-radius: 6px;
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: var(--bg);
+  font: 600 var(--pinv-t-label)/1 var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pinv-btn:hover:not(:disabled) { filter: brightness(1.06); }
+.pinv-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.pinv-error {
+  margin: 0;
+  color: var(--danger-text);
+  font-size: var(--pinv-t-label);
+}
+
+/* ── The standalone accept page ────────────────────────────────────────────
+   `/invite/{token}` renders one row on an otherwise empty page, so it needs the
+   page's own ground and a little room; the prompt on the landing screen sits
+   inside a shell that already provides both. */
+.pinv-page {
+  min-height: 100vh;
+  background: var(--bg);
+  padding: 48px 24px;
+  align-items: center;
+}
+.pinv-page .pinv-row { width: min(560px, 100%); margin: 0 auto; }
