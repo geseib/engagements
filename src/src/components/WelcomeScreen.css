@@ -73,6 +73,17 @@
 
 .wel-pad { padding-inline: var(--wel-gutter); }
 .wel-shell { width: 100%; max-width: 62rem; margin-inline: auto; }
+/* The single flex child of `.wel-main`, stacking what used to be siblings.
+   See the note in WelcomeScreen.jsx: a second child of `.wel-main` becomes a
+   second flex item and takes half the row, which is how an invisible
+   invitations prompt pushed the whole screen to the right.
+
+   NOT `.wel-stack` — that name is already taken, at line ~230, by the action
+   button group inside `.wel-start`, and it carries `max-width: 34rem`. Reusing
+   it put that cap on the whole page: same specificity, later rule wins, and the
+   entire screen would have been squeezed to 34rem while fixing a different
+   layout bug. */
+.wel-column { display: flex; flex-direction: column; }
 .wel-grow { flex: 1 1 auto; }
 
 /* ------------------------------------------------------------ top strip -- */

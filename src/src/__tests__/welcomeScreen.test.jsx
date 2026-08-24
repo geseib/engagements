@@ -52,6 +52,44 @@ function ruleFor(selector) {
   return match ? match[2] : '';
 }
 
+/*
+  ── THE ROW HAS ONE CHILD, AND THAT IS A LAYOUT CONTRACT jsdom CAN CHECK ────
+
+  `.wel-main` is `display: flex` above 900px. Adding a second element child
+  therefore adds a second flex ITEM, and both `.wel-shell` boxes carry
+  `width: 100%; max-width: 62rem` — so they split the row. That is exactly what
+  happened when the invitations prompt was added in its own shell beside the
+  split: an EMPTY box (PendingInvites renders null when nothing is waiting) took
+  the left half and pushed every visible thing on the screen into the right.
+
+  jsdom has no layout engine and cannot see the consequence. It can count
+  children, which is the cause — and the cause is the part a future edit would
+  reintroduce.
+*/
+describe('the main row', () => {
+  // rejects: a second child of `.wel-main`, which halves the row and shoves the
+  // page sideways whether or not the new child renders anything.
+  it('has exactly one child, so nothing can share the row with the split', () => {
+    render(<WelcomeScreen currentUser={{ attributes: { name: 'Amara' } }} />);
+    const main = document.querySelector('.wel-main');
+    expect(main).toBeTruthy();
+    expect(main.children).toHaveLength(1);
+    expect(main.children[0]).toHaveClass('wel-shell');
+    /* And NOT `.wel-stack`, which is the action-button group's class and caps
+       width at 34rem — reusing it would squeeze the whole page while fixing the
+       row. */
+    expect(main.children[0]).not.toHaveClass('wel-stack');
+  });
+
+  // rejects: dropping the width constraint while restructuring — the shell is
+  // what centres the content and caps its measure.
+  it('that child is the shell, and the split lives inside it', () => {
+    render(<WelcomeScreen currentUser={{ attributes: { name: 'Amara' } }} />);
+    const shell = document.querySelector('.wel-main > .wel-shell');
+    expect(shell.querySelector('.wel-split')).toBeTruthy();
+  });
+});
+
 describe('the five ways out of this screen', () => {
   // Each of these rejects the same failure in a different control: a button
   // that renders and is wired to nothing. That is not hypothetical here — the

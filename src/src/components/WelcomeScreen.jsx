@@ -137,16 +137,27 @@ export default function WelcomeScreen({
       </header>
 
       <main className="wel-grow wel-pad wel-main">
-        {/* ABOVE THE FOLD AND ABOVE THE SPLIT, because an invitation is
-            time-limited and everything below it is not. It draws nothing at all
-            when there is nothing waiting, which is almost always — a card that
-            is permanently present and permanently empty is one you stop
-            seeing. */}
-        <div className="wel-shell">
-          <PendingInvites />
-        </div>
+        {/*
+          ONE FLEX CHILD, ALWAYS.
 
-        <div className="wel-shell wel-split">
+          `.wel-main` is `display: flex` above 900px, so a SECOND child is a
+          second flex item sharing the row. The invitations prompt was added in
+          its own `.wel-shell` sibling and — because both carry
+          `width: 100%; max-width: 62rem` — the two split the row between them:
+          an empty box on the left (PendingInvites renders null when there is
+          nothing waiting) and every visible thing shoved into the right half.
+
+          So the shell is the single child and stacks its contents. `.wel-split`
+          keeps its own grid inside it, and the invitation prompt sits above the
+          split without competing with it for the row.
+        */}
+        <div className="wel-shell wel-column">
+          {/* Above the split because an invitation is time-limited and nothing
+              below it is. It draws nothing at all when there is nothing
+              waiting, which is almost always. */}
+          <PendingInvites />
+
+          <div className="wel-split">
 
           {/* Starting something is why a host opens this page, so it is first
               in the DOM at every width and the wide column when there is one. */}
@@ -270,6 +281,7 @@ export default function WelcomeScreen({
             </div>
           </aside>
 
+          </div>
         </div>
       </main>
     </div>
