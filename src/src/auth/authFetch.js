@@ -27,6 +27,15 @@ export const ORG_HEADER = 'X-Engage-Org';
 /** localStorage key. One constant so the reader and the writer cannot drift. */
 export const ACTIVE_ORG_STORAGE_KEY = 'engage.activeOrg';
 
+/**
+ * The one non-org value this header may carry: "I am acting as Engage."
+ *
+ * Duplicated from `config/consoleSections.js` rather than imported, because
+ * this module is the transport and must not depend on the console's
+ * configuration. `__tests__/platformModeWiring.test.jsx` asserts the two agree.
+ */
+export const PLATFORM_MODE_HEADER = '~platform';
+
 /* Read at call time rather than cached in a module variable: the switcher can
    change it in another component, and a cached copy would send the previous
    org for the rest of the page's life. localStorage access is wrapped because
@@ -81,18 +90,30 @@ export const authFetch = async (url, options = {}) => {
     /* An explicit header on the call wins: a screen acting on a named org —
        the switcher's own GET /orgs, a platform grant — must not be silently
        redirected to whatever this browser last selected. */
-    /* ONLY A MINTED ORG ID TRAVELS. Storage also holds the platform-mode
-       sentinel (`~platform`, config/consoleSections.js), and it will hold stale
-       values from any earlier shape this key ever had. Sending one of those
-       happens to work today — the authorizer resolves an org the caller is not
-       a member of to NO org — and it is a fail-open waiting for the first
-       person who adds a fallback there, at which point the platform console
-       would quietly be acting inside whichever organisation that fallback
-       picked. Anything not shaped like `org_…` sends no org, which is the safe
-       direction: unscoped refuses, mis-scoped does not. `isOrgId` in
-       admin/orgs/shared/org-guards.js is the server's copy of this rule. */
+    /*
+      A MINTED ORG ID, OR THE PLATFORM SENTINEL. Nothing else.
+
+      This used to drop `~platform` and send no header at all, reasoning that a
+      sentinel masquerading as an org id was a fail-open waiting to happen. That
+      reasoning was sound about the VALUE and wrong about the CONSEQUENCE:
+      sending nothing does not mean "no organisation". `auth/pick-active-org.js`
+      falls back to the single membership, then to `defaultOrgId` — and every
+      approved account has a personal org — so platform mode arrived at the
+      server indistinguishable from standing in your own space.
+
+      That is how an Engage admin acting as a host in TeamG edited Engage's
+      shared library: the server had no way to know which hat was on, and
+      `canManageScope(PLATFORM)` now requires that it does.
+
+      The sentinel is safe to send precisely because it can never match a
+      membership: `pickActiveOrg` returns null for any requested org the caller
+      does not belong to, so it resolves to NO organisation rather than to some
+      other one. The fail-open the old comment feared would need a fallback on
+      the REQUESTED path, which is the one place that must never have one.
+    */
     const orgId = getActiveOrgId();
-    if (/^org_[1-9A-HJ-NP-Za-km-z]+$/.test(orgId) && !headers[ORG_HEADER]) {
+    const sendable = /^org_[1-9A-HJ-NP-Za-km-z]+$/.test(orgId) || orgId === PLATFORM_MODE_HEADER;
+    if (sendable && !headers[ORG_HEADER]) {
       headers[ORG_HEADER] = orgId;
     }
   }

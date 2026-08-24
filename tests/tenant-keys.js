@@ -136,12 +136,27 @@ check('a platform admin gets NO extra scope', () =>
     [T.PLATFORM, T.PUBLIC]));
 
 console.log('\n   manageable scopes');
+/*
+  TWO STAFF FIXTURES NOW, because being Engage staff is no longer enough on its
+  own to write Engage's library — the caller must also be ACTING AS Engage.
+
+  An Engage admin standing inside a customer's team renamed a platform question
+  set on dev, and every organisation reads that library. The staff group says
+  WHO may change it; the absence of an active organisation says they meant to.
+*/
+const staffAsEngage = evt({ groups: 'admins,hosts', orgId: '', orgRole: '' });
 const staff = evt({ groups: 'admins,hosts', orgId: 'org_nw', orgRole: 'member' });
 const member = evt({ groups: 'hosts', orgId: 'org_nw', orgRole: 'member' });
 const orgAdmin = evt({ groups: 'hosts', orgId: 'org_nw', orgRole: 'admin' });
 
-check('platform content: Engage staff yes', () =>
-  assert.ok(T.canManageScope(staff, T.PLATFORM)));
+check('platform content: Engage staff ACTING AS ENGAGE yes', () =>
+  assert.ok(T.canManageScope(staffAsEngage, T.PLATFORM)));
+// rejects: the reported bug — staff editing the shared library from inside an
+// organisation, where the row looks like one of that organisation's own.
+check('platform content: the same staff INSIDE AN ORG no', () =>
+  assert.ok(!T.canManageScope(staff, T.PLATFORM)));
+check('platform content: Engage staff yes (legacy name, acting as Engage)', () =>
+  assert.ok(T.canManageScope(staffAsEngage, T.PLATFORM)));
 check('platform content: an org admin no', () =>
   assert.ok(!T.canManageScope(orgAdmin, T.PLATFORM)));
 check('own org: a member yes', () =>

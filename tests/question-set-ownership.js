@@ -225,6 +225,21 @@ const OTHER_HOST = { groups: 'hosts', userId: 'sub-raj', username: 'raj', orgId:
 // acting as a member of that org, not as staff.
 const ADMIN = { groups: 'hosts,admins', userId: 'sub-ada', username: 'ada', orgId: ORG, orgRole: 'admin' };
 
+/*
+  THE SAME PERSON, ACTING AS ENGAGE — no active organisation.
+
+  A legacy set carries no `scope`, and absence of scope IS the platform stamp,
+  so every assertion below about "an admin and an unowned set" is really about
+  ENGAGE'S SHARED LIBRARY. Writing that now needs the staff group AND the
+  absence of an active org: an Engage admin standing inside a customer's team
+  renamed a platform set on dev, and every organisation reads that library.
+
+  The ownership rule these tests exist for is unchanged — an administrator is
+  not second-class on content they did not personally upload. What changed is
+  that they have to be wearing the right hat.
+*/
+const ADMIN_AS_ENGAGE = { groups: 'hosts,admins', userId: 'sub-ada', username: 'ada', orgId: '', orgRole: '' };
+
 /** A payload-2.0 REQUEST authorizer event, as API Gateway builds it. */
 const authEvent = (routeKey) => {
   const token = JSON.stringify({ sub: 'user-sub-1', 'cognito:username': 'ivy', email: 'ivy@example.invalid' });
@@ -477,8 +492,12 @@ function reset() { store.clear(); log.length = 0; }
   // second-class on content they did not personally upload.
   check('an admin may manage a set they do not own', () =>
     assert.ok(access.canManageSet(callerEvent(ADMIN), owned)));
-  check('an admin may manage a set with NO owner recorded', () =>
-    assert.ok(access.canManageSet(callerEvent(ADMIN), legacy)));
+  check('an admin acting as Engage may manage a set with NO owner recorded', () =>
+    assert.ok(access.canManageSet(callerEvent(ADMIN_AS_ENGAGE), legacy)));
+  // rejects: the reported bug — an Engage admin inside a team editing the
+  // shared library, where the row looks like one of that team's own.
+  check('...but not while standing inside an organisation', () =>
+    assert.ok(!access.canManageSet(callerEvent(ADMIN), legacy)));
 
   // REJECTS: the whole feature being ownership-blind.
   check('a host may manage their own set', () =>
@@ -591,11 +610,11 @@ function reset() { store.clear(); log.length = 0; }
   // REJECTS: option (a) — an unowned set nobody can touch. This is the outage
   // test: every set in every tier is unowned right now.
   res = await editSet({
-    ...callerEvent(ADMIN),
+    ...callerEvent(ADMIN_AS_ENGAGE),
     pathParameters: { setId: 'eighties' },
     body: JSON.stringify({ name: '80s Trivia (curated)' }),
   });
-  check('an admin CAN still edit an unowned legacy set', () =>
+  check('an admin acting as Engage CAN still edit an unowned legacy set', () =>
     assert.strictEqual(res.statusCode, 200, res.body));
   check('...and the rename landed', () =>
     assert.strictEqual(metaOf('eighties').name, '80s Trivia (curated)'));
@@ -652,8 +671,8 @@ function reset() { store.clear(); log.length = 0; }
 
   reset();
   seedSet('eighties', { scope: 'platform' });
-  res = await deleteSet({ ...callerEvent(ADMIN), pathParameters: { setId: 'eighties' } });
-  check('an admin CAN still delete an unowned legacy set', () =>
+  res = await deleteSet({ ...callerEvent(ADMIN_AS_ENGAGE), pathParameters: { setId: 'eighties' } });
+  check('an admin acting as Engage CAN still delete an unowned legacy set', () =>
     assert.strictEqual(res.statusCode, 200, res.body));
 
   say('\n3.5 create — the set records who made it');
@@ -743,8 +762,8 @@ function reset() { store.clear(); log.length = 0; }
 
   // REJECTS: a guard so tight it locks admins out — the failure that makes the
   // sensible next move "delete the guard".
-  res = await flip(ADMIN, 'eighties', true);
-  check('an admin flags a legacy set', () =>
+  res = await flip(ADMIN_AS_ENGAGE, 'eighties', true);
+  check('an admin acting as Engage flags a legacy set', () =>
     assert.strictEqual(res.statusCode, 200, res.body));
   res = await flip(ADMIN, 'ivys', false);
   check("an admin unflags a host's set", () =>
@@ -870,11 +889,26 @@ function reset() { store.clear(); log.length = 0; }
     assert.ok(!('createdBy' in seen.rajs), 'the list leaks Cognito subs to hosts'));
 
   seen = await listAs(ADMIN);
+  /*
+    THE DISTINCTION, ON ONE LIST. `ivys` and `rajs` live in this admin's own
+    organisation, so they manage them as an org admin. `eighties` is Engage's —
+    and while they are STANDING IN an organisation the row is read-only, which
+    is what makes the panel offer "Copy to my organisation" instead of Edit.
+
+    This used to be [true, true, true], which is how an Engage admin acting as a
+    host in TeamG came to rename a set every organisation reads.
+  */
   // REJECTS: an admin losing the ability to manage anything — the list would
   // render an admin console with every control switched off.
-  check('an admin sees canManage true on every set', () =>
+  check('an admin inside an org manages its sets but not Engage\'s', () =>
     assert.deepStrictEqual(
-      [seen.ivys.canManage, seen.rajs.canManage, seen.eighties.canManage], [true, true, true]));
+      [seen.ivys.canManage, seen.rajs.canManage, seen.eighties.canManage], [true, true, false]));
+
+  // rejects: locking Engage out of its own library. Acting AS Engage is where
+  // that library is editable.
+  const asEngage = await listAs(ADMIN_AS_ENGAGE);
+  check('...and acting as Engage they manage the platform set', () =>
+    assert.strictEqual(asEngage.eighties.canManage, true));
   check('...and `mine` is still only what they authored', () =>
     assert.deepStrictEqual(
       [seen.ivys.mine, seen.rajs.mine, seen.eighties.mine], [false, false, false]));

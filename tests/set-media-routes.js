@@ -180,6 +180,18 @@ function question(number, image, { version = 2, title = `Q${number}` } = {}) {
   return item;
 }
 
+/**
+ * ACTING AS ENGAGE — the staff group AND no active organisation.
+ *
+ * Writing Engage's shared library needs both now. Being in `admins` says WHO
+ * may curate it; the absence of an active org says they meant to, rather than
+ * doing it while standing somewhere that makes the row look like their own. An
+ * Engage admin inside a customer's team renamed a platform set on dev.
+ */
+const asEngage = (sub) => ({
+  requestContext: { authorizer: { lambda: { userId: sub, username: sub, groups: 'admins', orgId: '', orgRole: '' } } },
+});
+
 const asCaller = (sub, groups) => ({
   // TENANCY: a host acts FOR an organisation. One org for the whole file — this
   // suite is about media upload permission, not about tenancy, so every caller
@@ -380,7 +392,7 @@ async function test(name, fn) {
         store.set(k.replace(`ORG#${ORG}#`, ''), { ...v, PK: String(v.PK).replace(`ORG#${ORG}#`, '') });
       }
     }
-    const res = await upload([{ name: 'a.jpg', size: 10 }], asCaller(ADMIN_SUB, 'admins'));
+    const res = await upload([{ name: 'a.jpg', size: 10 }], asEngage(ADMIN_SUB));
     assert.strictEqual(res.statusCode, 200, res.body);
   });
 
@@ -405,8 +417,13 @@ async function test(name, fn) {
       (await upload([{ name: 'a.jpg', size: 10 }], asCaller(OWNER_SUB, 'hosts'))).statusCode, 200,
       'an org host can write to the shared library');
     assert.strictEqual(
-      (await upload([{ name: 'a.jpg', size: 10 }], asCaller(ADMIN_SUB, 'admins'))).statusCode, 200,
+      (await upload([{ name: 'a.jpg', size: 10 }], asEngage(ADMIN_SUB))).statusCode, 200,
       'Engage staff lost the library they are supposed to curate');
+    // rejects: the reported bug, on the media route — Engage staff writing to
+    // the shared library while standing inside a customer's organisation.
+    assert.notStrictEqual(
+      (await upload([{ name: 'a.jpg', size: 10 }], asCaller(ADMIN_SUB, 'admins'))).statusCode, 200,
+      'staff wrote to the shared library from inside an organisation');
   });
 
   await test('a set that does not exist is a 404, not a signed URL for a phantom prefix', async () => {

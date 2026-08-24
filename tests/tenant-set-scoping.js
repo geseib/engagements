@@ -714,15 +714,24 @@ function seedPlatformSet() {
     const ev = (groups, orgId, role) => ({
       requestContext: { authorizer: { lambda: { userId: 'u1', groups, orgId, orgRole: role } } },
     });
-    const staff = ev('admins,hosts', 'org_3JtYs6WgHn5RkMqZaB7uEv', 'owner');
+    /* ACTING AS ENGAGE — no active organisation. Writing Engage's library needs
+       the staff group AND the mode: an Engage admin standing inside a team
+       renamed a platform set on dev, and every org reads that library. */
+    const staffAsEngage = ev('admins,hosts', '', '');
+    const staffInOrg = ev('admins,hosts', 'org_3JtYs6WgHn5RkMqZaB7uEv', 'owner');
     const host = ev('hosts', 'org_9xK4Fq7Pz2mNbVc8dQwLxR', 'member');
 
     // rejects: the UI's assumption that asking is enough. It is enough only
     // BECAUSE the caller is in `admins`; canManageScope decides, not the ask.
-    await check('staff asking for the platform scope get it', () =>
+    await check('staff ACTING AS ENGAGE asking for the platform scope get it', () =>
       assert.deepStrictEqual(
-        access.createSetRef(staff, 'newset', 'platform'),
+        access.createSetRef(staffAsEngage, 'newset', 'platform'),
         { scope: 'platform', orgId: '', setId: 'newset' }));
+
+    // rejects: the reported bug's create-side twin — staff inside a team
+    // writing a new set into the library every organisation reads.
+    await check('the same staff INSIDE an organisation are refused it', () =>
+      assert.strictEqual(access.createSetRef(staffInOrg, 'newset', 'platform'), null));
 
     // rejects: A HOST PUBLISHING INTO THE SHARED LIBRARY by passing a scope in
     // the request body. This is the whole reason the scope is a request rather
@@ -735,7 +744,7 @@ function seedPlatformSet() {
     // Engage admin's own drafts into every organisation's library.
     await check('with nothing asked for, staff still write to their own org', () =>
       assert.deepStrictEqual(
-        access.createSetRef(staff, 'newset', ''),
+        access.createSetRef(staffInOrg, 'newset', ''),
         { scope: 'org', orgId: 'org_3JtYs6WgHn5RkMqZaB7uEv', setId: 'newset' }));
 
     await check('and so does a host', () =>

@@ -7,7 +7,7 @@
  */
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { ACTIVE_ORG_STORAGE_KEY, authFetch } from '../auth/authFetch';
+import { ACTIVE_ORG_STORAGE_KEY, PLATFORM_MODE_HEADER, authFetch } from '../auth/authFetch';
 
 // The header only rides along with a token — signed out, authFetch sends
 // neither. Mocking the pool is how every other suite here gets a session.
@@ -34,14 +34,35 @@ describe('the org header', () => {
 
   const headerSent = () => (global.fetch.mock.calls[0][1].headers || {})['X-Engage-Org'];
 
-  // rejects: sending `~platform` as though it were an organisation id. The
-  // authorizer resolves an org the caller is not a member of to NO org, so this
-  // would happen to work — until somebody adds a fallback, at which point the
-  // platform console would silently act inside whichever org was picked.
-  it('is not sent when the switcher is in platform mode', async () => {
+  /*
+    THIS TEST USED TO REQUIRE THE OPPOSITE, and the reversal is the whole point.
+
+    It asserted the sentinel was DROPPED, reasoning that a non-org value in an
+    org header was a fail-open waiting to happen. Sound about the value, wrong
+    about the consequence: sending nothing does not mean "no organisation".
+    `pickActiveOrg` falls back to the single membership and then to
+    `defaultOrgId`, and every approved account has a personal org — so platform
+    mode reached the server indistinguishable from standing in your own space.
+
+    That is how an Engage admin acting as a host in TeamG edited Engage's shared
+    library. `canManageScope(PLATFORM)` now requires the absence of an active
+    org, so the server has to be able to SEE the mode.
+
+    Safe because the sentinel can never match a membership: a requested org the
+    caller does not belong to resolves to null, not to a fallback.
+  */
+  // rejects: swallowing the mode, which leaves the server unable to tell an
+  // Engage admin acting as Engage from one standing in a customer's team.
+  it('carries the platform sentinel so the server can see the mode', async () => {
     localStorage.setItem(ACTIVE_ORG_STORAGE_KEY, PLATFORM_MODE);
     await authFetch('https://api.test/orgs');
-    expect(headerSent()).toBeUndefined();
+    expect(headerSent()).toBe(PLATFORM_MODE);
+  });
+
+  // rejects: the transport and the console drifting apart on the one string
+  // that has to mean the same thing at both ends.
+  it('agrees with the console on what that sentinel is', () => {
+    expect(PLATFORM_MODE_HEADER).toBe(PLATFORM_MODE);
   });
 
   // rejects: a blanket "send whatever is in storage". Anything that is not

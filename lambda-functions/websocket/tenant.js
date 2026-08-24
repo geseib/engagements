@@ -247,7 +247,30 @@ function readableScopes(event) {
  * Denies by default: an unknown scope, a blank org, a caller with no context.
  */
 function canManageScope(event, scope, orgId, minRole = 'member') {
-  if (scope === PLATFORM) return isPlatformAdmin(event);
+  /*
+    ── ENGAGE'S LIBRARY IS ONLY WRITABLE WHILE ACTING AS ENGAGE ─────────────
+
+    This was `isPlatformAdmin(event)` alone, and being inside a customer's team
+    does not remove somebody's `admins` group. So an Engage admin standing in
+    TeamG, looking at a row badged "Engage", was offered Edit rather than Copy —
+    and their rename changed the shared library every organisation reads.
+    Reported exactly that way: "i was acting as a host for TeamG and went to
+    change the name of a question set and add a question. it changed the engage
+    version, it did not create a new copy."
+
+    The staff group says WHO may change Engage's library. The absence of an
+    active organisation says they are DOING SO DELIBERATELY, rather than while
+    standing somewhere that makes the row look like their own. Both, or neither.
+
+    This is an interlock and not a privilege: the mode alone grants nothing
+    (a host asking for it is still refused), and it only ever narrows what an
+    administrator can do by accident.
+
+    READING is untouched — `readableScopes` gives every account the platform
+    scope wherever they stand, because a shared library nobody can see is not
+    one. Only the write is gated.
+  */
+  if (scope === PLATFORM) return isPlatformAdmin(event) && !callerOrgId(event);
   if (scope === PUBLIC) return false;
   if (scope !== ORG) return false;
   const want = clean(orgId);
