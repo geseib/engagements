@@ -244,6 +244,7 @@ const acceptInvite = require(path.join(ORGS, 'accept-invite.js')).handler;
 const revokeInvite = require(path.join(ORGS, 'revoke-invite.js')).handler;
 const listMyInvites = require(path.join(ORGS, 'list-my-invites.js')).handler;
 const removeMember = require(path.join(ORGS, 'remove-member.js')).handler;
+const listMembers = require(path.join(ORGS, 'list-members.js')).handler;
 const G = require(path.join(ORGS, 'shared/org-guards.js'));
 
 let pass = 0, fail = 0;
@@ -447,7 +448,65 @@ const pointersFor = (email) => [...store.keys()]
     assert.deepStrictEqual(pointersFor(NEWCOMER), []);
   });
 
-  say('\n4. leaving');
+  say('\n4. invitations that predate the pointer are rescued');
+
+  /*
+    THE MIGRATION THIS FEATURE NEEDED AND ALMOST DID NOT GET.
+
+    An invitation written before the pointer shipped has only the forward row.
+    Its recipient signs in, `GET /invites` queries `INVITEE#{email}`, finds
+    nothing, and the invitation expires unseen a fortnight later with the admin
+    looking at a healthy-looking "Invited" list the whole time.
+
+    There was one of these on dev within an hour of the deploy — an invitation
+    the owner had sent 38 minutes before the feature landed.
+  */
+  // rejects: shipping the pointer with no path for the invitations that came
+  // before it, which is a silent dead end for exactly the people already
+  // waiting to join.
+  await check('an old invitation with no pointer becomes findable', async () => {
+    reset();
+    seedOrg(ORG_A, 'Northwind Learning', [{ sub: 'u_amara', role: 'admin', email: 'amara@northwind.example' }]);
+    // Seeded directly — this is the pre-pointer shape: forward row only.
+    const tok = seedInvite(ORG_A, NEWCOMER, 'member', 11);
+    assert.deepStrictEqual(pointersFor(NEWCOMER), [], 'precondition: no pointer');
+    assert.deepStrictEqual(
+      JSON.parse((await listMyInvites(evt({ method: 'GET', ...invitee() }))).body).invites,
+      [], 'precondition: invisible to the invitee',
+    );
+
+    // An admin opens the Members screen.
+    const res = await listMembers(evt({
+      method: 'GET', ...admin(ORG_A), pathParams: { orgId: ORG_A },
+    }));
+    assert.strictEqual(res.statusCode, 200, res.body);
+
+    const after = JSON.parse((await listMyInvites(evt({ method: 'GET', ...invitee() }))).body).invites;
+    assert.strictEqual(after.length, 1, 'the invitation must now be findable');
+    assert.strictEqual(after[0].token, tok);
+    assert.strictEqual(after[0].orgName, 'Northwind Learning', 'and carry the org name');
+  });
+
+  // rejects: a repair that overwrites. The pointer is derived, but resurrecting
+  // an accepted invitation or clobbering a live one would both be worse than
+  // the gap it is fixing.
+  await check('the repair cannot overwrite an existing pointer', async () => {
+    reset();
+    seedOrg(ORG_A, 'Northwind Learning', [{ sub: 'u_amara', role: 'admin', email: 'amara@northwind.example' }]);
+    const created = await inviteMember(evt({
+      ...admin(ORG_A), pathParams: { orgId: ORG_A }, body: { email: NEWCOMER, role: 'member' },
+    }));
+    const { invite } = JSON.parse(created.body);
+    const before = store.get(pointersFor(NEWCOMER)[0]);
+
+    await listMembers(evt({ method: 'GET', ...admin(ORG_A), pathParams: { orgId: ORG_A } }));
+
+    assert.strictEqual(pointersFor(NEWCOMER).length, 1, 'still exactly one');
+    assert.deepStrictEqual(store.get(pointersFor(NEWCOMER)[0]), before, 'and untouched');
+    assert.strictEqual(before.token, invite.token);
+  });
+
+  say('\n5. leaving');
 
   // rejects: THE MISSING HALF. This route required `admin` for every caller, so
   // a plain member had no way out of a team at all.

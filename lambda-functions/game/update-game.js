@@ -52,7 +52,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { resolveSetPartition } = require('./set-version');
-const { gamesIndexPk } = require('./tenant');
+const { gamesIndexPk, callerMayDriveSession } = require('./tenant');
 const { encryptValue } = require('./tenant-crypto');
 
 const client = new DynamoDBClient({});
@@ -137,6 +137,14 @@ exports.handler = async (event) => {
     const ownerOrgId = (gameMeta.Item && gameMeta.Item.orgId) || '';
 
     if (!gameState.Item) {
+      return reply(404, { error: 'Game not found' });
+    }
+
+    /* THE ORG WAS READ HERE ALL ALONG AND NEVER COMPARED TO THE CALLER. A host
+       in another organisation renamed a live session through this route on dev
+       — and the new title was written back encrypted under the VICTIM's key.
+       404 rather than 403: see tenant.callerMayDriveSession. */
+    if (!callerMayDriveSession(event, { orgId: ownerOrgId })) {
       return reply(404, { error: 'Game not found' });
     }
 

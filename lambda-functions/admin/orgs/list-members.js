@@ -45,6 +45,13 @@ async function listOrgMembers(event) {
     G.listMembers(orgId),
     G.listInvites(orgId),
   ]);
+  /* REPAIR ANY INVITATION THAT PREDATES THE POINTER, while its rows are
+     already in hand. Without a pointer the invitee signs in, sees nothing, and
+     the invitation expires unseen — see org-guards.backfillInvitePointers for
+     why this is a repair on read rather than a migration script. Not awaited
+     for its result and never fatal: it is a side effect of loading a roster. */
+  await G.backfillInvitePointers(inviteRows, auth.org && auth.org.name);
+
   const now = Date.now();
 
   const ownerCount = G.ownersOf(memberRows).length;

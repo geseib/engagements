@@ -1,7 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 
-const { gamesIndexPk } = require('./tenant');
+const { gamesIndexPk, callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -27,6 +27,23 @@ exports.handler = async (event) => {
     }));
 
     if (!gameState.Item) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ error: 'Game not found' }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
+    /* WHOSE SESSION IS THIS? Nothing here asked. A host in another organisation
+       started somebody else's session on dev with nothing but the four-digit
+       code. The owning org lives on METADATA; STATE does not carry it.
+       404 rather than 403 — see tenant.callerMayDriveSession. */
+    const ownerRead = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'orgId'
+    }));
+    if (!callerMayDriveSession(event, ownerRead.Item || {})) {
       return {
         statusCode: 404,
         body: JSON.stringify({ error: 'Game not found' }),

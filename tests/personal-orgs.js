@@ -416,6 +416,60 @@ const TEAM_ORG = 'org_2222222222222222222222';
     assert.strictEqual(metaOf(orgId).name, 'George Seib');
   });
 
+  await check('an approved account NEVER ends up with nowhere at all', async () => {
+    reset();
+    /*
+      THE REPRO, END TO END, EVERY STEP ANSWERING 200.
+
+      `ensurePersonalOrg` used to return the moment PROFILE.personalOrgId was
+      set, without asking whether that organisation still existed or still
+      contained the caller. So:
+
+        somebody accepts an invitation into a personal space
+          -> it flips to `team` (correct: two members now)
+          -> "a home cannot be left" is keyed on `type`, so the guard lifts
+          -> the original owner hands over and leaves
+          -> no new home is minted, because PROFILE still names the old one
+          -> `GET /orgs` returns [] for ever, and PROFILE points at an
+             organisation somebody else now owns.
+
+      Simulated here at the row level: the account's recorded home exists but
+      no longer holds their MEMBER row.
+    */
+    const { orgId: firstHome } = await ensurePersonalOrg(evt({ ...AMARA }));
+    // Their membership goes — they left, or were removed after the flip.
+    store.delete(key(`ORG#${firstHome}`, `MEMBER#${AMARA.sub}`));
+    store.delete(key(`USER#${AMARA.sub}`, `ORG#${firstHome}`));
+
+    const second = await ensurePersonalOrg(evt({ ...AMARA }));
+
+    // rejects: returning the stale pointer and leaving the account homeless.
+    assert.strictEqual(second.created, true, 'a new home must be provisioned');
+    assert.notStrictEqual(second.orgId, firstHome, 'and it must be a different one');
+    assert.ok(metaOf(second.orgId), 'with real metadata');
+    assert.ok(store.get(key(`ORG#${second.orgId}`, `MEMBER#${AMARA.sub}`)),
+      'and a membership row, or GET /orgs still returns nothing');
+    // rejects: leaving PROFILE pointing at somebody else's organisation.
+    assert.strictEqual(
+      store.get(key(`USER#${AMARA.sub}`, 'PROFILE')).personalOrgId, second.orgId,
+      'the stale pointer must be replaced, not merely ignored');
+  });
+
+  await check('a home that became a TEAM is left alone while they are still in it', async () => {
+    reset();
+    // rejects: over-correcting. A personal space with a second member becomes a
+    // team by design, and minting a replacement home for somebody who still
+    // belongs there is churn — they have a place.
+    const { orgId } = await ensurePersonalOrg(evt({ ...AMARA }));
+    const meta = metaOf(orgId);
+    meta.type = 'team';
+    store.set(key(`ORG#${orgId}`, 'METADATA'), meta);
+
+    const again = await ensurePersonalOrg(evt({ ...AMARA }));
+    assert.strictEqual(again.created, false);
+    assert.strictEqual(again.orgId, orgId);
+  });
+
   say('\n2. and only ONE, however many times it is asked');
 
   await check('calling it twice provisions once', async () => {

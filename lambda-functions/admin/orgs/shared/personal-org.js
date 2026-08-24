@@ -199,7 +199,51 @@ async function ensurePersonalOrg(event) {
   }
 
   const existing = G.clean(profile && profile.personalOrgId);
+
+  /*
+    ── IS THAT HOME STILL THEIRS? ───────────────────────────────────────────
+
+    This used to return the moment `personalOrgId` was set, without ever asking
+    whether the organisation it names still exists or still contains the caller.
+    That made the product's stated invariant — "there is no belongs-to-no-org
+    state after approval" — false by an entirely ordinary route:
+
+      somebody accepts an invitation into a personal space
+        -> it flips to `team` (correct: it has two members now)
+        -> the "a home cannot be left" guard is keyed on `type`, so it lifts
+        -> the original owner hands over and leaves
+        -> nothing mints them a new home, because PROFILE still names the old one
+        -> they leave their last remaining team
+        -> `GET /orgs` returns `{orgs: [], activeOrgId: ""}` for ever, while
+           PROFILE still points at an organisation somebody else now owns.
+
+    Every step answers 200. Reproduced end to end against dev.
+
+    The check is MEMBERSHIP, not type: a home that legitimately became a team is
+    still a place this person has, and minting a second one there would be
+    churn. What must never happen is an approved account with nowhere at all.
+
+    An unreadable row is NOT treated as gone — a transient error must not mint a
+    duplicate home.
+  */
+  let homeIsStillTheirs = false;
   if (existing) {
+    try {
+      const [meta, membership] = await Promise.all([
+        G.getOrgMetadata(existing),
+        G.getMembership(existing, sub),
+      ]);
+      homeIsStillTheirs = Boolean(meta && membership);
+    } catch (error) {
+      console.warn('ensurePersonalOrg: could not verify the recorded home:', error.message);
+      homeIsStillTheirs = true;
+    }
+    if (!homeIsStillTheirs) {
+      console.log(`ensurePersonalOrg: ${sub} no longer belongs to ${existing}; provisioning a new home`);
+    }
+  }
+
+  if (existing && homeIsStillTheirs) {
     /*
       SELF-HEAL A SPACE NAMED AFTER A MACHINE.
 
@@ -372,8 +416,26 @@ async function ensurePersonalOrg(event) {
               + 'defaultOrgId = if_not_exists(defaultOrgId, :orgId), '
               + 'userId = if_not_exists(userId, :sub), '
               + 'updatedAt = :now',
-            ConditionExpression: 'attribute_not_exists(personalOrgId)',
-            ExpressionAttributeValues: { ':orgId': orgId, ':sub': sub, ':now': now },
+            /*
+              TWO SHAPES, ONE GUARANTEE: at most one home per account, whatever
+              the timing.
+
+              First provisioning — there must be no `personalOrgId` yet.
+              RE-provisioning — there is one, and it must still be the STALE id
+              we just proved this account no longer belongs to. Conditioning on
+              its exact value is what stops two concurrent calls both minting a
+              replacement, and stops a replacement racing a legitimate write
+              from somewhere else.
+            */
+            ConditionExpression: existing
+              ? 'personalOrgId = :stale'
+              : 'attribute_not_exists(personalOrgId)',
+            ExpressionAttributeValues: {
+              ':orgId': orgId,
+              ':sub': sub,
+              ':now': now,
+              ...(existing ? { ':stale': existing } : {}),
+            },
           },
         },
       ],

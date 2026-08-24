@@ -197,9 +197,24 @@ export default function OrgSwitcher({
   if (!list.length && !platform) return null;
 
   const active = list.find((org) => org.orgId === activeOrgId) || list[0] || null;
-  /* A menu with one row is noise — but "staff" is always a second destination,
-     so the single-chip form is only right for one org and no platform mode. */
-  const single = list.length === 1 && !platform;
+  /*
+    THE INERT CHIP HID THE ONLY ROUTE TO THE PAID PRODUCT.
+
+    `single` collapses the switcher to a plain label when there is nothing to
+    switch between, which RATIONALE §3 argues for: "a control whose menu has one
+    item teaches people to ignore the control." Sound about SWITCHING — and it
+    silently deleted CREATING, because "Create an organisation" lives in that
+    menu and `setCreatingOrg(true)` has exactly one caller.
+
+    A new account has exactly one organisation (the personal space provisioned
+    for it) and is not staff, so `single` was true for every customer. Nobody
+    could make a team. The mockup agrees with the old code and the mockup is
+    wrong: it was never asked what happens to Create.
+
+    So the menu also stays when there is something to DO in it, not only
+    somewhere to go.
+  */
+  const single = list.length === 1 && !platform && !onCreate;
 
   if (single) {
     return (

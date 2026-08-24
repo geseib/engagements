@@ -52,6 +52,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
   DynamoDBDocumentClient,
   GetCommand,
+  PutCommand,
   QueryCommand,
 } = require('@aws-sdk/lib-dynamodb');
 
@@ -363,6 +364,49 @@ function invitePointer(invite, orgName) {
   };
 }
 
+/**
+ * BACKFILL ANY MISSING `INVITEE#{email}` POINTER FOR ONE ORGANISATION.
+ *
+ * ── WHY THIS IS NEEDED AT ALL ──────────────────────────────────────────────
+ *
+ * The pointer is what lets somebody find an invitation addressed to them:
+ * invitations live in the INVITING org's partition, which the invitee cannot
+ * read and whose id they do not know, and this table has no GSIs. It is written
+ * beside the invitation in one transaction — but only since that shipped.
+ *
+ * Every invitation created BEFORE it has no pointer, which means its recipient
+ * signs in, sees nothing, and the invitation expires unseen a fortnight later.
+ * There was one on dev within the hour, so there will be more on test and prod.
+ *
+ * ── WHY IT IS A REPAIR ON READ AND NOT A MIGRATION SCRIPT ──────────────────
+ *
+ * Same reasoning as the personal-organisation rename (personal-org.js): a repair
+ * that runs wherever somebody already looks needs nothing scheduled, nothing
+ * remembered, and reaches every tier on its own. An admin opening Members is
+ * exactly the moment their org's invitations are already in memory.
+ *
+ * Conditional, so it can only ever ADD a pointer that is absent — it cannot
+ * overwrite a live one or resurrect an accepted invitation. Failures are
+ * swallowed: this is a side effect of reading a roster, and it must never be
+ * the reason that roster fails to load.
+ */
+async function backfillInvitePointers(invites, orgName) {
+  await Promise.all((invites || []).map(async (invite) => {
+    if (!invite || !invite.email || !invite.token) return;
+    try {
+      await db.send(new PutCommand({
+        TableName: tableName(),
+        Item: invitePointer(invite, orgName),
+        ConditionExpression: 'attribute_not_exists(PK)',
+      }));
+    } catch (error) {
+      if (error.name !== 'ConditionalCheckFailedException') {
+        console.warn('backfillInvitePointers:', error.message);
+      }
+    }
+  }));
+}
+
 /** Every invitation waiting for one email address, expired ones dropped. */
 async function listInvitesFor(email, nowMs = Date.now()) {
   const rows = await queryPartition(inviteePk(email), 'INVITE#');
@@ -607,5 +651,5 @@ module.exports = {
   publicMember, publicInvite, publicOrg,
   PERSONAL, TEAM, ORG_TYPES, orgType, isPersonalOrg, personalOrgRefusal,
   slugify, validateName, NAME_MAX, INVITABLE_ROLES,
-  inviteePk, invitePointer, listInvitesFor,
+  inviteePk, invitePointer, listInvitesFor, backfillInvitePointers,
 };

@@ -181,6 +181,55 @@ function roleAtLeast(role, min) {
  * not add anybody else's org to this list; there is no scope value that means
  * "everyone's". Reading one org's content is a separate, granted, logged act.
  */
+/**
+ * MAY THIS AUTHENTICATED CALLER DRIVE THIS SESSION?
+ *
+ * ── THE HOLE THIS CLOSES ───────────────────────────────────────────────────
+ *
+ * The tenancy work put sessions in per-org partitions and then only ONE handler
+ * ever used that fact: `get-games-list` queries `gamesIndexPk(callerOrgId)`, so
+ * a rival's list is correctly empty. Every other session route reads `orgId`
+ * OFF THE ROW it just fetched and never compares it to the caller.
+ *
+ * Verified against dev: an authenticated host in organisation B, knowing only a
+ * four-digit code, could `GET /games/{id}?role=host` (title, private briefing,
+ * category state), `POST /close-round` (writing results), `POST /next-question`
+ * (advancing a room mid-session), rename the session through `PUT /games/{id}`,
+ * start it, and pull its full report. The rival's title was even written back
+ * ENCRYPTED UNDER THE VICTIM ORG'S KEY.
+ *
+ * So the real boundary was "any `hosts` account plus one of 9,000 ids". The
+ * partition scheme was designed into the data model and never carried into the
+ * handlers.
+ *
+ * ── WHAT IT DOES, AND WHAT IT DELIBERATELY DOES NOT ────────────────────────
+ *
+ * 404, not 403: the set routes already made this choice and it is the right one
+ * here too — a 403 confirms that a guessed code names a real session belonging
+ * to somebody else, which is an existence oracle over a 9,000-wide space.
+ *
+ * A SESSION WITH NO `orgId` IS ALLOWED THROUGH. Those are the sessions that
+ * predate tenancy and the ones an orgless host created; refusing them would
+ * break running rooms to close a hole they are not part of. They are a separate
+ * problem — an orgless session is unlisted and its code can never be released —
+ * and it is not this function's to solve.
+ *
+ * AN UNAUTHENTICATED CALLER IS ALSO ALLOWED THROUGH, because the participant
+ * journey must never be gated: joining, answering, voting and reading a
+ * resolved result carry no token by design. This guard is for the routes that
+ * already require one — the host controls — and it is the caller's ORG that it
+ * checks, never their identity.
+ *
+ * @returns {boolean} true when the caller may act on this session
+ */
+function callerMayDriveSession(event, gameRow) {
+  const gameOrg = clean(gameRow && (gameRow.orgId || gameRow.OrgId));
+  if (!gameOrg) return true;              // pre-tenancy or orgless: not ours to refuse
+  const groups = callerGroups(event);
+  if (!groups.length) return true;        // an anonymous participant, judged elsewhere
+  return callerOrgId(event) === gameOrg;
+}
+
 function readableScopes(event) {
   const scopes = [PLATFORM, PUBLIC];
   if (callerOrgId(event)) scopes.push(ORG);
@@ -261,5 +310,6 @@ module.exports = {
   scopePrefix, setsMetadataPk, setContentPk, gamesIndexPk, orgPk, userPk,
   callerOrgId, callerOrgRole, callerOrgIds, callerGroups, isPlatformAdmin,
   roleAtLeast, readableScopes, canManageScope,
+  callerMayDriveSession,
   requireOrg, requireOrgAdmin, tenantStamp,
 };

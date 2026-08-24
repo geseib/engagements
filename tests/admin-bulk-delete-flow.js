@@ -128,9 +128,18 @@ const say = (...a) => process.stdout.write(a.join(' ') + '\n');
 const rowsIn = (pk) => [...store.values()].filter((i) => i.PK === pk);
 const parse = (res) => JSON.parse(res.body);
 
-function seedGame(gameId, { players = 10, responses = 30 } = {}) {
-  put({ PK: 'GAMES', SK: `GAME#${gameId}`, gameId });
-  put({ PK: `GAME#${gameId}`, SK: 'META', gameId });
+/*
+  `orgId` and the org index row are part of a session's shape now. The wipe
+  finds sessions by QUERYING the caller's `ORG#{org}#GAMES` index — it no longer
+  Scans the table — so a fixture without that row describes an organisation with
+  no sessions, and the handler correctly deletes nothing.
+*/
+const ORG = 'org_9xK4Fq7Pz2mNbVc8dQwLxR';
+
+function seedGame(gameId, { players = 10, responses = 30, orgId = ORG } = {}) {
+  put({ PK: 'GAMES', SK: `GAME#${gameId}`, gameId, orgId });
+  put({ PK: `ORG#${orgId}#GAMES`, SK: `GAME#${gameId}`, gameId, orgId });
+  put({ PK: `GAME#${gameId}`, SK: 'META', gameId, orgId });
   for (let p = 0; p < players; p++) put({ PK: `GAME#${gameId}`, SK: `PLAYER#${p}` });
   for (let r = 0; r < responses; r++) {
     put({ PK: `GAME#${gameId}`, SK: `RESPONSE#${String(r).padStart(3, '0')}` });
@@ -163,9 +172,12 @@ function check(label, fn) {
         `${rowsIn('GAME#4242').length} of ${before} rows orphaned`));
     check('delete-game removes the GAMES index row', () =>
       assert.strictEqual(store.get('GAMES|GAME#4242'), undefined));
+    /* +2, not +1: a session has TWO pointer rows outside its own partition now
+       — the global four-digit reservation and the owning org's index entry.
+       tests/tenant-session-scoping.js asserts the same arithmetic. */
     check('delete-game reports the confirmed count', () =>
-      assert.strictEqual(parse(res).itemsDeleted, before + 1,
-        `reported ${parse(res).itemsDeleted}, expected ${before + 1}`));
+      assert.strictEqual(parse(res).itemsDeleted, before + 2,
+        `reported ${parse(res).itemsDeleted}, expected ${before + 2}`));
     check('delete-game does not touch a neighbouring game', () =>
       assert.strictEqual(rowsIn('GAME#9999').length, 11,
         `neighbour lost rows: ${rowsIn('GAME#9999').length} of 11`));
@@ -190,7 +202,12 @@ function check(label, fn) {
   put({ PK: 'SET#keepme', SK: 'QUESTION#c0#001', Title: 'Q1' });
   {
     deferOnce = new Set(['GAME#1111|RESPONSE#005', 'GAME#2222|PLAYER#2']);
-    const res = await clearAll.handler({});
+    /* The wipe is scoped to ONE organisation now, so it needs to be told which
+       — it used to Scan the whole table and take every tenant's sessions with
+       it. See tests/clear-sessions-scoped.js and tenant-session-scoping.js. */
+    const res = await clearAll.handler({
+      requestContext: { authorizer: { lambda: { userId: 'u1', groups: 'admins,hosts', orgId: ORG } } },
+    });
     check('clear-all-games returns 200', () => assert.strictEqual(res.statusCode, 200, res.body));
     check('clear-all-games retries UnprocessedItems rather than dropping them', () => {
       const left = rowsIn('GAME#1111').length + rowsIn('GAME#2222').length;
@@ -202,9 +219,11 @@ function check(label, fn) {
       assert(store.get('SETS|SET#keepme'), 'set metadata was wiped');
       assert(store.get('SET#keepme|QUESTION#c0#001'), 'set questions were wiped');
     });
+    /* 2 games x (META + 8 players + 20 responses = 29 session rows
+       + 1 org index row + 1 reservation row) = 62. */
     check('the reported count is confirmed deletes only', () =>
-      assert.strictEqual(parse(res).itemsDeleted, 60,   // 2 games x (1 meta + 8 players + 20 responses) + 2 index rows
-        `reported ${parse(res).itemsDeleted}, expected 60`));
+      assert.strictEqual(parse(res).itemsDeleted, 62,
+        `reported ${parse(res).itemsDeleted}, expected 62`));
   }
 
   say(`\n${pass} passed, ${fail} failed`);

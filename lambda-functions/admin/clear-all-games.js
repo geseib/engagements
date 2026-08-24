@@ -1,103 +1,127 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, ScanCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { batchDeleteKeys } = require('./shared/ddb-delete');
-const { GAMES_RESERVATION_PK } = require('./shared/tenant');
+const {
+  GAMES_RESERVATION_PK, gamesIndexPk, callerOrgId,
+} = require('./shared/tenant');
 
 /**
- * THE THREE PLACES A SESSION LIVES, and the wipe has to know all three.
+ * DELETE THIS ORGANISATION'S SESSIONS.
  *
- *   GAME#{id}           the session itself
- *   GAMES               the global four-digit code reservation
- *   ORG#{org}#GAMES     the owning org's session index
+ * ── WHAT THIS USED TO DO, AND WHY IT WAS DANGEROUS ─────────────────────────
  *
- * Missing the third would leave every host's list full of sessions whose rows
- * are gone — and missing the second would burn the codes.
+ * It SCANNED THE WHOLE TABLE and deleted every `GAME#*` partition, the global
+ * `GAMES` reservation partition, and — through a `/^ORG#.+#GAMES$/` pattern —
+ * EVERY ORGANISATION'S SESSION INDEX. It read no `orgId` anywhere.
  *
- * `ORG#{org}#GAMES` is matched EXACTLY, anchored at both ends. `ORG#` alone
- * would take the organisations themselves and every membership row with them,
- * which is not a game wipe, it is the customer list.
+ * The control that fires it lives on the org Sessions screen
+ * (components/SessionsPanel.jsx), underneath a list that IS org-scoped
+ * (`get-games-list.js` queries `gamesIndexPk(orgId)`), behind a dialog reading
+ * "Delete all 3 sessions? Everything below goes at once." So an Engage admin
+ * standing in their own personal space, looking at three of their own rows,
+ * would have destroyed every customer's sessions on the tier.
+ *
+ * The route is `admins`-only, and that is the only reason it was survivable.
+ * "Only staff can trigger the cross-tenant data loss" is a smaller blast
+ * radius, not a boundary.
+ *
+ * ── WHAT IT DOES NOW ───────────────────────────────────────────────────────
+ *
+ * Queries the caller's own `ORG#{orgId}#GAMES` index and deletes exactly those
+ * sessions: the index rows, each `GAME#{id}` partition, and each four-digit
+ * `GAMES` reservation so the code returns to the pool. A Query is
+ * single-partition by definition, so another tenant's rows are not filtered
+ * out — they are unreachable, which is the property the rest of the tenancy
+ * work rests on.
+ *
+ * NO ORG, NO DELETE. Falling back to "everything" when no organisation resolves
+ * is exactly how a scoped delete turns back into a global one.
  */
-const ORG_GAMES_INDEX = /^ORG#.+#GAMES$/;
-const isSessionPartition = (pk) =>
-  !!pk && (pk.startsWith('GAME#') || pk === GAMES_RESERVATION_PK || ORG_GAMES_INDEX.test(pk));
-
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
 
-exports.handler = async (event) => {
-  console.log('🗑️ Admin: Starting clear all games operation');
-  
-  try {
-    let totalDeleted = 0;
-    let lastEvaluatedKey = null;
-    
-    do {
-      // Scan for all items in the table
-      const scanParams = {
-        TableName: process.env.TABLE_NAME,
-        Limit: 25 // Process in batches to avoid timeout
-      };
-      
-      if (lastEvaluatedKey) {
-        scanParams.ExclusiveStartKey = lastEvaluatedKey;
-      }
-      
-      const scanResult = await db.send(new ScanCommand(scanParams));
-      
-      if (scanResult.Items && scanResult.Items.length > 0) {
-        // Filter to only delete game-related items, preserve question sets
-        const gameItems = scanResult.Items.filter(item => isSessionPartition(item.PK));
-        
-        if (gameItems.length === 0) {
-          // No game items in this batch, continue to next batch
-          lastEvaluatedKey = scanResult.LastEvaluatedKey;
-          continue;
-        }
-        
-        // Chunk into 25s and resubmit anything DynamoDB returns as
-        // UnprocessedItems. The previous loop discarded the BatchWrite
-        // response and incremented the counter unconditionally, so throttled
-        // deletes were dropped while still being reported as deleted.
-        const keys = gameItems.map(item => ({ PK: item.PK, SK: item.SK }));
-        totalDeleted += await batchDeleteKeys(db, process.env.TABLE_NAME, keys);
+const cors = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'DELETE,OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Engage-Org',
+};
 
-        console.log(`🗑️ Deleted ${keys.length} items, total confirmed: ${totalDeleted}`);
-      }
-      
-      lastEvaluatedKey = scanResult.LastEvaluatedKey;
-      
-    } while (lastEvaluatedKey);
-    
-    console.log(`✅ Admin: Successfully deleted ${totalDeleted} game items from table (question sets preserved)`);
-    
+/** Every key in one partition, paginated. */
+async function partitionKeys(pk) {
+  const keys = [];
+  let ExclusiveStartKey;
+  do {
+    // eslint-disable-next-line no-await-in-loop
+    const res = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk',
+      ExpressionAttributeValues: { ':pk': pk },
+      ProjectionExpression: 'PK, SK',
+      ExclusiveStartKey,
+    }));
+    for (const item of res.Items || []) keys.push({ PK: item.PK, SK: item.SK });
+    ExclusiveStartKey = res.LastEvaluatedKey;
+  } while (ExclusiveStartKey);
+  return keys;
+}
+
+exports.handler = async (event) => {
+  if (event?.requestContext?.http?.method === 'OPTIONS') {
+    return { statusCode: 204, headers: cors, body: '' };
+  }
+
+  const orgId = callerOrgId(event);
+  if (!orgId) {
     return {
-      statusCode: 200,
-      body: JSON.stringify({
-        success: true,
-        message: `Successfully deleted ${totalDeleted} game items (question sets preserved)`,
-        itemsDeleted: totalDeleted
-      }),
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'DELETE,OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type'
-      }
-    };
-    
-  } catch (error) {
-    console.error('❌ Admin: Clear all games error:', error);
-    return {
-      statusCode: 500,
+      statusCode: 403,
+      headers: cors,
       body: JSON.stringify({
         success: false,
-        error: 'Failed to clear games',
-        details: error.message
+        error: 'Choose an organisation first. This clears that organisation’s sessions.',
       }),
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'DELETE,OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type'
-      }
+    };
+  }
+
+  console.log(`🗑️ Clearing sessions for ${orgId}`);
+
+  try {
+    // The org's own index tells us which sessions are its own. Nothing else can.
+    const indexRows = await partitionKeys(gamesIndexPk(orgId));
+    const gameIds = indexRows
+      .map((k) => String(k.SK || '').replace(/^GAME#/, ''))
+      .filter(Boolean);
+
+    const keys = [...indexRows];
+
+    for (const gameId of gameIds) {
+      // The session's own partition — players, answers, votes, state, results.
+      // eslint-disable-next-line no-await-in-loop
+      keys.push(...await partitionKeys(`GAME#${gameId}`));
+      /* And the four-digit reservation, so the code goes back into a pool of
+         only 10,000. Leaving these behind is how the space leaks. */
+      keys.push({ PK: GAMES_RESERVATION_PK, SK: `GAME#${gameId}` });
+    }
+
+    const totalDeleted = await batchDeleteKeys(db, process.env.TABLE_NAME, keys);
+    console.log(`✅ Deleted ${totalDeleted} rows across ${gameIds.length} sessions for ${orgId}`);
+
+    return {
+      statusCode: 200,
+      headers: cors,
+      body: JSON.stringify({
+        success: true,
+        message: `Deleted ${gameIds.length} session${gameIds.length === 1 ? '' : 's'}.`,
+        sessionsDeleted: gameIds.length,
+        itemsDeleted: totalDeleted,
+        orgId,
+      }),
+    };
+  } catch (error) {
+    console.error('❌ Clear sessions error:', error);
+    return {
+      statusCode: 500,
+      headers: cors,
+      body: JSON.stringify({ success: false, error: 'Failed to clear sessions', details: error.message }),
     };
   }
 };

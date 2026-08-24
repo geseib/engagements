@@ -379,7 +379,13 @@ function AdminPage() {
    * exist under a name that is not its own.
    */
   const handleCopySet = async (set) => {
-    setNotice({ kind: 'info', text: `Copying ${set.name}…` });
+    /* `tone`, not `kind`. QuestionSetsPanel keys the banner's class, ICON and
+       aria role entirely off `tone` — every other setNotice call site in this
+       file passes it, and these three did not, so a FAILED copy rendered a
+       neutral banner with a green tick announced as `role="status"`. Copy is
+       the only action available on an Engage or Public row, and this is its
+       only feedback channel. */
+    setNotice({ tone: 'info', text: `Copying ${set.name}…` });
     try {
       const res = await authFetch(
         adminApiUrl(`question-sets/${encodeURIComponent(set.id)}/copy`),
@@ -393,11 +399,11 @@ function AdminPage() {
       if (!res.ok) throw new Error(body.error || `The server answered ${res.status}.`);
       await fetchQuestionSets();
       setNotice({
-        kind: 'success',
+        tone: 'success',
         text: `${body.name} is now yours to change. It is a copy — editing it does not touch the original.`,
       });
     } catch (err) {
-      setNotice({ kind: 'error', text: err.message || 'Could not copy that set.' });
+      setNotice({ tone: 'error', text: err.message || 'Could not copy that set.' });
     }
   };
 
@@ -1710,6 +1716,31 @@ function AdminPage() {
 
           {resolvedTab === 'orgs' && onPlatform && <PlatformOrgsPanel />}
 
+          {/* THE PUBLIC LIBRARY IS IN EVERY NON-PLATFORM NAV AND HAS NO
+              RENDERER. Without this branch the section drew its title over an
+              empty work area — and inherited Question sets' subtitle through
+              the fallback chain, so it read "The thing every session is built
+              from." over nothing at all.
+
+              An honest placeholder, the same choice Moderation makes below: an
+              empty screen with no explanation reads as a broken product, and a
+              silent one reads as "there is nothing published yet", which is a
+              different and untrue claim. */}
+          {resolvedTab === 'library' && (
+            <div className="tab-content">
+              <p style={{ maxWidth: '62ch' }}>
+                Nothing is here yet. Publishing a set for other organisations to use —
+                and the safety review that has to pass first — is not built. This is
+                where it will appear; it is not an empty library meaning nobody has
+                published anything.
+              </p>
+              <p style={{ maxWidth: '62ch' }}>
+                Engage’s own shared library is already available to you: it is in
+                Question sets, badged “Engage”, and you can copy any of it.
+              </p>
+            </div>
+          )}
+
           {resolvedTab === 'moderation' && onPlatform && (
             <div className="tab-content">
               <p style={{ maxWidth: '62ch' }}>
@@ -1733,7 +1764,7 @@ function AdminPage() {
               period={orgUsage?.period}
               history={orgUsage?.history}
               error={orgUsageError}
-              onUpgrade={() => { window.location.href = '/admin?section=members'; }}
+              onUpgrade={() => setCreatingOrg(true)}
             />
           )}
 

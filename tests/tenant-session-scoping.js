@@ -444,22 +444,47 @@ function reset() { store.clear(); log.length = 0; failPutOn = new Set(); }
       `reported ${parse(res).itemsDeleted}, expected ${before + 2} (session rows + index + reservation)`);
   });
 
-  // rejects: a wipe that scans for GAME#/GAMES only, leaving every host's list
-  // full of sessions whose rows are gone.
-  await check('clear-all-games clears org index rows too', async () => {
+  /*
+    ── THIS TEST USED TO REQUIRE THE CROSS-TENANT WIPE ──────────────────────
+
+    It asserted that ONE call to clear-all-games emptied BOTH Acme's and
+    Globex's session indexes. That was a faithful description of the handler —
+    it Scanned the whole table and matched `/^ORG#.+#GAMES$/`, so it destroyed
+    every organisation's sessions — and the control that fires it sits on the
+    org Sessions screen under a list that IS org-scoped, behind a dialog reading
+    "Delete all 3 sessions? Everything below goes at once."
+
+    The wipe is now scoped to the caller's own organisation, so the assertion is
+    inverted: the OTHER org's sessions must SURVIVE.
+  */
+  // rejects: a wipe that reaches another organisation's sessions, and a wipe
+  // that leaves the caller's own index full of sessions whose rows are gone.
+  await check('clear-all-games clears the caller\'s org and spares every other', async () => {
     reset();
-    await createFor(ACME);
-    await createFor(GLOBEX);
+    const mine = await createFor(ACME);
+    const theirs = await createFor(GLOBEX);
     store.set(key('SETS', 'SET#keepme'), { PK: 'SETS', SK: 'SET#keepme' });
     store.set(key(`ORG#${ACME}`, 'METADATA'), { PK: `ORG#${ACME}`, SK: 'METADATA', name: 'Acme' });
     store.set(key(`ORG#${ACME}`, 'MEMBER#u1'), { PK: `ORG#${ACME}`, SK: 'MEMBER#u1' });
 
-    const res = await clearAllGames({});
+    const res = await clearAllGames({
+      requestContext: { authorizer: { lambda: { userId: 'u1', groups: 'admins,hosts', orgId: ACME } } },
+    });
     assert.strictEqual(res.statusCode, 200, res.body);
-    assert.strictEqual(rowsIn(gamesIndexPk(ACME)).length, 0, 'Acme\'s session index survived the wipe');
-    assert.strictEqual(rowsIn(gamesIndexPk(GLOBEX)).length, 0, 'Globex\'s session index survived the wipe');
-    assert.strictEqual(rowsIn(GAMES_RESERVATION_PK).length, 0, 'codes are still reserved after a wipe');
+
+    assert.strictEqual(rowsIn(gamesIndexPk(ACME)).length, 0, "the caller's own index survived");
+    assert.strictEqual(rowsIn(`GAME#${mine.gameId}`).length, 0, "the caller's session rows survived");
+    assert.strictEqual(
+      rowsIn(GAMES_RESERVATION_PK).filter((r) => r.SK === `GAME#${mine.gameId}`).length, 0,
+      'the four-digit code was never released back to the pool');
+
+    // THE POINT OF THE CHANGE.
+    assert.strictEqual(rowsIn(gamesIndexPk(GLOBEX)).length, 1,
+      "another organisation's session index was destroyed");
+    assert.ok(rowsIn(`GAME#${theirs.gameId}`).length > 0,
+      "another organisation's session rows were destroyed");
   });
+
   // rejects: matching `ORG#` loosely — that is not a game wipe, it is the
   // customer list.
   await check('a wipe spares the organisations themselves and their sets', () => {
@@ -467,6 +492,17 @@ function reset() { store.clear(); log.length = 0; failPutOn = new Set(); }
     assert.ok(store.get(key(`ORG#${ACME}`, 'METADATA')), 'the organisation itself was wiped');
     assert.ok(store.get(key(`ORG#${ACME}`, 'MEMBER#u1')), 'the membership rows were wiped');
   });
+
+  // rejects: falling back to "everything" when no organisation resolves, which
+  // is how a scoped delete turns back into a global one.
+  await check('it refuses outright when no organisation is active', async () => {
+    reset();
+    await createFor(ACME);
+    const res = await clearAllGames({});
+    assert.strictEqual(res.statusCode, 403, res.body);
+    assert.strictEqual(rowsIn(gamesIndexPk(ACME)).length, 1, 'it deleted something anyway');
+  });
+
 
   // ------------------------------------------------------------------------
   say('\n5. the reservation is still the lock, and still releases');
