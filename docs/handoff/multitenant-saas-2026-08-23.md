@@ -15,6 +15,79 @@ break-glass grant, and org export/delete.
 
 ---
 
+## 0a. THE ONE THAT MATTERED — CORS, 2026-08-24
+
+**`X-Engage-Org` was not on the API's `AllowHeaders`, and that is a total outage
+that no test outside a browser can see.**
+
+`authFetch` attaches the header to every authenticated request. A custom header
+makes the request non-simple, so the browser sends a CORS preflight. API Gateway
+answers that preflight **204 — a success — with no `access-control-allow-*`
+headers at all**, because the requested header is not on the list. The browser
+then blocks the real request and reports a **network error** to the page.
+
+Everything that is not a browser says the system is fine:
+
+- the API is healthy and returns 401/200 to `curl` exactly as expected;
+- the Lambda logs are **empty**, because the request never arrives;
+- every smoke check in this repo passed.
+
+And it is intermittent in the worst way: until an organisation has been stored
+`authFetch` sends no org header, so the first page load works and everything
+after it does not. It presents as "the admin menu is broken", not as "nothing
+works". It was reported as the AI Builder's *"fill in the rest"* giving a
+network error — that was simply the first call made after the org was stored.
+
+Reproduce it in one command, and note the control:
+
+```bash
+curl -s -D - -o /dev/null -X OPTIONS "$API/admin/ai-draft-builder-form" \
+  -H 'Origin: https://engage.dev.seibtribe.us' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: content-type,authorization,x-engage-org'
+```
+
+No `access-control-*` in the response = blocked. Drop `x-engage-org` from that
+last header and they all come back.
+
+`tests/cors-allows-sent-headers.js` reads the headers `authFetch` actually sends
+out of the source and the list the template allows, and fails when they drift.
+It also found **nine handlers** building their own `Access-Control-Allow-Headers`
+that allowed `Authorization` and not the org header — a preflight passing and
+the real response then being rejected.
+
+**The rule: adding a header to a request is a template change.** They live in
+different languages in different files and nothing connects them but that test.
+
+---
+
+## 0b. TWO SCREENS AT ONCE
+
+The console has two ideas of which section is open:
+
+| | |
+|---|---|
+| `activeTab` | what the person ASKED for — the URL, or the click |
+| `resolvedTab` | what they can be SHOWN, after falling back when the asked-for section is not in this account's nav |
+
+The four tenancy panels were written against `resolvedTab`; the six older
+sections were left on `activeTab`. When the two disagree **both branches are
+true and both panels mount** — the head reads "Organisations" while Question
+sets renders underneath it, because it comes first in the file.
+
+The disagreement is the NORMAL state for Engage staff: `activeTab` starts at the
+constant `questionsets`, and platform mode has no such section, so they differ
+from the first paint.
+
+Nothing can catch this — both are strings in scope and the result is a working
+program that draws two screens. `__tests__/adminOneSection.test.jsx` mounts the
+page and counts. **Every section gate reads `resolvedTab`.** The single
+exception is the billing FETCH guard, which is declared above the line that
+computes it and would be a temporal-dead-zone error; it is a fetch, not a
+render, so the cost of being wrong there is one wasted request.
+
+---
+
 ## 0. THE SECOND PASS — what dev showed, 2026-08-23
 
 The first deploy was reviewed on dev and four things came back. They had one

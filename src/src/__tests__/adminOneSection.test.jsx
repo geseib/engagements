@@ -115,10 +115,42 @@ describe('platform mode', () => {
     still holding its initial constant `questionsets` — which platform mode does
     not have, so `resolvedTab` is `orgs`.
   */
-  // rejects: the mixed gating. Before the fix this mounted BOTH .qsets and
-  // .porgs, with the head saying Organisations over a list of question sets.
-  it('shows Organisations ALONE, not Organisations plus Question sets', async () => {
+  /*
+    A bare /admin means "wherever I start", which is Organisations here — not
+    the constant `questionsets` that `activeTab` initialises to.
+  */
+  // rejects: the mixed gating. Before the fix a disagreement mounted BOTH
+  // .qsets and .porgs, with the head saying one and the body showing the other.
+  it('shows exactly one section, and the head names it', async () => {
     mockActiveOrg = PLATFORM_MODE;
+    serve();
+    render(<AdminPage />);
+    await settle();
+    await waitFor(() => expect(mounted()).toEqual(['Organisations']));
+    expect(document.querySelector('h1')).toHaveTextContent('Organisations');
+  });
+
+  // rejects: the Shared library being unreachable, or mounting a customer's
+  // rows beside it. It is Engage's OWN library and the one content section this
+  // console has.
+  it('opens Engage’s shared library on its own', async () => {
+    mockActiveOrg = PLATFORM_MODE;
+    window.history.pushState({}, '', '/admin?section=questionsets');
+    serve();
+    render(<AdminPage />);
+    await settle();
+    await waitFor(() => expect(mounted()).toEqual(['Question sets']));
+    expect(document.querySelector('h1')).toHaveTextContent('Shared library');
+  });
+
+  /* `games` rather than `billing`: Sessions is a section platform mode does not
+     have, so it exercises the fallback — and it is one the URL parser actually
+     recognises, which is the difference that matters. */
+  // rejects: a section that platform mode does not have mounting alongside the
+  // one it fell back to.
+  it('falls back to ONE section when the URL names one it does not have', async () => {
+    mockActiveOrg = PLATFORM_MODE;
+    window.history.pushState({}, '', '/admin?section=games');
     serve();
     render(<AdminPage />);
     await settle();

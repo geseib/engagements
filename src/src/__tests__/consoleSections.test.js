@@ -36,8 +36,10 @@ test('the default export is the same function as the named one', () => {
 describe('platform staff (mockups 10 and 11)', () => {
   // rejects: leaving ANY content section in the platform nav — the whole isolation story
   test('get no content section at all', () => {
-    expect(ids(PLATFORM)).toEqual(['orgs', 'moderation', 'users', 'archive']);
-    expect(ids(PLATFORM)).not.toContain('questionsets');
+    // Engage's OWN library is here (labelled "Shared library"); a customer's
+    // content is not, and there is no link that could reach one. See
+    // consoleModes.test.js for why "no content at all" stopped being the rule.
+    expect(ids(PLATFORM)).toEqual(['orgs', 'questionsets', 'moderation', 'users', 'archive']);
     expect(ids(PLATFORM)).not.toContain('games');
     expect(ids(PLATFORM)).not.toContain('prompts');
     expect(ids(PLATFORM)).not.toContain('library');
@@ -191,7 +193,10 @@ describe('the ids the rest of the console has to agree with', () => {
     expect(sectionById(TEAM_ADMIN, 'billing').label).toBe('Plan & usage');
     expect(sectionById(TEAM_MEMBER, 'billing')).toBeUndefined();
     expect(sectionById(PERSONAL, 'members')).toBeUndefined();
-    expect(sectionById(PLATFORM, 'questionsets')).toBeUndefined();
+    // `questionsets` IS addressable in platform mode now — it is Engage's own
+    // library. `games` is the one that never is: a session always belongs to an
+    // organisation.
+    expect(sectionById(PLATFORM, 'games')).toBeUndefined();
   });
 
   // rejects: landing a personal account on a section that is not its first place

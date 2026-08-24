@@ -64,6 +64,21 @@ jest.mock('../auth/AuthContext', () => ({
   its job rather than the deep link being broken.
 */
 const PLATFORM_MODE = '~platform';
+
+/*
+  THE LANDING SECTION IS PER-PERSON, and this suite runs as Engage staff.
+
+  It was written when every account landed on Question sets, so "the landing
+  section" and that label were the same thing throughout. In platform mode the
+  landing is ORGANISATIONS (`defaultSectionIdFor` takes the first item of the
+  first group), and `questionsets` is still present but labelled "Shared
+  library" — Engage's own sets rather than somebody's.
+
+  A bare /admin now means "wherever I start" rather than "whatever constant
+  `activeTab` happens to initialise to", which is the behaviour these
+  expectations were updated to.
+*/
+const LANDING = 'Organisations';
 let mockActiveOrg = PLATFORM_MODE;
 jest.mock('../auth/authFetch', () => ({
   __esModule: true,
@@ -163,7 +178,7 @@ describe('arriving at a URL opens the section it names', () => {
 
   test('a bare /admin opens the landing section', async () => {
     render(<AdminPage />);
-    await waitFor(() => expect(openSection()).toBe('Question sets'));
+    await waitFor(() => expect(openSection()).toBe(LANDING));
   });
 
   // rejects: rendering an empty work area for a section id that does not exist.
@@ -173,7 +188,7 @@ describe('arriving at a URL opens the section it names', () => {
   test('an unrecognised section falls back rather than blanking', async () => {
     arriveAt('/admin?section=aiprompts');
     render(<AdminPage />);
-    await waitFor(() => expect(openSection()).toBe('Question sets'));
+    await waitFor(() => expect(openSection()).toBe(LANDING));
   });
 });
 
@@ -268,7 +283,7 @@ describe('Back returns to the previous section', () => {
   //          state, and the URL is the thing that is always right.
   test('a popstate carrying no state object still works', async () => {
     render(<AdminPage />);
-    await waitFor(() => expect(openSection()).toBe('Question sets'));
+    await waitFor(() => expect(openSection()).toBe(LANDING));
 
     // pushState(null, ...) directly, so the entry has no state of its own, then
     // announce it the way the browser would.
@@ -295,8 +310,12 @@ describe('Back returns to the previous section', () => {
 describe('the landing URL is canonicalised on arrival', () => {
   // rejects: leaving '?section=questionsets' in the bar. Bookmark that and Back
   //          needs two presses to leave a screen that never visibly changed.
+  /* `?section=orgs`, because the landing section is per-person and this suite
+     runs as Engage staff. `?section=questionsets` is no longer the landing here
+     — it is the Shared library, a real destination — so canonicalising it away
+     would be deleting a URL somebody meant. */
   test('an explicit landing section is replaced with the bare path', async () => {
-    arriveAt('/admin?section=questionsets');
+    arriveAt('/admin?section=orgs');
     render(<AdminPage />);
     await waitFor(() => expect(replaceState).toHaveBeenCalled());
     expect(lastUrl(replaceState)).toBe('/admin');
@@ -322,7 +341,7 @@ describe('the landing URL is canonicalised on arrival', () => {
 
   test('a bare /admin is left alone', async () => {
     render(<AdminPage />);
-    await waitFor(() => expect(openSection()).toBe('Question sets'));
+    await waitFor(() => expect(openSection()).toBe(LANDING));
     expect(replaceState).not.toHaveBeenCalled();
   });
 });

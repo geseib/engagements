@@ -12,6 +12,7 @@ import HelpButton from './components/HelpButton';
 import IssueFab from './components/IssueFab';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
 import CreateOrgDialog from './components/CreateOrgDialog';
+import ActingAsBanner from './components/ActingAsBanner';
 import { useAuth } from './auth/AuthContext';
 import './BuilderPage.css';
 import { authFetch } from './auth/authFetch';
@@ -27,7 +28,7 @@ import BillingPanel from './components/BillingPanel';
 import PrivacyPanel from './components/PrivacyPanel';
 import {
   sectionsFor, sectionIdsFor, defaultSectionIdFor, sectionById, FOOT_SECTIONS,
-  PLATFORM_GROUP, PLATFORM_MODE,
+  PLATFORM_GROUP, PLATFORM_MODE, ALL_SECTION_IDS,
 } from './config/consoleSections';
 import { getActiveOrgId, setActiveOrgId } from './auth/authFetch';
 import { adminApiUrl } from './utils/adminApi';
@@ -123,8 +124,38 @@ const ADMIN_SECTION_BY_ID = Object.fromEntries(
    above must become linkable by existing, not by somebody remembering a second
    list. `sectionFromSearch` validates against this, so an id that is not here
    falls back instead of rendering an empty work area. */
-const ADMIN_SECTION_IDS = Object.keys(ADMIN_SECTION_BY_ID);
+/*
+   THE UNION, and the older list alone was a bug.
+
+   This was `Object.keys(ADMIN_SECTION_BY_ID)` — derived from the static section
+   array that predates tenancy, so it knows `questionsets`, `games`, `prompts`,
+   `archive`, `users` and `settings` and has never heard of `orgs`,
+   `moderation`, `members`, `billing` or `privacy`. `sectionFromSearch`
+   validates against it, so EVERY deep link to a tenancy section failed
+   validation, fell back to the default and rewrote the address bar —
+   `?section=billing` opened Question sets, silently.
+
+   Parsing is permissive and resolution is strict: `resolvedTab` still refuses
+   any section this particular account cannot see. That order is what lets a
+   bookmark survive being opened by somebody in a different organisation. */
+const ADMIN_SECTION_IDS = [...new Set([
+  ...Object.keys(ADMIN_SECTION_BY_ID),
+  ...ALL_SECTION_IDS,
+])];
 const DEFAULT_ADMIN_SECTION = 'questionsets';
+
+/** True when the address bar names a section this console recognises. */
+function urlNamesKnownSection() {
+  if (typeof window === 'undefined') return false;
+  const asked = new URLSearchParams(window.location.search).get(SECTION_PARAM);
+  return Boolean(asked) && ADMIN_SECTION_IDS.includes(asked);
+}
+
+/* The four sections that only exist in platform mode. Listed here rather than
+   derived from `sectionsFor`, because this is used to decide whether to draw
+   the acting-as strip and calling the nav builder again for that would couple
+   a banner to the shape of the nav. */
+const PLATFORM_SECTION_IDS = ['orgs', 'moderation', 'users', 'archive'];
 
 function AdminPage() {
   console.log('🔧 AdminPage component loading with AI builders...');
@@ -291,6 +322,10 @@ function AdminPage() {
     fallback because the switcher's own fixtures and mockups use it.
   */
   const isStaff = (currentUser?.groups || []).includes(PLATFORM_GROUP);
+  /* Where "leave platform mode" goes: the person's own space, falling back to
+     whatever organisation they have. Undefined when they have none, and then
+     the banner offers no exit rather than one that goes nowhere. */
+  const homeOrg = orgs.find((o) => o.type === 'personal') || orgs[0] || null;
   const onPlatform = isStaff && activeOrgId === PLATFORM_MODE;
   const activeOrg = onPlatform
     ? null
@@ -542,6 +577,29 @@ function AdminPage() {
      bar has to be canonicalised against what the person is looking at rather
      than against what they asked for. */
   const resolvedRef = useRef(DEFAULT_ADMIN_SECTION);
+  /*
+     DID ANYBODY ACTUALLY ASK FOR A SECTION?
+
+     `activeTab` initialises to the constant `questionsets` whether the URL named
+     it or not, so "no preference" and "explicitly asked for Question sets" are
+     the same value. That is fine while every account lands on Question sets and
+     wrong the moment the landing section is per-person: a bare /admin in the
+     Engage console opened the Shared library instead of Organisations, because
+     the constant happens to be a section that console also has.
+
+     Read once, from the URL as it was at mount. */
+  /*
+     Does the CURRENT url name a section this console knows?
+
+     A section it has never heard of is not a preference, it is a typo or a
+     stale link, so it means "wherever I start" rather than "whatever the
+     constant happens to be".
+
+     Kept as state rather than a mount-time ref because Back changes the answer:
+     pressing Back from Accounts to a bare /admin has to mean the landing
+     section again, and a value read once at mount would still be saying "yes,
+     they asked for something" long after the URL stopped saying so. */
+  const [sectionAsked, setSectionAsked] = useState(() => urlNamesKnownSection());
 
   const handleNavigate = (sectionId) => {
     if (sectionId !== activeTab) {
@@ -549,6 +607,7 @@ function AdminPage() {
       setEditingSetId('');
     }
     setActiveTab(sectionId);
+    setSectionAsked(true);
     navigatedRef.current = true;
     if (typeof window !== 'undefined' && window.history?.pushState) {
       const search = searchForSection(window.location.search, sectionId, landingRef.current);
@@ -577,6 +636,9 @@ function AdminPage() {
       const next = sectionFromSearch(
         window.location.search, ADMIN_SECTION_IDS, DEFAULT_ADMIN_SECTION,
       );
+      /* Back to a bare /admin has to mean the landing section again, not the
+         constant `next` falls back to. */
+      setSectionAsked(urlNamesKnownSection());
       setActiveTab((current) => {
         if (current !== next) {
           setEditMode(false);
@@ -1227,10 +1289,44 @@ function AdminPage() {
     So the URL is trusted while the answer is still in flight, and only
     reconciled once we actually know what this account can see.
   */
-  const resolvedTab = (!orgsLoaded || visibleIds.includes(activeTab))
-    ? activeTab
-    : fallbackSection;
+  /*
+    WHAT IS ON SCREEN.
+
+    Three cases, in order:
+      1. The organisations have not arrived — trust the URL. Applying a fallback
+         against a nav we do not know yet would throw away the section the link
+         asked for, on every first paint.
+      2. Somebody asked for something (a `?section=` at mount, or a click) and
+         they may see it — give them that.
+      3. Otherwise their own landing section.
+
+    Case 3 is what makes a bare /admin mean "wherever I start", which differs
+    per person now: Organisations for Engage staff, Question sets inside an org.
+  */
+  const askedForSection = sectionAsked;
+  const resolvedTab = (() => {
+    if (!orgsLoaded) return activeTab;
+    if (askedForSection && visibleIds.includes(activeTab)) return activeTab;
+    if (!askedForSection) return fallbackSection;
+    return fallbackSection;
+  })();
   resolvedRef.current = resolvedTab;
+
+  /*
+    WHICH SETS THIS SCREEN SHOWS, which is not the same list in both consoles.
+
+    Inside an organisation: everything the caller may READ — their org's own
+    sets, Engage's shared library and the public one — because the whole point
+    of the shared library is that every organisation has it. The rows carry
+    badges and `canManage`, so what may be changed is already clear per row.
+
+    In the Engage console: ONLY Engage's own sets. Mixing a customer's rows in
+    here would be the isolation break this console exists to prevent, and mixing
+    the admin's PERSONAL rows in would be the confusion the mode exists to end.
+  */
+  const visibleSets = onPlatform
+    ? questionSets.filter((set) => (set.scope || 'platform') === 'platform')
+    : questionSets;
   /*
     ── EVERY SECTION GATE BELOW READS `resolvedTab`. NOT `activeTab`. ────────
 
@@ -1517,7 +1613,7 @@ function AdminPage() {
               when the list is empty there are no rows between the two.
             */
             <QuestionSetsPanel
-              questionSets={questionSets}
+              questionSets={visibleSets}
               loading={questionSetsLoading}
               notice={notice}
               onDismissNotice={() => setNotice(null)}
@@ -1531,8 +1627,14 @@ function AdminPage() {
               onCopy={activeOrg ? handleCopySet : undefined}
               createOpen={isCreateOpen}
             >
-              {(isCreateOpen || questionSets.length === 0) && (
+              {(isCreateOpen || visibleSets.length === 0) && (
                 <QuestionSetUploadPanel
+                  /* In the Engage console a new set belongs to the SHARED
+                     library, not to the admin's own space. Without this the
+                     server's default picks the caller's organisation — and an
+                     Engage admin always has one — so "add to the shared
+                     library" would quietly create a personal set. */
+                  scope={onPlatform ? 'platform' : ''}
                   /* Only when the person PRESSED something. The condition above
                      also renders this panel on arrival when the library is
                      empty, and scrolling then would move the page in response
@@ -1594,6 +1696,18 @@ function AdminPage() {
               reachable from a bookmarked ?section=orgs, and a staff screen must
               be a thing you are DOING rather than a URL you kept. The server
               re-checks the group on every call regardless. */}
+          {/* PLATFORM MODE IS STICKY, so it has to name itself. Somebody who
+              tried it once opens the console days later to four sections none
+              of which are theirs, with no reason to connect that to a chip in
+              the top bar they have never used. Rendered above all four platform
+              sections rather than inside one, because the trap is the MODE. */}
+          {onPlatform && PLATFORM_SECTION_IDS.includes(resolvedTab) && (
+            <ActingAsBanner
+              orgName={homeOrg?.name || ''}
+              onLeave={homeOrg ? () => handleSwitchOrg(homeOrg.orgId) : undefined}
+            />
+          )}
+
           {resolvedTab === 'orgs' && onPlatform && <PlatformOrgsPanel />}
 
           {resolvedTab === 'moderation' && onPlatform && (

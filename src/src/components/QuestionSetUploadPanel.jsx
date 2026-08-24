@@ -68,6 +68,21 @@ import './QuestionSetsPanel.css';
  * for a hidden capability is refused by the API whatever this component drew.
  */
 export default function QuestionSetUploadPanel({
+  /**
+   * WHICH LIBRARY THIS SET IS BEING CREATED IN.
+   *
+   * Empty (the default) lets the server decide, which is what every caller
+   * wanted before there was more than one library: `createSetRef` tries the
+   * caller's organisation and falls back to the platform library. That default
+   * is right inside an org and WRONG in the Engage console, where an admin
+   * writing to the shared library would silently get a set in their own
+   * personal space instead — they have one, so the org branch always wins.
+   *
+   * `'platform'` is honoured only for a caller in the `admins` group;
+   * `canManageScope` refuses everybody else, so passing it is a request rather
+   * than a decision.
+   */
+  scope = '',
   engagementType,
   onEngagementTypeChange,
   availablePrompts = [],
@@ -275,6 +290,7 @@ export default function QuestionSetUploadPanel({
           aiContextInstructions: aiContextInstructions.trim(),
           promptId: promptId.trim(),
           engagementType,
+          ...(scope ? { scope } : {}),
         }),
       });
       const result = await response.json().catch(() => ({}));

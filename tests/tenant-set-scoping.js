@@ -697,6 +697,53 @@ function seedPlatformSet() {
     }
   }
 
+  /* ── WRITING TO ENGAGE'S OWN LIBRARY ────────────────────────────────────
+     "they should be able to add questions to their personal space or org or to
+      the overall engage space as a engage manager/admin."
+
+     The first two always worked. The third could not happen from the product at
+     all, and the reason is the DEFAULT below rather than any refusal: with no
+     scope asked for, `createSetRef` tries the caller's organisation first — and
+     since every approved account is given a personal one, an Engage admin
+     always has an organisation, so a set made anywhere became a personal set.
+
+     So the Shared library screen sends `scope: 'platform'` explicitly. These
+     assertions are the contract that screen depends on. */
+  say('\n8. an Engage admin can write to the shared library, and only they can');
+  {
+    const ev = (groups, orgId, role) => ({
+      requestContext: { authorizer: { lambda: { userId: 'u1', groups, orgId, orgRole: role } } },
+    });
+    const staff = ev('admins,hosts', 'org_3JtYs6WgHn5RkMqZaB7uEv', 'owner');
+    const host = ev('hosts', 'org_9xK4Fq7Pz2mNbVc8dQwLxR', 'member');
+
+    // rejects: the UI's assumption that asking is enough. It is enough only
+    // BECAUSE the caller is in `admins`; canManageScope decides, not the ask.
+    await check('staff asking for the platform scope get it', () =>
+      assert.deepStrictEqual(
+        access.createSetRef(staff, 'newset', 'platform'),
+        { scope: 'platform', orgId: '', setId: 'newset' }));
+
+    // rejects: A HOST PUBLISHING INTO THE SHARED LIBRARY by passing a scope in
+    // the request body. This is the whole reason the scope is a request rather
+    // than an instruction — the field is client-supplied.
+    await check('a host asking for it is REFUSED, not quietly downgraded', () =>
+      assert.strictEqual(access.createSetRef(host, 'newset', 'platform'), null,
+        'a host must not be able to write into the library every other customer reads'));
+
+    // rejects: changing the default to platform for staff, which would put an
+    // Engage admin's own drafts into every organisation's library.
+    await check('with nothing asked for, staff still write to their own org', () =>
+      assert.deepStrictEqual(
+        access.createSetRef(staff, 'newset', ''),
+        { scope: 'org', orgId: 'org_3JtYs6WgHn5RkMqZaB7uEv', setId: 'newset' }));
+
+    await check('and so does a host', () =>
+      assert.deepStrictEqual(
+        access.createSetRef(host, 'newset', ''),
+        { scope: 'org', orgId: 'org_9xK4Fq7Pz2mNbVc8dQwLxR', setId: 'newset' }));
+  }
+
   say(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

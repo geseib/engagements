@@ -149,6 +149,30 @@ const SECTION = {
     subtitle: 'Who has opened what, and how to take everything with you.',
     contentTheme: 'dark',
   },
+  /*
+    ENGAGE'S OWN LIBRARY — the sets every organisation reads and none of them
+    may change.
+
+    It reuses the id `questionsets` deliberately: it is the same screen, reading
+    a different scope, and giving it a second id would mean a second renderer, a
+    second deep link and two places to keep in step. What changes is the LABEL
+    ("Shared library", because inside the platform console "Question sets" would
+    read as somebody's) and the scope the page filters and writes to.
+
+    This is NOT a hole in the isolation story. Platform content has no tenant —
+    it is Engage's own material, authored by Engage — so managing it from the
+    Engage console is where it always belonged. Before this there was nowhere at
+    all: an Engage admin could only reach these rows from inside their PERSONAL
+    space, where they sat mixed in with their own work.
+  */
+  platformsets: {
+    id: 'questionsets',
+    label: 'Shared library',
+    icon: 'Books',
+    title: 'Shared library',
+    subtitle: 'Engage’s own question sets. Every organisation can read these and copy them; none can change them.',
+    contentTheme: 'dark',
+  },
   orgs: {
     id: 'orgs',
     label: 'Organisations',
@@ -234,8 +258,11 @@ export function sectionsFor({
   */
   if (mode === PLATFORM_MODE) {
     if (!isStaff) return [];
+    /* Organisations stays FIRST because it is the landing section (mockup 10)
+       and `defaultSectionIdFor` takes the first item of the first group. */
     return [group('platform', 'Engage', [
       SECTION.orgs,
+      SECTION.platformsets,
       SECTION.moderation,
       SECTION.accounts,
       SECTION.archive,
@@ -290,6 +317,28 @@ export function sectionsFor({
     group('team', 'Team', [SECTION.members, SECTION.billing, SECTION.privacy]),
   ];
 }
+
+/**
+ * EVERY SECTION ID THIS CONSOLE KNOWS, for anybody.
+ *
+ * Not "the ids you can see" — that is `sectionIdsFor`, and it depends on who
+ * you are and which organisation is active. This is the vocabulary of the
+ * `?section=` parameter, and it exists because PARSING the URL and RESOLVING it
+ * are two different jobs that ran off one list.
+ *
+ * AdminPage validated the parameter against a list derived from its own older,
+ * static section array — which never learned about `orgs`, `moderation`,
+ * `members`, `billing` or `privacy`. Every deep link to a tenancy section
+ * therefore failed validation, fell back to the default, and rewrote the
+ * address bar: `?section=billing` opened Question sets.
+ *
+ * Parse permissively against this, then let `resolvedTab` decide what this
+ * particular account may actually be shown. That ordering is what lets a
+ * bookmark survive being opened by somebody in a different organisation.
+ */
+export const ALL_SECTION_IDS = [...new Set(
+  [...Object.values(SECTION), ...FOOT_SECTIONS].map((s) => s.id),
+)];
 
 /** Every nav item in order, groups flattened, foot items last. */
 export function allSections(input) {

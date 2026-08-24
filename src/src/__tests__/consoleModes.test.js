@@ -57,15 +57,38 @@ describe('the platform mode', () => {
   // is why it was bolted on additively in the first place.
   it('is reachable by an explicit choice, not by having no organisation', () => {
     expect(ids(sectionsFor(staffOnPlatform)))
-      .toEqual(['orgs', 'moderation', 'users', 'archive']);
+      .toEqual(['orgs', 'questionsets', 'moderation', 'users', 'archive']);
   });
 
-  // rejects: a platform console that also lists content sections. There is no
-  // "view their sets" link because after the split there is nothing to link to.
-  it('carries no content section at all', () => {
+  /*
+    IT CARRIES ENGAGE'S OWN LIBRARY AND NOBODY ELSE'S.
+
+    This test used to require NO content section at all, which was right while
+    there was nowhere for Engage's own sets to live — and wrong as a permanent
+    rule, because it left an Engage admin with no way to add to the shared
+    library except from inside their personal space, where the rows sat mixed in
+    with their own work.
+
+    The distinction that matters is not "content vs no content", it is WHOSE.
+    Platform sets have no tenant; a customer's sessions and sets are not
+    reachable from here at all, and there is still no link that could reach one.
+  */
+  // rejects: a customer's content appearing in the Engage console — the
+  // isolation break this console exists to prevent.
+  it('carries Engage’s own library, and no tenant content', () => {
     const got = ids(sectionsFor(staffOnPlatform));
-    expect(got).not.toContain('questionsets');
-    expect(got).not.toContain('games');
+    expect(got).toContain('questionsets');   // Engage's own, labelled Shared library
+    expect(got).not.toContain('games');      // a session always belongs to an org
+    expect(got).not.toContain('members');
+    expect(got).not.toContain('billing');
+    expect(got).not.toContain('privacy');
+  });
+
+  // rejects: the label reading "Question sets" here, which inside the Engage
+  // console would be read as somebody's rather than as Engage's.
+  it('labels it Shared library, not Question sets', () => {
+    const item = sectionsFor(staffOnPlatform)[0].items.find((s) => s.id === 'questionsets');
+    expect(item.label).toBe('Shared library');
   });
 
   // rejects: a host talking their way into the platform console by asking for

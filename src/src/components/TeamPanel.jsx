@@ -602,6 +602,36 @@ export default function TeamPanel({
 
       {roster && (
         <>
+          {/*
+            ── WHAT A HOST CAN AND CANNOT DO HERE ──────────────────────────
+
+            A host is an ADMIN of their own personal space and a MEMBER of this
+            organisation, and nothing on screen used to say so. They arrive to a
+            roster with no Invite button and "An admin can change this" on every
+            row, which reads as a broken screen rather than as a boundary — and
+            the sections they have lost (Plan & usage, Data & privacy) are
+            simply absent from the nav, so there is nothing to explain them
+            either.
+
+            The owner asked for this in those words: a friendly but informative
+            notice that they do not have access to these when they switch to an
+            organisation.
+
+            It says what they CAN do first. A notice that only lists refusals
+            reads as a demotion; this person can build question sets and run
+            sessions here, which is the whole job.
+          */}
+          {!canAdminister && (
+            <div className="team-notebox team-notebox--role">
+              <b>You are a host in {orgName || 'this organisation'}.</b>
+              {' '}
+              You can build question sets, run sessions and see who else is here.
+              Inviting people, changing roles, the plan and the privacy controls
+              belong to its admins — ask one of the owners below if you need
+              something changed. Your own space is still entirely yours.
+            </div>
+          )}
+
           {canAdminister && (
             <div className="team-head">
               <span className="team-head-grow" />

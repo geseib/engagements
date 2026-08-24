@@ -379,6 +379,17 @@
 }
 .team-notebox b { color: var(--text); }
 
+/* The role notice sits ABOVE the roster rather than below it, and is the first
+   thing a host sees on this screen — so it takes the top margin off and the
+   amber edge, which is the console's "this is about you" colour rather than
+   its "something is wrong" one. --primary is 9.14:1 on --bg; the copy stays
+   --muted on the same tint the box already used, which teamPanelPalette
+   already measures. */
+.team-notebox--role {
+  margin: 0 0 16px;
+  border-left-color: var(--primary);
+}
+
 /* ------------------------------------------------------------------ modal -- */
 /* A SCRIM SCROLLS AND DOES NOT CENTRE WITH THE FLEX CONTAINER. `align-items:
    center` on a scrolling scrim overflows in BOTH directions and only one of
