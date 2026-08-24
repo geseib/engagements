@@ -144,6 +144,7 @@ const say = (...a) => process.stdout.write(a.join(' ') + '\n');
 
 // ---- fixtures ---------------------------------------------------------------
 const SET = 'set-42';
+const ORG = 'org_nw';
 const ADMIN_SUB = 'admin-sub';
 const OWNER_SUB = 'owner-sub';
 const STRANGER_SUB = 'stranger-sub';
@@ -155,15 +156,21 @@ function reset() {
   fetchCalls.length = 0;
   fetchRoutes.clear();
   fetchRoutes.set('*', { status: 200 });
-  store.set(`SETS|SET#${SET}`, {
-    PK: 'SETS', SK: `SET#${SET}`, name: 'Famous art', createdBy: OWNER_SUB, activeVersion: 2,
+  // TENANCY: a set a host created is an ORG set — `scope` and `orgId` together,
+  // which is what ownerStamp writes. Seeded at PK='SETS' it would be PLATFORM
+  // content, which only Engage staff may change, so the owner's own upload was
+  // correctly refused.
+  store.set(`ORG#${ORG}#SETS|SET#${SET}`, {
+    PK: `ORG#${ORG}#SETS`, SK: `SET#${SET}`, name: 'Famous art',
+    scope: 'org', orgId: ORG,
+    createdBy: OWNER_SUB, activeVersion: 2,
     versions: [{ version: 1 }, { version: 2 }],
   });
 }
 
 function question(number, image, { version = 2, title = `Q${number}` } = {}) {
   const item = {
-    PK: `SET#${SET}#v${version}`,
+    PK: `ORG#${ORG}#SET#${SET}#v${version}`,
     SK: `QUESTION#${String(number).padStart(3, '0')}`,
     QuestionNumber: number,
     Title: title,
@@ -174,16 +181,29 @@ function question(number, image, { version = 2, title = `Q${number}` } = {}) {
 }
 
 const asCaller = (sub, groups) => ({
-  requestContext: { authorizer: { lambda: { userId: sub, username: sub, groups } } },
+  // TENANCY: a host acts FOR an organisation. One org for the whole file — this
+  // suite is about media upload permission, not about tenancy, so every caller
+  // shares one and the ownership question stays the question.
+  requestContext: { authorizer: { lambda: { userId: sub, username: sub, groups, orgId: ORG, orgRole: 'member' } } },
 });
 
-const upload = (files, caller = asCaller(ADMIN_SUB, 'admins'), setId = SET) => presign.handler({
+// THE DEFAULT CALLER IS THE SET'S OWNER, NOT AN ENGAGE ADMIN.
+//
+// It used to be `asCaller(ADMIN_SUB, 'admins')`, which worked because being a
+// platform administrator granted access to every set in the system. It no
+// longer does: Engage staff manage the shared platform library and nothing
+// inside a customer's organisation. Most of the tests below are about presign
+// MECHANICS — one key, the right prefix, the content type, the size ceiling —
+// so their default caller has to be somebody who is allowed, or they all fail
+// at the permission check and never reach the thing they are testing. The tests
+// that are genuinely about permission still name their caller explicitly.
+const upload = (files, caller = asCaller(OWNER_SUB, 'hosts'), setId = SET) => presign.handler({
   ...caller,
   pathParameters: { setId },
   body: JSON.stringify({ files }),
 });
 
-const verify = (caller = asCaller(ADMIN_SUB, 'admins'), setId = SET, query = null) => status.handler({
+const verify = (caller = asCaller(OWNER_SUB, 'hosts'), setId = SET, query = null) => status.handler({
   ...caller,
   pathParameters: { setId },
   queryStringParameters: query,
@@ -331,17 +351,62 @@ async function test(name, fn) {
     assert.strictEqual(signed.length, 1);
   });
 
-  await test('an admin may upload to any set', async () => {
+  // THE RULE INVERTED HERE, DELIBERATELY. This test used to read "an admin may
+  // upload to any set", and that was true: being in the `admins` group granted
+  // access to every set in the system. Tenancy removes it — Engage staff manage
+  // the shared platform library, and a customer's organisation is not theirs to
+  // write to. It is a real loss of capability and the point of the change, so
+  // the test asserts the refusal rather than being deleted.
+  await test('Engage staff may NOT upload to an organisation\'s set', async () => {
     reset();
+    const res = await upload([{ name: 'a.jpg', size: 10 }], asCaller(ADMIN_SUB, 'admins'));
+    assert.notStrictEqual(res.statusCode, 200,
+      'a platform admin still has write access to a customer\'s content');
+    assert.strictEqual(signed.length, 0, 'a URL was signed before the refusal');
+  });
+
+  await test('...but may upload to a PLATFORM set, which is theirs to curate', async () => {
+    reset();
+    // Move the fixture into the shared library: no `scope`, no `orgId`, at
+    // PK='SETS' — the shape of every set that exists today.
+    store.delete(`ORG#${ORG}#SETS|SET#${SET}`);
+    store.set(`SETS|SET#${SET}`, {
+      PK: 'SETS', SK: `SET#${SET}`, name: 'Famous art', activeVersion: 2,
+      versions: [{ version: 1 }, { version: 2 }],
+    });
+    for (const [k, v] of [...store.entries()]) {
+      if (k.startsWith(`ORG#${ORG}#SET#${SET}`)) {
+        store.delete(k);
+        store.set(k.replace(`ORG#${ORG}#`, ''), { ...v, PK: String(v.PK).replace(`ORG#${ORG}#`, '') });
+      }
+    }
     const res = await upload([{ name: 'a.jpg', size: 10 }], asCaller(ADMIN_SUB, 'admins'));
     assert.strictEqual(res.statusCode, 200, res.body);
   });
 
-  await test('an unowned legacy set is admins-only, matching every other set route', async () => {
+  await test('an unowned legacy set is Engage-staff-only, as it always was', async () => {
     reset();
-    delete store.get(`SETS|SET#${SET}`).createdBy;
-    assert.strictEqual((await upload([{ name: 'a.jpg', size: 10 }], asCaller(OWNER_SUB, 'hosts'))).statusCode, 403);
-    assert.strictEqual((await upload([{ name: 'a.jpg', size: 10 }], asCaller(ADMIN_SUB, 'admins'))).statusCode, 200);
+    // A legacy row: no createdBy AND no scope. Tenancy reads that absence as
+    // PLATFORM, which is exactly what those ~41 rows always were in practice —
+    // every one was made by an administrator back when these routes were
+    // admins-only. That is why there is no migration.
+    store.delete(`ORG#${ORG}#SETS|SET#${SET}`);
+    store.set(`SETS|SET#${SET}`, {
+      PK: 'SETS', SK: `SET#${SET}`, name: 'Famous art', activeVersion: 2,
+      versions: [{ version: 1 }, { version: 2 }],
+    });
+    for (const [k, v] of [...store.entries()]) {
+      if (k.startsWith(`ORG#${ORG}#SET#${SET}`)) {
+        store.delete(k);
+        store.set(k.replace(`ORG#${ORG}#`, ''), { ...v, PK: String(v.PK).replace(`ORG#${ORG}#`, '') });
+      }
+    }
+    assert.notStrictEqual(
+      (await upload([{ name: 'a.jpg', size: 10 }], asCaller(OWNER_SUB, 'hosts'))).statusCode, 200,
+      'an org host can write to the shared library');
+    assert.strictEqual(
+      (await upload([{ name: 'a.jpg', size: 10 }], asCaller(ADMIN_SUB, 'admins'))).statusCode, 200,
+      'Engage staff lost the library they are supposed to curate');
   });
 
   await test('a set that does not exist is a 404, not a signed URL for a phantom prefix', async () => {
@@ -354,8 +419,12 @@ async function test(name, fn) {
   await test('an anonymous caller owns nothing and is refused', async () => {
     reset();
     const res = await presign.handler({ pathParameters: { setId: SET }, body: JSON.stringify({ files: [{ name: 'a.jpg' }] }) });
-    assert.strictEqual(res.statusCode, 403, res.body);
-    assert.strictEqual(signed.length, 0);
+    // Any non-success. It is a 404 now rather than a 403: an anonymous caller
+    // cannot see an org set at all, and answering 403 would turn the refusal
+    // into an existence oracle — probe ids, and the ones that come back 403
+    // instead of 404 are the real ones.
+    assert.ok(res.statusCode >= 400, `expected a refusal, got ${res.statusCode}`);
+    assert.strictEqual(signed.length, 0, 'a URL was signed for an anonymous caller');
   });
 
   await test('an unconfigured environment fails loudly instead of signing for undefined', async () => {
@@ -523,7 +592,9 @@ async function test(name, fn) {
     assert.strictEqual(active.version, 2);
     assert.strictEqual(active.missingCount, 1);
 
-    const pinned = body(await verify(asCaller(ADMIN_SUB, 'admins'), SET, { version: '1' }));
+    // The owner, not an Engage admin: staff have no access to an org set since
+    // tenancy, and this test is about which VERSION is read, not about who may.
+    const pinned = body(await verify(asCaller(OWNER_SUB, 'hosts'), SET, { version: '1' }));
     assert.strictEqual(pinned.version, 1);
     assert.strictEqual(pinned.missingCount, 0);
   });
@@ -531,9 +602,15 @@ async function test(name, fn) {
   await test('verification is guarded by the same ownership rule as every other set route', async () => {
     reset();
     question(1, `sets/${SET}/a.jpg`);
-    assert.strictEqual((await verify(asCaller(STRANGER_SUB, 'hosts'))).statusCode, 403);
+    // A stranger in the SAME organisation: refused, because they did not create
+    // it. This is the within-org half of the rule, unchanged by tenancy.
+    assert.ok((await verify(asCaller(STRANGER_SUB, 'hosts'))).statusCode >= 400);
     assert.strictEqual((await verify(asCaller(OWNER_SUB, 'hosts'))).statusCode, 200);
-    assert.strictEqual((await verify(asCaller(ADMIN_SUB, 'admins'))).statusCode, 200);
+    // AND ENGAGE STAFF ARE REFUSED TOO, which is the half that changed. It used
+    // to assert 200 here. A platform admin has no access to a customer's set,
+    // and that is the whole isolation story in one line.
+    assert.ok((await verify(asCaller(ADMIN_SUB, 'admins'))).statusCode >= 400,
+      'a platform admin can still read a customer\'s media manifest');
   });
 
   await test('a set that does not exist is a 404', async () => {

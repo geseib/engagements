@@ -3,12 +3,13 @@ const { DynamoDBDocumentClient, UpdateCommand } = require('@aws-sdk/lib-dynamodb
 const { collectPartitionKeys, batchDeleteKeys } = require('./shared/ddb-delete');
 const {
   findGamesPinnedToVersion,
-  getSetMetadata,
   knownVersions,
   setPartition,
   toVersion,
   versionList,
+  setMetadataKey,
 } = require('./shared/set-version');
+const { requireSetManager, findSetForCaller, requestedScope } = require('./shared/question-set-access');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -71,10 +72,23 @@ exports.handler = async (event) => {
       };
     }
 
-    const meta = await getSetMetadata(db, tableName, setId);
+    // WHICH LIBRARY, THEN WHO. `findSetForCaller` searches only the scopes this
+    // caller may READ, so another organisation's set is ABSENT rather than
+    // forbidden and this 404s on it. The row it returns carries its own scope
+    // and `requireSetManager` reads it — platform sets are Engage staff's, org
+    // sets are that org's, and being an Engage administrator grants nothing
+    // inside an org. See shared/question-set-access.js.
+    const found = await findSetForCaller(db, tableName, event, setId, requestedScope(event));
+    const meta = found && found.item;
     if (!meta) {
       return { statusCode: 404, body: JSON.stringify({ error: 'Question set not found' }), headers };
     }
+
+    // 403 BEFORE anything is written. A version promote flips which questions
+    // every future session of this set plays, and a version delete removes rows;
+    // both are management of the set, gated by the same rule as editing it.
+    const denied = requireSetManager(event, meta, 'delete a version of');
+    if (denied) return denied;
 
     const activeVersion = toVersion(meta.activeVersion);
     const known = knownVersions(meta);
@@ -105,7 +119,11 @@ exports.handler = async (event) => {
 
     // RULE 2 — warn about live games pinned to it. Not a block: a second call
     // carrying ?confirm=true goes through.
-    const pinned = await findGamesPinnedToVersion(db, tableName, setId, version);
+    // The REF, not the id: an org's sessions are indexed in that org's own
+    // partition, and a bare id would walk the pre-tenancy global index and find
+    // nothing — reporting "no live games" for a version several rooms are
+    // playing right now, which is the one answer this warning must not give.
+    const pinned = await findGamesPinnedToVersion(db, tableName, found.ref, version);
     const live = pinned.filter((g) => !g.ended);
 
     if (live.length > 0 && !confirmed) {
@@ -137,7 +155,7 @@ exports.handler = async (event) => {
 
     await db.send(new UpdateCommand({
       TableName: tableName,
-      Key: { PK: 'SETS', SK: `SET#${setId}` },
+      Key: setMetadataKey(found.ref),
       // Aliased throughout — see the note in upload-questions.js.
       UpdateExpression: 'SET #versions = :versions, #updatedAt = :now',
       ConditionExpression: 'attribute_not_exists(#activeVersion) OR #activeVersion <> :v',
@@ -162,7 +180,7 @@ exports.handler = async (event) => {
 
     // Now the content. Paginated enumeration + UnprocessedItems retry, the same
     // machinery delete-question-set.js uses, scoped to one version's partition.
-    const partition = setPartition(setId, version);
+    const partition = setPartition(found.ref, version);
     const { keys, pages } = await collectPartitionKeys(db, tableName, partition);
     const deleted = keys.length ? await batchDeleteKeys(db, tableName, keys) : 0;
 

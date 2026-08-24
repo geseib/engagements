@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
+const { decryptItem } = require('./tenant-crypto');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -40,7 +41,26 @@ exports.handler = async (event) => {
       };
     }
 
-    const report = reportQuery.Item;
+    // ── THE ORG COMES OFF THE SESSION, NOT OFF THE CALLER ────────────────────
+    //
+    // `GET /games/{gameId}/report` is public and `role` is a query parameter —
+    // a claim anyone can make, not a fact this API established (see the same
+    // note in get-game.js). So there is no caller org to read, and a blank one
+    // throws rather than defaulting.
+    //
+    // The REPORT row does not carry `orgId` itself: create-report.js spreads
+    // `reportData` onto it and that object has no such field. Reading the
+    // session's METADATA row is therefore not laziness — it is the only place
+    // the answer lives, and the same place every participant path looks.
+    const metaRes = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'orgId'
+    }));
+    const reportOrgId = typeof metaRes.Item?.orgId === 'string' ? metaRes.Item.orgId.trim() : '';
+    const report = reportOrgId
+      ? await decryptItem(reportOrgId, 'report', reportQuery.Item)
+      : reportQuery.Item;
     console.log(`📊 Found report for game ${gameId}: ${report.gameStats?.totalQuestions || 0} questions`);
 
     // Role-specific information

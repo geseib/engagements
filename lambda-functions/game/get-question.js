@@ -1,6 +1,8 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { resolveSetPartition } = require('./set-version');
+const { ORG } = require('./tenant');
+const { decryptItem } = require('./tenant-crypto');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -86,6 +88,22 @@ exports.handler = async (event) => {
 
     const sourceQuestionId = questionRef.Item.SourceQuestionId;
     const questionSetId = questionRef.Item.SetId;
+    // THE SESSION IS THE AUTHORITY ON WHICH LIBRARY, NOT THE CALLER.
+    //
+    // Most participants here are anonymous — they joined with a 4-digit code
+    // and have no org context at all — so resolving the scope from the REQUEST
+    // would resolve it to platform for every player in every org session, and
+    // they would read an empty partition and see no question.
+    //
+    // The REF row is the right source: the host picked the set, the session
+    // pinned the pair, and that pin already carries the authorisation. Rows
+    // written before tenancy have no SetScope, which means platform — the same
+    // reading of an absent scope as everywhere else (set-version.js setRef).
+    const questionSetRef = {
+      scope: questionRef.Item.SetScope,
+      orgId: questionRef.Item.SetOrgId,
+      setId: questionSetId,
+    };
 
     console.log(`📖 Found question reference: ${sourceQuestionId} from set ${questionSetId}`);
 
@@ -95,7 +113,7 @@ exports.handler = async (event) => {
     // rows written before versioning have no SetVersion, so the resolver falls
     // through to the set's activeVersion and then to the legacy partition.
     const resolved = await resolveSetPartition(
-      db, process.env.TABLE_NAME, questionSetId, questionRef.Item.SetVersion
+      db, process.env.TABLE_NAME, questionSetRef, questionRef.Item.SetVersion
     );
 
     // Get the actual question from the resolved version of the question set
@@ -119,6 +137,42 @@ exports.handler = async (event) => {
       };
     }
 
+    // ── DECRYPT FROM THE ROW'S OWN ORG, NEVER FROM THE CALLER ────────────────
+    //
+    // THIS ROUTE IS PUBLIC AND ITS CALLERS ARE ANONYMOUS. A participant joined
+    // with a four-digit code and carries no authorizer context at all, so
+    // `tenant.callerOrgId(event)` resolves to '' for every player in every
+    // organisation's session — and a blank orgId does not "fall back", it
+    // THROWS (`tenant-crypto: an orgId is required`). Every question in the
+    // product would 500.
+    //
+    // The org therefore comes from the same place the PARTITION did: the REF
+    // row the host pinned when the round started, resolved above. That pin is
+    // the authorisation — the host chose this set for this session — and it is
+    // the only org that could possibly decrypt these rows anyway, because the
+    // orgId is the AES-GCM AAD.
+    //
+    // Platform and public sets are never encrypted (upload-questions.js says
+    // why), so they are used exactly as they came back.
+    const setOrgId = resolved.scope === ORG ? String(resolved.orgId || '') : '';
+    const questionItem = setOrgId
+      ? await decryptItem(setOrgId, 'question', question.Item)
+      : question.Item;
+    // `resolved.metadata` is the SETS row this handler already had in hand, and
+    // two of its fields ride out on the payload below — so it needs the same
+    // treatment or a player sees an envelope where a per-set instruction goes.
+    //
+    // Replaced IN PLACE rather than bound to a new name, deliberately:
+    // tests/question-set-routes-authorization.js pins the projection as the
+    // literal source text `setCustomInstruction: resolved.metadata`, because
+    // that payload is what let `GET /question-sets` be closed to anonymous
+    // callers. Renaming the expression here would read as a harmless tidy-up
+    // and would quietly strand every participant. `decryptItem` returns a new
+    // object, so nothing shared is mutated.
+    if (setOrgId && resolved.metadata) {
+      resolved.metadata = await decryptItem(setOrgId, 'set', resolved.metadata);
+    }
+
     // Base question information (common to both host and player)
     const baseQuestionInfo = {
       questionId: sourceQuestionId,
@@ -131,51 +185,81 @@ exports.handler = async (event) => {
       // The set id reaches the player too. PlayerPage guards its per-set
       // instruction fetch on `setId`, and this payload only ever carried
       // `questionSetId`, and only on the host branch — so per-set instructions
-      // never reached a player at all. Set metadata is already public via
-      // GET /question-sets, so there is nothing sensitive to withhold.
+      // never reached a player at all.
       setId: questionSetId,
-      title: question.Item.Title || '',
-      questionDetail: question.Item.questionDetail || question.Item.Detail || '',
-      detail: question.Item.Detail || question.Item.questionDetail || '',
+      // …and the scope beside it, for the same reason the id is here: the
+      // player's per-set instruction fetch addresses a set, and a bare slug
+      // addresses whichever library the recipient happens to search first.
+      setScope: resolved.scope,
+      setOrgId: resolved.orgId || null,
+      // ── THE TWO SET-LEVEL FIELDS, AND WHY THEY LIVE HERE ─────────────────
+      //
+      // These are the ONLY things PlayerPage ever wanted from a question set,
+      // and until this change it got them by downloading `GET /question-sets`
+      // — the WHOLE catalogue, every set in the environment with its name,
+      // description, categories, counts, engagement type and persona id — and
+      // running `.find()` over it for the one set its own game was playing
+      // (PlayerPage.jsx `loadQuestionSetMeta`). Every anonymous participant in
+      // every session received the entire library, with no login, to read two
+      // strings.
+      //
+      // A previous pass here optimised the NUMBER of those downloads (one per
+      // set instead of one per question) without noticing what each one
+      // contained. Caching a leak makes it quieter, not smaller.
+      //
+      // They cost this handler nothing. `resolveSetPartition` above already
+      // reads the SETS row to decide which partition to serve and hands it
+      // back as `resolved.metadata`, so this is a projection of a row that is
+      // already in memory — no extra GetItem, no extra latency.
+      //
+      // `|| null` and not `?? null`, deliberately: it mirrors what
+      // `loadQuestionSetMeta` did (`questionSet?.customInstruction || null`),
+      // so an empty string keeps collapsing to null and `resolveInstruction`
+      // keeps distinguishing "this set says nothing" from "this set says ''".
+      setCustomInstruction: resolved.metadata?.customInstruction || null,
+      setRoundNoun: resolved.metadata?.roundNoun || null,
+      title: questionItem.Title || '',
+      questionDetail: questionItem.questionDetail || questionItem.Detail || '',
+      detail: questionItem.Detail || questionItem.questionDetail || '',
       // No answerDetails here, deliberately. It is the spoiler — the real title
       // and its trivia on an art round, the answer explanation on a trivia one —
       // and game/get-ai-summary.js is its only reader, at RESULTS. This used to
-      // project `question.Item.answerDetails`, which looked harmless only
+      // project `questionItem.answerDetails`, which looked harmless only
       // because admin/upload-questions.js writes `AnswerDetails`; sets built by
       // admin/ai-generate-trivia.js store the lower-case spelling, and those
       // leaked the explanation to players during ASK.
-      category: question.Item.Category,
-      school: question.Item.School || '',
-      image: question.Item.Image || '', // Optional artwork URL ("Art Title" rounds)
-      customInstructions: question.Item.CustomInstructions || '',
+      category: questionItem.Category,
+      school: questionItem.School || '',
+      image: questionItem.Image || '', // Optional artwork URL ("Art Title" rounds)
+      customInstructions: questionItem.CustomInstructions || '',
       lessonNumber: lessonNumber,
       gameState: gameStateValue,
       startedAt: questionRef.Item.StartedAt,
       // Include trivia options if they exist (check both cases)
-      optionA: question.Item.optionA || question.Item.OptionA || '',
-      optionB: question.Item.optionB || question.Item.OptionB || '',
-      optionC: question.Item.optionC || question.Item.OptionC || '',
-      optionD: question.Item.optionD || question.Item.OptionD || '',
-      optionE: question.Item.optionE || question.Item.OptionE || '',
-      optionF: question.Item.optionF || question.Item.OptionF || ''
+      optionA: questionItem.optionA || questionItem.OptionA || '',
+      optionB: questionItem.optionB || questionItem.OptionB || '',
+      optionC: questionItem.optionC || questionItem.OptionC || '',
+      optionD: questionItem.optionD || questionItem.OptionD || '',
+      optionE: questionItem.optionE || questionItem.OptionE || '',
+      optionF: questionItem.optionF || questionItem.OptionF || ''
     };
 
     // Include correct answer for both host and player in RESULTS state
     if (gameStateValue.startsWith('RESULTS#')) {
-      let correctAnswer = question.Item.correctAnswer || '';
+      let correctAnswer = questionItem.correctAnswer || '';
       
       // Convert option IDs (OptionA, OptionB, etc.) to actual answer text
       if (typeof correctAnswer === 'string' && correctAnswer.startsWith('Option')) {
         const optionLetter = correctAnswer.replace('Option', '').toLowerCase();
         const optionField = `option${optionLetter.toUpperCase()}`;
-        correctAnswer = question.Item[optionField] || correctAnswer;
+        correctAnswer = questionItem[optionField] || correctAnswer;
       } else if (Array.isArray(correctAnswer)) {
         // Handle multiple correct answers
         correctAnswer = correctAnswer.map(answer => {
           if (typeof answer === 'string' && answer.startsWith('Option')) {
             const optionLetter = answer.replace('Option', '').toLowerCase();
             const optionField = `option${optionLetter.toUpperCase()}`;
-            return question.Item[optionField] || answer;
+            return questionItem[optionField] || answer;
           }
           return answer;
         });
@@ -191,10 +275,10 @@ exports.handler = async (event) => {
         ...baseQuestionInfo,
         gameId: gameId,
         questionSetId: questionSetId,
-        orderInCategory: question.Item.OrderInCategory,
-        active: question.Item.Active,
+        orderInCategory: questionItem.OrderInCategory,
+        active: questionItem.Active,
         sourceQuestionId: sourceQuestionId,
-        points: question.Item.points || 10 // Points value for trivia
+        points: questionItem.points || 10 // Points value for trivia
       };
       
       // Correct answer is already included in baseQuestionInfo if in RESULTS state

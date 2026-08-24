@@ -10,6 +10,7 @@
     "@aws-sdk/client-bedrock-runtime": "^3.600.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.863.0",
     "@aws-sdk/client-dynamodb": "^3.600.0",
+    "@aws-sdk/client-kms": "^3.600.0",
     "@aws-sdk/client-lambda": "^3.600.0",
     "@aws-sdk/lib-dynamodb": "^3.600.0",
     "@aws-sdk/s3-request-presigner": "^3.600.0",

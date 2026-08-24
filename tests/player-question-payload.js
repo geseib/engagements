@@ -117,6 +117,8 @@ function roundNumberOf(question, gameState) {
 const SET_ID = 'famousarttitles';
 const TRIVIA_SET_ID = 'triviaset';
 const GAME_ID = '1234';
+const SET_INSTRUCTION = 'Name this work of art. Accurate, witty, or make the room think?';
+const OTHER_SET_NAME = 'OTHER_SET_SENTINEL — Team Retro';
 
 // A trivia round, used for the correct-answer gating checks. Note the
 // LOWER-CASE `answerDetails`: admin/ai-generate-trivia.js emits that spelling
@@ -171,6 +173,29 @@ function seed(state) {
     PK: `GAME#${GAME_ID}`, SK: 'QUESTION#001#REF',
     SourceQuestionId: 'QUESTION#001', SetId: SET_ID,
     StartedAt: new Date(0).toISOString(),
+  });
+  // The SET metadata row. resolveSetPartition() already reads this to decide
+  // which partition to serve, and hands it back as `resolved.metadata` — so the
+  // two set-level fields below cost the payload no extra round trip.
+  store.set(key('SETS', `SET#${SET_ID}`), {
+    PK: 'SETS', SK: `SET#${SET_ID}`,
+    name: 'Famous Art Titles',
+    description: 'Name the painting.',
+    customInstruction: SET_INSTRUCTION,
+    roundNoun: 'Artwork',
+    engagementType: 'call-and-answer',
+    active: true,
+  });
+  // A SECOND set, which this game is not playing. Nothing a participant
+  // receives may mention it. See section 7.
+  store.set(key('SETS', 'SET#otherteamretro'), {
+    PK: 'SETS', SK: 'SET#otherteamretro',
+    name: OTHER_SET_NAME,
+    description: 'Another org would own this one.',
+    customInstruction: 'Do not leak me.',
+    roundNoun: 'Round',
+    engagementType: 'call-and-answer',
+    active: true,
   });
 }
 
@@ -318,6 +343,84 @@ function seed(state) {
     check(`${state}: 400 'No active question'`, () => {
       assert.strictEqual(res.statusCode, 400, `got ${res.statusCode}: ${res.body}`);
       assert.strictEqual(JSON.parse(res.body).error, 'No active question');
+    });
+  }
+
+  // ---------- 7. The set-level fields ride on the question ----------
+  //
+  // rejects: dropping `setCustomInstruction` / `setRoundNoun` from
+  // get-question's player payload.
+  //
+  // WHY THEY HAVE TO BE HERE. PlayerPage used to obtain these two values by
+  // fetching the WHOLE of `GET /question-sets` — every set in the environment,
+  // with its name, description, categories, counts and persona id — and then
+  // `.find()`ing the one set its own game was playing. Every anonymous
+  // participant in every session was handed the entire catalogue, with no
+  // login, to read two strings. That is the single widest tenant leak in the
+  // product, and closing `GET /question-sets` to authenticated callers is
+  // impossible while a player still needs it.
+  //
+  // These fields cost nothing: resolveSetPartition() already reads the SETS row
+  // to decide which partition to serve, and returns it as `resolved.metadata`.
+  console.log('\n7. set-level instruction and round noun ride on the question payload');
+  for (const state of ['ASK#001', 'VOTE#001', 'RESULTS#001']) {
+    for (const role of ['player', 'host']) {
+      seed(state);
+      const res = await questionHandler({
+        pathParameters: { gameId: GAME_ID }, queryStringParameters: { role },
+      });
+      const body = JSON.parse(res.body);
+      check(`${role} @ ${state}: carries setCustomInstruction`, () =>
+        assert.strictEqual(body.setCustomInstruction, SET_INSTRUCTION,
+          `got ${JSON.stringify(body.setCustomInstruction)}`));
+      check(`${role} @ ${state}: carries setRoundNoun`, () =>
+        assert.strictEqual(body.setRoundNoun, 'Artwork',
+          `got ${JSON.stringify(body.setRoundNoun)}`));
+    }
+  }
+
+  // A set with neither field must yield null, not undefined and not the
+  // question's own CustomInstructions — PlayerPage stores these straight into
+  // state and `resolveInstruction` distinguishes "no set instruction" from
+  // "empty string".
+  console.log('\n   a set carrying neither field yields null, not undefined');
+  seed('ASK#001');
+  store.set(key('SETS', `SET#${SET_ID}`), {
+    PK: 'SETS', SK: `SET#${SET_ID}`, name: 'Bare', active: true,
+  });
+  {
+    const res = await questionHandler({
+      pathParameters: { gameId: GAME_ID }, queryStringParameters: { role: 'player' },
+    });
+    const body = JSON.parse(res.body);
+    check('setCustomInstruction is null', () =>
+      assert.strictEqual(body.setCustomInstruction, null,
+        `got ${JSON.stringify(body.setCustomInstruction)}`));
+    check('setRoundNoun is null', () =>
+      assert.strictEqual(body.setRoundNoun, null,
+        `got ${JSON.stringify(body.setRoundNoun)}`));
+  }
+
+  // ---------- 8. Nothing about any OTHER set reaches a participant ----------
+  //
+  // rejects: any future widening of this payload that projects the set list, a
+  // set index, or a neighbouring set's metadata.
+  //
+  // This is the assertion the catalogue download would have failed. It is
+  // deliberately a substring search over the whole serialized body rather than
+  // a field check, because the leak it guards against is by definition a field
+  // nobody thought to look at.
+  console.log('\n8. no other set is mentioned anywhere in a participant payload');
+  for (const state of ['ASK#001', 'VOTE#001', 'RESULTS#001']) {
+    seed(state);
+    const res = await questionHandler({
+      pathParameters: { gameId: GAME_ID }, queryStringParameters: { role: 'player' },
+    });
+    check(`player @ ${state}: no trace of a set this game is not playing`, () => {
+      assert.ok(!res.body.includes('OTHER_SET_SENTINEL'),
+        `another set leaked into the player payload: ${res.body.slice(0, 300)}`);
+      assert.ok(!res.body.includes('otherteamretro'),
+        `another set id leaked into the player payload: ${res.body.slice(0, 300)}`);
     });
   }
 

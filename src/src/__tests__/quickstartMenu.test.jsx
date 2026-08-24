@@ -78,11 +78,17 @@ test('pressing a set still creates and starts the game', async () => {
   expect(onGameCreated).toHaveBeenCalledWith(
     expect.objectContaining({ gameId: '4821', questionSetId: 'set-tech' })
   );
-  // create, then start
+  // create, then start — BOTH authenticated now.
+  //
+  // `/start` used to be asserted against the bare `global.fetch` mock, because
+  // POST /games/{id}/start was a public route. It is not any more: an
+  // unauthenticated start let anyone holding the four-digit join code open
+  // somebody else's session. The route and this call site moved together —
+  // see tests/session-control-routes-authorization.js, which fails if either
+  // half is reverted alone.
   const authUrls = authFetch.mock.calls.map(([url]) => String(url));
   expect(authUrls.some((u) => u.endsWith('games'))).toBe(true);
-  const bareUrls = global.fetch.mock.calls.map(([url]) => String(url));
-  expect(bareUrls.some((u) => u.endsWith('games/4821/start'))).toBe(true);
+  expect(authUrls.some((u) => u.endsWith('games/4821/start'))).toBe(true);
   expect(onClose).toHaveBeenCalled();
 });
 

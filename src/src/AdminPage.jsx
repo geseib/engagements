@@ -19,6 +19,15 @@ import QuestionSetsPanel from './components/QuestionSetsPanel';
 import QuestionSetDeleteDialog from './components/QuestionSetDeleteDialog';
 import QuestionSetUploadPanel from './components/QuestionSetUploadPanel';
 import AdminShell from './components/AdminShell';
+import OrgSwitcher from './components/OrgSwitcher';
+import TeamPanel from './components/TeamPanel';
+import BillingPanel from './components/BillingPanel';
+import PrivacyPanel from './components/PrivacyPanel';
+import {
+  sectionsFor, sectionIdsFor, defaultSectionIdFor, sectionById, FOOT_SECTIONS,
+} from './config/consoleSections';
+import { getActiveOrgId, setActiveOrgId } from './auth/authFetch';
+import { adminApiUrl } from './utils/adminApi';
 import { describeEnvironment } from './utils/adminEnvironment';
 import {
   SECTION_PARAM, sectionFromSearch, searchForSection, searchMatchesSection,
@@ -185,6 +194,92 @@ function AdminPage() {
     ADMIN_SECTION_IDS,
     DEFAULT_ADMIN_SECTION,
   ));
+  /*
+    THE ORGANISATIONS THIS ACCOUNT BELONGS TO, and which one it is acting for.
+
+    `GET /orgs` is not only a read: it PROVISIONS the caller's personal
+    organisation on first call and returns it in the same response. So this one
+    request is what gives a newly-approved host somewhere to put their work, and
+    it has to happen before anything offers to create a set or a session — a
+    host with no organisation creates content that belongs to nobody.
+
+    Deliberately NOT in AuthContext: that context is loaded by the player and
+    entry surfaces too, and a participant joining a session must not be made to
+    fetch a list of organisations they do not have.
+  */
+  const [orgs, setOrgs] = useState([]);
+  const [orgsLoaded, setOrgsLoaded] = useState(false);
+  const [activeOrgId, setActiveOrgIdState] = useState(() => getActiveOrgId());
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authFetch(adminApiUrl('orgs'));
+        if (!res.ok) throw new Error(`orgs returned ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        const list = Array.isArray(data.orgs) ? data.orgs : [];
+        setOrgs(list);
+        /*
+          Reconcile the remembered choice against what the server says. An id
+          in localStorage the account is no longer a member of must NOT be sent
+          — the authorizer resolves an org you do not belong to to NO org, so
+          the console would silently act unscoped rather than as the team the
+          chip is showing.
+        */
+        const remembered = getActiveOrgId();
+        const valid = list.some((o) => o.orgId === remembered);
+        const next = valid ? remembered : (list.find((o) => o.type === 'personal') || list[0])?.orgId || '';
+        if (next !== remembered) setActiveOrgId(next);
+        setActiveOrgIdState(next);
+      } catch (err) {
+        console.error('Could not load organisations:', err);
+      } finally {
+        if (!cancelled) setOrgsLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const activeOrg = orgs.find((o) => o.orgId === activeOrgId) || null;
+
+  // Usage is fetched only when the Plan & usage section is actually open —
+  // it is a per-org read nobody needs while looking at question sets.
+  const [orgUsage, setOrgUsage] = useState(null);
+  const [orgUsageError, setOrgUsageError] = useState('');
+  useEffect(() => {
+    if (activeTab !== 'billing' || !activeOrgId) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        setOrgUsageError('');
+        const res = await authFetch(adminApiUrl(`orgs/${activeOrgId}/usage`));
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        // The server's message, never a local guess — the rule every panel on
+        // this page follows.
+        if (!res.ok) { setOrgUsageError(data.error || `Could not read usage (${res.status}).`); return; }
+        setOrgUsage(data);
+      } catch (err) {
+        if (!cancelled) setOrgUsageError(err.message || 'Could not read usage.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeTab, activeOrgId]);
+
+  const handleSwitchOrg = (orgId) => {
+    setActiveOrgId(orgId);
+    /*
+      A full reload, not a state update. Every panel on this page has already
+      fetched its org's content, and there is no single place that owns all of
+      it — a soft switch would leave one team's question sets on screen under
+      another team's name, which is the worst possible failure for a tenancy
+      feature. Reloading is cheap and unambiguous.
+    */
+    window.location.reload();
+  };
+
   // The set being edited. Every field of the editor itself now lives in
   // components/QuestionSetEditor.jsx — this page only decides which set is open
   // and shows the confirmation after the editor closes.
@@ -962,21 +1057,133 @@ function AdminPage() {
       ? questionSets.find((set) => set.id === editingSetId) || { id: editingSetId }
       : null;
 
-  const section = ADMIN_SECTION_BY_ID[activeTab] || ADMIN_SECTION_BY_ID.questionsets;
+  /*
+    THE NAV IS COMPUTED, and that is the change rather than a detail.
+
+    An org member, an org admin, a personal space and Engage staff must not see
+    the same console — most importantly, the platform view has NO content
+    section at all, because after this change staff cannot open a customer's
+    sets without a logged, expiring grant. `config/consoleSections.js` owns
+    that decision as a pure function so it can be tested without React.
+  */
+  const navGroups = sectionsFor({
+    groups: currentUser?.groups || [],
+    orgRole: activeOrg?.role,
+    orgType: activeOrg?.type,
+    orgName: activeOrg?.name,
+  });
+  const visibleIds = sectionIdsFor({
+    groups: currentUser?.groups || [],
+    orgRole: activeOrg?.role,
+    orgType: activeOrg?.type,
+  });
+  const fallbackSection = defaultSectionIdFor({
+    groups: currentUser?.groups || [],
+    orgRole: activeOrg?.role,
+    orgType: activeOrg?.type,
+  }) || DEFAULT_ADMIN_SECTION;
+  /*
+    A bookmarked `?section=billing` on an account that no longer has billing
+    lands on the default rather than on a blank work area. The old list was
+    static, so this could not happen; with a computed nav it can, and silently.
+
+    GATED ON `orgsLoaded`, AND THAT IS THE WHOLE OF IT. Until `GET /orgs`
+    answers there is no active organisation, so `sectionsFor` returns the
+    platform sections or none — and applying the fallback against that empty
+    set throws away the section the URL asked for, on every first paint. A
+    deep link to ?section=users would bounce to the landing section and rewrite
+    the address bar before the page had finished loading, which looks like the
+    link was wrong rather than early.
+
+    So the URL is trusted while the answer is still in flight, and only
+    reconciled once we actually know what this account can see.
+  */
+  const resolvedTab = (!orgsLoaded || visibleIds.includes(activeTab))
+    ? activeTab
+    : fallbackSection;
+
+  /*
+    THE WORK-HEAD DESCRIPTOR — title, subtitle and content theme.
+
+    `consoleSections` owns the nav LABEL; the longer title and the sentence
+    under it stay here, because they are copy about a screen rather than an
+    entry in a list. Three of them are new and have no entry in
+    `ADMIN_SECTION_BY_ID`, and the fallback chain quietly landed every one of
+    them on Question sets — so the Team screen was headed "Question sets" with
+    every test green except the one that reads the h1.
+  */
+  const NEW_SECTION_HEADS = {
+    members: {
+      id: 'members',
+      title: 'Members',
+      subtitle: 'Who can host for this organisation, and who has been invited.',
+      contentTheme: 'dark',
+    },
+    billing: {
+      id: 'billing',
+      title: 'Plan & usage',
+      subtitle: 'What this period has used, and what it costs. Nothing is ever cut off mid-session.',
+      contentTheme: 'dark',
+    },
+    privacy: {
+      id: 'privacy',
+      title: 'Data & privacy',
+      subtitle: 'What is stored, who has read it, and how to take it away.',
+      contentTheme: 'dark',
+    },
+  };
+
+  const navSection = sectionById({
+    groups: currentUser?.groups || [],
+    orgRole: activeOrg?.role,
+    orgType: activeOrg?.type,
+  }, resolvedTab);
+
+  /*
+    THE NAV LABEL IS THE NAME OF THE SCREEN, and the heading follows it.
+
+    Not a special case — a rule, because the alternative already bit: the
+    platform section keeps the id `users` but is labelled "Accounts" (managing
+    Cognito accounts is a platform job, and "Users" beside "Members" in one
+    console is two words for two genuinely different things). The stale title in
+    ADMIN_SECTION_BY_ID still said "Users", so the nav entry and the h1 it
+    opened disagreed about what the screen was called.
+
+    So: the label wins wherever the nav knows the section, and this page
+    supplies only the subtitle and the theme.
+  */
+  const base = NEW_SECTION_HEADS[resolvedTab]
+    || ADMIN_SECTION_BY_ID[resolvedTab]
+    || ADMIN_SECTION_BY_ID.questionsets;
+  const section = navSection
+    ? { ...base, id: resolvedTab, title: navSection.label }
+    : base;
 
   return (
     <>
       <AdminShell
-        navItems={ADMIN_SECTIONS.map((item) =>
-          item.id === 'questionsets'
-            ? // No count until there is one to state. A "0" beside Question
+        navGroups={navGroups.map((group) => ({
+          ...group,
+          items: group.items.map((item) =>
+            (item.id === 'questionsets'
+              // No count until there is one to state. A "0" beside Question
               // sets while the list is still loading is an empty state that
               // lies, and this console has three of those already.
-              { ...item, count: questionSets.length || undefined }
-            : item
-        )}
-        footNavItems={ADMIN_FOOT_SECTIONS}
-        activeId={activeTab}
+              ? { ...item, count: questionSets.length || undefined }
+              : item)),
+        }))}
+        footNavItems={FOOT_SECTIONS.length ? FOOT_SECTIONS : ADMIN_FOOT_SECTIONS}
+        orgSwitcher={
+          orgsLoaded ? (
+            <OrgSwitcher
+              orgs={orgs}
+              activeOrgId={activeOrgId}
+              onSwitch={handleSwitchOrg}
+              onCreate={() => { window.location.href = '/admin?section=members'; }}
+            />
+          ) : null
+        }
+        activeId={resolvedTab}
         onNavigate={handleNavigate}
         environment={environment}
         currentUser={currentUser}
@@ -1204,6 +1411,37 @@ function AdminPage() {
               a fade-in written for the paper tabs, and the converted screens
               own their own frame. */}
           {activeTab === 'users' && <UserManagement />}
+
+          {/* ── The tenancy sections ──────────────────────────────────────
+              Each is a pure props/callbacks component so it can be mounted in
+              jsdom on its own — AdminPage cannot be (`useAuth` hard-throws),
+              which is why every panel on this page is built that way. */}
+          {resolvedTab === 'members' && activeOrg && (
+            <TeamPanel orgId={activeOrg.orgId} orgName={activeOrg.name} />
+          )}
+
+          {resolvedTab === 'billing' && activeOrg && (
+            <BillingPanel
+              planId={activeOrg.plan || (activeOrg.type === 'personal' ? 'personal' : 'team')}
+              usage={orgUsage?.usage}
+              period={orgUsage?.period}
+              history={orgUsage?.history}
+              error={orgUsageError}
+              onUpgrade={() => { window.location.href = '/admin?section=members'; }}
+            />
+          )}
+
+          {resolvedTab === 'privacy' && activeOrg && (
+            /*
+              The access log, export and delete endpoints do not exist yet, so
+              the panel is mounted against its defaults. Its empty state says
+              "nobody at Engage has read anything", which is TRUE today and is
+              the honest thing to show — and it distinguishes that from a load
+              FAILURE, because an error rendered as an empty log would claim
+              nobody looked when the truth is that we do not know.
+            */
+            <PrivacyPanel org={{ id: activeOrg.orgId, name: activeOrg.name }} />
+          )}
 
           {activeTab === 'settings' && (
             <div className="tab-content">

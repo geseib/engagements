@@ -1,3 +1,6 @@
+// TENANCY: a host acts FOR an organisation, and content belongs to it. Without
+// an org in the context a host can create nothing — "Choose an organisation" —
+// which is the scheme working, not a fixture detail.
 /**
  * CSV ROUND-TRIP regression — admin/download-question-set.js -> admin/upload-questions.js
  *
@@ -140,6 +143,17 @@ const fakeDoc = {
   },
 };
 
+// ── TENANT CRYPTO ──────────────────────────────────────────────────────────
+// The handlers this suite drives now encrypt org content, and tenant-crypto
+// THROWS on an org with no data key rather than quietly writing plaintext. The
+// shared stub refuses a Decrypt with a missing or mismatched encryption context,
+// exactly as the key policy will, so this does not weaken anything here.
+const { makeKmsStub, installTestKeyLoader, plainRow } = require('./helpers/tenant-crypto-stub');
+const kmsStub = makeKmsStub();
+stub('@aws-sdk/client-kms', kmsStub.exports);
+// Every org gets a deterministic data key, no ORG#<id>/METADATA row needed —
+// otherwise every reset() in this file would have to re-seed one.
+installTestKeyLoader();
 stub('@aws-sdk/client-dynamodb', { DynamoDBClient: class {} });
 stub('@aws-sdk/lib-dynamodb', {
   DynamoDBDocumentClient: { from: () => fakeDoc },
@@ -185,13 +199,20 @@ const parse = (res) => JSON.parse(res.body);
 /** An ADMIN caller in this API's real event shape — see set-versioning-flow.js. */
 const adminContext = () => ({
   requestContext: {
-    authorizer: { lambda: { username: 'ada', userId: 'sub-ada', groups: 'admins', status: 'enabled' } },
+    authorizer: { lambda: { username: 'ada', userId: 'sub-ada', groups: 'admins', status: 'enabled', orgId: 'org_nw', orgRole: 'admin' } },
   },
 });
 
+// DECRYPTED. Org question rows are envelopes at rest since tenancy, and an
+// envelope never equals the string a round-trip assertion expects — worse, two
+// encryptions of the SAME text differ, because the IV is random, so a
+// field-for-field comparison of raw rows fails even when the round trip is
+// perfect. Unwrapping here keeps every assertion below about the CONTENT, which
+// is what this file is for.
 const rowsIn = (pk) =>
   [...store.values()].filter((i) => i.PK === pk && String(i.SK).startsWith('QUESTION#'))
-    .sort((a, b) => String(a.SK).localeCompare(String(b.SK)));
+    .sort((a, b) => String(a.SK).localeCompare(String(b.SK)))
+    .map((i) => plainRow('org_nw', i));
 
 /**
  * Create -> export -> re-import as a replace, all through the real handlers.
@@ -207,9 +228,14 @@ async function roundTrip(title, engagementType, csv) {
   });
   assert.strictEqual(created.statusCode, 200, `create failed: ${created.body}`);
   const setId = parse(created).setId;
-  const before = rowsIn(`SET#${setId}`);
+  const before = rowsIn(`ORG#org_nw#SET#${setId}`);
 
-  const exported = await download({ pathParameters: { setId }, queryStringParameters: {} });
+  // The download needs the caller too. The set is created by adminContext(),
+  // which since tenancy belongs to an ORGANISATION — so an anonymous export is
+  // a 404, not a leak of somebody's content.
+  const exported = await download({
+    ...adminContext(), pathParameters: { setId }, queryStringParameters: {},
+  });
   assert.strictEqual(exported.statusCode, 200, `download failed: ${exported.body}`);
   const exportedCsv = parse(exported).content;
 
@@ -220,7 +246,7 @@ async function roundTrip(title, engagementType, csv) {
   });
   assert.strictEqual(replaced.statusCode, 200, `replace failed: ${replaced.body}`);
   const version = parse(replaced).version;
-  const after = rowsIn(`SET#${setId}#v${version}`);
+  const after = rowsIn(`ORG#org_nw#SET#${setId}#v${version}`);
 
   return { setId, before, after, csv: exportedCsv, header: exportedCsv.split('\n')[0] };
 }
@@ -473,7 +499,7 @@ const WAVELENGTH_CSV = [
     // rejects: the exporter drifting on trip two — an alphabetically-sorted
     // partition plus two new conditional columns is exactly the shape that
     // renumbers or re-orders once and then looks stable.
-    const again = await download({ pathParameters: { setId: t.setId }, queryStringParameters: {} });
+    const again = await download({ ...adminContext(), pathParameters: { setId: t.setId }, queryStringParameters: {} });
     check('a second export of the kinded set is byte-identical', () =>
       assert.strictEqual(parse(again).content, t.csv));
   }
@@ -495,7 +521,7 @@ const WAVELENGTH_CSV = [
     // rejects: a future wavelength-specific export branch that emits columns the
     // importer does not read, repeating the trivia defect on a third type.
     check('the replace keeps the set on the wavelength engagement type', () =>
-      assert.strictEqual(store.get(`SETS|SET#${t.setId}`).engagementType, 'wavelength'));
+      assert.strictEqual(plainRow('org_nw', store.get(`ORG#org_nw#SETS|SET#${t.setId}`)).engagementType, 'wavelength'));
     check('the spectrum prompt (Detail) and the per-question instruction survive', () => {
       assert.deepStrictEqual(t.after.map((r) => r.Detail), t.before.map((r) => r.Detail));
       assert.deepStrictEqual(t.after.map((r) => r.CustomInstructions), t.before.map((r) => r.CustomInstructions));
@@ -510,7 +536,7 @@ const WAVELENGTH_CSV = [
   resetDb();
   {
     const first = await roundTrip('Roundtrip Twice', 'trivia', TRIVIA_CSV);
-    const again = await download({ pathParameters: { setId: first.setId }, queryStringParameters: {} });
+    const again = await download({ ...adminContext(), pathParameters: { setId: first.setId }, queryStringParameters: {} });
     const secondCsv = parse(again).content;
     check('exporting the re-imported set yields byte-identical CSV', () =>
       assert.strictEqual(secondCsv, first.csv));
@@ -532,7 +558,7 @@ const WAVELENGTH_CSV = [
 
   /** The editor's load: the real endpoint, then the real row mapper. */
   async function workingCopy(setId) {
-    const res = await getQuestions({ pathParameters: { setId }, queryStringParameters: {} });
+    const res = await getQuestions({ ...adminContext(), pathParameters: { setId }, queryStringParameters: {} });
     assert.strictEqual(res.statusCode, 200, `questions read failed: ${res.body}`);
     return editableRows(JSON.parse(res.body));
   }
@@ -553,7 +579,7 @@ const WAVELENGTH_CSV = [
     });
     assert.strictEqual(res.statusCode, 200, `console save failed: ${res.body}`);
     const version = parse(res).version;
-    return { version, rows: rowsIn(`SET#${setId}#v${version}`), summary };
+    return { version, rows: rowsIn(`ORG#org_nw#SET#${setId}#v${version}`), summary };
   }
 
   resetDb();
@@ -589,7 +615,7 @@ const WAVELENGTH_CSV = [
     // rejects: `versions[].note` staying '' on every entry, which is what made
     // the version list four identical rows and a rollback a guess.
     check('the version records what the save actually did', () => {
-      const meta = store.get(`SETS|SET#${t.setId}`);
+      const meta = plainRow('org_nw', store.get(`ORG#org_nw#SETS|SET#${t.setId}`));
       const entry = meta.versions[meta.versions.length - 1];
       assert.strictEqual(entry.version, untouched.version);
       assert.match(entry.note, /no changes/i);
@@ -622,7 +648,7 @@ const WAVELENGTH_CSV = [
     // version — that is decision 3's whole point, and it is what makes the
     // version list readable instead of a per-keystroke log.
     check('add + edit + delete land as ONE new version', () => {
-      const meta = store.get(`SETS|SET#${t.setId}`);
+      const meta = plainRow('org_nw', store.get(`ORG#org_nw#SETS|SET#${t.setId}`));
       assert.strictEqual(saved.version, 3, `expected v3, got v${saved.version}`);
       assert.strictEqual(meta.activeVersion, 3);
       assert.strictEqual(meta.versions.length, 3);
@@ -661,7 +687,7 @@ const WAVELENGTH_CSV = [
     // versions that all read "edited" are four versions you cannot choose
     // between when you need to roll one back.
     check('the version note says what changed', () => {
-      const meta = store.get(`SETS|SET#${t.setId}`);
+      const meta = plainRow('org_nw', store.get(`ORG#org_nw#SETS|SET#${t.setId}`));
       const note = meta.versions[meta.versions.length - 1].note;
       assert.match(note, /1 added/);
       assert.match(note, /1 edited/);
@@ -745,7 +771,10 @@ const WAVELENGTH_CSV = [
     // in the source set's partition — or, worse, make an edit here rewrite what
     // a game pinned to the source set is already playing.
     check('the copy has its own key in the target set, not the source\'s', () => {
-      assert.strictEqual(landed.PK, `SET#${target.setId}#v${saved.version}`);
+      // Org-scoped since tenancy: the copy lands in the TARGET set's partition
+      // inside the copying organisation, which is what stops a "copy into
+      // another set" ever reaching across a tenant boundary.
+      assert.strictEqual(landed.PK, `ORG#org_nw#SET#${target.setId}#v${saved.version}`);
       assert.notStrictEqual(landed.SK, 'QUESTION#c002#001');
     });
 
@@ -757,7 +786,7 @@ const WAVELENGTH_CSV = [
       assert.strictEqual(landed.SourceQuestionSk, 'c002#001');
     });
 
-    const again = await download({ pathParameters: { setId: target.setId }, queryStringParameters: {} });
+    const again = await download({ ...adminContext(), pathParameters: { setId: target.setId }, queryStringParameters: {} });
     const rebounced = await upload({
       ...adminContext(),
       body: JSON.stringify({ replaceSetId: target.setId, fileName: 'again.csv', fileContent: parse(again).content }),
@@ -767,7 +796,7 @@ const WAVELENGTH_CSV = [
     // than never stamping it.
     check('provenance survives a further export and re-import', () => {
       assert.strictEqual(rebounced.statusCode, 200, rebounced.body);
-      const after = rowsIn(`SET#${target.setId}#v${parse(rebounced).version}`);
+      const after = rowsIn(`ORG#org_nw#SET#${target.setId}#v${parse(rebounced).version}`);
       const still = after.find((r) => r.Title === 'THE PRE-MORTEM RULE');
       assert.strictEqual(still.SourceSetId, source.setId);
       assert.strictEqual(still.SourceQuestionSk, 'c002#001');
@@ -777,10 +806,10 @@ const WAVELENGTH_CSV = [
     // question living in two sets is fixed twice; the whole benefit is that
     // nothing an editor does here can reach into a set it does not own.
     check('the source set is untouched by the copy', () => {
-      const sourceMeta = store.get(`SETS|SET#${source.setId}`);
+      const sourceMeta = plainRow('org_nw', store.get(`ORG#org_nw#SETS|SET#${source.setId}`));
       assert.strictEqual(sourceMeta.activeVersion, 2);
       assert.strictEqual(sourceMeta.versions.length, 2);
-      assert.strictEqual(rowsIn(`SET#${source.setId}#v2`).length, 4);
+      assert.strictEqual(rowsIn(`ORG#org_nw#SET#${source.setId}#v2`).length, 4);
     });
   }
 
@@ -796,7 +825,7 @@ const WAVELENGTH_CSV = [
   {
     const hostContext = (sub) => ({
       requestContext: {
-        authorizer: { lambda: { username: `host-${sub}`, userId: sub, groups: 'hosts', status: 'enabled' } },
+        authorizer: { lambda: { username: `host-${sub}`, userId: sub, groups: 'hosts', status: 'enabled', orgId: 'org_nw', orgRole: 'member' } },
       },
     });
 
@@ -841,7 +870,7 @@ const WAVELENGTH_CSV = [
     // be unable to edit it — the exact trap the fork exists to avoid.
     check('the fork creates a new set owned by the person who forked it', () => {
       assert.strictEqual(forked.statusCode, 200, forked.body);
-      const meta = store.get(`SETS|SET#${parse(forked).setId}`);
+      const meta = plainRow('org_nw', store.get(`ORG#org_nw#SETS|SET#${parse(forked).setId}`));
       assert.strictEqual(meta.createdBy, 'sub-bo');
       assert.strictEqual(meta.sourceSetId, original.setId);
       assert.strictEqual(meta.questionCount, 4);
@@ -850,18 +879,18 @@ const WAVELENGTH_CSV = [
     // rejects: a fork that writes anything at all into the original — a
     // version, a flip, a row. "Not touched at all" is the promise.
     check('the original set is byte-for-byte what it was', () => {
-      const meta = store.get(`SETS|SET#${original.setId}`);
+      const meta = plainRow('org_nw', store.get(`ORG#org_nw#SETS|SET#${original.setId}`));
       assert.strictEqual(meta.activeVersion, 2);
       assert.strictEqual(meta.versions.length, 2);
       assert.strictEqual(meta.createdBy, 'sub-ada');
-      assertSameQuestions(original.after, rowsIn(`SET#${original.setId}#v2`));
+      assertSameQuestions(original.after, rowsIn(`ORG#org_nw#SET#${original.setId}#v2`));
     });
 
     // rejects: a fork whose questions came out different from the original's.
     // It is the same working copy through the same serialiser, so the rows must
     // match field for field apart from the provenance stamp.
     check('the forked set carries the same questions, with provenance', () => {
-      const forkedRows = rowsIn(`SET#${parse(forked).setId}`);
+      const forkedRows = rowsIn(`ORG#org_nw#SET#${parse(forked).setId}`);
       assert.deepStrictEqual(forkedRows.map((r) => r.Title), original.after.map((r) => r.Title));
       assert.ok(forkedRows.every((r) => r.SourceSetId === original.setId),
         'a forked row lost its provenance');

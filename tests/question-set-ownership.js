@@ -144,6 +144,20 @@ const fakeDoc = {
   },
 };
 
+// ── TENANT CRYPTO ──────────────────────────────────────────────────────────
+// The handlers this suite drives now encrypt org content, and tenant-crypto
+// THROWS on an org with no data key rather than quietly writing plaintext. The
+// shared stub refuses a Decrypt with a missing or mismatched encryption context,
+// exactly as the key policy will, so this does not weaken anything here.
+// Org rows are envelopes at rest since tenancy. `plainRow` unwraps them with
+// the real cipher so the assertions below stay about CONTENT — and it is
+// synchronous, so a suite that is not about encryption needs no new awaits.
+const { makeKmsStub, installTestKeyLoader, plainRow } = require('./helpers/tenant-crypto-stub');
+const kmsStub = makeKmsStub();
+stubs.set('@aws-sdk/client-kms', kmsStub.exports);
+// Every org gets a deterministic data key, no ORG#<id>/METADATA row needed —
+// otherwise every reset() in this file would have to re-seed one.
+installTestKeyLoader();
 stubs.set('@aws-sdk/client-dynamodb', { DynamoDBClient: class {} });
 stubs.set('@aws-sdk/lib-dynamodb', {
   DynamoDBDocumentClient: { from: () => fakeDoc },
@@ -180,22 +194,36 @@ async function checkAsync(label, fn) {
 // ---- Fixtures --------------------------------------------------------------
 
 /** A caller in THIS API'S REAL SHAPE (auth/authorizer.js:171-182). */
-const callerEvent = ({ groups, userId, username = 'someone' } = {}) => ({
+const callerEvent = ({ groups, userId, username = 'someone', orgId, orgRole } = {}) => ({
   requestContext: {
     authorizer: {
       lambda: {
         username,
         ...(userId === undefined ? {} : { userId }),
         ...(groups === undefined ? {} : { groups }),
+        ...(orgId === undefined ? {} : { orgId }),
+        ...(orgRole === undefined ? {} : { orgRole }),
         status: 'enabled',
       },
     },
   },
 });
 
-const HOST = { groups: 'hosts', userId: 'sub-ivy', username: 'ivy' };
-const OTHER_HOST = { groups: 'hosts', userId: 'sub-raj', username: 'raj' };
-const ADMIN = { groups: 'hosts,admins', userId: 'sub-ada', username: 'ada' };
+// ── TENANCY: content now belongs to an ORGANISATION, and these two hosts are
+// in the SAME one.
+//
+// That is the sharper version of what this file was already testing. Before
+// tenancy the question was "did you create it?"; now it is "is it your org's,
+// and did you create it?" — so putting Ivy and Raj in different orgs would make
+// every refusal below pass for the wrong reason (a scope miss rather than an
+// ownership miss). Same org, different creators, keeps the original question.
+const ORG = 'org_nw';
+const HOST = { groups: 'hosts', userId: 'sub-ivy', username: 'ivy', orgId: ORG, orgRole: 'member' };
+const OTHER_HOST = { groups: 'hosts', userId: 'sub-raj', username: 'raj', orgId: ORG, orgRole: 'member' };
+// Engage staff. NOTE they carry an org too: after this change being a platform
+// admin grants no content access at all, so an admin acting on org content is
+// acting as a member of that org, not as staff.
+const ADMIN = { groups: 'hosts,admins', userId: 'sub-ada', username: 'ada', orgId: ORG, orgRole: 'admin' };
 
 /** A payload-2.0 REQUEST authorizer event, as API Gateway builds it. */
 const authEvent = (routeKey) => {
@@ -224,18 +252,62 @@ const CSV = [
 ].join('\n');
 
 const parse = (res) => JSON.parse(res.body);
-const metaOf = (setId) => store.get(k('SETS', `SET#${setId}`));
-const contentRows = (setId) =>
-  [...store.values()].filter((i) => String(i.PK).startsWith(`SET#${setId}`));
+// ── TENANCY: WHICH PARTITION A FIXTURE SET LIVES IN ────────────────────────
+//
+// A set is now in one of three scopes, and the scope decides who may manage it
+// before ownership is even consulted:
+//
+//   PLATFORM  PK='SETS'              central content. Engage staff only.
+//   ORG       PK='ORG#<org>#SETS'    a team's own. Its members, per creator.
+//
+// Every fixture in this file used to be seeded at `PK='SETS'`, which is now
+// PLATFORM — so "a host may manage their own set" correctly became false, and
+// fifteen assertions went red for the right reason. The default is now the ORG
+// partition, because that is what "a host's own set" means; `scope: 'platform'`
+// opts a fixture back into the shared library for the tests that are about it.
+const ORG_SETS = `ORG#${ORG}#SETS`;
+// Find a fixture's row WHEREVER it was seeded. Org first, then platform — the
+// same order `readableSetRefs` uses, and for the same reason: an org's own set
+// shadows a platform set of the same slug. Doing the lookup here rather than
+// making every assertion name a scope keeps the assertions about ownership,
+// which is what this file is for.
+// DECRYPTED for the org partition. An org set's `name`/`description` are
+// envelopes at rest; a platform row is plaintext and passes straight through
+// (plainRow only unwraps what is envelope-shaped).
+const metaOf = (setId) => {
+  const org = store.get(k(ORG_SETS, `SET#${setId}`));
+  if (org) return plainRow(ORG, org);
+  return store.get(k('SETS', `SET#${setId}`));
+};
+const contentRows = (setId) => {
+  const org = [...store.values()]
+    .filter((i) => String(i.PK).startsWith(`ORG#${ORG}#SET#${setId}`));
+  if (org.length) return org;
+  // `startsWith` alone would let `SET#eighties` also match `SET#eightiesplus`,
+  // so anchor on the version separator or the exact id.
+  return [...store.values()].filter((i) => {
+    const pk = String(i.PK);
+    return pk === `SET#${setId}` || pk.startsWith(`SET#${setId}#v`);
+  });
+};
 
 function seedSet(setId, {
-  owner, name = setId, questions = 2, createdBy, createdByName,
+  owner, name = setId, questions = 2, createdBy, createdByName, scope = 'org',
 } = {}) {
+  const platform = scope === 'platform';
+  const metaPk = platform ? 'SETS' : ORG_SETS;
+  const contentPk = platform ? `SET#${setId}` : `ORG#${ORG}#SET#${setId}`;
   put({
-    PK: 'SETS', SK: `SET#${setId}`, name,
+    PK: metaPk, SK: `SET#${setId}`, name,
     description: 'seeded', engagementType: 'call-and-answer',
     questionCount: questions, categoryCount: 1, active: true,
     createdAt: '2020-01-01T00:00:00.000Z', updatedAt: '2020-01-01T00:00:00.000Z',
+    // Platform rows carry NO scope/orgId attributes — that absence IS the
+    // platform marker, which is what keeps the ~41 legacy rows shape-identical
+    // to a newly created one and the migration at zero.
+    // The real shape a writer produces: `scope` and `orgId` TOGETHER.
+    // ownerStamp() writes both, and setScopeOf() reads `scope` first.
+    ...(platform ? {} : { scope: 'org', orgId: ORG }),
     // `owner` deliberately omitted for the legacy rows: that is the whole point.
     ...(owner ? { createdBy: owner.userId, createdByName: owner.username } : {}),
     // Set the two ownership attributes INDEPENDENTLY, for the rows that exist
@@ -245,9 +317,9 @@ function seedSet(setId, {
     ...(createdBy === undefined ? {} : { createdBy }),
     ...(createdByName === undefined ? {} : { createdByName }),
   });
-  put({ PK: `SET#${setId}`, SK: 'CATEGORY#c001', Name: 'Renaissance', QuestionCount: questions });
+  put({ PK: contentPk, SK: 'CATEGORY#c001', Name: 'Renaissance', QuestionCount: questions });
   for (let q = 1; q <= questions; q++) {
-    put({ PK: `SET#${setId}`, SK: `QUESTION#c001#${String(q).padStart(3, '0')}`, Title: `Q${q}` });
+    put({ PK: contentPk, SK: `QUESTION#c001#${String(q).padStart(3, '0')}`, Title: `Q${q}` });
   }
 }
 function reset() { store.clear(); log.length = 0; }
@@ -390,8 +462,16 @@ function reset() { store.clear(); log.length = 0; }
   // =========================================================================
   say('\n2. THE ROW RULE — canManageSet, as a pure function');
 
-  const owned = { SK: 'SET#ivys', createdBy: 'sub-ivy', createdByName: 'ivy' };
-  const legacy = { SK: 'SET#eighties', name: '80s Trivia' };   // no createdBy — every set today
+  // A set Ivy made. Since tenancy that means an ORG set: `scope` and `orgId`
+  // together, which is what ownerStamp writes.
+  const owned = {
+    SK: 'SET#ivys', scope: 'org', orgId: ORG,
+    createdBy: 'sub-ivy', createdByName: 'ivy',
+  };
+  // No createdBy AND no scope — the shape of every set that exists today. The
+  // absence of `scope` is what marks it as central Engage content, which is why
+  // there is no migration: these rows are already correct.
+  const legacy = { SK: 'SET#eighties', name: '80s Trivia' };
 
   // REJECTS: dropping the admin short-circuit, which would make admins
   // second-class on content they did not personally upload.
@@ -437,9 +517,14 @@ function reset() { store.clear(); log.length = 0; }
 
   // REJECTS: dropping the JWT fallbacks, so a route moved onto a native JWT
   // authorizer silently stops recognising its owners.
+  // The org half travels in claims too (`custom:orgId` / `custom:orgRole`), or
+  // the fallback only half works: the caller would be identified as the owner
+  // and then refused for having no organisation.
   check('a native JWT authorizer still identifies the owner', () =>
     assert.ok(access.canManageSet(
-      { requestContext: { authorizer: { jwt: { claims: { sub: 'sub-ivy' } } } } }, owned)));
+      { requestContext: { authorizer: { jwt: { claims: {
+        sub: 'sub-ivy', 'custom:orgId': ORG, 'custom:orgRole': 'member',
+      } } } } }, owned)));
 
   say('\n2b. ownerStamp');
 
@@ -490,7 +575,7 @@ function reset() { store.clear(); log.length = 0; }
   say('\n3.2 edit — the legacy sets, which is the decision');
 
   reset();
-  seedSet('eighties', { name: '80s Trivia' });   // no owner, like every set today
+  seedSet('eighties', { name: '80s Trivia', scope: 'platform' });   // no owner, like every set today
 
   // REJECTS: option (b). A host must not inherit the house content.
   res = await editSet({
@@ -559,14 +644,14 @@ function reset() { store.clear(); log.length = 0; }
   check('...and the set is gone', () => assert.strictEqual(metaOf('ivys'), undefined));
 
   reset();
-  seedSet('eighties');
+  seedSet('eighties', { scope: 'platform' });
   res = await deleteSet({ ...callerEvent(HOST), pathParameters: { setId: 'eighties' } });
   check('a host may NOT delete an unowned legacy set', () =>
     assert.strictEqual(res.statusCode, 403, res.body));
   check('...and it survives intact', () => assert.ok(metaOf('eighties')));
 
   reset();
-  seedSet('eighties');
+  seedSet('eighties', { scope: 'platform' });
   res = await deleteSet({ ...callerEvent(ADMIN), pathParameters: { setId: 'eighties' } });
   check('an admin CAN still delete an unowned legacy set', () =>
     assert.strictEqual(res.statusCode, 200, res.body));
@@ -621,7 +706,7 @@ function reset() { store.clear(); log.length = 0; }
 
   reset();
   seedSet('ivys', { owner: HOST });
-  seedSet('eighties');  // legacy, unowned -> admin-only by rule
+  seedSet('eighties', { scope: 'platform' });  // legacy, unowned -> admin-only by rule
 
   const flip = (caller, setId, quickstart) => toggleQuickstart({
     ...callerEvent(caller),
@@ -645,7 +730,7 @@ function reset() { store.clear(); log.length = 0; }
   // a response the handler must RETURN, not merely evaluate.
   reset();
   seedSet('ivys', { owner: HOST });
-  seedSet('eighties');  // re-seeded: the reset above dropped it
+  seedSet('eighties', { scope: 'platform' });  // re-seeded: the reset above dropped it
   await flip(OTHER_HOST, 'ivys', true);
   check('...and nothing was written', () =>
     assert.strictEqual(metaOf('ivys').Quickstart, undefined));
@@ -744,7 +829,7 @@ function reset() { store.clear(); log.length = 0; }
     assert.strictEqual(metaOf('ivys').createdBy, 'sub-ivy'));
 
   reset();
-  seedSet('eighties');
+  seedSet('eighties', { scope: 'platform' });
   res = await upload({
     ...callerEvent(HOST),
     body: JSON.stringify({ fileName: 'x.csv', fileContent: CSV, replaceSetId: 'eighties' }),
@@ -758,7 +843,7 @@ function reset() { store.clear(); log.length = 0; }
   reset();
   seedSet('ivys', { owner: HOST, name: 'Ivy Set' });
   seedSet('rajs', { owner: OTHER_HOST, name: 'Raj Set' });
-  seedSet('eighties', { name: '80s Trivia' });
+  seedSet('eighties', { name: '80s Trivia', scope: 'platform' });
 
   const listWithEvent = async (ev) => {
     const out = parse(await adminList(ev));
@@ -834,7 +919,7 @@ function reset() { store.clear(); log.length = 0; }
     reset();
     seedSet('ivys', { owner: HOST });
     seedSet('rajs', { owner: OTHER_HOST });
-    seedSet('eighties');
+    seedSet('eighties', { scope: 'platform' });
     // Owned by raj's sub, but carrying ivy's display name.
     seedSet('impostor', { createdBy: 'sub-raj', createdByName: 'ivy' });
   };
@@ -856,8 +941,16 @@ function reset() { store.clear(); log.length = 0; }
     const eventFor = () => (who === ANON ? {} : callerEvent(who));
 
     // The LIST's answer.
+    //
+    // ABSENT counts as false, and that is not a fudge. Since tenancy the list
+    // returns only the scopes a caller can READ — platform, public, and their
+    // own org — so an anonymous caller, or a member of another organisation,
+    // does not receive an org set at all. That is a stronger refusal than
+    // `canManage: false`: they cannot see it, so they certainly cannot manage
+    // it, and the guard below must agree with that too.
     seedMatrix();
-    const listSaid = (await listWithEvent(eventFor()))[setId].canManage;
+    const listed = (await listWithEvent(eventFor()))[setId];
+    const listSaid = listed ? listed.canManage : false;
 
     // The GUARD's answer, asked directly of the function the handlers enforce
     // with. null means "proceed"; a response object means refused.
@@ -869,13 +962,25 @@ function reset() { store.clear(); log.length = 0; }
       pathParameters: { setId },
       body: JSON.stringify({ name: `renamed by ${whoName}` }),
     });
-    const editSaid = editRes.statusCode !== 403;
+    // A REFUSAL IS ANY NON-SUCCESS, NOT SPECIFICALLY A 403.
+    //
+    // This used to read `!== 403`, which was right when every caller could see
+    // every set and the only question was permission. Since tenancy a caller
+    // who is outside the owning organisation does not get a 403 — they get a
+    // 404, because the handler will not confirm that a set it will not show
+    // them even exists. Answering 403 there would turn "forbidden" into an
+    // existence oracle: probe ids, and the ones that come back 403 instead of
+    // 404 are the real ones.
+    //
+    // Treating 404 as "allowed" made this cross-check assert the exact
+    // opposite of what it is for.
+    const editSaid = editRes.statusCode < 400;
 
     // The real DELETE handler's answer. Reseeded first: the edit above may have
     // succeeded, and delete destroys rows either way.
     seedMatrix();
     const delRes = await deleteSet({ ...eventFor(), pathParameters: { setId } });
-    const delSaid = delRes.statusCode !== 403;
+    const delSaid = delRes.statusCode < 400;
 
     // REJECTS: the whole reason this field exists — a list that decides
     // manageability by any route other than the one the handlers enforce.

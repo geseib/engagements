@@ -4,6 +4,8 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const { resolveSetPartition } = require('./set-version');
 const { analyzeWavelength, buildMergePrompt, parseMergeReply } = require('./wavelength');
+const { ORG } = require('./tenant');
+const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
 
 // @aws-sdk/client-lambda exists in the Lambda Node 22 runtime but is NOT in
 // lambda-functions/package.json (the standing landmine client-s3 already has).
@@ -19,6 +21,42 @@ try {
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
+
+/**
+ * WHOSE SESSION IS THIS? — off the row, because this route is PUBLIC.
+ *
+ * `POST /games/get-results` and `POST /games/{id}/close-round` both reach here,
+ * and the first carries no identity at all: a participant polls it with the
+ * four-digit game id once the room enters RESULTS. So the organisation cannot
+ * come from `tenant.callerOrgId(event)` — that is '' for every such caller, and
+ * a blank orgId THROWS in tenant-crypto rather than defaulting. `GAME#<id>`'s
+ * METADATA row carries `orgId` for exactly this purpose.
+ *
+ * The trivia and wavelength branches are separate functions with only a gameId
+ * in hand, hence a helper rather than a variable.
+ */
+const orgOf = (item) => (item && typeof item.orgId === 'string' ? item.orgId.trim() : '');
+async function sessionOrgId(gameId) {
+  const res = await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+    ProjectionExpression: 'orgId'
+  }));
+  return orgOf(res && res.Item);
+}
+/**
+ * Encrypt a derived tally, or leave it alone when the session has no org.
+ *
+ * The RESULTS row QUOTES THE ANSWERS BACK — the wavelength branch stores
+ * `answers[].answer`, the participant's literal submission — so encrypting the
+ * ANSWER rows and leaving this one raw protects nothing at all. But a session
+ * with no organisation has no key, and `encryptItem` throws on a blank orgId by
+ * design rather than defaulting, so an unscoped session must skip it rather
+ * than 500 the whole round.
+ */
+const maybeEncryptResults = async (orgId, item) =>
+  (orgId ? encryptItem(orgId, 'results', item) : item);
+
 const apigateway = new ApiGatewayManagementApiClient({
   endpoint: process.env.WEBSOCKET_API_ENDPOINT
 });
@@ -390,7 +428,13 @@ exports.handler = async (event) => {
       }
     }));
 
-    const votes = votesQuery.Items || [];
+    // The ballots, unwrapped. `Votes` is a map and round-trips as one; the org
+    // is the session's own, read off METADATA above rather than off a caller
+    // this public route never authenticated.
+    const cryptoOrgId = orgOf(gameMetadata.Item);
+    const votes = cryptoOrgId
+      ? await decryptItems(cryptoOrgId, 'vote', votesQuery.Items || [])
+      : (votesQuery.Items || []);
     console.log(`📊 Found ${votes.length} votes for question ${paddedQuestionId}`);
 
     if (votes.length === 0) {
@@ -424,7 +468,12 @@ exports.handler = async (event) => {
       }
     }));
 
-    const answers = answersQuery.Items || [];
+    // …and the answers those ballots point AT. `voteTallies[index].answerText`
+    // below is the text that goes on the wall, so an envelope here is an
+    // envelope on the projector.
+    const answers = cryptoOrgId
+      ? await decryptItems(cryptoOrgId, 'answer', answersQuery.Items || [])
+      : (answersQuery.Items || []);
     console.log(`📋 Found ${answers.length} answers for question ${paddedQuestionId}`);
 
     // Calculate vote tallies
@@ -565,7 +614,12 @@ exports.handler = async (event) => {
     // Store question results record for report generation
     await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
-      Item: {
+      // `Winners` is a list of player NAMES, and anonymity is a product feature
+      // here — anonymity.js exists so the room does not learn who said what
+      // until the host reveals. A name list sitting in the clear at rest
+      // outlives that choice by thirty days. The counts beside it stay
+      // plaintext: they are what the privacy page already concedes is visible.
+      Item: await maybeEncryptResults(orgOf(gameMetadata.Item), {
         PK: `GAME#${gameId}`,
         SK: `QUESTION#${paddedQuestionId}#RESULTS`,
         GameId: gameId,
@@ -576,7 +630,7 @@ exports.handler = async (event) => {
         TotalVotes: votes.length,
         CompletedAt: new Date().toISOString(),
         ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
-      }
+      })
     }));
 
     // Decrement category counts after results are calculated (prevent duplicates)
@@ -641,7 +695,14 @@ async function handleTriviaResults(event, gameId, questionId) {
           }
         }));
 
-        question = questionResponse.Item;
+        // Decrypted from the SET's org, which is not necessarily the SESSION's
+        // — a host in org A may be running a platform set — so the pinned pair
+        // resolved above is the authority, and platform/public content passes
+        // through untouched because it was never encrypted.
+        const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
+        question = questionResponse.Item && setOrgId
+          ? await decryptItem(setOrgId, 'question', questionResponse.Item)
+          : questionResponse.Item;
         console.log(`📋 Question data fetched from question set:`, question ? 'Success' : 'Not found');
       } else {
         console.log(`❌ Question reference not found: QUESTION#${paddedQuestionId}#REF`);
@@ -662,7 +723,15 @@ async function handleTriviaResults(event, gameId, questionId) {
     }
   }));
 
-  const answers = answersQuery.Items || [];
+  // The org off the session row — this branch has only a gameId in hand, and
+  // its caller is the same unauthenticated participant the handler above
+  // serves. `Answer` on a trivia row is the chosen option letter, which is a
+  // pointer rather than prose, but it is in ENCRYPTED_FIELDS.answer all the
+  // same and the leaderboard prints it.
+  const answerOrgId = await sessionOrgId(gameId);
+  const answers = answerOrgId
+    ? await decryptItems(answerOrgId, 'answer', answersQuery.Items || [])
+    : (answersQuery.Items || []);
   console.log(`🎯 Found ${answers.length} trivia answers for question ${paddedQuestionId}`);
   
   if (answers.length > 0) {
@@ -956,7 +1025,12 @@ async function handleWavelengthResults(event, gameId, questionId) {
         }));
 
         if (questionResponse.Item) {
-          question = questionResponse.Item;
+          // Same rule as the trivia branch: the SET's org, from the pinned
+          // pair, not the session's and never the caller's.
+          const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
+          question = setOrgId
+            ? await decryptItem(setOrgId, 'question', questionResponse.Item)
+            : questionResponse.Item;
           console.log(`✅ Question data loaded for wavelength results`);
         }
       }
@@ -974,7 +1048,15 @@ async function handleWavelengthResults(event, gameId, questionId) {
       }
     }));
 
-    const allAnswers = answersQuery.Items || [];
+    // Same session-row org as every other participant path here. `Answer` is
+    // the comma-joined word list the whole analysis is computed from, so this
+    // has to happen before `submissions` is built — note that `ProcessedWords`
+    // is NOT in the boundary and is read first, which is a real gap recorded in
+    // the hand-off rather than papered over here.
+    const answerOrgId = await sessionOrgId(gameId);
+    const allAnswers = answerOrgId
+      ? await decryptItems(answerOrgId, 'answer', answersQuery.Items || [])
+      : (answersQuery.Items || []);
     console.log(`📝 Found ${allAnswers.length} wavelength answers`);
 
     // One submission per answer row. Surfaces keep their original casing —
@@ -1034,12 +1116,17 @@ async function handleWavelengthResults(event, gameId, questionId) {
     // keeps their read on the stored path instead of a recompute.
     await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
-      Item: {
+      // THIS ROW QUOTED THE ANSWERS BACK IN THE CLEAR. `resultsData.answers`
+      // carries `answer` — the participant's literal submission — plus their
+      // word list, the question and the whole word analysis. Encrypting the
+      // ANSWER rows and leaving this alone protected nothing: the same sentence
+      // was one Query away, for seven days.
+      Item: await maybeEncryptResults(answerOrgId, {
         PK: `GAME#${gameId}`,
         SK: `QUESTION#${paddedQuestionId}#RESULTS`,
         ...resultsData,
         ttl: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // 7 days TTL
-      }
+      })
     }));
 
     // This branch never wrote the state at all — the word cloud was computed and

@@ -123,37 +123,6 @@ export const PlayerShell = ({
   </div>
 );
 
-// `fetchQuestionSetInstruction` runs on every question, and the only endpoint
-// that carries a set's customInstruction/roundNoun is the FULL /question-sets
-// list. That was O(questions) full-list downloads per player per game. The
-// metadata cannot change mid-game, so resolve each setId once and share the
-// answer across every player component instance. The value is the in-flight
-// promise, so N questions arriving together still make one request.
-const questionSetMetaCache = new Map();
-
-const loadQuestionSetMeta = (setId) => {
-  const cached = questionSetMetaCache.get(setId);
-  if (cached) return cached;
-
-  const pending = (async () => {
-    const response = await fetch(`${API_BASE}question-sets`);
-    if (!response.ok) throw new Error(`question-sets returned ${response.status}`);
-    const data = await response.json();
-    const questionSet = data.sets?.find((set) => set.id === setId);
-    return {
-      customInstruction: questionSet?.customInstruction || null,
-      roundNoun: questionSet?.roundNoun || null,
-    };
-  })();
-
-  // Never cache a failure: a transient network error would otherwise wedge the
-  // player on the default instruction for the rest of the game.
-  pending.catch(() => questionSetMetaCache.delete(setId));
-
-  questionSetMetaCache.set(setId, pending);
-  return pending;
-};
-
 // Utility function to calculate proper rankings with tie handling
 const calculatePlayerRankings = (players) => {
   // Sort players by score (descending)
@@ -840,28 +809,28 @@ function PlayerPage() {
     }
   }, [rejoinedPlayer]);
 
-  const fetchQuestionSetInstruction = async (setId) => {
-    if (!setId) {
-      setCustomInstruction(null);
-      setSetRoundNoun(null);
-      return;
-    }
-
-    try {
-      console.log('📋 PLAYER: Resolving instruction for set:', setId);
-      const meta = await loadQuestionSetMeta(setId);
-      if (meta.customInstruction) {
-        console.log('📋 PLAYER: Found custom instruction:', meta.customInstruction);
-      } else {
-        console.log('📋 PLAYER: No custom instruction found, using default');
-      }
-      setCustomInstruction(meta.customInstruction);
-      setSetRoundNoun(meta.roundNoun);
-    } catch (error) {
-      console.error('Error fetching question set instruction:', error);
-      setCustomInstruction(null);
-      setSetRoundNoun(null);
-    }
+  // The set's instruction and round noun now ARRIVE WITH THE QUESTION, so this
+  // reads a payload instead of making a request.
+  //
+  // It used to call `loadQuestionSetMeta`, which fetched the whole of
+  // `GET /question-sets` — every set in the environment — and `.find()`ed the
+  // one this game was playing, in order to read these two strings. That handed
+  // every anonymous participant the entire library. `get-question.js` now
+  // projects `setCustomInstruction` and `setRoundNoun` from the SETS row it
+  // was already reading to resolve the partition, so the two values cost a
+  // participant nothing and reveal nothing about any other set.
+  //
+  // GUARDED ON `setId`, not called unconditionally, and that is deliberate:
+  // the RESULTS path can rebuild `currentQuestion` from get-results, which
+  // carries no set fields at all (see get-question.js:44). Clearing the
+  // instruction there would blank a prompt the room is still looking at, so a
+  // payload that knows nothing about the set leaves both values alone —
+  // exactly what the old `if (setId)` guard at the call site achieved.
+  const applyQuestionSetInstruction = (questionData) => {
+    const setId = questionData?.setId || questionData?.questionSetId;
+    if (!setId) return;
+    setCustomInstruction(questionData.setCustomInstruction ?? null);
+    setSetRoundNoun(questionData.setRoundNoun ?? null);
   };
 
   const fetchPlayerRanking = async (gameIdOverride = null, playerNameOverride = null) => {
@@ -1009,13 +978,9 @@ function PlayerPage() {
           setMySubmittedAnswer('');
         }
 
-        // Fetch question set instructions. The payload only started carrying
-        // `setId` for players in this change; before that this guard could
-        // never fire and per-set instructions were host-only.
-        const setId = questionData.setId || questionData.questionSetId;
-        if (setId) {
-          fetchQuestionSetInstruction(setId);
-        }
+        // The set's instruction and round noun ride on this same payload —
+        // no second request, and nothing about any other set.
+        applyQuestionSetInstruction(questionData);
         
         console.log(`🎯 PLAYER: Question ${questionNumber} loaded, hasAnswered: ${hasAnswered}`);
       } else {

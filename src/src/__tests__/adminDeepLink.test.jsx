@@ -35,7 +35,7 @@ import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 jest.mock('../auth/AuthContext', () => ({
   __esModule: true,
   useAuth: () => ({
-    currentUser: { username: 'admin', attributes: { email: 'admin@example.com', name: 'Dana Whitfield' } },
+    currentUser: { username: 'admin', groups: ['admins', 'hosts'], attributes: { email: 'admin@example.com', name: 'Dana Whitfield' } },
     signOut: jest.fn(),
     // A FUNCTION, because that is what AuthContext exports (AuthContext.jsx:412)
     // and what UserManagement calls (`const canAdminister = isAdmin()`). The
@@ -47,12 +47,29 @@ jest.mock('../auth/AuthContext', () => ({
   AuthProvider: ({ children }) => children,
 }));
 
+// The active-organisation accessors live beside `authFetch` because the header
+// they drive is sent from there. A mock that stubs only `authFetch` leaves
+// `getActiveOrgId` undefined and AdminPage dies on its first render — which is
+// what happened, and reads as a component bug rather than a mock gap.
+let mockActiveOrg = '';
 jest.mock('../auth/authFetch', () => ({
   __esModule: true,
   authFetch: (...args) => global.fetch(...args),
+  ORG_HEADER: 'X-Engage-Org',
+  ACTIVE_ORG_STORAGE_KEY: 'engage.activeOrg',
+  getActiveOrgId: () => mockActiveOrg,
+  setActiveOrgId: (id) => { mockActiveOrg = id || ''; },
 }));
 
 import AdminPage from '../AdminPage';
+
+/*
+  THE NAV IS ASYNCHRONOUS NOW. It is computed from the caller's organisations
+  (config/consoleSections.js), and those arrive from `GET /orgs` — the same
+  request that provisions a personal one. So a nav entry must be AWAITED:
+  grabbing it synchronously catches the first paint, where only the sections
+  that need no organisation exist yet.
+*/
 
 /** The h1 the shell renders for whichever section is open. */
 const openSection = () => screen.getByRole('heading', { level: 1 }).textContent;
@@ -70,11 +87,27 @@ beforeEach(() => {
   window.history.pushState({}, '', '/admin');
   pushState = jest.spyOn(window.history, 'pushState');
   replaceState = jest.spyOn(window.history, 'replaceState');
-  global.fetch = jest.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: async () => ({ questionSets: [], sets: [], games: [], prompts: [], users: [] }),
-    text: async () => '{}',
+  global.fetch = jest.fn(async (url) => {
+      // AdminPage now asks for the caller's organisations on mount — that one
+      // request also PROVISIONS a personal org, so it is what gives a host
+      // somewhere to put their work. Without it here, `sectionsFor` sees no
+      // active org and the console legitimately renders no sections at all,
+      // which is not what this file is testing.
+      if (String(url).includes('/orgs')) {
+        return {
+          ok: true, status: 200, text: async () => '{}',
+          json: async () => ({ orgs: [{
+            orgId: 'org_nw', name: 'Northwind Learning', role: 'admin',
+            type: 'team', plan: 'team',
+          }] }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ questionSets: [], sets: [], games: [], prompts: [], users: [] }),
+        text: async () => '{}',
+      };
   });
 });
 
@@ -89,6 +122,16 @@ function arriveAt(url) {
   pushState = jest.spyOn(window.history, 'pushState');
 }
 
+/*
+  THE SECTION IS STILL `users`; ITS LABEL IS NOW "Accounts".
+  
+  Managing Cognito accounts is a PLATFORM job — it sits under the "Engage"
+  heading beside Organisations and Moderation, not inside a customer's team —
+  and "Users" beside "Members" in the same console would be two words for two
+  genuinely different things, one of which is a person in your team and one of
+  which is an account in the whole system. The id is unchanged, so every
+  `?section=users` bookmark still works, which is what this file is really about.
+*/
 describe('arriving at a URL opens the section it names', () => {
   // rejects: THE SHIPPED BEHAVIOUR — `useState('questionsets')`, which puts
   //          every reload and every pasted link on Question sets no matter what
@@ -96,7 +139,7 @@ describe('arriving at a URL opens the section it names', () => {
   test('?section=users opens Users', async () => {
     arriveAt('/admin?section=users');
     render(<AdminPage />);
-    await waitFor(() => expect(openSection()).toBe('Users'));
+    await waitFor(() => expect(openSection()).toBe('Accounts'));
   });
 
   test('?section=archive opens Archive', async () => {
@@ -129,10 +172,10 @@ describe('moving between sections writes the URL', () => {
     await screen.findByRole('heading', { level: 1 });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /^users$/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /^accounts$/i }));
     });
 
-    expect(openSection()).toBe('Users');
+    expect(openSection()).toBe('Accounts');
     // The whole URL, not just the part that gets read back. `location.search`
     // alone cannot tell '/admin?section=users' from a wrong pathname.
     expect(lastUrl(pushState)).toBe('/admin?section=users');
@@ -145,10 +188,10 @@ describe('moving between sections writes the URL', () => {
   test('returning to the landing section drops the parameter', async () => {
     arriveAt('/admin?section=users');
     render(<AdminPage />);
-    await waitFor(() => expect(openSection()).toBe('Users'));
+    await waitFor(() => expect(openSection()).toBe('Accounts'));
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /^question sets$/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /^question sets$/i }));
     });
 
     expect(lastUrl(pushState)).toBe('/admin');
@@ -164,7 +207,7 @@ describe('moving between sections writes the URL', () => {
     const replacesBefore = replaceState.mock.calls.length;
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /^sessions$/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /^sessions$/i }));
     });
 
     expect(pushState).toHaveBeenCalled();
@@ -184,12 +227,12 @@ describe('Back returns to the previous section', () => {
     render(<AdminPage />);
     await screen.findByRole('heading', { level: 1 });
 
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^users$/i })); });
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^archive$/i })); });
+    await act(async () => { fireEvent.click(await screen.findByRole('button', { name: /^accounts$/i })); });
+    await act(async () => { fireEvent.click(await screen.findByRole('button', { name: /^archive$/i })); });
     expect(openSection()).toBe('Archive');
 
     await act(async () => { window.history.back(); });
-    await waitFor(() => expect(openSection()).toBe('Users'));
+    await waitFor(() => expect(openSection()).toBe('Accounts'));
     expect(window.location.search).toBe('?section=users');
   });
 
@@ -197,7 +240,7 @@ describe('Back returns to the previous section', () => {
     render(<AdminPage />);
     await screen.findByRole('heading', { level: 1 });
 
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^users$/i })); });
+    await act(async () => { fireEvent.click(await screen.findByRole('button', { name: /^accounts$/i })); });
     await act(async () => { window.history.back(); });
 
     await waitFor(() => expect(openSection()).toBe('Question sets'));
@@ -218,7 +261,7 @@ describe('Back returns to the previous section', () => {
       window.dispatchEvent(new PopStateEvent('popstate', { state: null }));
     });
 
-    expect(openSection()).toBe('Users');
+    expect(openSection()).toBe('Accounts');
   });
 
   // rejects: the listener outliving the component. AdminPage is unmounted
@@ -257,7 +300,7 @@ describe('the landing URL is canonicalised on arrival', () => {
   test('a URL that already says it is left alone', async () => {
     arriveAt('/admin?section=users');
     render(<AdminPage />);
-    await waitFor(() => expect(openSection()).toBe('Users'));
+    await waitFor(() => expect(openSection()).toBe('Accounts'));
     expect(replaceState).not.toHaveBeenCalled();
   });
 

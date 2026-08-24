@@ -1,6 +1,9 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { resolvePartitionFromMeta } = require('./shared/set-version');
+const { findSetForCaller, requestedScope } = require('./shared/question-set-access');
+const { ORG } = require('./shared/tenant');
+const { decryptItem, decryptItems } = require('./shared/tenant-crypto');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -24,11 +27,17 @@ exports.handler = async (event) => {
       };
     }
     
-    // Get question set metadata
-    const metaRes = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: 'SETS', SK: `SET#${setId}` }
-    }));
+    // Get question set metadata — from a library this caller may READ.
+    //
+    // A read, so the guard is readability rather than manageability: every org
+    // is meant to be able to take a copy of the shared platform library, and no
+    // org user may MANAGE a platform set, so requireSetManager would refuse
+    // exactly the callers this route exists for. Another organisation's set is
+    // never probed, so it 404s here like a set that does not exist.
+    const found = await findSetForCaller(
+      db, process.env.TABLE_NAME, event, setId, requestedScope(event)
+    );
+    const metaRes = { Item: found && found.item };
     
     if (!metaRes.Item) {
       return {
@@ -38,7 +47,20 @@ exports.handler = async (event) => {
       };
     }
     
-    const metadata = metaRes.Item;
+    // ── THE EXPORT IS THE ROUND TRIP, SO IT MUST BE PLAINTEXT ────────────────
+    //
+    // This file is downloaded, edited in a spreadsheet and uploaded back as a
+    // new version. A CSV cell containing `{"v":1,"iv":…}` would not merely look
+    // wrong — upload-questions.js would re-import it as the literal question
+    // title, so one export/import cycle would permanently replace a set's
+    // content with its own envelopes.
+    //
+    // Only org content is decrypted, because only org content was ever
+    // encrypted. `found.ref` is the library the row was actually read from.
+    const cryptoOrgId = found.ref && found.ref.scope === ORG ? String(found.ref.orgId || '') : '';
+    const metadata = cryptoOrgId
+      ? await decryptItem(cryptoOrgId, 'set', metaRes.Item)
+      : metaRes.Item;
     const setName = metadata.name || metadata.Name;
     const engagementType = metadata.engagementType || metadata.EngagementType || 'call-and-answer';
     
@@ -46,7 +68,7 @@ exports.handler = async (event) => {
     // reflect the SAME rows a game would be served, or the round trip
     // (download -> edit -> upload as a new version) silently reverts to
     // whatever the legacy partition still holds.
-    const resolved = resolvePartitionFromMeta(setId, metadata, requestedVersion);
+    const resolved = resolvePartitionFromMeta(found.ref, metadata, requestedVersion);
 
     const questionsRes = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
@@ -57,8 +79,13 @@ exports.handler = async (event) => {
       }
     }));
     
-    const questions = questionsRes.Items || [];
-    
+    // Same reasoning as the metadata above: every exporter below reads Title,
+    // Detail, optionA..F, AnswerDetails and CustomInstructions straight out of
+    // these rows and writes them into a cell.
+    const questions = cryptoOrgId
+      ? await decryptItems(cryptoOrgId, 'question', questionsRes.Items || [])
+      : (questionsRes.Items || []);
+
     // Determine output format based on engagement type and user preference
     let outputFormat = format;
     if (format === 'auto') {

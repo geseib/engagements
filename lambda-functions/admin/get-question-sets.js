@@ -1,8 +1,12 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
-const { toVersion, versionList } = require('./shared/set-version');
-const { canManageSet, isSetOwner, setOwnerId } = require('./shared/question-set-access');
+const { toVersion, versionList, setMetadataKey, readableSetRefs } = require('./shared/set-version');
+const {
+  canManageSet, isSetOwner, setOwnerId, setScopeOf, setOrgOf,
+} = require('./shared/question-set-access');
 const { isAdminCaller } = require('./shared/require-admin');
+const { ORG } = require('./shared/tenant');
+const { decryptItem } = require('./shared/tenant-crypto');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -10,13 +14,52 @@ const db = DynamoDBDocumentClient.from(client);
 exports.handler = async (event) => {
   try {
     console.log('Getting question sets...');
-    
-    // Get all question set metadata (both active and inactive)
-    const res = await db.send(new QueryCommand({
-      TableName: process.env.TABLE_NAME,
-      KeyConditionExpression: 'PK = :pk',
-      ExpressionAttributeValues: { ':pk': 'SETS' }
+
+    // EVERY LIBRARY THIS CALLER MAY SEE, MERGED — not one partition any more.
+    //
+    // `readableSetRefs` is the authority (set-version.js -> tenant.js): the
+    // caller's own org, then the platform library, then public. Platform is in
+    // that list for EVERYBODY with an account, which is the owner's explicit
+    // requirement — the existing library stays available to every organisation
+    // and does not have to be copied per customer.
+    //
+    // One Query per scope, run CONCURRENTLY: they hit different partitions, so
+    // sequential awaits would just add latency. Three at most.
+    //
+    // `setMetadataKey(ref).PK` rather than a literal: nothing outside tenant.js
+    // may spell a partition key, and a hand-built 'ORG#'+id+'#SETS' here is
+    // exactly the drift that ends with two spellings of one partition.
+    const refs = readableSetRefs(event, '');
+    const perScope = await Promise.all(refs.map(async (ref) => {
+      const res = await db.send(new QueryCommand({
+        TableName: process.env.TABLE_NAME,
+        KeyConditionExpression: 'PK = :pk',
+        ExpressionAttributeValues: { ':pk': setMetadataKey(ref).PK }
+      }));
+      // The row is stamped with its own scope (ownerStamp), EXCEPT on platform
+      // rows where absence IS the stamp — so the ref that found it fills in
+      // what the row does not say, and canManageSet still reads the row.
+      // ── DECRYPT, PER SCOPE, BEFORE ANYTHING PROJECTS A FIELD ──────────────
+      //
+      // Done here rather than in the projection below because the org is a
+      // property of the PARTITION this Query named, and one `ref` covers every
+      // row it returned. Platform and public rows are left alone: they were
+      // never encrypted (upload-questions.js says why), and `decryptValue`
+      // would pass their plaintext through regardless — but calling it would
+      // demand an orgId there is none of.
+      //
+      // A set written before this change is still plaintext in an org's own
+      // partition, and passes through untouched. That is the migration: no
+      // backfill, both forms coexisting in one Query result.
+      const items = (res && res.Items) || [];
+      if (ref.scope !== ORG || !ref.orgId) return items.map((item) => ({ item, ref }));
+      const decrypted = [];
+      for (const item of items) {
+        decrypted.push({ item: await decryptItem(ref.orgId, 'set', item), ref });
+      }
+      return decrypted;
     }));
+    const found = perScope.flat();
 
     // Hosts read this list too now — it is the only projection that carries
     // ownership, and the host surface needs it to know which rows it may offer
@@ -24,8 +67,15 @@ exports.handler = async (event) => {
     // same for every row.
     const callerIsAdmin = isAdminCaller(event);
 
-    const questionSets = res.Items.map(item => ({
+    const questionSets = found.map(({ item, ref }) => ({
       id: item.SK.replace('SET#', ''),
+      // THE OTHER HALF OF THE REFERENCE. A setId is a slug of the title, so
+      // `teamretro` names one set per library and the client must round-trip
+      // the pair — creating a session, opening the editor, asking for the
+      // questions — or it will address whichever library it happens to hit
+      // first. Projected on every row, never inferred by the client.
+      scope: setScopeOf(item) || ref.scope,
+      orgId: setOrgOf(item) || ref.orgId || null,
       name: item.name,
       description: item.description,
       customInstruction: item.customInstruction,
@@ -61,6 +111,10 @@ exports.handler = async (event) => {
       isAIGenerated: item.isAIGenerated || false,
       hasImages: item.hasImages === true,
       // OWNERSHIP.
+      //
+      // Both fields answer the SCOPED question now: canManage is false for an
+      // org's set when the caller is Engage staff who are not in that org, which
+      // is the deliberate capability loss documented in question-set-access.js.
       //
       // `canManage` is the server's answer to "may THIS caller edit or delete
       // THIS set", computed by the same function the edit and delete handlers

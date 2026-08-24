@@ -1,6 +1,8 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand, BatchGetCommand } = require('@aws-sdk/lib-dynamodb');
 const { countParticipants } = require('./player-rows');
+const { callerOrgId, gamesIndexPk } = require('./tenant');
+const { decryptItems } = require('./tenant-crypto');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -150,19 +152,56 @@ async function playerCountsByGame(gameIds) {
 
 exports.handler = async (event) => {
   try {
-    console.log('🎮 Getting games list for game history');
+    /*
+      ONE ORG'S PARTITION, AND NO OTHER — this is the whole point of the scheme.
 
-    // Get all games from GAMES partition
+      This Query used to name `PK = 'GAMES'`, the global partition, and hand back
+      every session in the environment: every four-digit join code, every title,
+      every host name, every `started` flag. Scoping it is NOT a filter added to
+      that result. The partition key IS the organisation, so a Query issued for
+      org A cannot reach org B's rows — there is no line of code to forget, and
+      nothing an added attribute or a new caller can widen.
+
+      A caller with no organisation gets an EMPTY LIST. Not everything, and not
+      an error: they have no sessions because sessions belong to orgs, and
+      `gamesIndexPk('')` throws by design rather than inventing a partition.
+    */
+    const orgId = callerOrgId(event);
+    if (!orgId) {
+      console.log('🎮 Games list requested by a caller with no organisation — returning an empty list');
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ games: [], count: 0, timestamp: new Date().toISOString() }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
+    console.log(`🎮 Getting games list for org ${orgId}`);
+
     const gamesResult = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
       KeyConditionExpression: 'PK = :pk',
       ExpressionAttributeValues: {
-        ':pk': 'GAMES'
+        ':pk': gamesIndexPk(orgId)
       },
       ScanIndexForward: false // Sort by SK in descending order (most recent first)
     }));
 
-    const games = (gamesResult.Items || []).map(game => ({
+    // THE ONE PLACE THE CALLER'S OWN ORG IS THE RIGHT ANSWER.
+    //
+    // Everywhere else in the session lifecycle the org is read off the row,
+    // because those routes are public and their callers are anonymous. This one
+    // is the opposite: it is authenticated, `gamesIndexPk(orgId)` IS the
+    // partition, and a Query issued for org A cannot reach org B's rows. So the
+    // org that named the partition is necessarily the org that keys its rows —
+    // there is no possibility of a mismatch to guard against.
+    //
+    // Sessions written before this change are still plaintext in the same
+    // partition and pass straight through (`decryptValue` unwraps envelopes and
+    // nothing else), so the list mixes both forms happily.
+    const indexRows = await decryptItems(orgId, 'session', gamesResult.Items || []);
+
+    const games = indexRows.map(game => ({
       gameId: game.SK.replace('GAME#', ''),
       title: game.Title,
       gameType: game.GameType,

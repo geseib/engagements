@@ -3,6 +3,7 @@ const { DynamoDBDocumentClient, QueryCommand, DeleteCommand, PutCommand, GetComm
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { resolveSetPartition } = require('./set-version');
 const { isHidden } = require('./anonymity');
+const { encryptItem } = require('./tenant-crypto');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -477,10 +478,36 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
     
     console.log(`📝 STORING ANSWER RECORD:`, JSON.stringify(answerRecord, null, 2));
     console.log(`🔥 WEBSOCKET DEBUG: About to store answer record with PK: ${answerRecord.PK}, SK: ${answerRecord.SK}`);
-    
+
+    // ── THE MOST SENSITIVE ROW IN THE TABLE ──────────────────────────────────
+    //
+    // What a named person said in a retrospective. `ENCRYPTED_FIELDS.answer` is
+    // just `Answer`, and everything else on this row stays readable on purpose:
+    // `PlayerName`, `IsCorrect`, `PointsEarned` and `ResponseTimeMs` are the
+    // scoring machinery, and the privacy page promises identifiers and counts
+    // are visible — it is the CONTENT that is not.
+    //
+    // THE ORG COMES OFF THE SESSION ROW, NOT OFF THE CONNECTION. A player's
+    // WebSocket carries no authorizer context — they joined with a four-digit
+    // code — so there is no caller org here at all, and a blank one throws
+    // rather than defaulting. `GAME#<id>/METADATA.orgId` is the same source
+    // every participant-facing HTTP handler uses.
+    //
+    // A session with no org (created before tenancy) writes plaintext, exactly
+    // as it did yesterday; there is no key to write it under.
+    const sessionMeta = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'orgId'
+    }));
+    const answerOrgId = typeof sessionMeta.Item?.orgId === 'string' ? sessionMeta.Item.orgId.trim() : '';
+    const itemToStore = answerOrgId
+      ? await encryptItem(answerOrgId, 'answer', answerRecord)
+      : answerRecord;
+
     await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
-      Item: answerRecord
+      Item: itemToStore
     }));
     
     console.log(`✅ Answer stored for ${playerName} on question ${questionNumber}`);

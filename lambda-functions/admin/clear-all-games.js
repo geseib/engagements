@@ -1,6 +1,25 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, ScanCommand } = require('@aws-sdk/lib-dynamodb');
 const { batchDeleteKeys } = require('./shared/ddb-delete');
+const { GAMES_RESERVATION_PK } = require('./shared/tenant');
+
+/**
+ * THE THREE PLACES A SESSION LIVES, and the wipe has to know all three.
+ *
+ *   GAME#{id}           the session itself
+ *   GAMES               the global four-digit code reservation
+ *   ORG#{org}#GAMES     the owning org's session index
+ *
+ * Missing the third would leave every host's list full of sessions whose rows
+ * are gone — and missing the second would burn the codes.
+ *
+ * `ORG#{org}#GAMES` is matched EXACTLY, anchored at both ends. `ORG#` alone
+ * would take the organisations themselves and every membership row with them,
+ * which is not a game wipe, it is the customer list.
+ */
+const ORG_GAMES_INDEX = /^ORG#.+#GAMES$/;
+const isSessionPartition = (pk) =>
+  !!pk && (pk.startsWith('GAME#') || pk === GAMES_RESERVATION_PK || ORG_GAMES_INDEX.test(pk));
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -27,11 +46,7 @@ exports.handler = async (event) => {
       
       if (scanResult.Items && scanResult.Items.length > 0) {
         // Filter to only delete game-related items, preserve question sets
-        const gameItems = scanResult.Items.filter(item => {
-          const pk = item.PK;
-          // Delete items that start with GAME# OR are in the GAMES index
-          return pk && (pk.startsWith('GAME#') || pk === 'GAMES');
-        });
+        const gameItems = scanResult.Items.filter(item => isSessionPartition(item.PK));
         
         if (gameItems.length === 0) {
           // No game items in this batch, continue to next batch

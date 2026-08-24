@@ -54,7 +54,30 @@ import './AdminShell.css';
 export default function AdminShell({
   brand = 'Engage',
   navItems = [],
+  /*
+    GROUPED NAV. `consoleSections.sectionsFor()` returns
+    `[{ id, label, items }]` — "Northwind Learning", "Team", "Your space",
+    "Account", "Engage" — because an org member, an org admin, a personal space
+    and Engage staff must not see the same console, and the headings are what
+    make the two halves legible as two halves.
+
+    `navItems` stays for callers that have a flat list; when `navGroups` is
+    given it wins. Both are rendered by the same `renderNavItem`, so a group is
+    a heading plus the items that already worked.
+  */
+  navGroups = null,
   footNavItems = [],
+  /*
+    The organisation switcher, rendered in the top bar beside the environment
+    chip. A ReactNode rather than data: `.orgsw` is self-contained, declares its
+    own theme, and this shell should not know what an organisation is.
+
+    IT IS IN THE TOP BAR AND NOT THE NAV ON PURPOSE. The nav lists places
+    INSIDE one organisation; the switcher changes which organisation those
+    places belong to — a different axis, so a different spot, next to the
+    environment chip because both answer "which world am I looking at?".
+  */
+  orgSwitcher = null,
   activeId,
   onNavigate,
   environment,
@@ -131,6 +154,13 @@ export default function AdminShell({
 
         <span className="adm-spacer" />
 
+        {/*
+          BEFORE the environment chip, so the pair reads left to right as
+          "which organisation, then which environment" — narrowing, in the
+          order somebody actually asks it.
+        */}
+        {orgSwitcher}
+
         {environment && (
           <span
             className={`adm-envchip adm-envchip--${environment.id}`}
@@ -169,7 +199,14 @@ export default function AdminShell({
       </div>
 
       <nav className="adm-nav" aria-label="Sections">
-        {navItems.map(renderNavItem)}
+        {navGroups
+          ? navGroups.map((group) => (
+            <div className="adm-nav-group" key={group.id}>
+              {group.label && <div className="adm-nav-sec">{group.label}</div>}
+              {group.items.map(renderNavItem)}
+            </div>
+          ))
+          : navItems.map(renderNavItem)}
         {footNavItems.length > 0 && (
           <div className="adm-nav-foot">{footNavItems.map(renderNavItem)}</div>
         )}

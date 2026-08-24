@@ -1,0 +1,234 @@
+/* ============================================================================
+   THE ORGANISATION SWITCHER — components/OrgSwitcher.jsx
+
+   Derived from docs/design/tenancy-redesign/01-org-switcher.html and
+   02-org-single.html (`_src/extra.css` .orgwrap/.orgchip/.orgmenu), re-scoped
+   under `.orgsw` because global styles.css already owns `.chip`, and the
+   mockups' unnamespaced names cannot be imported without colliding with the
+   host stage.
+
+   WHERE IT LIVES AND WHY (RATIONALE §3). The topbar, beside the environment
+   chip — not the left nav. The nav lists places INSIDE one organisation; the
+   switcher changes which organisation those places belong to. A different axis,
+   so a different location, and it sits next to the env chip because both answer
+   the same question: which world am I looking at?
+
+   A USER WITH ONE ORGANISATION GETS NO MENU. Same chip, dashed border, no
+   caret, nothing to open. A control whose menu has one item teaches people to
+   ignore the control, and then they miss it on the day they have two.
+
+   THE MENU IS A SIBLING OF THE CHIP, NOT A CHILD, and that is not a style
+   preference: a <button> may not contain a <button>. The mockup's first cut
+   authored the menu inside the chip, the parser hoisted every item out, and the
+   menu unwrapped itself across the whole topbar and pushed the env chip off the
+   row. `.orgsw` is the positioned wrapper; the chip and the menu are siblings
+   in it.
+
+   THE LADDER is the console's, scoped: 12 floor / 13 label / 15 body. The
+   initials tile is at the 12px floor and not below it — the mockups drew avatar
+   initials at 10 and 11px twice and both were defects (RATIONALE §4).
+
+   MEASURED CONTRAST (sRGB, computed in __tests__/orgSwitcherPalette.test.js,
+   composited up the real ancestor stack, not eyeballed):
+     --text    #F4EDE4 on --surface #1B2942              12.53:1   chip + rows
+     --muted   #9BA8BE on --surface #1B2942               6.06:1   role, caret
+     --primary #F6A94C on --surface-2 #25375A             6.44:1   tile initials
+     --text    on --surface + --orgsw-row-hover                     hovered row
+     --text    on --surface + --orgsw-row-sel                       current row
+     --muted   on both of those tints                               role column
+
+   COLOUR IS TOKENS ONLY. The root declares data-theme="dark" rather than
+   inheriting it — public/index.html carries data-theme="light" on <html>, so
+   without it every --surface here resolves to the paper set. Same move as
+   AdminShell and WelcomeScreen.
+   ========================================================================== */
+
+.orgsw {
+  /* -- the ladder, scoped ------------------------------------------------ */
+  --orgsw-t-floor: 12px;
+  --orgsw-t-label: 13px;
+  --orgsw-t-body: 15px;
+
+  /* Rules and tints, matched to AdminShell's so the chip and the environment
+     chip beside it are the same object at the same weight. */
+  --orgsw-rule: rgba(155, 168, 190, .20);
+  --orgsw-rule-strong: rgba(155, 168, 190, .34);
+  --orgsw-row-hover: rgba(155, 168, 190, .055);
+  --orgsw-row-sel: rgba(246, 169, 76, .10);
+  --orgsw-shadow: 0 18px 44px rgba(6, 11, 22, .55);
+
+  /* 36px rows. The console's row height, because cards were rejected and a
+     menu row is a row. */
+  --orgsw-row-h: 36px;
+  --orgsw-chip-h: 26px;
+  --orgsw-menu-w: 290px;
+
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  font-variant-numeric: tabular-nums;
+}
+
+/* -- the chip ------------------------------------------------------------ */
+
+.orgsw-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  max-width: 260px;
+  height: var(--orgsw-chip-h);
+  padding: 0 9px;
+  border: 1px solid var(--orgsw-rule-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: 400 var(--orgsw-t-label)/1 var(--font-ui);
+  cursor: pointer;
+}
+
+.orgsw-chip:hover { border-color: var(--muted); }
+
+.orgsw-chip:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* One organisation: the same chip, dashed, inert. Dashed rather than absent
+   because the chip still answers "which world am I in" — it just has no second
+   answer to offer. */
+.orgsw-chip--single {
+  cursor: default;
+  border-style: dashed;
+}
+
+.orgsw-chip--single:hover { border-color: var(--orgsw-rule-strong); }
+
+/* THE TRUNCATING NODE IS A SINGLE TEXT NODE with min-width: 0. text-overflow is
+   inert on a flex container with span children, and the text is silently cut —
+   a reduction with no recovery is a deletion, so the full name is on title=. */
+.orgsw-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orgsw-caret {
+  flex: none;
+  color: var(--muted);
+}
+
+/* -- the initials tile --------------------------------------------------- */
+
+.orgsw-tile {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  color: var(--primary);
+  font: 700 var(--orgsw-t-floor)/1 var(--font-ui);
+  letter-spacing: .02em;
+}
+
+/* -- the menu ------------------------------------------------------------ */
+
+.orgsw-menu {
+  position: absolute;
+  top: 31px;
+  right: 0;
+  width: var(--orgsw-menu-w);
+  z-index: 70;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--orgsw-rule-strong);
+  border-radius: 8px;
+  box-shadow: var(--orgsw-shadow);
+  padding: 5px;
+  cursor: default;
+}
+
+.orgsw-heading {
+  margin: 6px 8px 4px;
+  font: 600 var(--orgsw-t-floor)/1 var(--font-ui);
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.orgsw-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: var(--orgsw-row-h);
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: 400 var(--orgsw-t-body)/1.25 var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.orgsw-item:hover { background: var(--orgsw-row-hover); }
+
+.orgsw-item:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+/* The current organisation. aria-current carries it to assistive tech; the
+   tint alone would be a colour-only signal, which is why the check is drawn. */
+.orgsw-item[aria-current] { background: var(--orgsw-row-sel); }
+
+.orgsw-item .orgsw-tile {
+  width: 22px;
+  height: 22px;
+}
+
+.orgsw-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orgsw-check {
+  flex: none;
+  margin-left: auto;
+  color: var(--primary);
+}
+
+/* The role, right-aligned. margin-left:auto on the first thing that should be
+   pushed right — never justify-content: flex-end, which overflows toward the
+   start where a hidden overflow is unreachable. */
+.orgsw-role {
+  flex: none;
+  margin-left: auto;
+  font-size: var(--orgsw-t-floor);
+  color: var(--muted);
+}
+
+.orgsw-check + .orgsw-role { margin-left: 0; }
+
+.orgsw-sep {
+  height: 1px;
+  background: var(--orgsw-rule);
+  margin: 5px 4px;
+}
+
+.orgsw-item--add { color: var(--muted); }
+.orgsw-item--add:hover { color: var(--text); }
+
+@media (max-width: 1180px) {
+  /* The rail collapses to icons at this width and the topbar is tight. The
+     name goes; the tile stays, because the tile is the identity — and title=
+     still carries the full name. */
+  .orgsw .orgsw-chip { max-width: none; }
+  .orgsw .orgsw-chip .orgsw-name { display: none; }
+}

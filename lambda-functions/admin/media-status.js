@@ -42,10 +42,10 @@
  * are different advice.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 const { resolvePartitionFromMeta, queryPartition } = require('./shared/set-version');
-const { requireSetManager } = require('./shared/question-set-access');
+const { requireSetManager, findSetForCaller, requestedScope } = require('./shared/question-set-access');
 const { classifyImage, mediaPrefix } = require('./shared/set-media');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -155,10 +155,14 @@ exports.handler = async (event) => {
       return reply(500, { error: 'Image storage is not configured in this environment.' });
     }
 
-    const setRes = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: 'SETS', SK: `SET#${setId}` },
-    }));
+    // WHICH LIBRARY, THEN WHO. `findSetForCaller` searches only the scopes this
+    // caller may READ, so another organisation's set is ABSENT rather than
+    // forbidden and this 404s on it. The row carries its own scope and
+    // `requireSetManager` reads it — see shared/question-set-access.js.
+    const found = await findSetForCaller(
+      db, process.env.TABLE_NAME, event, setId, requestedScope(event)
+    );
+    const setRes = { Item: found && found.item };
     if (!setRes.Item) return reply(404, { error: 'Question set not found' });
 
     // Reading a set's media is a management action on that set, gated exactly
@@ -170,7 +174,7 @@ exports.handler = async (event) => {
     // The version the games actually play, unless one is asked for — the same
     // resolution get-question-set-questions.js uses, so the editor's Questions
     // panel and this report are looking at the same rows.
-    const resolved = resolvePartitionFromMeta(setId, setRes.Item, event?.queryStringParameters?.version);
+    const resolved = resolvePartitionFromMeta(found.ref, setRes.Item, event?.queryStringParameters?.version);
     const { items } = await queryPartition(db, process.env.TABLE_NAME, resolved.pk, 'QUESTION#');
 
     const prefix = mediaPrefix(setId);

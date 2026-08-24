@@ -97,6 +97,17 @@ Globals:
         # Account ID for constructing Bedrock inference-profile ARNs at runtime
         # (replaces hardcoded account IDs that used to live in Lambda source).
         ACCOUNT_ID: !Ref AWS::AccountId
+        # The tenant CMK, for lambda-functions/*/tenant-crypto.js. Set globally
+        # because the module throws BY NAME when it is missing
+        # ("TENANT_KMS_KEY_ID is not set"), and a function that acquires a
+        # decrypt path later should fail on its IAM — which is explicit and
+        # greppable — rather than on a missing environment variable, which
+        # looks like a code bug and is the same symptom as a typo.
+        #
+        # The variable alone grants nothing. kms:Decrypt is attached per
+        # function, deliberately, so that the set of functions able to read
+        # customer content stays something you can enumerate from this file.
+        TENANT_KMS_KEY_ID: !Ref TenantKey
 
 Resources:
 
@@ -209,6 +220,14 @@ Resources:
       CodeUri: lambda-functions/websocket/
       Handler: message.handler
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - Statement:
@@ -234,7 +253,40 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games
             Method: post
+            # HOST/ADMIN ONLY. This route was PUBLIC.
+            #
+            # A four-digit join code is not a secret — it is on the projector and
+            # typed by everyone in the room. Unauthenticated, every participant, and
+            # anyone they forward the code to, could drive somebody else's live
+            # session: advance the round out from under the host, push the room into
+            # voting before people had answered, or change which categories get
+            # asked. POST /games is the other kind of problem — an unauthenticated
+            # creator leaves a session with no owner to attribute and no org to bill.
+            #
+            # THE CLIENT HALF SHIPPED IN THE SAME CHANGE AND HAD TO. Every caller is
+            # a signed-in host surface, but they all used plain `fetch`, which sends
+            # no Authorization header. Attaching this first would have 401'd the
+            # host's own advance button and frozen the room mid-round. GameHostPage,
+            # HostRemote and QuickstartMenu moved to authFetch together — including
+            # HostRemote's two ${apiBase()}${request.path} dispatches, whose paths
+            # are built in config/hostRemote.js and so name no route here.
+            #
+            # The GROUP check is NOT here. requiredGroupsForRoute answers
+            # ['hosts','admins'] via its POST/PUT/DELETE + games rule, which sits
+            # ABOVE the generic public rule — so start-vote is not handed to
+            # path.includes('vote'). tests/session-control-routes-authorization.js
+            # pins both halves.
+            Auth:
+              Authorizer: CognitoAuthorizer
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Tags:
@@ -254,6 +306,31 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/start-question
             Method: post
+            # HOST/ADMIN ONLY. This route was PUBLIC.
+            #
+            # A four-digit join code is not a secret — it is on the projector and
+            # typed by everyone in the room. Unauthenticated, every participant, and
+            # anyone they forward the code to, could drive somebody else's live
+            # session: advance the round out from under the host, push the room into
+            # voting before people had answered, or change which categories get
+            # asked. POST /games is the other kind of problem — an unauthenticated
+            # creator leaves a session with no owner to attribute and no org to bill.
+            #
+            # THE CLIENT HALF SHIPPED IN THE SAME CHANGE AND HAD TO. Every caller is
+            # a signed-in host surface, but they all used plain `fetch`, which sends
+            # no Authorization header. Attaching this first would have 401'd the
+            # host's own advance button and frozen the room mid-round. GameHostPage,
+            # HostRemote and QuickstartMenu moved to authFetch together — including
+            # HostRemote's two ${apiBase()}${request.path} dispatches, whose paths
+            # are built in config/hostRemote.js and so name no route here.
+            #
+            # The GROUP check is NOT here. requiredGroupsForRoute answers
+            # ['hosts','admins'] via its POST/PUT/DELETE + games rule, which sits
+            # ABOVE the generic public rule — so start-vote is not handed to
+            # path.includes('vote'). tests/session-control-routes-authorization.js
+            # pins both halves.
+            Auth:
+              Authorizer: CognitoAuthorizer
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
@@ -279,7 +356,40 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/start-vote
             Method: post
+            # HOST/ADMIN ONLY. This route was PUBLIC.
+            #
+            # A four-digit join code is not a secret — it is on the projector and
+            # typed by everyone in the room. Unauthenticated, every participant, and
+            # anyone they forward the code to, could drive somebody else's live
+            # session: advance the round out from under the host, push the room into
+            # voting before people had answered, or change which categories get
+            # asked. POST /games is the other kind of problem — an unauthenticated
+            # creator leaves a session with no owner to attribute and no org to bill.
+            #
+            # THE CLIENT HALF SHIPPED IN THE SAME CHANGE AND HAD TO. Every caller is
+            # a signed-in host surface, but they all used plain `fetch`, which sends
+            # no Authorization header. Attaching this first would have 401'd the
+            # host's own advance button and frozen the room mid-round. GameHostPage,
+            # HostRemote and QuickstartMenu moved to authFetch together — including
+            # HostRemote's two ${apiBase()}${request.path} dispatches, whose paths
+            # are built in config/hostRemote.js and so name no route here.
+            #
+            # The GROUP check is NOT here. requiredGroupsForRoute answers
+            # ['hosts','admins'] via its POST/PUT/DELETE + games rule, which sits
+            # ABOVE the generic public rule — so start-vote is not handed to
+            # path.includes('vote'). tests/session-control-routes-authorization.js
+            # pins both halves.
+            Auth:
+              Authorizer: CognitoAuthorizer
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - Statement:
@@ -556,6 +666,528 @@ Resources:
             Identity:
               Headers:
                 - Authorization
+                # X-Engage-Org IS DELIBERATELY NOT LISTED HERE. Read this before
+                # adding it.
+                #
+                # The active organisation genuinely is part of a request's
+                # identity — one token, several orgs, a different role in each —
+                # so listing it looks obviously right. It is not, yet, and the
+                # failure mode is total.
+                #
+                # An HTTP API returns 401 WITHOUT INVOKING THE AUTHORIZER when a
+                # configured identity source is absent from the request. Every
+                # client that has not yet been taught to send the header — which
+                # today is all of them — would stop being able to sign in to
+                # anything. The authorizer does not need the entry to see the
+                # header anyway: it reads event.headers['x-engage-org'] directly,
+                # and an identitySource entry only ever affects CACHE KEYING.
+                #
+                # It becomes mandatory the moment authorizer caching is turned
+                # on. With a TTL set and this header missing from the cache key,
+                # API Gateway would serve one organisation's authorisation
+                # decision to a request for another — a cross-tenant leak
+                # introduced by a performance tweak that looks unrelated to
+                # tenancy. tests/authorizer-identity-source.js fails the build if
+                # AuthorizerResultTtlInSeconds ever appears without it.
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  ## ── TENANT ENCRYPTION ────────────────────────────────────────────────────
+  #
+  # ONE customer-managed key for the whole stack, not one per organisation.
+  # A per-org CMK is $1/month, which against a $5/month subscription is 20% of
+  # revenue before a single session runs. Instead every org gets its own 256-bit
+  # DATA key, generated under this CMK with `EncryptionContext: {orgId}`; the
+  # wrapped blob lives on ORG#<id>/METADATA and the plaintext is cached in the
+  # Lambda container. Field crypto is AES-256-GCM in node:crypto with the orgId
+  # as AAD, so there is no KMS call per item — see lambda-functions/*/tenant-crypto.js.
+  TenantKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: !Sub 'Engage ${StackName} — per-organisation content encryption'
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          # The account root, without which the key cannot be administered and
+          # becomes unmanageable. This is the statement AWS requires.
+          - Sid: RootAdministration
+            Effect: Allow
+            Principal: { AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root' }
+            Action: 'kms:*'
+            Resource: '*'
+
+          # ── THE STATEMENT THAT DOES THE ACTUAL WORK ──────────────────────
+          #
+          # There is no decrypt that does not name a tenant. Every Decrypt and
+          # GenerateDataKey must supply an `orgId` encryption context, or it is
+          # denied — by anyone, including the root principal above, because an
+          # explicit Deny wins over any Allow.
+          #
+          # THIS IS WHAT MAKES THE PRIVACY PAGE TRUE. 08-privacy.html tells a
+          # customer "it is not that we cannot — it is that we cannot do it
+          # quietly", and this is the mechanism: CloudTrail records
+          # `requestParameters.encryptionContext.orgId` on every call, so the
+          # decrypt log IS a per-tenant read log. A blanket "let me read the
+          # table" is not expressible.
+          #
+          # It also means S3 SSE-KMS CANNOT use this key: S3 supplies its own
+          # object-ARN encryption context, so it would be denied here. The
+          # report body is encrypted in the application before the put instead
+          # (game/save-report.js) — a DynamoDB-only encryption story would
+          # leave the PDF readable and defeat the whole thing.
+          - Sid: DenyDecryptWithoutTenantContext
+            Effect: Deny
+            Principal: '*'
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey
+            Resource: '*'
+            Condition:
+              'Null':
+                'kms:EncryptionContext:orgId': 'true'
+
+  TenantKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/${StackName}-tenant'
+      TargetKeyId: !Ref TenantKey
+
+  ## ── ORGANISATIONS ────────────────────────────────────────────────────────
+  #
+  # EVERY ROUTE HERE CARRIES THE AUTHORIZER, INCLUDING THE INVITE ACCEPT.
+  # `/orgs/*` and `/invites/*` do not begin with `admin`, so they get no help
+  # from the `path.startsWith('admin')` rule; auth/authorizer.js names them
+  # explicitly (ORG_ROUTE / INVITE_ROUTE) rather than falling through to the
+  # trailing default, because two `path.includes()` rules sit in between and an
+  # invite token is 32 base58 characters travelling in the path — one that
+  # happened to spell "join", "vote" or "answer" made its own accept route
+  # public. tests/org-route-authorization.js pins both halves.
+  #
+  # WHICH org a caller may act on is decided per row by
+  # admin/orgs/shared/org-guards.js, which additionally requires a MEMBER row
+  # and the right role. Reaching a route is not being allowed to use it.
+  OrgsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-orgs'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: orgs/create-org.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          TENANT_KMS_KEY_ID: !Ref TenantKey
+      Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt, kms:GenerateDataKey ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        # TransactWriteItems is NOT covered by DynamoDBCrudPolicy, and org
+        # creation, invite acceptance, role changes and member removal are all
+        # transactional — a half-created org (index row but no member row, or a
+        # member row with no reverse row) is invisible to its own owner.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ dynamodb:TransactWriteItems ]
+              Resource: !GetAtt GameTable.Arn
+        # GenerateDataKey ONLY — this is the one function that mints an org's
+        # data key, at creation. Nothing else in the stack may create one.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:GenerateDataKey ]
+              Resource: !GetAtt TenantKey.Arn
+      Events:
+        CreateOrg:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  OrgsListFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-org-list-my-orgs'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: orgs/list-my-orgs.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt, kms:GenerateDataKey ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        ListMyOrgs:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  OrgGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-org-get-org'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: orgs/get-org.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        GetOrg:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  OrgMembersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-org-list-members'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: orgs/list-members.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        ListMembers:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/members
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  OrgInviteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-org-invite-member'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: orgs/invite-member.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        InviteMember:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/invites
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  OrgRevokeInviteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-org-revoke-invite'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: orgs/revoke-invite.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        RevokeInvite:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/invites/{token}
+            Method: DELETE
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  OrgAcceptInviteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-org-accept-invite'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: orgs/accept-invite.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ dynamodb:TransactWriteItems ]
+              Resource: !GetAtt GameTable.Arn
+      Events:
+        AcceptInvite:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /invites/{token}/accept
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  OrgMemberRoleFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-org-change-member-role'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: orgs/change-member-role.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ dynamodb:TransactWriteItems ]
+              Resource: !GetAtt GameTable.Arn
+      Events:
+        ChangeRole:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/members/{sub}/role
+            Method: PUT
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  OrgRemoveMemberFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-org-remove-member'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: orgs/remove-member.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ dynamodb:TransactWriteItems ]
+              Resource: !GetAtt GameTable.Arn
+      Events:
+        RemoveMember:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/members/{sub}
+            Method: DELETE
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  ## ── METERING ─────────────────────────────────────────────────────────────
+  GetUsageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-get-usage'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: get-usage.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+      Events:
+        GetUsage:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/usage
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  # THE TABLE'S STREAM HAS BEEN ENABLED SINCE DAY ONE WITH NO CONSUMER.
+  # This is its first. Stored-set billing is a PEAK over the period, so when a
+  # stream record touches an ORG#…#SETS partition the handler RE-QUERIES that
+  # partition's count and conditionally raises the peak. Recompute rather than
+  # increment: streams deliver at-least-once, an increment double-counts on
+  # redelivery, and a recompute cannot.
+  UsageStreamFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-usage-stream'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 60
+      Handler: usage-stream.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        - DynamoDBStreamReadPolicy:
+            TableName: !Ref GameTable
+            StreamName: !Select [3, !Split ['/', !GetAtt GameTable.StreamArn]]
+      Events:
+        TableStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt GameTable.StreamArn
+            StartingPosition: LATEST
+            BatchSize: 100
+            MaximumBatchingWindowInSeconds: 10
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  # The backstop for a shard the stream consumer missed. It repairs counters
+  # from the LEDGER, which is the authority — the ledger row is written before
+  # the counter, so "no ledger rows but a non-zero counter" is unreachable from
+  # our own code and is left alone rather than zeroed.
+  UsageReconcileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-usage-reconcile'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 300
+      Handler: usage-reconcile.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        Nightly:
+          Type: Schedule
+          Properties:
+            Schedule: cron(5 0 * * ? *)
+            Description: Rebuild org usage counters from the ledger
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  # The reader for an encrypted saved report. See lambda-functions/game/
+  # download-report.js for why the object is an envelope and why SSE-KMS under
+  # the tenant key is not an option.
+  #
+  # PUBLIC, deliberately and unchanged: it replaces a presigned S3 link, which
+  # was a bearer URL too. The UI's "Copy Link" is a report sent to a colleague;
+  # authenticating it would break that, which is the feature.
+  DownloadReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-download-report'
+      CodeUri: lambda-functions/game/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: download-report.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          REPORTS_BUCKET_NAME: !Ref ReportsBucket
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+        - S3ReadPolicy:
+            BucketName: !Ref ReportsBucket
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+      Events:
+        DownloadReport:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/report/download
+            Method: GET
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -570,6 +1202,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 30
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
@@ -597,6 +1237,14 @@ Resources:
         Variables:
           TABLE_NAME: !Ref GameTable
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
@@ -606,6 +1254,26 @@ Resources:
             ApiId: !Ref RestApi
             Path: /question-sets/{setId}/questions
             Method: GET
+            # HOST/ADMIN ONLY. This route was PUBLIC.
+            #
+            # Question sets are the product's content: the questions, the answers,
+            # the categories, the instructions. Unauthenticated, any caller could
+            # read all of it. The participant surface was the proof — PlayerPage
+            # fetched the WHOLE catalogue every round to read two strings about its
+            # own set, so every anonymous player received the library.
+            #
+            # CLOSING THIS WAS IMPOSSIBLE UNTIL THE PLAYER STOPPED NEEDING IT.
+            # game/get-question.js now projects setCustomInstruction and
+            # setRoundNoun onto GET /games/{gameId}/question, from the SETS row it
+            # already reads. Attaching this authorizer first would have 401'd every
+            # player mid-round.
+            #
+            # The GROUP check is NOT here. An authorizer proves you are someone, not
+            # that you are allowed to be here — requiredGroupsForRoute in
+            # lambda-functions/auth/authorizer.js names these routes explicitly, and
+            # tests/question-set-routes-authorization.js pins both halves.
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -620,6 +1288,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 30
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
@@ -629,6 +1305,26 @@ Resources:
             ApiId: !Ref RestApi
             Path: /question-sets
             Method: GET
+            # HOST/ADMIN ONLY. This route was PUBLIC.
+            #
+            # Question sets are the product's content: the questions, the answers,
+            # the categories, the instructions. Unauthenticated, any caller could
+            # read all of it. The participant surface was the proof — PlayerPage
+            # fetched the WHOLE catalogue every round to read two strings about its
+            # own set, so every anonymous player received the library.
+            #
+            # CLOSING THIS WAS IMPOSSIBLE UNTIL THE PLAYER STOPPED NEEDING IT.
+            # game/get-question.js now projects setCustomInstruction and
+            # setRoundNoun onto GET /games/{gameId}/question, from the SETS row it
+            # already reads. Attaching this authorizer first would have 401'd every
+            # player mid-round.
+            #
+            # The GROUP check is NOT here. An authorizer proves you are someone, not
+            # that you are allowed to be here — requiredGroupsForRoute in
+            # lambda-functions/auth/authorizer.js names these routes explicitly, and
+            # tests/question-set-routes-authorization.js pins both halves.
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -643,6 +1339,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 30
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
@@ -674,6 +1378,31 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/start
             Method: POST
+            # HOST/ADMIN ONLY. This route was PUBLIC.
+            #
+            # A four-digit join code is not a secret — it is on the projector and
+            # typed by everyone in the room. Unauthenticated, every participant, and
+            # anyone they forward the code to, could drive somebody else's live
+            # session: advance the round out from under the host, push the room into
+            # voting before people had answered, or change which categories get
+            # asked. POST /games is the other kind of problem — an unauthenticated
+            # creator leaves a session with no owner to attribute and no org to bill.
+            #
+            # THE CLIENT HALF SHIPPED IN THE SAME CHANGE AND HAD TO. Every caller is
+            # a signed-in host surface, but they all used plain `fetch`, which sends
+            # no Authorization header. Attaching this first would have 401'd the
+            # host's own advance button and frozen the room mid-round. GameHostPage,
+            # HostRemote and QuickstartMenu moved to authFetch together — including
+            # HostRemote's two ${apiBase()}${request.path} dispatches, whose paths
+            # are built in config/hostRemote.js and so name no route here.
+            #
+            # The GROUP check is NOT here. requiredGroupsForRoute answers
+            # ['hosts','admins'] via its POST/PUT/DELETE + games rule, which sits
+            # ABOVE the generic public rule — so start-vote is not handed to
+            # path.includes('vote'). tests/session-control-routes-authorization.js
+            # pins both halves.
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -693,6 +1422,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 30
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
@@ -731,6 +1468,31 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/next-question
             Method: POST
+            # HOST/ADMIN ONLY. This route was PUBLIC.
+            #
+            # A four-digit join code is not a secret — it is on the projector and
+            # typed by everyone in the room. Unauthenticated, every participant, and
+            # anyone they forward the code to, could drive somebody else's live
+            # session: advance the round out from under the host, push the room into
+            # voting before people had answered, or change which categories get
+            # asked. POST /games is the other kind of problem — an unauthenticated
+            # creator leaves a session with no owner to attribute and no org to bill.
+            #
+            # THE CLIENT HALF SHIPPED IN THE SAME CHANGE AND HAD TO. Every caller is
+            # a signed-in host surface, but they all used plain `fetch`, which sends
+            # no Authorization header. Attaching this first would have 401'd the
+            # host's own advance button and frozen the room mid-round. GameHostPage,
+            # HostRemote and QuickstartMenu moved to authFetch together — including
+            # HostRemote's two ${apiBase()}${request.path} dispatches, whose paths
+            # are built in config/hostRemote.js and so name no route here.
+            #
+            # The GROUP check is NOT here. requiredGroupsForRoute answers
+            # ['hosts','admins'] via its POST/PUT/DELETE + games rule, which sits
+            # ABOVE the generic public rule — so start-vote is not handed to
+            # path.includes('vote'). tests/session-control-routes-authorization.js
+            # pins both halves.
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -753,6 +1515,31 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/toggle-category
             Method: POST
+            # HOST/ADMIN ONLY. This route was PUBLIC.
+            #
+            # A four-digit join code is not a secret — it is on the projector and
+            # typed by everyone in the room. Unauthenticated, every participant, and
+            # anyone they forward the code to, could drive somebody else's live
+            # session: advance the round out from under the host, push the room into
+            # voting before people had answered, or change which categories get
+            # asked. POST /games is the other kind of problem — an unauthenticated
+            # creator leaves a session with no owner to attribute and no org to bill.
+            #
+            # THE CLIENT HALF SHIPPED IN THE SAME CHANGE AND HAD TO. Every caller is
+            # a signed-in host surface, but they all used plain `fetch`, which sends
+            # no Authorization header. Attaching this first would have 401'd the
+            # host's own advance button and frozen the room mid-round. GameHostPage,
+            # HostRemote and QuickstartMenu moved to authFetch together — including
+            # HostRemote's two ${apiBase()}${request.path} dispatches, whose paths
+            # are built in config/hostRemote.js and so name no route here.
+            #
+            # The GROUP check is NOT here. requiredGroupsForRoute answers
+            # ['hosts','admins'] via its POST/PUT/DELETE + games rule, which sits
+            # ABOVE the generic public rule — so start-vote is not handed to
+            # path.includes('vote'). tests/session-control-routes-authorization.js
+            # pins both halves.
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -778,6 +1565,31 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/persona
             Method: PUT
+            # HOST/ADMIN ONLY. This route was PUBLIC.
+            #
+            # A four-digit join code is not a secret — it is on the projector and
+            # typed by everyone in the room. Unauthenticated, every participant, and
+            # anyone they forward the code to, could drive somebody else's live
+            # session: advance the round out from under the host, push the room into
+            # voting before people had answered, or change which categories get
+            # asked. POST /games is the other kind of problem — an unauthenticated
+            # creator leaves a session with no owner to attribute and no org to bill.
+            #
+            # THE CLIENT HALF SHIPPED IN THE SAME CHANGE AND HAD TO. Every caller is
+            # a signed-in host surface, but they all used plain `fetch`, which sends
+            # no Authorization header. Attaching this first would have 401'd the
+            # host's own advance button and frozen the room mid-round. GameHostPage,
+            # HostRemote and QuickstartMenu moved to authFetch together — including
+            # HostRemote's two ${apiBase()}${request.path} dispatches, whose paths
+            # are built in config/hostRemote.js and so name no route here.
+            #
+            # The GROUP check is NOT here. requiredGroupsForRoute answers
+            # ['hosts','admins'] via its POST/PUT/DELETE + games rule, which sits
+            # ABOVE the generic public rule — so start-vote is not handed to
+            # path.includes('vote'). tests/session-control-routes-authorization.js
+            # pins both halves.
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -791,6 +1603,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 30
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
@@ -814,6 +1634,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 30
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
@@ -837,6 +1665,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 30
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         # get-results moves the game into RESULTS# and now announces it over the
@@ -917,6 +1753,14 @@ Resources:
             Path: /games/{gameId}/report
             Method: POST
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Tags:
@@ -937,6 +1781,14 @@ Resources:
             Path: /games/{gameId}/report
             Method: GET
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Tags:
@@ -958,6 +1810,14 @@ Resources:
             Path: /games/{gameId}/save-report
             Method: POST
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - S3CrudPolicy:
@@ -983,6 +1843,14 @@ Resources:
           TABLE_NAME: !Ref GameTable
           AI_PROMPTS_BUCKET: !Ref AIPromptsBucket
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - S3ReadPolicy:
@@ -1051,6 +1919,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 30
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
@@ -1099,6 +1975,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 30
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
@@ -1136,6 +2020,26 @@ Resources:
             ApiId: !Ref RestApi
             Path: /question-sets/{setId}/categories
             Method: GET
+            # HOST/ADMIN ONLY. This route was PUBLIC.
+            #
+            # Question sets are the product's content: the questions, the answers,
+            # the categories, the instructions. Unauthenticated, any caller could
+            # read all of it. The participant surface was the proof — PlayerPage
+            # fetched the WHOLE catalogue every round to read two strings about its
+            # own set, so every anonymous player received the library.
+            #
+            # CLOSING THIS WAS IMPOSSIBLE UNTIL THE PLAYER STOPPED NEEDING IT.
+            # game/get-question.js now projects setCustomInstruction and
+            # setRoundNoun onto GET /games/{gameId}/question, from the SETS row it
+            # already reads. Attaching this authorizer first would have 401'd every
+            # player mid-round.
+            #
+            # The GROUP check is NOT here. An authorizer proves you are someone, not
+            # that you are allowed to be here — requiredGroupsForRoute in
+            # lambda-functions/auth/authorizer.js names these routes explicitly, and
+            # tests/question-set-routes-authorization.js pins both halves.
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -1302,6 +2206,14 @@ Resources:
           TABLE_NAME: !Ref GameTable
           WEBSOCKET_API_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - Statement:
@@ -1332,6 +2244,14 @@ Resources:
         Variables:
           TABLE_NAME: !Ref GameTable
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
@@ -1355,6 +2275,14 @@ Resources:
       Timeout: 900
       MemorySize: 1024
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - Version: '2012-10-17'
@@ -1426,6 +2354,14 @@ Resources:
       Timeout: 900
       MemorySize: 1024
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - Version: '2012-10-17'
@@ -1500,6 +2436,14 @@ Resources:
       Timeout: 900
       MemorySize: 1024
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - Version: '2012-10-17'
@@ -1560,6 +2504,14 @@ Resources:
       Timeout: 900
       MemorySize: 1024
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - Version: '2012-10-17'
@@ -1623,6 +2575,14 @@ Resources:
       Timeout: 900
       MemorySize: 1024
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - Version: '2012-10-17'
@@ -1687,6 +2647,14 @@ Resources:
       Timeout: 900
       MemorySize: 1024
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - Version: '2012-10-17'
@@ -1751,6 +2719,14 @@ Resources:
       Timeout: 900
       MemorySize: 1024
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - Version: '2012-10-17'
@@ -1814,6 +2790,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 60
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Environment:
@@ -1947,6 +2931,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 30
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
@@ -2003,6 +2995,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 30
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
@@ -2624,6 +3624,14 @@ Resources:
           # as bodyless — which is what import-from-archive.js did.
           AI_PROMPTS_BUCKET: !Ref AIPromptsBucket
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - Version: '2012-10-17'
@@ -3314,6 +4322,10 @@ Resources:
           USER_POOL_ID: !Ref UserPoolV2
           CLIENT_ID: !Ref UserPoolClient
           REGION: !Ref AWS::Region
+          # The authorizer now reads the caller's organisation memberships
+          # (PK=USER#<sub>, begins_with(SK,'ORG#')) and their PROFILE row, and
+          # puts orgId/orgRole/orgIds into the context every handler reads.
+          TABLE_NAME: !Ref GameTable
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -3322,6 +4334,20 @@ Resources:
                 - cognito-idp:AdminListGroupsForUser
                 - cognito-idp:AdminGetUser
               Resource: !GetAtt UserPoolV2.Arn
+        # READ ONLY, and only the membership rows are ever read. The authorizer
+        # runs on EVERY authenticated request, so this is the hottest IAM grant
+        # in the stack; it gets Query and GetItem and nothing else.
+        #
+        # WITHOUT THIS THE FAILURE IS SILENT. authorizer.js resolves the org
+        # context defensively — a throttle, a torn row or a missing table all
+        # degrade to `orgId: ''` and still authorize, because a caller who has
+        # not joined a team yet is a legitimate state and must not be locked
+        # out. That is right, and it means a MISSING POLICY presents as "the
+        # org features quietly do nothing" rather than as an error. The only
+        # trace is a console.error. Wave 5's smoke test asserts a real token
+        # comes back carrying an orgId for that reason.
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName

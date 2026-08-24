@@ -959,7 +959,9 @@ function GameHostPage() {
 
     try {
       console.log('📋 HOST: Fetching instruction for set:', setId);
-      const res = await fetch(`${API_BASE}question-sets`);
+      // authFetch: the question-set routes now carry the Cognito authorizer.
+      // They were public, so any caller could read any set's content.
+      const res = await authFetch(`${API_BASE}question-sets`);
       const data = await res.json();
       const questionSet = data.sets?.find(set => set.id === setId);
       if (questionSet && questionSet.customInstruction) {
@@ -1032,7 +1034,7 @@ function GameHostPage() {
     setGamePersonaId(personaId);
     setPersonaSwitchStatus('Saving...');
     try {
-      const response = await fetch(`${API_BASE}games/${gameId}/persona`, {
+      const response = await authFetch(`${API_BASE}games/${gameId}/persona`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ personaId: personaId || '' })
@@ -2518,7 +2520,9 @@ Focus on actionable business strategy insights.`;
 
   const fetchQuestionSets = async (duringRestoration = false) => {
     try {
-      const res = await fetch(`${API_BASE}question-sets`);
+      // authFetch: the question-set routes now carry the Cognito authorizer.
+      // They were public, so any caller could read any set's content.
+      const res = await authFetch(`${API_BASE}question-sets`);
       const json = await res.json();
       const activeSets = json.sets?.filter(set => set.active) || [];
       setQuestionSets(activeSets);
@@ -2561,7 +2565,9 @@ Focus on actionable business strategy insights.`;
     }
     
     try {
-      const res = await fetch(`${API_BASE}question-sets/${setId}/categories`);
+      // authFetch: the question-set routes now carry the Cognito authorizer.
+      // They were public, so any caller could read any set's content.
+      const res = await authFetch(`${API_BASE}question-sets/${setId}/categories`);
       const json = await res.json();
       const fetchedCategories = json.categories || [];
       setCategories(fetchedCategories);
@@ -2704,7 +2710,7 @@ Focus on actionable business strategy insights.`;
     try {
       console.log(`🎯 Toggling category ${categoryId} (${categoryName}) to ${enabled} for game ${gameId}`);
       
-      const response = await fetch(`${API_BASE}games/${gameId}/toggle-category`, {
+      const response = await authFetch(`${API_BASE}games/${gameId}/toggle-category`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2755,7 +2761,9 @@ Focus on actionable business strategy insights.`;
 
     setLoadingQuestions(true);
     try {
-      const response = await fetch(`${API_BASE}question-sets/${setId}/questions`);
+      // authFetch: this route now carries the Cognito authorizer. It used to be
+      // public, which meant a guessed set id read anyone's questions.
+      const response = await authFetch(`${API_BASE}question-sets/${setId}/questions`);
 
       if (!response.ok) {
         console.error(`❌ Failed to fetch questions: ${response.status}`);
@@ -3111,7 +3119,7 @@ Focus on actionable business strategy insights.`;
       }
       
       // Use the same next-question API that handleNextQuestion uses
-      const nextQuestionRes = await fetch(`${API_BASE}games/${gameId}/next-question`, {
+      const nextQuestionRes = await authFetch(`${API_BASE}games/${gameId}/next-question`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody)
@@ -3520,7 +3528,7 @@ Focus on actionable business strategy insights.`;
       const questionNumber = lessonNumber; // Current question number
       
       // Start the voting process using the dedicated endpoint
-      const startVoteRes = await fetch(`${API_BASE}games/${gameId}/start-vote`, {
+      const startVoteRes = await authFetch(`${API_BASE}games/${gameId}/start-vote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3933,7 +3941,7 @@ Focus on actionable business strategy insights.`;
       console.log(`🚀 HOST: Starting game ${selectedGameId} from history`);
       
       // Call start-game API
-      const response = await fetch(`${API_BASE}games/${selectedGameId}/start`, {
+      const response = await authFetch(`${API_BASE}games/${selectedGameId}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -3998,7 +4006,8 @@ Focus on actionable business strategy insights.`;
       */
       let editCategories = [];
       try {
-        const catRes = await fetch(`${API_BASE}question-sets/${values.questionSetId}/categories`);
+        // authFetch: this route now carries the Cognito authorizer.
+        const catRes = await authFetch(`${API_BASE}question-sets/${values.questionSetId}/categories`);
         if (catRes.ok) editCategories = (await catRes.json()).categories || [];
       } catch (catErr) {
         console.warn('⚠️ EDIT: could not load categories for the dialog:', catErr?.message);
@@ -4122,7 +4131,7 @@ Focus on actionable business strategy insights.`;
 
     // Create the game directly with the backend API
     try {
-      const createResponse = await fetch(`${API_BASE}games`, {
+      const createResponse = await authFetch(`${API_BASE}games`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createGameBody(form))

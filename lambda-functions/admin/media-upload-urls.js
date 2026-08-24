@@ -44,10 +44,10 @@
  * — an admin may load any set's media, a host only the sets they created.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-const { requireSetManager } = require('./shared/question-set-access');
+const { requireSetManager, findSetForCaller, requestedScope } = require('./shared/question-set-access');
 const {
   MAX_BYTES,
   MAX_FILES_PER_REQUEST,
@@ -124,10 +124,14 @@ exports.handler = async (event) => {
     }
 
     // THE SET, AND WHO OWNS IT — read before a single URL is signed.
-    const setRes = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: 'SETS', SK: `SET#${setId}` },
-    }));
+    // WHICH LIBRARY, THEN WHO. `findSetForCaller` searches only the scopes this
+    // caller may READ, so another organisation's set is ABSENT rather than
+    // forbidden and this 404s on it. The row carries its own scope and
+    // `requireSetManager` reads it — see shared/question-set-access.js.
+    const found = await findSetForCaller(
+      db, process.env.TABLE_NAME, event, setId, requestedScope(event)
+    );
+    const setRes = { Item: found && found.item };
     if (!setRes.Item) return reply(404, { error: 'Question set not found' });
 
     const refusal = requireSetManager(event, setRes.Item, 'upload images to');

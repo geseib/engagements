@@ -38,9 +38,13 @@
  *     whole private-game control; the edit surface does not get to rotate it
  *     until there is a design for re-informing the players who already hold it.
  *
- * THE MIRROR. PK='GAMES' SK='GAME#{id}' is a duplicate index row carrying
- * Title and Visibility (schema-compliant-manager.js:44-64). An edit that
- * touches either must land there too or every session list goes stale.
+ * THE MIRROR, AND IT MOVED. The duplicate index row carrying Title and
+ * Visibility is now PK='ORG#{org}#GAMES' SK='GAME#{id}' — the global 'GAMES'
+ * partition holds only the four-digit code reservation, `{orgId, ttl}`, and
+ * nothing a list reads. An edit that mirrors onto the OLD key would write into
+ * the reservation row: the session lists would stay stale AND the code registry
+ * would grow attributes it must never carry. The owning org comes from
+ * METADATA.orgId, not from the caller.
  *
  * Auth: the template route carries the Cognito authorizer, and
  * authorizer.js:191 already requires hosts/admins for PUT on a games path.
@@ -48,6 +52,8 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { resolveSetPartition } = require('./set-version');
+const { gamesIndexPk } = require('./tenant');
+const { encryptValue } = require('./tenant-crypto');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -114,10 +120,21 @@ exports.handler = async (event) => {
 
     // Same gate as start-game.js:22-45 — the STATE row is the authority on
     // whether this session is still editable.
-    const gameState = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: 'STATE' }
-    }));
+    // The owning org is fetched alongside the state gate: the mirror at the end
+    // of this handler needs it, and a session that is not editable never gets
+    // that far, so the two reads are the same round trip.
+    const [gameState, gameMeta] = await Promise.all([
+      db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'STATE' }
+      })),
+      db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+        ProjectionExpression: 'orgId'
+      })),
+    ]);
+    const ownerOrgId = (gameMeta.Item && gameMeta.Item.orgId) || '';
 
     if (!gameState.Item) {
       return reply(404, { error: 'Game not found' });
@@ -134,6 +151,23 @@ exports.handler = async (event) => {
     // Field-by-field builder in the style of admin/edit-question-set.js:
     // `'field' in body` so an omitted key is left untouched while a key present
     // with null/'' is a deliberate clear.
+    // ── THE EDIT MUST NOT UN-ENCRYPT WHAT CREATE ENCRYPTED ──────────────────
+    //
+    // `Title`, `Details` and `AIContext` are ciphertext at rest on an org's
+    // session (ENCRYPTED_FIELDS.session, written by
+    // schema-compliant-manager.js). This handler overwrites those exact three
+    // attributes, so without this every save would silently return them to
+    // plaintext — the worst shape of this bug, because nothing misbehaves and
+    // the row simply becomes readable again.
+    //
+    // Per VALUE rather than per item: `encryptItem` takes a row and there is
+    // no row in an UpdateExpression. `applied` keeps the plaintext, because it
+    // is echoed to the console so a host can see what landed.
+    //
+    // '' passes straight through (`encryptValue` skips blanks), so clearing
+    // `engagementInfo` still records an empty string rather than noise.
+    const store = async (value) => (ownerOrgId ? encryptValue(ownerOrgId, value) : value);
+
     const sets = [];
     const removes = [];
     const names = {};
@@ -148,7 +182,7 @@ exports.handler = async (event) => {
         return reply(400, { error: 'eventTitle cannot be blank' });
       }
       names['#title'] = 'Title';
-      values[':title'] = title;
+      values[':title'] = await store(title);
       sets.push('#title = :title');
       applied.eventTitle = title;
     }
@@ -156,7 +190,7 @@ exports.handler = async (event) => {
     if ('engagementInfo' in body) {
       const details = body.engagementInfo === null ? '' : String(body.engagementInfo);
       names['#details'] = 'Details';
-      values[':details'] = details;
+      values[':details'] = await store(details);
       sets.push('#details = :details');
       applied.engagementInfo = details;
     }
@@ -164,7 +198,7 @@ exports.handler = async (event) => {
     if ('aiContext' in body) {
       const aiContext = body.aiContext === null ? '' : String(body.aiContext);
       names['#aiContext'] = 'AIContext';
-      values[':aiContext'] = aiContext;
+      values[':aiContext'] = await store(aiContext);
       sets.push('#aiContext = :aiContext');
       applied.aiContext = aiContext;
     }
@@ -341,16 +375,20 @@ exports.handler = async (event) => {
       }
     }
 
-    // THE MIRROR. Title and Visibility are duplicated onto the GAMES index row
-    // (schema-compliant-manager.js:44-64); an edit that skips this leaves every
-    // session list showing the old values.
-    if ('eventTitle' in applied || 'visibility' in applied) {
+    // THE MIRROR. Title and Visibility are duplicated onto the OWNING ORG's
+    // index row (schema-compliant-manager.js); an edit that skips this leaves
+    // every session list showing the old values. A session with no owning org
+    // has no index row at all, so there is nothing to mirror onto.
+    if (ownerOrgId && ('eventTitle' in applied || 'visibility' in applied)) {
       const mirrorSets = [];
       const mirrorNames = {};
       const mirrorValues = {};
       if ('eventTitle' in applied) {
         mirrorNames['#title'] = 'Title';
-        mirrorValues[':title'] = applied.eventTitle;
+        // The index row carries the SAME string, so it takes the same
+        // treatment — one encrypted and one readable copy of a session title in
+        // the same table is the inconsistency `session` exists to close.
+        mirrorValues[':title'] = await store(applied.eventTitle);
         mirrorSets.push('#title = :title');
       }
       if ('visibility' in applied) {
@@ -361,7 +399,7 @@ exports.handler = async (event) => {
       try {
         await db.send(new UpdateCommand({
           TableName: process.env.TABLE_NAME,
-          Key: { PK: 'GAMES', SK: `GAME#${gameId}` },
+          Key: { PK: gamesIndexPk(ownerOrgId), SK: `GAME#${gameId}` },
           UpdateExpression: `SET ${mirrorSets.join(', ')}`,
           ExpressionAttributeNames: mirrorNames,
           ExpressionAttributeValues: mirrorValues,
@@ -373,7 +411,7 @@ exports.handler = async (event) => {
         if (err.name !== 'ConditionalCheckFailedException') throw err;
         // The METADATA edit already landed; a missing index row (TTL skew) is
         // logged, not turned into a failure for a request that succeeded.
-        console.warn(`⚠️ No GAMES index row to mirror onto for game ${gameId}`);
+        console.warn(`⚠️ No session index row to mirror onto for game ${gameId} in org ${ownerOrgId}`);
       }
     }
 

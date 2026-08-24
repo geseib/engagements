@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { decryptItem } = require('./tenant-crypto');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -34,6 +35,25 @@ exports.handler = async (event) => {
       };
     }
 
+    // ── THE ANONYMOUS DECRYPT, WHICH IS THE POINT ────────────────────────────
+    //
+    // `GET /games/{gameId}` is PUBLIC — RootPage checks a typed join code
+    // against it before anyone has signed in — so this handler decrypts on an
+    // unauthenticated path, and it CAN, because the row carries `orgId`.
+    // Deriving the org from the caller would give '' for every real
+    // participant, and a blank orgId throws rather than defaulting.
+    //
+    // Encrypting a title participants are shown anyway is not a contradiction:
+    // the threat is a `Scan` of the table by someone who was never in the room,
+    // not the person standing in it. "Q3 Restructure Retro" names the meeting
+    // and usually the problem.
+    const sessionOrgId = typeof gameMetadata.Item.orgId === 'string'
+      ? gameMetadata.Item.orgId.trim()
+      : '';
+    const sessionMeta = sessionOrgId
+      ? await decryptItem(sessionOrgId, 'session', gameMetadata.Item)
+      : gameMetadata.Item;
+
     // Get game state
     const gameState = await db.send(new GetCommand({
       TableName: process.env.TABLE_NAME,
@@ -56,11 +76,11 @@ exports.handler = async (event) => {
     // Base game information (common to both host and player)
     const baseGameInfo = {
       gameId: gameId,
-      title: gameMetadata.Item.Title,
+      title: sessionMeta.Title,
       gameType: gameMetadata.Item.GameType,
       anonymousUntilReveal: anonymousUntilReveal,
       createdAt: gameMetadata.Item.CreatedAt,
-      hostName: gameMetadata.Item.HostName,
+      hostName: sessionMeta.HostName,
       visibility: gameMetadata.Item.Visibility || 'public',
       started: gameMetadata.Item.Started || false,
       state: gameState.Item?.State || 'CREATED',
@@ -95,8 +115,8 @@ exports.handler = async (event) => {
       const result = {
         ...baseGameInfo,
         questionSetId: gameMetadata.Item.QuestionSetId,
-        aiContext: gameMetadata.Item.AIContext,
-        details: gameMetadata.Item.Details,
+        aiContext: sessionMeta.AIContext,
+        details: sessionMeta.Details,
         // Prefill for the edit dialog (PUT /games/{gameId}). None of these is
         // a secret — the persona is a label, and both flags describe behaviour
         // every participant can observe. `visibility` and `anonymousUntilReveal`
@@ -128,7 +148,7 @@ exports.handler = async (event) => {
       // Player gets basic game information
       const result = {
         ...baseGameInfo,
-        engagementInfo: gameMetadata.Item.Details || ''
+        engagementInfo: sessionMeta.Details || ''
       };
 
       console.log(`✅ Returning player game info for ${gameId}`);

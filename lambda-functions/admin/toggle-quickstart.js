@@ -1,6 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
-const { requireSetManager } = require('./shared/question-set-access');
+const { DynamoDBDocumentClient, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { requireSetManager, findSetForCaller, requestedScope } = require('./shared/question-set-access');
+const { setMetadataKey } = require('./shared/set-version');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -78,10 +79,20 @@ exports.handler = async (event) => {
       };
     }
 
-    const existing = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: 'SETS', SK: `SET#${setId}` }
-    }));
+    // WHICH LIBRARY, THEN WHO. `findSetForCaller` searches only the scopes this
+    // caller may READ — their own org, then platform, then public — so a set in
+    // another organisation is ABSENT rather than forbidden and this route 404s
+    // on it exactly as it would on a set that never existed. Whether org B has a
+    // `teamretro` is not a fact org A gets to establish from a status code.
+    //
+    // The row that comes back carries its own scope, and `requireSetManager`
+    // reads it: platform sets are Engage staff's, org sets are that org's, and
+    // being an Engage administrator grants nothing inside an org. See
+    // shared/question-set-access.js.
+    const found = await findSetForCaller(
+      db, process.env.TABLE_NAME, event, setId, requestedScope(event)
+    );
+    const existing = { Item: found && found.item };
 
     if (!existing.Item) {
       return {
@@ -98,7 +109,7 @@ exports.handler = async (event) => {
 
     await db.send(new UpdateCommand({
       TableName: process.env.TABLE_NAME,
-      Key: { PK: 'SETS', SK: `SET#${setId}` },
+      Key: setMetadataKey(found.ref),
       UpdateExpression: 'SET #quickstart = :quickstart, updatedAt = :updatedAt',
       ExpressionAttributeNames: {
         '#quickstart': 'Quickstart'

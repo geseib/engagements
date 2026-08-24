@@ -162,17 +162,26 @@ function GameReport({
         ? 'Report saved permanently! Your report will be kept for 1 year.'
         : 'Report saved! Download link expires in 24 hours.';
 
+      // An encrypted report's link points at THIS API, not at S3, because the
+      // stored object is an envelope and a presigned S3 link would hand a
+      // browser ciphertext. Resolve it against the configured API base — the
+      // handler cannot know that from inside Lambda, and hardcoding a host is
+      // how every join link came to point at the retired eng.dev twin.
+      const downloadHref = result.downloadUrlIsRelative
+        ? `${API_BASE}${result.downloadUrl}`
+        : result.downloadUrl;
+
       setConfirmModalProps({
         title: 'Report Saved Successfully',
         message: `${message}\n\nWould you like to download the report now?`,
         confirmText: 'Download Now',
         cancelText: 'Copy Link',
         onConfirm: () => {
-          window.open(result.downloadUrl, '_blank');
+          window.open(downloadHref, '_blank');
           setShowConfirmModal(false);
         },
         onCancel: () => {
-          navigator.clipboard.writeText(result.downloadUrl).then(() => {
+          navigator.clipboard.writeText(downloadHref).then(() => {
             // Show brief success message
             const successDiv = document.createElement('div');
             successDiv.className = 'clipboard-success';
@@ -182,7 +191,7 @@ function GameReport({
           }).catch(() => {
             // Fallback: show the URL in an input for manual copying
             const input = document.createElement('input');
-            input.value = result.downloadUrl;
+            input.value = downloadHref;
             input.select();
             document.execCommand('copy');
           });

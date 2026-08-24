@@ -1,7 +1,25 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { resolveSetPartition } = require('./set-version');
+const { ORG } = require('./tenant');
+const { decryptItem } = require('./tenant-crypto');
+
 const { isPresent } = require('./player-presence');
+
+/**
+ * WHOSE SESSION IS THIS? — read off the row, never off the caller.
+ *
+ * `GET /games/{gameId}/state` is PUBLIC: every participant's phone polls it
+ * with no identity, and the Host Remote polls it every two seconds. So the
+ * organisation cannot come from `tenant.callerOrgId(event)` — that is '' for
+ * every anonymous caller, and a blank orgId THROWS in tenant-crypto rather
+ * than defaulting. The METADATA row carries `orgId` for exactly this reason
+ * (schema-compliant-manager.js:164).
+ *
+ * '' for a session created before tenancy, or by a host with no org. Those
+ * rows were never encrypted, so there is nothing to unwrap.
+ */
+const orgOf = (item) => (item && typeof item.orgId === 'string' ? item.orgId.trim() : '');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -44,6 +62,17 @@ exports.handler = async (event) => {
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
     }
+
+    // THE SESSION BRIEF, in the clear for this response only. `Title`,
+    // `HostName`, `Details` and `AIContext` are ciphertext at rest on an org's
+    // session (ENCRYPTED_FIELDS.session) — a session title like "Q3
+    // Restructure Retro" names the meeting and often the problem, and the
+    // threat this guards against is a scan of the table, not the person in the
+    // room who is about to be shown it anyway.
+    const sessionOrgId = orgOf(gameMetadata.Item);
+    const sessionMeta = sessionOrgId
+      ? await decryptItem(sessionOrgId, 'session', gameMetadata.Item)
+      : gameMetadata.Item;
 
     // Get game state
     const gameState = await db.send(new GetCommand({
@@ -156,8 +185,28 @@ exports.handler = async (event) => {
           // (next-question.js writes SetVersion); the resolver falls through to
           // the set's activeVersion and then to the legacy `SET#<id>` partition,
           // so rounds started before versioning are unaffected.
+          //
+          // AND THE SCOPE, FROM THE SAME ROW. Since tenancy a `setId` alone no
+          // longer names one partition — setId is a slug of the title
+          // (upload-questions.js:298), so two organisations can both produce
+          // `teamretro`. The REF row pins the PAIR, and this reads it from
+          // there rather than from the request for the reason get-question.js
+          // gives at the same call: THIS ROUTE IS PUBLIC and its callers are
+          // anonymous participants, so a request-derived scope would resolve to
+          // `platform` for every player in every organisation's session and
+          // serve them nothing.
+          //
+          // A REF written before tenancy carries no SetScope, which reads as
+          // platform — the same reading of an absent scope as everywhere else
+          // (set-version.js `setRef`).
           const resolvedSet = await resolveSetPartition(
-            db, process.env.TABLE_NAME, questionSetId, questionRef.Item.SetVersion
+            db, process.env.TABLE_NAME,
+            {
+              scope: questionRef.Item.SetScope,
+              orgId: questionRef.Item.SetOrgId,
+              setId: questionSetId,
+            },
+            questionRef.Item.SetVersion
           );
 
           // Get the actual question from the question set
@@ -169,29 +218,38 @@ exports.handler = async (event) => {
             }
           }));
 
+          // Decrypted from the SET's org, which is not necessarily the
+          // SESSION's: a host in org A can run a platform set, and the pinned
+          // pair on the REF row is the only authority on which. Platform and
+          // public content is never encrypted, so it passes through as-is.
+          const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
+          const questionItem = question.Item && setOrgId
+            ? await decryptItem(setOrgId, 'question', question.Item)
+            : question.Item;
+
           if (question.Item) {
             currentQuestionData = {
               id: currentQuestionNumber,
               questionNumber: currentQuestionNumber,
-              title: question.Item.Title || '',
-              detail: question.Item.Detail || '',
-              questionDetail: question.Item.Detail || '',
-              category: question.Item.Category,
-              field: question.Item.Category,
-              school: question.Item.School || '',
-              image: question.Item.Image || '', // Optional artwork URL ("Art Title" rounds)
-              customInstructions: question.Item.CustomInstructions || '',
+              title: questionItem.Title || '',
+              detail: questionItem.Detail || '',
+              questionDetail: questionItem.Detail || '',
+              category: questionItem.Category,
+              field: questionItem.Category,
+              school: questionItem.School || '',
+              image: questionItem.Image || '', // Optional artwork URL ("Art Title" rounds)
+              customInstructions: questionItem.CustomInstructions || '',
               setId: questionSetId,
               startedAt: questionRef.Item.StartedAt,
               // For trivia questions (check both cases)
-              optionA: question.Item.optionA || question.Item.OptionA || '',
-              optionB: question.Item.optionB || question.Item.OptionB || '',
-              optionC: question.Item.optionC || question.Item.OptionC || '',
-              optionD: question.Item.optionD || question.Item.OptionD || '',
-              optionE: question.Item.optionE || question.Item.OptionE || '',
-              optionF: question.Item.optionF || question.Item.OptionF || '',
-              correctAnswer: question.Item.correctAnswer,
-              points: question.Item.points || 10
+              optionA: questionItem.optionA || questionItem.OptionA || '',
+              optionB: questionItem.optionB || questionItem.OptionB || '',
+              optionC: questionItem.optionC || questionItem.OptionC || '',
+              optionD: questionItem.optionD || questionItem.OptionD || '',
+              optionE: questionItem.optionE || questionItem.OptionE || '',
+              optionF: questionItem.optionF || questionItem.OptionF || '',
+              correctAnswer: questionItem.correctAnswer,
+              points: questionItem.points || 10
             };
             
             console.log(`✅ Fetched question data for question ${currentQuestionNumber}: ${currentQuestionData.title}`);
@@ -216,8 +274,8 @@ exports.handler = async (event) => {
       stageFocus: stageFocus,
       gameType: gameMetadata.Item.GameType || 'call-and-answer',
       gameMetadata: {
-        title: gameMetadata.Item.Title,
-        hostName: gameMetadata.Item.HostName,
+        title: sessionMeta.Title,
+        hostName: sessionMeta.HostName,
         gameType: gameMetadata.Item.GameType || 'call-and-answer',
         questionSetId: gameMetadata.Item.QuestionSetId,
         selectedCategories: gameMetadata.Item.SelectedCategories || [],

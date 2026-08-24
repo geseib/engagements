@@ -1,9 +1,12 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
-const { requireSetManager } = require('./shared/question-set-access');
+const { DynamoDBDocumentClient, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { requireSetManager, findSetForCaller, requestedScope } = require('./shared/question-set-access');
+const { setMetadataKey } = require('./shared/set-version');
 const {
   ROUND_KIND_IDS, MAX_ROUND_KIND_BRIEF, normalizeRoundKind,
 } = require('./shared/round-kinds');
+const { ORG } = require('./shared/tenant');
+const { ENCRYPTED_FIELDS, encryptValue } = require('./shared/tenant-crypto');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -92,10 +95,20 @@ exports.handler = async (event) => {
     //    unownable empty set. That was survivable while only admins could call
     //    it. It is not survivable now: it would be a way to manufacture rows
     //    outside the ownership rule entirely.
-    const existing = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: 'SETS', SK: `SET#${setId}` }
-    }));
+    // WHICH LIBRARY, THEN WHO. `findSetForCaller` searches only the scopes this
+    // caller may READ — their own org, then platform, then public — so a set in
+    // another organisation is ABSENT rather than forbidden and this route 404s
+    // on it exactly as it would on a set that never existed. Whether org B has a
+    // `teamretro` is not a fact org A gets to establish from a status code.
+    //
+    // The row that comes back carries its own scope, and `requireSetManager`
+    // reads it: platform sets are Engage staff's, org sets are that org's, and
+    // being an Engage administrator grants nothing inside an org. See
+    // shared/question-set-access.js.
+    const found = await findSetForCaller(
+      db, process.env.TABLE_NAME, event, setId, requestedScope(event)
+    );
+    const existing = { Item: found && found.item };
 
     if (!existing.Item) {
       return {
@@ -118,15 +131,43 @@ exports.handler = async (event) => {
     // toggle-question-set.js) and the reader in get-question-sets.js. This used
     // to write `UpdatedAt`, so an edit never moved the timestamp the list shows
     // and the owner got no feedback that a save had landed.
+    // ── WHAT GETS WRITTEN AS CIPHERTEXT ──────────────────────────────────────
+    //
+    // The editor writes the set's prose one attribute at a time, so encryption
+    // happens per VALUE here rather than per item: `encryptItem` takes a whole
+    // row and there is no row in an UpdateExpression.
+    //
+    // The field list is READ FROM tenant-crypto, never restated. A local copy
+    // would drift the moment a field is added to the boundary, and the way that
+    // drift presents is a new prose field shipping in plaintext with every test
+    // still green — which is exactly why ENCRYPTED_FIELDS is data.
+    //
+    // ONLY ORG SCOPE, for the same reason upload-questions.js gives: platform
+    // and public sets are the libraries every organisation reads, and there is
+    // no org whose key they could be written under. `found.ref` is the row that
+    // was actually read, so this cannot be argued about from the request.
+    //
+    // A CLEAR STAYS A CLEAR. `encryptValue` skips '' (and null/undefined), so
+    // blanking a field writes a real empty string rather than 60 bytes of noise
+    // that every `x || fallback` reader would treat as present.
+    const cryptoOrgId = found.ref && found.ref.scope === ORG ? String(found.ref.orgId || '') : '';
+    const encryptedSetFields = new Set(ENCRYPTED_FIELDS.set);
+    const store = async (field, value) => (
+      cryptoOrgId && encryptedSetFields.has(field) ? encryptValue(cryptoOrgId, value) : value
+    );
+
     const updateParams = {
       TableName: process.env.TABLE_NAME,
-      Key: { PK: 'SETS', SK: `SET#${setId}` },
+      // The row that was READ, not a rebuilt platform key — an org's set is
+      // updated in its own partition or the upsert would manufacture a second,
+      // empty, platform-scoped set with the same slug.
+      Key: setMetadataKey(found.ref),
       UpdateExpression: 'SET #name = :name, updatedAt = :updatedAt',
       ExpressionAttributeNames: {
         '#name': 'name'
       },
       ExpressionAttributeValues: {
-        ':name': name.trim(),
+        ':name': await store('name', name.trim()),
         ':updatedAt': new Date().toISOString()
       }
     };
@@ -162,7 +203,11 @@ exports.handler = async (event) => {
       const value = body[field] === null ? '' : String(body[field]).trim();
       updateParams.UpdateExpression += `, #${field} = :${field}`;
       updateParams.ExpressionAttributeNames[`#${field}`] = field;
-      updateParams.ExpressionAttributeValues[`:${field}`] = value;
+      updateParams.ExpressionAttributeValues[`:${field}`] = await store(field, value);
+      // `applied` is echoed to the console so it can state exactly what landed.
+      // It carries the PLAINTEXT deliberately: the caller just sent these
+      // strings, and handing back an envelope would turn a "saved" confirmation
+      // into `{v:1,iv:…}` on screen.
       applied[field] = value;
     }
 
@@ -221,6 +266,8 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         message: `Question set "${name}" updated successfully`,
         setId: setId,
+        scope: found.ref.scope,
+        orgId: found.ref.orgId || null,
         name: name,
         // Echoed back so the UI can state exactly what landed instead of
         // showing a generic "saved" that looks identical to a failed save.

@@ -8,13 +8,20 @@ const {
   nextVersion,
   queryPartition,
   setPartition,
+  setMetadataKey,
   toVersion,
 } = require('./shared/set-version');
 const { normalizeTags } = require('./shared/tags');
-const { ownerStamp, requireSetManager } = require('./shared/question-set-access');
+const {
+  ownerStamp, requireSetManager, findSetForCaller, createSetRef, requestedScope,
+} = require('./shared/question-set-access');
+const { readAllowance } = require('./shared/usage');
+const { upgradeRequired, UPGRADE_REQUIRED_STATUS } = require('./shared/pricing');
 const {
   ROUND_KIND_IDS, MAX_ROUND_KIND_BRIEF, normalizeRoundKind,
 } = require('./shared/round-kinds');
+const { ORG } = require('./shared/tenant');
+const { encryptItem } = require('./shared/tenant-crypto');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -162,12 +169,21 @@ exports.handler = async (event) => {
     // as call-and-answer and drop every option — so the existing set's type is
     // the default, and only an explicit value overrides it.
     let existingMeta;
+    // THE REFERENCE THIS IMPORT WRITES TO — `{scope, orgId, setId}`, never a
+    // bare id. A setId is a slug of the title, so `teamretro` names one set per
+    // library; without the scope this handler would write one org's questions
+    // into whichever partition it reached first.
+    let targetRef = null;
     if (isReplace) {
-      const res = await db.send(new GetCommand({
-        TableName: process.env.TABLE_NAME,
-        Key: { PK: 'SETS', SK: `SET#${replaceSetId}` }
-      }));
-      existingMeta = res.Item;
+      // Only the scopes this caller may READ are probed, so a replace aimed at
+      // another organisation's set finds nothing and 404s — it does not 403,
+      // because "there is a set by that name over there" is not something this
+      // route should confirm.
+      const found = await findSetForCaller(
+        db, process.env.TABLE_NAME, event, replaceSetId, requestedScope(event)
+      );
+      existingMeta = found && found.item;
+      targetRef = found && found.ref;
       if (!existingMeta) {
         return notFound(`Question set "${replaceSetId}" does not exist, so there is nothing to replace.`);
       }
@@ -673,13 +689,70 @@ exports.handler = async (event) => {
     // and a fully intact live set.
 
     if (!isReplace) {
+      // WHICH LIBRARY A NEW SET GOES INTO.
+      //
+      // The caller's acting organisation, or the platform library for Engage
+      // staff with no org selected — `createSetRef` has the rule and the
+      // reasoning. It returns null rather than guessing, and this refuses
+      // rather than defaulting: silently writing a customer's material into the
+      // platform library would publish it to every other customer, which is the
+      // failure the whole scoping scheme exists to prevent.
+      targetRef = createSetRef(event, setId, requestedScope(event));
+      if (!targetRef) {
+        return {
+          statusCode: 403,
+          body: JSON.stringify({
+            error: 'Choose an organisation before creating a question set.'
+          }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+
+      /*
+        THE STORAGE ALLOWANCE, CHECKED ONLY WHEN A NEW SET IS BEING CREATED.
+
+        A personal organisation stores five question sets. The sixth is refused
+        with an upgrade path rather than a charge, because a free account has no
+        payment method to meter against (pricing.js:PERSONAL_PLAN). A Team
+        organisation is never refused — it is billed $0.25 a set past the
+        allowance and told so on 04-billing.html.
+
+        DELIBERATELY INSIDE THE `!isReplace` BRANCH. A replace does not add a
+        set, it writes a new version of one that already exists and is already
+        counted; gating it would mean a person at their limit could no longer
+        FIX the sets they have, which is a worse product than one that simply
+        stops growing. The same reasoning keeps the gate off every read, every
+        download and every delete.
+
+        And the count it compares against is `setsCurrent`, not `setsPeak`. The
+        invoice bills the peak because 04-billing.html promises "a set you
+        created and deleted still counted"; a GATE on the peak would make
+        deletion pointless and turn a storage allowance into a lifetime quota of
+        creations. See usage.js:readAllowance.
+      */
+      const allowance = await readAllowance(targetRef.orgId);
+      if (allowance.mustUpgradeForSet) {
+        console.log(`🚧 ${targetRef.orgId} is at its stored-set allowance (${allowance.setsUsed}/${allowance.setsIncluded}) — refusing a NEW set`);
+        return {
+          statusCode: UPGRADE_REQUIRED_STATUS,
+          body: JSON.stringify(upgradeRequired('sets', allowance)),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+
       // Check if set already exists. A plain import still refuses to touch an
       // existing set: overwriting one by accident (same title -> same slug) is
       // exactly the data loss versioning exists to prevent. Replacing is opt-in
       // and explicit, via replaceSetId.
+      //
+      // Scoped, and that is the point of scoping: two organisations may both
+      // have a "Team Retro", because the collision that used to make the second
+      // write clobber the first is now a collision between different partitions
+      // and therefore not a collision at all. Within ONE library the old rule
+      // still holds — replacing your own same-named set stays deliberate.
       const existingSet = await db.send(new GetCommand({
         TableName: process.env.TABLE_NAME,
-        Key: { PK: 'SETS', SK: `SET#${setId}` }
+        Key: setMetadataKey(targetRef)
       }));
 
       if (existingSet.Item) {
@@ -705,10 +778,10 @@ exports.handler = async (event) => {
         || knownVersions(existingMeta).length > 0;
 
       if (!alreadyVersioned) {
-        const legacyPk = setPartition(setId, null);
+        const legacyPk = setPartition(targetRef, null);
         const { items: legacyItems } = await queryPartition(db, process.env.TABLE_NAME, legacyPk);
         if (legacyItems.length > 0) {
-          snapshotted = await copyPartition(db, process.env.TABLE_NAME, legacyPk, setPartition(setId, 1));
+          snapshotted = await copyPartition(db, process.env.TABLE_NAME, legacyPk, setPartition(targetRef, 1));
           console.log(`📸 Snapshotted ${snapshotted} legacy row(s) of "${setId}" to v1 before replacing`);
           existingMeta = {
             ...existingMeta,
@@ -731,11 +804,12 @@ exports.handler = async (event) => {
     // Content partition for THIS import. A plain import keeps writing to the
     // legacy `SET#<id>` layout (a new set is version-less until it is migrated
     // or first replaced); a replace writes to `SET#<id>#v<n>`.
-    const contentPk = setPartition(setId, targetVersion);
+    const contentPk = setPartition(targetRef, targetVersion);
 
     const setMetadataItem = {
-      PK: 'SETS',
-      SK: `SET#${setId}`,
+      // The scope's metadata partition, built by tenant.js via setMetadataKey.
+      // The SK is `SET#<id>` in every scope — only the partition moves.
+      ...setMetadataKey(targetRef),
       name: setName,
       description: setDescription,
       customInstruction: customInstructions?.trim() || '',
@@ -778,7 +852,10 @@ exports.handler = async (event) => {
       // row through the flip below — so replacing a set deliberately leaves its
       // original creator in place instead of transferring it to whoever last
       // uploaded a CSV.
-      ...ownerStamp(event),
+      // …and WHICH LIBRARY, stamped by the same call. Platform is stamped as an
+      // ABSENCE, so a new platform row has the identical shape to the ~41 that
+      // predate tenancy and there is one rule for reading them, not two.
+      ...ownerStamp(event, targetRef),
       updatedAt: new Date().toISOString(),
       sourceFile: fileName,
       engagementType: engagementType || 'call-and-answer',
@@ -914,10 +991,47 @@ exports.handler = async (event) => {
     const intendedKeys = [...categoryItems, ...questionItems, ...(isReplace ? [] : [setMetadataItem])]
       .map(({ PK, SK }) => ({ PK, SK }));
 
+    // ── ENCRYPTION, AND THE ONE CONDITION IT HANGS ON ────────────────────────
+    //
+    // A row becomes ciphertext the first time it is written — there is no
+    // backfill, and `decryptValue` passes plaintext through — so THIS is the
+    // moment a set stops being browsable by anyone with table access.
+    //
+    // ONLY ORG-SCOPED CONTENT IS ENCRYPTED, and that is a decision rather than
+    // an omission. PLATFORM sets are the shared library that every organisation
+    // reads (tenant.js), and PUBLIC sets are copies a customer asked to make
+    // readable by everyone; encrypting either to one org's data key would make
+    // content the whole product depends on unreadable — and there is no org to
+    // key it to in the first place. `createSetRef` also routes every internal
+    // invocation (the generation worker, the seed and archive scripts, the
+    // suite's direct handler calls) to platform, so those keep writing exactly
+    // what they wrote before this change.
+    //
+    // An org that HAS no `dataKeyCiphertext` throws here rather than writing
+    // plaintext, by design: a tenant that believes its library is encrypted
+    // must not be quietly given a plaintext one. Org creation mints the key.
+    //
+    // CATEGORY rows are deliberately absent: `ENCRYPTED_FIELDS.category` is
+    // empty because the 24-bit host mask addresses categories by the ORDER of
+    // their stored names, so encrypting `Name` silently reorders the mask.
+    const cryptoOrgId = targetRef && targetRef.scope === ORG ? String(targetRef.orgId || '') : '';
+    let setMetadataItemToWrite = setMetadataItem;
+    let questionItemsToWrite = questionItems;
+    if (cryptoOrgId) {
+      // `encryptItem` never mutates, so `setMetadataItem` below (read by the
+      // activeVersion flip for `hasImages`) still holds the plaintext values.
+      setMetadataItemToWrite = await encryptItem(cryptoOrgId, 'set', setMetadataItem);
+      questionItemsToWrite = [];
+      for (const q of questionItems) {
+        questionItemsToWrite.push(await encryptItem(cryptoOrgId, 'question', q));
+      }
+      console.log(`🔐 Encrypting ${questionItems.length} question row(s) for org ${cryptoOrgId}`);
+    }
+
     try {
       await batchPut(categoryItems);
-      await batchPut(questionItems);
-      if (!isReplace) await batchPut([setMetadataItem]);
+      await batchPut(questionItemsToWrite);
+      if (!isReplace) await batchPut([setMetadataItemToWrite]);
     } catch (writeError) {
       console.error(`❌ Import write failed: ${writeError.message}`);
       console.log(`🧹 Rolling back up to ${intendedKeys.length} item(s)`);
@@ -943,6 +1057,19 @@ exports.handler = async (event) => {
     // versions[] is appended in the SAME update, so the list and the pointer can
     // never disagree. list_append needs an existing list, so if_not_exists seeds
     // one for a set that has never carried the attribute.
+    //
+    // NOTHING IN THIS UPDATE IS ENCRYPTED, and that is checked rather than
+    // assumed: every attribute it writes — activeVersion, versions[],
+    // questionCount, categoryCount, hasImages, sourceFile, updatedAt,
+    // engagementType — is a count, a flag, a timestamp or a pointer, and
+    // `ENCRYPTED_FIELDS.set` names none of them. A replace never rewrites the
+    // set's `name`, `description`, `customInstruction`, `aiContextInstruction`
+    // or `roundKindBrief` (that is the whole point of the targeted update — see
+    // the note above the batch writes), so those keep whatever form they were
+    // last written in: ciphertext for an org set, plaintext for a platform one.
+    // If a prose field is ever ADDED to this expression it must be run through
+    // `encryptValue(cryptoOrgId, …)` first, or an org set's replace will
+    // silently re-plaintext a field its create encrypted.
     if (isReplace) {
       const versionEntry = {
         version: targetVersion,
@@ -959,7 +1086,7 @@ exports.handler = async (event) => {
       try {
         await db.send(new UpdateCommand({
           TableName: process.env.TABLE_NAME,
-          Key: { PK: 'SETS', SK: `SET#${setId}` },
+          Key: setMetadataKey(targetRef),
           // Every attribute is aliased through ExpressionAttributeNames, the
           // same blanket rule edit-question-set.js uses: DynamoDB's reserved-word
           // list is long and dull, and one rule beats a per-field judgement call

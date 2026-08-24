@@ -288,17 +288,27 @@ const PARTICIPANT_GETS = [
     assert.ok(/await\s+authFetch\(`\$\{API_BASE\}games`\)/.test(hostPage),
       'the games-list call site does not send a token'));
 
-  // The closing paren immediately after the template literal is what keeps this
-  // off the POST /games CREATE call a few hundred lines up, which is
-  // fetch(`${API_BASE}games`, { ... } — a second argument, so no match. That
-  // route is public and is a separate question; this must not drag it in.
+  // TWO things keep this off the POST /games CREATE call a few hundred lines
+  // up. The closing paren immediately after the template literal is one: the
+  // create call passes a second argument, so it cannot match. The other, which
+  // this file did not originally rely on, is that `authFetch` carries a CAPITAL
+  // F — `fetch\(` is not a substring of `authFetch(` at all.
+  //
+  // THE COMMENT HERE USED TO SAY POST /games WAS PUBLIC AND "a separate
+  // question". It is not any more. An unauthenticated create left a session
+  // with no owner to attribute and no org to bill, and it is now authorized
+  // alongside the whole session-control surface — see
+  // tests/session-control-routes-authorization.js. Both calls send a token now,
+  // so this negative assertion and the positive one below say the same thing
+  // from opposite sides.
   await check('and no bare fetch of the list survives', () =>
     assert.ok(!/await\s+fetch\(`\$\{API_BASE\}games`\)/.test(hostPage),
       'a bare fetch of GET /games is still in the file — it will 401'));
 
-  await check('the POST /games create call is untouched by that assertion', () =>
-    assert.ok(/fetch\(`\$\{API_BASE\}games`,\s*\{/.test(hostPage),
-      'the create call changed shape — re-read the negative assertion above'));
+  await check('the POST /games create call sends a token too', () =>
+    assert.ok(/authFetch\(`\$\{API_BASE\}games`,\s*\{/.test(hostPage),
+      'creating a session no longer carries a token — that route is authorized now, '
+      + 'so the host would 401 on Create engagement'));
 
   await check('authFetch is imported', () =>
     assert.ok(/import\s*\{[^}]*\bauthFetch\b[^}]*\}\s*from\s*'\.\/auth\/authFetch'/.test(hostPage)));
