@@ -1,20 +1,138 @@
 # Handoff — Engage as a multi-tenant SaaS
 
-**Branch:** merged to `dev` as `6730ce9a` (rebased onto `df8250f5`).
-**Status:** backend complete; the console's org switcher, Members, Plan & usage and
-Data & privacy are built and wired; **deployed to dev** 2026-08-23. Test and prod have
-not seen it.
+**Branch:** `dev`. First pass `6730ce9a`; **second pass `1e6ff843`** — read §0 first,
+it is the one that answers what dev actually showed.
+**Status:** deployed to dev 2026-08-23, twice. Test and prod have not seen either.
 
-**Baselines at the push:** frontend 165 suites / 4037 tests green · backend 89 node
-suites green · lint 0 errors / 11 known `exhaustive-deps` warnings · build clean with
-the 2 known size warnings · `tests/template-validates.js` 2 passed.
+**Baselines at the second push:** frontend **172 suites / 4104 tests** green · backend
+**91 node suites** green · lint 0 errors / 11 known `exhaustive-deps` warnings · build
+clean with the 2 known size warnings · `tests/template-validates.js` 2 passed.
 
-**Still unbuilt, and named in §7:** the public library and its moderation pipeline
-(mockups 05, 06, 07, 10, 11), Stripe, the access-log WRITER — the Data & privacy page
-renders the log but nothing writes rows to it yet — and org export/delete.
-**Read first:** `~/.claude/plans/make-sure-you-get-magical-book.md` (the approved plan) and
-`docs/design/tenancy-redesign/RATIONALE.md`. **Open the mockups in a browser** — they are
-the design, and reading the HTML is not the same as seeing them render.
+**Still unbuilt, and named in §7:** the public library and its moderation
+pipeline (mockups 05, 06, 07, 11), Stripe, the access-log WRITER — the Data &
+privacy page renders the log but nothing writes rows to it yet — the
+break-glass grant, and org export/delete.
+
+---
+
+## 0. THE SECOND PASS — what dev showed, 2026-08-23
+
+The first deploy was reviewed on dev and four things came back. They had one
+root cause between them: **the console could not tell an Engage admin from an
+org admin**, so it tried to be both consoles at once and was neither.
+
+### Platform is a MODE now, and this has been wrong twice
+
+`config/consoleSections.js` carries the full reasoning; the short version is
+that both previous attempts failed in opposite directions.
+
+1. **Selected by the ABSENCE of an active organisation.** Right in spirit,
+   unreachable in practice — every approved account is given a personal org, so
+   staff always had one and the platform console could not be opened at all.
+2. **Bolted on ADDITIVELY**, beside the org's own sections. Reachable, and it
+   reintroduced exactly the mixing the split exists to end: Moderation rendered
+   beside the operator's own question sets with nothing on screen saying which
+   hat was on.
+
+Now it is an explicit choice in the switcher — **Act as · Engage** — and it is
+exclusive. `mode: PLATFORM_MODE` gives the platform console and nothing else;
+anything else gives the active organisation and no platform links. The mode is
+a VIEW and the `admins` group is the PERMISSION: asking for the mode without
+the group returns no sections, and every platform route re-checks the group.
+
+The sentinel is `~platform`, deliberately not a possible org id, and
+`authFetch` sends `X-Engage-Org` **only** for a value matching `org_` + base58.
+
+### Two bugs that were invisible to every pure-module test
+
+Both lived in the wiring between `consoleSections` and the page, which is why
+the module had full coverage and the console was still wrong.
+
+| | |
+|---|---|
+| `activeOrg.role` | `GET /orgs` answers with **`yourRole`**. orgRole arrived undefined for everybody, so every team OWNER was rendered the member nav — losing Plan & usage and Data & privacy while still being the person who pays. Reported as "missing most of the menu items". |
+| `<OrgSwitcher orgs onSwitch>` | The component's props are **`organisations`** and **`onSelect`**. It received an empty list, took its "nothing to name" branch and rendered **nothing** — there was no switcher on dev at all. React says nothing about a prop that is simply not there. |
+
+`src/src/__tests__/adminOrgWiring.test.jsx` exists for exactly this class: it
+mounts the page and looks. Note its first test had to be rewritten to use a
+HOST rather than staff — with `platform` true the chip renders from that branch
+regardless, so the assertion passed against the shipped bug until the caller
+changed.
+
+### The super admin exists
+
+`GET /platform/orgs` and `POST /platform/orgs/{orgId}/status`, in
+`lambda-functions/admin/orgs/platform-orgs.js`, behind
+`components/PlatformOrgsPanel.jsx`.
+
+- **`admins` alone, never `['hosts','admins']`.** The one place in this API
+  where those two must not be interchangeable — these routes administer other
+  people's tenants.
+- **A personal space cannot be suspended.** It is an account deletion with a
+  friendlier name; the lever for a person is their Cognito account.
+- **Status writes BOTH rows** — METADATA, which every guard reads, and the
+  index row, which the screen reads.
+- **`PlatformOrgsFunction` carries no `kms:Decrypt`,** and that absence is part
+  of the guarantee. `tests/kms-grants-match-code.js` derives the grant set from
+  the require graph and fails if this function ever pulls `tenant-crypto` in.
+- The mockup's per-row **Request access** is NOT built: the break-glass grant it
+  belongs to does not exist, and a button leading to a safeguard that is not
+  there is worse than no button.
+
+### Copying, which was the missing middle step
+
+Every org could already READ the platform and public libraries and could not
+change them, so the only honest answer to "can I adapt this?" was no.
+
+`POST /question-sets/{setId}/copy` duplicates every row into the org's own
+partition, **encrypting the questions on the way in** — the source is plaintext
+because platform content has no tenant, the destination has one, and a copy
+that stayed plaintext would sit outside the guarantee its owner was given. It
+records `sourceSetId`/`sourceScope` for provenance and links to nothing: an
+Engage admin editing the platform set must never change a customer's copy.
+
+The table now reads the `canManage` the server has been projecting all along,
+instead of drawing Edit and Delete on every row and letting the click 403. Rows
+are badged **Engage** or **Public** so the refusal has an explanation on screen.
+
+### Smaller, and real
+
+- **The report button** is a header control beside Help. It was `position:fixed`
+  at `z-index: 20000` with no way to ask for anything else — so it floated over
+  every screen, including the panels that were already slotting it into their
+  own footers and having that placement ignored. `placement="floating"` still
+  exists for a surface with no chrome.
+- **A space is named after a person.** The first org this product provisioned
+  was called `Google_113956208956782440356`: `callerName` falls back to the
+  Cognito username, which for a federated identity is the provider's opaque id.
+  Repaired lazily on `GET /orgs`, on both rows, conditioned so a space somebody
+  has since renamed is never undone.
+- **The URL canonicaliser** now uses the per-person landing section. It named a
+  constant, so in platform mode it wrote `?section=orgs` for a URL that already
+  WAS the landing screen — the two-URLs-one-screen defect it exists to prevent.
+
+### One loose end, stated rather than hidden
+
+**Where does an Engage admin edit the platform library?** Today: from their own
+personal space, where `canManageSet` grants it and the row is badged Engage. It
+works and it is legible, but it is conceptually muddy — Engage's own content is
+being managed from a personal org rather than from the platform console. The
+clean answer is a "Shared library" section in platform mode, which does not
+weaken isolation at all because platform content has no tenant. Not built.
+
+### Two tests were corrected, not silenced
+
+`consoleSections`' *"an Engage operator inside an organisation reaches BOTH"*
+required the additive console this removes, and `orgSwitcher`'s *"the platform
+chip is inert"* required the chip that left staff with no door. Both now assert
+the opposite and carry the reversal in their comments.
+
+Two fixture lessons worth carrying: org ids in fixtures must be **`org_` + 22
+base58** or they fail `isOrgId` and assertions pass for the wrong reason; and
+`tests/helpers/tenant-crypto-stub.js` has two modes — `mintOrg` (random key) and
+`installTestKeyLoader` (derived key). `plainRow` only matches the second, and
+mixing them fails as "Unsupported state or unable to authenticate data", which
+reads like a crypto bug.
 
 ---
 
