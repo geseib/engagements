@@ -1,7 +1,17 @@
 # Handoff — Engage as a multi-tenant SaaS
 
-**Branch:** `working/engagements-multitenant-saas-832f3f`
-**Status:** backend complete and green; console partly built; **not yet deployed**.
+**Branch:** merged to `dev` as `6730ce9a` (rebased onto `df8250f5`).
+**Status:** backend complete; the console's org switcher, Members, Plan & usage and
+Data & privacy are built and wired; **deployed to dev** 2026-08-23. Test and prod have
+not seen it.
+
+**Baselines at the push:** frontend 165 suites / 4037 tests green · backend 89 node
+suites green · lint 0 errors / 11 known `exhaustive-deps` warnings · build clean with
+the 2 known size warnings · `tests/template-validates.js` 2 passed.
+
+**Still unbuilt, and named in §7:** the public library and its moderation pipeline
+(mockups 05, 06, 07, 10, 11), Stripe, the access-log WRITER — the Data & privacy page
+renders the log but nothing writes rows to it yet — and org export/delete.
 **Read first:** `~/.claude/plans/make-sure-you-get-magical-book.md` (the approved plan) and
 `docs/design/tenancy-redesign/RATIONALE.md`. **Open the mockups in a browser** — they are
 the design, and reading the HTML is not the same as seeing them render.
