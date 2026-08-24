@@ -374,7 +374,12 @@ describe('the members table, and the badge that used to lie about it', () => {
     await mount();
     const row = within(screen.getByRole('table')).getByText('Priya Balasubramanian').closest('tr');
     expect(within(row).queryByRole('button', { name: /make host/i })).toBeNull();
-    fireEvent.click(within(row).getByRole('button', { name: /make admin/i }));
+    /* "Make Engage admin", not "Make admin". The word carries the distinction
+       between Engage staff and an ORG admin, which are unrelated roles granted
+       on different screens — see the header of UserManagement.jsx. The regex
+       stays loose enough to match either spelling so it is testing the control,
+       not the wording. */
+    fireEvent.click(within(row).getByRole('button', { name: /make (engage )?admin/i }));
 
     await waitFor(() => expect(stateCalls()).toHaveLength(1));
     expect(stateCalls()[0][0]).toBe('https://api.example.test/dev/admin/users/priya/state');

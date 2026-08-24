@@ -102,6 +102,84 @@ async function listUsers(event) {
 }
 
 // Change user state by moving them between groups
+/** The Cognito group that means "works on Engage". */
+const ENGAGE_ADMIN_GROUP = 'admins';
+
+/** Moves that would take somebody OUT of the Engage admin group. */
+const REMOVES_ADMIN = new Set(['hosts', 'pending', 'disabled', 'delete']);
+
+/** Moves nobody may aim at their own account, because nothing undoes them. */
+const SELF_DESTRUCTIVE = new Set(['delete', 'disabled']);
+
+/** Who is asking. The custom authorizer puts both on the context. */
+function callerNames(event) {
+  const lambda = event?.requestContext?.authorizer?.lambda || {};
+  return [lambda.username, lambda.userId].filter(Boolean).map(String);
+}
+
+/** Is this account currently an Engage admin? */
+async function isEngageAdmin(username) {
+  const res = await cognito.send(new AdminListGroupsForUserCommand({
+    UserPoolId: USER_POOL_ID,
+    Username: username,
+  }));
+  return (res.Groups || []).some((g) => g.GroupName === ENGAGE_ADMIN_GROUP);
+}
+
+/** How many Engage admins the pool has, counted rather than remembered. */
+async function engageAdminCount() {
+  const res = await cognito.send(new ListUsersCommand({
+    UserPoolId: USER_POOL_ID,
+    Limit: 60,
+  }));
+  const users = res.Users || [];
+  const flags = await Promise.all(users.map((u) => isEngageAdmin(u.Username)));
+  return flags.filter(Boolean).length;
+}
+
+/**
+ * REFUSE A MOVE THAT WOULD LOCK THE PLATFORM CONSOLE SHUT.
+ *
+ * The Accounts screen is itself only reachable from the Engage console, and the
+ * `admins` group is the only key to it — so pressing "Make host", "Disable" or
+ * "Delete" on the last Engage admin removed the only route back in. Nothing in
+ * the product could undo it: Organisations, Moderation and Accounts all sit
+ * behind that group, and so does the one screen that grants it. Recovery meant
+ * the AWS console against Cognito.
+ *
+ * Two rules, and the asymmetry between them is deliberate:
+ *
+ *   - THE LAST ADMIN cannot be demoted, disabled or deleted by anybody. This is
+ *     about the pool, not about who is asking.
+ *   - NOBODY deletes or disables THEIR OWN account, even with other admins
+ *     present. Demotion is reversible by any remaining admin; these are not
+ *     reversible by anyone but AWS.
+ *
+ * Self-demotion while others remain IS allowed. Somebody stepping back from the
+ * role is a real thing and another admin can put it back.
+ *
+ * Checked BEFORE the destructive step. `changeUserState` removes every group
+ * and then adds one, so a guard placed after that would leave the account in no
+ * group at all — worse than either outcome it was choosing between.
+ *
+ * Counted live rather than tracked, because the count has exactly one consumer
+ * and a stored counter that drifts fails in the direction of locking people out.
+ */
+async function lockoutRefusal(event, username, newState) {
+  if (SELF_DESTRUCTIVE.has(newState) && callerNames(event).includes(String(username))) {
+    return newState === 'delete'
+      ? 'You cannot delete your own account. Ask another Engage admin to do it.'
+      : 'You cannot disable your own account. Ask another Engage admin to do it.';
+  }
+
+  if (!REMOVES_ADMIN.has(newState)) return null;
+  if (!(await isEngageAdmin(username))) return null;
+  if ((await engageAdminCount()) > 1) return null;
+
+  return 'This is the last Engage admin. Make somebody else an Engage admin first, '
+    + 'or nobody will be able to reach Organisations, Moderation or Accounts again.';
+}
+
 async function changeUserState(event) {
   console.log('Changing user state');
   
@@ -126,6 +204,18 @@ async function changeUserState(event) {
   }
   
   try {
+    /* BEFORE ANYTHING IS WRITTEN. See lockoutRefusal for why the order matters
+       and why self-demotion is deliberately still allowed. */
+    const refusal = await lockoutRefusal(event, username, newState);
+    if (refusal) {
+      console.log(`Refused ${newState} on ${username}: ${refusal}`);
+      return {
+        statusCode: 409,
+        headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: refusal })
+      };
+    }
+
     // Handle delete action
     if (newState === 'delete') {
       await cognito.send(new AdminDeleteUserCommand({

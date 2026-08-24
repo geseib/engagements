@@ -36,6 +36,31 @@
 
 .corg :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
 
+/* ── THE SCRIM, WHICH WAS MISSING AND MEANT THE DIALOG DID NOT APPEAR ──────
+   `Modal` puts `overlayClassName` on the backdrop element and applies NO
+   styling of its own — the caller owns the whole overlay. This file named
+   `.corg-scrim` from the JSX and never declared it, so the dialog rendered as
+   an unpositioned, unscrimmed block at the end of the document: present in the
+   DOM, invisible on screen. Reported as "i dont get anything for pressing
+   create and organization button".
+
+   jsdom cannot see this. It has no layout engine, so every assertion in
+   createOrgDialog.test.jsx passed against a dialog nobody could see — which is
+   why __tests__/scopedClassesDeclared.test.js now checks that every scoped
+   class the markup uses actually exists in the stylesheet. */
+.corg-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 11, 22, .72);
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 24px;
+}
+.corg-scrim > * { margin: auto; }
+
 .corg-dialog {
   width: min(420px, calc(100vw - 32px));
   background: var(--surface);
