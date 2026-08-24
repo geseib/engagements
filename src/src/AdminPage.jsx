@@ -378,6 +378,17 @@ function AdminPage() {
    * this org already had), so guessing it here would show a row that does not
    * exist under a name that is not its own.
    */
+  /**
+   * The editor copied a set the caller could not change, and is now pointing at
+   * the copy. Refresh the list so the new row exists, and rebind the editor to
+   * it — the person is mid-edit and the Questions panel still holds their work.
+   */
+  const handleEditorCopied = async (newSetId, message) => {
+    await fetchQuestionSets();
+    setEditingSetId(newSetId);
+    setNotice({ tone: 'success', text: message });
+  };
+
   const handleCopySet = async (set) => {
     /* `tone`, not `kind`. QuestionSetsPanel keys the banner's class, ICON and
        aria role entirely off `tone` — every other setNotice call site in this
@@ -1492,6 +1503,11 @@ function AdminPage() {
             availableSets={questionSets}
             defaultInstructions={defaultInstructions}
             onSaved={handleEditorSaved}
+            /* A copy was made: stay in the editor, now looking at THEIR set.
+               Closing here would lose whatever is typed into the Questions
+               panel below, and saving that afterwards would make a second
+               copy of the same original. */
+            onCopied={handleEditorCopied}
             onChanged={fetchQuestionSets}
             onCancel={handleCancelEdit}
           />

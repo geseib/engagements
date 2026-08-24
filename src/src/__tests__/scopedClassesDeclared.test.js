@@ -50,6 +50,7 @@ const SURFACES = [
   ['PlatformOrgsPanel', 'porgs'],
   ['ActingAsBanner', 'pmode'],
   ['PendingInvites', 'pinv'],
+  ['CountField', 'cnt'],
   ['OrgSwitcher', 'orgsw'],
   ['TeamPanel', 'team'],
   ['BillingPanel', 'bill'],

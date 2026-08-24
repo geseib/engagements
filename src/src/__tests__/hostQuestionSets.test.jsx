@@ -721,7 +721,7 @@ describe('delete', () => {
 /* ----------------------------------------------------------------- create -- */
 
 describe('create', () => {
-  test('the upload form is the shared one, with the admin machinery switched off', async () => {
+  test('the upload form is the shared one, and the builders are a host\'s now', async () => {
     await openDialog();
     fireEvent.click(screen.getByRole('button', { name: /new question set/i }));
 
@@ -729,13 +729,29 @@ describe('create', () => {
     expect(screen.getByLabelText(/engagement type/i)).toBeTruthy();
     expect(screen.getByLabelText(/csv file/i)).toBeTruthy();
 
-    // rejects: handing a host the console's form whole. Each of these is either
-    // an admins-only route or a library-curation field, and every one of them
-    // would be a dead or refused control here.
-    expect(screen.queryByRole('button', { name: /AI .* builder/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /manual builder/i })).toBeNull();
+    /*
+      THE BUILDERS USED TO BE ASSERTED ABSENT HERE, and the reversal is the
+      owner's decision rather than a relaxation.
+
+      They were off because the AI routes were admins-only, and those were
+      admins-only because Bedrock costs money and, before tenancy, there was no
+      way to say whose. A generation now happens inside an organisation that has
+      a plan and a metering ledger behind it: "now that we have teams with
+      purchase and tracking capabilities coming in, it is ok to let it have the
+      full AI Builder experience in the host create question set."
+
+      The routes moved with the UI — see tests/host-ai-builder-routes.js, which
+      opens both halves of every job (start AND poll, because opening only the
+      start spends the money and then refuses the answer).
+    */
+    // rejects: showing a host a builder whose route would refuse them.
+    expect(screen.queryByRole('button', { name: /AI .* builder/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /manual builder/i })).toBeTruthy();
+
+    // rejects: handing a host the console's form WHOLE. These two remain off —
+    // the summary prompt is a library-curation choice the fuller editor owns,
+    // and this dialog is the quick "make me a set" path.
     expect(screen.queryByLabelText(/AI summary prompt/i)).toBeNull();
-    expect(screen.queryByLabelText(/custom instructions/i)).toBeNull();
     expect(screen.queryByLabelText(/AI context instructions/i)).toBeNull();
   });
 

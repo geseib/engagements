@@ -429,15 +429,36 @@ export default function QuestionSetsPanel({
                                 Delete
                               </button>
                             </>
-                          ) : onCopy && (
-                            <button
-                              type="button"
-                              className="qsets-btn qsets-btn--sm"
-                              onClick={() => onCopy(set)}
-                              title="Make this organisation's own copy, which you can then change"
-                            >
-                              Copy to my organisation
-                            </button>
+                          ) : (
+                            <>
+                              {/* OPEN IS SAFE ON A ROW YOU DO NOT OWN, because
+                                  saving one now COPIES it (QuestionSetEditor:
+                                  `isSomebodyElses`). Offering only Copy meant
+                                  the shared library could not be READ in the
+                                  editor at all — you could take a blind
+                                  duplicate or nothing, and the reported flow was
+                                  somebody wanting to look, adjust and then
+                                  keep. Delete stays absent: that one has no
+                                  copy-on-write equivalent. */}
+                              <button
+                                type="button"
+                                className="qsets-btn qsets-btn--sm"
+                                onClick={() => onEdit && onEdit(set)}
+                                title="Open it. Saving makes your organisation its own copy."
+                              >
+                                Open
+                              </button>
+                              {onCopy && (
+                                <button
+                                  type="button"
+                                  className="qsets-btn qsets-btn--sm"
+                                  onClick={() => onCopy(set)}
+                                  title="Take a copy now, without opening it"
+                                >
+                                  Copy
+                                </button>
+                              )}
+                            </>
                           )}
                         </div>
                       </td>

@@ -256,6 +256,48 @@ const HOST_ADMIN_ROUTES = new Set([
   // `admin/question-sets/{setId}/media/uploads` are two entries because they
   // are two routes; a prefix match here would additionally open every version
   // route, which is the mistake this list's header exists to prevent.
+  /*
+    ── THE AI BUILDERS, WHICH WERE ADMINS-ONLY BECAUSE OF THE BILL ──────────
+
+    These were withheld from hosts for one reason and it was a good one:
+    Bedrock costs money, and before tenancy there was no way to say WHOSE money.
+    Every generation was an unattributable charge against the platform.
+
+    That reason has expired. A generation now happens inside an organisation —
+    the caller carries an `orgId`, the org carries a plan, and the metering
+    ledger exists to attribute usage to it. The owner's call: "now that we have
+    teams with purchase and tracking capabilities coming in, it is ok to let it
+    have the full AI Builder experience in the host create question set."
+
+    Each is TWO entries, the POST that starts the job and the GET that polls it,
+    because they are two routes — see the note below about prefix matching. A
+    started job whose poll route refuses is worse than no job at all: the work
+    is done, the money is spent, and the answer is unreachable.
+
+    NOT included: the prompt LIBRARY writes (`POST/PUT/DELETE admin/ai-prompts…`,
+    `ai-prompt-advisor`, `ai-generate-prompt`). Those shape what the AI does for
+    everybody, and they stay Engage's. The read is here because the builders
+    offer a summary prompt to choose from and cannot without it.
+  */
+  'POST admin/ai-generate-trivia',
+  'GET admin/ai-generate-trivia/{jobId}',
+  'POST admin/ai-generate-scenarios',
+  'GET admin/ai-generate-scenarios/{jobId}',
+  'POST admin/ai-generate-polls',
+  'GET admin/ai-generate-polls/{jobId}',
+  'POST admin/ai-generate-survey',
+  'GET admin/ai-generate-survey/{jobId}',
+  'POST admin/ai-generate-questions',
+  'GET admin/ai-generate-questions/{jobId}',
+  // "Fill in the rest" on the builder forms, and the set's own name/description
+  // draft. Same job shape, same reasoning.
+  'POST admin/ai-draft-builder-form',
+  'GET admin/ai-draft-builder-form/{jobId}',
+  'POST admin/ai-draft-set-metadata',
+  'GET admin/ai-draft-set-metadata/{jobId}',
+  // READ ONLY. The builders let somebody pick which summary prompt a set uses;
+  // writing the library stays Engage's.
+  'GET admin/ai-prompts',
   'POST admin/question-sets/{setId}/media/uploads',
   'GET admin/question-sets/{setId}/media',
   // Put a set on the quickstart shelf, or take it off. Ownership-guarded by
@@ -290,6 +332,27 @@ function requiredGroupsForRoute(method, path) {
   if (HOST_ADMIN_ROUTES.has(`${method} ${path}`)) {
     return ['hosts', 'admins'];
   }
+  // `platform/...` route, including one somebody meant to be public.
+  // ── POLLING AN AI JOB YOU STARTED ────────────────────────────────────────
+  //
+  // HOST_ADMIN_ROUTES matches exact `METHOD template` pairs, and this handler
+  // falls back to `event.rawPath` whenever `routeKey` is absent — which carries
+  // a REAL job id, not `{jobId}`. So a host could start a generation, be
+  // charged for it, and then be refused the poll that hands over the answer.
+  // Strictly worse than never opening the route.
+  //
+  // Anchored on the five generation families and the two draft helpers by name,
+  // not a prefix over `admin/ai-`: a prefix would additionally open
+  // `ai-prompt-advisor` and `ai-generate-prompt`, which shape what the AI does
+  // for every organisation and stay Engage's.
+  const AI_JOB_POLL = new RegExp(
+    '^admin/ai-(?:generate-(?:trivia|scenarios|polls|survey|questions)'
+    + '|draft-(?:builder-form|set-metadata))/[A-Za-z0-9_-]+$',
+  );
+  if (method === 'GET' && AI_JOB_POLL.test(path)) {
+    return ['hosts', 'admins'];
+  }
+
   // All other admin routes require the admins group
   if (path.startsWith('admin')) {
     return ['admins'];
@@ -343,7 +406,7 @@ function requiredGroupsForRoute(method, path) {
   //
   // Anchored, and not `startsWith('platform')`, for the reason recorded on the
   // question-set block below: a prefix silently swallows every future
-  // `platform/...` route, including one somebody meant to be public.
+
   const PLATFORM_ROUTE = /^platform\/orgs(\/[^/]+\/status)?$/;
   if (PLATFORM_ROUTE.test(path)) {
     return ['admins'];

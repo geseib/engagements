@@ -547,8 +547,19 @@ export default function HostQuestionSetsDialog({
             scrollIntoViewOnMount
             engagementType={newSetType}
             onEngagementTypeChange={setNewSetType}
-            showAIBuilder={false}
-            showManualBuilder={false}
+            /* ── THE BUILDERS ARE A HOST'S NOW ────────────────────────────
+               These were off because the AI routes were admins-only, and those
+               were admins-only because Bedrock costs money and, before tenancy,
+               there was no way to say whose. A generation now happens inside an
+               organisation with a plan and a metering ledger behind it, so the
+               routes accept hosts (auth/authorizer.js, HOST_ADMIN_ROUTES) and
+               the panel can offer them.
+
+               The SUMMARY PROMPT picker stays off here: choosing one is a
+               property of the set that the console's fuller editor handles, and
+               this dialog is the quick "make me a set" path. */
+            showAIBuilder
+            showManualBuilder
             showSummaryPrompt={false}
             showAdvancedFields={false}
             heading="New question set"

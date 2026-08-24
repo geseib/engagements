@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
+import CountField from './CountField';
 import { normalizeTags } from '../utils/tags';
 import GenerationJobPanel from './GenerationJobPanel';
 import GeneratedItemsTable from './GeneratedItemsTable';
@@ -568,33 +569,14 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
                 </div>
 
                 <div className="form-row">
-                  <div className="form-group">
-                    <label>Number of Questions: <strong>{surveyConfig.questionCount}</strong></label>
-                    <div className="quantity-controls">
-                      <input
-                        type="range"
-                        min="5"
-                        max="50"
-                        value={surveyConfig.questionCount}
-                        onChange={(e) => setSurveyConfig(prev => ({ ...prev, questionCount: parseInt(e.target.value) }))}
-                        className="quantity-slider"
-                      />
-                      <input
-                        type="number"
-                        min="5"
-                        max="50"
-                        value={surveyConfig.questionCount}
-                        onChange={(e) => setSurveyConfig(prev => ({ ...prev, questionCount: Math.min(50, Math.max(5, parseInt(e.target.value) || 5)) }))}
-                        className="quantity-input"
-                      />
-                    </div>
-                    <div className="quantity-presets">
-                      <button type="button" className="preset-btn" onClick={() => setSurveyConfig(prev => ({ ...prev, questionCount: 10 }))}>10</button>
-                      <button type="button" className="preset-btn" onClick={() => setSurveyConfig(prev => ({ ...prev, questionCount: 15 }))}>15</button>
-                      <button type="button" className="preset-btn" onClick={() => setSurveyConfig(prev => ({ ...prev, questionCount: 25 }))}>25</button>
-                      <button type="button" className="preset-btn" onClick={() => setSurveyConfig(prev => ({ ...prev, questionCount: 40 }))}>40</button>
-                    </div>
-                  </div>
+                  <CountField
+                      label="Questions to generate"
+                      value={surveyConfig.questionCount}
+                      onChange={(n) => setSurveyConfig((prev) => ({ ...prev, questionCount: n }))}
+                      min={1}
+                      max={50}
+                      presets={[5, 10, 20, 30]}
+                    />
                 </div>
 
                 <div className="question-types-selection">

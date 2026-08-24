@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
+import CountField from './CountField';
 import { tagsToCsvCell, normalizeTags } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
 import GenerationJobPanel from './GenerationJobPanel';
@@ -438,33 +439,14 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                 </div>
 
                 <div className="form-row">
-                  <div className="form-group">
-                    <label>Number of Questions: <strong>{triviaConfig.count}</strong></label>
-                    <div className="quantity-controls">
-                      <input
-                        type="range"
-                        min="1"
-                        max="100"
-                        value={triviaConfig.count}
-                        onChange={(e) => setTriviaConfig(prev => ({ ...prev, count: parseInt(e.target.value) }))}
-                        className="quantity-slider"
-                      />
-                      <input
-                        type="number"
-                        min="1"
-                        max="100"
-                        value={triviaConfig.count}
-                        onChange={(e) => setTriviaConfig(prev => ({ ...prev, count: Math.min(100, Math.max(1, parseInt(e.target.value) || 1)) }))}
-                        className="quantity-input"
-                      />
-                    </div>
-                    <div className="quantity-presets">
-                      <button type="button" className="preset-btn" onClick={() => setTriviaConfig(prev => ({ ...prev, count: 5 }))}>5</button>
-                      <button type="button" className="preset-btn" onClick={() => setTriviaConfig(prev => ({ ...prev, count: 10 }))}>10</button>
-                      <button type="button" className="preset-btn" onClick={() => setTriviaConfig(prev => ({ ...prev, count: 20 }))}>20</button>
-                      <button type="button" className="preset-btn" onClick={() => setTriviaConfig(prev => ({ ...prev, count: 50 }))}>50</button>
-                    </div>
-                  </div>
+                  <CountField
+                      label="Questions to generate"
+                      value={triviaConfig.count}
+                      onChange={(n) => setTriviaConfig((prev) => ({ ...prev, count: n }))}
+                      min={1}
+                      max={100}
+                      presets={[5, 10, 20, 50]}
+                    />
                 </div>
 
                 <div className="form-row">
@@ -493,36 +475,15 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                 </div>
 
                 <div className="form-row">
-                  <div className="form-group">
-                    <label>Number of Categories: <strong>{triviaConfig.numberOfCategories}</strong></label>
-                    <div className="quantity-controls">
-                      <input
-                        type="range"
-                        min="1"
-                        max="24"
-                        value={triviaConfig.numberOfCategories}
-                        onChange={(e) => setTriviaConfig(prev => ({ ...prev, numberOfCategories: parseInt(e.target.value) }))}
-                        className="quantity-slider"
-                      />
-                      <input
-                        type="number"
-                        min="1"
-                        max="24"
-                        value={triviaConfig.numberOfCategories}
-                        onChange={(e) => setTriviaConfig(prev => ({ ...prev, numberOfCategories: Math.min(24, Math.max(1, parseInt(e.target.value) || 1)) }))}
-                        className="quantity-input"
-                      />
-                    </div>
-                    <div className="quantity-note" style={{fontSize: '0.9em', color: '#666', marginTop: '5px'}}>
-                      Recommended: 1-8 categories for optimal organization
-                    </div>
-                    <div className="quantity-presets">
-                      <button type="button" className="preset-btn" onClick={() => setTriviaConfig(prev => ({ ...prev, numberOfCategories: 3 }))}>3</button>
-                      <button type="button" className="preset-btn" onClick={() => setTriviaConfig(prev => ({ ...prev, numberOfCategories: 5 }))}>5</button>
-                      <button type="button" className="preset-btn" onClick={() => setTriviaConfig(prev => ({ ...prev, numberOfCategories: 8 }))}>8</button>
-                      <button type="button" className="preset-btn" onClick={() => setTriviaConfig(prev => ({ ...prev, numberOfCategories: 12 }))}>12</button>
-                    </div>
-                  </div>
+                  <CountField
+                      label="Categories to spread them across"
+                      value={triviaConfig.numberOfCategories}
+                      onChange={(n) => setTriviaConfig((prev) => ({ ...prev, numberOfCategories: n }))}
+                      min={1}
+                      max={24}
+                      presets={[1, 3, 6, 12]}
+                      hint="Categories are what the host can switch on and off mid-session."
+                    />
                   <div className="form-group">
                     <div className="label-row">
                       <label>Must Have Categories</label>

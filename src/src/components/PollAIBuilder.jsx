@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
+import CountField from './CountField';
 import RoundKindPicker from './RoundKindPicker';
 import {
   roundKindParticipantInstruction, roundKindGaps, DEFAULT_ROUND_KIND,
@@ -477,33 +478,14 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                 </div>
 
                 <div className="form-row">
-                  <div className="form-group">
-                    <label>Number of Poll Questions: <strong>{pollConfig.count}</strong></label>
-                    <div className="quantity-controls">
-                      <input
-                        type="range"
-                        min="1"
-                        max="100"
-                        value={pollConfig.count}
-                        onChange={(e) => setPollConfig(prev => ({ ...prev, count: parseInt(e.target.value) }))}
-                        className="quantity-slider"
-                      />
-                      <input
-                        type="number"
-                        min="1"
-                        max="100"
-                        value={pollConfig.count}
-                        onChange={(e) => setPollConfig(prev => ({ ...prev, count: Math.min(100, Math.max(1, parseInt(e.target.value) || 1)) }))}
-                        className="quantity-input"
-                      />
-                    </div>
-                    <div className="quantity-presets">
-                      <button type="button" className="preset-btn" onClick={() => setPollConfig(prev => ({ ...prev, count: 5 }))}>5</button>
-                      <button type="button" className="preset-btn" onClick={() => setPollConfig(prev => ({ ...prev, count: 10 }))}>10</button>
-                      <button type="button" className="preset-btn" onClick={() => setPollConfig(prev => ({ ...prev, count: 20 }))}>20</button>
-                      <button type="button" className="preset-btn" onClick={() => setPollConfig(prev => ({ ...prev, count: 50 }))}>50</button>
-                    </div>
-                  </div>
+                  <CountField
+                      label="Poll questions to generate"
+                      value={pollConfig.count}
+                      onChange={(n) => setPollConfig((prev) => ({ ...prev, count: n }))}
+                      min={1}
+                      max={50}
+                      presets={[3, 5, 10, 20]}
+                    />
                 </div>
 
                 <div className="form-row">

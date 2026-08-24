@@ -1,0 +1,138 @@
+/* ============================================================================
+   "HOW MANY?" — components/CountField.jsx
+
+   Scoped under `.cnt`, like `.qsets`, `.team` and `.porgs`, so it declares no
+   global class a later import inherits.
+
+   REPLACES A SLIDER, and the shape follows from why. The presets are the
+   primary control because they are the real answer almost every time, so they
+   get the weight: 36px targets, the selected one filled with the accent. The
+   exact row is secondary and reads as such — a quiet stepper either side of a
+   narrow field, with the permitted range stated beside it rather than implied
+   by a track's length.
+
+   Colour is tokens only, from the dusk set the console already uses:
+
+     --text        #F4EDE4 on --bg #0F1A2E       14.97:1  the value, typed digits
+     --muted       #9BA8BE on --bg                7.24:1  label, range, hint
+     --primary     #F6A94C on --bg                9.14:1  the selected preset's ring
+     --bg          #0F1A2E on --primary           8.86:1  the selected preset's text
+
+   Asserted in __tests__/countFieldPalette.test.js.
+   ========================================================================== */
+
+.cnt {
+  --cnt-t-floor: 12px;
+  --cnt-t-label: 13px;
+  --cnt-t-body: 15px;
+  --cnt-t-value: 19px;
+  --cnt-rule: rgba(155, 168, 190, .22);
+  --cnt-rule-strong: rgba(155, 168, 190, .38);
+  --cnt-hover: rgba(155, 168, 190, .07);
+
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font: 400 var(--cnt-t-body)/1.4 var(--font-ui);
+  color: var(--text);
+}
+
+.cnt *,
+.cnt *::before,
+.cnt *::after { box-sizing: border-box; }
+
+.cnt :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 6px; }
+
+/* ------------------------------------------------------------------- head -- */
+
+.cnt-head { display: flex; align-items: baseline; gap: 10px; }
+
+.cnt-label {
+  flex: 1 1 auto;
+  color: var(--muted);
+  font: 600 var(--cnt-t-label)/1 var(--font-ui);
+}
+
+/* The current value, said once and plainly. A slider says it with a thumb
+   position, which is a guess; this is the number. */
+.cnt-value {
+  color: var(--text);
+  font: 600 var(--cnt-t-value)/1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.cnt-unit { color: var(--muted); font-size: var(--cnt-t-label); font-weight: 400; }
+
+/* ---------------------------------------------------------------- presets -- */
+
+.cnt-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.cnt-preset {
+  min-width: 46px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--cnt-rule-strong);
+  background: transparent;
+  color: var(--text);
+  font: 600 var(--cnt-t-body)/1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background-color .12s ease, border-color .12s ease;
+}
+.cnt-preset:hover { background: var(--cnt-hover); border-color: var(--muted); }
+
+/* Filled, not merely outlined: which one is chosen has to survive a glance
+   across a form with several of these on it. */
+.cnt-preset.is-on {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--bg);
+}
+.cnt-preset.is-on:hover { background: var(--primary); filter: brightness(1.05); }
+
+/* ------------------------------------------------------------------ exact -- */
+
+.cnt-exact { display: flex; align-items: center; gap: 6px; }
+
+.cnt-step {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid var(--cnt-rule);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.cnt-step:hover:not(:disabled) { background: var(--cnt-hover); color: var(--text); }
+.cnt-step:disabled { opacity: .35; cursor: not-allowed; }
+
+.cnt-input {
+  width: 72px;
+  height: 32px;
+  padding: 0 8px;
+  text-align: center;
+  border-radius: 8px;
+  border: 1px solid var(--cnt-rule-strong);
+  background: var(--bg);
+  color: var(--text);
+  font: 400 var(--cnt-t-body)/1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+/* The spinners are redundant beside real − and + buttons, and they are the
+   other half of what makes a number input look like a 2009 form. */
+.cnt-input::-webkit-outer-spin-button,
+.cnt-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.cnt-input { -moz-appearance: textfield; appearance: textfield; }
+
+/* The permitted range, stated. A slider implied it with the length of a track;
+   saying it is shorter and exact. */
+.cnt-range { color: var(--muted); font-size: var(--cnt-t-floor); font-variant-numeric: tabular-nums; }
+
+.cnt-hint { margin: 0; color: var(--muted); font-size: var(--cnt-t-floor); line-height: 1.5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cnt-preset { transition: none; }
+}

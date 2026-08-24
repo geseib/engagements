@@ -67,7 +67,8 @@ describe('a set Engage manages', () => {
   it('offers neither Edit nor Delete', () => {
     draw([ENGAGE]);
     const row = rowFor('80s Trivia');
-    expect(within(row).queryByRole('button', { name: /edit/i })).toBeNull();
+    // "Edit" specifically — the row does offer "Open", which copies on save.
+    expect(within(row).queryByRole('button', { name: /^edit$/i })).toBeNull();
     expect(within(row).queryByRole('button', { name: /delete/i })).toBeNull();
   });
 
@@ -76,8 +77,29 @@ describe('a set Engage manages', () => {
   it('offers a copy instead', () => {
     const onCopy = jest.fn();
     draw([ENGAGE], { onCopy });
-    within(rowFor('80s Trivia')).getByRole('button', { name: /copy/i }).click();
+    within(rowFor('80s Trivia')).getByRole('button', { name: /^copy$/i }).click();
     expect(onCopy).toHaveBeenCalledWith(expect.objectContaining({ id: '80strivia' }));
+  });
+
+  /*
+    AND IT CAN BE OPENED. Offering Copy alone meant the shared library could not
+    be READ in the editor — you could take a blind duplicate or nothing. Saving
+    an unowned set now copies it (QuestionSetEditor), so opening one is safe and
+    is what somebody wanting to look, adjust and then keep actually needs.
+  */
+  // rejects: a library you can duplicate but not read.
+  it('can be opened, and opening is not editing the original', () => {
+    const onEdit = jest.fn();
+    draw([ENGAGE], { onEdit, onCopy: jest.fn() });
+    within(rowFor('80s Trivia')).getByRole('button', { name: /^open$/i }).click();
+    expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: '80strivia' }));
+  });
+
+  // rejects: a Delete on a row nobody here may delete — it has no
+  // copy-on-write equivalent, so it stays absent.
+  it('still offers no Delete', () => {
+    draw([ENGAGE], { onCopy: jest.fn() });
+    expect(within(rowFor('80s Trivia')).queryByRole('button', { name: /delete/i })).toBeNull();
   });
 
   // rejects: three visually identical rows, which makes the refusal above
@@ -98,6 +120,6 @@ describe('when the page passes no onCopy', () => {
   // host's own set picker reuses this panel.
   it('draws no copy control', () => {
     draw([ENGAGE]);
-    expect(within(rowFor('80s Trivia')).queryByRole('button', { name: /copy/i })).toBeNull();
+    expect(within(rowFor('80s Trivia')).queryByRole('button', { name: /^copy$/i })).toBeNull();
   });
 });

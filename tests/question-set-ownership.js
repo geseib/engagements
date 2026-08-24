@@ -385,24 +385,26 @@ function reset() { store.clear(); log.length = 0; }
     ['POST', 'admin/toggle-question-set/{setId}'],
     // REJECTS: adding the download route "while we are here". Not asked for.
     ['GET', 'admin/download-question-set/{setId}'],
-    // REJECTS: adding the set-metadata drafter to HOST_ADMIN_ROUTES so that the
-    // host's copy of QuestionSetEditor can use it. Both halves of this route are
-    // listed because both spend money: the POST starts a Bedrock generation, and
-    // the {jobId} GET hands back whatever any admin's job produced. The AI routes
-    // are excluded from the host list on purpose (authorizer.js:112-114) —
-    // reaching one is a Bedrock spend, and a host's question-set permissions say
-    // nothing about budget. The host surface passes showAIAssist={false}, but a
-    // hidden button is not a permission: this is the check that survives someone
-    // flipping the flag.
-    ['POST', 'admin/ai-draft-set-metadata'],
-    ['GET', 'admin/ai-draft-set-metadata/{jobId}'],
-    // REJECTS: adding the builder-form helper to HOST_ADMIN_ROUTES because the
-    // AI builders themselves feel host-shaped. Same reasoning as the two lines
-    // above, both halves for the same reason: the POST starts a Bedrock
-    // generation, and the {jobId} GET hands back whatever any admin's job
-    // produced. The AI routes are excluded from the host list on purpose.
-    ['POST', 'admin/ai-draft-builder-form'],
-    ['GET', 'admin/ai-draft-builder-form/{jobId}'],
+    /*
+      ── THESE FOUR MOVED, AND THE REASON THEY WERE HERE EXPIRED ────────────
+
+      They were listed as must-stay-admins-only, and the argument was money:
+      "reaching one is a Bedrock spend, and a host's question-set permissions
+      say nothing about budget." That was exactly right while there was no way
+      to say WHOSE budget — every generation was an unattributable charge
+      against the platform.
+
+      Tenancy answered it. A generation now happens inside an organisation: the
+      caller carries an `orgId`, the org carries a plan, and the metering ledger
+      exists to attribute the spend. The owner's call — "now that we have teams
+      with purchase and tracking capabilities coming in, it is ok to let it have
+      the full AI Builder experience in the host create question set."
+
+      They are covered by tests/host-ai-builder-routes.js now, which asserts
+      BOTH halves of every job are open (opening only the POST spends the money
+      and then refuses the answer) and that the prompt LIBRARY writes are not —
+      those shape what the AI does for every organisation and stay Engage's.
+    */
     // REJECTS: any regression in the guard that matters most.
     ['POST', 'admin/users/list'],
     ['PUT', 'admin/users/{username}/state'],
