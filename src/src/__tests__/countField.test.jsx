@@ -131,3 +131,45 @@ describe('what it says', () => {
     expect(screen.queryByText(/host switches on and off/i)).toBeNull();
   });
 });
+
+/**
+ * AND NOWHERE STILL ASKS WITH A SLIDER.
+ *
+ * The report named both surfaces — "the AI builder and Manual builder … it is
+ * used for category count and for question count for generation" — and the
+ * manual builder's one was missed on the first pass, because it lives in
+ * `AIAssistant.jsx` under `BuilderPage` rather than in the four `*AIBuilder`
+ * files. It was only caught by grepping the DEPLOYED bundle for the old class
+ * name and finding it still there.
+ */
+describe('no builder asks with a slider any more', () => {
+  const fs = require('fs');
+  const path = require('path');
+
+  const SRC = path.join(__dirname, '..');
+  const walk = (dir, out = []) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === '__tests__' || entry.name === 'node_modules') continue;
+        walk(full, out);
+      } else if (/\.jsx?$/.test(entry.name)) out.push(full);
+    }
+    return out;
+  };
+
+  // rejects: a range input coming back on any surface, and a new one being
+  // added on a surface nobody thought to check.
+  it('no range input survives anywhere in the frontend', () => {
+    const offenders = walk(SRC)
+      .filter((f) => !f.endsWith('CountField.jsx'))
+      .filter((f) => {
+        const src = fs.readFileSync(f, 'utf8')
+          .replace(/\/\*[\s\S]*?\*\//g, ' ')
+          .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+        return /type=["']range["']/.test(src);
+      })
+      .map((f) => path.relative(SRC, f));
+    expect(offenders).toEqual([]);
+  });
+});
