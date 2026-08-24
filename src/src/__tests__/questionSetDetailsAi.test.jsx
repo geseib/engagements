@@ -147,7 +147,31 @@ const openAiPanel = async () => {
 };
 const draftIt = async () => {
   fireEvent.click(screen.getByRole('button', { name: /^Draft it$/i }));
-  await waitFor(() => expect(screen.getByRole('button', { name: /^Draft it$/i })).toBeEnabled());
+  /*
+    THE DEFAULT 1000ms BUDGET IS A RACE HERE, NOT A LIMIT.
+
+    Waiting for this button to come back enabled means waiting for a whole
+    async job: start, then poll, then apply. `pollGenerationJob` does its first
+    poll immediately, so the happy path takes no `POLL_INTERVAL_MS` sleep — but
+    that interval is 2000ms of REAL time (utils/aiBatchClient.js:108), so any
+    run that needs a second poll blows a one-second budget outright, and even
+    the single-poll path is several awaits and a re-render deep.
+
+    It is green on every developer machine and it took the whole dev build down
+    on f68b31b5, which is the signature of contention rather than of a defect.
+
+    Nothing here measures speed — the assertion is "the button comes back
+    enabled" — so the budget is raised clear of one poll cycle rather than the
+    wait being weakened.
+
+    `questionAddModal.test.jsx` drives the same flow through `findByTestId`,
+    which carries the same 1000ms default. It has not failed yet; if it starts
+    to, this is why.
+  */
+  await waitFor(
+    () => expect(screen.getByRole('button', { name: /^Draft it$/i })).toBeEnabled(),
+    { timeout: 8000 },
+  );
 };
 
 /**
