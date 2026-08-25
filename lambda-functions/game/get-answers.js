@@ -1,9 +1,20 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { isHidden, redactAnswers } = require('./anonymity');
+const { decryptItem, decryptItems } = require('./tenant-crypto');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
+
+/**
+ * WHOSE SESSION IS THIS? — off the row, because this route is PUBLIC.
+ *
+ * `GET /games/{gameId}/answers` carries no identity: `role` is a query
+ * parameter (see the note at the role branch), so `tenant.callerOrgId(event)`
+ * is '' for every caller and a blank orgId THROWS in tenant-crypto rather than
+ * silently returning nothing. The session's own METADATA row is the authority.
+ */
+const orgOf = (item) => (item && typeof item.orgId === 'string' ? item.orgId.trim() : '');
 
 exports.handler = async (event) => {
   try {
@@ -106,21 +117,18 @@ exports.handler = async (event) => {
     const answers = answersQuery.Items || [];
     console.log(`📊 Found ${answers.length} answers for question ${targetQuestionId}`);
 
-    // Base answer information
-    const fullAnswers = answers.map(answer => ({
-      playerName: answer.PlayerName,
-      name: answer.PlayerName, // Add name field for frontend compatibility
-      answer: answer.Answer,
-      answerType: answer.AnswerType || 'text',
-      submittedAt: answer.SubmittedAt
-    }));
-
     // Anonymity is decided here, once, for both role branches below.
     //
     // There is deliberately no host exemption: `role` arrives as a query
     // parameter (see :11), so a payload we would emit to role=host we would
     // emit to anybody who typed it. The only implementable guarantee is that
     // the names are not in the response at all.
+    //
+    // HOISTED ABOVE `fullAnswers` because the METADATA row is now needed for a
+    // second reason: it carries the `orgId` that decrypts `Answer`. Both the
+    // anonymity gate and the decrypt read the same row, so this costs nothing
+    // extra — but the ORDER matters, and it is the ordering that would break
+    // silently: build the payload first and every answer in it is an envelope.
     const [metaRes, roundRes] = await Promise.all([
       db.send(new GetCommand({
         TableName: process.env.TABLE_NAME,
@@ -133,6 +141,31 @@ exports.handler = async (event) => {
     ]);
 
     const hidden = isHidden(metaRes.Item, roundRes.Item);
+
+    // ── PLAINTEXT BEFORE REDACTION, NOT AFTER ────────────────────────────────
+    //
+    // `redactAnswers` strips the NAMES and keeps the text — it is the anonymity
+    // rule, not the encryption one, and the two are independent. Redacting
+    // envelopes would leave the ciphertext in place and hand the voting screen
+    // `{v:1,iv:…}` to vote on, so the unwrap has to come first.
+    //
+    // `decryptItems` preserves order, and order is load-bearing here: the
+    // ballot is POSITIONAL and get-results tallies vote index against
+    // answers[index].
+    const answerOrgId = orgOf(metaRes.Item);
+    const decryptedAnswers = answerOrgId
+      ? await decryptItems(answerOrgId, 'answer', answers)
+      : answers;
+
+    // Base answer information
+    const fullAnswers = decryptedAnswers.map(answer => ({
+      playerName: answer.PlayerName,
+      name: answer.PlayerName, // Add name field for frontend compatibility
+      answer: answer.Answer,
+      answerType: answer.AnswerType || 'text',
+      submittedAt: answer.SubmittedAt
+    }));
+
     // Order is preserved by redactAnswers and must stay that way: the ballot is
     // positional and get-results tallies vote index against answers[index].
     const baseAnswers = hidden ? redactAnswers(fullAnswers) : fullAnswers;
@@ -237,7 +270,7 @@ exports.handler = async (event) => {
  * re-checking on every tab focus.
  */
 async function getOwnAnswer(gameId, questionId, playerName, clientId) {
-  const [answerRes, playerRes] = await Promise.all([
+  const [answerRes, playerRes, metaRes] = await Promise.all([
     db.send(new GetCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionId}#ANSWER#${playerName}` }
@@ -245,10 +278,22 @@ async function getOwnAnswer(gameId, questionId, playerName, clientId) {
     db.send(new GetCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` }
+    })),
+    // The session row, for its `orgId` alone. This path returns the ANSWER TEXT
+    // to a caller that proved it wrote it, so it needs the same unwrap the
+    // board does — otherwise a player recovering their place after a reload
+    // gets their own submission back as an envelope and the screen shows it.
+    db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'orgId'
     }))
   ]);
 
-  const answerItem = answerRes.Item;
+  const answerOrgId = orgOf(metaRes.Item);
+  const answerItem = answerRes.Item && answerOrgId
+    ? await decryptItem(answerOrgId, 'answer', answerRes.Item)
+    : answerRes.Item;
   const storedClientId = (playerRes.Item && playerRes.Item.ClientId) || null;
   const identityProven = !!(clientId && storedClientId && storedClientId === clientId);
 

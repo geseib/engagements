@@ -5,6 +5,7 @@ import OAuthCallback from './auth/OAuthCallback';
 import PrivacyPolicyPage from './PrivacyPolicyPage';
 import TermsOfServicePage from './TermsOfServicePage';
 import GameHostPage from './GameHostPage';
+import InviteAcceptPage from './components/InviteAcceptPage';
 import PlayerPage from './PlayerPage';
 import AdminPage from './AdminPage';
 import BuilderPage from './BuilderPage';
@@ -194,6 +195,19 @@ function AppRouter() {
     return <WordCloudTest />;
   }
 
+  /* AN INVITATION LINK. Behind ProtectedRoute on purpose: this page exists for
+     somebody who has no account yet, so being bounced to sign in or register
+     and returned here afterwards IS the flow, not an obstacle. Everybody who
+     already has an account accepts from their landing screen instead and never
+     sees this. */
+  if (path.startsWith('/invite/')) {
+    return (
+      <ProtectedRoute>
+        <InviteAcceptPage />
+      </ProtectedRoute>
+    );
+  }
+
   // OAuth callback route
   if (path === '/auth/callback') {
     console.log('🔐 OAuth callback route hit');
@@ -230,10 +244,31 @@ function AppRouter() {
     return <AuthPage onAuthSuccess={() => window.location.href = '/'} />;
   }
 
-  // Admin routes (require admin authentication)
+  /*
+    THE CONSOLE IS FOR CUSTOMERS TOO, and requiring `admins` here meant it never
+    was.
+
+    `admins` is PLATFORM_GROUP — "the group that means 'works on Engage', not
+    'runs an organisation'" (config/consoleSections.js). A customer is approved
+    into `hosts`, and their organisation role is a DynamoDB fact delivered on
+    `GET /orgs` as `yourRole`. So `requireAdmin` refused a team OWNER, a team
+    ADMIN, a team MEMBER and every personal space with a bare "Access Denied ·
+    Admin privileges are required" page. Three of the four consoles
+    `sectionsFor` computes had never been seen by anybody they were computed
+    for.
+
+    Every test in this repo mounts `AdminPage` DIRECTLY, so nothing exercised
+    the router in front of it and the guard was invisible to jsdom and to a
+    green build alike. __tests__/adminRouteAccess.test.jsx goes through App.
+
+    OPENING THE DOOR GRANTS NOTHING. The nav is computed per person, the
+    platform sections are separately gated on `onPlatform && isStaff`, and every
+    platform route re-checks the group server-side. The door was never the
+    permission.
+  */
   if (path.startsWith('/admin')) {
     return (
-      <ProtectedRoute requireAdmin={true}>
+      <ProtectedRoute>
         <AdminPage />
       </ProtectedRoute>
     );

@@ -1,6 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+const { encryptItem } = require('./tenant-crypto');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -65,9 +66,27 @@ exports.handler = async (event) => {
       ttl: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // 7 days TTL
     };
 
+    // ── THE BALLOT ───────────────────────────────────────────────────────────
+    //
+    // `Votes` is a MAP (`{"0":1,"1":2}`), not a string. `encryptValue`
+    // JSON-serialises whatever it is given, so it round-trips back as a map and
+    // every tally below keeps working on the shape it expects.
+    //
+    // THIS ROUTE IS PUBLIC — a participant votes with nothing but the game id
+    // and their name — so the organisation cannot come from the caller. It
+    // comes off `GAME#<id>/METADATA`, the same row `get-votes` and
+    // `get-results` read it from when they decrypt. A pre-tenancy session has
+    // no orgId, no data key, and therefore keeps writing plaintext.
+    const sessionMeta = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'orgId'
+    }));
+    const voteOrgId = typeof sessionMeta.Item?.orgId === 'string' ? sessionMeta.Item.orgId.trim() : '';
+
     await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
-      Item: voteRecord
+      Item: voteOrgId ? await encryptItem(voteOrgId, 'vote', voteRecord) : voteRecord
     }));
 
     console.log(`✅ Vote stored successfully for ${playerName} on question ${questionNumber}`);

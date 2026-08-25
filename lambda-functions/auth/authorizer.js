@@ -8,15 +8,19 @@
 // AuthorizerPayloadFormatVersion "2.0" and EnableSimpleResponses true:
 // the handler returns { isAuthorized, context }, not an IAM policy.
 const { CognitoIdentityProviderClient, AdminListGroupsForUserCommand } = require('@aws-sdk/client-cognito-identity-provider');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, QueryCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const jwt = require('jsonwebtoken');
 const jwkToPem = require('jwk-to-pem');
 const axios = require('axios');
+const { pickActiveOrg } = require('./pick-active-org');
 
 // Cache for Cognito JWKs (persists across warm invocations)
 let cachedJwks = null;
 let cacheExpiry = 0;
 
 const cognito = new CognitoIdentityProviderClient({});
+const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
 // Get Cognito JWKs with caching
 async function getJwks() {
@@ -83,6 +87,124 @@ async function getUserGroups(username) {
   }
 }
 
+// ── THE CALLER'S ORGANISATION ──────────────────────────────────────────────
+//
+// Tenant identity is resolved HERE, once, and handed to every handler in the
+// authorizer context — the same way `userId` and `groups` already are. The
+// alternative was each handler querying memberships for itself, which is the
+// same query written eleven times and eleven chances to write it wrong; and a
+// handler that forgets it does not fail loudly, it silently acts for no org
+// (or, worse, for whichever org it guesses). `game/tenant.js` reads what this
+// writes and nothing else may re-derive it.
+//
+// TWO ROWS FEED THE ANSWER:
+//
+//   PK=USER#<sub>  SK begins_with 'ORG#'   → the memberships, each {orgId, role}
+//   PK=USER#<sub>  SK='PROFILE'            → defaultOrgId, the caller's own tie-break
+//
+// The PROFILE row is already written on signup by `auth/post-confirmation.js`
+// and, until now, read by nothing. See the note on readDefaultOrgId below for
+// what it does and does not yet contain.
+//
+// THE MEMBERSHIP LOOKUP MUST NOT BE ABLE TO DENY A REQUEST. Every failure
+// below — no table configured, a throttle, a torn row, no memberships at all —
+// resolves to `orgId: ''`, and the request proceeds. Two reasons, and the
+// second is the one that bites:
+//
+//   1. NO ORG IS A VALID STATE. A host who has not joined a team yet has no
+//      membership row and never will until someone invites them. Platform and
+//      public content is readable without an org (`tenant.js:readableScopes`),
+//      which is the entire existing product. Denying here would lock out every
+//      account that predates multi-tenancy — i.e. all of them.
+//   2. THIS FUNCTION GATES THE WHOLE API. A DynamoDB blip turning into
+//      `isAuthorized: false` is a total outage of every authorized route,
+//      including the participant journey, caused by a table this authorizer
+//      did not need five minutes ago. The org is an ENRICHMENT of the context,
+//      not a second authentication factor. Handlers that genuinely require an
+//      org call `tenant.js:requireOrg` and answer 403 themselves, where the
+//      message can say something useful.
+
+const TABLE_NAME = process.env.TABLE_NAME;
+
+/**
+ * Every organisation this user belongs to, as `{orgId, role}` rows.
+ *
+ * Returns [] on any failure, deliberately — see the block comment above. The
+ * error is logged rather than swallowed silently so a persistently missing
+ * table policy is visible in CloudWatch instead of presenting as "org features
+ * mysteriously do nothing".
+ */
+async function getUserMemberships(sub) {
+  if (!TABLE_NAME || !sub) return [];
+  try {
+    const res = await dynamodb.send(new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': `USER#${sub}`, ':sk': 'ORG#' },
+    }));
+    return (res.Items || [])
+      .map((i) => ({ orgId: i.orgId, role: i.role }))
+      .filter((m) => typeof m.orgId === 'string' && m.orgId.trim());
+  } catch (error) {
+    console.error('Error fetching org memberships:', error);
+    return [];
+  }
+}
+
+/**
+ * The caller's stated default organisation, or ''.
+ *
+ * NOTE WHAT THIS ROW CONTAINS TODAY: `post-confirmation.js` writes the PROFILE
+ * row with username/email/status/role and NO `defaultOrgId` at all, so this
+ * currently returns '' for every existing account. That is correct and not a
+ * bug to route around — it only means the tie-break in `pickActiveOrg` has
+ * nothing to say until an org picker starts writing the field. A caller with
+ * one membership never reaches the tie-break anyway, and a caller with several
+ * gets an explicit choice via `x-engage-org` rather than a guess.
+ */
+async function getDefaultOrgId(sub) {
+  if (!TABLE_NAME || !sub) return '';
+  try {
+    const res = await dynamodb.send(new GetCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: `USER#${sub}`, SK: 'PROFILE' },
+    }));
+    const v = res.Item && res.Item.defaultOrgId;
+    return typeof v === 'string' ? v.trim() : '';
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    return '';
+  }
+}
+
+/**
+ * The tenant half of the authorizer context.
+ *
+ * `orgIds` is COMMA-JOINED, like `groups` immediately above it in the context,
+ * and for the same unavoidable reason: a Lambda authorizer context is a flat
+ * map of strings — an array put in here arrives at the handler stringified in
+ * a shape nobody agreed on, or is dropped. `tenant.js:callerOrgIds` splits it
+ * back. Every value is a string for the same reason.
+ *
+ * `orgIds` carries EVERY membership while `orgId` carries only the active one,
+ * because they answer different questions: "may this caller switch to X"
+ * (a picker) is not "is this caller acting for X right now" (a row guard).
+ * Nothing may use `orgIds` to decide whether a write is permitted — that is
+ * `canManageScope`, which reads the single active `orgId` on purpose.
+ */
+async function resolveOrgContext(sub, requestedOrgId) {
+  const [memberships, defaultOrgId] = await Promise.all([
+    getUserMemberships(sub),
+    getDefaultOrgId(sub),
+  ]);
+  const active = pickActiveOrg(memberships, requestedOrgId, defaultOrgId);
+  return {
+    orgId: active ? active.orgId : '',
+    orgRole: active ? active.role : '',
+    orgIds: memberships.map((m) => String(m.orgId).trim()).filter(Boolean).join(','),
+  };
+}
+
 // Check if user has required permissions
 function hasPermission(groups, requiredGroups) {
   if (!requiredGroups || requiredGroups.length === 0) {
@@ -134,6 +256,48 @@ const HOST_ADMIN_ROUTES = new Set([
   // `admin/question-sets/{setId}/media/uploads` are two entries because they
   // are two routes; a prefix match here would additionally open every version
   // route, which is the mistake this list's header exists to prevent.
+  /*
+    ── THE AI BUILDERS, WHICH WERE ADMINS-ONLY BECAUSE OF THE BILL ──────────
+
+    These were withheld from hosts for one reason and it was a good one:
+    Bedrock costs money, and before tenancy there was no way to say WHOSE money.
+    Every generation was an unattributable charge against the platform.
+
+    That reason has expired. A generation now happens inside an organisation —
+    the caller carries an `orgId`, the org carries a plan, and the metering
+    ledger exists to attribute usage to it. The owner's call: "now that we have
+    teams with purchase and tracking capabilities coming in, it is ok to let it
+    have the full AI Builder experience in the host create question set."
+
+    Each is TWO entries, the POST that starts the job and the GET that polls it,
+    because they are two routes — see the note below about prefix matching. A
+    started job whose poll route refuses is worse than no job at all: the work
+    is done, the money is spent, and the answer is unreachable.
+
+    NOT included: the prompt LIBRARY writes (`POST/PUT/DELETE admin/ai-prompts…`,
+    `ai-prompt-advisor`, `ai-generate-prompt`). Those shape what the AI does for
+    everybody, and they stay Engage's. The read is here because the builders
+    offer a summary prompt to choose from and cannot without it.
+  */
+  'POST admin/ai-generate-trivia',
+  'GET admin/ai-generate-trivia/{jobId}',
+  'POST admin/ai-generate-scenarios',
+  'GET admin/ai-generate-scenarios/{jobId}',
+  'POST admin/ai-generate-polls',
+  'GET admin/ai-generate-polls/{jobId}',
+  'POST admin/ai-generate-survey',
+  'GET admin/ai-generate-survey/{jobId}',
+  'POST admin/ai-generate-questions',
+  'GET admin/ai-generate-questions/{jobId}',
+  // "Fill in the rest" on the builder forms, and the set's own name/description
+  // draft. Same job shape, same reasoning.
+  'POST admin/ai-draft-builder-form',
+  'GET admin/ai-draft-builder-form/{jobId}',
+  'POST admin/ai-draft-set-metadata',
+  'GET admin/ai-draft-set-metadata/{jobId}',
+  // READ ONLY. The builders let somebody pick which summary prompt a set uses;
+  // writing the library stays Engage's.
+  'GET admin/ai-prompts',
   'POST admin/question-sets/{setId}/media/uploads',
   'GET admin/question-sets/{setId}/media',
   // Put a set on the quickstart shelf, or take it off. Ownership-guarded by
@@ -168,9 +332,155 @@ function requiredGroupsForRoute(method, path) {
   if (HOST_ADMIN_ROUTES.has(`${method} ${path}`)) {
     return ['hosts', 'admins'];
   }
+  // `platform/...` route, including one somebody meant to be public.
+  // ── POLLING AN AI JOB YOU STARTED ────────────────────────────────────────
+  //
+  // HOST_ADMIN_ROUTES matches exact `METHOD template` pairs, and this handler
+  // falls back to `event.rawPath` whenever `routeKey` is absent — which carries
+  // a REAL job id, not `{jobId}`. So a host could start a generation, be
+  // charged for it, and then be refused the poll that hands over the answer.
+  // Strictly worse than never opening the route.
+  //
+  // Anchored on the five generation families and the two draft helpers by name,
+  // not a prefix over `admin/ai-`: a prefix would additionally open
+  // `ai-prompt-advisor` and `ai-generate-prompt`, which shape what the AI does
+  // for every organisation and stay Engage's.
+  const AI_JOB_POLL = new RegExp(
+    '^admin/ai-(?:generate-(?:trivia|scenarios|polls|survey|questions)'
+    + '|draft-(?:builder-form|set-metadata))/[A-Za-z0-9_-]+$',
+  );
+  if (method === 'GET' && AI_JOB_POLL.test(path)) {
+    return ['hosts', 'admins'];
+  }
+
   // All other admin routes require the admins group
   if (path.startsWith('admin')) {
     return ['admins'];
+  }
+  // ── ORGANISATION AND INVITATION ROUTES ───────────────────────────────────
+  //
+  // These do not begin with `admin`, so without this block they fall all the
+  // way through to the trailing default. That default happens to be
+  // ['hosts','admins'], which is the right answer — and relying on it is a
+  // FAIL-OPEN waiting to happen, because two rules sit between here and there:
+  //
+  //     if (path.includes('join') || path.includes('answer')
+  //         || path.includes('vote') || ...) return [];
+  //
+  // `includes`, on the whole path. An invitation token is 32 base58 characters
+  // and travels IN THE PATH — `/invites/org_9xK.4Fq7joinPz2mNbVc8dQwLxRt3/accept`.
+  // base58 contains j, o, i, n, v, t, e, a, s and w, so a token that happens to
+  // spell one of those three words makes its own accept route return `[]`, and
+  // `hasPermission` treats `[]` as "no groups required" — every account in the
+  // pool passes, including one still sitting in `pending`. That is the exact
+  // failure require-admin.js:19-24 records: authentication doing the work of
+  // authorisation. Verified: all three sample tokens above resolve to PUBLIC
+  // without this block.
+  //
+  // Matched by anchored regex covering BOTH the route template (what `routeKey`
+  // gives) and a concrete path (what the `rawPath` fallback gives), for the same
+  // reason the question-set block below does.
+  //
+  // Being allowed to KNOCK is all this decides. WHICH org a caller may act on is
+  // decided per row by admin/orgs/shared/org-guards.js, which additionally
+  // requires a MEMBER row and the right role.
+  const ORG_ROUTE = /^orgs(\/[^/]+)*$/;
+  // `invites` on its own is "which organisations are waiting for me" — the
+  // route the landing screen reads. Signed in is the only requirement; the
+  // handler answers with the caller's OWN address and nothing else, so there is
+  // no org to be a member of yet. That is the whole point: the person being
+  // invited is by definition not in the organisation inviting them.
+  const MY_INVITES_ROUTE = /^invites$/;
+  const INVITE_ROUTE = /^invites\/[^/]+\/accept$/;
+  if (ORG_ROUTE.test(path) || INVITE_ROUTE.test(path) || MY_INVITES_ROUTE.test(path)) {
+    return ['hosts', 'admins'];
+  }
+
+  // ── THE PLATFORM CONSOLE ─────────────────────────────────────────────────
+  //
+  // Engage staff only, and this is the SECOND of two checks, not the only one:
+  // platform-orgs.js re-asks `tenant.isPlatformAdmin` on every call. Both exist
+  // because they answer different questions — this one decides who may knock,
+  // that one decides who is answered — and because a route whose only guard is
+  // a group named here would be one edit away from being open.
+  //
+  // Anchored, and not `startsWith('platform')`, for the reason recorded on the
+  // question-set block below: a prefix silently swallows every future
+
+  const PLATFORM_ROUTE = /^platform\/orgs(\/[^/]+\/status)?$/;
+  if (PLATFORM_ROUTE.test(path)) {
+    return ['admins'];
+  }
+
+  // ── COPYING A SHARED SET INTO YOUR OWN ORGANISATION ──────────────────────
+  //
+  // Hosts and admins both: copying is how an ordinary member adapts something
+  // from the shared library, and refusing it to hosts would leave the library
+  // read-only for exactly the people it is for. WHICH set may be copied FROM is
+  // decided in the handler — platform and public only, never another
+  // organisation's partition.
+  //
+  // Named here explicitly rather than left to the trailing default, because two
+  // rules sit between this point and that default, and one of them is the
+  // `path.includes('answer')` clause that a set id can satisfy by accident.
+  const COPY_ROUTE = /^question-sets\/[^/]+\/copy$/;
+  if (path === 'question-sets/{setId}/copy' || COPY_ROUTE.test(path)) {
+    return ['hosts', 'admins'];
+  }
+
+  // ── THE QUESTION-SET ROUTES, WHICH WERE PUBLIC ───────────────────────────
+  //
+  // These three carry the product's content — the questions, the answers, the
+  // categories, the instructions — and none of them had an authorizer at all.
+  // The participant surface was the proof: PlayerPage.jsx fetched the WHOLE of
+  // `GET /question-sets` on every round to read two strings about its own set,
+  // so every anonymous player in every session received the entire library.
+  //
+  // Hosts and admins both, not admins only: hosts build and run their own sets
+  // and every picker in the create-engagement flow reads these. WHICH set a
+  // host may change is still decided per row by
+  // admin/shared/question-set-access.js — this only decides who may knock.
+  //
+  // MATCHED EXACTLY, like HOST_ADMIN_ROUTES above and for the same reason.
+  // `path.startsWith('question-sets')` would read as the same intent and is
+  // not, because the generic rules below no longer get a say once this returns
+  // — and a future `question-sets/{setId}/something-public` would be silently
+  // closed by a prefix nobody revisited.
+  //
+  // THE PLAYER HALF SHIPPED FIRST AND HAD TO. `game/get-question.js` projects
+  // `setCustomInstruction`/`setRoundNoun` onto GET /games/{gameId}/question so
+  // a participant never calls these. Closing them before that landed would
+  // have 401'd every player out of the round — the exact mirror of the
+  // `path === 'games'` decision below, in the other direction.
+  // The `{setId}` form is the route TEMPLATE, which is what `routeKey` gives.
+  // The regex covers the same two routes with a REAL id in place of the
+  // placeholder, which is what `rawPath` gives — and the handler falls back to
+  // `rawPath` whenever `routeKey` is absent.
+  //
+  // THAT FALLBACK IS NOT THEORETICAL COVER, IT IS A HOLE THIS CLOSES. The
+  // generic rule further down is
+  //
+  //     if (path.includes('join') || path.includes('answer') || path.includes('vote') ...) return [];
+  //
+  // — `includes`, on the whole string. A set id is a slug of its title
+  // (admin/upload-questions.js:298 lower-cases and strips non-alphanumerics),
+  // so a set named "Lessons and Answers" becomes `lessonsandanswers`, and
+  // `question-sets/lessonsandanswers/questions` matches `includes('answer')`
+  // and returns PUBLIC. Same for any set with "vote" or "join" in its title.
+  // Matching the concrete path here means these three routes are decided
+  // before that rule is ever consulted.
+  //
+  // The regex names the two sub-routes rather than taking everything under
+  // `question-sets/`, for the reason the HOST_ADMIN_ROUTES header gives: a
+  // prefix silently closes routes nobody has written yet.
+  const CONCRETE_SET_ROUTE = /^question-sets\/[^/]+\/(questions|categories)$/;
+  if (method === 'GET' && (
+    path === 'question-sets' ||
+    path === 'question-sets/{setId}/questions' ||
+    path === 'question-sets/{setId}/categories' ||
+    CONCRETE_SET_ROUTE.test(path)
+  )) {
+    return ['hosts', 'admins'];
   }
   // The games LIST, not a game. `GET /games` returns every session's title,
   // host name and four-digit join code in the environment, and the generic
@@ -237,6 +547,16 @@ exports.handler = async (event) => {
       return { isAuthorized: false };
     }
 
+    // The organisation this request is acting for. Resolved only after the
+    // group gate has passed, so a refused request never costs a table read.
+    //
+    // HTTP API lowercases header names, so `x-engage-org` is read lower-case
+    // here exactly as `authorization` is a few lines up. A header naming an org
+    // the caller does not belong to yields NO org — never a substitute one; see
+    // pick-active-org.js for why that direction is the only safe one.
+    const requestedOrgId = event.headers?.['x-engage-org'] || '';
+    const org = await resolveOrgContext(decoded.sub, requestedOrgId);
+
     return {
       isAuthorized: true,
       // Available to backing lambdas as event.requestContext.authorizer.lambda
@@ -246,7 +566,11 @@ exports.handler = async (event) => {
         email,
         groups: groups.join(','),
         status: userStatus,
-        role: decoded['custom:role'] || 'host'
+        role: decoded['custom:role'] || 'host',
+        // Read by game/tenant.js: callerOrgId / callerOrgRole / callerOrgIds.
+        orgId: org.orgId,
+        orgRole: org.orgRole,
+        orgIds: org.orgIds
       }
     };
   } catch (error) {
@@ -261,3 +585,6 @@ module.exports.verifyToken = verifyToken;
 module.exports.getUserGroups = getUserGroups;
 module.exports.hasPermission = hasPermission;
 module.exports.requiredGroupsForRoute = requiredGroupsForRoute;
+module.exports.getUserMemberships = getUserMemberships;
+module.exports.getDefaultOrgId = getDefaultOrgId;
+module.exports.resolveOrgContext = resolveOrgContext;

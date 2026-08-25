@@ -1,11 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
+import AIScenarioBuilder from './AIScenarioBuilder';
+import TriviaAIBuilder from './TriviaAIBuilder';
+import PollAIBuilder from './PollAIBuilder';
+import SurveyAIBuilder from './SurveyAIBuilder';
 import SetImageBadge from './SetImageBadge';
 import QuestionSetUploadPanel from './QuestionSetUploadPanel';
 import QuestionSetDeleteDialog from './QuestionSetDeleteDialog';
 import QuestionSetEditor from './QuestionSetEditor';
 import { authFetch } from '../auth/authFetch';
+import { recallAllGenerationJobs } from '../utils/generationJob';
 import { adminApiUrl } from '../utils/adminApi';
 import { gameTypeLabel } from '../config/gameTypes';
 import { buildEditPayload, editableSnapshot, summarizeEditResult } from '../utils/questionSetEditing';
@@ -90,6 +95,82 @@ export default function HostQuestionSetsDialog({
   const [editorDirty, setEditorDirty] = useState(false);
   /** The id of the set whose quickstart flag is currently in flight, or null. */
   const [quickstartBusy, setQuickstartBusy] = useState(null);
+  /*
+    WHICH BUILDER IS OPEN, or null. `showAIBuilder` was passed to
+    QuestionSetUploadPanel without an `onOpenBuilder`, so the button rendered,
+    passed its own test, and did nothing — the panel's onClick is
+    `onOpenBuilder && onOpenBuilder(type)`, and the guard made the omission
+    silent. The builders are mounted HERE for the same reason the editor is:
+    the console owns them, this dialog is the host's way to the same thing, and
+    a host copy of four large components would be four places to fix.
+  */
+  const [builder, setBuilder] = useState(null);   // 'scenario' | 'trivia' | 'poll' | 'survey'
+  /*
+    GENERATIONS THE PERSON STARTED, read from the slots the builders already
+    write (utils/generationJob.js). Read once on mount rather than polled: this
+    strip says "something you started is running, here is the way back to it",
+    and the builder it opens is what actually polls. A second poller here would
+    double the request rate on a job that is already being watched.
+  */
+  const [runningJobs, setRunningJobs] = useState([]);
+  useEffect(() => { setRunningJobs(recallAllGenerationJobs()); }, [builder]);
+
+  /*
+    THE FOUR BUILDERS, ONE DOOR. QuestionSetUploadPanel hands back the format
+    the host chose, and the builder is picked from it exactly as AdminPage does
+    (handleOpenBuilder) — scenario is the default rather than an error, because
+    call-and-answer is a scenario generation and every unlisted future type is
+    closer to that than to trivia.
+  */
+  /*
+    Which builder wrote a remembered slot. The slot key is the endpoint's last
+    path segment (utils/generationJob.js), so this maps back the same way
+    `openBuilder` maps forward — and an unrecognised slot opens the scenario
+    builder rather than nothing, for the same reason `openBuilder` defaults
+    there.
+  */
+  const builderKeyFor = (slot) => {
+    if (String(slot).includes('trivia')) return 'trivia';
+    if (String(slot).includes('poll')) return 'poll';
+    if (String(slot).includes('survey')) return 'survey';
+    return 'call-and-answer';
+  };
+
+  const openBuilder = (type) => {
+    if (type === 'trivia') setBuilder('trivia');
+    else if (type === 'poll') setBuilder('poll');
+    else if (type === 'survey') setBuilder('survey');
+    else setBuilder('scenario');
+  };
+
+  /*
+    WHAT A FINISHED GENERATION DOES HERE.
+
+    The worker already created the set — `createdSet` on the job row, see
+    admin/shared/generated-set.js — so there is nothing to upload and uploading
+    would be REFUSED anyway: the importer will not write over a set that exists,
+    and it would report that refusal as a failure over a set sitting right
+    there. So this re-reads the list and opens the draft, which is what
+    AdminPage's own handler does with the same value.
+
+    A generation that produced no set (an older job, or one whose set creation
+    failed) still closes and re-reads: the items are on the job and the panel
+    inside the builder offers them, which is the pre-existing fallback.
+  */
+  const finishBuilder = async (result) => {
+    setBuilder(null);
+    const created = result && result.createdSet;
+    const fresh = await load();
+    if (created?.setId) {
+      const row = (fresh || []).find((item) => item.id === created.setId);
+      setEditingQuestions(row || { id: created.setId, name: created.setName });
+      setNotice({
+        text: `“${created.setName}” was created while the generator ran. It is switched off `
+          + 'until you review it and turn it on.',
+        tone: 'success',
+      });
+    }
+  };
 
   const load = useCallback(async (announce) => {
     setLoading(true);
@@ -271,6 +352,40 @@ export default function HostQuestionSetsDialog({
           </div>
         )}
 
+        {/*
+          A GENERATION THE PERSON STARTED, said where its RESULT will appear.
+
+          Reported: "the question set doesnt get generated in the list until i
+          click AI builder and see the status of the generation … it should still
+          show up in the list with a review button to take you to the output."
+
+          The job is real, it runs server-side whether or not anything is
+          watching (the worker self-invokes; see admin/shared/generation-handler
+          .js), and it takes minutes. Until now the only surface that knew was
+          the modal it was started in — so closing that modal made a running job
+          invisible, and an unchanged list reads as "nothing happened".
+
+          `role="status"` and not `alert`: this is progress, not a problem, and
+          an assertive live region would interrupt a screen reader mid-row.
+        */}
+        {runningJobs.length > 0 && (
+          <div className="qsets-alert qsets-alert--success" role="status">
+            <Icon name="Sparkle" weight="duotone" size={16} color="currentColor" />
+            <span>
+              {runningJobs.length === 1
+                ? 'Generating a question set. It keeps running if you close this.'
+                : `Generating ${runningJobs.length} question sets. They keep running if you close this.`}
+            </span>
+            <button
+              type="button"
+              className="qsets-btn qsets-btn--sm qsets-btn--primary"
+              onClick={() => openBuilder(builderKeyFor(runningJobs[0].key))}
+            >
+              Review the generation
+            </button>
+          </div>
+        )}
+
         {error && (
           <div className="qsets-alert qsets-alert--error" role="alert">
             <Icon name="Warning" weight="fill" size={16} color="currentColor" />
@@ -364,10 +479,35 @@ export default function HostQuestionSetsDialog({
                         {set.name}
                         <SetImageBadge hasImages={set.hasImages} />
                       </span>
-                      {!set.active && <span className="qsets-sub">Not offered in the picker</span>}
+                      {/*
+                        WHAT IT IS, THEN WHAT FOLLOWS FROM THAT. "Not offered in
+                        the picker" is a consequence phrased as a setting, and on
+                        a freshly generated set it is the wrong sentence twice
+                        over: the person is hunting for the thing they just made,
+                        and what they need to know is that nobody has read it yet.
+
+                        An inactive set the host switched off themselves is a
+                        curation state and keeps the original line — only a
+                        generation is unreviewed by construction.
+                      */}
+                      {!set.active && (
+                        <span className="qsets-sub">
+                          {set.isAIGenerated
+                            ? 'Generated — review it, then switch it on'
+                            : 'Not offered in the picker'}
+                        </span>
+                      )}
                     </td>
                     <td>
                       <span className="qsets-chip qsets-chip--type">{gameTypeLabel(set.engagementType)}</span>
+                      {/* Badged only where it changes what to DO: a generated
+                          set nobody has read. Once it is switched on it is an
+                          ordinary set and the badge would be noise. */}
+                      {!set.active && set.isAIGenerated && (
+                        <span className="qsets-chip qsets-chip--warn" title="Written by the generator and not reviewed yet.">
+                          Draft
+                        </span>
+                      )}
                     </td>
                     <td className="qsets-num">{set.totalQuestions ?? 0}</td>
                     <td>
@@ -423,12 +563,20 @@ export default function HostQuestionSetsDialog({
                           thing a host actually came to change, and until now the
                           only way to change one was to re-upload the whole CSV.
                         */}
+                        {/*
+                          THE SAME DOOR, NAMED FOR WHAT IS BEHIND IT. "Edit
+                          questions" is right for a set you already trust and
+                          wrong for eight sentences a model wrote a minute ago
+                          that nobody has read: the task is to READ them, and
+                          then decide. One control, two labels, because the two
+                          states are two different jobs.
+                        */}
                         <button
                           type="button"
-                          className="qsets-btn qsets-btn--sm"
+                          className={`qsets-btn qsets-btn--sm${!set.active && set.isAIGenerated ? ' qsets-btn--primary' : ''}`}
                           onClick={() => { setEditorDirty(false); setEditingQuestions(set); }}
                         >
-                          Edit questions
+                          {!set.active && set.isAIGenerated ? 'Review' : 'Edit questions'}
                         </button>
                         <button
                           type="button"
@@ -547,8 +695,20 @@ export default function HostQuestionSetsDialog({
             scrollIntoViewOnMount
             engagementType={newSetType}
             onEngagementTypeChange={setNewSetType}
-            showAIBuilder={false}
-            showManualBuilder={false}
+            /* ── THE BUILDERS ARE A HOST'S NOW ────────────────────────────
+               These were off because the AI routes were admins-only, and those
+               were admins-only because Bedrock costs money and, before tenancy,
+               there was no way to say whose. A generation now happens inside an
+               organisation with a plan and a metering ledger behind it, so the
+               routes accept hosts (auth/authorizer.js, HOST_ADMIN_ROUTES) and
+               the panel can offer them.
+
+               The SUMMARY PROMPT picker stays off here: choosing one is a
+               property of the set that the console's fuller editor handles, and
+               this dialog is the quick "make me a set" path. */
+            showAIBuilder
+            onOpenBuilder={openBuilder}
+            showManualBuilder
             showSummaryPrompt={false}
             showAdvancedFields={false}
             heading="New question set"
@@ -581,6 +741,42 @@ export default function HostQuestionSetsDialog({
           Close
         </button>
       </footer>
+
+      {builder && (
+        /*
+          THE CONSOLE'S OWN BUILDERS, MOUNTED HERE — not host copies, for the
+          same reason the editor below is not one.
+
+          A DOM DESCENDANT of this dialog, deliberately. Each builder renders its
+          own `.modal-overlay` (z-index 9999), and `.qsets-scrim--over` is a
+          fixed, z-indexed STACKING CONTEXT — so a positioned child paints inside
+          it whatever its z-index. Hoisted out, 9999 would land beside
+          `.new-game-overlay`'s 10000 and the builder would paint BEHIND the
+          dialog that opened it. The editor's comment below works through the
+          same reasoning at more length.
+        */
+        <>
+          {builder === 'scenario' && (
+            <AIScenarioBuilder
+              engagementType={newSetType}
+              onClose={() => setBuilder(null)}
+              onScenariosGenerated={finishBuilder}
+            />
+          )}
+          {builder === 'trivia' && (
+            <TriviaAIBuilder onClose={() => setBuilder(null)} onTriviaGenerated={finishBuilder} />
+          )}
+          {builder === 'poll' && (
+            <PollAIBuilder onClose={() => setBuilder(null)} onPollGenerated={finishBuilder} />
+          )}
+          {builder === 'survey' && (
+            /* Survey EXPORTS rather than uploading — upload-questions.js rejects
+               the type outright — so there is no set to re-read afterwards and
+               the button says so. Closing is the whole callback. */
+            <SurveyAIBuilder onClose={() => setBuilder(null)} onSurveyGenerated={() => setBuilder(null)} />
+          )}
+        </>
+      )}
 
       {editingQuestions && (
         /*

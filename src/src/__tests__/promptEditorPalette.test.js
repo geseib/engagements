@@ -330,9 +330,15 @@ describe('the surface is dusk, and the markup and the theme moved together', () 
       still legitimately used by the tabs that have not converted.
     */
     const page = read('AdminPage.jsx');
+    /* `resolvedTab`, not `activeTab`: every section gate moved to the resolved
+       value after the two were found wired to different renderers, which mounted
+       two screens at once (see __tests__/adminOneSection.test.jsx). The slice
+       markers had to move with them or this reads an empty string and passes
+       for the wrong reason — it failed loudly instead, which is the better of
+       the two outcomes. */
     const branch = page.slice(
-      page.indexOf("activeTab === 'prompts'"),
-      page.indexOf("activeTab === 'questionsets'")
+      page.indexOf("resolvedTab === 'prompts'"),
+      page.indexOf("resolvedTab === 'questionsets'")
     );
     expect(branch.length).toBeGreaterThan(200); // the slice really found the branch
     expect(branch).not.toMatch(/className="admin-section"/);

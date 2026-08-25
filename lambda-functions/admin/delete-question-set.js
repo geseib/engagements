@@ -1,8 +1,9 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { collectPartitionKeys, batchDeleteKeys } = require('./shared/ddb-delete');
 const { knownVersions, setPartition, toVersion } = require('./shared/set-version');
-const { requireSetManager } = require('./shared/question-set-access');
+const { requireSetManager, findSetForCaller, requestedScope } = require('./shared/question-set-access');
+const { setMetadataKey } = require('./shared/set-version');
 
 // How far past the highest recorded version to sweep for orphans. A replace
 // that died between writing `SET#<id>#v<n>` and flipping activeVersion leaves an
@@ -52,11 +53,19 @@ exports.handler = async (event) => {
       };
     }
 
-    // Get set metadata first to check if it exists
-    const metaRes = await db.send(new GetCommand({
-      TableName: tableName,
-      Key: { PK: 'SETS', SK: `SET#${setId}` }
-    }));
+    // Get set metadata first to check if it exists.
+    // WHICH LIBRARY, THEN WHO. `findSetForCaller` searches only the scopes this
+    // caller may READ — their own org, then platform, then public — so a set in
+    // another organisation is ABSENT rather than forbidden and this route 404s
+    // on it exactly as it would on a set that never existed. Whether org B has a
+    // `teamretro` is not a fact org A gets to establish from a status code.
+    //
+    // The row that comes back carries its own scope, and `requireSetManager`
+    // reads it: platform sets are Engage staff's, org sets are that org's, and
+    // being an Engage administrator grants nothing inside an org. See
+    // shared/question-set-access.js.
+    const found = await findSetForCaller(db, tableName, event, setId, requestedScope(event));
+    const metaRes = { Item: found && found.item };
 
     if (!metaRes.Item) {
       return {
@@ -95,9 +104,12 @@ exports.handler = async (event) => {
       ...knownVersions(metaRes.Item)
     );
 
-    const partitions = [setPartition(setId, null)];
+    //    Every partition is built from the REF, so an org's content partitions
+    //    are the ones swept — a bare setId here would sweep the platform
+    //    library's `SET#<id>` instead and delete somebody else's questions.
+    const partitions = [setPartition(found.ref, null)];
     for (let v = 1; v <= highestVersion + ORPHAN_SWEEP_AHEAD; v++) {
-      partitions.push(setPartition(setId, v));
+      partitions.push(setPartition(found.ref, v));
     }
 
     const keys = [];
@@ -125,7 +137,7 @@ exports.handler = async (event) => {
     // 3. Only now is it safe to drop the index row.
     await db.send(new DeleteCommand({
       TableName: tableName,
-      Key: { PK: 'SETS', SK: `SET#${setId}` }
+      Key: setMetadataKey(found.ref)
     }));
 
     const itemsDeleted = deletedContent + 1;

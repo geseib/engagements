@@ -1,8 +1,27 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { decryptItems } = require('./tenant-crypto');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
+
+/**
+ * WHOSE SESSION IS THIS? — off the row, because this route is PUBLIC.
+ *
+ * `GET /games/{gameId}/votes` takes a four-digit id and no identity, so
+ * `tenant.callerOrgId(event)` is '' for every real caller, and a blank orgId
+ * THROWS in tenant-crypto rather than quietly decrypting nothing. The session's
+ * own METADATA row is the authority (schema-compliant-manager.js:164).
+ */
+async function sessionOrgId(gameId) {
+  const res = await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+    ProjectionExpression: 'orgId'
+  }));
+  const raw = res && res.Item && res.Item.orgId;
+  return typeof raw === 'string' ? raw.trim() : '';
+}
 
 exports.handler = async (event) => {
   try {
@@ -71,29 +90,39 @@ exports.handler = async (event) => {
       }
     }));
 
-    const votes = votesQuery.Items || [];
-    console.log(`📊 Found ${votes.length} votes for question ${paddedQuestionNumber}`);
-
-    // Format votes for host consumption
-    const formattedVotes = votes.map(vote => ({
-      voter: vote.VoterName || vote.PlayerName,
-      questionNumber: vote.QuestionNumber,
-      votes: vote.Votes, // e.g., {"0": 1, "1": 2, "2": 3}
-      submittedAt: vote.SubmittedAt
-    }));
+    const rawVotes = votesQuery.Items || [];
+    console.log(`📊 Found ${rawVotes.length} votes for question ${paddedQuestionNumber}`);
 
     // Role-specific information
     if (role === 'host') {
+      // Unwrapped ONLY on the branch that actually reads a ballot. The player
+      // branch below returns a count and nothing else, and `rawVotes.length` is
+      // the same number whether the rows are envelopes or not — so an anonymous
+      // participant's two-second poll costs no KMS call and no decrypt. That is
+      // not merely a saving: every decrypt is a logged, attributed act against
+      // the organisation, and a vote meter ticking on a phone is not one worth
+      // writing into the customer's "who read your data" record.
+      const orgId = rawVotes.length ? await sessionOrgId(gameId) : '';
+      const votes = orgId ? await decryptItems(orgId, 'vote', rawVotes) : rawVotes;
+
+      // Format votes for host consumption
+      const formattedVotes = votes.map(vote => ({
+        voter: vote.VoterName || vote.PlayerName,
+        questionNumber: vote.QuestionNumber,
+        votes: vote.Votes, // e.g., {"0": 1, "1": 2, "2": 3}
+        submittedAt: vote.SubmittedAt
+      }));
+
       // Host gets complete vote information
       const result = {
         gameId: gameId,
         questionNumber: paddedQuestionNumber,
         votes: formattedVotes,
-        voteCount: votes.length,
+        voteCount: rawVotes.length,
         timestamp: new Date().toISOString()
       };
 
-      console.log(`✅ Returning host vote info for ${gameId}: ${votes.length} votes`);
+      console.log(`✅ Returning host vote info for ${gameId}: ${rawVotes.length} votes`);
       return {
         statusCode: 200,
         body: JSON.stringify(result),
@@ -104,11 +133,11 @@ exports.handler = async (event) => {
       const result = {
         gameId: gameId,
         questionNumber: paddedQuestionNumber,
-        voteCount: votes.length,
+        voteCount: rawVotes.length,
         timestamp: new Date().toISOString()
       };
 
-      console.log(`✅ Returning player vote info for ${gameId}: ${votes.length} votes (count only)`);
+      console.log(`✅ Returning player vote info for ${gameId}: ${rawVotes.length} votes (count only)`);
       return {
         statusCode: 200,
         body: JSON.stringify(result),

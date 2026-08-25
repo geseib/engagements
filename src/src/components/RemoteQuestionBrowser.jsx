@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import './RemoteQuestionBrowser.css';
 import Icon from './Icon';
 import { remoteQuestionRow, filterRemoteRows } from '../config/hostRemote';
+import { authFetch } from '../auth/authFetch';
 
 /**
  * The host's phone browsing the question set — `17-remote.html`, right phone.
@@ -52,7 +53,10 @@ export default function RemoteQuestionBrowser({
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${apiBase()}question-sets/${setId}/questions`);
+        // authFetch: this route now carries the Cognito authorizer. The phone
+        // remote is a host surface and is signed in, so the token is there —
+        // a plain fetch here would 401 the browser and render 'unavailable'.
+        const res = await authFetch(`${apiBase()}question-sets/${setId}/questions`);
         if (cancelled) return;
         if (!res.ok) { setFailed(true); setQuestions([]); return; }
         const data = await res.json();

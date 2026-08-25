@@ -1,0 +1,150 @@
+/* ============================================================================
+   THE USAGE METER — UsageMeter.jsx.
+
+   Derived from docs/design/tenancy-redesign/04-billing.html and
+   12-personal-limit.html, and ported from _src/extra.css's `.meters` block
+   rather than re-invented. Scoped under `.usg`, like `.qsets`, `.adm-shell`,
+   `.sp` and `.um`, because the mockups' `.meter` / `.track` / `.fill` names are
+   far too generic to put in a shared bundle.
+
+   WHY THE INCLUDED ALLOWANCE IS A NOTCH AND NOT THE END OF THE BAR.
+   In usage-based pricing the only genuinely bad experience is a surprise
+   invoice, so this is built to be read BEFORE the overage, not after. A bar
+   that fills to 100% and stops cannot show "15 over". Drawing the allowance as
+   a 2px rule ON the track lets the fill run past it, so the overage is a length
+   you can see rather than a number you have to read. (RATIONALE §3.)
+
+   ONE GRID FOR ALL THE ROWS, NOT ONE GRID PER ROW. `.usg` is the grid and
+   `.usg-row` is `display: contents`, which lifts every cell into it. With a
+   grid per row the `auto` value column is sized per row, so "15 over" and
+   "3 of 5" land at different x and the numbers do not line up — a column is
+   only a column when one grid owns it.
+
+   THE LADDER (RATIONALE §3): 12 floor / 13 label / 15 body at ~120 CSS ppi read
+   at 24in. Nothing below 12px, including the notch label, which is why the
+   compact strip drops that label to a `title=` rather than shrinking it.
+
+   COLOUR. MEASURED, unlifted, composited up the real ancestor stack in
+   __tests__/usageMeterPalette.test.js:
+
+     --muted   #9BA8BE on --bg      #0F1A2E    7.24:1   row labels
+     --muted   #9BA8BE on --surface #1B2942    6.06:1   row labels, in a panel
+     --text    #F4EDE4 on --bg                14.97:1   values
+     --text    #F4EDE4 on --surface           12.53:1   values, in a panel
+     --primary #F6A94C on --bg                 8.86:1   the over value
+     --primary #F6A94C on --surface            7.42:1   the over value, in a panel
+
+   `--success` and `--primary` here are BAR FILLS, never text — the fill is the
+   one place `--danger`-class contrast rules do not apply, and no text is ever
+   painted on one. The track itself is `--surface-2`, unread.
+   ========================================================================== */
+
+.usg {
+  /* Scoped locals. An undefined custom property invalidates the WHOLE
+     declaration, so nothing here reaches for a token declared in a stylesheet
+     that merely happens to be in the same bundle. */
+  --usg-t-floor: 12px;
+  --usg-t-label: 13px;
+  --usg-t-body: 15px;
+
+  --usg-track-h: 10px;
+  --usg-track-h-compact: 6px;
+  --usg-label-w: 150px;
+
+  display: grid;
+  grid-template-columns: var(--usg-label-w) minmax(0, 1fr) auto;
+  gap: 16px 14px;
+  align-items: center;
+
+  color: var(--text);
+  font: 400 var(--usg-t-body)/1.45 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.usg *,
+.usg *::before,
+.usg *::after { box-sizing: border-box; }
+
+/* `display: contents` is what makes the three cells join the parent grid. */
+.usg-row { display: contents; }
+
+.usg-label {
+  font-size: var(--usg-t-label);
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usg-track {
+  position: relative;
+  height: var(--usg-track-h);
+  border-radius: 5px;
+  background: var(--surface-2);
+  /* visible, NOT hidden: the notch deliberately overhangs the track by 4px top
+     and bottom so it reads as a threshold rather than as a segment of the bar. */
+  overflow: visible;
+}
+
+.usg-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 5px;
+  background: var(--success);
+}
+.usg-row--over .usg-fill { background: var(--primary); }
+
+/* The included line. A 2px rule, not a colour change, so it reads at a glance
+   as a threshold rather than as another quantity. */
+.usg-notch {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--text);
+  opacity: .85;
+}
+.usg-notch::after {
+  content: attr(data-label);
+  position: absolute;
+  top: -17px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: var(--usg-t-floor);
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* When the allowance sits at the END of the track a centred label hangs half
+   its width past the bar and lands in the 14px gap before the value.
+   Right-align the label instead of nudging the line, which would misreport
+   where the allowance actually is. */
+.usg-notch--end::after { left: auto; right: 0; transform: none; }
+
+.usg-value {
+  font-size: var(--usg-t-body);
+  white-space: nowrap;
+}
+.usg-num { font-weight: 700; }
+.usg-num--over,
+.usg-over-text { color: var(--primary); }
+.usg-sep { color: var(--muted); }
+
+/* -- The compact strip ------------------------------------------------------
+   The same component on the host's front door, with no panel around it: one
+   line, no heading, no note. It is a STRIP, so it must not assume a 150px
+   label gutter or a 16px row gap.
+
+   The notch label is dropped rather than shrunk — 12px is the floor and there
+   is no 10px tier. A reduction with no recovery is a deletion, so the label
+   moves to a `title=` on the notch (set in UsageMeter.jsx) and the value text
+   still says the same number out loud. */
+.usg--compact {
+  grid-template-columns: auto minmax(56px, 1fr) auto;
+  gap: 6px 10px;
+  font-size: var(--usg-t-label);
+}
+.usg--compact .usg-track { height: var(--usg-track-h-compact); }
+.usg--compact .usg-notch { top: -3px; bottom: -3px; }
+.usg--compact .usg-notch::after { content: none; }
+.usg--compact .usg-value { font-size: var(--usg-t-label); }

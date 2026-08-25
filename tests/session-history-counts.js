@@ -49,7 +49,7 @@ function seatPlayer(gameId, name, joinedAt = '2026-08-10T09:00:00Z') {
 
 function seedSession(gameId, { players = [], rounds = null, started = true } = {}) {
   put({
-    PK: 'GAMES', SK: `GAME#${gameId}`, Title: `Session ${gameId}`,
+    PK: `ORG#${ORG}#GAMES`, SK: `GAME#${gameId}`, Title: `Session ${gameId}`,
     GameType: 'call-and-answer', QuestionSetId: 'set-alpha',
     CreatedAt: '2026-08-10T09:00:00Z', Started: started, HostName: 'Ada',
   });
@@ -59,7 +59,20 @@ function seedSession(gameId, { players = [], rounds = null, started = true } = {
   }
 }
 
-const list = async () => JSON.parse((await getGamesList.handler({})).body).games;
+// ── TENANCY: the session INDEX moved, and so did the caller ────────────────
+//
+// `GET /games` used to Query the single global `GAMES` partition and return
+// every session in the environment. It now Queries `ORG#<org>#GAMES`, so a
+// caller with no organisation gets an empty list rather than everything — the
+// isolation is the shape of the query, not a filter applied afterwards.
+//
+// That makes an event with no authorizer context return [] and every count in
+// this file read zero. The fixture therefore names ONE org and seeds the org
+// index; nothing here is about tenancy, and giving every row the same org keeps
+// it that way.
+const ORG = 'org_nw';
+const asOrg = () => ({ requestContext: { authorizer: { lambda: { orgId: ORG } } } });
+const list = async () => JSON.parse((await getGamesList.handler(asOrg())).body).games;
 const byId = (games, id) => games.find((g) => g.gameId === id);
 
 (async () => {
@@ -219,7 +232,7 @@ const byId = (games, id) => games.find((g) => g.gameId === id);
   await check('a week-old session still counts its players from the score rows', async () => {
     store.clear();
     put({
-      PK: 'GAMES', SK: 'GAME#4821', Title: 'Aged', GameType: 'trivia',
+      PK: `ORG#${ORG}#GAMES`, SK: 'GAME#4821', Title: 'Aged', GameType: 'trivia',
       CreatedAt: new Date(Date.now() - 20 * 864e5).toISOString(), Started: true,
     });
     put({ PK: 'GAME#4821', SK: 'STATE', LessonNumber: 3 });
@@ -236,7 +249,7 @@ const byId = (games, id) => games.find((g) => g.gameId === id);
     // eleven people may have sat through.
     store.clear();
     put({
-      PK: 'GAMES', SK: 'GAME#4821', Title: 'Ancient', GameType: 'trivia',
+      PK: `ORG#${ORG}#GAMES`, SK: 'GAME#4821', Title: 'Ancient', GameType: 'trivia',
       CreatedAt: new Date(Date.now() - 60 * 864e5).toISOString(), Started: true,
     });
     put({ PK: 'GAME#4821', SK: 'STATE', LessonNumber: 5 });
@@ -246,7 +259,7 @@ const byId = (games, id) => games.find((g) => g.gameId === id);
   await check('inside the window an empty result is a real zero', async () => {
     store.clear();
     put({
-      PK: 'GAMES', SK: 'GAME#4821', Title: 'Recent', GameType: 'trivia',
+      PK: `ORG#${ORG}#GAMES`, SK: 'GAME#4821', Title: 'Recent', GameType: 'trivia',
       CreatedAt: new Date(Date.now() - 2 * 864e5).toISOString(), Started: true,
     });
     put({ PK: 'GAME#4821', SK: 'STATE', LessonNumber: 1 });
@@ -258,7 +271,7 @@ const byId = (games, id) => games.find((g) => g.gameId === id);
     // does not decay with age.
     store.clear();
     put({
-      PK: 'GAMES', SK: 'GAME#9137', Title: 'Never ran', GameType: 'trivia',
+      PK: `ORG#${ORG}#GAMES`, SK: 'GAME#9137', Title: 'Never ran', GameType: 'trivia',
       CreatedAt: new Date(Date.now() - 80 * 864e5).toISOString(), Started: false,
     });
     assert.strictEqual(byId(await list(), '9137').playerCount, 0);
@@ -306,7 +319,7 @@ const byId = (games, id) => games.find((g) => g.gameId === id);
 
   await check('an empty GAMES partition returns an empty list, not an error', async () => {
     store.clear();
-    const res = await getGamesList.handler({});
+    const res = await getGamesList.handler(asOrg());
     assert.strictEqual(res.statusCode, 200);
     assert.deepStrictEqual(JSON.parse(res.body).games, []);
   });

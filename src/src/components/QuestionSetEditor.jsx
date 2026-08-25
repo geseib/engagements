@@ -143,6 +143,15 @@ export default function QuestionSetEditor({
   /** `POST /admin/ai-generate-questions` — admins only. */
   showAIAssist = true,
   onSaved,
+  /**
+   * A copy was made and the editor should now be looking at IT.
+   *
+   * Without this the editor closes on a copy, and anything the person had
+   * changed in the Questions panel below is lost — or worse, saved afterwards
+   * against the original and made into a SECOND copy. Rebinding means one
+   * copy, and every save after it is an ordinary in-place save of their own set.
+   */
+  onCopied,
   onChanged,
   /**
    * Reports the Questions panel's unsaved working copy upward, so a container
@@ -557,6 +566,28 @@ export default function QuestionSetEditor({
    */
   const exitLabel = (questionsDirty || detailsDirty) ? 'Cancel' : 'Close';
 
+  /*
+    ── SAVING SOMEBODY ELSE'S SET MAKES IT YOURS ────────────────────────────
+
+    Engage's shared library and other organisations' published sets are readable
+    by everyone and writable by nobody but their owner. Opening one here and
+    pressing Save used to mean a 403 — or, worse, before the platform-mode
+    interlock landed, an Engage admin standing in a team silently edited the
+    library every organisation reads.
+
+    Reported: "when i go to save a copy of someone elses set … it is not obvious
+    that i have to change something besides just a name and cant use the save
+    button under the main settings … it should be fine to use the save button up
+    top and it should do the same copy action."
+
+    So it does. Save on an unmanageable set copies it into the caller's own
+    organisation first, then applies the edits to THAT copy. The original is
+    untouched, which is the whole point — and the button says so before it is
+    pressed rather than after, because the complaint was that it was not
+    obvious.
+  */
+  const isSomebodyElses = questionSet?.canManage === false;
+
   const handleSave = async () => {
     if (!title.trim()) {
       setSaveOk(false);
@@ -575,9 +606,43 @@ export default function QuestionSetEditor({
     const { name, ...changed } = payload;
 
     setSaveOk(null);
-    setSaveStatus('Saving...');
+    setSaveStatus(isSomebodyElses ? 'Making your copy…' : 'Saving...');
+
+    /*
+      COPY FIRST, THEN EDIT THE COPY. Two calls rather than one, because the
+      copy endpoint duplicates a set verbatim — it is not an "edit into a new
+      set" route, and making it one would give it two jobs and a partial-write
+      failure mode between them.
+
+      If the copy fails nothing has changed anywhere, which is the safe order.
+    */
+    let targetSetId = setId;
+    if (isSomebodyElses) {
+      try {
+        const copyRes = await authFetch(
+          `${API_BASE()}question-sets/${encodeURIComponent(setId)}/copy`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scope: questionSet?.scope || 'platform' }),
+          },
+        );
+        const copyBody = await copyRes.json().catch(() => ({}));
+        if (!copyRes.ok || !copyBody.setId) {
+          setSaveOk(false);
+          setSaveStatus(`Could not make your copy: ${copyBody.error || `the server answered ${copyRes.status}`}`);
+          return;
+        }
+        targetSetId = copyBody.setId;
+      } catch (error) {
+        setSaveOk(false);
+        setSaveStatus(`Could not make your copy: ${error.message}`);
+        return;
+      }
+    }
+
     try {
-      const response = await authFetch(`${API_BASE()}admin/edit-question-set/${setId}`, {
+      const response = await authFetch(`${API_BASE()}admin/edit-question-set/${targetSetId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -588,12 +653,25 @@ export default function QuestionSetEditor({
       if (response.ok) {
         // Report what the backend says it wrote, not what we hoped it wrote.
         setSaveOk(true);
-        setSaveStatus(summarizeEditResult(savedName, result.updated || changed));
+        const written = summarizeEditResult(savedName, result.updated || changed);
+        setSaveStatus(isSomebodyElses
+          ? `${savedName} is now your organisation's own copy. ${written} The original is unchanged.`
+          : written);
         // Rebaseline: what was just saved is the new "unchanged", so the exit
         // reads Close again and a second Save has nothing phantom to re-send.
         setOriginal(current);
         setSavedTitle(savedName);
-        if (onSaved) onSaved(summarizeEditResult(savedName, result.updated || changed));
+        if (isSomebodyElses && onCopied) {
+          /* Hand the caller the NEW id so the editor rebinds to the copy. The
+             Questions panel below is still holding whatever was typed into it;
+             closing here would lose that, and saving it afterwards against the
+             original would make a second copy. */
+          onCopied(targetSetId, `${savedName} is now your organisation's own copy — the original is unchanged.`);
+        } else if (onSaved) {
+          onSaved(isSomebodyElses
+            ? `${savedName} is now your organisation's own copy — the original is unchanged.`
+            : written);
+        }
       } else {
         setSaveOk(false);
         setSaveStatus(`Save failed: ${result.error || 'Unknown error'}`);
@@ -929,6 +1007,21 @@ export default function QuestionSetEditor({
             does to an unknown CSV column, which is exactly the failure the
             question path chose a tag to avoid. So provenance lives where it can
             still be acted on: named, per field, at the moment before the save. */}
+        {/* SAID ON ARRIVAL, not only on the button. The complaint was that it
+            was "not obvious" — a label you read at the moment of pressing is
+            already too late if you have spent two minutes editing. */}
+        {isSomebodyElses && (
+          <p className="qs-ai-provenance" data-testid="not-yours-notice">
+            <Icon name="Books" weight="duotone" size={14} color="var(--primary)" />{' '}
+            <strong>
+              This set belongs to {questionSet?.scope === 'public' ? 'another organisation' : 'Engage'}.
+            </strong>{' '}
+            You can change anything here and save it — doing so makes your organisation its
+            own copy, and leaves the original exactly as it is. Nothing you type changes
+            what anybody else sees.
+          </p>
+        )}
+
         {aiDrafted.length > 0 && (
           <p className="qs-ai-provenance" data-testid="ai-set-provenance">
             <Icon name="Sparkle" weight="duotone" size={14} color="var(--primary)" />{' '}
@@ -1137,13 +1230,19 @@ export default function QuestionSetEditor({
           </div>
 
           <div className="form-actions">
+            {/* THE LABEL SAYS WHICH ACTION THIS IS. The complaint was that it
+                was not obvious a set belonging to somebody else could not simply
+                be saved; naming the copy on the button answers that before the
+                press rather than after it. */}
             <button
               className="btn-primary"
               onClick={handleSave}
-              disabled={saveStatus === 'Saving...'}
+              disabled={saveStatus === 'Saving...' || saveStatus === 'Making your copy…'}
             >
               <Icon name="FloppyDisk" weight="bold" size={16} color="currentColor" />{' '}
-              {saveStatus === 'Saving...' ? 'Saving...' : 'Save Changes'}
+              {saveStatus === 'Saving...' || saveStatus === 'Making your copy…'
+                ? saveStatus
+                : (isSomebodyElses ? 'Save details as my copy' : 'Save Changes')}
             </button>
             {/* Same gate as the other two exits: `onCancel` is optional, and a
                 Cancel wired to nothing is a control that reads as a frozen

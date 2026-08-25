@@ -2,6 +2,8 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { resolveSetPartition } = require('./set-version');
+const { GAMES_RESERVATION_PK, gamesIndexPk, PLATFORM } = require('./tenant');
+const { encryptItem } = require('./tenant-crypto');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -13,13 +15,41 @@ const apigateway = new ApiGatewayManagementApiClient({
 const TTL_CREATION_PHASE = 90 * 24 * 60 * 60; // 90 days
 const TTL_ACTIVE_PHASE = 7 * 24 * 60 * 60;    // 7 days
 
+/**
+ * WHERE A SESSION LIVES, NOW THAT SESSIONS HAVE OWNERS.
+ *
+ *   PK: GAMES            SK: GAME#{id}   the GLOBAL reservation. `{orgId, ttl}`
+ *                                        and nothing else, ever.
+ *   PK: ORG#{org}#GAMES  SK: GAME#{id}   the brief a host lists.
+ *   PK: GAME#{id}        SK: METADATA…   stays global, gains an `orgId`.
+ *
+ * The reservation STAYS GLOBAL because a participant types four digits with no
+ * idea which organisation they belong to, so the code space is one space. It
+ * also stays the LOCK: `attribute_not_exists(PK)` on this row is what stops a
+ * fresh draw from overwriting a living session (issue #26), and it is still the
+ * first write of the nine.
+ *
+ * The brief MOVED because `GET /games` must be structurally incapable of
+ * returning another org's sessions — one Query of one partition, not a global
+ * Query with a filter bolted on. A filter is a line of code somebody can delete;
+ * a partition boundary is not.
+ *
+ * A HALF-CREATED GAME IS IMPOSSIBLE, and not by transaction: the nine writes
+ * are interleaved with Queries of the question set, so they cannot be one
+ * TransactWriteItems. Instead the reservation is taken first and RELEASED again
+ * if anything after it fails — so a failed create leaves no rows and no burnt
+ * code. The release deliberately does not run for a ConditionalCheckFailed,
+ * because that row belongs to the session that won the race.
+ */
 // Create game with proper schema compliance
 const createGame = async (gameId, gameData) => {
+  const orgId = typeof gameData.orgId === 'string' ? gameData.orgId.trim() : '';
+  let reserved = false;
   try {
     const ttl = Math.floor(Date.now() / 1000) + TTL_CREATION_PHASE;
     const now = new Date().toISOString();
-    
-    console.log(`🎮 Creating game ${gameId} with schema compliance`);
+
+    console.log(`🎮 Creating game ${gameId} for org ${orgId || '(none)'} with schema compliance`);
 
     // Resolve — and then PIN — the question-set version this game plays.
     //
@@ -32,13 +62,28 @@ const createGame = async (gameId, gameData) => {
     //
     // `null` means the set has never been versioned; the attribute is then
     // omitted entirely so the resolver's legacy branch keeps firing.
-    let resolvedSet = { pk: null, version: null, source: 'none' };
+    //
+    // A SET REFERENCE IS A PAIR NOW, `{scope, setId}` — `teamretro` names a
+    // different partition in each of platform, org and public (tenant.js
+    // header), so the id alone can no longer be handed to the resolver and the
+    // scope can no longer be left off the game. It defaults to `platform`,
+    // which is where every set that exists today lives and therefore what a
+    // create payload that says nothing still means.
+    const setScope = (gameData.questionSetScope || '').trim() || PLATFORM;
+    let resolvedSet = { pk: null, version: null, scope: setScope, source: 'none' };
     if (gameData.questionSetId) {
       resolvedSet = await resolveSetPartition(
-        db, process.env.TABLE_NAME, gameData.questionSetId, gameData.questionSetVersion
+        db,
+        process.env.TABLE_NAME,
+        { scope: setScope, orgId, setId: gameData.questionSetId },
+        gameData.questionSetVersion
       );
     }
     const pinnedVersion = resolvedSet.version;
+    // THE SCOPE PIN, written beside the version pin and read by every runtime
+    // resolver. Without it a game whose set was replaced in one scope would
+    // start reading a same-named set in another.
+    const pinnedScope = resolvedSet.scope || setScope;
 
     // 1. Create GAMES list entry (for efficient game listing - DATABASE_DESIGN.md requirement)
     //
@@ -59,36 +104,94 @@ const createGame = async (gameId, gameData) => {
       ConditionExpression: 'attribute_not_exists(PK)',
       TableName: process.env.TABLE_NAME,
       Item: {
-        PK: 'GAMES',
+        PK: GAMES_RESERVATION_PK,
         SK: `GAME#${gameId}`,
-        Title: gameData.title || 'Engagement Session',
-        CreatedAt: now,
-        HostName: gameData.hostName || 'Host',
-        GameType: gameData.engagementType || 'call-and-answer',
-        QuestionSetId: gameData.questionSetId,
-        // Mirrored onto the index row so DELETE /versions/{n} can find the games
-        // pinned to a version with ONE Query of the GAMES partition instead of a
-        // GetItem per game.
-        ...(pinnedVersion !== null ? { QuestionSetVersion: pinnedVersion } : {}),
-        Visibility: gameData.visibility || 'public',
-        AccessCode: gameData.accessCode || null,
-        Started: false, // Game is created but not started
-        LastPlayedAt: null,
+        // NOTHING ELSE BELONGS ON THIS ROW. It used to carry the whole session
+        // brief — title, host name, visibility — in a partition every account
+        // could Query, which is how `GET /games` returned every session in the
+        // environment. `orgId` is here for one reason: it is the only thing that
+        // says which org's index row to clean up when the code is released, and
+        // without it a deleted session's code stays reserved for 90 days.
+        ...(orgId ? { orgId } : {}),
         ttl
       }
     }));
+    reserved = true;
+
+    // 1b. THE SESSION BRIEF, in the owning org's partition.
+    //
+    // Everything the reservation row used to carry lives here instead, and this
+    // is the ONLY row `GET /games` reads. An org with no sessions has an empty
+    // partition; an org that is not yours is a partition your Query never names.
+    //
+    // Skipped, loudly, when the caller has no organisation. That session is then
+    // listed by nobody — which is the safe direction, and the same answer
+    // get-games-list gives an orgless caller. Once every host carries an org,
+    // create-game.js's `requireOrg` makes this branch unreachable.
+    // ── ENCRYPTION STARTS HERE, AND ONLY WHERE THERE IS A TENANT ─────────────
+    //
+    // `ENCRYPTED_FIELDS.session` is Title/HostName/Details/AIContext, and both
+    // rows below carry the first two — the index row so `GET /games` can list a
+    // session without reading its brief, METADATA because it IS the brief. The
+    // same sentence must be ciphertext in both or a `Scan` reads the one that
+    // was forgotten; that is the exact inconsistency `session` was added to the
+    // boundary to close (tenant-crypto.js:174).
+    //
+    // Skipped entirely for an orgless session. That is not a loophole, it is
+    // the only honest answer: there is no organisation, therefore no data key,
+    // and `encryptItem('')` throws rather than inventing one. Such a session is
+    // already listed by nobody (see the warning below) and `create-game.js`'s
+    // `requireOrg` is making the branch unreachable.
+    const encryptSession = (item) => (orgId ? encryptItem(orgId, 'session', item) : item);
+
+    if (orgId) {
+      await db.send(new PutCommand({
+        TableName: process.env.TABLE_NAME,
+        Item: await encryptSession({
+          PK: gamesIndexPk(orgId),
+          SK: `GAME#${gameId}`,
+          orgId,
+          Title: gameData.title || 'Engagement Session',
+          CreatedAt: now,
+          HostName: gameData.hostName || 'Host',
+          GameType: gameData.engagementType || 'call-and-answer',
+          QuestionSetId: gameData.questionSetId,
+          QuestionSetScope: pinnedScope,
+          // Mirrored onto the index row so DELETE /versions/{n} can find the
+          // games pinned to a version with ONE Query of an org's partition
+          // instead of a GetItem per game.
+          ...(pinnedVersion !== null ? { QuestionSetVersion: pinnedVersion } : {}),
+          Visibility: gameData.visibility || 'public',
+          AccessCode: gameData.accessCode || null,
+          Started: false, // Game is created but not started
+          LastPlayedAt: null,
+          ttl
+        })
+      }));
+    } else {
+      console.warn(`⚠️ Game ${gameId} was created with no organisation — it will appear in no session list`);
+    }
 
     // 2. Create METADATA record (for template compatibility)
     await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
-      Item: {
+      Item: await encryptSession({
         PK: `GAME#${gameId}`,
         SK: 'METADATA',
+        // THE OWNER, and until this line there was not one — not `hostId`, not
+        // `createdBy`, nothing. `HostName` is free text off the create form and
+        // has never identified anybody. Every handler that needs to know which
+        // org a session belongs to reads THIS attribute; the partition it sits
+        // in stays global because participants reach it by code alone.
+        ...(orgId ? { orgId } : {}),
         Title: gameData.title || 'Engagement Session',
         CreatedAt: now,
         HostName: gameData.hostName || 'Host',
         GameType: gameData.engagementType || 'call-and-answer',
         QuestionSetId: gameData.questionSetId,
+        // …and WHICH `questionSetId`. See the scope pin above: the id alone
+        // names a partition in three different scopes now.
+        QuestionSetScope: pinnedScope,
         // THE PIN. Every runtime reader (next-question, get-question,
         // select-question, get-categories) resolves through this first. Absent
         // means "no version anywhere" — every game created before this change —
@@ -122,7 +225,7 @@ const createGame = async (gameId, gameData) => {
           anonymousUntilReveal: gameData.hostPreferences?.anonymousUntilReveal !== false
         },
         ttl
-      }
+      })
     }));
 
     // 3. Create initial STATE record
@@ -371,6 +474,27 @@ const createGame = async (gameId, gameData) => {
     return true;
   } catch (error) {
     console.error(`❌ Error creating game ${gameId}:`, error);
+    // RELEASE THE CODE. A create that fell over after the lock was taken would
+    // otherwise burn one of 9,000 codes for 90 days for nothing, and leave a
+    // half-built partition no list shows and no delete finds. Not attempted when
+    // the failure IS the lock — that row is another session's.
+    if (reserved && error && error.name !== 'ConditionalCheckFailedException') {
+      try {
+        await db.send(new DeleteCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: GAMES_RESERVATION_PK, SK: `GAME#${gameId}` }
+        }));
+        if (orgId) {
+          await db.send(new DeleteCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: gamesIndexPk(orgId), SK: `GAME#${gameId}` }
+          }));
+        }
+        console.log(`↩️ Released reservation for failed game ${gameId}`);
+      } catch (releaseError) {
+        console.error(`❌ Could not release reservation for ${gameId}:`, releaseError.message);
+      }
+    }
     throw error;
   }
 };

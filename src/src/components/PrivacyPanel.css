@@ -1,0 +1,427 @@
+/* ============================================================================
+   DATA & PRIVACY — components/PrivacyPanel.jsx
+
+   Derived from docs/design/tenancy-redesign/08-privacy.html and RATIONALE.md §3
+   ("the privacy page states the limit honestly"). Scoped under `.priv` because
+   the mockup's `.panel` / `.tbl` / `.btn` / `.kv` / `.note-box` / `.wrap` /
+   `.tight` names belong to the mockup shell and to styles.css; a component
+   stylesheet that declared them would reach every other screen in the bundle
+   (see UserManagement.css's `.alert`, and QuestionSetsPanel.css's `.qs`
+   collision).
+
+   WHAT THIS SCREEN IS. A promise about data handling that a customer cannot
+   check is a sentence in a contract; this page is the check. Three jobs: say
+   what is encrypted, show every time anyone read anything and WHY, and make
+   leaving self-service.
+
+   THE ACCESS LOG'S CELLS WRAP AND DO NOT TRUNCATE, and that is the one place
+   this sheet departs from the dense-list default. `.priv-tbl td` is
+   `overflow: hidden; text-overflow: ellipsis` — right for a scan list, wrong
+   here, because the free-text reason somebody gave for reading a customer's
+   data IS the record. Truncated, `"Report shows no responses for round 3" —
+   tic…` loses the ticket that makes it checkable. `.priv-wrap` + `.priv-tight`
+   are the two modifiers that turn a row back into prose, exactly as the mockup
+   shell's `.wrap` / `.tight` do (RATIONALE §4: "a reduction with no recovery is
+   a deletion" — it ate three cells of this very table while it was drawn).
+
+   THE LADDER (RATIONALE §3): 12 floor / 13 label / 15 body / 19 head at ~120
+   CSS ppi read at 24in. Rows are 36px. Nothing below 12px.
+
+   COLOUR, MEASURED (unlifted, composited up the real ancestor stack — the
+   arithmetic lives in __tests__/privacyPanelPalette.test.js):
+
+     --text        #F4EDE4 on --bg #0F1A2E             14.97:1  row values
+     --muted       #9BA8BE on --bg                      7.24:1  column heads, dates
+     --text        #F4EDE4 on --surface #1B2942        12.53:1  panel + dialog copy
+     --muted       #9BA8BE on --surface                 6.06:1  panel notes
+     --primary     #F6A94C on --bg                      8.86:1  links, dots
+     --danger-text #EF8C86 on --surface                 6.08:1  Delete, consequence
+     --bg          #0F1A2E on --primary                 8.86:1  the filled primary
+     --text        #F4EDE4 on --danger-deep #B03A34     5.16:1  the filled destructive
+
+   `--danger` is never text here: 4.38:1 on --surface, under AA. It keeps
+   borders and tints only.
+   ========================================================================== */
+
+.priv {
+  --priv-t-floor: 12px;
+  --priv-t-label: 13px;
+  --priv-t-body: 15px;
+  --priv-t-head: 19px;
+  --priv-row-h: 36px;
+
+  /* Scoped, not global. An undefined custom property invalidates the WHOLE
+     declaration, so a colour borrowed from a stylesheet that merely happens to
+     be in the bundle disappears the day that import moves. */
+  --priv-success-text: #6FD0A4;
+
+  --priv-rule: rgba(155, 168, 190, .20);
+  --priv-rule-strong: rgba(155, 168, 190, .34);
+  --priv-row-hover: rgba(155, 168, 190, .055);
+  --priv-tint-note: rgba(155, 168, 190, .06);
+  --priv-tint-ok: rgba(79, 178, 134, .10);
+  --priv-tint-danger: rgba(229, 100, 94, .09);
+
+  color: var(--text);
+  font: 400 var(--priv-t-body)/1.45 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------ panel -- */
+
+.priv-panel {
+  background: var(--surface);
+  border: 1px solid var(--priv-rule);
+  border-radius: 8px;
+  margin: 0 0 14px;
+  overflow: hidden;
+}
+.priv-panel > header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--priv-rule);
+}
+.priv-panel > header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--priv-t-head);
+  font-weight: 700;
+  letter-spacing: -.003em;
+}
+.priv-panel-body { padding: 14px; }
+.priv-panel-body > b { font-weight: 700; }
+
+.priv-grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.priv-grid2 .priv-panel { margin: 0; }
+@media (max-width: 1080px) {
+  .priv-grid2 { grid-template-columns: 1fr; }
+}
+
+/* --------------------------------------------------------------- the kv --- */
+
+.priv-kv {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 8px 14px;
+  margin: 0;
+  font-size: var(--priv-t-body);
+}
+.priv-kv dt {
+  color: var(--muted);
+  font-size: var(--priv-t-label);
+  padding-top: 2px;
+}
+.priv-kv dd { margin: 0; line-height: 1.5; max-width: 92ch; }
+.priv-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: var(--muted);
+}
+.priv-dot--ok { background: var(--success); }
+.priv-dot--plat { background: var(--primary); }
+.priv-dot--mem { background: var(--secondary); }
+
+/* ------------------------------------------------------------- the notes -- */
+
+.priv-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--priv-t-label);
+  line-height: 1.5;
+  max-width: 104ch;
+}
+.priv-note-box {
+  border-left: 3px solid var(--muted);
+  background: var(--priv-tint-note);
+  border-radius: 0 6px 6px 0;
+  padding: 10px 13px;
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: var(--priv-t-label);
+  line-height: 1.5;
+  max-width: 104ch;
+}
+.priv-note-box b { color: var(--text); }
+
+.priv-secttl {
+  font: 600 var(--priv-t-head)/1.2 var(--font-ui);
+  margin: 22px 0 10px;
+}
+
+/* --------------------------------------------------------------- table ---- */
+/* table-layout: fixed, and it is load-bearing. Under auto layout the declared
+   widths are only hints, a nowrap date sets a min-content width and the whole
+   work area scrolls sideways. */
+.priv-tbl {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--priv-t-body);
+}
+.priv-tbl th {
+  text-align: left;
+  padding: 0 10px 7px;
+  font-size: var(--priv-t-floor);
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--priv-rule-strong);
+}
+.priv-tbl td {
+  padding: 0 10px;
+  height: var(--priv-row-h);
+  border-bottom: 1px solid var(--priv-rule);
+  vertical-align: middle;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.priv-tbl tbody tr:hover td { background: var(--priv-row-hover); }
+
+/* The two modifiers that make the log readable. See the header: a truncated
+   reason is a deleted reason.
+
+   THEY ARE WRITTEN `.priv-tbl td.priv-wrap` AND NOT `.priv-wrap`, and that is
+   the whole fix rather than a tidiness. `.priv-tbl td` is (0,1,1) — one class
+   and one type — so a bare `.priv-wrap` at (0,1,0) LOSES to it and the cells go
+   on truncating with the modifier applied and every test green. It rendered as
+   `12 Aug, expired after 4…` in the browser, which is the exact defect
+   RATIONALE §4 records this table producing while it was drawn. */
+.priv-tbl td.priv-wrap {
+  white-space: normal;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+.priv-tbl td.priv-tight {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  height: auto;
+}
+.priv-logrow td {
+  vertical-align: top;
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+.priv-col-who { width: 20%; }
+.priv-col-what { width: 36%; }
+.priv-col-touched { width: 26%; }
+.priv-col-when { width: 18%; }
+
+.priv-actor { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.priv-affil {
+  display: block;
+  font-size: var(--priv-t-floor);
+  color: var(--muted);
+  margin-top: 2px;
+}
+.priv-rsn {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: var(--priv-t-label);
+  line-height: 1.45;
+}
+.priv-dim { color: var(--muted); }
+
+/* -------------------------------------------------------------- states ---- */
+/* Three different situations, three different sentences. An empty log is a GOOD
+   state and must not read as a failure to load; a failure to load must not read
+   as an empty log. */
+.priv-state {
+  border: 1px solid var(--priv-rule);
+  border-radius: 8px;
+  padding: 18px;
+  margin: 0;
+  max-width: 78ch;
+}
+.priv-state h4 {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: var(--priv-t-head);
+  font-weight: 700;
+}
+.priv-state p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--priv-t-body);
+  line-height: 1.55;
+}
+.priv-state--empty { border-color: rgba(79, 178, 134, .5); background: var(--priv-tint-ok); }
+.priv-state--empty h4 { color: var(--priv-success-text); }
+.priv-state--bad { border-color: rgba(229, 100, 94, .5); background: var(--priv-tint-danger); }
+.priv-state--bad h4 { color: var(--danger-text); }
+
+/* ------------------------------------------------------------- controls --- */
+
+.priv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--priv-rule-strong);
+  background: transparent;
+  color: var(--text);
+  font: 600 var(--priv-t-label)/1 var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.priv-btn:hover { background: var(--priv-row-hover); border-color: var(--muted); }
+.priv-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.priv-btn[disabled] { opacity: .42; cursor: not-allowed; }
+.priv-btn--primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--bg);
+  font-weight: 700;
+}
+.priv-btn--primary:hover { background: var(--primary); border-color: var(--primary); }
+.priv-btn--danger { border-color: rgba(229, 100, 94, .55); color: var(--danger-text); }
+.priv-btn--danger:hover { background: var(--priv-tint-danger); border-color: var(--danger-text); }
+.priv-btn--dangersolid {
+  background: var(--danger-deep);
+  border-color: var(--danger-deep);
+  color: var(--text);
+}
+.priv-btn--dangersolid:hover { background: var(--danger-deep); }
+.priv-btn--ghost { border-color: transparent; color: var(--muted); }
+.priv-btn--ghost:hover { color: var(--text); background: var(--priv-row-hover); }
+.priv-btn--icon {
+  height: 28px;
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+  border-color: transparent;
+  color: var(--muted);
+}
+.priv-btn--icon:hover { color: var(--text); background: var(--priv-row-hover); }
+.priv-actions { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+
+.priv-err {
+  margin: 10px 0 0;
+  color: var(--danger-text);
+  font-size: var(--priv-t-label);
+  line-height: 1.5;
+}
+.priv-ok {
+  margin: 10px 0 0;
+  color: var(--priv-success-text);
+  font-size: var(--priv-t-label);
+  line-height: 1.5;
+}
+
+/* ---------------------------------------------------------------- modal --- */
+/* The scrim SCROLLS and does not centre with the flex container: a child
+   centred by the container overflows in both directions and a scroll container
+   can only reach one of them. `margin: auto` on the card centres it while it
+   fits and yields once it does not. This bug has recurred four times. */
+.priv-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(6, 11, 22, .72);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 24px;
+}
+.priv-scrim > * { margin: auto; }
+.priv-modal {
+  overflow-wrap: anywhere;
+  background: var(--surface);
+  border: 1px solid var(--priv-rule-strong);
+  border-radius: 12px;
+  width: min(560px, 100%);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .5);
+  color: var(--text);
+  font: 400 var(--priv-t-body)/1.45 var(--font-ui);
+}
+.priv-modal > header {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 16px 18px 10px;
+}
+.priv-modal > header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--priv-t-head);
+  font-weight: 800;
+}
+.priv-modal-body { padding: 0 18px 4px; }
+.priv-modal-body p { margin: 0 0 12px; line-height: 1.55; max-width: 70ch; }
+.priv-modal footer {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--priv-rule);
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.priv-grow { flex: 1 1 auto; }
+
+/* The reversible neighbour. A destructive dialog that does not offer the
+   non-destructive thing the person may actually have wanted is a trap. */
+.priv-alt {
+  border: 1px solid rgba(79, 178, 134, .5);
+  background: var(--priv-tint-ok);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0 0 12px;
+  line-height: 1.5;
+  font-size: var(--priv-t-label);
+  color: var(--muted);
+}
+.priv-alt b { color: var(--priv-success-text); }
+/* A bordered button, not a ghost: inside a paragraph a borderless control reads
+   as emphasis rather than as the thing you can press instead. */
+.priv-alt .priv-btn { margin-top: 8px; }
+
+.priv-consq {
+  margin: 0 0 12px;
+  padding: 0 0 0 18px;
+  color: var(--text);
+  line-height: 1.55;
+}
+.priv-consq li { margin: 0 0 4px; }
+
+.priv-field { display: flex; flex-direction: column; gap: 5px; margin: 0 0 4px; }
+.priv-field label {
+  font-size: var(--priv-t-label);
+  font-weight: 600;
+  color: var(--muted);
+}
+/* Inputs render at the reading tier (15px). A 13px input producing 15px table
+   text is the commonest way a dense console gets illegible where a mistake is
+   most expensive. */
+.priv-input {
+  font: 400 var(--priv-t-body)/1.4 var(--font-ui);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--priv-rule-strong);
+  border-radius: 6px;
+  padding: 6px 9px;
+  min-height: 32px;
+  width: 100%;
+}
+.priv-input:focus { outline: 2px solid var(--primary); outline-offset: 1px; border-color: var(--primary); }

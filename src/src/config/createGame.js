@@ -9,24 +9,33 @@
  *    the frontend for months and silently discarded that way." Building the body
  *    where it can be called and asserted is the cheapest guard against a repeat.
  *
- * 2. **`selectedCategories` used to depend on closure timing.**
+ * 2. **`questionSetScope` was never in the body at all.** A set reference is a
+ *    pair — `tenant.js`: `teamretro` names a different set in each of platform,
+ *    org and public — and the backend has always accepted one. The picker threw
+ *    the scope away, so every session pinned the backend's `platform` default
+ *    and a session built from an ORG's set resolved to a partition with no
+ *    categories and no questions. See utils/setRef.js.
+ *
+ * 3. **`selectedCategories` used to depend on closure timing.**
  *    `handleStartNewGame` calls `leaveCurrentGame()` — which clears
  *    `activeCategoryIds` — and then read `Array.from(activeCategoryIds)` from
  *    the pre-reset closure. It worked, for a reason invisible at the call site.
  *    The ids now arrive in the form payload and the ordering stops mattering.
  */
 import { createPayloadFor } from './anonymity';
+import { DEFAULT_SCOPE } from '../utils/setRef';
 
 /**
  * @param form  what `<GameSetupDialog>` raises through `onCreate`:
- *              { title, gameType, setId, categoryIds, eventDetails, aiContext,
- *                personaId, randomizeQuestions, anonymousResponses }
+ *              { title, gameType, setId, setScope, categoryIds, eventDetails,
+ *                aiContext, personaId, randomizeQuestions, anonymousResponses }
  */
 export function createGameBody(form = {}) {
   const {
     title = '',
     gameType,
     setId = '',
+    setScope = '',
     categoryIds,
     eventDetails = '',
     aiContext = '',
@@ -41,6 +50,11 @@ export function createGameBody(form = {}) {
     aiContext: aiContext || null,
     gameType,
     questionSetId: setId,
+    // THE OTHER HALF OF THE REFERENCE. Sent explicitly, never omitted: an
+    // absent key and 'platform' happen to agree in create-game.js today, and
+    // would stop agreeing the moment that default moves. A form that carries no
+    // scope is a platform set, which is what every pre-tenancy set is.
+    questionSetScope: setScope || DEFAULT_SCOPE,
     randomizeQuestions,
     // Always an array. `undefined` would be deleted by JSON.stringify, so the
     // backend would read "no categories key" where the host meant "all of them".

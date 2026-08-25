@@ -44,6 +44,13 @@ function setup(overrides = {}) {
 const pill = (label) => screen.getByRole('button', { name: label });
 const setSelect = () => screen.getByLabelText(/question set/i);
 
+/*
+  THE PICKER'S VALUE IS `scope:id`, NOT `id`. A <select> can only carry a
+  string, and a set reference is a pair — `teamretro` names a different set in
+  each of platform, org and public (utils/setRef.js). Every fixture above is
+  unscoped, which means platform.
+*/
+
 describe('the format picker', () => {
   // rejects: the shipped three-option <select>, which hand-listed
   // call-and-answer / trivia / wavelength and omitted poll — a picker that
@@ -73,8 +80,8 @@ describe('the format picker', () => {
   // which is what makes the set dropdown's type filter meaningful.
   test('choosing a format marks it, and clears the question set', () => {
     const { props } = setup();
-    fireEvent.change(setSelect(), { target: { value: 'pricing' } });
-    expect(setSelect().value).toBe('pricing');
+    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    expect(setSelect().value).toBe('platform:pricing');
 
     fireEvent.click(pill('Trivia'));
 
@@ -82,7 +89,7 @@ describe('the format picker', () => {
     expect(pill('Call & Answer')).toHaveAttribute('aria-pressed', 'false');
     expect(setSelect().value).toBe('');
     // and the page is told, so it can drop the old set's categories/instruction
-    expect(props.onQuestionSetChange).toHaveBeenLastCalledWith('');
+    expect(props.onQuestionSetChange).toHaveBeenLastCalledWith('', 'platform');
   });
 
   // rejects: leaving `blurb` as the dead data it is today — it exists on all
@@ -121,14 +128,14 @@ describe('the question set', () => {
   // categories the create payload then carries.
   test('tells the page which set was chosen, so it can load the categories', () => {
     const { props } = setup();
-    fireEvent.change(setSelect(), { target: { value: 'pricing' } });
-    expect(props.onQuestionSetChange).toHaveBeenCalledWith('pricing');
+    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    expect(props.onQuestionSetChange).toHaveBeenCalledWith('pricing', 'platform');
   });
 
   test('shows the category grid only once a set is chosen', () => {
     setup();
     expect(screen.queryByText('Leadership')).toBeNull();
-    fireEvent.change(setSelect(), { target: { value: 'pricing' } });
+    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
     expect(screen.getByText('Leadership')).toBeInTheDocument();
   });
 
@@ -136,7 +143,7 @@ describe('the question set', () => {
   // "these three, not those five".
   test('a category toggle goes back to the page that owns the selection', () => {
     const { props } = setup();
-    fireEvent.change(setSelect(), { target: { value: 'pricing' } });
+    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
     fireEvent.click(screen.getByText('Leadership').closest('button'));
     expect(props.onToggleCategory).toHaveBeenCalledWith('Leadership');
   });
@@ -213,7 +220,7 @@ describe('the trivia timer', () => {
 describe('creating', () => {
   const ready = (overrides = {}) => {
     const r = setup({ eventTitle: 'Q3 Offsite', ...overrides });
-    fireEvent.change(setSelect(), { target: { value: 'pricing' } });
+    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
     return r;
   };
 
@@ -224,7 +231,7 @@ describe('creating', () => {
     const create = screen.getByRole('button', { name: /create engagement/i });
     expect(create).toBeDisabled();               // no title, no set
 
-    fireEvent.change(setSelect(), { target: { value: 'pricing' } });
+    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
     expect(create).toBeDisabled();               // set, still no title
 
     setup({ eventTitle: '   ' });                 // whitespace is not a title
@@ -337,7 +344,7 @@ describe('edit mode', () => {
     expect(screen.getByLabelText(/event details/i).value).toBe('Pricing day.');
     expect(screen.getByLabelText(/ai context/i).value).toBe('Mid-market SaaS.');
     expect(screen.getByLabelText(/workie's voice/i).value).toBe('coach');
-    expect(setSelect().value).toBe('pricing');
+    expect(setSelect().value).toBe('platform:pricing');
     expect(pill('Call & Answer')).toHaveAttribute('aria-pressed', 'true');
     // anonymousUntilReveal: false must arrive as an UNCHECKED box — seeding
     // the default instead would flip the session anonymous on the first save.
@@ -419,7 +426,7 @@ describe('edit mode', () => {
   // the pinned set (retired, or fetched for another format).
   test('a set the page\'s list does not carry still displays by id', () => {
     setupEdit({ questionSetId: 'retired-set' });
-    expect(setSelect().value).toBe('retired-set');
+    expect(setSelect().value).toBe('platform:retired-set');
   });
 
   /*
@@ -500,7 +507,7 @@ describe('the zero-setup plan line', () => {
 
   test('a set with no prompt of its own promises the format standard', () => {
     setup();
-    fireEvent.change(setSelect(), { target: { value: 'pricing' } });
+    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
     const plan = screen.getByTestId('gsd-workie-plan');
     expect(plan.textContent).toMatch(/standard Call & Answer way/);
     expect(plan.textContent).toMatch(/nothing above needs setting up/i);
@@ -512,9 +519,80 @@ describe('the zero-setup plan line', () => {
         { id: 'lp', name: 'Leadership Principles', totalQuestions: 10, engagementType: 'call-and-answer', hasImages: false, promptId: 'lp-behavioral' },
       ],
     });
-    fireEvent.change(setSelect(), { target: { value: 'lp' } });
+    fireEvent.change(setSelect(), { target: { value: 'platform:lp' } });
     const plan = screen.getByTestId('gsd-workie-plan');
     expect(plan.textContent).toMatch(/brings its own summary approach/i);
     expect(plan.textContent).not.toMatch(/standard/i);
+  });
+});
+
+/**
+ * THE SCOPE HALF OF THE SET REFERENCE.
+ *
+ * `teamretro` names a different set in each of platform, org and public
+ * (lambda-functions/game/tenant.js). `GET /question-sets` returns `scope` on
+ * every row for exactly that reason. This picker used to drop it — the option
+ * value was `set.id` — so the create body had no scope to send, `create-game.js`
+ * applied its documented `platform` default, and a session built from an ORG's
+ * set resolved to a partition with no categories and no questions. It created,
+ * listed and joined fine. It just could not be played.
+ */
+describe('the question set reference survives the picker', () => {
+  const SCOPED = [
+    { id: 'teamretro', name: 'Team Retro (Engage)', totalQuestions: 20, engagementType: 'call-and-answer', scope: 'platform' },
+    { id: 'teamretro', name: 'Team Retro (ours)', totalQuestions: 8, engagementType: 'call-and-answer', scope: 'org' },
+    { id: 'pricing', name: 'Strategic Pricing Plays', totalQuestions: 47, engagementType: 'call-and-answer' },
+  ];
+
+  /* `eventTitle` is owned by the PAGE in create mode (the live host screen
+     reads it), so a submittable form is seeded through the prop rather than
+     typed — typing here only calls onEventTitleChange. */
+  const ready = (over = {}) => setup({ questionSets: SCOPED, eventTitle: 'Retro', ...over });
+  const create = () => fireEvent.click(screen.getByRole('button', { name: /create engagement/i }));
+
+  /*
+    THE BUG, AT THE SEAM IT ESCAPED THROUGH. Everything downstream of this
+    callback was already correct: create-game.js names questionSetScope,
+    schema-compliant-manager pins it, and tests/tenant-session-scoping.js proves
+    an explicit scope is honoured. Only the picker forgot.
+  */
+  // rejects: raising the id alone, which pins the session to Engage's library.
+  test('an org set is raised with its scope', () => {
+    const { props } = ready();
+    fireEvent.change(setSelect(), { target: { value: 'org:teamretro' } });
+    create();
+    expect(props.onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ setId: 'teamretro', setScope: 'org' }),
+    );
+  });
+
+  // rejects: hardcoding 'org' — a platform set must still say platform.
+  test('a platform set is raised as platform', () => {
+    const { props } = ready();
+    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    create();
+    expect(props.onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ setId: 'pricing', setScope: 'platform' }),
+    );
+  });
+
+  /*
+    Two sets, one slug. Keyed by id, the <select> renders duplicate option
+    values and duplicate React keys, and whichever the browser resolves first
+    wins — so the host cannot reliably pick the other one at all.
+  */
+  // rejects: a picker that cannot express "ours, not Engage's".
+  test('both libraries\' copies of one slug are offered separately', () => {
+    setup({ questionSets: SCOPED });
+    expect(screen.getByRole('option', { name: /Team Retro \(Engage\)/ }).value).toBe('platform:teamretro');
+    expect(screen.getByRole('option', { name: /Team Retro \(ours\)/ }).value).toBe('org:teamretro');
+  });
+
+  // rejects: the page being told an id with no scope, which sends
+  // fetchCategories and fetchQuestionSetInstruction back to the same ambiguity.
+  test('the page is told the scope too, so it loads the right categories', () => {
+    const { props } = setup({ questionSets: SCOPED });
+    fireEvent.change(setSelect(), { target: { value: 'org:teamretro' } });
+    expect(props.onQuestionSetChange).toHaveBeenCalledWith('teamretro', 'org');
   });
 });

@@ -55,6 +55,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { PICKER_GAME_TYPES, gameTypeMeta } from '../config/gameTypes';
 import { anonymityApplies } from '../config/anonymity';
+import { setRefKey, parseSetRefKey, sameSetRef, DEFAULT_SCOPE } from '../utils/setRef';
 import { imageMarkerSuffix } from './SetImageBadge';
 import HostQuestionSetsDialog from './HostQuestionSetsDialog';
 import Modal from './Modal';
@@ -86,6 +87,9 @@ export default function GameSetupDialog({
     with a legitimate seed — a deep link, say — would use.
   */
   initialSetId = '',
+  /* The other half of `initialSetId`, for the same hypothetical seeded caller.
+     Absent reads as platform — see utils/setRef.js. */
+  initialSetScope = '',
   questionSets = [],
   personas = [],
   categories = [],
@@ -106,9 +110,21 @@ export default function GameSetupDialog({
   const [engagementType, setEngagementType] = useState(
     isEdit ? (seed.gameType || 'call-and-answer') : 'call-and-answer'
   );
-  const [newGameSetId, setNewGameSetId] = useState(
-    isEdit ? (seed.questionSetId || '') : (initialSetId || '')
-  );
+  /*
+    THE SELECTION IS A PAIR, held as the encoded key the <select> can carry.
+    `teamretro` names a different set in each of platform, org and public
+    (utils/setRef.js), so an id alone is not a selection — that is precisely
+    what let a session built from an org's set pin Engage's library instead.
+
+    Seeded from whichever half the caller has: an edit carries the session's
+    pinned QuestionSetScope when it has one, and a pre-tenancy session has none,
+    which parseSetRefKey reads as platform.
+  */
+  const [newGameSetKey, setNewGameSetKey] = useState(() => (isEdit
+    ? setRefKey({ id: seed.questionSetId || '', scope: seed.questionSetScope })
+    : setRefKey({ id: initialSetId || '', scope: initialSetScope })));
+  const newGameSetRef = parseSetRefKey(newGameSetKey);
+  const newGameSetId = newGameSetRef.id;
   const [eventDetails, setEventDetails] = useState(isEdit ? (seed.details || '') : '');
   const [gameAiContext, setGameAiContext] = useState(isEdit ? (seed.aiContext || '') : '');
   const [newGamePersonaId, setNewGamePersonaId] = useState(isEdit ? (seed.personaId || '') : '');
@@ -161,9 +177,12 @@ export default function GameSetupDialog({
   // keeps the page's richer record.
   const allSets = useMemo(() => {
     if (!localSets) return questionSets;
-    const byId = new Map(localSets.map((set) => [set.id, set]));
-    for (const set of questionSets) byId.set(set.id, set);
-    return Array.from(byId.values());
+    // KEYED BY THE PAIR. Keyed by id alone this merge silently DELETED one of
+    // two same-slug sets — an org's `teamretro` and Engage's collapse into
+    // whichever was written last, and the host can no longer pick the other.
+    const byRef = new Map(localSets.map((set) => [setRefKey(set), set]));
+    for (const set of questionSets) byRef.set(setRefKey(set), set);
+    return Array.from(byRef.values());
   }, [questionSets, localSets]);
 
   const setsForType = allSets.filter((set) => set.engagementType === engagementType);
@@ -180,15 +199,18 @@ export default function GameSetupDialog({
     // A set belongs to exactly one format, so the previous choice cannot
     // survive the switch. Telling the page too, so it drops that set's
     // categories and custom instruction rather than leaving them stale.
-    setNewGameSetId('');
-    onQuestionSetChange?.('');
+    setNewGameSetKey('');
+    onQuestionSetChange?.('', DEFAULT_SCOPE);
     // A voice picked for the old format may not exist for the new one.
     setNewGamePersonaId('');
   };
 
-  const chooseSet = (setId) => {
-    setNewGameSetId(setId);
-    onQuestionSetChange?.(setId);
+  const chooseSet = (key) => {
+    setNewGameSetKey(key);
+    // BOTH HALVES go to the page. It loads the categories and the custom
+    // instruction from this, and both of those reads are per-partition too.
+    const ref = parseSetRefKey(key);
+    onQuestionSetChange?.(ref.id, ref.scope);
   };
 
   const submit = () => {
@@ -201,6 +223,11 @@ export default function GameSetupDialog({
       title,
       gameType: engagementType,
       setId: newGameSetId,
+      // WHICH LIBRARY that id is in. createGameBody sends it as
+      // questionSetScope and schema-compliant-manager pins it onto the session;
+      // without it the session pins `platform` and an org's set resolves to a
+      // partition holding nothing.
+      setScope: newGameSetRef.scope,
       categoryIds: Array.from(selectedCats || []),
       eventDetails,
       aiContext: gameAiContext,
@@ -312,22 +339,25 @@ export default function GameSetupDialog({
             <label htmlFor="gsd-set">Question set</label>
             <select
               id="gsd-set"
-              value={newGameSetId}
+              value={newGameSetKey}
               onChange={(e) => chooseSet(e.target.value)}
               className="dialog-select"
               disabled={isEdit}
             >
               <option value="">Select a question set...</option>
               {setsForType.map((set) => (
-                <option key={set.id} value={set.id}>
+                /* KEY AND VALUE ARE THE PAIR. Two libraries can hold the same
+                   slug, which under `key={set.id}` is a duplicate React key and
+                   two <option>s the browser cannot tell apart. */
+                <option key={setRefKey(set)} value={setRefKey(set)}>
                   {set.name} ({set.totalQuestions} questions){imageMarkerSuffix(set.hasImages)}
                 </option>
               ))}
               {/* Editing a session whose set the page's list does not carry —
                   a retired set, or a list fetched for another format — must
                   still DISPLAY the pinned set rather than a blank control. */}
-              {isEdit && newGameSetId && !setsForType.some((s) => s.id === newGameSetId) && (
-                <option value={newGameSetId}>{newGameSetId}</option>
+              {isEdit && newGameSetId && !setsForType.some((s) => sameSetRef(s, newGameSetRef)) && (
+                <option value={newGameSetKey}>{newGameSetId}</option>
               )}
             </select>
             {/* THE ENTRY POINT. Always offered in create mode, not only when

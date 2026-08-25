@@ -138,6 +138,18 @@
   letter-spacing: -.003em;
 }
 .um-note { margin: 0; font-size: var(--um-t-label); color: var(--muted); }
+
+/* The standing explanation above the roster. Sits on the work field rather
+   than in a panel: it is a caption for the table, not a separate thing to
+   read, and boxing it would make it a notice people dismiss mentally. */
+.um-note--roles {
+  max-width: 92ch;
+  margin: 0 0 12px;
+  padding-left: 10px;
+  border-left: 2px solid var(--um-rule-strong, rgba(155, 168, 190, .34));
+  line-height: 1.55;
+}
+.um-note--roles b { color: var(--text); font-weight: 600; }
 .um-grow { flex: 1 1 auto; min-width: 8px; }
 .um-wait { font-size: var(--um-t-label); color: var(--muted); white-space: nowrap; }
 .um-wait b { color: var(--primary); }

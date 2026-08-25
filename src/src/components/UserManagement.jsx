@@ -72,8 +72,23 @@ export function roleOf(user) {
   return 'pending';
 }
 
+/*
+  "ENGAGE ADMIN", NOT "ADMIN".
+
+  Before tenancy there was one kind of admin and the word was unambiguous. There
+  are now two, they are unrelated, and this screen grants the more powerful one:
+
+    ENGAGE ADMIN — the `admins` Cognito group. Sees every organisation on the
+                   tier, approves and suspends them, and approves accounts.
+    ORG ADMIN    — a role inside one organisation, granted on its Members
+                   screen, and worth nothing anywhere else.
+
+  A row reading "Admin" beside an Accounts screen is exactly the ambiguity that
+  gets somebody made staff by accident, so the word Engage is carried in both
+  the chip and the verb.
+*/
 const ROLE_META = {
-  admins: { label: 'Admin', chip: 'warn' },
+  admins: { label: 'Engage admin', chip: 'warn' },
   hosts: { label: 'Host', chip: 'on' },
   disabled: { label: 'Disabled', chip: 'off' },
   pending: { label: 'Pending', chip: 'warn' },
@@ -82,8 +97,10 @@ const ROLE_META = {
 /** The three roles a member row can be moved between, in the order they rank. */
 const MEMBER_ROLES = ['admins', 'hosts', 'disabled'];
 
-/** "Make admin" / "Make host" / "Disable" — the verb, named. */
-const MOVE_VERB = { admins: 'Make admin', hosts: 'Make host', disabled: 'Disable' };
+/** "Make Engage admin" / "Make host" / "Disable" — the verb, named. */
+const MOVE_VERB = {
+  admins: 'Make Engage admin', hosts: 'Make host', disabled: 'Disable',
+};
 
 /**
  * How this person signed in.
@@ -474,6 +491,26 @@ const UserManagement = () => {
           ))}
         </div>
       </div>
+
+      {/*
+        WHAT THE POWERFUL BUTTON ON THIS SCREEN ACTUALLY DOES.
+
+        "Make Engage admin" grants the platform console — every organisation on
+        the tier, approving and suspending them, and this screen. It is the one
+        control here that widens power rather than narrowing it, and until now
+        it said only "Make admin" beside a roster of ordinary accounts.
+
+        The second sentence is the part people get wrong in the other direction:
+        being Engage staff grants NO access to any customer's content. That is
+        the whole point of the split, and staff who expect otherwise read the
+        refusal as a broken product.
+      */}
+      <p className="um-note um-note--roles">
+        <b>Engage admin</b> is Engage staff: every organisation on this tier, approving
+        and suspending them, and this screen. It grants no access to any organisation’s
+        question sets, sessions or reports — that is a separate, logged request.
+        <b> Host</b> is everybody else, and is what an ordinary account needs.
+      </p>
 
       <table className="um-tbl">
         <thead>

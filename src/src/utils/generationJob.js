@@ -213,6 +213,44 @@ export function rememberGenerationJob(endpoint, jobId, extra = {}) {
   }
 }
 
+/**
+ * EVERY REMEMBERED JOB, so a LIST can show what is coming rather than only the
+ * modal that started it.
+ *
+ * Reported: "the question set doesnt get generated in the list until i click AI
+ * builder and see the status of the generation … it should still show up in the
+ * list with a review button to take you to the output."
+ *
+ * That is right, and the memory to do it already existed — it was only ever
+ * read by the builder that wrote it, to offer a resume. The slots are one per
+ * endpoint under a shared prefix, so a list can read all of them without
+ * knowing which builders exist.
+ *
+ * @returns {{key: string, jobId: string, startedAt: number}[]} newest first.
+ */
+export function recallAllGenerationJobs() {
+  const store = storage();
+  if (!store) return [];
+  const found = [];
+  try {
+    for (let i = 0; i < store.length; i += 1) {
+      const key = store.key(i);
+      if (!key || !key.startsWith(STORAGE_PREFIX)) continue;
+      try {
+        const parsed = JSON.parse(store.getItem(key));
+        // A slot with no jobId is a half-written or cleared one; the single-slot
+        // reader treats it as absent and so does this.
+        if (parsed && parsed.jobId) {
+          found.push({ ...parsed, key: key.slice(STORAGE_PREFIX.length) });
+        }
+      } catch (error) { /* one malformed slot must not hide the others */ }
+    }
+  } catch (error) {
+    return [];
+  }
+  return found.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+}
+
 /** `{ jobId, startedAt, ... }` or null. Malformed JSON reads as null. */
 export function recallGenerationJob(endpoint) {
   const store = storage();

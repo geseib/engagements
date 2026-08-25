@@ -3,6 +3,7 @@ const { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand, PutComm
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { resolveSetPartition } = require('./set-version');
 const { normaliseQueue, queueDrop } = require('./queue-order');
+const { callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -745,13 +746,37 @@ exports.handler = async (event) => {
 
     console.log(`➡️ Getting next question for game ${gameId}, action: ${action || 'normal'}, questionId: ${questionId || 'auto-select'}`);
 
-    // Get game state
-    const gameState = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: 'STATE' }
-    }));
+    // Get game state, and the org that owns this session.
+    const [gameState, ownerRead] = await Promise.all([
+      db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'STATE' }
+      })),
+      db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+        ProjectionExpression: 'orgId'
+      })),
+    ]);
 
     if (!gameState.Item) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ error: 'Game not found' }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
+    /*
+      THE SHARPEST OF THE SESSION HOLES. This route ADVANCES A LIVE ROOM, and it
+      compared nothing: on dev a host in another organisation moved somebody
+      else's session to the next question with only the four-digit code. There
+      are 9,000 of those.
+
+      404 rather than 403, so a guessed code cannot be used to discover that a
+      session exists — see tenant.callerMayDriveSession.
+    */
+    if (!callerMayDriveSession(event, ownerRead.Item || {})) {
       return {
         statusCode: 404,
         body: JSON.stringify({ error: 'Game not found' }),

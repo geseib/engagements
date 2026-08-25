@@ -721,7 +721,7 @@ describe('delete', () => {
 /* ----------------------------------------------------------------- create -- */
 
 describe('create', () => {
-  test('the upload form is the shared one, with the admin machinery switched off', async () => {
+  test('the upload form is the shared one, and the builders are a host\'s now', async () => {
     await openDialog();
     fireEvent.click(screen.getByRole('button', { name: /new question set/i }));
 
@@ -729,14 +729,64 @@ describe('create', () => {
     expect(screen.getByLabelText(/engagement type/i)).toBeTruthy();
     expect(screen.getByLabelText(/csv file/i)).toBeTruthy();
 
-    // rejects: handing a host the console's form whole. Each of these is either
-    // an admins-only route or a library-curation field, and every one of them
-    // would be a dead or refused control here.
-    expect(screen.queryByRole('button', { name: /AI .* builder/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /manual builder/i })).toBeNull();
+    /*
+      THE BUILDERS USED TO BE ASSERTED ABSENT HERE, and the reversal is the
+      owner's decision rather than a relaxation.
+
+      They were off because the AI routes were admins-only, and those were
+      admins-only because Bedrock costs money and, before tenancy, there was no
+      way to say whose. A generation now happens inside an organisation that has
+      a plan and a metering ledger behind it: "now that we have teams with
+      purchase and tracking capabilities coming in, it is ok to let it have the
+      full AI Builder experience in the host create question set."
+
+      The routes moved with the UI — see tests/host-ai-builder-routes.js, which
+      opens both halves of every job (start AND poll, because opening only the
+      start spends the money and then refuses the answer).
+    */
+    // rejects: showing a host a builder whose route would refuse them.
+    expect(screen.queryByRole('button', { name: /AI .* builder/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /manual builder/i })).toBeTruthy();
+
+    /*
+      AND IT HAS TO DO SOMETHING. This assertion is the one that was missing:
+      the button was rendered by passing `showAIBuilder` to
+      QuestionSetUploadPanel, whose onClick is
+      `onOpenBuilder && onOpenBuilder(engagementType)` — and this dialog never
+      passed an `onOpenBuilder`. So it rendered, it was tested, and pressing it
+      did nothing at all. Reported exactly that way: "the AI build button has
+      been added but it doesnt work. the other buttons copy prompt download csv
+      templates seem to work" — the others work because they are self-contained.
+
+      A dead control is the one people reach for FIRST, which is why the design
+      system's rule is to gate the affordance on the handler existing. Here the
+      handler is what was missing, not the button.
+    */
+    // rejects: an inert primary button — the exact defect.
+    expect(screen.getByRole('button', { name: /AI .* builder/i })).toHaveAttribute('type', 'button');
+
+    // rejects: handing a host the console's form WHOLE. These two remain off —
+    // the summary prompt is a library-curation choice the fuller editor owns,
+    // and this dialog is the quick "make me a set" path.
     expect(screen.queryByLabelText(/AI summary prompt/i)).toBeNull();
-    expect(screen.queryByLabelText(/custom instructions/i)).toBeNull();
     expect(screen.queryByLabelText(/AI context instructions/i)).toBeNull();
+  });
+
+  /*
+    PRESSING IT OPENS THE BUILDER. Nothing above proves that, and nothing did:
+    the dialog rendered the button and passed no handler, so the whole feature
+    was a label.
+  */
+  test('pressing the AI builder button opens a builder', async () => {
+    await openDialog();
+    fireEvent.click(screen.getByRole('button', { name: /new question set/i }));
+    fireEvent.click(screen.getByRole('button', { name: /AI .* builder/i }));
+
+    // rejects: the button being wired to nothing. The builder names itself in a
+    // heading; a dialog that never opened has none.
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /AI .* builder/i })).toBeInTheDocument();
+    });
   });
 
   /**
@@ -987,5 +1037,100 @@ describe('a host puts their own set on the quickstart shelf', () => {
     });
     expect(screen.getByTestId('hqs-quickstart-ivy-retro').getAttribute('title'))
       .toMatch(/not offered in the picker/i);
+  });
+});
+
+/**
+ * WHERE A GENERATION GOES WHILE YOU WAIT, AND AFTER.
+ *
+ * Reported: "the question set doesnt get generated in the list until i click AI
+ * builder and see the status of the generation. i think if thats the approach —
+ * to review the output before it finishes, it should still show up in the list
+ * with a review button to take you to the output."
+ *
+ * Two separate failures wearing one description.
+ *
+ * WHILE IT RUNS the list said nothing at all. The generation is a real thing
+ * the person started, it takes minutes, and the only surface that knew about it
+ * was the modal they started it in — so closing that modal made it invisible,
+ * and the natural reading of an unchanged list is that nothing happened.
+ *
+ * AFTER IT FINISHES the set was there, but the row said "Not offered in the
+ * picker" — a CONSEQUENCE, phrased as a setting, on the one row the person was
+ * hunting for. Nothing said it was a draft, nothing said a review was what it
+ * wanted, and the row's first action was "Edit questions", which is not the
+ * thing to do to a set you have not read yet.
+ */
+const AI_DRAFT = {
+  id: 'fresh-set', name: 'Onboarding Scenarios', description: 'Just generated',
+  engagementType: 'call-and-answer', totalQuestions: 8, categoryCount: 2,
+  active: false, isAIGenerated: true, hasImages: false, canManage: true, mine: true,
+};
+
+describe('a generation is visible in the list, running and finished', () => {
+  beforeEach(() => window.localStorage.clear());
+
+  // rejects: a draft row explaining itself only by what it is NOT offered for.
+  test('a finished draft says it is a draft, not just that it is unpickable', async () => {
+    await openDialog({}, { sets: [...HOST_VIEW, AI_DRAFT] });
+    const row = screen.getByText('Onboarding Scenarios').closest('tr');
+    expect(within(row).getByText(/draft/i)).toBeInTheDocument();
+  });
+
+  /*
+    THE BUTTON THE OWNER ASKED FOR. "Edit questions" is the right label for a set
+    you already trust; it is the wrong one for eight sentences a model wrote
+    ninety seconds ago and nobody has read. The happy path here is REVIEW, and
+    the button should say the thing you are about to do.
+  */
+  // rejects: a draft whose only way in is a control named for a different task.
+  test('a draft offers Review, and it opens the set', async () => {
+    await openDialog({}, { sets: [...HOST_VIEW, AI_DRAFT] });
+    const row = screen.getByText('Onboarding Scenarios').closest('tr');
+    fireEvent.click(within(row).getByRole('button', { name: /^review$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /Onboarding Scenarios/i })).toBeInTheDocument();
+    });
+  });
+
+  // rejects: labelling a set the host uploaded themselves as a draft. Inactive
+  // is a curation state for those; only a generation is unreviewed by default.
+  test('a set the host switched off is not called a draft', async () => {
+    const off = { ...AI_DRAFT, id: 'mine-off', name: 'Mine Off', isAIGenerated: false };
+    await openDialog({}, { sets: [...HOST_VIEW, off] });
+    const row = screen.getByText('Mine Off').closest('tr');
+    expect(within(row).queryByText(/draft/i)).toBeNull();
+    expect(within(row).getByText(/not offered in the picker/i)).toBeInTheDocument();
+  });
+
+  /*
+    A JOB THE PERSON STARTED, remembered in localStorage by the builder that
+    started it (utils/generationJob.js). The list can read every slot, so the
+    strip appears whether or not the builder that wrote it is still mounted.
+  */
+  // rejects: the list staying silent for the minutes a generation takes.
+  test('a running generation is announced in the list', async () => {
+    window.localStorage.setItem('engage.generationJob.ai-generate-scenarios',
+      JSON.stringify({ jobId: 'job-1', startedAt: Date.now() }));
+    await openDialog();
+    expect(screen.getByText(/generating/i)).toBeInTheDocument();
+  });
+
+  // rejects: telling the person something is running and giving them no way to
+  // look at it — which is the state the report describes.
+  test('the running strip takes you to the generation', async () => {
+    window.localStorage.setItem('engage.generationJob.ai-generate-scenarios',
+      JSON.stringify({ jobId: 'job-1', startedAt: Date.now() }));
+    await openDialog();
+    fireEvent.click(screen.getByRole('button', { name: /review the generation/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /AI .* builder/i })).toBeInTheDocument();
+    });
+  });
+
+  // rejects: a stale slot from a job that finished days ago showing for ever.
+  test('nothing is announced when no job is remembered', async () => {
+    await openDialog();
+    expect(screen.queryByText(/generating/i)).toBeNull();
   });
 });

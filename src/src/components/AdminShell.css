@@ -414,3 +414,28 @@
 .adm-work-body[data-theme="dark"] {
   padding: 14px 20px 40px;
 }
+
+/* -- Grouped nav ------------------------------------------------------------
+   The console shows different sections to an org member, an org admin, a
+   personal space and Engage staff (config/consoleSections.js), and the group
+   headings are what make "your team's stuff" and "the platform's stuff" read as
+   two halves rather than one long list.
+
+   Below 1180px the rail collapses to icons — `.nav-label` is already hidden
+   there, so the heading must go too or it becomes a stack of orphaned words
+   above a column of glyphs. */
+.adm-nav-group + .adm-nav-group{margin-top:14px}
+.adm-nav-sec{
+  padding:0 12px 5px;
+  font-size:var(--adm-t-floor);
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:var(--muted);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+@media (max-width:1180px){
+  .adm-nav-sec{display:none}
+  .adm-nav-group + .adm-nav-group{margin-top:10px;border-top:1px solid var(--adm-rule);padding-top:10px}
+}

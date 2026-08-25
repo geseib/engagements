@@ -204,6 +204,20 @@ const fakeDoc = {
   },
 };
 
+// ── TENANT CRYPTO ──────────────────────────────────────────────────────────
+// The handlers this suite drives now encrypt org content, and tenant-crypto
+// THROWS on an org with no data key rather than quietly writing plaintext. The
+// shared stub refuses a Decrypt with a missing or mismatched encryption context,
+// exactly as the key policy will, so this does not weaken anything here.
+// Org rows are envelopes at rest since tenancy. `plainRow` unwraps them with
+// the real cipher so the assertions below stay about CONTENT — and it is
+// synchronous, so a suite that is not about encryption needs no new awaits.
+const { makeKmsStub, installTestKeyLoader, plainRow } = require('./helpers/tenant-crypto-stub');
+const kmsStub = makeKmsStub();
+stub('@aws-sdk/client-kms', kmsStub.exports);
+// Every org gets a deterministic data key, no ORG#<id>/METADATA row needed —
+// otherwise every reset() in this file would have to re-seed one.
+installTestKeyLoader();
 stub('@aws-sdk/client-dynamodb', { DynamoDBClient: class {} });
 stub('@aws-sdk/lib-dynamodb', {
   DynamoDBDocumentClient: { from: () => fakeDoc },
@@ -230,20 +244,51 @@ async function acheck(label, fn) {
 
 // The exact invocation shapes API Gateway delivers — the same reading
 // update-game-persona.js does of pathParameters/body.
+// ── TENANCY: a session belongs to an organisation ──────────────────────────
+//
+// `POST /games` now carries the Cognito authorizer and `createGame` reads the
+// caller's org from the context, so every fixture here creates its session AS
+// somebody. Without a context the session is created unowned, no org index row
+// is written, and every mirror assertion below has nothing to look at.
+//
+// One org for the whole file: this suite is about editing a session, not about
+// tenancy, and giving every row the same org keeps it that way.
+const ORG = 'org_nw';
+const asOrg = (extra = {}) => ({
+  ...extra,
+  requestContext: { authorizer: { lambda: { orgId: ORG, orgRole: 'admin', groups: 'hosts' } } },
+});
+
 const createGame = async (body) => {
-  const res = await createGameHandler({ body: JSON.stringify(body) });
+  const res = await createGameHandler(asOrg({ body: JSON.stringify(body) }));
   return { status: res.statusCode, body: JSON.parse(res.body) };
 };
 const putGame = async (gameId, body) => {
-  const res = await updateGameHandler({
+  const res = await updateGameHandler(asOrg({
     pathParameters: { gameId },
     body: JSON.stringify(body),
-  });
+  }));
   return { status: res.statusCode, body: JSON.parse(res.body) };
 };
 
-const metadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
-const listRowOf = (gameId) => store.get(key('GAMES', `GAME#${gameId}`));
+// DECRYPTED. A session's Title / HostName / Details / AIContext are envelopes
+// at rest — the same two strings the report row already encrypted, which is why
+// they were added to the boundary.
+const metadataOf = (gameId) => plainRow(ORG, store.get(key(`GAME#${gameId}`, 'METADATA')));
+// THE RAW ROW, for the two tests that MUTATE a fixture rather than read it.
+// `metadataOf` decrypts, and decrypting builds a new object — so
+// `delete metadataOf(id).HostPreferences` edits a copy and the store never
+// changes. That silently turned a "legacy row with no map" fixture into an
+// ordinary one, and the test failed on the map it was trying to remove.
+const rawMetadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
+// The row a host LISTS. It moved out of the single global `GAMES` partition and
+// into the org's own, so that `GET /games` cannot Query another team's sessions
+// at all — the isolation is the shape of the query, not a filter after it.
+const listRowOf = (gameId) => plainRow(ORG, store.get(key(`ORG#${ORG}#GAMES`, `GAME#${gameId}`)));
+// What is LEFT in the global partition: the code reservation, and nothing else.
+// It is the uniqueness lock for the 4-digit code a participant types with no
+// idea which organisation it belongs to.
+const reservationOf = (gameId) => store.get(key('GAMES', `GAME#${gameId}`));
 const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batchWrite', 'transact'].includes(c.type));
 
 (async () => {
@@ -468,7 +513,7 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
     const legacy = await createGame({ eventTitle: 'Legacy game', gameType: 'call-and-answer', questionSetId: 'set-a' });
     loud();
     const gameId = legacy.body.gameId;
-    delete metadataOf(gameId).HostPreferences;
+    delete rawMetadataOf(gameId).HostPreferences;
 
     quiet();
     const res = await putGame(gameId, { anonymousUntilReveal: false });
@@ -769,7 +814,12 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
   */
   const purge = (id) => {
     for (const k of [...store.keys()]) {
-      if (k.startsWith(`GAME#${id}|`) || k === key('GAMES', `GAME#${id}`)) store.delete(k);
+      // BOTH pointer rows. Since tenancy a session has two: the global 4-digit
+      // code reservation, and the brief in its org's own index. Purging only
+      // the first leaves a stale brief behind and the next draw inherits it.
+      if (k.startsWith(`GAME#${id}|`)
+        || k === key('GAMES', `GAME#${id}`)
+        || k === key(`ORG#${ORG}#GAMES`, `GAME#${id}`)) store.delete(k);
     }
   };
   const realRandom = Math.random;
@@ -799,8 +849,17 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
         'the collision was not detected — the newcomer took the living id');
 
       // The original is UNTOUCHED — this is the exact loss that was reported.
-      assert.strictEqual(store.get(key('GAMES', 'GAME#1900')).Title, 'The original',
+      //
+      // Checked on the ORG INDEX row, which is where the brief lives since
+      // tenancy; the global `GAMES` row is now the code reservation and carries
+      // {orgId, ttl} only. Both halves are asserted, because the failure this
+      // test was written for could now happen in two places: the lock could
+      // fail to hold the code, or the brief could be overwritten.
+      assert.strictEqual(listRowOf('1900').Title, 'The original',
         'the history row now belongs to the newcomer: "missing from history"');
+      assert.ok(reservationOf('1900'), 'the code reservation was released by the collision');
+      assert.strictEqual(reservationOf('1900').orgId, ORG,
+        'the reservation stopped naming the org that holds the code');
       assert.strictEqual(catsRowOf('1900')['HostMask1-8'], '10000000',
         'the original\'s category masks were overwritten');
       assert.strictEqual(metadataOf('1900').Title, 'The original');
@@ -819,7 +878,7 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
       });
       loud();
       assert.strictEqual(res.status, 503, JSON.stringify(res.body));
-      assert.strictEqual(store.get(key('GAMES', 'GAME#1900')).Title, 'The original',
+      assert.strictEqual(listRowOf('1900').Title, 'The original',
         'the give-up path still overwrote the living session');
     } finally {
       Math.random = realRandom;

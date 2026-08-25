@@ -115,7 +115,7 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
         console.log(`✅ Quickstart game created:`, gameData);
         
         // Start the game immediately
-        const startResponse = await fetch(`${API_BASE}games/${gameData.gameId}/start`, {
+        const startResponse = await authFetch(`${API_BASE}games/${gameData.gameId}/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
         });

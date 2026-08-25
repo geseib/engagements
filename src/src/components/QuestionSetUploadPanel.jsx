@@ -68,6 +68,21 @@ import './QuestionSetsPanel.css';
  * for a hidden capability is refused by the API whatever this component drew.
  */
 export default function QuestionSetUploadPanel({
+  /**
+   * WHICH LIBRARY THIS SET IS BEING CREATED IN.
+   *
+   * Empty (the default) lets the server decide, which is what every caller
+   * wanted before there was more than one library: `createSetRef` tries the
+   * caller's organisation and falls back to the platform library. That default
+   * is right inside an org and WRONG in the Engage console, where an admin
+   * writing to the shared library would silently get a set in their own
+   * personal space instead — they have one, so the org branch always wins.
+   *
+   * `'platform'` is honoured only for a caller in the `admins` group;
+   * `canManageScope` refuses everybody else, so passing it is a request rather
+   * than a decision.
+   */
+  scope = '',
   engagementType,
   onEngagementTypeChange,
   availablePrompts = [],
@@ -275,6 +290,7 @@ export default function QuestionSetUploadPanel({
           aiContextInstructions: aiContextInstructions.trim(),
           promptId: promptId.trim(),
           engagementType,
+          ...(scope ? { scope } : {}),
         }),
       });
       const result = await response.json().catch(() => ({}));
@@ -338,9 +354,34 @@ export default function QuestionSetUploadPanel({
       </div>
 
       <div className="qsets-section">
-        <h4>Create</h4>
-        <div className="qsets-actions">
+        {/*
+          THE WAYS IN ARE NOT INTERCHANGEABLE, and the panel used to present
+          them as five sibling buttons in a wrap under the word "Create" — the
+          same five options with the part that lets a newcomer choose between
+          them removed. Reported as: "the workflow is a bit difficult to follow
+          as a new person, i think the buttons should reflect what happy path
+          and canceling throughout."
+
+          docs/design/admin-redesign/07-new-set.html already answered this and
+          the shipped panel diverged from it. Its heading is the model followed
+          here — "They are not interchangeable, so this says what each costs" —
+          so every route now names WHEN IT IS THE RIGHT ONE, and exactly one is
+          marked as the lead. One column rather than the mockup's card grid,
+          because this panel also renders inside the host's dialog at about half
+          the console's width.
+        */}
+        <h4>How do you want to make it?</h4>
+        <p className="qsets-route-when" style={{ margin: '-4px 0 10px' }}>
+          These are not interchangeable. Each one says when it is the right one.
+        </p>
+        <div className="qsets-routes">
           {showAIBuilder && (
+          <div className="qsets-route qsets-route--lead">
+            <span className="qsets-route-nm">Generate with AI</span>
+            <p className="qsets-route-when">
+              Best when you have a topic and no source material. It writes the questions and
+              leaves you a draft to read — a generated set arrives switched off on purpose.
+            </p>
           <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onOpenBuilder && onOpenBuilder(engagementType)}>
             <Icon name="Sparkle" weight="duotone" size={14} color="currentColor" />
             {/* The survey builder does not upload: handleSurveyGenerated builds a
@@ -348,47 +389,85 @@ export default function QuestionSetUploadPanel({
                 the fact (OPEN-QUESTIONS #3, option (c)'s copy). */}
             AI {gameTypeLabel(engagementType)} builder{playable ? '' : ' (exports JSON)'}
           </button>
+          </div>
           )}
-          <button type="button" className="qsets-btn" onClick={() => downloadTemplate(engagementType)}>
-            <Icon name="FileText" weight="bold" size={14} color="currentColor" />
-            Download {gameTypeLabel(engagementType)} template
-          </button>
+
+          <div className="qsets-route">
+            <span className="qsets-route-nm">Start from a template</span>
+            <p className="qsets-route-when">
+              Best when you want to write the questions yourself but not guess at the columns.
+              Costs you a round trip through a spreadsheet.
+            </p>
+            <button type="button" className="qsets-btn" onClick={() => downloadTemplate(engagementType)}>
+              <Icon name="FileText" weight="bold" size={14} color="currentColor" />
+              Download {gameTypeLabel(engagementType)} template
+            </button>
+          </div>
           {/* Beside the template it pairs with, and only for the types whose
               prompt exists — authoringPrompt() returns null for the rest, so
               adding a type later is a config entry, not panel surgery. */}
           {authoringPrompt(engagementType) && (
-            <button
-              type="button"
-              className="qsets-btn"
-              onClick={copyAuthoringPrompt}
-              title="Copy instructions you can paste into Claude or ChatGPT, together with the downloaded template, to have it write the CSV for you. The bits you fill in (topic, count, difficulty…) are marked in [BRACKETS]."
-            >
-              <Icon name="ClipboardText" weight="bold" size={14} color="currentColor" />
-              Copy AI authoring prompt
-            </button>
+            <div className="qsets-route">
+              <span className="qsets-route-nm">Use your own chatbot</span>
+              <p className="qsets-route-when">
+                Best when you would rather drive the AI yourself. Paste this prompt and the
+                template into Claude or ChatGPT and upload the CSV it writes.
+              </p>
+              <button
+                type="button"
+                className="qsets-btn"
+                onClick={copyAuthoringPrompt}
+                title="Copy instructions you can paste into Claude or ChatGPT, together with the downloaded template, to have it write the CSV for you. The bits you fill in (topic, count, difficulty…) are marked in [BRACKETS]."
+              >
+                <Icon name="ClipboardText" weight="bold" size={14} color="currentColor" />
+                Copy AI authoring prompt
+              </button>
+            </div>
           )}
           {engagementType === 'call-and-answer' && (
-            <button
-              type="button"
-              className="qsets-btn"
-              onClick={() => downloadTemplate('art-title')}
-              title="Call and Answer template with an Image column: players title a famous artwork, then vote"
-            >
-              <Icon name="Image" weight="bold" size={14} color="currentColor" />
-              Download Art Title template
-            </button>
+            <div className="qsets-route">
+              <span className="qsets-route-nm">Start from the artwork template</span>
+              <p className="qsets-route-when">
+                Best when the round is pictures: players title a famous artwork, then vote. Same
+                columns as above plus an Image one.
+              </p>
+              <button
+                type="button"
+                className="qsets-btn"
+                onClick={() => downloadTemplate('art-title')}
+                title="Call and Answer template with an Image column: players title a famous artwork, then vote"
+              >
+                <Icon name="Image" weight="bold" size={14} color="currentColor" />
+                Download Art Title template
+              </button>
+            </div>
           )}
           {showManualBuilder && (
-          <button type="button" className="qsets-btn" onClick={() => window.open('/builder', '_blank')}>
-            <Icon name="Palette" weight="duotone" size={14} color="currentColor" />
-            Manual builder
-          </button>
+          <div className="qsets-route">
+            <span className="qsets-route-nm">Manual builder</span>
+            <p className="qsets-route-when">
+              Best when you are writing three or four questions. Costs you time, and it opens in
+              a second tab that does not know about this set.
+            </p>
+            <button type="button" className="qsets-btn" onClick={() => window.open('/builder', '_blank')}>
+              <Icon name="Palette" weight="duotone" size={14} color="currentColor" />
+              Manual builder
+            </button>
+          </div>
           )}
         </div>
       </div>
 
       <div className="qsets-section">
-        <h4>Upload a CSV</h4>
+        {/* THE ROUTE EVERY OTHER ONE COMPILES DOWN TO, said plainly — the
+            mockup's phrase. Three of the routes above end here holding a CSV,
+            and a newcomer who has just downloaded a template has no way to know
+            that this is where it goes. */}
+        <h4>…then upload it here</h4>
+        <p className="qsets-route-when" style={{ margin: '-4px 0 10px' }}>
+          Where every route above ends up, and the only one that loses nothing. Already have a
+          CSV? Start here.
+        </p>
 
         <div className="qsets-file">
           <input

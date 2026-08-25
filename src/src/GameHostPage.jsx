@@ -50,6 +50,7 @@ import {
   AI_NOTIFICATION_TIMEOUT_MS, AI_POLL_ATTEMPTS, AI_POLL_INTERVAL_MS,
 } from './utils/aiSummaryRecovery';
 import { createGameBody, updateGameBody } from './config/createGame';
+import { DEFAULT_SCOPE } from './utils/setRef';
 import { gameTypeMeta, gameTypeLabel } from './config/gameTypes';
 import {
   hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
@@ -568,6 +569,14 @@ function GameHostPage() {
   // Question Set Management
   const [questionSets, setQuestionSets] = useState([]);
   const [selectedSetId, setSelectedSetId] = useState('');
+  /*
+    THE OTHER HALF OF THE SELECTED SET. A setId names one set PER LIBRARY
+    (utils/setRef.js), so every read derived from it — the categories, the
+    custom instruction — needs to say which library it means. Without it those
+    reads fall back to the backend's org-first SEARCH, which is right until two
+    libraries hold the same slug.
+  */
+  const [selectedSetScope, setSelectedSetScope] = useState(DEFAULT_SCOPE);
   const [categories, setCategories] = useState([]);
   const [activeCategoryIds, setActiveCategoryIds] = useState(new Set());
   
@@ -950,7 +959,7 @@ function GameHostPage() {
 
 
   // Fetch question set custom instruction (similar to player screen)
-  const fetchQuestionSetInstruction = async (setId) => {
+  const fetchQuestionSetInstruction = async (setId, scope = '') => {
     if (!setId) {
       setCustomInstruction(null);
       setSetRoundNoun(null);
@@ -959,9 +968,15 @@ function GameHostPage() {
 
     try {
       console.log('📋 HOST: Fetching instruction for set:', setId);
-      const res = await fetch(`${API_BASE}question-sets`);
+      // authFetch: the question-set routes now carry the Cognito authorizer.
+      // They were public, so any caller could read any set's content.
+      const res = await authFetch(`${API_BASE}question-sets`);
       const data = await res.json();
-      const questionSet = data.sets?.find(set => set.id === setId);
+      // MATCHED ON THE PAIR when the caller knows it. `find(s => s.id === setId)`
+      // returns whichever library happens to come first in the response, so an
+      // org set could be described by Engage's set of the same name.
+      const questionSet = data.sets?.find((set) => set.id === setId
+        && (!scope || (set.scope || DEFAULT_SCOPE) === scope));
       if (questionSet && questionSet.customInstruction) {
         console.log('📋 HOST: Found custom instruction:', questionSet.customInstruction);
         setCustomInstruction(questionSet.customInstruction);
@@ -1032,7 +1047,7 @@ function GameHostPage() {
     setGamePersonaId(personaId);
     setPersonaSwitchStatus('Saving...');
     try {
-      const response = await fetch(`${API_BASE}games/${gameId}/persona`, {
+      const response = await authFetch(`${API_BASE}games/${gameId}/persona`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ personaId: personaId || '' })
@@ -1906,7 +1921,7 @@ Focus on actionable business strategy insights.`;
   // Fetch categories when selectedSetId changes
   useEffect(() => {
     if (selectedSetId) {
-      fetchCategories(selectedSetId);
+      fetchCategories(selectedSetId, false, selectedSetScope);
     }
   }, [selectedSetId]);
 
@@ -1998,13 +2013,18 @@ Focus on actionable business strategy insights.`;
           // Show the voice the game is actually set to, not a fresh default.
           setGamePersonaId(gameStateData.gameMetadata.personaId || '');
           const restoredSetId = gameStateData.gameMetadata.questionSetId || '';
+          // The scope the SESSION pinned, not a fresh search. A session plays
+          // one partition for its whole life; reloading the host screen must
+          // read that one.
+          const restoredSetScope = gameStateData.gameMetadata.questionSetScope || DEFAULT_SCOPE;
           setSelectedSetId(restoredSetId);
-          fetchQuestionSetInstruction(restoredSetId);
+          setSelectedSetScope(restoredSetScope);
+          fetchQuestionSetInstruction(restoredSetId, restoredSetScope);
           console.log(`🎮 HOST: Restored game metadata`);
           
           // Restore categories from bitmask if we have a question set
           if (restoredSetId) {
-            await fetchCategories(restoredSetId, true); // true = restore from game bitmask
+            await fetchCategories(restoredSetId, true, restoredSetScope); // true = restore from game bitmask
             if (superseded()) return false;
           }
         }
@@ -2518,7 +2538,9 @@ Focus on actionable business strategy insights.`;
 
   const fetchQuestionSets = async (duringRestoration = false) => {
     try {
-      const res = await fetch(`${API_BASE}question-sets`);
+      // authFetch: the question-set routes now carry the Cognito authorizer.
+      // They were public, so any caller could read any set's content.
+      const res = await authFetch(`${API_BASE}question-sets`);
       const json = await res.json();
       const activeSets = json.sets?.filter(set => set.active) || [];
       setQuestionSets(activeSets);
@@ -2535,9 +2557,13 @@ Focus on actionable business strategy insights.`;
       // CRITICAL: Don't auto-select during state restoration to prevent override of restored questionSetId
       if (activeSets.length > 0 && !selectedSetId && isLobbyState(gameState) && !isRestoringState && !duringRestoration) {
         const firstSetId = activeSets[0].id;
+        // The row carries its own scope (get-question-sets.js returns it beside
+        // the id); auto-selection must not drop the half it already has.
+        const firstSetScope = activeSets[0].scope || DEFAULT_SCOPE;
         setSelectedSetId(firstSetId);
-        fetchCategories(firstSetId);
-        fetchQuestionSetInstruction(firstSetId);
+        setSelectedSetScope(firstSetScope);
+        fetchCategories(firstSetId, false, firstSetScope);
+        fetchQuestionSetInstruction(firstSetId, firstSetScope);
         console.log(`🎯 HOST: Auto-selected first question set: ${firstSetId}`);
       } else if (selectedSetId) {
         console.log(`⏳ HOST: Question set already selected: ${selectedSetId}`);
@@ -2553,7 +2579,7 @@ Focus on actionable business strategy insights.`;
     }
   };
 
-  const fetchCategories = async (setId, restoreFromGame = false) => {
+  const fetchCategories = async (setId, restoreFromGame = false, scope = '') => {
     if (!setId) {
       setCategories([]);
       setActiveCategoryIds(new Set());
@@ -2561,7 +2587,14 @@ Focus on actionable business strategy insights.`;
     }
     
     try {
-      const res = await fetch(`${API_BASE}question-sets/${setId}/categories`);
+      // authFetch: the question-set routes now carry the Cognito authorizer.
+      // They were public, so any caller could read any set's content.
+      // ?scope= NAMES THE LIBRARY. get-categories.js searches the caller's
+      // readable scopes when this is absent — org, then platform, then public —
+      // which resolves the right set almost always and the wrong one exactly
+      // when two libraries hold this slug.
+      const scopeQuery = scope ? `?scope=${encodeURIComponent(scope)}` : '';
+      const res = await authFetch(`${API_BASE}question-sets/${setId}/categories${scopeQuery}`);
       const json = await res.json();
       const fetchedCategories = json.categories || [];
       setCategories(fetchedCategories);
@@ -2610,10 +2643,11 @@ Focus on actionable business strategy insights.`;
    * owns, so loading them stays here. Clearing goes through the same path so a
    * format switch cannot leave the previous set's categories on screen.
    */
-  const handleSetupSetChange = (setId) => {
-    fetchCategories(setId);
+  const handleSetupSetChange = (setId, scope = DEFAULT_SCOPE) => {
+    setSelectedSetScope(scope || DEFAULT_SCOPE);
+    fetchCategories(setId, false, scope);
     if (setId) {
-      fetchQuestionSetInstruction(setId);
+      fetchQuestionSetInstruction(setId, scope);
     } else {
       setCustomInstruction(null);
     }
@@ -2704,7 +2738,7 @@ Focus on actionable business strategy insights.`;
     try {
       console.log(`🎯 Toggling category ${categoryId} (${categoryName}) to ${enabled} for game ${gameId}`);
       
-      const response = await fetch(`${API_BASE}games/${gameId}/toggle-category`, {
+      const response = await authFetch(`${API_BASE}games/${gameId}/toggle-category`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2755,7 +2789,9 @@ Focus on actionable business strategy insights.`;
 
     setLoadingQuestions(true);
     try {
-      const response = await fetch(`${API_BASE}question-sets/${setId}/questions`);
+      // authFetch: this route now carries the Cognito authorizer. It used to be
+      // public, which meant a guessed set id read anyone's questions.
+      const response = await authFetch(`${API_BASE}question-sets/${setId}/questions`);
 
       if (!response.ok) {
         console.error(`❌ Failed to fetch questions: ${response.status}`);
@@ -3111,7 +3147,7 @@ Focus on actionable business strategy insights.`;
       }
       
       // Use the same next-question API that handleNextQuestion uses
-      const nextQuestionRes = await fetch(`${API_BASE}games/${gameId}/next-question`, {
+      const nextQuestionRes = await authFetch(`${API_BASE}games/${gameId}/next-question`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody)
@@ -3295,8 +3331,17 @@ Focus on actionable business strategy insights.`;
         nothing below may tell the host to press again. Pressing again skips a
         question, live, in front of a room.
       */
+      /* `authFetch`, NOT the bare global. `POST /games/{id}/next-question` was
+         closed in Phase 0 — before that anyone holding a four-digit code could
+         drive somebody else's live session — and this call site was missed
+         because the fetch is not CALLED here, it is PASSED AS A VALUE. Grepping
+         this line for `fetch(` finds `requestNextQuestion(`.
+
+         It shipped as a 401 on the main control of the host page: start a
+         quickstart, press next, "Unauthorized". __tests__/closedRoutesUseAuthFetch
+         now scans for both shapes. */
       const attempt = await requestNextQuestion({
-        fetchFn: fetch, apiBase: API_BASE, gameId, body: requestBody,
+        fetchFn: authFetch, apiBase: API_BASE, gameId, body: requestBody,
       });
 
       if (!attempt.advanced) {
@@ -3520,7 +3565,7 @@ Focus on actionable business strategy insights.`;
       const questionNumber = lessonNumber; // Current question number
       
       // Start the voting process using the dedicated endpoint
-      const startVoteRes = await fetch(`${API_BASE}games/${gameId}/start-vote`, {
+      const startVoteRes = await authFetch(`${API_BASE}games/${gameId}/start-vote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3933,7 +3978,7 @@ Focus on actionable business strategy insights.`;
       console.log(`🚀 HOST: Starting game ${selectedGameId} from history`);
       
       // Call start-game API
-      const response = await fetch(`${API_BASE}games/${selectedGameId}/start`, {
+      const response = await authFetch(`${API_BASE}games/${selectedGameId}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -3998,7 +4043,8 @@ Focus on actionable business strategy insights.`;
       */
       let editCategories = [];
       try {
-        const catRes = await fetch(`${API_BASE}question-sets/${values.questionSetId}/categories`);
+        // authFetch: this route now carries the Cognito authorizer.
+        const catRes = await authFetch(`${API_BASE}question-sets/${values.questionSetId}/categories`);
         if (catRes.ok) editCategories = (await catRes.json()).categories || [];
       } catch (catErr) {
         console.warn('⚠️ EDIT: could not load categories for the dialog:', catErr?.message);
@@ -4118,11 +4164,11 @@ Focus on actionable business strategy insights.`;
         gameType: form.gameType, anonymousResponses: form.anonymousResponses,
       }).anonymousUntilReveal,
     });
-    fetchQuestionSetInstruction(form.setId);
+    fetchQuestionSetInstruction(form.setId, form.setScope);
 
     // Create the game directly with the backend API
     try {
-      const createResponse = await fetch(`${API_BASE}games`, {
+      const createResponse = await authFetch(`${API_BASE}games`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createGameBody(form))
@@ -6074,7 +6120,7 @@ Focus on actionable business strategy insights.`;
           // The group AdminPage's own ProtectedRoute requires. Offering the
           // link to a plain host would open a tab onto Access Denied.
           isAdmin={Boolean(currentUser?.groups?.includes('admins'))}
-          issueControl={<IssueFab context="host" gameId={gameId} />}
+          issueControl={<IssueFab context="host" gameId={gameId} placement="inline" />}
         />
       )}
 

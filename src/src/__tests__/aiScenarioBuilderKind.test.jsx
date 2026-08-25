@@ -284,7 +284,11 @@ describe('an incomplete custom direction cannot leave step 1', () => {
     await open();
     fireEvent.click(screen.getByRole('radio', { name: /Something else/i }));
     fireEvent.click(screen.getByText('Lessons Learned Scenarios'));
-    expect(screen.getByRole('radiogroup')).toBeInTheDocument();
+    /* NAMED, not "the only radiogroup on the page". The count fields that
+       replaced the generation sliders are radiogroups too — presets are
+       mutually exclusive choices of one value — so a bare role query now finds
+       several, and this test is about the round-kind picker specifically. */
+    expect(screen.getByRole('radiogroup', { name: /what will the room do with each one/i })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/What should this round do/i), {
       target: { value: 'Hand them two proposals and ask which they would fund.' },
@@ -293,7 +297,7 @@ describe('an incomplete custom direction cannot leave step 1', () => {
       target: { value: 'Pick one and say what you would cut to pay for it.' },
     });
     fireEvent.click(screen.getByText('Lessons Learned Scenarios'));
-    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+    expect(screen.queryByRole('radiogroup', { name: /what will the room do with each one/i })).not.toBeInTheDocument();
   });
 });
 

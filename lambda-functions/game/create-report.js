@@ -1,8 +1,20 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
-const { resolveSetPartition } = require('./set-version');
+const { resolveSetPartition, setMetadataKey } = require('./set-version');
+const { ORG } = require('./tenant');
 const { uniquePlayerRecords } = require('./player-rows');
 const { isHidden } = require('./anonymity');
+const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
+
+/**
+ * WHOSE SESSION IS THIS? — off the row, because this route is PUBLIC.
+ *
+ * `POST /games/{gameId}/report` takes a four-digit id and no identity (see the
+ * anonymity note below, which exists for exactly that reason), so the caller's
+ * org is '' and a blank orgId THROWS in tenant-crypto rather than defaulting.
+ * The session's METADATA row is the authority.
+ */
+const orgOf = (item) => (item && typeof item.orgId === 'string' ? item.orgId.trim() : '');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client, {
@@ -105,11 +117,43 @@ exports.handler = async (event) => {
 
     console.log(`📊 Found ${players.length} player records and ${playerScores.length} score records`);
     
+    // ── EVERY SOURCE OF PROSE THIS REPORT QUOTES, UNWRAPPED ──────────────────
+    //
+    // One Query returned answers, votes, AI summaries and stored results in a
+    // single pass, so they are split first and then decrypted per entity —
+    // `decryptItem` needs to know WHICH boundary list applies, and there is no
+    // single list that covers a mixed partition.
+    //
+    // `results` is deliberately absent: the `QUESTION#nnn#RESULTS` row is not
+    // in ENCRYPTED_FIELDS at all. It is a derived tally written by
+    // get-results.js, and it is recorded in the hand-off as a known gap rather
+    // than quietly encrypted here — a boundary decision belongs in
+    // tenant-crypto.js, not in a call site.
+    //
+    // Also note the session brief itself: `gameTitle` and `hostName` on the
+    // report below are THE SAME TWO STRINGS as METADATA's Title and HostName,
+    // which is why `session` is in the boundary at all.
+    const reportOrgId = orgOf(gameMetadata.Item);
+    const sessionMeta = reportOrgId
+      ? await decryptItem(reportOrgId, 'session', gameMetadata.Item)
+      : gameMetadata.Item;
+
     // Filter items by type using SK patterns
-    const results = allQuestionItems.filter(item => item.SK.includes('#RESULTS'));
-    const answers = allQuestionItems.filter(item => item.SK.includes('#ANSWER#'));
-    const votes = allQuestionItems.filter(item => item.SK.includes('#VOTE#'));
-    const aiSummaries = allQuestionItems.filter(item => item.SK.includes('#AISummary'));
+    const rawResults = allQuestionItems.filter(item => item.SK.includes('#RESULTS'));
+    const rawAnswers = allQuestionItems.filter(item => item.SK.includes('#ANSWER#'));
+    const rawVotes = allQuestionItems.filter(item => item.SK.includes('#VOTE#'));
+    const rawAiSummaries = allQuestionItems.filter(item => item.SK.includes('#AISummary'));
+
+    // The derived tally is encrypted too, and it has to be: the wavelength
+    // branch of get-results stores `answers[].answer` — the participant's
+    // literal submission — inside it, so decrypting the ANSWER rows and reading
+    // this one raw would put the same sentences into the report in the clear.
+    const results = reportOrgId ? await decryptItems(reportOrgId, 'results', rawResults) : rawResults;
+    const answers = reportOrgId ? await decryptItems(reportOrgId, 'answer', rawAnswers) : rawAnswers;
+    const votes = reportOrgId ? await decryptItems(reportOrgId, 'vote', rawVotes) : rawVotes;
+    const aiSummaries = reportOrgId
+      ? await decryptItems(reportOrgId, 'aiSummary', rawAiSummaries)
+      : rawAiSummaries;
 
     // Who actually played.
     //
@@ -174,16 +218,36 @@ exports.handler = async (event) => {
           questionSetData = newFormatResult.Item.metadata;
           useNewFormat = true;
         } else {
-          // Fallback to old structure (SETS / SET#{id})
-          console.log(`📊 New format not found, trying old format...`);
+          // Fallback to the metadata row — IN THE RIGHT SCOPE.
+          //
+          // This read `PK: 'SETS'` unconditionally, which since tenancy is the
+          // PLATFORM library and nothing else. An organisation's own set lives
+          // at `ORG#<org>#SETS`, so for every org session this simply found
+          // nothing and the report silently lost its set name, description and
+          // instructions — no error, just absent fields.
+          //
+          // The session pins the pair (`QuestionSetScope` beside
+          // `QuestionSetId`), so the scope comes from the row rather than from
+          // the caller: this route is PUBLIC and its callers are anonymous
+          // participants, and a caller-derived scope would resolve to platform
+          // for every one of them.
+          const setRef = {
+            scope: sessionMeta.QuestionSetScope,
+            orgId: sessionMeta.QuestionSetScope === ORG ? reportOrgId : '',
+            setId: questionSetId,
+          };
+          console.log(`📊 New format not found, trying the metadata row in scope ${setRef.scope || 'platform'}...`);
           const oldFormatResult = await db.send(new GetCommand({
             TableName: process.env.TABLE_NAME,
-            Key: { PK: 'SETS', SK: `SET#${questionSetId}` }
+            Key: setMetadataKey(setRef),
           }));
-          
+
           if (oldFormatResult.Item) {
-            console.log(`📊 Found question set in OLD format`);
-            questionSetData = oldFormatResult.Item;
+            console.log(`📊 Found question set metadata`);
+            // Its name/description/instructions are encrypted for an org set.
+            questionSetData = setRef.orgId
+              ? await decryptItem(setRef.orgId, 'set', oldFormatResult.Item)
+              : oldFormatResult.Item;
             useNewFormat = false;
           }
         }
@@ -588,8 +652,10 @@ exports.handler = async (event) => {
       // schema-compliant-manager.js writes the metadata attribute as `Title`;
       // nothing has ever written `EventTitle`, so this always read
       // "Untitled Game". Same tolerant order get-ai-summary.js:947 uses.
-      gameTitle: gameMetadata.Item.EventTitle || gameMetadata.Item.Title || 'Untitled Game',
-      hostName: gameMetadata.Item.HostName || 'Unknown Host',
+      // From the DECRYPTED session row: these two strings are `session.Title`
+      // and `session.HostName`, which are ciphertext at rest on an org's row.
+      gameTitle: sessionMeta.EventTitle || sessionMeta.Title || 'Untitled Game',
+      hostName: sessionMeta.HostName || 'Unknown Host',
       questionSetId: gameMetadata.Item.QuestionSetId,
       gameType: gameMetadata.Item.GameType || 'standard',
       createdAt: gameMetadata.Item.CreatedAt,
@@ -662,9 +728,23 @@ exports.handler = async (event) => {
       ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
     };
 
+    // ── THE REPORT IS THE DENSEST ROW IN THE TABLE ───────────────────────────
+    //
+    // It is a copy of everything above, in one item: every answer quoted,
+    // every AI summary, the session title and the host's name. Encrypting the
+    // sources and leaving this in plaintext would make the whole exercise
+    // theatre — a `Scan` would simply read the report instead.
+    //
+    // `gameStats` and `scoringConfig` stay readable (counts and configuration),
+    // and so do the identifiers and timestamps. That is the boundary
+    // tenant-crypto.js draws for `report`, and it is not restated here.
+    //
+    // NOTE the split: `reportRecord` is what goes into DynamoDB, `reportData`
+    // is what goes back to the caller — and `encryptItem` never mutates, so the
+    // response stays plaintext for the host who just asked for it.
     await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
-      Item: reportRecord
+      Item: reportOrgId ? await encryptItem(reportOrgId, 'report', reportRecord) : reportRecord
     }));
 
     console.log(`✅ Report created for game ${gameId}: ${gameStats.totalQuestions} questions, ${gameStats.totalPlayers} players`);

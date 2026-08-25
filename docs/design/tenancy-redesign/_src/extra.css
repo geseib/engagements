@@ -1,0 +1,173 @@
+/* ===========================================================================
+   Tenancy set — ONLY the components that did not already exist.
+
+   Everything else comes from admin-redesign/_src/shell.css, inlined ahead of
+   this block. If a rule here duplicates one there, delete it here: two sources
+   for one token is how a type ladder drifts.
+   =========================================================================== */
+
+/* -- The org switcher ------------------------------------------------------
+   A chip in the topbar beside the environment chip. Deliberately NOT in the
+   left nav: the nav lists places inside one org, and the switcher changes
+   which org those places belong to — a different axis, so a different spot.
+
+   A user in ONE org gets `.orgchip.single`, which is the same chip without the
+   caret and without a menu. A control whose menu has one item is a control
+   that teaches people to ignore it. */
+/* THE MENU IS A SIBLING OF THE BUTTON, NOT A CHILD, and that is not a style
+   preference. A <button> may not contain a <button>; the parser hoists the
+   inner ones out, and the first cut of this shipped a menu that unwrapped
+   itself across the whole topbar and pushed the env chip off the row. */
+.orgwrap{position:relative;flex:none;display:inline-flex}
+.orgchip{
+  display:inline-flex;align-items:center;gap:7px;flex:none;height:26px;
+  padding:0 9px;border:1px solid var(--rule-strong);border-radius:999px;
+  background:var(--surface);color:var(--text);
+  font-size:var(--t-label);cursor:pointer;
+}
+.orgchip:hover{border-color:var(--muted)}
+.orgchip .oi{
+  width:20px;height:20px;border-radius:5px;flex:none;display:grid;place-items:center;
+  background:var(--surface-2);color:var(--primary);
+  font:700 var(--t-floor)/1 var(--font-ui);letter-spacing:.02em;
+}
+.orgchip.single{cursor:default;border-style:dashed}
+.orgchip.single:hover{border-color:var(--rule-strong)}
+.orgchip .car{color:var(--muted)}
+
+/* The open menu. Absolute inside the chip so it hangs under it. */
+.orgmenu{
+  position:absolute;top:31px;right:0;width:290px;z-index:70;text-align:left;
+  background:var(--surface);border:1px solid var(--rule-strong);
+  border-radius:var(--radius);box-shadow:0 18px 44px rgba(6,11,22,.55);
+  padding:5px;cursor:default;
+}
+.orgmenu h6{
+  margin:6px 8px 4px;font:600 var(--t-floor)/1 var(--font-ui);
+  letter-spacing:.11em;text-transform:uppercase;color:var(--muted);
+}
+.orgmenu .om{
+  display:flex;align-items:center;gap:9px;width:100%;padding:7px 8px;
+  border:0;border-radius:6px;background:transparent;color:var(--text);
+  font:400 var(--t-body)/1.25 var(--font-ui);text-align:left;cursor:pointer;
+}
+.orgmenu .om:hover{background:var(--row-hover)}
+.orgmenu .om[aria-current]{background:var(--row-sel)}
+.orgmenu .om .oi{width:22px;height:22px;font-size:var(--t-floor)}
+.orgmenu .om .rl{margin-left:auto;font-size:var(--t-floor);color:var(--muted)}
+.orgmenu .sep{height:1px;background:var(--rule);margin:5px 4px}
+.orgmenu .om.add{color:var(--muted)}
+.orgmenu .om.add:hover{color:var(--text)}
+
+/* -- The usage meter -------------------------------------------------------
+   THE MOST IMPORTANT NEW COMPONENT ON THIS SURFACE.
+
+   In usage-based pricing the only genuinely bad experience is a surprise
+   invoice, so this is built to be read BEFORE the overage, not after. The
+   included allowance is drawn as a notch ON the track rather than as the end
+   of it, because the bar has to keep going once you pass it — a bar that fills
+   to 100% and stops cannot show "15 over". */
+/* ONE grid for all the rows, not one grid per row. With `display:grid` on each
+   .meter the `auto` value column is sized per row, so "15 over" and "2 of 5"
+   land at different x and the numbers do not line up. `display:contents` lifts
+   every cell into the shared grid, which is what makes a column a column. */
+.meters{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:16px 14px;align-items:center}
+.meter{display:contents}
+.meter .mlab{font-size:var(--t-label);color:var(--muted)}
+.meter .track{
+  position:relative;height:10px;border-radius:5px;
+  background:var(--surface-2);overflow:visible;
+}
+.meter .fill{position:absolute;inset:0 auto 0 0;border-radius:5px;background:var(--success)}
+.meter.over .fill{background:var(--primary)}
+/* The included line. A 2px rule, not a colour change, so it reads at a glance
+   as a threshold rather than as another quantity. */
+.meter .incl{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--text);opacity:.85}
+.meter .incl::after{
+  content:attr(data-label);position:absolute;top:-17px;left:50%;transform:translateX(-50%);
+  font-size:var(--t-floor);color:var(--muted);white-space:nowrap;
+}
+/* When the allowance sits at the END of the track, a centred label hangs half
+   its width past the bar and lands in the 14px gap before the value. Right-align
+   it instead of nudging the number, which would misreport where the line is. */
+.meter .incl.end::after{left:auto;right:0;transform:none}
+.meter .mval{font-size:var(--t-body);white-space:nowrap}
+.meter .mval b{font-weight:700}
+.meter .mval .ov{color:var(--primary)}
+
+/* The one display numeral a panel is allowed (shell.css ladder, 30px). */
+.bignum{font:700 var(--t-numeral)/1 var(--font-display);letter-spacing:-.01em}
+.bignum .cur{font-size:19px;vertical-align:.32em;margin-right:1px;color:var(--muted)}
+
+/* Invoice arithmetic, shown as arithmetic. Nobody trusts a total they cannot
+   reproduce, and this one is four lines long. */
+.calc{width:100%;border-collapse:collapse;font-size:var(--t-body)}
+.calc td{padding:7px 0;border-bottom:1px solid var(--rule)}
+.calc td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+.calc tr.tot td{border-bottom:0;border-top:1px solid var(--rule-strong);font-weight:700;padding-top:11px}
+.calc .why{display:block;color:var(--muted);font-size:var(--t-label);margin-top:1px}
+
+/* -- Visibility / review state --------------------------------------------
+   Four states, and each needs a different word AND a different exit, so they
+   are never collapsed into a boolean. */
+.chip.priv{color:var(--muted);border-color:var(--rule-strong)}
+.chip.review{color:var(--secondary);border-color:rgba(124,167,230,.5)}
+.chip.pub{color:var(--success-text);border-color:rgba(79,178,134,.5)}
+.chip.changes{color:var(--danger-text);border-color:rgba(229,100,94,.5)}
+
+/* -- The access log --------------------------------------------------------
+   Deliberately a table on the CUSTOMER's own page, not an internal audit view.
+   A guarantee nobody can inspect is a claim in a contract. */
+/* The only thing the shell does not already give these rows. `.wrap` and
+   `.tight` come from shell.css; adding a third rule here for white-space would
+   be a second source for one behaviour. */
+.logrow td{vertical-align:top;padding-top:9px;padding-bottom:9px}
+.logrow .rsn{color:var(--muted);font-size:var(--t-label);display:block;margin-top:2px}
+.actor{display:inline-flex;align-items:center;gap:6px}
+.actor .dot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--muted)}
+.actor.plat .dot{background:var(--primary)}
+.actor.mem .dot{background:var(--secondary)}
+
+/* -- Moderation verdict ---------------------------------------------------- */
+.verdict{display:grid;gap:10px}
+.vrow{
+  display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:11px;align-items:start;
+  padding:11px 12px;border:1px solid var(--rule);border-radius:var(--radius);
+  background:var(--surface);
+}
+.vrow.bad{border-color:rgba(229,100,94,.45);background:rgba(229,100,94,.07)}
+.vrow.ok{border-color:rgba(79,178,134,.35)}
+.vrow .vi{width:20px;height:20px;margin-top:1px}
+.vrow.bad .vi{color:var(--danger-text)}
+.vrow.ok .vi{color:var(--success-text)}
+.vrow .q{font-size:var(--t-body);margin:0 0 3px}
+.vrow .rsn{font-size:var(--t-label);color:var(--muted);margin:0}
+.vrow.bad .rsn{color:var(--danger-text)}
+
+/* -- Small shared bits ----------------------------------------------------- */
+.secttl{font:600 var(--t-head)/1.2 var(--font-ui);margin:22px 0 10px}
+.secttl:first-child{margin-top:0}
+.grow{flex:1 1 auto}
+.stack{display:grid;gap:14px}
+.kv{display:grid;grid-template-columns:180px minmax(0,1fr);gap:8px 14px;font-size:var(--t-body)}
+.kv dt{color:var(--muted);font-size:var(--t-label);padding-top:2px}
+.kv dd{margin:0}
+.avatar-sm{
+  width:24px;height:24px;border-radius:50%;flex:none;display:grid;place-items:center;
+  background:var(--surface-2);color:var(--text);font:700 var(--t-floor)/1 var(--font-ui);
+}
+.person{display:flex;align-items:center;gap:9px;min-width:0}
+.person .pn{min-width:0}
+.person .pn b{display:block;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.person .pn span{display:block;font-size:var(--t-label);color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rowacts{display:flex;gap:6px;flex-wrap:wrap}
+.rowacts .btn:first-child{margin-left:auto}
+
+/* -- Work-head safety ------------------------------------------------------
+   `.work-head` is a wrapping flex row (shell.css). A subtitle long enough to
+   fill the line pushes `.head-actions` onto a second row, where the primary
+   button renders LEFT-aligned under the title and reads as part of the content.
+   Capping the text column keeps the actions where they belong; it also stops a
+   sentence running to 130 characters, which is past comfortable measure. */
+.work-head > div:first-child{max-width:74ch;min-width:0}

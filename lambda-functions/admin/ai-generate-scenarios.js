@@ -52,6 +52,7 @@ const { normalizeRoundKind, roundKindDirection } = require('./shared/round-kinds
 const { createSetForJob, scenariosToCsv } = require('./shared/generated-set');
 const { callerUsername } = require('./shared/require-admin');
 const { callerUserId } = require('./shared/question-set-access');
+const { callerOrgId, callerOrgRole } = require('./shared/tenant');
 
 const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const lambda = new LambdaClient({ region: process.env.AWS_REGION });
@@ -62,7 +63,7 @@ const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Engage-Org',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 const json = (statusCode, body) => ({ statusCode, body: JSON.stringify(body), headers: CORS });
@@ -275,7 +276,12 @@ async function runWorker(event, context) {
   let caller = {};
   try {
     const record = await getJob(dynamodb, tableName, jobId);
-    caller = { userId: record?.callerUserId, username: record?.callerUsername };
+    caller = {
+      userId: record?.callerUserId,
+      username: record?.callerUsername,
+      orgId: record?.callerOrgId,
+      orgRole: record?.callerOrgRole,
+    };
   } catch (error) {
     console.error(`⚠️ Job ${jobId}: could not read its own row for the caller: ${error.message}`);
   }
@@ -485,7 +491,23 @@ exports.handler = async (event, context) => {
       // question-set-access.js (what `ownerStamp` reads) and `callerUsername`
       // from require-admin.js. A second parser here is how eighteen tests once
       // passed against `.jwt.claims`, a shape this API has never produced.
-      caller: { userId: callerUserId(event), username: callerUsername(event) },
+      //
+      // THE ORGANISATION TRAVELS TOO. `createSetRef` reads a caller with no
+      // groups AND no org as an internal invocation and routes it to the
+      // platform library; the worker's synthetic event was landing there by
+      // accident, so every customer's generated set was written into Engage's
+      // shared library — badged "Engage", unmanageable by the person who asked
+      // for it, and readable by every other organisation.
+      //
+      // The role travels with it because tenant.canManageScope refuses an org
+      // write without one: an orgId alone would resolve to no writable scope
+      // and the set would be refused rather than misfiled.
+      caller: {
+        userId: callerUserId(event),
+        username: callerUsername(event),
+        orgId: callerOrgId(event),
+        orgRole: callerOrgRole(event),
+      },
     });
 
     try {

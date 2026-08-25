@@ -32,10 +32,11 @@ const {
 const { createSetForJob } = require('./generated-set');
 const { callerUsername } = require('./require-admin');
 const { callerUserId } = require('./question-set-access');
+const { callerOrgId, callerOrgRole } = require('./tenant');
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Engage-Org',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 const json = (statusCode, body) => ({ statusCode, body: JSON.stringify(body), headers: CORS });
@@ -112,7 +113,12 @@ function makeGenerationHandler(config) {
     let caller = {};
     try {
       const record = await getJob(dynamodb, tableName, jobId);
-      caller = { userId: record?.callerUserId, username: record?.callerUsername };
+      caller = {
+        userId: record?.callerUserId,
+        username: record?.callerUsername,
+        orgId: record?.callerOrgId,
+        orgRole: record?.callerOrgRole,
+      };
     } catch (error) {
       console.error(`⚠️ Job ${jobId}: could not read its own row for the caller: ${error.message}`);
     }
@@ -283,7 +289,25 @@ function makeGenerationHandler(config) {
         // what `ownerStamp` reads) and `callerUsername` from require-admin.js.
         // A second parser here is how eighteen tests once passed against
         // `.jwt.claims`, a shape this API has never produced.
-        caller: { userId: callerUserId(event), username: callerUsername(event) },
+        //
+        // THE ORGANISATION IS PART OF THE IDENTITY, and leaving it off is how
+        // every customer's generated set ended up in Engage's shared library.
+        // `createSetRef` reads a caller with no groups AND no org as an
+        // INTERNAL invocation — the seed scripts, the archive importer — and
+        // routes those to platform, which is right for them. The worker was
+        // landing in that branch by accident, because the only thing carried
+        // this far was a user id and a name.
+        //
+        // The ROLE travels too: tenant.canManageScope refuses an org write
+        // from a caller whose role is unknown, so an orgId without one resolves
+        // to "no writable scope" and the set would be refused instead of
+        // misfiled — a different bug, not a fix.
+        caller: {
+          userId: callerUserId(event),
+          username: callerUsername(event),
+          orgId: callerOrgId(event),
+          orgRole: callerOrgRole(event),
+        },
       });
 
       try {

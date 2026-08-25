@@ -1,0 +1,64 @@
+/* ============================================================================
+   THE ACTING-AS STRIP — components/ActingAsBanner.jsx
+
+   Scoped under `.pmode`, like `.porgs`, `.team` and `.qsets`, so it declares no
+   global class that a later import would inherit.
+
+   Colour is tokens only, and the values are the dusk set the console already
+   uses — the ratios TeamPanel.css measured hold here because the surfaces are
+   the same:
+
+     --text        #F4EDE4 on --bg #0F1A2E composited with the amber tint  >AA
+     --muted       #9BA8BE on the same stack                                >AA
+     --primary     #F6A94C on --bg              9.14:1   the lock
+     --bg          #0F1A2E on --primary         8.86:1   the filled exit
+
+   Asserted in __tests__/actingAsBannerPalette.test.js, composited up the real
+   ancestor chain rather than eyeballed.
+   ========================================================================== */
+
+.pmode {
+  --pmode-t-floor: 12px;
+  --pmode-t-label: 13px;
+  --pmode-t-body: 15px;
+  --pmode-rule: rgba(246, 169, 76, .38);
+  --pmode-tint: rgba(246, 169, 76, .07);
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 16px;
+  padding: 9px 12px;
+  border: 1px solid var(--pmode-rule);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--pmode-tint);
+  color: var(--muted);
+  font: 400 var(--pmode-t-label)/1.5 var(--font-ui);
+}
+
+.pmode *,
+.pmode *::before,
+.pmode *::after { box-sizing: border-box; }
+
+.pmode :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+
+.pmode-icon { flex: none; display: inline-flex; }
+
+.pmode-text { flex: 1 1 320px; min-width: 0; }
+.pmode-text strong { color: var(--text); font-weight: 600; }
+
+.pmode-btn {
+  flex: none;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: var(--bg);
+  font: 600 var(--pmode-t-label)/1 var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pmode-btn:hover { filter: brightness(1.06); }

@@ -20,8 +20,17 @@ import {
   askNextRequest,
 } from '../config/hostRemote';
 
+// Delegates to the same router `serve()` installs on global.fetch.
+//
+// It used to answer every call with `{}`, which was harmless only while the
+// authenticated calls were ones this file did not assert on. The question-set
+// routes (`/questions`, `/categories`) moved onto `authFetch` when they stopped
+// being public — a blanket stub then fed the browser an empty set and the
+// failures read as "the browser lists nothing", pointing at the component
+// rather than at the mock. Route both transports through one place so the
+// fixtures below are what the component actually receives, whichever it uses.
 jest.mock('../auth/authFetch', () => ({
-  authFetch: jest.fn(() => Promise.resolve({ ok: true, status: 200, json: async () => ({}) })),
+  authFetch: jest.fn((...args) => global.fetch(...args)),
 }));
 jest.mock('qrcode.react', () => ({ QRCodeCanvas: () => null }));
 

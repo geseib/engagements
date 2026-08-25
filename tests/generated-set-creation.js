@@ -41,6 +41,9 @@ Module._load = function (request, parent, isMain) {
 function stub(name, exports) { stubs.set(name, exports); }
 
 process.env.TABLE_NAME = 'engage-test';
+// tenant-crypto refuses to mint a data key without one, and org-scoped set
+// content is encrypted — see the KMS stub registered below.
+process.env.TENANT_KMS_KEY_ID = 'alias/test-tenant-key';
 process.env.ACCOUNT_ID = '000000000000';
 process.env.AWS_REGION = 'us-east-1';
 
@@ -181,6 +184,19 @@ class LambdaClient {
 }
 stub('@aws-sdk/client-lambda', { LambdaClient, InvokeCommand });
 
+/*
+  ORG CONTENT IS ENCRYPTED, so the moment a generated set stops going to the
+  platform library this suite needs a KMS that behaves like the real key policy.
+  The stub REFUSES a Decrypt whose encryption context disagrees with the blob,
+  so an org-confusion bug fails here rather than passing quietly — see the
+  helper's header. `mintOrg` below writes the ORG#<id>/METADATA row that carries
+  the wrapped key; without it tenant-crypto throws by design rather than writing
+  a tenant plaintext it believes is encrypted.
+*/
+const { makeKmsStub, mintOrg, forgetAllOrgs } = require('./helpers/tenant-crypto-stub');
+const kmsStub = makeKmsStub();
+stub('@aws-sdk/client-kms', kmsStub.exports);
+
 // ---- The real handlers ----------------------------------------------------
 const scenarios = require(path.join(REPO, 'lambda-functions/admin/ai-generate-scenarios.js')).handler;
 const trivia = require(path.join(REPO, 'lambda-functions/admin/ai-generate-trivia.js')).handler;
@@ -203,7 +219,14 @@ function reset() {
   bedrockCalls = [];
   dispatched = [];
   bedrockHandler = () => toolResponse([]);
+  // Every bundle's key cache, or a later assertion decrypts with a key whose
+  // blob the cleared store no longer holds.
+  forgetAllOrgs();
 }
+
+/** Give an org a wrapped data key, so org-scoped writes are encryptable. */
+const mint = (org = 'org_acme') =>
+  mintOrg((item) => ddb.set(rowKey(item.PK, item.SK), item), org);
 
 /**
  * A real signed-in caller in THIS API'S REAL EVENT SHAPE.
@@ -220,6 +243,25 @@ const adminEvent = (body) => ({
   },
   body: JSON.stringify(body),
 });
+/*
+  A CUSTOMER'S HOST, not Engage staff. The suite only ever ran as `admins` with
+  NO organisation — which is the one caller for whom writing to the platform
+  library is correct — so nothing here ever exercised the case every real
+  customer is in. `orgRole` is required as well as `orgId`: tenant.canManageScope
+  needs a role of at least `member` before it will let anyone write an org scope.
+*/
+const hostEvent = (body, org = 'org_acme') => ({
+  requestContext: {
+    http: { method: 'POST' },
+    authorizer: {
+      lambda: {
+        username: 'hal', userId: 'sub-hal', groups: 'hosts', status: 'enabled',
+        orgId: org, orgRole: 'owner', orgIds: org,
+      },
+    },
+  },
+  body: JSON.stringify(body),
+});
 const ctx = (remainingMs = 900000) => ({
   functionName: 'engagedev-admin-ai-generate-scenarios',
   getRemainingTimeInMillis: () => remainingMs,
@@ -231,8 +273,8 @@ const ctx = (remainingMs = 900000) => ({
  * of it. That is what makes "the dispatch carries no identity" a real test —
  * a reconstructed event could smuggle one in and nobody would notice.
  */
-async function runJob(handler, body, workerCtx = ctx()) {
-  const started = await handler(adminEvent(body), ctx());
+async function runJob(handler, body, workerCtx = ctx(), starter = adminEvent) {
+  const started = await handler(starter(body), ctx());
   const { jobId } = JSON.parse(started.body);
   const dispatch = dispatched[dispatched.length - 1].payload;
   await handler(dispatch, workerCtx);
@@ -242,6 +284,8 @@ async function runJob(handler, body, workerCtx = ctx()) {
 }
 
 const setRows = () => [...ddb.values()].filter((row) => row.PK === 'SETS');
+/** Set metadata rows in ONE organisation's library. tenant.js keys it this way. */
+const orgSetRows = (org = 'org_acme') => [...ddb.values()].filter((row) => row.PK === `ORG#${org}#SETS`);
 const questionRows = (setId) => [...ddb.values()]
   .filter((row) => row.PK === `SET#${setId}` && String(row.SK).startsWith('QUESTION#'))
   .sort((a, b) => String(a.SK).localeCompare(String(b.SK)));
@@ -339,6 +383,75 @@ const scenarioBody = (overrides = {}) => ({
     const row = ddb.get(rowKey('AIJOBS', `AIJOB#${jobId}`));
     assert.strictEqual(row.callerUserId, 'sub-ada', 'the job row does not carry the caller');
     assert.strictEqual(row.callerUsername, 'ada');
+  });
+
+  /*
+    ── WHOSE LIBRARY DOES A GENERATED SET LAND IN? ──────────────────────────
+
+    Reported: "as an individual when on my personal space i created a question
+    set, it ends up being labled engage."
+
+    It was not a label bug. `createSetRef` treats a caller with NO GROUPS AND NO
+    ORG as an internal invocation — the seed scripts, the archive importer, the
+    suite's own direct calls — and routes it to the platform library, which is
+    documented and right for those. The generation worker was landing in that
+    branch by accident: the job row captured `callerUserId`/`callerUsername` and
+    nothing else, so the synthetic event it replays had no organisation to read.
+
+    So EVERY set any customer generated was written into Engage's shared
+    library: badged "Engage" in their own list, unmanageable by them (platform
+    rows need the staff group), and readable by every other organisation on the
+    platform. That last part is the one that matters — it is the exact failure
+    tenant.js says it exists to prevent, and it happened through the front door.
+  */
+  await test('a host\'s generated set lands in THEIR org, not in Engage\'s library', async () => {
+    // rejects: the worker's synthetic event losing the organisation, which puts
+    // one customer's generated content in the library every customer reads.
+    reset();
+    await mint();
+    bedrockHandler = () => toolResponse(scenarioItems(2, 'tenanted'));
+    await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), hostEvent);
+
+    assert.deepStrictEqual(setRows(), [],
+      'a customer\'s generated set was written into the shared platform library');
+    const mine = orgSetRows();
+    assert.strictEqual(mine.length, 1, `expected one set in the org's library, found ${mine.length}`);
+    assert.strictEqual(mine[0].createdBy, 'sub-hal', 'the org set is not owned by the host who asked');
+  });
+
+  await test('the job row carries the organisation, not just the person', async () => {
+    // rejects: capturing the caller at POST time without their org — the worker
+    // has no authorizer of its own, so anything not on the job row is gone.
+    reset();
+    await mint();
+    bedrockHandler = () => toolResponse(scenarioItems(2, 'jobrow'));
+    const { jobId } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), hostEvent);
+    const row = ddb.get(rowKey('AIJOBS', `AIJOB#${jobId}`));
+    assert.strictEqual(row.callerOrgId, 'org_acme', 'the job row does not carry the org');
+    assert.strictEqual(row.callerOrgRole, 'owner',
+      'the role is needed too — canManageScope refuses an org write without one');
+  });
+
+  await test('the organisation does not travel in the dispatch payload either', async () => {
+    // rejects: moving the org into the worker payload, which is an invocation
+    // path with no authorizer — an org read from there is an org whoever can
+    // invoke the function chose.
+    reset();
+    await mint();
+    bedrockHandler = () => toolResponse(scenarioItems(2, 'notpayload'));
+    const { dispatch } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), hostEvent);
+    assert.doesNotMatch(JSON.stringify(dispatch), /org_acme/,
+      'the organisation travelled in the dispatch payload');
+  });
+
+  await test('Engage staff with no org still author the shared library', async () => {
+    // rejects: over-correcting. The platform library has to stay authorable, and
+    // staff-with-no-org is the only caller for whom that is right.
+    reset();
+    bedrockHandler = () => toolResponse(scenarioItems(2, 'house'));
+    await runJob(scenarios, scenarioBody({ count: 2 }));
+    assert.strictEqual(setRows().length, 1, 'staff can no longer write the shared library');
+    assert.deepStrictEqual(orgSetRows(), []);
   });
 
   await test('an unidentifiable caller leaves the set unowned rather than owned by ""', async () => {

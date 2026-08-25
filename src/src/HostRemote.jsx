@@ -406,7 +406,9 @@ function HostRemote() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${apiBase()}question-sets/${setId}/categories`);
+        // authFetch: this route now carries the Cognito authorizer. The remote
+        // is a signed-in host surface, so the token is available here.
+        const res = await authFetch(`${apiBase()}question-sets/${setId}/categories`);
         if (cancelled || !res.ok) return;
         const data = await res.json();
         if (!cancelled) setCategories(Array.isArray(data.categories) ? data.categories : []);
@@ -450,11 +452,16 @@ function HostRemote() {
     setBusyAction(actionId);
 
     try {
-      // authFetch, not fetch: closing a round is now an authenticated route
-      // (games/{id}/close-round), because it ends the room's anonymity and
-      // moves everyone's screen. The other actions sit on public routes and
-      // simply ignore the header. This page is behind ProtectedRoute, so the
-      // host is signed in and the token is there to attach.
+      // authFetch, not fetch. EVERY action dispatched here is now an
+      // authenticated route — next-question, start-vote and close-round all
+      // drive somebody's live session, and a four-digit code is not a secret:
+      // it is on the projector and typed by everyone in the room. This page is
+      // behind ProtectedRoute, so the host is signed in and the token is there.
+      //
+      // The path is built by config/hostRemote.js, so no route name appears in
+      // this file. That is why tests/session-control-routes-authorization.js
+      // checks both `request.path` dispatch sites by shape rather than by
+      // grepping for the routes.
       const res = await authFetch(`${apiBase()}${request.path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -512,9 +519,14 @@ function HostRemote() {
    * uses, because it IS an advance — mid-round it skips the round on screen —
    * and the cooldown is what stops a double-tap consuming two questions.
    *
-   * Plain fetch, not authFetch: `next-question` is a public route and
-   * GameHostPage.selectQuestion calls it the same way. Only /close-round,
-   * /stage-beat and /reveal-authors carry the authorizer.
+   * authFetch, like every other dispatch here. `next-question` USED to be a
+   * public route — this comment used to say so, and say that only
+   * /close-round, /stage-beat and /reveal-authors were authenticated. That is
+   * no longer true: an unauthenticated next-question let anyone holding the
+   * join code advance the round out from under the host.
+   *
+   * GameHostPage.selectQuestion calls the same route the same way, and moved
+   * in the same change — the two must not diverge.
    */
   const askSpecific = useCallback(async (row) => {
     const request = askNextRequest({ gameId, questionId: row?.id, state: snapshot?.state });
@@ -528,7 +540,7 @@ function HostRemote() {
     setBusyAction('ask');
 
     try {
-      const res = await fetch(`${apiBase()}${request.path}`, {
+      const res = await authFetch(`${apiBase()}${request.path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request.body),
@@ -567,7 +579,7 @@ function HostRemote() {
     if (!gameId || togglingCategory || !row?.live) return;
     setTogglingCategory(true);
     try {
-      const res = await fetch(`${apiBase()}games/${gameId}/toggle-category`, {
+      const res = await authFetch(`${apiBase()}games/${gameId}/toggle-category`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

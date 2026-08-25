@@ -1,0 +1,317 @@
+/* ============================================================================
+   PLAN & USAGE — BillingPanel.jsx.
+
+   Derived from docs/design/tenancy-redesign/04-billing.html (a paid Team over
+   its included sessions) and 12-personal-limit.html (a free personal space at
+   its limit). Both are ONE component: the two screens share a head, a meters
+   panel, a second panel and a closing note, and splitting them would give two
+   token blocks that drift. RATIONALE §3 carries the reasoning.
+
+   Scoped under `.bill`, like `.qsets`, `.adm-shell`, `.sp` and `.um`. The
+   mockups' `.panel` / `.btn` / `.calc` / `.tbl` / `.note-box` names belong to
+   styles.css and the host stage, so every one of them is re-cut here under the
+   scope. The meter itself is NOT re-cut — it is `.usg`, its own component,
+   because the same strip also lands on the host's front door.
+
+   THE TWO IDEAS THIS SCREEN EXISTS TO CARRY
+   1. The included allowance is a NOTCH, not the end of the bar. See
+      UsageMeter.css — that is where the track is drawn.
+   2. NOTHING IS EVER BLOCKED MID-SESSION. For a paid Team, overage is charged,
+      stated in advance and never enforced. For a personal space the limit lands
+      on CREATING a session, never on one already running in front of a room —
+      and `.bill-notebox` at the foot of the personal screen says so unprompted,
+      because somebody who has just hit a wall assumes the worst.
+   And: SHOW THE ARITHMETIC. `.bill-calc` is four lines that add up, each naming
+   the quantity it came from. Nobody trusts a total they cannot reproduce. The
+   numbers come from lambda-functions/game/pricing.js — the same function the
+   API bills from — never from arithmetic written again here.
+
+   THE LADDER (RATIONALE §3): 12 floor / 13 label / 15 body / 19 head / 24 title
+   / 30 numeral, at ~120 CSS ppi read at 24in. Rows are 36px. `--bill-t-numeral`
+   is spent once, on the total, which is the one display number a panel is
+   allowed.
+
+   COLOUR. MEASURED, unlifted, composited up the real ancestor stack in
+   __tests__/billingPanelPalette.test.js:
+
+     --text        #F4EDE4 on --bg      #0F1A2E        14.97:1  headings, values
+     --muted       #9BA8BE on --bg                      7.24:1  sub, column heads
+     --text        #F4EDE4 on --surface #1B2942        12.53:1  panel copy
+     --muted       #9BA8BE on --surface                 6.06:1  the `why` lines
+     --primary     #F6A94C on --surface                 7.42:1  the over value
+     --danger-text #EF8C86 on --surface                 6.08:1  a failed load
+     --text on the amber tint over --surface           10.84:1  the warn box lead
+     --muted on the amber tint over --surface           5.24:1  the warn box body
+     --text on the grey tint over --surface            11.30:1  the plain box lead
+     --muted on the grey tint over --surface            5.46:1  the plain box body
+     --bg          #0F1A2E on --primary                 8.86:1  the filled primary
+     --bg          #0F1A2E on #FFBB66                  10.39:1  its hover
+
+   `--danger` is never text here: 4.38:1 on --surface, under AA. It keeps
+   borders and tints only; `--danger-text` carries the copy.
+   ========================================================================== */
+
+.bill {
+  /* Scoped locals. An undefined custom property invalidates the WHOLE
+     declaration, so nothing here borrows a token from a stylesheet that merely
+     happens to be in the same bundle. */
+  --bill-t-floor: 12px;
+  --bill-t-label: 13px;
+  --bill-t-body: 15px;
+  --bill-t-head: 19px;
+  --bill-t-title: 24px;
+  --bill-t-numeral: 30px;
+  --bill-row-h: 36px;
+
+  --bill-rule: rgba(155, 168, 190, .20);
+  --bill-rule-strong: rgba(155, 168, 190, .34);
+  --bill-row-hover: rgba(155, 168, 190, .055);
+  --bill-tint-note: rgba(155, 168, 190, .06);
+  --bill-tint-warn: rgba(246, 169, 76, .08);
+  --bill-tint-danger: rgba(229, 100, 94, .09);
+
+  color: var(--text);
+  font: 400 var(--bill-t-body)/1.45 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.bill *,
+.bill *::before,
+.bill *::after { box-sizing: border-box; }
+
+.bill :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+
+/* ------------------------------------------------------------------- head -- */
+
+.bill-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 16px;
+}
+/* Cap the text column. `.bill-head` wraps, and a subtitle long enough to fill
+   the line pushes the actions onto a second row, where the primary button
+   renders left-aligned under the title and reads as part of the content. */
+.bill-head > div:first-child { max-width: 74ch; min-width: 0; }
+.bill-title {
+  font-family: var(--font-display);
+  font-size: var(--bill-t-title);
+  font-weight: 700;
+  letter-spacing: -.006em;
+  margin: 0 0 3px;
+}
+.bill-sub {
+  font-size: var(--bill-t-label);
+  color: var(--muted);
+  margin: 0;
+}
+.bill-head-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---------------------------------------------------------------- buttons -- */
+
+.bill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--bill-rule-strong);
+  background: transparent;
+  color: var(--text);
+  font: 600 var(--bill-t-label)/1 var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.bill-btn:hover:not(:disabled) { background: var(--bill-row-hover); border-color: var(--muted); }
+.bill-btn:disabled { opacity: .42; cursor: not-allowed; }
+.bill-btn--sm { min-height: 26px; padding: 0 9px; font-size: var(--bill-t-floor); }
+.bill-btn--primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--bg);
+  font-weight: 700;
+}
+/* #FFBB66 is a DELIBERATE literal: styles.css has no lighter-amber token, and
+   QuestionSetsPanel.css:181 already settled on this exact value for the same
+   hover. It carries --bg at 10.39:1. Named in the palette test's allow-list. */
+.bill-btn--primary:hover:not(:disabled) { background: #FFBB66; border-color: #FFBB66; }
+.bill-btn--ghost { border-color: transparent; color: var(--muted); }
+.bill-btn--ghost:hover:not(:disabled) { color: var(--text); background: var(--bill-row-hover); }
+
+/* ----------------------------------------------------------------- panels -- */
+
+/* Two panels side by side while there is room, stacked when there is not.
+   `align-items: start` so a short panel does not stretch to match a tall one. */
+.bill-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  align-items: start;
+  gap: 14px;
+}
+
+.bill-panel {
+  background: var(--surface);
+  border: 1px solid var(--bill-rule);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 0;
+}
+.bill-panel-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--bill-rule);
+}
+.bill-panel-head h2 {
+  font-family: var(--font-display);
+  font-size: var(--bill-t-head);
+  font-weight: 700;
+  letter-spacing: -.003em;
+  margin: 0;
+}
+.bill-panel-body { padding: 14px; }
+
+.bill-note {
+  font-size: var(--bill-t-label);
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.5;
+}
+.bill-note--after { margin-top: 14px; }
+
+/* --------------------------------------------------------------- the boxes -- */
+
+.bill-notebox {
+  border-left: 3px solid var(--muted);
+  background: var(--bill-tint-note);
+  padding: 10px 13px;
+  border-radius: 0 6px 6px 0;
+  font-size: var(--bill-t-label);
+  color: var(--muted);
+  margin: 0;
+  max-width: 104ch;
+  line-height: 1.55;
+}
+.bill-notebox b { color: var(--text); }
+.bill-notebox--warn { border-left-color: var(--primary); background: var(--bill-tint-warn); }
+.bill-notebox--bad {
+  border-left-color: var(--danger);
+  background: var(--bill-tint-danger);
+  color: var(--danger-text);
+}
+.bill-notebox--bad b { color: var(--text); }
+.bill-notebox--top { margin-top: 18px; }
+.bill-notebox--foot { margin-top: 20px; }
+
+/* The two exits out of a limit, side by side. A limit with exactly one exit
+   reads as a toll gate, so the wait-it-out alternative is stated next to the
+   upgrade rather than left for somebody to work out. */
+.bill-exits {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.bill-wait { font-size: var(--bill-t-label); color: var(--muted); }
+
+/* -------------------------------------------------------------- the total -- */
+
+.bill-total { margin: 0 0 16px; }
+/* The ONE display number a panel is allowed. */
+.bill-bignum {
+  font: 700 var(--bill-t-numeral)/1 var(--font-display);
+  letter-spacing: -.01em;
+}
+.bill-cur {
+  font-size: var(--bill-t-head);
+  vertical-align: .32em;
+  margin-right: 1px;
+  color: var(--muted);
+}
+.bill-sofar { margin-left: 8px; font-size: var(--bill-t-label); color: var(--muted); }
+
+/* Invoice arithmetic, shown as arithmetic. */
+.bill-calc {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: var(--bill-t-body);
+}
+.bill-calc td { padding: 7px 0; border-bottom: 1px solid var(--bill-rule); vertical-align: top; }
+.bill-calc td:last-child { text-align: right; width: 96px; font-variant-numeric: tabular-nums; }
+.bill-calc tr:last-child td { border-bottom: 0; }
+.bill-calc-total td {
+  border-bottom: 0;
+  border-top: 1px solid var(--bill-rule-strong);
+  font-weight: 700;
+  padding-top: 11px;
+}
+.bill-why {
+  display: block;
+  color: var(--muted);
+  font-size: var(--bill-t-label);
+  margin-top: 1px;
+}
+
+/* ------------------------------------------------------- what a team adds -- */
+
+.bill-kv {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 8px 14px;
+  font-size: var(--bill-t-body);
+  margin: 0;
+}
+.bill-kv dt { color: var(--muted); font-size: var(--bill-t-label); padding-top: 2px; }
+.bill-kv dd { margin: 0; }
+
+/* ---------------------------------------------------------- recent periods -- */
+
+.bill-secttl {
+  font: 600 var(--bill-t-head)/1.2 var(--font-ui);
+  margin: 22px 0 10px;
+}
+
+/* `table-layout: fixed` on every table: under auto layout the declared widths
+   are hints, and one nowrap cell sets a min-content width that grows the whole
+   table past its container. */
+.bill-tbl {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: var(--bill-t-body);
+}
+.bill-tbl th {
+  text-align: left;
+  font-size: var(--bill-t-label);
+  font-weight: 600;
+  color: var(--muted);
+  padding: 0 10px 7px;
+  border-bottom: 1px solid var(--bill-rule-strong);
+}
+.bill-tbl td {
+  height: var(--bill-row-h);
+  padding: 0 10px;
+  border-bottom: 1px solid var(--bill-rule);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bill-tbl tbody tr:hover { background: var(--bill-row-hover); }
+.bill-tbl .bill-num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* A row's action group is aligned with `margin-left: auto` on its first child,
+   NEVER with `justify-content: flex-end`: flex-end overflows toward the START
+   of the cell, where an `overflow: hidden` clip is unreachable. */
+.bill-rowacts { display: flex; gap: 6px; flex-wrap: wrap; }
+.bill-rowacts > :first-child { margin-left: auto; }

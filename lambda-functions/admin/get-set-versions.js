@@ -1,11 +1,12 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const {
-  getSetMetadata,
   queryPartition,
   toVersion,
   versionList,
 } = require('./shared/set-version');
+const { findSetForCaller, requestedScope } = require('./shared/question-set-access');
+const tenant = require('./shared/tenant');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -38,7 +39,13 @@ exports.handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: 'Set ID is required' }), headers };
     }
 
-    const meta = await getSetMetadata(db, tableName, setId);
+    // A READ, so the guard is READABILITY: `findSetForCaller` probes only the
+    // caller's own org, platform and public, so another organisation's set is
+    // absent and this 404s on it. requireSetManager would be the WRONG guard
+    // here — no org user may manage a platform set, and every org is meant to
+    // be able to read the shared library.
+    const found = await findSetForCaller(db, tableName, event, setId, requestedScope(event));
+    const meta = found && found.item;
     if (!meta) {
       return { statusCode: 404, body: JSON.stringify({ error: 'Question set not found' }), headers };
     }
@@ -55,8 +62,18 @@ exports.handler = async (event) => {
 
     // One paginated Query of the GAMES index partition serves every version, so
     // the cost does not multiply by version count.
-    const { items: gameRows } = await queryPartition(db, tableName, 'GAMES', 'GAME#');
-    const pinnedBySet = gameRows.filter((g) => g.QuestionSetId === setId && toVersion(g.QuestionSetVersion));
+    // An org's sessions are indexed in that org's own partition; the global
+    // GAMES partition is the pre-tenancy index (and now the 4-digit code
+    // reservation registry, which carries no set id and matches nothing).
+    const gamesIndexPk = found.ref.orgId
+      ? tenant.gamesIndexPk(found.ref.orgId)
+      : tenant.GAMES_RESERVATION_PK;
+    const { items: gameRows } = await queryPartition(db, tableName, gamesIndexPk, 'GAME#');
+    // Matched on the PAIR: a session records QuestionSetScope beside
+    // QuestionSetId since tenancy, and an absent scope means platform.
+    const pinnedBySet = gameRows.filter((g) => g.QuestionSetId === setId
+      && (String(g.QuestionSetScope || '').trim() || tenant.PLATFORM) === found.ref.scope
+      && toVersion(g.QuestionSetVersion));
 
     // Only the pinned games need a state lookup, and each is looked up once
     // even when several versions are listed.

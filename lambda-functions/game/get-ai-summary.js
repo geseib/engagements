@@ -21,6 +21,8 @@ const { consensusLabel } = require('./consensus');
 // or the preflight reads the sliced text's interpolations as unknown
 // brace-tokens and goes red.
 const { analyzeWavelength, buildWavelengthProse } = require('./wavelength');
+const { ORG } = require('./tenant');
+const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
 
 /**
  * Voice attribution carried out of generateAISummary() and onto the stored
@@ -39,6 +41,31 @@ const personaAttribution = (persona) => ({
 const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
+
+/**
+ * WHOSE SESSION IS THIS? — off the row, because this route is PUBLIC.
+ *
+ * GET /games/{gameId}/ai-summary is polled by every phone in the room and by
+ * the projector, none of which carry an authorizer context, so the caller's org
+ * is '' — and a blank orgId THROWS in tenant-crypto rather than defaulting to
+ * something. The session's own METADATA row is the authority.
+ *
+ * A helper rather than one variable because the CACHED-SUMMARY branch returns
+ * long before the handler reads game metadata for anything else, and that
+ * branch has to decrypt too.
+ *
+ * NO BACKTICKS ANYWHERE IN THIS FILE ABOVE THE FALLBACK TEMPLATE — see the note
+ * at the top. That is why this builds its keys with concatenation.
+ */
+const orgOf = (item) => (item && typeof item.orgId === 'string' ? item.orgId.trim() : '');
+async function sessionOrgId(gameId) {
+  const res = await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: 'GAME#' + gameId, SK: 'METADATA' },
+    ProjectionExpression: 'orgId'
+  }));
+  return orgOf(res && res.Item);
+}
 const s3 = new S3Client({ region: 'us-east-1' });
 const lambda = new LambdaClient({});
 const apigateway = new ApiGatewayManagementApiClient({ endpoint: process.env.WEBSOCKET_API_ENDPOINT });
@@ -553,6 +580,18 @@ exports.handler = async (event) => {
 
       if (existingSummary.Item) {
         console.log(`✅ Returning existing AI summary for ${gameId}: ${targetQuestionId}`);
+
+        // THE CACHED READ IS A READ, and it is the one most likely to be
+        // forgotten: it returns before the handler touches game metadata for
+        // any other reason, so it needs its own org lookup. `DebugInfo` in
+        // particular carries the FULL PROMPT, which embeds every participant's
+        // answer verbatim — the most content-dense attribute in the table.
+        const summaryOrgId = await sessionOrgId(gameId);
+        const cached = summaryOrgId
+          ? await decryptItem(summaryOrgId, 'aiSummary', existingSummary.Item)
+          : existingSummary.Item;
+        existingSummary.Item = cached;
+
         const responseData = {
           gameId: gameId,
           questionId: targetQuestionId,
@@ -769,8 +808,19 @@ exports.handler = async (event) => {
       }
     }));
 
-    const votes = votesQuery.Items || [];
-    const answers = answersQuery.Items || [];
+    // ── PLAINTEXT INTO THE PROMPT ────────────────────────────────────────────
+    //
+    // Everything below feeds a Bedrock prompt built from the room's own words,
+    // so an envelope here does not fail loudly — it produces a summary of
+    // base64. The org is the SESSION's, read off the metadata row above (this
+    // route is public; see sessionOrgId).
+    const summaryOrgId = orgOf(gameMetadata.Item);
+    const votes = summaryOrgId
+      ? await decryptItems(summaryOrgId, 'vote', votesQuery.Items || [])
+      : (votesQuery.Items || []);
+    const answers = summaryOrgId
+      ? await decryptItems(summaryOrgId, 'answer', answersQuery.Items || [])
+      : (answersQuery.Items || []);
     
     // Get stored results data if available (contains wavelength commonWords)
     const storedResultsQuery = await db.send(new GetCommand({
@@ -1125,9 +1175,19 @@ exports.handler = async (event) => {
       dbItem.DebugInfo = summaryData.debugInfo;
     }
     
+    // ── THE SUMMARY GOES BACK IN ENCRYPTED ───────────────────────────────────
+    //
+    // Summary/SummaryText/DiscussionQuestions/NextSteps/FullResponse/
+    // MarkdownResponse are the AI's account of what the room said, and
+    // `DebugInfo` embeds the participants' answers verbatim inside the prompt.
+    // PersonaName/PersonaId/PersonaSource stay plaintext: they are platform
+    // configuration, not content, and a report reads them as labels.
+    //
+    // Same session org as the reads above, so the cached-read branch at the top
+    // of this handler unwraps exactly what this wrote.
     await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
-      Item: dbItem
+      Item: summaryOrgId ? await encryptItem(summaryOrgId, 'aiSummary', dbItem) : dbItem
     }));
 
     console.log(`✅ Enhanced AI summary generated and stored for ${gameId}: ${targetQuestionId}`);

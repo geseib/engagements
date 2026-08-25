@@ -3,7 +3,31 @@ import IssueReportForm from './IssueReportForm';
 import './IssueFab.css';
 import Icon from './Icon';
 
-const IssueFab = ({ context = 'host', gameId = null }) => {
+/**
+ * Report a bug, request a feature, ask for help.
+ *
+ * ── WHY THIS IS NO LONGER A FLOATING BUTTON BY DEFAULT ─────────────────────
+ *
+ * It was a 56px circle pinned `position: fixed` to the bottom-right at
+ * `z-index: 20000` — above every dialog, every panel and every stage — on every
+ * screen that mounted it. Reported plainly: it is "floating in the way".
+ *
+ * The sharper problem is that being fixed made it ignore the places that were
+ * already built for it. GameHostPage passes it to SessionSetupPanel as
+ * `issueControl`, which slots it into that panel's own footer — and it floated
+ * anyway, because the CSS overrode the placement its own caller had chosen. A
+ * component that cannot be put anywhere is not a component, it is a fixture.
+ *
+ * So placement is now a decision the CALLER makes:
+ *
+ *   'inline'   — a normal header/footer control, laid out where it is written.
+ *                The default, because every current mount has somewhere to put
+ *                it. The menu opens against the button rather than over the page.
+ *   'floating' — the old fixed circle, for a surface with no chrome to host it.
+ *
+ * @param {'inline'|'floating'} placement Where this instance lives.
+ */
+const IssueFab = ({ context = 'host', gameId = null, placement = 'inline' }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [formConfig, setFormConfig] = useState(null);
 
@@ -18,7 +42,13 @@ const IssueFab = ({ context = 'host', gameId = null }) => {
 
   return (
     <>
-      <div className={`issue-fab-container ${isMenuOpen ? 'menu-open' : ''}`}>
+      <div
+        className={[
+          'issue-fab-container',
+          `issue-fab-container--${placement === 'floating' ? 'floating' : 'inline'}`,
+          isMenuOpen ? 'menu-open' : '',
+        ].filter(Boolean).join(' ')}
+      >
         {/* Floating Action Menu */}
         {isMenuOpen && (
           <div className="issue-fab-menu">
@@ -55,11 +85,13 @@ const IssueFab = ({ context = 'host', gameId = null }) => {
         <button 
           className={`issue-fab-main ${isMenuOpen ? 'active' : ''}`}
           onClick={() => setIsMenuOpen(!isMenuOpen)}
-          title="Report Issue or Request Feature"
+          title="Report a problem or ask for something"
+          aria-label="Report a problem or ask for something"
+          aria-expanded={isMenuOpen}
         >
           {isMenuOpen
-            ? <Icon name="X" weight="bold" size={20} />
-            : <Icon name="NotePencil" weight="bold" size={20} />}
+            ? <Icon name="X" weight="bold" size={placement === 'floating' ? 20 : 16} />
+            : <Icon name="NotePencil" weight="bold" size={placement === 'floating' ? 20 : 16} />}
         </button>
       </div>
 

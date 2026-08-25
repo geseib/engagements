@@ -1,6 +1,8 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 
+const { gamesIndexPk, callerMayDriveSession } = require('./tenant');
+
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
 
@@ -25,6 +27,23 @@ exports.handler = async (event) => {
     }));
 
     if (!gameState.Item) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ error: 'Game not found' }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
+    /* WHOSE SESSION IS THIS? Nothing here asked. A host in another organisation
+       started somebody else's session on dev with nothing but the four-digit
+       code. The owning org lives on METADATA; STATE does not carry it.
+       404 rather than 403 — see tenant.callerMayDriveSession. */
+    const ownerRead = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'orgId'
+    }));
+    if (!callerMayDriveSession(event, ownerRead.Item || {})) {
       return {
         statusCode: 404,
         body: JSON.stringify({ error: 'Game not found' }),
@@ -79,20 +98,44 @@ exports.handler = async (event) => {
       }
     }));
 
-    // Update GAMES list entry with Started flag and LastPlayedAt
-    await db.send(new UpdateCommand({
+    /*
+      Update the SESSION BRIEF — which is the OWNING ORG's index row now, not
+      the global reservation.
+
+      The reservation row carries `{orgId, ttl}` and nothing a list ever reads,
+      so writing `Started` there would be writing to a row nobody looks at while
+      every host's list stayed stale. The owning org is read from METADATA
+      rather than from the caller: a session belongs to the org that created it,
+      not to whichever org the person pressing Start happens to be acting for.
+
+      A session created without an org has no index row, so there is nothing to
+      update and the round still starts — the state that matters is on STATE and
+      METADATA, both already written above.
+    */
+    const metadata = await db.send(new GetCommand({
       TableName: process.env.TABLE_NAME,
-      Key: { PK: 'GAMES', SK: `GAME#${gameId}` },
-      UpdateExpression: 'SET #started = :started, #lastPlayedAt = :lastPlayedAt',
-      ExpressionAttributeNames: {
-        '#started': 'Started',
-        '#lastPlayedAt': 'LastPlayedAt'
-      },
-      ExpressionAttributeValues: {
-        ':started': true,
-        ':lastPlayedAt': now
-      }
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'orgId'
     }));
+    const orgId = (metadata.Item && metadata.Item.orgId) || '';
+
+    if (orgId) {
+      await db.send(new UpdateCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: gamesIndexPk(orgId), SK: `GAME#${gameId}` },
+        UpdateExpression: 'SET #started = :started, #lastPlayedAt = :lastPlayedAt',
+        ExpressionAttributeNames: {
+          '#started': 'Started',
+          '#lastPlayedAt': 'LastPlayedAt'
+        },
+        ExpressionAttributeValues: {
+          ':started': true,
+          ':lastPlayedAt': now
+        }
+      }));
+    } else {
+      console.warn(`⚠️ Game ${gameId} has no owning organisation — no session list row to update`);
+    }
 
     console.log(`✅ Game ${gameId} started successfully`);
 

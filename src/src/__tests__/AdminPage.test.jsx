@@ -19,9 +19,18 @@ jest.mock('../auth/AuthContext', () => ({
   AuthProvider: ({ children }) => children,
 }));
 
+// The active-organisation accessors live beside `authFetch` because the header
+// they drive is sent from there. A mock that stubs only `authFetch` leaves
+// `getActiveOrgId` undefined and AdminPage dies on its first render — which is
+// what happened, and reads as a component bug rather than a mock gap.
+let mockActiveOrg = '';
 jest.mock('../auth/authFetch', () => ({
   __esModule: true,
   authFetch: (...args) => global.fetch(...args),
+  ORG_HEADER: 'X-Engage-Org',
+  ACTIVE_ORG_STORAGE_KEY: 'engage.activeOrg',
+  getActiveOrgId: () => mockActiveOrg,
+  setActiveOrgId: (id) => { mockActiveOrg = id || ''; },
 }));
 
 import AdminPage from '../AdminPage';
@@ -45,12 +54,31 @@ describe('the admin console', () => {
     localStorage.clear();
     window.history.pushState({}, '', '/admin');
     global.fetch.mockClear();
-    global.fetch.mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ questionSets: [], sets: [], games: [], prompts: [] }),
-      text: async () => '{}',
-    });
+    // AdminPage asks for the caller's organisations on mount — the one request
+    // that also PROVISIONS a personal org. Without it, `sectionsFor` sees no
+    // active organisation and the console renders only the sections that need
+    // none, which is not what this file is testing.
+    global.fetch.mockImplementation(async (url) => (String(url).includes('/orgs')
+      ? {
+        ok: true,
+        status: 200,
+        text: async () => '{}',
+        json: async () => ({
+          orgs: [{
+            orgId: 'org_nw',
+            name: 'Northwind Learning',
+            role: 'admin',
+            type: 'team',
+            plan: 'team',
+          }],
+        }),
+      }
+      : {
+        ok: true,
+        status: 200,
+        json: async () => ({ questionSets: [], sets: [], games: [], prompts: [] }),
+        text: async () => '{}',
+      }));
   });
 
   /*
@@ -68,9 +96,19 @@ describe('the admin console', () => {
     // `findAllByText`: the console names each section in the nav AND in the
     // breadcrumb, so a single-match query fails on a screen that is perfectly
     // correct. What matters is that the entries are there at all.
+    // EVERY ONE OF THESE IS AWAITED, not just the first. The nav is computed
+    // from the caller's organisations now (config/consoleSections.js), and they
+    // arrive from `GET /orgs` — so the sections appear in two waves: the ones
+    // that need no organisation, then the rest. Awaiting only the first entry
+    // and then reading the others synchronously catches the gap between them,
+    // which is precisely what happened.
     expect((await screen.findAllByText(/Question sets/i)).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Sessions/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Prompts/i).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Sessions/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Prompts/i)).length).toBeGreaterThan(0);
+    // And the tenancy sections, which are the point of the change.
+    expect((await screen.findAllByText(/Members/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Plan & usage/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Data & privacy/i)).length).toBeGreaterThan(0);
   });
 
   // rejects: an unreachable backend blanking the console. This is the screen
@@ -117,19 +155,41 @@ describe('the two prompt libraries are reached the same way', () => {
     localStorage.clear();
     window.history.pushState({}, '', '/admin');
     global.fetch.mockClear();
-    global.fetch.mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ questionSets: [], sets: [], games: [], prompts: [] }),
-      text: async () => '{}',
-    });
+    // Prompts is an ORG ADMIN section, and the console learns the caller's org
+    // role from GET /orgs. A blanket mock answers that route with the same
+    // empty payload as everything else, so `sectionsFor` sees no active org,
+    // the nav never grows a Prompts entry, and every test below times out
+    // looking for a control that was never going to be drawn.
+    global.fetch.mockImplementation(async (url) => (String(url).includes('/orgs')
+      ? {
+        ok: true,
+        status: 200,
+        text: async () => '{}',
+        json: async () => ({
+          orgs: [{
+            orgId: 'org_nw', name: 'Northwind Learning', role: 'admin', type: 'team', plan: 'team',
+          }],
+        }),
+      }
+      : {
+        ok: true,
+        status: 200,
+        json: async () => ({ questionSets: [], sets: [], games: [], prompts: [] }),
+        text: async () => '{}',
+      }));
   });
 
-  /** Open the Prompts section from the console nav. */
+  /**
+   * Open the Prompts section from the console nav.
+   *
+   * The nav entry is awaited BY ROLE, not by text: the nav is asynchronous now
+   * (it is computed from GET /orgs) and the work-head <h1> also says "Prompts"
+   * once the section is open, so a text query can settle on the heading of a
+   * section that is already showing and click nothing.
+   */
   async function openPrompts() {
     render(<AdminPage />);
-    const entries = await screen.findAllByText('Prompts');
-    fireEvent.click(entries[0].closest('button') || entries[0]);
+    fireEvent.click(await screen.findByRole('button', { name: /^prompts$/i }));
     return screen.findByRole('button', { name: /Question set generator prompts/ });
   }
 

@@ -189,6 +189,20 @@ const fakeDoc = {
   },
 };
 
+// ── TENANT CRYPTO ──────────────────────────────────────────────────────────
+// The handlers this suite drives now encrypt org content, and tenant-crypto
+// THROWS on an org with no data key rather than quietly writing plaintext. The
+// shared stub refuses a Decrypt with a missing or mismatched encryption context,
+// exactly as the key policy will, so this does not weaken anything here.
+// Org rows are envelopes at rest since tenancy. `plainRow` unwraps them with
+// the real cipher so the assertions below stay about CONTENT — and it is
+// synchronous, so a suite that is not about encryption needs no new awaits.
+const { makeKmsStub, installTestKeyLoader, plainRow } = require('./helpers/tenant-crypto-stub');
+const kmsStub = makeKmsStub();
+stub('@aws-sdk/client-kms', kmsStub.exports);
+// Every org gets a deterministic data key, no ORG#<id>/METADATA row needed —
+// otherwise every reset() in this file would have to re-seed one.
+installTestKeyLoader();
 stub('@aws-sdk/client-dynamodb', { DynamoDBClient: class {} });
 stub('@aws-sdk/lib-dynamodb', {
   DynamoDBDocumentClient: { from: () => fakeDoc },
@@ -212,6 +226,16 @@ const adminListSets = require(path.join(REPO, 'lambda-functions', 'admin', 'get-
 const getQuestion = require(path.join(REPO, 'lambda-functions', 'game', 'get-question.js')).handler;
 const getCategories = require(path.join(REPO, 'lambda-functions', 'game', 'get-categories.js')).handler;
 const { createGame } = require(path.join(REPO, 'lambda-functions', 'websocket', 'schema-compliant-manager.js'));
+
+const ORG = 'org_nw';
+const OWNER = 'sub-owner';
+/** The caller for every route that is now ownership-guarded. */
+const asOwner = (extra = {}) => ({
+  ...extra,
+  requestContext: { authorizer: { lambda: {
+    userId: OWNER, username: 'owner', groups: 'hosts', orgId: ORG, orgRole: 'admin', status: 'enabled',
+  } } },
+});
 const resolver = require(path.join(REPO, 'lambda-functions', 'admin', 'shared', 'set-version.js'));
 
 if (!process.env.DEBUG) console.log = () => {};
@@ -228,9 +252,12 @@ async function checkAsync(label, fn) {
 }
 
 const parse = (res) => JSON.parse(res.body);
+// DECRYPTED for org partitions. `plainRow` only unwraps envelope-shaped values,
+// so a platform row (`SET#…`, plaintext by design) passes through untouched.
 const rowsIn = (pk, prefix = 'QUESTION#') =>
   [...store.values()].filter((i) => i.PK === pk && String(i.SK).startsWith(prefix))
-    .sort((a, b) => String(a.SK).localeCompare(String(b.SK)));
+    .sort((a, b) => String(a.SK).localeCompare(String(b.SK)))
+    .map((i) => plainRow(ORG, i));
 
 const HEADER = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Image';
 const csvV1 = [
@@ -258,9 +285,15 @@ const csvV2 = [
  * authorizer emits (auth/authorizer.js:171-182) — NOT `.jwt.claims`, a shape
  * this API never produces. Ownership itself: tests/question-set-ownership.js.
  */
+// TENANCY: the sets in this suite belong to ORG, and the caller who creates
+// them is the same person `asOwner` describes — otherwise the set lands in the
+// platform library and every org-scoped lookup below finds nothing.
 const adminContext = () => ({
   requestContext: {
-    authorizer: { lambda: { username: 'ada', userId: 'sub-ada', groups: 'admins', status: 'enabled' } },
+    authorizer: { lambda: {
+      username: 'owner', userId: OWNER, groups: 'hosts', status: 'enabled',
+      orgId: ORG, orgRole: 'admin',
+    } },
   },
 });
 const importSet = (title, csv, extra = {}) => upload({
@@ -279,7 +312,7 @@ const replaceSet = (setId, csv, extra = {}) => upload({
 
 /** Give a set the metadata fields a replace must not clobber. */
 function decorate(setId, fields) {
-  const key = `SETS|SET#${setId}`;
+  const key = `ORG#${ORG}#SETS|SET#${setId}`;
   store.set(key, { ...store.get(key), ...fields });
 }
 
@@ -346,9 +379,9 @@ function decorate(setId, fields) {
     check('a plain import writes NO version (legacy layout, unchanged behaviour)', () =>
       assert.strictEqual(parse(res).version, null));
     check('its questions land in the legacy partition', () =>
-      assert.strictEqual(rowsIn('SET#demoset').length, 2));
+      assert.strictEqual(rowsIn(`ORG#${ORG}#SET#demoset`).length, 2));
     check('the metadata row has no activeVersion', () =>
-      assert.strictEqual(store.get('SETS|SET#demoset').activeVersion, undefined));
+      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`)).activeVersion, undefined));
   }
 
   // ==== 3. replace: snapshot legacy -> v1, write v2, flip ===================
@@ -370,44 +403,44 @@ function decorate(setId, fields) {
     check('replace reports the new version number', () => assert.strictEqual(body.version, 2));
     check('replace keeps the set id', () => assert.strictEqual(body.setId, 'demoset'));
     check('the pre-versioning content is snapshotted to v1', () => {
-      const v1 = rowsIn('SET#demoset#v1');
+      const v1 = rowsIn(`ORG#${ORG}#SET#demoset#v1`);
       assert.strictEqual(v1.length, 2, `v1 has ${v1.length} question rows`);
       assert.strictEqual(v1[0].Title, 'THE SMILE');
     });
     check('the new content is written to v2', () => {
-      const v2 = rowsIn('SET#demoset#v2');
+      const v2 = rowsIn(`ORG#${ORG}#SET#demoset#v2`);
       assert.strictEqual(v2.length, 3);
       assert.strictEqual(v2[0].Title, 'THE SMILE (FIXED)');
     });
     check('the LEGACY rows are left in place (rollback needs no restore)', () =>
-      assert.strictEqual(rowsIn('SET#demoset').length, 2));
+      assert.strictEqual(rowsIn(`ORG#${ORG}#SET#demoset`).length, 2));
     check('activeVersion is flipped to 2', () =>
-      assert.strictEqual(store.get('SETS|SET#demoset').activeVersion, 2));
+      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`)).activeVersion, 2));
     check('versions[] lists both v1 and v2', () => {
-      const versions = store.get('SETS|SET#demoset').versions.map((v) => v.version);
+      const versions = plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`)).versions.map((v) => v.version);
       assert.deepStrictEqual(versions, [1, 2]);
     });
     check('counts follow the new version', () => {
-      const meta = store.get('SETS|SET#demoset');
+      const meta = plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`));
       assert.strictEqual(meta.questionCount, 3);
       assert.strictEqual(meta.categoryCount, 1);
     });
 
     // The requirement that makes replace worth doing at all.
     check('replace PRESERVES promptId', () =>
-      assert.strictEqual(store.get('SETS|SET#demoset').promptId, 'lessons-learned'));
+      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`)).promptId, 'lessons-learned'));
     check('replace PRESERVES personaId', () =>
-      assert.strictEqual(store.get('SETS|SET#demoset').personaId, 'workie-dry'));
+      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`)).personaId, 'workie-dry'));
     check('replace PRESERVES customInstruction', () =>
-      assert.strictEqual(store.get('SETS|SET#demoset').customInstruction, 'Answer in one sentence.'));
+      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`)).customInstruction, 'Answer in one sentence.'));
     check('replace PRESERVES aiContextInstruction', () =>
-      assert.strictEqual(store.get('SETS|SET#demoset').aiContextInstruction, 'This is a pilot cohort.'));
+      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`)).aiContextInstruction, 'This is a pilot cohort.'));
     check('replace PRESERVES roundNoun', () =>
-      assert.strictEqual(store.get('SETS|SET#demoset').roundNoun, 'Lesson'));
+      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`)).roundNoun, 'Lesson'));
     check('replace PRESERVES the quickstart badge', () =>
-      assert.strictEqual(store.get('SETS|SET#demoset').Quickstart, true));
+      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`)).Quickstart, true));
     check('replace keeps the original set name', () =>
-      assert.strictEqual(store.get('SETS|SET#demoset').name, 'Demo Set'));
+      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`)).name, 'Demo Set'));
   }
 
   // ==== 4. a THIRD replace increments, it does not overwrite ================
@@ -415,15 +448,15 @@ function decorate(setId, fields) {
     const res = await replaceSet('demoset', csvV1);
     check('a second replace writes v3', () => assert.strictEqual(parse(res).version, 3));
     check('v2 still exists after v3 is written', () =>
-      assert.strictEqual(rowsIn('SET#demoset#v2').length, 3));
+      assert.strictEqual(rowsIn(`ORG#${ORG}#SET#demoset#v2`).length, 3));
     check('activeVersion follows to 3', () =>
-      assert.strictEqual(store.get('SETS|SET#demoset').activeVersion, 3));
+      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`)).activeVersion, 3));
   }
 
   // ==== 5. a validation failure must write NOTHING and not move activeVersion
   say('\n  -- failed replace --');
   {
-    const before = store.get('SETS|SET#demoset').activeVersion;
+    const before = plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`)).activeVersion;
     const partitionsBefore = new Set([...store.values()].map((i) => i.PK));
 
     const res = await replaceSet('demoset', [
@@ -436,14 +469,14 @@ function decorate(setId, fields) {
     check('the rejection names the missing column', () =>
       assert.match(parse(res).error, /Category/));
     check('a rejected replace leaves activeVersion exactly where it was', () =>
-      assert.strictEqual(store.get('SETS|SET#demoset').activeVersion, before));
+      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`)).activeVersion, before));
     check('a rejected replace creates no new version partition', () => {
       const after = new Set([...store.values()].map((i) => i.PK));
-      assert.ok(!after.has('SET#demoset#v4'), 'v4 was written by a rejected replace');
+      assert.ok(!after.has(`ORG#${ORG}#SET#demoset#v4`), 'v4 was written by a rejected replace');
       assert.strictEqual(after.size, partitionsBefore.size);
     });
     check('a rejected replace does not append to versions[]', () =>
-      assert.strictEqual(store.get('SETS|SET#demoset').versions.length, 3));
+      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`)).versions.length, 3));
 
     const missing = await replaceSet('nosuchset', csvV1);
     check('replacing a set that does not exist is a 404', () =>
@@ -460,20 +493,21 @@ function decorate(setId, fields) {
     // A game that started on v1: METADATA pin plus the per-round REF pin that
     // next-question.js writes.
     store.set('GAME#1111|METADATA', {
-      PK: 'GAME#1111', SK: 'METADATA', QuestionSetId: 'pinset', QuestionSetVersion: 1,
+      PK: 'GAME#1111', SK: 'METADATA', orgId: ORG, QuestionSetId: 'pinset', SetScope: 'org', SetOrgId: ORG,
+      QuestionSetScope: 'org', QuestionSetVersion: 1,
     });
     store.set('GAME#1111|STATE', { PK: 'GAME#1111', SK: 'STATE', State: 'ASK#001', LessonNumber: 1 });
     store.set('GAME#1111|QUESTION#001#REF', {
       PK: 'GAME#1111', SK: 'QUESTION#001#REF',
-      SourceQuestionId: 'QUESTION#c001#001', SetId: 'pinset', SetVersion: 1, StartedAt: 'now',
+      SourceQuestionId: 'QUESTION#c001#001', SetId: 'pinset', SetScope: 'org', SetOrgId: ORG, SetVersion: 1, StartedAt: 'now',
     });
 
     // A game with NO pin — every game that existed before this change.
-    store.set('GAME#2222|METADATA', { PK: 'GAME#2222', SK: 'METADATA', QuestionSetId: 'pinset' });
+    store.set('GAME#2222|METADATA', { PK: 'GAME#2222', SK: 'METADATA', orgId: ORG, QuestionSetId: 'pinset', SetScope: 'org', SetOrgId: ORG, QuestionSetScope: 'org' });
     store.set('GAME#2222|STATE', { PK: 'GAME#2222', SK: 'STATE', State: 'ASK#001', LessonNumber: 1 });
     store.set('GAME#2222|QUESTION#001#REF', {
       PK: 'GAME#2222', SK: 'QUESTION#001#REF',
-      SourceQuestionId: 'QUESTION#c001#001', SetId: 'pinset', StartedAt: 'now',
+      SourceQuestionId: 'QUESTION#c001#001', SetId: 'pinset', SetScope: 'org', SetOrgId: ORG, StartedAt: 'now',
     });
 
     await checkAsync('a game pinned to v1 STILL reads v1 after the set is replaced', async () => {
@@ -490,14 +524,14 @@ function decorate(setId, fields) {
     });
 
     await checkAsync('get-categories serves the active version by default', async () => {
-      const res = await getCategories({ pathParameters: { setId: 'pinset' }, queryStringParameters: null });
+      const res = await getCategories(asOwner({ pathParameters: { setId: 'pinset' }, queryStringParameters: null }));
       assert.strictEqual(res.statusCode, 200, res.body);
       assert.strictEqual(parse(res).version, 2);
       assert.strictEqual(parse(res).categories.length, 1);
     });
 
     await checkAsync('get-categories honours an explicit ?version', async () => {
-      const res = await getCategories({ pathParameters: { setId: 'pinset' }, queryStringParameters: { version: '1' } });
+      const res = await getCategories(asOwner({ pathParameters: { setId: 'pinset' }, queryStringParameters: { version: '1' } }));
       assert.strictEqual(parse(res).version, 1);
       assert.strictEqual(parse(res).versionSource, 'pinned');
     });
@@ -508,11 +542,11 @@ function decorate(setId, fields) {
   resetDb();
   {
     await importSet('Legacy Set', csvV1);     // never replaced, never migrated
-    store.set('GAME#3333|METADATA', { PK: 'GAME#3333', SK: 'METADATA', QuestionSetId: 'legacyset' });
+    store.set('GAME#3333|METADATA', { PK: 'GAME#3333', SK: 'METADATA', orgId: ORG, QuestionSetId: 'legacyset', SetScope: 'org', SetOrgId: ORG, QuestionSetScope: 'org' });
     store.set('GAME#3333|STATE', { PK: 'GAME#3333', SK: 'STATE', State: 'ASK#001', LessonNumber: 1 });
     store.set('GAME#3333|QUESTION#001#REF', {
       PK: 'GAME#3333', SK: 'QUESTION#001#REF',
-      SourceQuestionId: 'QUESTION#c001#001', SetId: 'legacyset', StartedAt: 'now',
+      SourceQuestionId: 'QUESTION#c001#001', SetId: 'legacyset', SetScope: 'org', SetOrgId: ORG, StartedAt: 'now',
     });
 
     await checkAsync('a legacy set with no version resolves and serves its question', async () => {
@@ -521,13 +555,13 @@ function decorate(setId, fields) {
       assert.strictEqual(parse(res).title, 'THE SMILE');
     });
     await checkAsync('a legacy set lists its categories with version null', async () => {
-      const res = await getCategories({ pathParameters: { setId: 'legacyset' }, queryStringParameters: null });
+      const res = await getCategories(asOwner({ pathParameters: { setId: 'legacyset' }, queryStringParameters: null }));
       assert.strictEqual(parse(res).version, null);
       assert.strictEqual(parse(res).versionSource, 'legacy');
       assert.strictEqual(parse(res).categories.length, 1);
     });
     await checkAsync('listing versions of an unversioned set is [] , not an error', async () => {
-      const res = await listVersions({ pathParameters: { setId: 'legacyset' } });
+      const res = await listVersions(asOwner({ pathParameters: { setId: 'legacyset' } }));
       assert.strictEqual(res.statusCode, 200, res.body);
       assert.deepStrictEqual(parse(res), []);
     });
@@ -540,18 +574,18 @@ function decorate(setId, fields) {
     await importSet('Pin Me', csvV1);
     await replaceSet('pinme', csvV2);         // activeVersion = 2
 
-    await createGame('4444', { title: 'T', engagementType: 'call-and-answer', questionSetId: 'pinme' });
+    await createGame('4444', { orgId: ORG, questionSetScope: 'org', title: 'T', engagementType: 'call-and-answer', questionSetId: 'pinme' });
 
     check('createGame writes QuestionSetVersion onto GAME METADATA', () =>
       assert.strictEqual(store.get('GAME#4444|METADATA').QuestionSetVersion, 2));
     check('createGame mirrors the version onto the GAMES index row', () =>
-      assert.strictEqual(store.get('GAMES|GAME#4444').QuestionSetVersion, 2));
+      assert.strictEqual(store.get(`ORG#${ORG}#GAMES|GAME#4444`).QuestionSetVersion, 2));
     check('createGame builds its category state from the pinned version', () => {
       // v2 has 3 questions in one category; v1 and legacy have 2.
       assert.strictEqual(store.get('GAME#4444|CATEGORY#c001#ACTIVE').QuestionCount, 3);
     });
 
-    await createGame('5555', { title: 'T', engagementType: 'call-and-answer', questionSetId: 'pinme', questionSetVersion: 1 });
+    await createGame('5555', { orgId: ORG, questionSetScope: 'org', title: 'T', engagementType: 'call-and-answer', questionSetId: 'pinme', questionSetVersion: 1 });
     check('an explicit questionSetVersion pins that version instead', () =>
       assert.strictEqual(store.get('GAME#5555|METADATA').QuestionSetVersion, 1));
     check('an explicitly pinned game is built from that version', () =>
@@ -559,9 +593,74 @@ function decorate(setId, fields) {
 
     // A legacy set must not gain a spurious pin.
     await importSet('No Version', csvV1);
-    await createGame('6666', { title: 'T', engagementType: 'call-and-answer', questionSetId: 'noversion' });
+    await createGame('6666', { orgId: ORG, questionSetScope: 'org', title: 'T', engagementType: 'call-and-answer', questionSetId: 'noversion' });
     check('a game on an unversioned set gets NO QuestionSetVersion attribute', () =>
       assert.strictEqual(store.get('GAME#6666|METADATA').QuestionSetVersion, undefined));
+
+    /*
+      THE SCOPE IS NOT OPTIONAL, AND OMITTING IT FAILS IN SILENCE.
+
+      Everything above passes `questionSetScope: 'org'` because these sets live
+      in an ORG partition. The frontend passed nothing at all for months: the
+      picker's <option> carried `set.id` alone, so createGameBody had no scope
+      to send. create-game.js then applies its documented `platform` default,
+      `resolveSetPartition` finds no metadata for that id in Engage's library,
+      `resolvePartitionFromMeta` falls through to its legacy branch, and the
+      session pins a partition key that holds nothing.
+
+      Nothing threw. The session was created, listed and joinable — with no
+      categories and no questions, so it could not be played.
+
+      Both ends are fixed and either one alone is sufficient, which is the point
+      of testing them separately: the picker now sends the pair
+      (src/src/utils/setRef.js), and create-game.js no longer ASSUMES a library
+      when the caller names none — it looks for the set in the caller's readable
+      scopes, org first, exactly as GET /question-sets/{id}/categories always
+      has. That asymmetry — the setup screen resolving by search while the
+      session resolved by assumption — was the whole bug.
+    */
+    await createGame('7001', { orgId: ORG, questionSetScope: 'org', title: 'T', engagementType: 'call-and-answer', questionSetId: 'pinme' });
+
+    // rejects: nothing on its own — the control that proves the checks below
+    // are measuring the scope and not some unrelated difference.
+    check('an ORG set named WITH its scope builds category state', () =>
+      assert.ok(store.get('GAME#7001|CATEGORY#c001#ACTIVE'),
+        'the org-scoped session got no categories — the control is broken'));
+
+    /*
+      THIS FILE DRIVES THE MANAGER, WHICH IS STRICT ON PURPOSE. It is handed a
+      scope and pins it; it has no `event`, so it has no caller and no readable
+      scopes to search. The recovery for an unnamed scope lives one layer up in
+      create-game.js, where the caller exists — and is tested there, in
+      tests/tenant-session-scoping.js §1, against the real handler.
+
+      What belongs HERE is the consequence, so the shape of the failure stays on
+      the record: hand this function a scope the set is not in and it silently
+      builds a session with nothing in it.
+    */
+    // rejects: the manager quietly searching for the set, which would make its
+    // pin depend on data rather than on what it was told.
+    await createGame('7002', { orgId: ORG, title: 'T', engagementType: 'call-and-answer', questionSetId: 'pinme' });
+    check('the manager pins what it was told, and an absent set builds nothing', () => {
+      assert.strictEqual(store.get('GAME#7002|METADATA').QuestionSetScope, 'platform');
+      assert.strictEqual(store.get('GAME#7002|CATEGORY#c001#ACTIVE'), undefined);
+      assert.strictEqual(store.get('GAME#7002|STATE#CATS'), undefined,
+        'STATE#CATS is written only when the set resolved to real categories');
+    });
+
+    /*
+      AND THE SEARCH IS NOT A HOLE. An EXPLICIT scope is honoured verbatim: a
+      caller naming `platform` gets platform, and gets nothing when the set is
+      not there. Redirecting an explicit scope to wherever the set happens to
+      live is how a set from one library ends up played from another.
+    */
+    // rejects: applying the search to an explicit scope too.
+    await createGame('7003', { orgId: ORG, questionSetScope: 'platform', title: 'T', engagementType: 'call-and-answer', questionSetId: 'pinme' });
+    check('an EXPLICIT scope is still strict, and still empty when wrong', () => {
+      assert.strictEqual(store.get('GAME#7003|METADATA').QuestionSetScope, 'platform');
+      assert.strictEqual(store.get('GAME#7003|CATEGORY#c001#ACTIVE'), undefined,
+        'an explicit platform scope was quietly redirected to the org library');
+    });
   }
 
   // ==== 9. listing / promoting versions ====================================
@@ -570,16 +669,16 @@ function decorate(setId, fields) {
   {
     await importSet('Ops Set', csvV1);
     await replaceSet('opsset', csvV2);        // v1 (snapshot), v2 active
-    await createGame('7777', { title: 'T', engagementType: 'call-and-answer', questionSetId: 'opsset', questionSetVersion: 1 });
+    await createGame('7777', { orgId: ORG, questionSetScope: 'org', title: 'T', engagementType: 'call-and-answer', questionSetId: 'opsset', questionSetVersion: 1 });
     store.set('GAME#7777|STATE', { PK: 'GAME#7777', SK: 'STATE', State: 'ASK#001' });
 
     await checkAsync('GET .../versions returns a bare ARRAY, per the contract', async () => {
-      const res = await listVersions({ pathParameters: { setId: 'opsset' } });
+      const res = await listVersions(asOwner({ pathParameters: { setId: 'opsset' } }));
       assert.strictEqual(res.statusCode, 200, res.body);
       assert.ok(Array.isArray(parse(res)), `body was ${res.body}`);
     });
     await checkAsync('each entry carries the agreed fields', async () => {
-      const [v1, v2] = parse(await listVersions({ pathParameters: { setId: 'opsset' } }));
+      const [v1, v2] = parse(await listVersions(asOwner({ pathParameters: { setId: 'opsset' } })));
       for (const field of ['version', 'createdAt', 'questionCount', 'categoryCount', 'sourceFile', 'isActive', 'pinnedByGames']) {
         assert.ok(field in v1, `missing "${field}"`);
       }
@@ -589,35 +688,35 @@ function decorate(setId, fields) {
       assert.strictEqual(v1.isActive, false);
     });
     await checkAsync('pinnedByGames names the live game pinned to v1', async () => {
-      const [v1] = parse(await listVersions({ pathParameters: { setId: 'opsset' } }));
+      const [v1] = parse(await listVersions(asOwner({ pathParameters: { setId: 'opsset' } })));
       assert.deepStrictEqual(v1.pinnedByGames, ['7777']);
     });
     await checkAsync('an ENDED game is not reported as pinning a version', async () => {
       store.set('GAME#7777|STATE', { PK: 'GAME#7777', SK: 'STATE', State: 'ENDED' });
-      const [v1] = parse(await listVersions({ pathParameters: { setId: 'opsset' } }));
+      const [v1] = parse(await listVersions(asOwner({ pathParameters: { setId: 'opsset' } })));
       assert.deepStrictEqual(v1.pinnedByGames, []);
       store.set('GAME#7777|STATE', { PK: 'GAME#7777', SK: 'STATE', State: 'ASK#001' });
     });
 
     await checkAsync('promote flips activeVersion back to v1 (the rollback)', async () => {
-      const res = await promoteVersion({ pathParameters: { setId: 'opsset', version: '1' } });
+      const res = await promoteVersion(asOwner({ pathParameters: { setId: 'opsset', version: '1' } }));
       assert.strictEqual(res.statusCode, 200, res.body);
       assert.strictEqual(parse(res).activeVersion, 1);
-      assert.strictEqual(store.get('SETS|SET#opsset').activeVersion, 1);
+      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#opsset`)).activeVersion, 1);
     });
     await checkAsync('promoting an unknown version is a 404, not a silent write', async () => {
-      const res = await promoteVersion({ pathParameters: { setId: 'opsset', version: '9' } });
+      const res = await promoteVersion(asOwner({ pathParameters: { setId: 'opsset', version: '9' } }));
       assert.strictEqual(res.statusCode, 404, res.body);
-      assert.strictEqual(store.get('SETS|SET#opsset').activeVersion, 1);
+      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#opsset`)).activeVersion, 1);
     });
     await checkAsync('promoting a non-numeric version is a 400', async () => {
-      const res = await promoteVersion({ pathParameters: { setId: 'opsset', version: 'latest' } });
+      const res = await promoteVersion(asOwner({ pathParameters: { setId: 'opsset', version: 'latest' } }));
       assert.strictEqual(res.statusCode, 400, res.body);
     });
     await checkAsync('a replace after a rollback still gets a fresh number', async () => {
       const res = await replaceSet('opsset', csvV1);
       assert.strictEqual(parse(res).version, 3, 'a rollback must not cause v2 to be overwritten');
-      assert.strictEqual(rowsIn('SET#opsset#v2').length, 3, 'v2 was clobbered');
+      assert.strictEqual(rowsIn(`ORG#${ORG}#SET#opsset#v2`).length, 3, 'v2 was clobbered');
     });
   }
 
@@ -629,25 +728,27 @@ function decorate(setId, fields) {
     await replaceSet('delset', csvV2);        // v1, v2 (active)
 
     await checkAsync('deleting the ACTIVE version is refused with 409', async () => {
-      const res = await deleteVersion({ pathParameters: { setId: 'delset', version: '2' }, queryStringParameters: null });
+      const res = await deleteVersion(asOwner({ pathParameters: { setId: 'delset', version: '2' }, queryStringParameters: null }));
       assert.strictEqual(res.statusCode, 409, res.body);
       assert.strictEqual(parse(res).activeVersion, 2);
       assert.match(parse(res).error, /active version/i);
     });
     check('the refused delete removed nothing', () =>
-      assert.strictEqual(rowsIn('SET#delset#v2').length, 3));
+      assert.strictEqual(rowsIn(`ORG#${ORG}#SET#delset#v2`).length, 3));
 
     await checkAsync('deleting an unknown version is a 404', async () => {
-      const res = await deleteVersion({ pathParameters: { setId: 'delset', version: '9' }, queryStringParameters: null });
+      const res = await deleteVersion(asOwner({ pathParameters: { setId: 'delset', version: '9' }, queryStringParameters: null }));
       assert.strictEqual(res.statusCode, 404, res.body);
     });
 
     // A live game pinned to v1 -> pre-flight warning, nothing deleted.
-    await createGame('8888', { title: 'T', engagementType: 'call-and-answer', questionSetId: 'delset', questionSetVersion: 1 });
+    await createGame('8888', { orgId: ORG, questionSetScope: 'org', title: 'T', engagementType: 'call-and-answer', questionSetId: 'delset', questionSetVersion: 1 });
+    store.set('GAME#8888|METADATA', { PK: 'GAME#8888', SK: 'METADATA', orgId: ORG,
+      QuestionSetId: 'delset', QuestionSetScope: 'org' });
     store.set('GAME#8888|STATE', { PK: 'GAME#8888', SK: 'STATE', State: 'ASK#002' });
 
     await checkAsync('deleting a PINNED version warns and NAMES the games', async () => {
-      const res = await deleteVersion({ pathParameters: { setId: 'delset', version: '1' }, queryStringParameters: null });
+      const res = await deleteVersion(asOwner({ pathParameters: { setId: 'delset', version: '1' }, queryStringParameters: null }));
       assert.strictEqual(res.statusCode, 200, res.body);
       const body = parse(res);
       assert.strictEqual(body.deleted, false, 'the warning path must not delete');
@@ -656,30 +757,31 @@ function decorate(setId, fields) {
       assert.strictEqual(body.requiresConfirmation, true);
     });
     check('the warned-about version is still fully intact', () =>
-      assert.strictEqual(rowsIn('SET#delset#v1').length, 2));
+      assert.strictEqual(rowsIn(`ORG#${ORG}#SET#delset#v1`).length, 2));
     check('the warned-about version is still listed in versions[]', () =>
-      assert.deepStrictEqual(store.get('SETS|SET#delset').versions.map((v) => v.version), [1, 2]));
+      assert.deepStrictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#delset`)).versions.map((v) => v.version), [1, 2]));
 
     await checkAsync('?confirm=true goes through and deletes the version', async () => {
-      const res = await deleteVersion({
+      const res = await deleteVersion(asOwner({
         pathParameters: { setId: 'delset', version: '1' },
         queryStringParameters: { confirm: 'true' },
-      });
+      }));
       assert.strictEqual(res.statusCode, 200, res.body);
       assert.strictEqual(parse(res).deleted, true);
       assert.deepStrictEqual(parse(res).pinnedByGames, ['8888']);
     });
     check('the deleted version has no rows left', () =>
-      assert.strictEqual(rowsIn('SET#delset#v1').length, 0));
+      assert.strictEqual(rowsIn(`ORG#${ORG}#SET#delset#v1`).length, 0));
     check('the deleted version is gone from versions[]', () =>
-      assert.deepStrictEqual(store.get('SETS|SET#delset').versions.map((v) => v.version), [2]));
+      assert.deepStrictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#delset`)).versions.map((v) => v.version), [2]));
     check('the ACTIVE version is untouched by deleting another one', () =>
-      assert.strictEqual(rowsIn('SET#delset#v2').length, 3));
+      assert.strictEqual(rowsIn(`ORG#${ORG}#SET#delset#v2`).length, 3));
 
     await checkAsync('the game stranded by the delete falls back rather than breaking', async () => {
       store.set('GAME#8888|QUESTION#001#REF', {
         PK: 'GAME#8888', SK: 'QUESTION#001#REF',
-        SourceQuestionId: 'QUESTION#c001#001', SetId: 'delset', SetVersion: 1, StartedAt: 'now',
+        SourceQuestionId: 'QUESTION#c001#001', SetId: 'delset', SetScope: 'org', SetOrgId: ORG,
+        SetVersion: 1, StartedAt: 'now',
       });
       store.set('GAME#8888|STATE', { PK: 'GAME#8888', SK: 'STATE', State: 'ASK#001', LessonNumber: 1 });
       const res = await getQuestion({ pathParameters: { gameId: '8888' }, queryStringParameters: { role: 'player' } });
@@ -689,10 +791,10 @@ function decorate(setId, fields) {
 
     await checkAsync('a version with no live pins deletes without needing confirm', async () => {
       await replaceSet('delset', csvV1);      // v3 becomes active, v2 is now idle
-      const res = await deleteVersion({ pathParameters: { setId: 'delset', version: '2' }, queryStringParameters: null });
+      const res = await deleteVersion(asOwner({ pathParameters: { setId: 'delset', version: '2' }, queryStringParameters: null }));
       assert.strictEqual(res.statusCode, 200, res.body);
       assert.strictEqual(parse(res).deleted, true);
-      assert.strictEqual(rowsIn('SET#delset#v2').length, 0);
+      assert.strictEqual(rowsIn(`ORG#${ORG}#SET#delset#v2`).length, 0);
     });
   }
 
@@ -704,20 +806,20 @@ function decorate(setId, fields) {
     await replaceSet('wipeset', csvV2);
     await replaceSet('wipeset', csvV1);       // legacy + v1 + v2 + v3
     // An orphan from a replace that died before the activeVersion flip.
-    store.set('SET#wipeset#v4|QUESTION#c001#001', {
-      PK: 'SET#wipeset#v4', SK: 'QUESTION#c001#001', Title: 'ORPHAN',
+    store.set(`ORG#${ORG}#SET#wipeset#v4|QUESTION#c001#001`, {
+      PK: `ORG#${ORG}#SET#wipeset#v4`, SK: 'QUESTION#c001#001', Title: 'ORPHAN',
     });
 
     const res = await deleteSet({ ...adminContext(), pathParameters: { setId: 'wipeset' } });
     check('deleting a versioned set succeeds', () => assert.strictEqual(res.statusCode, 200, res.body));
     check('every version partition is emptied', () => {
-      const left = [...store.values()].filter((i) => String(i.PK).startsWith('SET#wipeset'));
+      const left = [...store.values()].filter((i) => String(i.PK).startsWith(`ORG#${ORG}#SET#wipeset`));
       assert.strictEqual(left.length, 0, `${left.length} rows left: ${left.map((i) => `${i.PK}/${i.SK}`).join(', ')}`);
     });
     check('the orphaned partition from a failed flip is swept too', () =>
       assert.strictEqual(store.get('SET#wipeset#v4|QUESTION#c001#001'), undefined));
     check('the index row is gone last', () =>
-      assert.strictEqual(store.get('SETS|SET#wipeset'), undefined));
+      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#wipeset`)), undefined));
   }
 
   // ==== 12. image keys: set-scoped, per-SET not per-version =================
@@ -734,7 +836,7 @@ function decorate(setId, fields) {
       '"Art",6,"HTTP URL","d","s","i","http://example.test/legacy.png"',
     ].join('\n');
     await importSet('Media Set', csv);
-    const q = rowsIn('SET#mediaset');
+    const q = rowsIn(`ORG#${ORG}#SET#mediaset`);
 
     check('a bare filename becomes sets/<setId>/<filename>', () =>
       assert.strictEqual(q[0].Image, 'sets/mediaset/the-enigmatic-smile.jpg'));
@@ -753,7 +855,7 @@ function decorate(setId, fields) {
       assert.ok(!/^https?:\/\//.test(q[0].Image), q[0].Image);
     });
     check('hasImages still detects artwork after the transform', () =>
-      assert.strictEqual(store.get('SETS|SET#mediaset').hasImages, true));
+      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#mediaset`)).hasImages, true));
 
     // Media is per-SET: a new version must reuse the same prefix, so replacing
     // a CSV never means re-uploading the images.
@@ -762,7 +864,7 @@ function decorate(setId, fields) {
       '"Art",1,"BARE FILENAME v2","d","s","i","the-enigmatic-smile.jpg"',
       '"Art",2,"ROUND TRIPPED","d","s","i","sets/mediaset/the-enigmatic-smile.jpg"',
     ].join('\n'));
-    const v = rowsIn('SET#mediaset#v2');
+    const v = rowsIn(`ORG#${ORG}#SET#mediaset#v2`);
     check('a replace keys images to the SET, never to the version', () => {
       assert.strictEqual(v[0].Image, 'sets/mediaset/the-enigmatic-smile.jpg');
       assert.ok(!v[0].Image.includes('#v'), v[0].Image);
@@ -780,20 +882,20 @@ function decorate(setId, fields) {
     await replaceSet('roundtrip', csvV2);
 
     await checkAsync('the admin list reports activeVersion and versions[]', async () => {
-      const res = await adminListSets({});
+      const res = await adminListSets(asOwner());
       const set = parse(res).questionSets.find((s) => s.id === 'roundtrip');
       assert.strictEqual(set.activeVersion, 2);
       assert.deepStrictEqual(set.versions.map((v) => v.version), [1, 2]);
     });
     await checkAsync('an unversioned set reports activeVersion null and versions []', async () => {
       await importSet('Plain', csvV1);
-      const res = await adminListSets({});
+      const res = await adminListSets(asOwner());
       const set = parse(res).questionSets.find((s) => s.id === 'plain');
       assert.strictEqual(set.activeVersion, null);
       assert.deepStrictEqual(set.versions, []);
     });
     await checkAsync('download exports the ACTIVE version, not the legacy rows', async () => {
-      const res = await downloadSet({ pathParameters: { setId: 'roundtrip' }, queryStringParameters: { format: 'csv' } });
+      const res = await downloadSet(asOwner({ pathParameters: { setId: 'roundtrip' }, queryStringParameters: { format: 'csv' } }));
       assert.strictEqual(res.statusCode, 200, res.body);
       const { content, filename, contentType } = parse(res);
       assert.ok(filename && contentType, 'the {filename, content, contentType} shape is what the UI parses');
@@ -801,12 +903,12 @@ function decorate(setId, fields) {
       assert.ok(!/THE SMILE"/.test(content.replace(/THE SMILE \(FIXED\)/g, '')), 'legacy rows leaked into the export');
     });
     await checkAsync('download honours ?version for an older one', async () => {
-      const res = await downloadSet({ pathParameters: { setId: 'roundtrip' }, queryStringParameters: { format: 'csv', version: '1' } });
+      const res = await downloadSet(asOwner({ pathParameters: { setId: 'roundtrip' }, queryStringParameters: { format: 'csv', version: '1' } }));
       assert.match(parse(res).content, /THE SMILE/);
       assert.ok(!parse(res).content.includes('(FIXED)'), 'v1 export contained v2 text');
     });
     await checkAsync('the exported CSV keeps the stored image key intact', async () => {
-      const res = await downloadSet({ pathParameters: { setId: 'roundtrip' }, queryStringParameters: { format: 'csv' } });
+      const res = await downloadSet(asOwner({ pathParameters: { setId: 'roundtrip' }, queryStringParameters: { format: 'csv' } }));
       assert.match(parse(res).content, /sets\/roundtrip\/smile\.jpg/);
     });
   }
@@ -825,13 +927,15 @@ function decorate(setId, fields) {
     await replaceSet('crossset', csvV2);      // v1 = original, v2 = active
 
     store.set('GAME#9999|METADATA', {
-      PK: 'GAME#9999', SK: 'METADATA', QuestionSetId: 'crossset', QuestionSetVersion: 1,
+      PK: 'GAME#9999', SK: 'METADATA', orgId: ORG, QuestionSetId: 'crossset',
+      QuestionSetScope: 'org', QuestionSetVersion: 1,
       Title: 'T', GameType: 'call-and-answer',
     });
     store.set('GAME#9999|STATE', { PK: 'GAME#9999', SK: 'STATE', State: 'VOTE#001', LessonNumber: 1 });
     store.set('GAME#9999|QUESTION#001#REF', {
       PK: 'GAME#9999', SK: 'QUESTION#001#REF',
-      SourceQuestionId: 'QUESTION#c001#001', SetId: 'crossset', SetVersion: 1, StartedAt: 'now',
+      SourceQuestionId: 'QUESTION#c001#001', SetId: 'crossset', SetScope: 'org', SetOrgId: ORG,
+      SetVersion: 1, StartedAt: 'now',
     });
 
     await checkAsync('get-game-state serves the pinned version during VOTE', async () => {

@@ -94,7 +94,20 @@ function check(label, fn) {
  * context at `.authorizer.lambda`, groups comma-joined, exactly as
  * `auth/authorizer.js:156-166` returns them.
  */
-const eventAs = (groups, { method = 'POST', path: p = '/admin/users/list', body } = {}) => ({
+/*
+  `target` NAMES THE ACCOUNT BEING ACTED ON, and it defaults to the caller only
+  because that is how this fixture was written.
+
+  Every state-change case below used to leave it there, so the request was an
+  Engage admin acting on THEMSELVES — invisible while the handler had no
+  self-check, and refused the moment it grew one (manage-users.js now blocks
+  disabling or deleting your own account, because nothing in the product undoes
+  either). The subject of this file is which GROUPS may call these routes, not
+  who the target is, so the state-change cases now name somebody else.
+*/
+const eventAs = (groups, {
+  method = 'POST', path: p = '/admin/users/list', body, target = 'mallory',
+} = {}) => ({
   requestContext: {
     http: { method, path: p },
     authorizer: { lambda: {
@@ -106,7 +119,7 @@ const eventAs = (groups, { method = 'POST', path: p = '/admin/users/list', body 
   },
   rawPath: p,
   body: body ? JSON.stringify(body) : undefined,
-  pathParameters: { username: 'mallory' },
+  pathParameters: { username: target },
 });
 
 /** The same request as a native JWT authorizer would deliver it. */
@@ -225,9 +238,9 @@ const jwtEventAs = (groups, { method = 'POST', path: p = '/admin/users/list' } =
   // anyway; only the account flag does. Nothing in this path reads
   // email_verified, which is why an unverified registrant is just as
   // rejectable — the owner's other half of the report.
-  sent = []; groupsByUser = { mallory: ['pending'] };
+  sent = []; groupsByUser = { registrant: ['pending'] };
   res = await handler(eventAs('admins', {
-    method: 'PUT', path: '/admin/users/mallory/state', body: { newState: 'disabled' },
+    method: 'PUT', path: '/admin/users/registrant/state', target: 'registrant', body: { newState: 'disabled' },
   }));
   check('reject answers 200', () => assert.strictEqual(res.statusCode, 200));
   check('the account is disabled at the Cognito level', () =>
@@ -242,7 +255,7 @@ const jwtEventAs = (groups, { method = 'POST', path: p = '/admin/users/list' } =
   // cannot sign in.
   sent = []; groupsByUser = {};
   res = await handler(eventAs('admins', {
-    method: 'PUT', path: '/admin/users/mallory/state', body: { newState: 'hosts' },
+    method: 'PUT', path: '/admin/users/registrant/state', target: 'registrant', body: { newState: 'hosts' },
   }));
   check('moving back to hosts re-enables the account', () =>
     assert.strictEqual(sent.filter((c) => c.type === 'enableUser').length, 1));
@@ -253,9 +266,12 @@ const jwtEventAs = (groups, { method = 'POST', path: p = '/admin/users/list' } =
     ));
 
   // REJECTS: the raw 500 for a row that outlived its account.
-  sent = []; missingUsers = new Set(['mallory']);
+  /* The TARGET is what vanished, and the target is no longer the caller — see
+     the note on `eventAs`. Naming the caller here made the account under test
+     exist perfectly well, and the case asserted a 404 that could not happen. */
+  sent = []; missingUsers = new Set(['registrant']);
   res = await handler(eventAs('admins', {
-    method: 'PUT', path: '/admin/users/mallory/state', body: { newState: 'disabled' },
+    method: 'PUT', path: '/admin/users/registrant/state', target: 'registrant', body: { newState: 'disabled' },
   }));
   check('a vanished account answers 404, not a raw 500', () =>
     assert.strictEqual(res.statusCode, 404));

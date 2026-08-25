@@ -61,6 +61,15 @@ the list; new surfaces will not add themselves.
       commit.
 - [ ] A component reused across polarities re-points its tokens in one `--onlight`-style
       block, including a selector for **nested** instances of its own scope.
+- [ ] A field that deliberately **inherits** (a control dropped into somebody else's
+      form, not a screen root) is measured on **every ground it can land on**, not just
+      the one it was drawn against. `CountField` was written for the console's dusk work
+      field and its palette test measured dusk only; the AI builders that host it are
+      mounted outside `AdminShell`, so what it actually inherits is paper, where
+      `color: var(--bg)` on the filled preset measured **1.84:1**.
+- [ ] Ink on a **theme-invariant** token (`--primary`, `--danger`, `--success`) is itself
+      invariant. `var(--bg)` and `var(--text)` swap under it and one of the two ends up
+      near-isoluminant with the fill.
 
 ### D — Type and density
 
@@ -96,6 +105,15 @@ the list; new surfaces will not add themselves.
 - [ ] Every tinted composite clears 4.5:1 — a tint is invisible in a token table.
 - [ ] Ratios are in the stylesheet header, computed not eyeballed.
 - [ ] No black-lift model on a laptop surface; the stage keeps its own.
+- [ ] Non-text parts clear **3:1** (WCAG 1.4.11) where they carry a control's identity or
+      its state — a slider's filled rail and thumb, a selected chip's boundary. Ask it of
+      those, and **not** of everything: the unfilled remainder of a rail is context, not
+      state, and holding it to 3:1 forces a heavier grey than the design wants. Say in
+      the test which side of that line each part is on and why.
+- [ ] A selected state that rests on a **fill colour alone** is checked against the
+      unselected one. On paper `--cnt-on-accent` and `--text` are the same #1B2942, so
+      selection rode entirely on an amber fill measuring 1.96:1 until the boundary moved
+      to `--primary-deep`.
 
 ### H — Tests
 

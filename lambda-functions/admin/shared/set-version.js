@@ -9,6 +9,31 @@
  *   PK = SET#<setId>#v<n>  SK = CATEGORY#<cat>         categories, per version
  *   PK = SET#<setId>       SK = QUESTION#… / CATEGORY# LEGACY, pre-versioning
  *
+ * ── SCOPE: THE SECOND HALF OF A SET REFERENCE ──────────────────────────────
+ *
+ * Those keys are the PLATFORM keys, and since multi-tenancy they are one scope
+ * of three. `tenant.js` builds every partition; this module never concatenates
+ * a prefix itself. The shapes above become, per scope:
+ *
+ *   platform  metadata PK 'SETS'              content PK 'SET#<id>[#v<n>]'
+ *   org       metadata PK 'ORG#<org>#SETS'    content PK 'ORG#<org>#SET#<id>[#v<n>]'
+ *   public    metadata PK 'PUBLIC#SETS'       content PK 'PUBLIC#SET#<id>[#v<n>]'
+ *
+ * The SORT key is `SET#<id>` in every scope — only the partition moves.
+ *
+ * SO A SET IS NAMED BY A PAIR, NOT AN ID: `{scope, orgId, setId}`. A setId is a
+ * slug of the title (admin/upload-questions.js:298), so two organisations both
+ * naming a set "Team Retro" produce the same `teamretro`; in one global
+ * partition the second write silently clobbers the first. Every entry point
+ * below therefore takes a `ref`, and `setRef()` normalises it.
+ *
+ * A BARE STRING IS ACCEPTED AND MEANS PLATFORM. That is not a convenience
+ * default — it is the truth about today's rows, which all live at `PK='SETS'`
+ * and are all platform content by the owner's decision. It also keeps the
+ * pre-tenancy callers (and the migration scripts) reading exactly the rows they
+ * read yesterday, which is what makes the migration empty. A caller that means
+ * an org set must SAY so; nothing here infers one.
+ *
  * RESOLUTION ORDER — every runtime read goes through resolveSetPartition():
  *
  *   1. the game's pinned QuestionSetVersion   -> SET#<setId>#v<n>
@@ -31,12 +56,13 @@
  * DUPLICATED — Lambda bundles are per-directory (CodeUri: lambda-functions/game,
  * .../websocket, .../admin), so a module cannot be shared across them. Keep all
  * three byte-identical apart from the "(this file)" marker:
- *   - lambda-functions/admin/shared/set-version.js   (this file)
+ *   - lambda-functions/admin/shared/set-version.js      (this file)
  *   - lambda-functions/game/set-version.js
  *   - lambda-functions/websocket/set-version.js
  */
 
 const { GetCommand, QueryCommand, BatchWriteCommand } = require('@aws-sdk/lib-dynamodb');
+const tenant = require('./tenant');
 
 // DynamoDB hard limit — BatchWriteItem rejects more than 25 requests.
 const BATCH_LIMIT = 25;
@@ -58,14 +84,105 @@ function toVersion(value) {
   return n;
 }
 
-/** `SET#<id>#v<n>`, or the legacy `SET#<id>` when there is no version. */
-function setPartition(setId, version) {
-  const n = toVersion(version);
-  return n ? `SET#${setId}#v${n}` : `SET#${setId}`;
+/**
+ * Normalise a set reference to `{scope, orgId, setId}`.
+ *
+ * Accepts either the pair or a bare setId string; a bare string is PLATFORM,
+ * for the reason set out in the header. `scope: ''` on an object is likewise
+ * platform — it is what a metadata row written before tenancy carries, and
+ * those rows really are platform rows.
+ *
+ * Nothing is inferred from the caller here. This function is pure and is used
+ * on both sides of the wire, including in tests; "which scope is this request
+ * about" is answered by `readableSetRefs`/`findSetMetadata` below, which do
+ * have an event to read.
+ */
+function setRef(ref) {
+  if (ref && typeof ref === 'object') {
+    return {
+      scope: String(ref.scope ?? '').trim() || tenant.PLATFORM,
+      orgId: String(ref.orgId ?? '').trim(),
+      setId: String(ref.setId ?? '').trim(),
+    };
+  }
+  return { scope: tenant.PLATFORM, orgId: '', setId: String(ref ?? '').trim() };
 }
 
-/** The metadata row key. Metadata never moves — only content is versioned. */
-const setMetadataKey = (setId) => ({ PK: 'SETS', SK: `SET#${setId}` });
+/**
+ * The CONTENT partition: `SET#<id>#v<n>`, or the legacy `SET#<id>` when there
+ * is no version — each prefixed by its scope. Delegated to tenant.js so there
+ * is exactly one place that knows what a scope prefix looks like, and so a
+ * typo'd scope throws here rather than quietly addressing the platform library.
+ */
+function setPartition(ref, version) {
+  const { scope, orgId, setId } = setRef(ref);
+  return tenant.setContentPk(scope, orgId, setId, toVersion(version));
+}
+
+/**
+ * The metadata row key. Metadata never moves BETWEEN VERSIONS — only content is
+ * versioned — but it does live in its scope's partition, and the SK is the same
+ * `SET#<id>` in all three.
+ */
+function setMetadataKey(ref) {
+  const { scope, orgId, setId } = setRef(ref);
+  return { PK: tenant.setsMetadataPk(scope, orgId), SK: `SET#${setId}` };
+}
+
+/**
+ * Every scope this caller may READ, as refs for one setId, MOST SPECIFIC FIRST.
+ *
+ * Order is org, then platform, then public, and it is load-bearing: an org that
+ * makes its own "Team Retro" must get its own, not the platform one of the same
+ * slug. Shadowing beats collision — the alternative is that adopting a name
+ * Engage happens to have used makes your own set unreachable.
+ *
+ * `tenant.readableScopes` is the authority on which scopes are listed at all;
+ * this only decides the order and attaches the caller's org id. Note that being
+ * Engage staff adds nobody else's org, deliberately (see tenant.js).
+ */
+function readableSetRefs(event, setId) {
+  const orgId = tenant.callerOrgId(event);
+  const rank = { [tenant.ORG]: 0, [tenant.PLATFORM]: 1, [tenant.PUBLIC]: 2 };
+  return tenant.readableScopes(event)
+    .slice()
+    .sort((a, b) => (rank[a] ?? 9) - (rank[b] ?? 9))
+    .map((scope) => setRef({ scope, orgId: scope === tenant.ORG ? orgId : '', setId }));
+}
+
+/**
+ * Find one set's metadata in the first readable scope that has it.
+ *
+ * This is how a handler that was handed only a setId — which is every existing
+ * route, because the path is `/admin/question-sets/{setId}` — turns it back
+ * into a pair. A caller that already knows the scope passes `requestedScope`
+ * and gets exactly that one probe.
+ *
+ * IT IS ALSO THE READ GUARD. A scope the caller cannot read is never probed, so
+ * another organisation's set is not "forbidden", it is ABSENT: the handler 404s
+ * on it exactly as it would on a set that does not exist. That is the intended
+ * answer — whether org B owns a set called `teamretro` is not a fact org A
+ * should be able to establish.
+ *
+ * Costs at most three GetItems, and one when the scope is known.
+ *
+ * @returns {Promise<{ref, item}|null>}
+ */
+async function findSetMetadata(db, tableName, event, setId, requestedScope) {
+  const wanted = String(requestedScope ?? '').trim();
+  let refs = readableSetRefs(event, setId);
+  if (wanted) refs = refs.filter((r) => r.scope === wanted);
+
+  for (const ref of refs) {
+    // scopePrefix throws on an org ref with no org id (an anonymous caller
+    // cannot have one), which is a skip rather than a failure of the request.
+    let key;
+    try { key = setMetadataKey(ref); } catch { continue; }
+    const res = await db.send(new GetCommand({ TableName: tableName, Key: key }));
+    if (res && res.Item) return { ref, item: res.Item };
+  }
+  return null;
+}
 
 /** The `versions[]` array, always an array. */
 function versionList(meta) {
@@ -98,10 +215,17 @@ function nextVersion(meta) {
  * Resolve from metadata the caller already has, so a handler that reads the
  * SETS row for other reasons does not read it twice.
  *
- * @returns {{setId, pk, version, source}} `source` is one of
+ * The four cases below are unchanged by tenancy — scope only decides WHICH
+ * set's versions are being reasoned about, never which version wins.
+ *
+ * @returns {{setId, scope, orgId, pk, version, source}} `source` is one of
  *          'pinned' | 'active' | 'legacy' | 'pinned-missing'
  */
-function resolvePartitionFromMeta(setId, meta, pinnedVersion) {
+function resolvePartitionFromMeta(ref, meta, pinnedVersion) {
+  const { scope, orgId, setId } = setRef(ref);
+  const at = (v, source) => ({
+    setId, scope, orgId, pk: setPartition({ scope, orgId, setId }, v), version: v, source,
+  });
   const pinned = toVersion(pinnedVersion);
   const active = toVersion(meta && meta.activeVersion);
 
@@ -111,28 +235,28 @@ function resolvePartitionFromMeta(setId, meta, pinnedVersion) {
     // an unmigrated set with an explicitly pinned game is not a case we want to
     // silently rewrite.
     if (!meta || known.length === 0 || known.includes(pinned)) {
-      return { setId, pk: setPartition(setId, pinned), version: pinned, source: 'pinned' };
+      return at(pinned, 'pinned');
     }
     // The pinned version has been deleted. Fall through rather than serve an
     // empty partition, and say so in `source` so the log names the cause.
-    if (active) {
-      return { setId, pk: setPartition(setId, active), version: active, source: 'pinned-missing' };
-    }
-    return { setId, pk: setPartition(setId, null), version: null, source: 'pinned-missing' };
+    if (active) return at(active, 'pinned-missing');
+    return at(null, 'pinned-missing');
   }
 
-  if (active) {
-    return { setId, pk: setPartition(setId, active), version: active, source: 'active' };
-  }
+  if (active) return at(active, 'active');
 
-  return { setId, pk: setPartition(setId, null), version: null, source: 'legacy' };
+  return at(null, 'legacy');
 }
 
-/** Read the SETS metadata row. Returns undefined when the set does not exist. */
-async function getSetMetadata(db, tableName, setId) {
+/**
+ * Read one scope's metadata row. Returns undefined when the set does not exist
+ * THERE — this takes a ref and probes exactly one partition, unlike
+ * `findSetMetadata` above which searches the caller's readable scopes.
+ */
+async function getSetMetadata(db, tableName, ref) {
   const res = await db.send(new GetCommand({
     TableName: tableName,
-    Key: setMetadataKey(setId),
+    Key: setMetadataKey(ref),
   }));
   return res && res.Item;
 }
@@ -144,10 +268,11 @@ async function getSetMetadata(db, tableName, setId) {
  *        the game predates pinning (which is every game created so far).
  * @returns {Promise<{setId, pk, version, source, metadata}>}
  */
-async function resolveSetPartition(db, tableName, setId, pinnedVersion) {
-  const metadata = await getSetMetadata(db, tableName, setId);
-  const resolved = resolvePartitionFromMeta(setId, metadata, pinnedVersion);
-  console.log(`📚 set ${setId}: reading ${resolved.pk} (${resolved.source})`);
+async function resolveSetPartition(db, tableName, ref, pinnedVersion) {
+  const normalized = setRef(ref);
+  const metadata = await getSetMetadata(db, tableName, normalized);
+  const resolved = resolvePartitionFromMeta(normalized, metadata, pinnedVersion);
+  console.log(`📚 set ${normalized.scope}/${normalized.setId}: reading ${resolved.pk} (${resolved.source})`);
   return { ...resolved, metadata };
 }
 
@@ -239,13 +364,25 @@ async function copyPartition(db, tableName, fromPk, toPk) {
  * activeVersion, so deleting a non-active version cannot affect them. (Deleting
  * the ACTIVE version is refused outright, which is what closes that gap.)
  */
-async function findGamesPinnedToVersion(db, tableName, setId, version) {
+async function findGamesPinnedToVersion(db, tableName, ref, version) {
   const n = toVersion(version);
   if (!n) return [];
+  const { scope, orgId, setId } = setRef(ref);
 
-  const { items } = await queryPartition(db, tableName, 'GAMES', 'GAME#');
+  // WHICH SESSION INDEX TO WALK. An org's sessions are indexed in that org's own
+  // partition; the global `GAMES` partition is the pre-tenancy index (and, since
+  // tenancy, the 4-digit code reservation registry, which carries no set id and
+  // therefore matches nothing here). An org-scoped set can only have been played
+  // by that org, so walking one index is complete, not a shortcut.
+  const indexPk = orgId ? tenant.gamesIndexPk(orgId) : tenant.GAMES_RESERVATION_PK;
+  const { items } = await queryPartition(db, tableName, indexPk, 'GAME#');
+  // A game pins the PAIR (QuestionSetScope beside QuestionSetId) since tenancy.
+  // Rows with no scope recorded predate it and are platform rows, which is what
+  // setRef() says an absent scope means everywhere else in this file.
   const candidates = items.filter((g) =>
-    g.QuestionSetId === setId && toVersion(g.QuestionSetVersion) === n);
+    g.QuestionSetId === setId
+    && (String(g.QuestionSetScope || '').trim() || tenant.PLATFORM) === scope
+    && toVersion(g.QuestionSetVersion) === n);
 
   const games = [];
   for (const g of candidates) {
@@ -277,6 +414,9 @@ module.exports = {
   findGamesPinnedToVersion,
   MAX_BATCH_ATTEMPTS,
   toVersion,
+  setRef,
+  readableSetRefs,
+  findSetMetadata,
   setPartition,
   setMetadataKey,
   versionList,

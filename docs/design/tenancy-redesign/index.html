@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Multi-tenant Engage — contact sheet</title>
+<style>
+:root{
+  --bg:#0F1A2E; --surface:#1B2942; --surface-2:#25375A; --text:#F4EDE4;
+  --muted:#B6C2D4; --primary:#F6A94C; --secondary:#7CA7E6; --success-text:#6FD0A4;
+  --rule:rgba(182,194,212,.20); --rule-strong:rgba(182,194,212,.34);
+  --font-ui:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-display:"Archivo Expanded","Archivo",system-ui,sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:400 15px/1.5 var(--font-ui);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:40px 28px 80px}
+h1{font:800 30px/1.15 var(--font-display);margin:0 0 10px;letter-spacing:-.01em}
+.lede{color:var(--muted);max-width:76ch;margin:0 0 8px}
+.lede b{color:var(--text);font-weight:600}
+h2{font:600 19px/1.2 var(--font-ui);margin:38px 0 4px}
+h2 + p{color:var(--muted);font-size:13px;margin:0 0 16px;max-width:76ch}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+a.card{
+  display:block;text-decoration:none;color:inherit;background:var(--surface);
+  border:1px solid var(--rule);border-radius:10px;padding:14px 15px;transition:.12s;
+}
+a.card:hover{border-color:var(--primary);background:var(--surface-2)}
+a.card .n{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+a.card .t{display:block;font-weight:600;margin:3px 0 5px}
+a.card .d{display:block;font-size:13px;color:var(--muted);line-height:1.45}
+.tag{display:inline-block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  border:1px solid var(--rule-strong);border-radius:999px;padding:1px 7px;color:var(--muted);
+  margin-bottom:7px}
+.tag.plat{color:var(--primary);border-color:rgba(246,169,76,.5)}
+.note{border-left:3px solid var(--secondary);background:rgba(124,167,230,.08);
+  border-radius:0 8px 8px 0;padding:12px 14px;margin:26px 0 0;font-size:14px;
+  color:var(--muted);max-width:80ch}
+.note b{color:var(--text)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;color:var(--secondary)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Multi-tenant Engage</h1>
+  <p class="lede">Twelve screens covering the whole of what changes when Engage stops being
+    one shared environment and becomes a place where separate organisations keep their own
+    work. <b>Press <code>N</code> on any page to hide the design notes</b> — that is the
+    state to judge the screen in.</p>
+  <p class="lede">The worked example throughout is <b>Northwind Learning</b>, a training
+    outfit of three on the $5 Team plan. In the month shown they ran 20 sessions and stored
+    3 sets, so their bill is $5 + $0 + $3.75 = <b>$8.75</b>.</p>
+  <p class="lede"><b>Everyone also has a space of their own.</b> A personal organisation is
+    created with the account, is free for 5 sessions and 5 stored sets a month, and becomes
+    a $5 Team the moment you invite somebody. There is no "belongs to no organisation"
+    state after approval &mdash; which is the point: it was a state every handler had to
+    remember to consider, and every place that forgot was a bug.</p>
+
+  <h2>The organisation dimension</h2>
+  <p>Which team am I working in, and how do I move between them?</p>
+  <div class="grid">
+    <a class="card" href="01-org-switcher.html"><span class="n">01</span>
+      <span class="t">Switching organisation</span>
+      <span class="d">The switcher open. Three memberships with a different role in each,
+        and the question sets underneath belong to exactly one of them.</span></a>
+    <a class="card" href="02-org-single.html"><span class="n">02</span>
+      <span class="t">One organisation, no menu</span>
+      <span class="d">The same chip for somebody who belongs to a single team. No caret,
+        no menu — a control whose menu has one item teaches people to ignore it.</span></a>
+    <a class="card" href="09-first-run.html"><span class="n">09</span>
+      <span class="t">Approved, but in no team yet</span>
+      <span class="d">Join the invitation you were sent, or start your own. Two doors, not
+        a wizard. The nav is empty because there is nowhere to go yet.</span></a>
+  </div>
+
+  <h2>Running a team</h2>
+  <p>Who is in it, what it costs, and what happens to the data.</p>
+  <div class="grid">
+    <a class="card" href="03-team.html"><span class="n">03</span>
+      <span class="t">Members and invitations</span>
+      <span class="d">Two lists because they are two situations. An invitation that expires
+        in three days says so. The last owner cannot be demoted, and the row says why.</span></a>
+    <a class="card" href="04-billing.html"><span class="n">04</span>
+      <span class="t">Plan &amp; usage</span>
+      <span class="d">The usage meter, past the included allowance. The invoice is shown as
+        four lines of arithmetic, and nothing is ever blocked mid-session.</span></a>
+    <a class="card" href="12-personal-limit.html"><span class="n">12</span>
+      <span class="t">Your own space, at its limit</span>
+      <span class="d">A personal org is free for 5 sessions and 5 sets, then needs a
+        team. The gate lands on <i>creating</i> a session, never on one already running
+        in front of a room.</span></a>
+    <a class="card" href="08-privacy.html"><span class="n">08</span>
+      <span class="t">Data &amp; privacy</span>
+      <span class="d">What is encrypted, every time anyone at Engage read anything and why,
+        and a one-click export that needs no conversation.</span></a>
+  </div>
+
+  <h2>Sharing, and the review that gates it</h2>
+  <p>Nothing leaves a team without a check, and a rejection has to be actionable.</p>
+  <div class="grid">
+    <a class="card" href="05-share-review.html"><span class="n">05</span>
+      <span class="t">Sharing a set publicly</span>
+      <span class="d">What the automated review actually looks for, all three outcomes
+        stated up front, and the fact that publishing makes an independent copy.</span></a>
+    <a class="card" href="06-share-rejected.html"><span class="n">06</span>
+      <span class="t">A set that needs changes</span>
+      <span class="d">Two of thirty questions flagged, quoted, each with a reason that
+        separates the topic from the treatment — plus a route to a human.</span></a>
+    <a class="card" href="07-public-library.html"><span class="n">07</span>
+      <span class="t">The public library</span>
+      <span class="d">Browse what other teams published and copy it. Your own published
+        sets appear here too, listed exactly as everyone else sees them.</span></a>
+  </div>
+
+  <h2>The platform side</h2>
+  <p>What somebody who works on Engage sees — and, more importantly, what they do not.</p>
+  <div class="grid">
+    <a class="card" href="10-platform-orgs.html"><span class="tag plat">Engage staff</span>
+      <span class="n">10</span>
+      <span class="t">Organisations</span>
+      <span class="d">Accounts, plans and billing. There is no “view their sets” button,
+        and the left nav has no content section at all. Reading a customer’s data takes a
+        request with a reason that expires in four hours.</span></a>
+    <a class="card" href="11-moderation.html"><span class="tag plat">Engage staff</span>
+      <span class="n">11</span>
+      <span class="t">Moderation queue</span>
+      <span class="d">The sets the automated check would not decide alone. The one screen
+        where staff read customer content by design — and it is still logged.</span></a>
+  </div>
+
+  <div class="note"><b>What is not drawn here.</b> The host stage and the participant
+    phone are unchanged by tenancy and keep their own mockup sets
+    (<code>../host-redesign/</code>, <code>../player-redesign/</code>). The one host-side
+    change still to draw is the usage strip on the signed-in front door, so a host sees
+    “3 of 5 sessions used” <i>before</i> creating the sixth — that surface is dusk
+    full-page, not console chrome, so drawing it in this shell would misrepresent it.</div>
+
+  <div class="note"><b>Checking the set.</b> <code>audit.js</code> sweeps every page for
+    text its own cell has silently cut off — <code>.tbl td</code> is
+    <code>overflow:hidden</code> by design, so a narrow column deletes the end of a
+    sentence rather than overflowing visibly. Run it against all eleven pages at 1440 and
+    1280; it caught four real truncations while this set was being drawn, including the
+    escalation reason on 11 and the invitation expiry on 03.</div>
+</div>
+</body>
+</html>

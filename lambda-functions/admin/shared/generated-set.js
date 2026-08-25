@@ -166,11 +166,34 @@ async function recordSetCreationError(dynamodb, tableName, jobId, message) {
  * can only ever add a new row, and `requireSetManager` guards the replace
  * branch alone. Handing the worker a fabricated 'admins' would be inventing an
  * authority the caller may not have.
+ *
+ * THE ORGANISATION IS NOT ABSENT, AND MUST NOT BE. `createSetRef` reads
+ * no-groups-AND-no-org as an internal invocation and sends it to the platform
+ * library — correct for the seed scripts and the archive importer, and a
+ * tenancy leak here: it put every customer's generated set into the shared
+ * library that every other customer reads, badged "Engage" and unmanageable by
+ * the person who asked for it.
+ *
+ * An org WITH no role is worse than neither, so both travel or neither does:
+ * tenant.canManageScope requires a role of at least `member`, so an orgId alone
+ * resolves to no writable scope at all and the importer refuses the set — a set
+ * that vanishes instead of a set in the wrong place.
+ *
+ * Both are read off the JOB ROW, like the identity above and for the same
+ * reason: the worker's invocation path has no authorizer, so anything not
+ * captured by the authorised POST is gone.
  */
 function syntheticUploadEvent({ caller, body }) {
   const lambdaContext = {};
   if (caller?.userId) lambdaContext.userId = caller.userId;
   if (caller?.username) lambdaContext.username = caller.username;
+  if (caller?.orgId && caller?.orgRole) {
+    lambdaContext.orgId = caller.orgId;
+    lambdaContext.orgRole = caller.orgRole;
+    // `orgIds` is what membership checks read; the acting org is by definition
+    // one the caller belongs to, and the authorizer comma-joins this field.
+    lambdaContext.orgIds = caller.orgId;
+  }
   return {
     requestContext: { authorizer: { lambda: lambdaContext } },
     body: JSON.stringify(body),
@@ -188,7 +211,8 @@ function syntheticUploadEvent({ caller, body }) {
  *                                  optionally `roundKindFrom(payload)`.
  * @param {object[]} args.items     what the worker actually produced. A partial
  *                                  run still makes a set — see the call site.
- * @param {object}   args.caller    `{ userId, username }` read off the job row.
+ * @param {object}   args.caller    `{ userId, username, orgId, orgRole }` read
+ *                                  off the job row.
  */
 async function createSetForJob({
   dynamodb, tableName, jobId, spec, payload, items, caller,

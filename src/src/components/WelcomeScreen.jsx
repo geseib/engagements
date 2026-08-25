@@ -1,4 +1,6 @@
 import React from 'react';
+import ActiveOrgSwitcher from './ActiveOrgSwitcher';
+import PendingInvites from './PendingInvites';
 import './WelcomeScreen.css';
 
 /**
@@ -94,6 +96,13 @@ export default function WelcomeScreen({
 
           {currentUser && (
             <div className="wel-who">
+              {/* WHICH ORGANISATION'S SETS AM I ABOUT TO PICK FROM? This screen
+                  never said. `GET /question-sets` is scoped by the header the
+                  switcher writes, so a host in two teams was choosing from one
+                  of them blind, with no way to change it without a trip through
+                  the console. It draws nothing at all for somebody with a
+                  single space, which is most people. */}
+              <ActiveOrgSwitcher />
               <span className="wel-who-name">{currentUser.attributes?.name || 'Signed in'}</span>
               {isAdmin && <span className="wel-badge">Administrator</span>}
               {/* THE LINK BACK, WHICH ONLY EXISTED IN ONE DIRECTION.
@@ -111,11 +120,14 @@ export default function WelcomeScreen({
                   A real <a href>, so middle-click and "open in new tab" work.
                   App.jsx routes on pathname, so this is a page load either way
                   and an onClick would only take that choice away. */}
-              {isAdmin && (
-                <a className="wel-btn wel-btn-quiet" href="/admin">
-                  Admin console
-                </a>
-              )}
+              {/* NOT `isAdmin` ANY MORE. `/admin` used to require the `admins`
+                  group and now accepts hosts, because that console is where a
+                  host manages their question sets, their team and their plan.
+                  Gating the link on staff kept every customer out of the screen
+                  built for them. */}
+              <a className="wel-btn wel-btn-quiet" href="/admin">
+                {isAdmin ? 'Admin console' : 'Question sets & team'}
+              </a>
               <button type="button" className="wel-btn wel-btn-quiet" onClick={() => onSignOut?.()}>
                 Sign out
               </button>
@@ -125,7 +137,27 @@ export default function WelcomeScreen({
       </header>
 
       <main className="wel-grow wel-pad wel-main">
-        <div className="wel-shell wel-split">
+        {/*
+          ONE FLEX CHILD, ALWAYS.
+
+          `.wel-main` is `display: flex` above 900px, so a SECOND child is a
+          second flex item sharing the row. The invitations prompt was added in
+          its own `.wel-shell` sibling and — because both carry
+          `width: 100%; max-width: 62rem` — the two split the row between them:
+          an empty box on the left (PendingInvites renders null when there is
+          nothing waiting) and every visible thing shoved into the right half.
+
+          So the shell is the single child and stacks its contents. `.wel-split`
+          keeps its own grid inside it, and the invitation prompt sits above the
+          split without competing with it for the row.
+        */}
+        <div className="wel-shell wel-column">
+          {/* Above the split because an invitation is time-limited and nothing
+              below it is. It draws nothing at all when there is nothing
+              waiting, which is almost always. */}
+          <PendingInvites />
+
+          <div className="wel-split">
 
           {/* Starting something is why a host opens this page, so it is first
               in the DOM at every width and the wide column when there is one. */}
@@ -249,6 +281,7 @@ export default function WelcomeScreen({
             </div>
           </aside>
 
+          </div>
         </div>
       </main>
     </div>

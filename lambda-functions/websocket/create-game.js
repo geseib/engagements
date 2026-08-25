@@ -1,4 +1,86 @@
 const { createGame } = require('./schema-compliant-manager');
+const { callerOrgId } = require('./tenant');
+const { findSetMetadata } = require('./set-version');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
+
+/** Read-only, for the scope search below. The write path has its own client. */
+const docClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const { readAllowance } = require('./usage');
+const { upgradeRequired, UPGRADE_REQUIRED_STATUS } = require('./pricing');
+
+/**
+ * WHERE THE PLAYER LINK POINTS, and why it was pointing at a dead host.
+ *
+ * This response used to hand back a hardcoded `https://eng.dev.seibtribe.us/...`
+ * — the RETIRED off-pipeline twin (CLAUDE.md: frozen at a July 2 bundle, its own
+ * Cognito pool, no pipeline). Every session created on test or prod shipped its
+ * host a join link to a stale dev site, and a hardcoded dev host in a prod
+ * response is a link that cannot ever be right on two tiers out of three.
+ *
+ * So it is derived, in this order:
+ *   1. PUBLIC_APP_URL, if the stack ever sets one — the explicit answer.
+ *   2. The Origin of the request. The caller IS the host console; the link is
+ *      for the room in front of that same console, so its origin is the right
+ *      one by construction and is per-tier for free.
+ *   3. The Referer's origin, for a caller that sends one and no Origin.
+ *   4. A ROOT-RELATIVE path. Not a guess at a hostname: a relative link the
+ *      client resolves against wherever it is actually running is right on
+ *      every tier, where a wrong absolute one is silently wrong on two.
+ */
+const originOf = (event) => {
+  const configured = (process.env.PUBLIC_APP_URL || '').trim();
+  if (configured) return configured.replace(/\/+$/, '');
+
+  const headers = event?.headers || {};
+  // API Gateway lower-cases header names, but a hand-built invocation (a test,
+  // a local harness) may not — so match case-insensitively rather than guessing
+  // at three spellings.
+  const header = (name) => {
+    const want = name.toLowerCase();
+    const hit = Object.keys(headers).find((h) => h.toLowerCase() === want);
+    return hit ? headers[hit] : '';
+  };
+
+  const origin = (header('origin') || '').trim();
+  if (/^https?:\/\//i.test(origin)) return origin.replace(/\/+$/, '');
+
+  const referer = (header('referer') || header('referrer') || '').trim();
+  if (/^https?:\/\//i.test(referer)) {
+    try { return new URL(referer).origin; } catch { /* fall through */ }
+  }
+  return '';
+};
+
+/**
+ * The scope a create should pin, given what the caller said.
+ *
+ * Explicit wins and is not second-guessed. Otherwise the set is looked for in
+ * the caller's readable scopes, org first — at most three GetItems, and only on
+ * a create, which is not a hot path. Falls back to platform when the set is
+ * found nowhere, which keeps the pre-tenancy meaning of an unresolvable id and
+ * leaves resolveSetPartition to take its legacy branch exactly as before.
+ *
+ * FAILS OPEN. A read error here must not refuse a session — the search is a
+ * convenience for a caller that under-specified, not an authorisation step.
+ */
+async function resolveSetScope(event, setId, requestedScope) {
+  const explicit = String(requestedScope || '').trim();
+  if (explicit) return explicit;
+  if (!setId) return '';
+
+  try {
+    const found = await findSetMetadata(docClient, process.env.TABLE_NAME, event, setId, '');
+    if (found && found.ref && found.ref.scope) {
+      console.log(`📚 create: no scope given for "${setId}" — found it in ${found.ref.scope}`);
+      return found.ref.scope;
+    }
+    console.warn(`⚠️ create: set "${setId}" is in NO readable library — the session will have no questions`);
+  } catch (err) {
+    console.warn(`⚠️ create: could not search for set "${setId}" (${err.message}); assuming platform`);
+  }
+  return '';
+}
 
 exports.handler = async (event) => {
   // ⚠️ This destructure is a whitelist: anything not named here is dropped on
@@ -6,7 +88,88 @@ exports.handler = async (event) => {
   // and silently discarded that way. If you add a field to the create payload,
   // it needs THREE edits — here, the createGame() argument below, and the
   // METADATA item in schema-compliant-manager.js.
-  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, questionSetVersion, randomizeQuestions, anonymousUntilReveal, selectedCategories, hostName, visibility, accessCode, personaId } = JSON.parse(event.body || '{}');
+  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, questionSetVersion, randomizeQuestions, anonymousUntilReveal, selectedCategories, hostName, visibility, accessCode, personaId, questionSetScope } = JSON.parse(event.body || '{}');
+
+  /*
+    THE OWNING ORGANISATION. Until this line a session had no owner attribute of
+    any kind, and `GET /games` therefore had nothing to scope by and returned
+    every session in the environment.
+
+    It is read, not trusted from the body: `callerOrgId` reads the authorizer
+    context, which a caller cannot forge. A caller with none creates a session
+    that no session list will ever show — see the warning in createGame(). That
+    is the safe direction, and it stops being reachable the moment every host
+    surface carries an active org.
+  */
+  const orgId = callerOrgId(event);
+
+  /*
+    WHICH LIBRARY THE SET IS IN, when the caller did not say.
+
+    A setId is a slug and names one set PER SCOPE (tenant.js), so a session pins
+    the pair. An explicit `questionSetScope` is honoured VERBATIM and strictly —
+    that is the isolation guarantee, and a caller naming a scope must not be
+    quietly redirected to a different one.
+
+    A payload that names NOTHING used to mean `platform`, full stop. That is
+    what made this route's most damaging failure silent: the picker sent an org
+    set's id with no scope, this handler assumed Engage's library, the set was
+    not there, resolveSetPartition fell through to its legacy branch, and the
+    session pinned a partition holding no categories and no questions. Created,
+    listed, joinable, unplayable, and nothing logged a word.
+
+    So an unnamed scope now means "the first readable scope that actually HAS
+    this set" — org, then platform, then public — which is precisely what
+    `GET /question-sets/{setId}/categories` has always done. The asymmetry
+    between the two was the bug: the setup screen resolved by searching while
+    the session resolved by assuming, so the categories a host picked from were
+    never the ones the session was built with.
+
+    This cannot break a working create. A set that IS in platform is still found
+    in platform; the only outcome that changes is the one that was already
+    broken. And it is not a hole: findSetMetadata probes only the scopes this
+    caller may READ, so another organisation's set is not reachable here — it is
+    absent, exactly as it is everywhere else.
+  */
+  const setScope = await resolveSetScope(event, questionSetId, questionSetScope);
+
+  /*
+    THE ONE GATE IN THE WHOLE SESSION LIFECYCLE, AND IT IS HERE ON PURPOSE.
+
+    A personal organisation includes five sessions a month and then must
+    upgrade — it does not accrue overage, because there is no payment method to
+    charge and no invoice to put it on. A Team organisation is metered instead
+    and is NEVER gated.
+
+    THE REFUSAL IS ONLY EVER ON CREATING A NEW SESSION. Not on starting one, not
+    on joining, answering, voting or results. RATIONALE.md §3 — "Nothing is ever
+    blocked" — was written because the single moment a hard limit would fire is
+    the moment somebody is standing in front of a room, and a session that
+    already exists must run to its end whatever the meter says. Moving this
+    check one step later, into join-game.js or start-game.js, stops a room
+    mid-round; that is the failure this comment exists to prevent somebody
+    "tidying up" into existence. The meter itself (usage.js:recordBillableSession)
+    documents the same rule and cannot refuse a join by construction.
+
+    Creating a session is the safe place to say no: nobody is waiting, nothing
+    is running, and the answer carries the button that fixes it (a 402 with an
+    `upgrade` block, not a bare 403 string).
+
+    `readAllowance` FAILS OPEN — an unreadable plan or counter returns an
+    ungated state and logs. This is a commercial limit, not an authorisation
+    boundary, and a DynamoDB blip must not stop a paying customer working.
+  */
+  if (orgId) {
+    const allowance = await readAllowance(orgId);
+    if (allowance.mustUpgradeForSession) {
+      console.log(`🚧 ${orgId} is at its session allowance (${allowance.sessionsUsed}/${allowance.sessionsIncluded}) — refusing a NEW session`);
+      return {
+        statusCode: UPGRADE_REQUIRED_STATUS,
+        body: JSON.stringify(upgradeRequired('sessions', allowance)),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+  }
 
   /*
     DRAW UNTIL THE ID IS ACTUALLY FREE (issue #26). The comment here used to
@@ -38,6 +201,11 @@ exports.handler = async (event) => {
       // — the game keeps reading the questions it started on even after the set
       // is replaced. Supplying it lets a host deliberately run an older version.
       questionSetVersion: questionSetVersion,
+      // WHICH partition that set id lives in — platform, this org's, or public.
+      // The id alone stopped naming one partition when sets became per-org, so
+      // the game pins the pair (tenant.js header).
+      questionSetScope: setScope,
+      orgId,
       selectedCategories: selectedCategories || [],
       hostPreferences: {
         randomizeQuestions: randomizeQuestions !== false, // Default to true if not specified
@@ -92,7 +260,7 @@ exports.handler = async (event) => {
       engagementType: gameType || 'call-and-answer',
       visibility: visibility || 'public',
       createdAt: new Date().toISOString(),
-      joinUrl: `https://eng.dev.seibtribe.us/play?gameId=${gameId}`
+      joinUrl: `${originOf(event)}/play?gameId=${gameId}`
     }),
     headers: { 'Access-Control-Allow-Origin': '*' }
   };

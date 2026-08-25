@@ -5,6 +5,8 @@ import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { normalizeTags, tagsToCsvCell } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
 import Icon from './Icon';
+import CountField from './CountField';
+import { categorySpread } from '../utils/categorySpread';
 import RoundKindPicker from './RoundKindPicker';
 import { samplesForKind } from '../config/scenarioSamples';
 import {
@@ -28,6 +30,18 @@ import {
 } from '../utils/generationJob';
 
 const API_BASE = window.API_BASE;
+
+/*
+  The noun for one generated item, which changes with the engagement type. This
+  file spelled the same four-way ternary out in half a dozen places; the spread
+  hint needed it too, so it is named once here rather than a seventh time.
+*/
+const ITEM_NOUN = {
+  trivia: 'questions',
+  poll: 'polls',
+  wavelength: 'prompts',
+};
+const itemNoun = (type) => ITEM_NOUN[type] || 'scenarios';
 const ENDPOINT = `${API_BASE}admin/ai-generate-scenarios`;
 
 // Shared framing for wavelength generation. Wavelength is a word-association
@@ -1255,19 +1269,29 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                 </div>
 
                 <div className="form-row">
-                  <div className="form-group">
-                    <label>Number of Categories (Max: 24)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="24"
-                      value={scenarioConfig.numberOfCategories}
-                      onChange={(e) => setScenarioConfig(prev => ({ ...prev, numberOfCategories: Math.min(24, Math.max(1, parseInt(e.target.value) || 1)) }))}
-                    />
-                    <small style={{color: '#666', fontSize: '12px'}}>
-                      System supports maximum 24 categories due to bitmask limitations
-                    </small>
-                  </div>
+                  {/*
+                    THIS WAS A BARE NUMBER BOX with browser spinners and a
+                    hardcoded #666 caption reading "System supports maximum 24
+                    categories due to bitmask limitations" — an implementation
+                    detail offered to a host as an explanation, stating a ceiling
+                    the field then enforced silently anyway.
+
+                    The sweep that replaced the sliders looked for
+                    `type="range"` and this one was already a number box, so it
+                    survived: two adjacent "how many?" questions on one screen,
+                    asked with two different controls. The ceiling is now the
+                    track's right-hand end, where it is a place rather than a
+                    sentence.
+                  */}
+                  <CountField
+                    label="Categories to spread them across"
+                    value={scenarioConfig.numberOfCategories}
+                    onChange={(n) => setScenarioConfig((prev) => ({ ...prev, numberOfCategories: n }))}
+                    min={1}
+                    max={24}
+                    presets={[1, 3, 6, 12]}
+                    hint={`${categorySpread(scenarioConfig.count, scenarioConfig.numberOfCategories, itemNoun(engagementType))} Categories are what the host can switch on and off mid-session.`}
+                  />
                   <div className="form-group">
                     <div className="label-row">
                       <label>Must Have Categories</label>
@@ -1307,33 +1331,14 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                     </select>
                   </div>
 
-                  <div className="form-group">
-                    <label>Number of {engagementType === 'trivia' ? 'Questions' : engagementType === 'poll' ? 'Polls' : engagementType === 'wavelength' ? 'Prompts' : 'Scenarios'}: <strong>{scenarioConfig.count}</strong></label>
-                    <div className="quantity-controls">
-                      <input
-                        type="range"
-                        min="1"
-                        max="100"
-                        value={scenarioConfig.count}
-                        onChange={(e) => setScenarioConfig(prev => ({ ...prev, count: parseInt(e.target.value) }))}
-                        className="quantity-slider"
-                      />
-                      <input
-                        type="number"
-                        min="1"
-                        max="100"
-                        value={scenarioConfig.count}
-                        onChange={(e) => setScenarioConfig(prev => ({ ...prev, count: Math.min(100, Math.max(1, parseInt(e.target.value) || 1)) }))}
-                        className="quantity-input"
-                      />
-                    </div>
-                    <div className="quantity-presets">
-                      <button type="button" className="preset-btn" onClick={() => setScenarioConfig(prev => ({ ...prev, count: 5 }))}>5</button>
-                      <button type="button" className="preset-btn" onClick={() => setScenarioConfig(prev => ({ ...prev, count: 10 }))}>10</button>
-                      <button type="button" className="preset-btn" onClick={() => setScenarioConfig(prev => ({ ...prev, count: 20 }))}>20</button>
-                      <button type="button" className="preset-btn" onClick={() => setScenarioConfig(prev => ({ ...prev, count: 50 }))}>50</button>
-                    </div>
-                  </div>
+                  <CountField
+                      label={`${itemNoun(engagementType).replace(/^./, (c) => c.toUpperCase())} to generate`}
+                      value={scenarioConfig.count}
+                      onChange={(n) => setScenarioConfig((prev) => ({ ...prev, count: n }))}
+                      min={1}
+                      max={50}
+                      presets={[3, 5, 10, 20]}
+                    />
                 </div>
 
                 <div className="form-group">

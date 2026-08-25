@@ -97,6 +97,35 @@ exports.handler = async (event) => {
       // Don't throw - this is not critical for registration
     }
 
+    /*
+      NO ORGANISATION IS CREATED HERE, AND THAT IS DELIBERATE.
+
+      Every approved account gets a personal organisation — the owner's rule is
+      that there is no "belongs to no org" state after approval — and this trigger
+      looks like the place to do it. It is not.
+
+      THIS RUNS AT CONFIRMATION, WHICH IS BEFORE APPROVAL. Twenty lines above,
+      this handler puts the new account in the `pending` group and stamps
+      `status: 'pending'`; an administrator later moves them to `hosts` on the
+      Members screen, or REJECTS them, which disables the account
+      (manage-users.js). Provisioning here would mint an organisation for every
+      abandoned signup and every account that is about to be rejected — rows that
+      are never entered, never billed, never deleted, and that sit in the exact
+      partition `10-platform-orgs.html` counts to say "47 teams".
+
+      So provisioning is lazy and hangs off the first authenticated request that
+      needs an organisation to exist: `GET /orgs`, which draws the switcher on
+      every page of the console. It can read the caller's GROUPS there, so an
+      account still in `pending` gets nothing, and it self-heals the accounts
+      that already exist without a backfill script.
+
+      See lambda-functions/admin/orgs/shared/personal-org.js — the whole argument
+      is written out at the top of that file.
+
+      What this handler DOES still owe the org system is the PROFILE row below,
+      which is where `defaultOrgId` and `personalOrgId` later land.
+    */
+
     // Store user record in DynamoDB (only if not exists)
     try {
       await dynamodb.send(new PutCommand({

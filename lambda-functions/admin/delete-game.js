@@ -1,6 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, DeleteCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { collectPartitionKeys, batchDeleteKeys } = require('./shared/ddb-delete');
+const { GAMES_RESERVATION_PK, gamesIndexPk } = require('./shared/tenant');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -32,6 +33,35 @@ exports.handler = async (event) => {
 
     console.log(`Deleting game: ${gameId}`);
 
+    /*
+      WHICH ORG OWNED IT — asked BEFORE anything is deleted, because both places
+      that answer are about to be destroyed.
+
+      A session now has TWO rows outside its own partition: the global
+      reservation `GAMES / GAME#{id}`, which is what makes the four-digit code
+      unavailable, and the owning org's index row `ORG#{org}#GAMES / GAME#{id}`,
+      which is what a host's list reads. Deleting one and not the other is the
+      leak this lookup exists to prevent: miss the reservation and the code is
+      burnt for 90 days out of a space of 9,000; miss the index row and a deleted
+      session goes on being listed and offered.
+
+      The reservation carries `orgId` for exactly this. METADATA is the fallback
+      for a reservation row that predates the attribute.
+    */
+    const reservation = await db.send(new GetCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: GAMES_RESERVATION_PK, SK: `GAME#${gameId}` }
+    }));
+    let orgId = (reservation.Item && reservation.Item.orgId) || '';
+    if (!orgId) {
+      const metadata = await db.send(new GetCommand({
+        TableName: TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+        ProjectionExpression: 'orgId'
+      }));
+      orgId = (metadata.Item && metadata.Item.orgId) || '';
+    }
+
     // First, get all items related to this game.
     // Paginated: a Query response caps at 1 MB, and a long game accumulates a
     // row per player and per response. An un-paginated Query would delete only
@@ -45,19 +75,31 @@ exports.handler = async (event) => {
     // UnprocessedItems. Throws (=> 500) rather than under-delete silently.
     const deletedCount = keys.length ? await batchDeleteKeys(db, TABLE_NAME, keys) : 0;
 
-    // Only once the content rows are confirmed gone do we drop the index row —
-    // a partial failure must leave the game still listed and re-deletable,
+    // Only once the content rows are confirmed gone do we drop the pointer rows
+    // — a partial failure must leave the game still listed and re-deletable,
     // never an invisible orphan partition.
-    const gameIndexParams = {
-      TableName: TABLE_NAME,
-      Key: {
-        PK: 'GAMES',
-        SK: `GAME#${gameId}`
-      }
-    };
+    //
+    // ORDER MATTERS BETWEEN THE TWO. The org index row goes first, so the
+    // session stops being listed before its code is handed back; releasing the
+    // code first would let a new session claim that code while the old one was
+    // still on somebody's screen.
+    let pointerRowsDeleted = 0;
 
-    console.log('Removing game from GAMES index...');
-    await db.send(new DeleteCommand(gameIndexParams));
+    if (orgId) {
+      console.log(`Removing game from the ${orgId} session index...`);
+      await db.send(new DeleteCommand({
+        TableName: TABLE_NAME,
+        Key: { PK: gamesIndexPk(orgId), SK: `GAME#${gameId}` }
+      }));
+      pointerRowsDeleted += 1;
+    }
+
+    console.log('Releasing the game code reservation...');
+    await db.send(new DeleteCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: GAMES_RESERVATION_PK, SK: `GAME#${gameId}` }
+    }));
+    pointerRowsDeleted += 1;
 
     console.log(`✅ Successfully deleted game ${gameId} and all related data`);
 
@@ -67,7 +109,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         success: true,
         message: `Game ${gameId} deleted successfully`,
-        itemsDeleted: deletedCount + 1
+        itemsDeleted: deletedCount + pointerRowsDeleted
       })
     };
 
