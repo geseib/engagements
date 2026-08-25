@@ -278,6 +278,14 @@ exports.handler = async (event) => {
         hostName: sessionMeta.HostName,
         gameType: gameMetadata.Item.GameType || 'call-and-answer',
         questionSetId: gameMetadata.Item.QuestionSetId,
+        // THE OTHER HALF OF THE PIN, so a restoring host reloads the categories
+        // from the library the session actually plays. An id alone names one
+        // set per library (tenant.js), and without this the host page had to
+        // fall back to the backend's org-first SEARCH — right almost always,
+        // ambiguous exactly when two libraries hold the same slug. Not a
+        // secret: it is one of platform/org/public and names no organisation.
+        // Absent on sessions created before the pin, read as platform.
+        questionSetScope: gameMetadata.Item.QuestionSetScope || 'platform',
         selectedCategories: gameMetadata.Item.SelectedCategories || [],
         // Workie's voice for this session. Another whitelist projection: without
         // this line the host's in-game voice picker resets to "Adapt to the

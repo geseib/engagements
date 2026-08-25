@@ -160,3 +160,50 @@ describe('updateGameBody', () => {
     expect(updateGameBody({ ...form, visibility: 'private' }).visibility).toBe('private');
   });
 });
+
+/**
+ * THE SCOPE, WHICH THE BODY NEVER CARRIED.
+ *
+ * `tenant.js` states the rule: a setId is a slug that names a different set in
+ * each of platform, org and public, so a session pins the PAIR. The backend has
+ * carried it the whole time — `create-game.js` names `questionSetScope` in its
+ * destructure, `schema-compliant-manager.js:72` reads it, and
+ * `tests/tenant-session-scoping.js` proves "an explicit scope on the create
+ * payload is the one pinned".
+ *
+ * No client ever sent one. The default is `platform`, so a session built from an
+ * ORG's set went looking for that id in the platform library, found no metadata,
+ * fell through to the legacy partition, and pinned a key holding no CATEGORY#
+ * rows and no questions. Nothing failed: the set list showed the set, the
+ * dialog showed its categories (GET /question-sets/{id}/categories SEARCHES the
+ * readable scopes, which is why it looked right up to the moment of play), and
+ * the session was created empty.
+ */
+describe('the question set reference is a pair', () => {
+  // rejects: the exact defect — an org set's session pinned to the platform
+  // library, where that id does not exist.
+  test('sends the scope the host actually picked', () => {
+    expect(createGameBody({ ...form, setScope: 'org' }).questionSetScope).toBe('org');
+    expect(createGameBody({ ...form, setScope: 'public' }).questionSetScope).toBe('public');
+  });
+
+  /*
+    Platform is what a payload that says nothing already means to the backend,
+    so an unscoped form must send that rather than omitting the key — an absent
+    key and `platform` agree today, and would stop agreeing the moment anyone
+    changes the backend default.
+  */
+  // rejects: leaving it undefined, which JSON.stringify deletes outright.
+  test('says platform explicitly when the form carries no scope', () => {
+    const body = createGameBody(form);
+    expect(body.questionSetScope).toBe('platform');
+    expect(JSON.parse(JSON.stringify(body))).toHaveProperty('questionSetScope');
+  });
+
+  // rejects: the id and the scope drifting apart in the body.
+  test('keeps the id beside it', () => {
+    const body = createGameBody({ ...form, setId: 'teamretro', setScope: 'org' });
+    expect(body.questionSetId).toBe('teamretro');
+    expect(body.questionSetScope).toBe('org');
+  });
+});

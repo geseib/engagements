@@ -1,5 +1,11 @@
 const { createGame } = require('./schema-compliant-manager');
 const { callerOrgId } = require('./tenant');
+const { findSetMetadata } = require('./set-version');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
+
+/** Read-only, for the scope search below. The write path has its own client. */
+const docClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const { readAllowance } = require('./usage');
 const { upgradeRequired, UPGRADE_REQUIRED_STATUS } = require('./pricing');
 
@@ -46,6 +52,36 @@ const originOf = (event) => {
   return '';
 };
 
+/**
+ * The scope a create should pin, given what the caller said.
+ *
+ * Explicit wins and is not second-guessed. Otherwise the set is looked for in
+ * the caller's readable scopes, org first — at most three GetItems, and only on
+ * a create, which is not a hot path. Falls back to platform when the set is
+ * found nowhere, which keeps the pre-tenancy meaning of an unresolvable id and
+ * leaves resolveSetPartition to take its legacy branch exactly as before.
+ *
+ * FAILS OPEN. A read error here must not refuse a session — the search is a
+ * convenience for a caller that under-specified, not an authorisation step.
+ */
+async function resolveSetScope(event, setId, requestedScope) {
+  const explicit = String(requestedScope || '').trim();
+  if (explicit) return explicit;
+  if (!setId) return '';
+
+  try {
+    const found = await findSetMetadata(docClient, process.env.TABLE_NAME, event, setId, '');
+    if (found && found.ref && found.ref.scope) {
+      console.log(`📚 create: no scope given for "${setId}" — found it in ${found.ref.scope}`);
+      return found.ref.scope;
+    }
+    console.warn(`⚠️ create: set "${setId}" is in NO readable library — the session will have no questions`);
+  } catch (err) {
+    console.warn(`⚠️ create: could not search for set "${setId}" (${err.message}); assuming platform`);
+  }
+  return '';
+}
+
 exports.handler = async (event) => {
   // ⚠️ This destructure is a whitelist: anything not named here is dropped on
   // the floor without a word. `triviaTimer` was sent by the frontend for months
@@ -66,6 +102,36 @@ exports.handler = async (event) => {
     surface carries an active org.
   */
   const orgId = callerOrgId(event);
+
+  /*
+    WHICH LIBRARY THE SET IS IN, when the caller did not say.
+
+    A setId is a slug and names one set PER SCOPE (tenant.js), so a session pins
+    the pair. An explicit `questionSetScope` is honoured VERBATIM and strictly —
+    that is the isolation guarantee, and a caller naming a scope must not be
+    quietly redirected to a different one.
+
+    A payload that names NOTHING used to mean `platform`, full stop. That is
+    what made this route's most damaging failure silent: the picker sent an org
+    set's id with no scope, this handler assumed Engage's library, the set was
+    not there, resolveSetPartition fell through to its legacy branch, and the
+    session pinned a partition holding no categories and no questions. Created,
+    listed, joinable, unplayable, and nothing logged a word.
+
+    So an unnamed scope now means "the first readable scope that actually HAS
+    this set" — org, then platform, then public — which is precisely what
+    `GET /question-sets/{setId}/categories` has always done. The asymmetry
+    between the two was the bug: the setup screen resolved by searching while
+    the session resolved by assuming, so the categories a host picked from were
+    never the ones the session was built with.
+
+    This cannot break a working create. A set that IS in platform is still found
+    in platform; the only outcome that changes is the one that was already
+    broken. And it is not a hole: findSetMetadata probes only the scopes this
+    caller may READ, so another organisation's set is not reachable here — it is
+    absent, exactly as it is everywhere else.
+  */
+  const setScope = await resolveSetScope(event, questionSetId, questionSetScope);
 
   /*
     THE ONE GATE IN THE WHOLE SESSION LIFECYCLE, AND IT IS HERE ON PURPOSE.
@@ -138,7 +204,7 @@ exports.handler = async (event) => {
       // WHICH partition that set id lives in — platform, this org's, or public.
       // The id alone stopped naming one partition when sets became per-org, so
       // the game pins the pair (tenant.js header).
-      questionSetScope: questionSetScope,
+      questionSetScope: setScope,
       orgId,
       selectedCategories: selectedCategories || [],
       hostPreferences: {

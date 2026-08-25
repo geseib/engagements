@@ -336,6 +336,62 @@ function reset() { store.clear(); log.length = 0; failPutOn = new Set(); }
     const scoped = await createFor(ACME, { questionSetScope: 'org', questionSetId: 'teamretro' });
     assert.strictEqual(metadataOf(scoped.gameId).QuestionSetScope, 'org');
   });
+
+  /*
+    AND A CALLER THAT NAMES NO SCOPE MUST NOT GET AN UNPLAYABLE SESSION.
+
+    This route used to assume `platform` whenever the payload said nothing,
+    which is what every client did: the host picker's <option> carried the set
+    id alone, so createGameBody had no scope to send. An ORG set's id then went
+    looking in Engage's library, was not there, and the session pinned a
+    partition holding no categories and no questions. It created, listed and
+    joined perfectly. It simply could not be played, and nothing said so.
+
+    The recovery lives HERE rather than in schema-compliant-manager because it
+    needs a caller: `findSetMetadata` probes only the scopes this event may
+    READ, org first — the same search `GET /question-sets/{id}/categories` has
+    always done. The two disagreeing is what made the failure invisible, since
+    the categories the host chose from came from the search and the session came
+    from the assumption.
+  */
+  await check('an unscoped create FINDS the caller\'s own set instead of assuming platform', async () => {
+    // One org set, seeded the way tenant.js keys it: metadata in the org's SETS
+    // partition, content in the org's SET# partition.
+    store.set(key(`ORG#${ACME}#SETS`, 'SET#ourretro'), {
+      PK: `ORG#${ACME}#SETS`, SK: 'SET#ourretro', name: 'Our Retro', active: true,
+    });
+    store.set(key(`ORG#${ACME}#SET#ourretro`, 'CATEGORY#c001'), {
+      PK: `ORG#${ACME}#SET#ourretro`, SK: 'CATEGORY#c001',
+      CategoryName: 'Wins', QuestionCount: 3,
+    });
+
+    const found = await createFor(ACME, { questionSetId: 'ourretro' });
+    assert.strictEqual(metadataOf(found.gameId).QuestionSetScope, 'org',
+      'an unscoped create assumed a library instead of finding the set');
+
+    /*
+      STATE#CATS IS THE PLAYABILITY ROW, and its absence is the whole failure.
+      schema-compliant-manager writes it only when the resolved partition
+      actually returned CATEGORY# rows — so a session pointed at the wrong
+      library simply has no category state at all, and every mask a host would
+      toggle mid-round is missing.
+    */
+    const cats = store.get(key(`GAME#${found.gameId}`, 'STATE#CATS'));
+    assert.ok(cats, 'the session has no category state — it is not playable');
+    assert.strictEqual(cats['HostMask1-8'], '10000000',
+      'the org set\'s one category was not switched on for the host');
+  });
+
+  // rejects: the search reaching into a scope this caller cannot read, which
+  // would let one org build a session from another org's library.
+  await check('the search never reaches another org\'s library', async () => {
+    store.set(key(`ORG#${GLOBEX}#SETS`, 'SET#globexonly'), {
+      PK: `ORG#${GLOBEX}#SETS`, SK: 'SET#globexonly', name: 'Globex Only', active: true,
+    });
+    const blind = await createFor(ACME, { questionSetId: 'globexonly' });
+    assert.strictEqual(metadataOf(blind.gameId).QuestionSetScope, 'platform',
+      'Acme resolved a set that only exists in Globex\'s library');
+  });
   // rejects: an orgless caller falling back to the global partition, which is
   // the "returns everything" bug wearing a different hat.
   await check('a caller with no org gets an empty list, not everything', async () => {

@@ -50,6 +50,7 @@ import {
   AI_NOTIFICATION_TIMEOUT_MS, AI_POLL_ATTEMPTS, AI_POLL_INTERVAL_MS,
 } from './utils/aiSummaryRecovery';
 import { createGameBody, updateGameBody } from './config/createGame';
+import { DEFAULT_SCOPE } from './utils/setRef';
 import { gameTypeMeta, gameTypeLabel } from './config/gameTypes';
 import {
   hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
@@ -568,6 +569,14 @@ function GameHostPage() {
   // Question Set Management
   const [questionSets, setQuestionSets] = useState([]);
   const [selectedSetId, setSelectedSetId] = useState('');
+  /*
+    THE OTHER HALF OF THE SELECTED SET. A setId names one set PER LIBRARY
+    (utils/setRef.js), so every read derived from it — the categories, the
+    custom instruction — needs to say which library it means. Without it those
+    reads fall back to the backend's org-first SEARCH, which is right until two
+    libraries hold the same slug.
+  */
+  const [selectedSetScope, setSelectedSetScope] = useState(DEFAULT_SCOPE);
   const [categories, setCategories] = useState([]);
   const [activeCategoryIds, setActiveCategoryIds] = useState(new Set());
   
@@ -950,7 +959,7 @@ function GameHostPage() {
 
 
   // Fetch question set custom instruction (similar to player screen)
-  const fetchQuestionSetInstruction = async (setId) => {
+  const fetchQuestionSetInstruction = async (setId, scope = '') => {
     if (!setId) {
       setCustomInstruction(null);
       setSetRoundNoun(null);
@@ -963,7 +972,11 @@ function GameHostPage() {
       // They were public, so any caller could read any set's content.
       const res = await authFetch(`${API_BASE}question-sets`);
       const data = await res.json();
-      const questionSet = data.sets?.find(set => set.id === setId);
+      // MATCHED ON THE PAIR when the caller knows it. `find(s => s.id === setId)`
+      // returns whichever library happens to come first in the response, so an
+      // org set could be described by Engage's set of the same name.
+      const questionSet = data.sets?.find((set) => set.id === setId
+        && (!scope || (set.scope || DEFAULT_SCOPE) === scope));
       if (questionSet && questionSet.customInstruction) {
         console.log('📋 HOST: Found custom instruction:', questionSet.customInstruction);
         setCustomInstruction(questionSet.customInstruction);
@@ -1908,7 +1921,7 @@ Focus on actionable business strategy insights.`;
   // Fetch categories when selectedSetId changes
   useEffect(() => {
     if (selectedSetId) {
-      fetchCategories(selectedSetId);
+      fetchCategories(selectedSetId, false, selectedSetScope);
     }
   }, [selectedSetId]);
 
@@ -2000,13 +2013,18 @@ Focus on actionable business strategy insights.`;
           // Show the voice the game is actually set to, not a fresh default.
           setGamePersonaId(gameStateData.gameMetadata.personaId || '');
           const restoredSetId = gameStateData.gameMetadata.questionSetId || '';
+          // The scope the SESSION pinned, not a fresh search. A session plays
+          // one partition for its whole life; reloading the host screen must
+          // read that one.
+          const restoredSetScope = gameStateData.gameMetadata.questionSetScope || DEFAULT_SCOPE;
           setSelectedSetId(restoredSetId);
-          fetchQuestionSetInstruction(restoredSetId);
+          setSelectedSetScope(restoredSetScope);
+          fetchQuestionSetInstruction(restoredSetId, restoredSetScope);
           console.log(`🎮 HOST: Restored game metadata`);
           
           // Restore categories from bitmask if we have a question set
           if (restoredSetId) {
-            await fetchCategories(restoredSetId, true); // true = restore from game bitmask
+            await fetchCategories(restoredSetId, true, restoredSetScope); // true = restore from game bitmask
             if (superseded()) return false;
           }
         }
@@ -2539,9 +2557,13 @@ Focus on actionable business strategy insights.`;
       // CRITICAL: Don't auto-select during state restoration to prevent override of restored questionSetId
       if (activeSets.length > 0 && !selectedSetId && isLobbyState(gameState) && !isRestoringState && !duringRestoration) {
         const firstSetId = activeSets[0].id;
+        // The row carries its own scope (get-question-sets.js returns it beside
+        // the id); auto-selection must not drop the half it already has.
+        const firstSetScope = activeSets[0].scope || DEFAULT_SCOPE;
         setSelectedSetId(firstSetId);
-        fetchCategories(firstSetId);
-        fetchQuestionSetInstruction(firstSetId);
+        setSelectedSetScope(firstSetScope);
+        fetchCategories(firstSetId, false, firstSetScope);
+        fetchQuestionSetInstruction(firstSetId, firstSetScope);
         console.log(`🎯 HOST: Auto-selected first question set: ${firstSetId}`);
       } else if (selectedSetId) {
         console.log(`⏳ HOST: Question set already selected: ${selectedSetId}`);
@@ -2557,7 +2579,7 @@ Focus on actionable business strategy insights.`;
     }
   };
 
-  const fetchCategories = async (setId, restoreFromGame = false) => {
+  const fetchCategories = async (setId, restoreFromGame = false, scope = '') => {
     if (!setId) {
       setCategories([]);
       setActiveCategoryIds(new Set());
@@ -2567,7 +2589,12 @@ Focus on actionable business strategy insights.`;
     try {
       // authFetch: the question-set routes now carry the Cognito authorizer.
       // They were public, so any caller could read any set's content.
-      const res = await authFetch(`${API_BASE}question-sets/${setId}/categories`);
+      // ?scope= NAMES THE LIBRARY. get-categories.js searches the caller's
+      // readable scopes when this is absent — org, then platform, then public —
+      // which resolves the right set almost always and the wrong one exactly
+      // when two libraries hold this slug.
+      const scopeQuery = scope ? `?scope=${encodeURIComponent(scope)}` : '';
+      const res = await authFetch(`${API_BASE}question-sets/${setId}/categories${scopeQuery}`);
       const json = await res.json();
       const fetchedCategories = json.categories || [];
       setCategories(fetchedCategories);
@@ -2616,10 +2643,11 @@ Focus on actionable business strategy insights.`;
    * owns, so loading them stays here. Clearing goes through the same path so a
    * format switch cannot leave the previous set's categories on screen.
    */
-  const handleSetupSetChange = (setId) => {
-    fetchCategories(setId);
+  const handleSetupSetChange = (setId, scope = DEFAULT_SCOPE) => {
+    setSelectedSetScope(scope || DEFAULT_SCOPE);
+    fetchCategories(setId, false, scope);
     if (setId) {
-      fetchQuestionSetInstruction(setId);
+      fetchQuestionSetInstruction(setId, scope);
     } else {
       setCustomInstruction(null);
     }
@@ -4136,7 +4164,7 @@ Focus on actionable business strategy insights.`;
         gameType: form.gameType, anonymousResponses: form.anonymousResponses,
       }).anonymousUntilReveal,
     });
-    fetchQuestionSetInstruction(form.setId);
+    fetchQuestionSetInstruction(form.setId, form.setScope);
 
     // Create the game directly with the backend API
     try {

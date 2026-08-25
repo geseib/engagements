@@ -596,6 +596,71 @@ function decorate(setId, fields) {
     await createGame('6666', { orgId: ORG, questionSetScope: 'org', title: 'T', engagementType: 'call-and-answer', questionSetId: 'noversion' });
     check('a game on an unversioned set gets NO QuestionSetVersion attribute', () =>
       assert.strictEqual(store.get('GAME#6666|METADATA').QuestionSetVersion, undefined));
+
+    /*
+      THE SCOPE IS NOT OPTIONAL, AND OMITTING IT FAILS IN SILENCE.
+
+      Everything above passes `questionSetScope: 'org'` because these sets live
+      in an ORG partition. The frontend passed nothing at all for months: the
+      picker's <option> carried `set.id` alone, so createGameBody had no scope
+      to send. create-game.js then applies its documented `platform` default,
+      `resolveSetPartition` finds no metadata for that id in Engage's library,
+      `resolvePartitionFromMeta` falls through to its legacy branch, and the
+      session pins a partition key that holds nothing.
+
+      Nothing threw. The session was created, listed and joinable — with no
+      categories and no questions, so it could not be played.
+
+      Both ends are fixed and either one alone is sufficient, which is the point
+      of testing them separately: the picker now sends the pair
+      (src/src/utils/setRef.js), and create-game.js no longer ASSUMES a library
+      when the caller names none — it looks for the set in the caller's readable
+      scopes, org first, exactly as GET /question-sets/{id}/categories always
+      has. That asymmetry — the setup screen resolving by search while the
+      session resolved by assumption — was the whole bug.
+    */
+    await createGame('7001', { orgId: ORG, questionSetScope: 'org', title: 'T', engagementType: 'call-and-answer', questionSetId: 'pinme' });
+
+    // rejects: nothing on its own — the control that proves the checks below
+    // are measuring the scope and not some unrelated difference.
+    check('an ORG set named WITH its scope builds category state', () =>
+      assert.ok(store.get('GAME#7001|CATEGORY#c001#ACTIVE'),
+        'the org-scoped session got no categories — the control is broken'));
+
+    /*
+      THIS FILE DRIVES THE MANAGER, WHICH IS STRICT ON PURPOSE. It is handed a
+      scope and pins it; it has no `event`, so it has no caller and no readable
+      scopes to search. The recovery for an unnamed scope lives one layer up in
+      create-game.js, where the caller exists — and is tested there, in
+      tests/tenant-session-scoping.js §1, against the real handler.
+
+      What belongs HERE is the consequence, so the shape of the failure stays on
+      the record: hand this function a scope the set is not in and it silently
+      builds a session with nothing in it.
+    */
+    // rejects: the manager quietly searching for the set, which would make its
+    // pin depend on data rather than on what it was told.
+    await createGame('7002', { orgId: ORG, title: 'T', engagementType: 'call-and-answer', questionSetId: 'pinme' });
+    check('the manager pins what it was told, and an absent set builds nothing', () => {
+      assert.strictEqual(store.get('GAME#7002|METADATA').QuestionSetScope, 'platform');
+      assert.strictEqual(store.get('GAME#7002|CATEGORY#c001#ACTIVE'), undefined);
+      assert.strictEqual(store.get('GAME#7002|STATE#CATS'), undefined,
+        'STATE#CATS is written only when the set resolved to real categories');
+    });
+
+    /*
+      AND THE SEARCH IS NOT A HOLE. An EXPLICIT scope is honoured verbatim: a
+      caller naming `platform` gets platform, and gets nothing when the set is
+      not there. Redirecting an explicit scope to wherever the set happens to
+      live is how a set from one library ends up played from another.
+    */
+    // rejects: applying the search to an explicit scope too.
+    await createGame('7003', { orgId: ORG, questionSetScope: 'platform', title: 'T', engagementType: 'call-and-answer', questionSetId: 'pinme' });
+    check('an EXPLICIT scope is still strict, and still empty when wrong', () => {
+      assert.strictEqual(store.get('GAME#7003|METADATA').QuestionSetScope, 'platform');
+      assert.strictEqual(store.get('GAME#7003|CATEGORY#c001#ACTIVE'), undefined,
+        'an explicit platform scope was quietly redirected to the org library');
+    });
   }
 
   // ==== 9. listing / promoting versions ====================================

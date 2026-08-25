@@ -26,7 +26,7 @@
  *     those, and resetting them here would fight the caller.
  *   - the create dialog's own inputs — they are the form, not the game, and
  *     since the extraction they live inside components/GameSetupDialog.jsx,
- *     which unmounts when the dialog closes: engagementType, newGameSetId,
+ *     which unmounts when the dialog closes: engagementType, newGameSetKey,
  *     randomizeQuestions, anonymousResponses, eventDetails, gameAiContext,
  *     newGamePersonaId, localSets, localTitle, editCategoryNames. (This list named five and omitted three until the
  *     extraction. `localTitle` is the edit-mode title — an edit targets a

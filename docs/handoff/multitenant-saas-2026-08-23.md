@@ -68,11 +68,34 @@ held; the handlers on top of it did not.** Everything in §0c came from that.
 
 ### Still open, in the order worth taking
 
-From the session agent's live run, none fixed:
+From the session agent's live run. **#1 is fixed; 2-6 are not.**
 
-1. **Sessions built from an org's own set are silently unplayable.** The client
-   never sends `questionSetScope`, so it defaults to platform and the game gets
-   no category state; `next-question` then 400s.
+1. ~~**Sessions built from an org's own set are silently unplayable.**~~ FIXED.
+   Both ends, and either alone is sufficient.
+
+   The picker's `<option>` carried `set.id` alone, so the scope was gone before
+   `createGameBody` ran and `create-game.js` applied its documented `platform`
+   default. The set reference is a PAIR — `src/src/utils/setRef.js` now encodes
+   it for the `<select>`, and the dialog raises `setScope` through `onCreate`.
+
+   The deeper cause was an ASYMMETRY worth remembering: the setup screen
+   resolved the set by SEARCHING readable scopes (`get-categories.js`, org
+   first) while the session resolved it by ASSUMING platform. So the host
+   picked categories that came from one library and the session was built from
+   another — which is exactly why nothing looked wrong until play.
+   `create-game.js` now searches too when the payload names no scope; an
+   EXPLICIT scope is still honoured strictly, because that is the isolation
+   guarantee.
+
+   `get-game.js` and `get-game-state.js` also return the pinned
+   `questionSetScope` now, so a reloading host reads the library the session
+   actually plays instead of searching for it again.
+
+   Guarded by: `tests/tenant-session-scoping.js` §1 (an unscoped create finds
+   the caller's own set; the search never reaches another org's library),
+   `tests/set-versioning-flow.js` §8 (the manager stays strict), and
+   `__tests__/setRef.test.js`, `createGamePayload.test.js`,
+   `gameSetupDialog.test.jsx`, `gameSetupCallSite.test.js` on the client.
 2. **`GET /games/{id}?role=host` needs no auth at all** — plain curl returns the
    private briefing. `role=host` is an unverified query param.
 3. **`GET /games/{id}/state` is public and leaks `correctAnswer` mid-round.**

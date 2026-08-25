@@ -96,3 +96,60 @@ describe('the trivia timer is gone, not hidden', () => {
     expect(quickstart).not.toMatch(/triviaTimer/i);
   });
 });
+
+/**
+ * THE SCOPE REACHES THE CALL SITE.
+ *
+ * `createGameBody` sending `questionSetScope` and `GameSetupDialog` raising
+ * `setScope` are both unit-tested. Between them sits `handleStartNewGame`, in a
+ * file jsdom cannot mount — which is exactly the gap this suite exists for, and
+ * exactly where a scope fix would ship as dead code: green on both ends, and the
+ * page still calling `fetchCategories(setId)` with no library named.
+ */
+describe('the host page carries the set\'s scope, not just its id', () => {
+  // rejects: the page handling the dialog's callback with one parameter, which
+  // silently drops the scope the picker just went to the trouble of raising.
+  test('handleSetupSetChange takes a scope and passes it to both reads', () => {
+    const fn = host.match(/const handleSetupSetChange = \(([^)]*)\) => \{([\s\S]*?)\n  \};/);
+    expect(fn).not.toBeNull();
+    const [, params, body] = fn;
+    expect(params).toMatch(/scope/);
+    expect(body).toMatch(/fetchCategories\([^)]*scope/);
+    expect(body).toMatch(/fetchQuestionSetInstruction\([^)]*scope/);
+  });
+
+  // rejects: the categories read going back to a bare URL, which sends
+  // get-categories.js back to searching the readable scopes for the right set.
+  test('the categories read names the library in the query string', () => {
+    expect(host).toMatch(/question-sets\/\$\{setId\}\/categories\$\{scopeQuery\}/);
+    expect(host).toMatch(/scope=\$\{encodeURIComponent\(scope\)\}/);
+  });
+
+  // rejects: matching a set out of the list by id alone, which returns
+  // whichever library happens to come first in the response.
+  test('the instruction read matches on the pair', () => {
+    expect(host).toMatch(/set\.scope \|\| DEFAULT_SCOPE\) === scope/);
+  });
+
+  /*
+    A session plays ONE partition for its whole life. Restoring the host screen
+    has to read the scope the session PINNED, which is why get-game-state.js
+    returns `questionSetScope` beside the id.
+  */
+  // rejects: a reload resolving a restored session's categories by search.
+  test('a restored session reloads from the scope it pinned', () => {
+    expect(host).toMatch(/gameStateData\.gameMetadata\.questionSetScope/);
+    expect(host).toMatch(/fetchCategories\(restoredSetId, true, restoredSetScope\)/);
+  });
+
+  // rejects: auto-selection dropping the scope off a row that carries one.
+  test('auto-selecting the first set keeps its scope', () => {
+    expect(host).toMatch(/activeSets\[0\]\.scope \|\| DEFAULT_SCOPE/);
+  });
+
+  // rejects: the create call reaching createGameBody without the scope on the
+  // form — the body would then send `platform` for every org set.
+  test('the create form carries setScope through to the body', () => {
+    expect(host).toMatch(/fetchQuestionSetInstruction\(form\.setId, form\.setScope\)/);
+  });
+});

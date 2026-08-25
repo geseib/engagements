@@ -115,6 +115,15 @@ exports.handler = async (event) => {
       const result = {
         ...baseGameInfo,
         questionSetId: gameMetadata.Item.QuestionSetId,
+        // THE OTHER HALF OF THE PIN. `QuestionSetId` alone names one set PER
+        // LIBRARY (tenant.js) — the runtime resolvers have always read the pair
+        // off METADATA, but this route returned only the id, so the host page
+        // restoring a session had to fall back to SEARCHING the readable scopes
+        // for its categories. That search is org-first and right almost always;
+        // it is ambiguous exactly when two libraries hold the same slug, which
+        // is the case the pair exists for. Absent on sessions created before the
+        // pin, which the client reads as platform.
+        questionSetScope: gameMetadata.Item.QuestionSetScope || 'platform',
         aiContext: sessionMeta.AIContext,
         details: sessionMeta.Details,
         // Prefill for the edit dialog (PUT /games/{gameId}). None of these is
