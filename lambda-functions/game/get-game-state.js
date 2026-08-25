@@ -88,6 +88,13 @@ exports.handler = async (event) => {
     
     // Use the actual state directly (ASK#001, VOTE#001, etc.)
     const frontendState = currentState;
+    /*
+      HAS THE ROUND REVEALED ITS ANSWER YET? The same predicate get-question.js
+      uses for the same field, spelled the same way on purpose — two handlers
+      serving one question had two different rules, and only one of them was a
+      rule. See the block that reads this, below.
+    */
+    const revealed = String(currentState).startsWith('RESULTS#');
     // Try to get question number from LessonNumber, CurrentQuestionId is the source question ID
     const currentQuestionId = stateItem?.CurrentQuestionId;
     const currentQuestionNumber = lessonNumber > 0 ? String(lessonNumber).padStart(3, '0') : null;
@@ -248,7 +255,26 @@ exports.handler = async (event) => {
               optionD: questionItem.optionD || questionItem.OptionD || '',
               optionE: questionItem.optionE || questionItem.OptionE || '',
               optionF: questionItem.optionF || questionItem.OptionF || '',
-              correctAnswer: questionItem.correctAnswer,
+              /*
+                THE ANSWER IS A SPOILER UNTIL THE ROUND REVEALS IT.
+
+                This route carries NO authorizer (template-clean.yaml — unlike
+                `/games/{gameId}/queue`, which does), and `currentQuestionData`
+                is in the BASE response, gated by neither `playerId` nor
+                `includeHostData`. So this line handed the correct answer to
+                anyone holding the four digits projected on the wall, during
+                ASK, while the room was still answering.
+
+                RESULTS is the line because that is where the answer goes on the
+                projector anyway — and it is the same line `get-question.js`
+                already draws for the identical field. Two handlers serving one
+                question had two different rules; now they have one.
+
+                NOT gated on `includeHostData`: that flag is a query parameter
+                on an unauthenticated route, so it proves nothing and would only
+                move the leak somewhere slightly less obvious.
+              */
+              ...(revealed ? { correctAnswer: questionItem.correctAnswer } : {}),
               points: questionItem.points || 10
             };
             

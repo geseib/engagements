@@ -112,6 +112,23 @@ Unbuilt from the original plan: the public library and its moderation pipeline,
 Stripe, the access-log WRITER (the Data & privacy page renders a log nothing
 writes to), the break-glass grant, org export/delete.
 
+### One AI set in TEST's shared library, deliberately left
+
+`lessonsfromtheband` sits in `PK=SETS` on **test**, created 2026-08-24 by
+`george@seibtribe.com` — before the tenancy fix, when every generation went to
+the platform library whatever organisation asked. **The owner has looked at it
+and chosen to leave it**, so it is house content now and not a misfile.
+
+Recorded because `scripts/audit-set-scopes.sh` flags every AI-generated set in
+the shared library, by design — it cannot tell staff authoring from a misfile,
+and says so. Without this note that one row gets re-investigated every time the
+audit runs. The org copy of the same name under
+`ORG#org_FXCwstNv7Nmo3EccQmnudT` is qa-host-b's, generated 08-25 after the fix,
+and the pair is the cleanest evidence the fix took.
+
+**Dev has not been audited yet** and has had far more QA traffic, so its count is
+likely higher: `./scripts/audit-set-scopes.sh engagedev adminaccess`.
+
 ### Test data left on dev
 
 QA orgs from the agents — `QA Meridian Delivery`, `QA Halcyon Institute`,
