@@ -5,7 +5,14 @@
 # Run it yourself — it asks for the passwords rather than taking them as
 # arguments, so nothing lands in shell history.
 #
-#   ./scripts/create-test-users.sh engagetest
+#   ./scripts/create-test-users.sh engagetest adminaccess
+#   AWS_PROFILE=adminaccess ./scripts/create-test-users.sh engagetest
+#
+# THE PROFILE IS NOT OPTIONAL UNLESS YOUR DEFAULT ONE IS THE RIGHT ACCOUNT.
+# The first version of this script called plain `aws` and therefore used the
+# DEFAULT profile, so signing in with `aws sso login --profile adminaccess`
+# changed nothing it could see and it died on "Unable to locate credentials"
+# with no hint that a profile existed, let alone that it was being ignored.
 #
 # ── THE FOUR TRAPS, WHICH ARE WHY THIS IS A SCRIPT AND NOT A COMMAND ────────
 #
@@ -16,16 +23,16 @@
 #    dev" with no configuration difference between them, because dev's only
 #    native account had been admin-created and never exchanged its temporary
 #    password. `admin-set-user-password --permanent` below is what moves it to
-#    CONFIRMED.
+#    CONFIRMED, and the status is READ BACK rather than assumed.
 #
 # 2. THE GROUP DECIDES WHETHER THEY GET AN ORGANISATION AT ALL. Personal-org
 #    provisioning is LAZY and reads the caller's groups
-#    (admin/orgs/shared/personal-org.js): an account sitting in `pending` is
-#    given nothing, deliberately, so abandoned signups do not mint rows. An
-#    account with no org cannot create a question set — upload-questions.js
-#    refuses with "Choose an organisation before creating a question set" — so a
-#    test account left in `pending` looks broken in a way that has nothing to do
-#    with what you are testing. These go straight into `hosts`.
+#    (admin/orgs/shared/personal-org.js): `APPROVED_GROUPS = ['hosts','admins']`,
+#    with `pending` and the empty list both deliberately absent so abandoned
+#    signups mint no rows. An account with no org cannot create a question set —
+#    upload-questions.js refuses with "Choose an organisation before creating a
+#    question set" — so a test account left in `pending` looks broken in a way
+#    that has nothing to do with what you are testing. These go into `hosts`.
 #
 # 3. THE ORG IS MINTED ON FIRST CONSOLE LOAD, NOT HERE. Provisioning hangs off
 #    `GET /orgs`, the request that draws the switcher. So the account has no
@@ -40,13 +47,30 @@
 # row is written. That is fine and needs no fixing here: personal-org.js is
 # explicitly self-healing for accounts with no profile row — it is how the
 # federated accounts on dev were provisioned without a backfill.
+#
+# ── A NOTE ON `set -e` AND ERROR MESSAGES ──────────────────────────────────
+# `VAR="$(aws ...)"` under `set -e` exits AT THE ASSIGNMENT when the command
+# fails, so any check written after it never runs. That is how the first version
+# of this script ended up with a friendly credentials message that could not
+# fire. Every capture below is therefore `if ! VAR="$(...)"`, which puts the
+# command in a condition and lets the handler actually run.
 
 set -euo pipefail
 
 STACK="${1:-}"
+PROFILE="${2:-${AWS_PROFILE:-}}"
+
 if [[ -z "$STACK" ]]; then
-  echo "usage: $0 <stack>            e.g. $0 engagetest" >&2
-  echo "  stacks: engagedev | engagetest | engageprod" >&2
+  cat >&2 <<'USAGE'
+usage: ./scripts/create-test-users.sh <stack> [aws-profile]
+
+  stacks:   engagedev | engagetest        (engageprod is refused)
+  profile:  optional; falls back to $AWS_PROFILE, then your default profile
+
+examples:
+  ./scripts/create-test-users.sh engagetest adminaccess
+  AWS_PROFILE=adminaccess ./scripts/create-test-users.sh engagetest
+USAGE
   exit 2
 fi
 
@@ -55,15 +79,72 @@ if [[ "$STACK" == "engageprod" ]]; then
   exit 2
 fi
 
-# ── 4. derive the pool, never trust a table ────────────────────────────────
-POOL_ID="$(aws cloudformation describe-stacks --stack-name "$STACK" \
-  --query 'Stacks[0].Outputs[?OutputKey==`UserPoolId`].OutputValue' --output text)"
+# Exported rather than threaded through as `--profile` on every call: an array
+# of optional flags is a bash-3.2 unbound-variable trap under `set -u`, and
+# macOS still ships bash 3.2.
+if [[ -n "$PROFILE" ]]; then
+  export AWS_PROFILE="$PROFILE"
+fi
 
-if [[ -z "$POOL_ID" || "$POOL_ID" == "None" ]]; then
-  echo "Could not read UserPoolId from stack '$STACK'. Is the name right, and are your credentials current?" >&2
+# ── PREFLIGHT: whose credentials, and are they live? ───────────────────────
+# Before anything is created, and reported with the profile NAMED — the failure
+# this replaces said only "Unable to locate credentials", which is true of a
+# missing profile, an expired SSO session and a typo alike.
+if ! IDENTITY="$(aws sts get-caller-identity --output text --query '[Account,Arn]' 2>&1)"; then
+  echo "Could not use ${AWS_PROFILE:-your default} AWS credentials." >&2
+  echo >&2
+  echo "  $IDENTITY" >&2
+  echo >&2
+  if [[ -n "${AWS_PROFILE:-}" ]]; then
+    echo "  Try:  aws sso login --profile $AWS_PROFILE" >&2
+    echo "  Then: ./scripts/create-test-users.sh $STACK $AWS_PROFILE" >&2
+  else
+    echo "  No profile was given and the default one is not usable. Pass one:" >&2
+    echo "    ./scripts/create-test-users.sh $STACK <profile>" >&2
+    echo >&2
+    echo "  Your profiles:" >&2
+    aws configure list-profiles 2>/dev/null | sed 's/^/    /' >&2 || true
+  fi
   exit 1
 fi
-echo "Pool for $STACK: $POOL_ID"
+
+ACCOUNT="${IDENTITY%%$'\t'*}"
+WHO="${IDENTITY#*$'\t'}"
+
+# ── 4. derive the pool, never trust a table ────────────────────────────────
+if ! POOL_ID="$(aws cloudformation describe-stacks --stack-name "$STACK" \
+    --query 'Stacks[0].Outputs[?OutputKey==`UserPoolId`].OutputValue' \
+    --output text 2>&1)"; then
+  echo "Could not read stack '$STACK' in account $ACCOUNT." >&2
+  echo >&2
+  echo "  $POOL_ID" >&2
+  echo >&2
+  echo "  Either the stack name is wrong, or ${AWS_PROFILE:-your default profile} points at a different account." >&2
+  exit 1
+fi
+
+if [[ -z "$POOL_ID" || "$POOL_ID" == "None" ]]; then
+  echo "Stack '$STACK' exists but publishes no UserPoolId output." >&2
+  exit 1
+fi
+
+cat <<EOF
+
+  AWS account : $ACCOUNT
+  acting as   : $WHO
+  profile     : ${AWS_PROFILE:-(default)}
+  stack       : $STACK
+  user pool   : $POOL_ID
+
+EOF
+
+# Creating sign-in identities is worth one look at WHICH account first — the
+# stack name is easy to get right while the profile points somewhere else.
+read -r -p "Create test accounts here? [y/N] " AGREE
+if [[ "$AGREE" != "y" && "$AGREE" != "Y" ]]; then
+  echo "Nothing was created."
+  exit 0
+fi
 
 # TWO ACCOUNTS, IN TWO DIFFERENT ORGANISATIONS. One account cannot test tenancy.
 # Each gets its own personal org on first sign-in, which is what makes "org A
@@ -87,31 +168,45 @@ fi
 
 make_user() {
   local email="$1"
+  local out status
 
   if aws cognito-idp admin-get-user --user-pool-id "$POOL_ID" --username "$email" >/dev/null 2>&1; then
     echo "  $email already exists — setting its password and group rather than recreating it"
   else
     # SUPPRESS: these addresses are not real and Cognito's invitation would
     # bounce. The temporary password is irrelevant — the next call replaces it.
-    aws cognito-idp admin-create-user \
-      --user-pool-id "$POOL_ID" \
-      --username "$email" \
-      --user-attributes Name=email,Value="$email" Name=email_verified,Value=true \
-                        Name=name,Value="${email%%@*}" \
-      --message-action SUPPRESS >/dev/null
+    if ! out="$(aws cognito-idp admin-create-user \
+        --user-pool-id "$POOL_ID" \
+        --username "$email" \
+        --user-attributes Name=email,Value="$email" Name=email_verified,Value=true \
+                          Name=name,Value="${email%%@*}" \
+        --message-action SUPPRESS 2>&1)"; then
+      echo "  could not create $email:" >&2
+      echo "    $out" >&2
+      return 1
+    fi
     echo "  created $email"
   fi
 
   # ── 1. the one that makes it signable-in AND resettable ─────────────────
-  aws cognito-idp admin-set-user-password \
-    --user-pool-id "$POOL_ID" --username "$email" \
-    --password "$PASSWORD" --permanent
+  if ! out="$(aws cognito-idp admin-set-user-password \
+      --user-pool-id "$POOL_ID" --username "$email" \
+      --password "$PASSWORD" --permanent 2>&1)"; then
+    echo "  could not set the password for $email:" >&2
+    echo "    $out" >&2
+    echo "    (a pool password policy rejects weak passwords here, and the account" >&2
+    echo "     stays in FORCE_CHANGE_PASSWORD — unusable AND unresettable)" >&2
+    return 1
+  fi
 
   # ── 2. hosts, not pending — see the header ──────────────────────────────
-  aws cognito-idp admin-add-user-to-group \
-    --user-pool-id "$POOL_ID" --username "$email" --group-name hosts
+  if ! out="$(aws cognito-idp admin-add-user-to-group \
+      --user-pool-id "$POOL_ID" --username "$email" --group-name hosts 2>&1)"; then
+    echo "  could not add $email to hosts:" >&2
+    echo "    $out" >&2
+    return 1
+  fi
 
-  local status
   status="$(aws cognito-idp admin-get-user --user-pool-id "$POOL_ID" --username "$email" \
     --query 'UserStatus' --output text)"
   echo "  $email -> $status, group hosts"
@@ -146,11 +241,6 @@ Then, to check they landed:
 
   aws cognito-idp admin-list-groups-for-user --user-pool-id $POOL_ID \\
     --username $EMAIL_A --query 'Groups[].GroupName'
-
-  aws dynamodb query --table-name <table> \\
-    --key-condition-expression 'PK = :pk' \\
-    --expression-attribute-values '{":pk":{"S":"ORGS"}}' \\
-    --query 'Items[].orgId.S'
 
 To remove them afterwards:
 
