@@ -316,6 +316,65 @@ function seed(state) {
     });
   }
 
+  /*
+    ── 5b. AND THE SIBLING HANDLER MUST AGREE ───────────────────────────────
+
+    `get-question` gates the correct answer on RESULTS# and is tested for it
+    above. `get-game-state` served the SAME question through
+    `currentQuestionData` and gated nothing — so the spoiler this file exists to
+    keep out of one payload walked straight out of the other.
+
+    It is not a host leak, it is a PUBLIC one. `/games/{gameId}/state` carries no
+    authorizer in template-clean.yaml (unlike `/games/{gameId}/queue`, which
+    does), and `currentQuestionData` is in the BASE response — gated by neither
+    `playerId` nor `includeHostData`. So anyone holding the four digits that are
+    projected on the wall could read the answer during ASK, from a phone, while
+    the room was still answering.
+
+    RESULTS is the line because that is where the answer is revealed on the
+    projector anyway — the same line get-question already draws, and copying it
+    keeps one rule rather than two.
+  */
+  console.log('\n5b. get-game-state gates the correct answer on the same line');
+  for (const state of ['ASK#001', 'VOTE#001']) {
+    seedTrivia(state);
+    const res = await stateHandler({ pathParameters: { gameId: GAME_ID } });
+    // rejects: THE REPORTED LEAK. A public route handing out the answer while
+    // the room is still answering.
+    check(`@ ${state}: the public state payload carries no correct answer`, () => {
+      assert.strictEqual(res.statusCode, 200, `got ${res.statusCode}: ${res.body}`);
+      const body = JSON.parse(res.body);
+      assert.strictEqual(body.currentQuestionData?.correctAnswer, undefined,
+        `correctAnswer leaked at ${state}`);
+      assert.ok(!/OptionA/.test(res.body), 'the answer leaked somewhere else in the payload');
+    });
+  }
+
+  // rejects: over-correcting into a withhold that never lifts. The results
+  // screen needs it, and by then it is on the projector.
+  seedTrivia('RESULTS#001');
+  {
+    const res = await stateHandler({ pathParameters: { gameId: GAME_ID } });
+    check('@ RESULTS: the correct answer is served again', () => {
+      assert.strictEqual(res.statusCode, 200, `got ${res.statusCode}: ${res.body}`);
+      assert.strictEqual(JSON.parse(res.body).currentQuestionData.correctAnswer, 'OptionA');
+    });
+  }
+
+  // rejects: gating on `includeHostData` instead of on the round's state, which
+  // moves the leak behind a query parameter anyone can type rather than closing
+  // it. The route has no authorizer, so that flag proves nothing.
+  for (const state of ['ASK#001', 'VOTE#001']) {
+    seedTrivia(state);
+    const res = await stateHandler({
+      pathParameters: { gameId: GAME_ID },
+      queryStringParameters: { includeHostData: 'true' },
+    });
+    check(`@ ${state}: asking for host data does not unlock it either`, () => {
+      assert.strictEqual(JSON.parse(res.body).currentQuestionData?.correctAnswer, undefined);
+    });
+  }
+
   // The spoiler check, in every state the widened guard now serves.
   for (const state of ['ASK#001', 'VOTE#001', 'RESULTS#001']) {
     for (const role of ['player', 'host']) {
