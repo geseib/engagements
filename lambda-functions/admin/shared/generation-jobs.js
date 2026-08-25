@@ -82,6 +82,12 @@ async function createJob(dynamodb, tableName, { jobId, kind, requested, request 
     ...(caller.userId ? { callerUserId: caller.userId } : {}),
     ...(caller.username && caller.username !== 'unknown'
       ? { callerUsername: caller.username } : {}),
+    // WHOSE LIBRARY THE RESULT BELONGS IN. Same rule as the two above: written
+    // only when the POST actually carried one, so Engage staff authoring the
+    // shared library (no active org, by design — see tenant.canManageScope)
+    // leave both absent and keep writing platform content.
+    ...(caller.orgId ? { callerOrgId: caller.orgId } : {}),
+    ...(caller.orgRole ? { callerOrgRole: caller.orgRole } : {}),
     requested,
     completed: 0,
     phase: 'Queued',

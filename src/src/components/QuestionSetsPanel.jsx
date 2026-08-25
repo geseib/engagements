@@ -360,10 +360,25 @@ export default function QuestionSetsPanel({
                             </span>
                           )}
                           {!set.totalQuestions && <span className="qsets-chip qsets-chip--bad">Empty</span>}
+                          {/*
+                            AI, AND WHETHER ANYONE HAS READ IT. A generated set
+                            arrives switched OFF and unreviewed
+                            (admin/shared/generated-set.js, note 2), and until
+                            now the row said only "AI" — the same badge a set
+                            that was generated, reviewed and switched on months
+                            ago carries. The state that changes what to DO is
+                            the unreviewed one, so that is the one that is named.
+                          */}
                           {set.isAIGenerated && (
-                            <span className="qsets-chip qsets-chip--warn" title="AI-generated content">
-                              AI
-                            </span>
+                            set.active === false ? (
+                              <span className="qsets-chip qsets-chip--warn" title="Written by the generator and not reviewed yet.">
+                                AI draft
+                              </span>
+                            ) : (
+                              <span className="qsets-chip qsets-chip--warn" title="AI-generated content">
+                                AI
+                              </span>
+                            )
                           )}
                           {/* WHOSE IT IS. Only the rows that are NOT this
                               organisation's own are badged — the common case is
@@ -412,13 +427,23 @@ export default function QuestionSetsPanel({
                           */}
                           {set.canManage !== false ? (
                             <>
+                              {/*
+                                THE SAME DOOR, NAMED FOR WHAT IS BEHIND IT. On an
+                                unreviewed generation the task is to READ it and
+                                then decide; "Edit" is the label for a set you
+                                already trust. It is also the row's primary
+                                action in that state, because it is the only
+                                thing anyone should be doing to it.
+                              */}
                               <button
                                 type="button"
-                                className="qsets-btn qsets-btn--sm"
+                                className={`qsets-btn qsets-btn--sm${set.isAIGenerated && set.active === false ? ' qsets-btn--primary' : ''}`}
                                 onClick={() => onEdit && onEdit(set)}
-                                title="Edit this question set"
+                                title={set.isAIGenerated && set.active === false
+                                  ? 'Read what the generator wrote, then switch it on'
+                                  : 'Edit this question set'}
                               >
-                                Edit
+                                {set.isAIGenerated && set.active === false ? 'Review' : 'Edit'}
                               </button>
                               <button
                                 type="button"

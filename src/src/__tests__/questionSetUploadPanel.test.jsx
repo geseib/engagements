@@ -362,3 +362,66 @@ describe('the upload itself', () => {
     expect(uploadButton()).toBeDisabled();
   });
 });
+
+/**
+ * CHOOSING BETWEEN THE WAYS IN.
+ *
+ * Reported: "the workflow is a bit difficult to follow as a new person, i think
+ * the buttons should reflect what happy path and canceling throughout."
+ *
+ * The panel offered five routes as sibling buttons in a wrap under the word
+ * "Create". They are not interchangeable — one spends money and leaves a draft,
+ * one is a round trip through a spreadsheet, one opens a different tab that
+ * does not know about this set — and nothing on screen said which to pick.
+ *
+ * docs/design/admin-redesign/07-new-set.html had already answered it, and the
+ * shipped panel had diverged: "Five ways in. They are not interchangeable, so
+ * this says what each costs." Every route names when it is the right one, and
+ * exactly ONE is marked as the lead.
+ */
+describe('the ways in are ranked and explained', () => {
+  // rejects: a bare row of verbs. Every route has to say when to take it.
+  test('each route says when it is the right one', () => {
+    mount({ showAIBuilder: true, showManualBuilder: true, onOpenBuilder: jest.fn() });
+    const routes = document.querySelectorAll('.qsets-route');
+    expect(routes.length).toBeGreaterThanOrEqual(3);
+    for (const route of routes) {
+      expect(route.querySelector('.qsets-route-nm')).toBeTruthy();
+      expect(route.querySelector('.qsets-route-when').textContent.trim().length).toBeGreaterThan(20);
+    }
+  });
+
+  /*
+    EXACTLY ONE LEAD. Two recommendations are none, and zero leaves the
+    newcomer where they started.
+  */
+  // rejects: marking several routes as primary, or none.
+  test('exactly one route is marked as the lead', () => {
+    mount({ showAIBuilder: true, showManualBuilder: true, onOpenBuilder: jest.fn() });
+    expect(document.querySelectorAll('.qsets-route--lead')).toHaveLength(1);
+  });
+
+  // rejects: the AI route's cost being left off. A generated set arrives
+  // switched OFF and unread, and finding that out afterwards is the complaint
+  // that produced the draft badge in the list.
+  test('the AI route says the set arrives as a draft', () => {
+    mount({ showAIBuilder: true, onOpenBuilder: jest.fn() });
+    const lead = document.querySelector('.qsets-route--lead');
+    expect(lead.textContent).toMatch(/switched off|draft/i);
+  });
+
+  // rejects: hiding where a downloaded template is supposed to go. Three routes
+  // end holding a CSV and the upload box is the only place it can be used.
+  test('the upload section says it is where the other routes end', () => {
+    mount({ showAIBuilder: true, onOpenBuilder: jest.fn() });
+    expect(screen.getByText(/where every route above ends up/i)).toBeInTheDocument();
+  });
+
+  // rejects: a route rendering its guidance and no way to take it.
+  test('every route carries a control', () => {
+    mount({ showAIBuilder: true, showManualBuilder: true, onOpenBuilder: jest.fn() });
+    for (const route of document.querySelectorAll('.qsets-route')) {
+      expect(route.querySelector('button')).toBeTruthy();
+    }
+  });
+});

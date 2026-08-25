@@ -403,6 +403,61 @@ button.qsets-chip:hover { background: var(--qsets-row-hover); }
 }
 .qsets-actions { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; }
 
+/* ── THE WAYS IN, AS ROUTES RATHER THAN A ROW OF BUTTONS ──────────────────
+   docs/design/admin-redesign/07-new-set.html draws this choice as cards, each
+   naming what it is BEST FOR and what it COSTS — "Five ways in. They are not
+   interchangeable, so this says what each costs." The shipped panel was a flat
+   wrap of five sibling buttons under the word "Create", which is the same five
+   options with the part that lets a newcomer choose between them removed.
+
+   One column rather than the mockup's two, because this panel is also rendered
+   inside the host's dialog at roughly half the console's width; the content
+   model is the mockup's. */
+.qsets-routes { display: flex; flex-direction: column; gap: 8px; }
+
+.qsets-route {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 11px 13px;
+  border: 1px solid var(--qsets-rule);
+  border-radius: 10px;
+  background: transparent;
+}
+/* The recommended route, marked once. A second highlighted row is no
+   recommendation at all.
+
+   --primary carries no text here — it is a 1px border and an amber wash, both
+   of which the whole sheet already uses for the same job (--qsets-tint-warn).
+   The route's own copy stays --text and --muted, so nothing on this row depends
+   on the accent being readable. */
+.qsets-route--lead {
+  border-color: var(--primary);
+  background: var(--qsets-tint-warn);
+}
+
+.qsets-route-nm {
+  grid-column: 1;
+  font-size: var(--qsets-t-body);
+  font-weight: 600;
+  color: var(--text);
+}
+.qsets-route-when {
+  grid-column: 1;
+  grid-row: 2;
+  font-size: var(--qsets-t-floor);
+  line-height: 1.5;
+  color: var(--muted);
+  margin: 0;
+}
+.qsets-route .qsets-btn { grid-column: 2; grid-row: 1 / span 2; white-space: nowrap; }
+
+@media (max-width: 560px) {
+  .qsets-route { grid-template-columns: 1fr; }
+  .qsets-route .qsets-btn { grid-column: 1; grid-row: auto; justify-self: start; }
+}
+
 .qsets-field { display: flex; flex-direction: column; gap: 5px; margin: 0 0 12px; }
 .qsets-field > label { font-size: var(--qsets-t-label); font-weight: 600; color: var(--muted); }
 .qsets-field .qsets-input { padding-left: 9px; }

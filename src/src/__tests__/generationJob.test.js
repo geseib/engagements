@@ -25,6 +25,7 @@ import {
   generationJobHeadline,
   warningsMayBeIncomplete,
   generationJobStorageKey,
+  recallAllGenerationJobs,
   rememberGenerationJob,
   recallGenerationJob,
   forgetGenerationJob,
@@ -252,5 +253,61 @@ describe('remembering the job id, so leaving is survivable', () => {
     expect(resumeIsGone(gone)).toBe(true);
     expect(resumeIsGone(new Error('lost contact with the job'))).toBe(false);
     expect(resumeIsGone(null)).toBe(false);
+  });
+});
+
+/**
+ * WHAT A LIST CAN SEE.
+ *
+ * Reported: "the question set doesnt get generated in the list until i click AI
+ * builder and see the status of the generation … it should still show up in the
+ * list with a review button." The memory to do that already existed — one slot
+ * per endpoint under a shared prefix — but only the builder that wrote a slot
+ * ever read it, to offer itself a resume. A list needs all of them.
+ */
+describe('recallAllGenerationJobs', () => {
+  const key = (leaf) => `engage.generationJob.${leaf}`;
+  beforeEach(() => window.localStorage.clear());
+
+  test('finds every remembered job, whichever builder wrote it', () => {
+    window.localStorage.setItem(key('ai-generate-trivia'), JSON.stringify({ jobId: 't1', startedAt: 10 }));
+    window.localStorage.setItem(key('ai-generate-scenarios'), JSON.stringify({ jobId: 's1', startedAt: 20 }));
+    expect(recallAllGenerationJobs().map((j) => j.jobId)).toEqual(['s1', 't1']);
+  });
+
+  // rejects: a list ordered by whatever order localStorage happens to enumerate,
+  // which puts the job the person just started anywhere.
+  test('newest first', () => {
+    window.localStorage.setItem(key('a'), JSON.stringify({ jobId: 'old', startedAt: 1 }));
+    window.localStorage.setItem(key('b'), JSON.stringify({ jobId: 'new', startedAt: 999 }));
+    expect(recallAllGenerationJobs()[0].jobId).toBe('new');
+  });
+
+  // rejects: reading unrelated keys. This runs against the same localStorage as
+  // every other feature in the app.
+  test('reads nothing that is not a generation slot', () => {
+    window.localStorage.setItem('engage.somethingElse', JSON.stringify({ jobId: 'no' }));
+    window.localStorage.setItem('game_1234_title', 'Retro');
+    expect(recallAllGenerationJobs()).toEqual([]);
+  });
+
+  // rejects: one bad slot taking the others down with it — the single-slot
+  // reader already survives this and a list must not be more fragile.
+  test('one malformed slot does not hide the rest', () => {
+    window.localStorage.setItem(key('broken'), '{not json');
+    window.localStorage.setItem(key('ok'), JSON.stringify({ jobId: 'fine', startedAt: 5 }));
+    expect(recallAllGenerationJobs().map((j) => j.jobId)).toEqual(['fine']);
+  });
+
+  // rejects: a cleared-but-present slot showing as a running generation.
+  test('a slot with no jobId is absent, as it is for the single-slot reader', () => {
+    window.localStorage.setItem(key('empty'), JSON.stringify({ startedAt: 5 }));
+    expect(recallAllGenerationJobs()).toEqual([]);
+  });
+
+  // rejects: the caller having to know which builders exist to interpret it.
+  test('says which builder wrote each slot', () => {
+    window.localStorage.setItem(key('ai-generate-polls'), JSON.stringify({ jobId: 'p1', startedAt: 3 }));
+    expect(recallAllGenerationJobs()[0].key).toBe('ai-generate-polls');
   });
 });
