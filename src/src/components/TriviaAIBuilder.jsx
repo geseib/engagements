@@ -3,6 +3,7 @@ import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
 import CountField from './CountField';
+import { categorySpread } from '../utils/categorySpread';
 import { tagsToCsvCell, normalizeTags } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
 import GenerationJobPanel from './GenerationJobPanel';
@@ -482,7 +483,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                       min={1}
                       max={24}
                       presets={[1, 3, 6, 12]}
-                      hint="Categories are what the host can switch on and off mid-session."
+                      hint={`${categorySpread(triviaConfig.count, triviaConfig.numberOfCategories)} Categories are what the host can switch on and off mid-session.`}
                     />
                   <div className="form-group">
                     <div className="label-row">

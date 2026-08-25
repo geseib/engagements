@@ -70,16 +70,50 @@ function tint(name) {                       // an rgba() layer from MY_CSS
 
 const ROOT = ':root {';
 const DUSK = '[data-theme="dark"] {';
+const PAPER = '[data-theme="light"] {';
+
+/*
+  BOTH THEMES, AND PAPER IS NOT THE HYPOTHETICAL ONE.
+
+  The first revision of this file measured dusk only, because the stylesheet was
+  written against the console's dark work field. This field is not a screen
+  root — it declares no theme and inherits — and the builders that host it are
+  mounted in AdminPage's top-level fragment, OUTSIDE AdminShell and outside the
+  work body, so what they inherit is `data-theme="light"` from
+  public/index.html.
+
+  Measuring one theme let `color: var(--bg)` ship on the filled preset. On dusk
+  that is #0F1A2E on amber, 8.86:1. On paper — where it actually renders — it is
+  #FBF7F1 on amber: 1.84:1, on the single element whose entire job is to say
+  which value is current. Every pairing below is asserted on both grounds.
+*/
+const THEMES = {
+  dusk: {
+    bg: token(GLOBAL_CSS, DUSK, '--bg'),
+    surface: token(GLOBAL_CSS, DUSK, '--surface'),
+    surface2: token(GLOBAL_CSS, DUSK, '--surface-2'),
+    text: token(GLOBAL_CSS, DUSK, '--text'),
+    muted: token(GLOBAL_CSS, DUSK, '--muted'),
+  },
+  paper: {
+    bg: token(GLOBAL_CSS, PAPER, '--bg'),
+    surface: token(GLOBAL_CSS, PAPER, '--surface'),
+    surface2: token(GLOBAL_CSS, PAPER, '--surface-2'),
+    text: token(GLOBAL_CSS, PAPER, '--text'),
+    muted: token(GLOBAL_CSS, PAPER, '--muted'),
+  },
+};
+
 const T = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  surface2: token(GLOBAL_CSS, DUSK, '--surface-2'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
+  ...THEMES.dusk,
   primary: token(GLOBAL_CSS, ROOT, '--primary'),
+  primaryDeep: token(GLOBAL_CSS, ROOT, '--primary-deep'),
   danger: token(GLOBAL_CSS, ROOT, '--danger'),
   dangerText: token(GLOBAL_CSS, ROOT, '--danger-text'),
   dangerDeep: token(GLOBAL_CSS, ROOT, '--danger-deep'),
+  /* Read from this stylesheet, not retyped: the ink on the theme-invariant
+     accent, which has to be invariant for the same reason. */
+  onAccent: token(MY_CSS, '.cnt {', '--cnt-on-accent'),
   /* No success colour on this strip: it has one state and it is a notice, not
      an outcome. Every other screen here declares its own --*-success-text
      because an undefined custom property invalidates the whole declaration. */
@@ -114,38 +148,107 @@ const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 /* ========================================================================== */
 
-describe('the strip, composited on the work field', () => {
+describe.each(Object.entries(THEMES))('the field, composited on %s', (_name, theme) => {
   /*
-    Every pairing here sits on ONE stack: the work field, plus this strip's own
-    amber tint. Nothing else nests inside it — it is three elements on a line —
-    which is why this file is short where the panel palettes are long.
+    Every pairing here sits on ONE stack: the surface the field was dropped on,
+    plus this field's own hover tint. Nothing else nests inside it — it is a
+    label, a row of chips and a row of controls — which is why this file is
+    short where the panel palettes are long.
   */
-  const STACK = [T.bg];
+  const STACK = [theme.bg];
 
-  // rejects: deepening the tint until the sentence stops clearing AA, which is
-  // the change somebody makes to "make the warning stand out more".
+  // rejects: dimming --muted until the label, the endpoints or the spread hint
+  // stop clearing AA — the change somebody makes to "quieten the secondary row".
   test.each([
-    ['the current value', T.text],
-    ['the label, the range and the hint', T.muted],
-  ])('%s clears AA on the tinted field', (_label, fg) => {
-    expect(on(fg, STACK)).toBeGreaterThanOrEqual(AA);
+    ['the current value and the typed digits', 'text'],
+    ['the label, the track endpoints and the hint', 'muted'],
+  ])('%s clears AA', (_label, key) => {
+    expect(on(theme[key], STACK)).toBeGreaterThanOrEqual(AA);
   });
 
-  // rejects: the SELECTED preset losing contrast. It is filled with the accent
-  // and carries the ground colour as text, and it is the one thing on this
-  // control that says which value is current now that no thumb position does.
+  /*
+    THE ONE THAT WAS WRONG. The filled preset is the only thing on this control
+    that says which value is current, and --primary is theme-invariant, so its
+    ink must be too. `var(--bg)` is not: it measures 8.86:1 on dusk and 1.84:1
+    on paper, and paper is where the builders render.
+  */
+  // rejects: the ink on the accent going back to a theme-dependent token.
   test('the filled preset clears AA', () => {
-    expect(on(T.bg, [T.primary])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.onAccent, [T.primary])).toBeGreaterThanOrEqual(AA);
   });
 
   // rejects: an unselected preset or the typed digits fading into the field.
-  test('an unselected preset and the typed value clear AA', () => {
-    expect(on(T.text, [T.bg])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.text, [T.bg, tint('--cnt-hover')])).toBeGreaterThanOrEqual(AA);
+  test('an unselected preset clears AA, hovered and not', () => {
+    expect(on(theme.text, [theme.bg])).toBeGreaterThanOrEqual(AA);
+    expect(on(theme.text, [theme.bg, tint('--cnt-hover')])).toBeGreaterThanOrEqual(AA);
+  });
+});
+
+describe('the track, and the state boundaries that are not text', () => {
+  /*
+    NOT 4.5:1, AND NOT EVERYTHING. None of this is text, so the bar is WCAG
+    1.4.11's 3:1 — and 1.4.11 asks it of the visual information needed to
+    IDENTIFY a control and its state, not of every pixel in the widget.
+
+    What that means here, said explicitly so the next person does not either
+    over-apply it or quietly drop it:
+
+      HELD to 3:1  the filled portion of the rail (it is the state), the
+                   selected preset's boundary (it is the state), and the thumb's
+                   hairline (it is how you find and aim at the control).
+
+      NOT held     the UNFILLED remainder of the rail. It is the empty half of
+                   a progress bar: context, not state. The value it would be
+                   carrying is already stated four other ways in this field — the
+                   numeral in the head, the typed box, the filled preset, and the
+                   thumb's position between two labelled endpoints — so a low
+                   luminance there costs a reader nothing. It is deliberately
+                   light, and deliberately not asserted.
+  */
+  const UI = 3.0;
+
+  // rejects: the fill going back to bright --primary, which is 1.84:1 on paper
+  // and therefore invisible on the surface these builders actually render on.
+  test.each(Object.entries(THEMES))('the filled rail reads against %s', (_name, theme) => {
+    expect(on(T.primaryDeep, [theme.bg])).toBeGreaterThanOrEqual(UI);
+    expect(on(T.primaryDeep, [theme.bg, theme.surface])).toBeGreaterThanOrEqual(UI);
+  });
+
+  /*
+    On paper the ink inside a selected chip and the ink inside an unselected one
+    are the same #1B2942, so without this border the whole selected state rests
+    on a 1.96:1 fill.
+  */
+  // rejects: the selected chip's boundary collapsing back into the fill colour.
+  test.each(Object.entries(THEMES))('the selected preset is bounded against %s', (_name, theme) => {
+    expect(on(T.primaryDeep, [theme.bg, theme.surface])).toBeGreaterThanOrEqual(UI);
+    expect(block(MY_CSS, '.cnt-preset.is-on')).toMatch(/border-color:\s*var\(--primary-deep\)/);
+  });
+
+  // rejects: dropping the thumb's ring or hairline — together they are the only
+  // things separating a bright amber disc from the deep amber bar under it.
+  test('the thumb keeps a ring and a hairline', () => {
+    const thumb = MY_CSS.slice(MY_CSS.indexOf('.cnt-slider::-webkit-slider-thumb'));
+    expect(thumb).toMatch(/border:\s*2px solid var\(--bg\)/);
+    expect(thumb).toMatch(/box-shadow:\s*0 0 0 1px var\(--muted\)/);
+    for (const theme of Object.values(THEMES)) {
+      expect(on(theme.muted, [theme.bg, theme.surface])).toBeGreaterThanOrEqual(UI);
+    }
   });
 });
 
 describe('the rules that are about what must NOT be there', () => {
+  /*
+    The defect this file failed to catch, named so it cannot come back by
+    somebody "simplifying" the token away.
+  */
+  // rejects: theme-dependent ink on the theme-invariant accent.
+  test('the filled preset does not take its ink from a theme token', () => {
+    const rule = block(MY_CSS, '.cnt-preset.is-on');
+    expect(rule).toMatch(/color:\s*var\(--cnt-on-accent\)/);
+    expect(rule).not.toMatch(/color:\s*var\(--bg\)/);
+  });
+
   // rejects: a raw hex creeping in outside the token block.
   test('no hex literal survives outside the token block', () => {
     const declarations = stripped(MY_CSS)

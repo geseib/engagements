@@ -4,21 +4,40 @@
    Scoped under `.cnt`, like `.qsets`, `.team` and `.porgs`, so it declares no
    global class a later import inherits.
 
-   REPLACES A SLIDER, and the shape follows from why. The presets are the
-   primary control because they are the real answer almost every time, so they
-   get the weight: 36px targets, the selected one filled with the accent. The
-   exact row is secondary and reads as such — a quiet stepper either side of a
-   narrow field, with the permitted range stated beside it rather than implied
-   by a track's length.
+   THREE JOBS, TWO AFFORDANCES. The presets are primary because they are the
+   real answer almost every time, so they get the weight: 36px targets, the
+   selected one filled with the accent. Below them one secondary row carries
+   both remaining jobs — say it exactly (stepper + typed box) and see how big
+   the ask is (a track) — so the field reads as two controls, not three.
 
-   Colour is tokens only, from the dusk set the console already uses:
+   THE TRACK CAME BACK, and the reason it went is worth keeping in view. What
+   was removed was three SEPARATE affordances for one integer: a native range
+   input, a number box beside it, and presets underneath, the range input the
+   most prominent and the least able to hit 37. What is here now is not that.
+   The track is secondary, it is 4px of paint rather than a native widget, it
+   shares its row with the exact entry that answers its one weakness, and it
+   states the permitted range by its own endpoints instead of a separate
+   `1–100` caption. It is the only thing in the field that answers "is 50 a
+   lot?", which presets and a number box genuinely cannot.
 
-     --text        #F4EDE4 on --bg #0F1A2E       14.97:1  the value, typed digits
-     --muted       #9BA8BE on --bg                7.24:1  label, range, hint
-     --primary     #F6A94C on --bg                9.14:1  the selected preset's ring
-     --bg          #0F1A2E on --primary           8.86:1  the selected preset's text
+   A track is decoration over a handful of values, so it is drawn only when the
+   span is wide enough to carry information — see TRACK_MIN_SPAN in the JSX.
 
-   Asserted in __tests__/countFieldPalette.test.js.
+   ── COLOUR: THIS FIELD RENDERS ON BOTH SURFACES ────────────────────────────
+   It declares no theme (see the JSX), so it inherits — and the builders that
+   host it are mounted OUTSIDE AdminShell, which means they inherit
+   `data-theme="light"` from public/index.html. The first revision of this file
+   was measured against dusk only and shipped `color: var(--bg)` on the filled
+   preset, which resolves to #FBF7F1 on paper: 1.84:1, on the one element whose
+   whole job is to say which value is current.
+
+   --primary is theme-INVARIANT, so its ink has to be invariant too:
+
+     --cnt-on-accent #1B2942 on --primary #F6A94C   7.42:1   both themes
+     --text          on --bg      14.97:1 dusk / 15.85:1 paper  value, digits
+     --muted         on --bg       7.24:1 dusk /  6.34:1 paper  label, hint, edges
+
+   Asserted for BOTH themes in __tests__/countFieldPalette.test.js.
    ========================================================================== */
 
 .cnt {
@@ -26,6 +45,11 @@
   --cnt-t-label: 13px;
   --cnt-t-body: 15px;
   --cnt-t-value: 19px;
+  /* Ink on the amber fill. #1B2942 is --surface in dusk and --text in paper —
+     a Warm Summit colour either way, and 7.42:1 on --primary in both, which
+     `var(--bg)` was not. */
+  --cnt-on-accent: #1B2942;
+  --cnt-thumb: 20px;                 /* 16px core + a 2px ring each side */
   --cnt-rule: rgba(155, 168, 190, .22);
   --cnt-rule-strong: rgba(155, 168, 190, .38);
   --cnt-hover: rgba(155, 168, 190, .07);
@@ -82,11 +106,19 @@
 .cnt-preset:hover { background: var(--cnt-hover); border-color: var(--muted); }
 
 /* Filled, not merely outlined: which one is chosen has to survive a glance
-   across a form with several of these on it. */
+   across a form with several of these on it.
+
+   THE BORDER IS THE DEEP AMBER AND THE FILL IS NOT. On paper the ink inside a
+   selected chip (--cnt-on-accent #1B2942) and the ink inside an unselected one
+   (--text #1B2942) are the SAME COLOUR, so the entire selected state rested on
+   an amber fill measuring 1.96:1 against a white panel — under the 3:1 that
+   WCAG 1.4.11 asks of the visual information distinguishing a control's state.
+   --primary-deep carries that boundary instead: 3.30:1 on white, 5.27:1 on the
+   dusk field, so selection is legible without the fill having to carry it. */
 .cnt-preset.is-on {
   background: var(--primary);
-  border-color: var(--primary);
-  color: var(--bg);
+  border-color: var(--primary-deep);
+  color: var(--cnt-on-accent);
 }
 .cnt-preset.is-on:hover { background: var(--primary); filter: brightness(1.05); }
 
@@ -127,9 +159,105 @@
 .cnt-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .cnt-input { -moz-appearance: textfield; appearance: textfield; }
 
-/* The permitted range, stated. A slider implied it with the length of a track;
-   saying it is shorter and exact. */
+/* The permitted range, stated in words. Only for spans too narrow to earn a
+   track — where a track IS drawn its endpoints say the same thing in the place
+   the thing is, and saying it both ways would be the same fact twice. */
 .cnt-range { color: var(--muted); font-size: var(--cnt-t-floor); font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------------ track -- */
+
+/* The endpoints. These ARE the range statement when a track is drawn. */
+.cnt-edge {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: var(--cnt-t-floor);
+  font-variant-numeric: tabular-nums;
+}
+.cnt-edge-min { margin-left: 10px; }
+
+/* The rail is 4px of paint; the DRAG TARGET is the full 36px row on top of it,
+   so the pointer never has to find a hairline and a touch never misses.
+
+   --cnt-fill is a UNITLESS RATIO (0–1) set inline by the JSX. */
+.cnt-track {
+  --cnt-at: calc(var(--cnt-thumb) / 2 + (100% - var(--cnt-thumb)) * var(--cnt-fill));
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 36px;
+  display: flex;
+  align-items: center;
+}
+
+/* THE FILL IS --primary-deep, NOT --primary. Bright amber measures 1.84:1 on
+   paper, so on the surface these builders actually render the filled half of
+   the track would have been invisible; #C77B4A clears 3:1 on every ground this
+   field can land on (3.09 / 3.30 paper, 5.27 / 4.41 dusk). A 4px bar wants the
+   heavier of the two ambers anyway, and it leaves the bright one free to be the
+   thumb, which then reads as a distinct object sitting ON the fill rather than
+   dissolving into it.
+
+   THE FILL ENDS UNDER THE THUMB'S CENTRE, not at a raw percentage of the box.
+   A native thumb travels inset by half its own width, so a plain 0–100%
+   gradient drifts from the thumb by up to half a thumb — worst exactly at min
+   and max, which is where anyone checking the control looks first. */
+.cnt-track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--primary-deep) 0 var(--cnt-at),
+    var(--cnt-rule-strong) var(--cnt-at) 100%
+  );
+}
+
+/* Native range styling is the single most dated-looking control on a modern
+   screen, and that was half of the original complaint. Nothing native survives
+   here: the widget is stripped to a transparent 36px hit area and every pixel
+   you can see is painted above. */
+.cnt-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 100%;
+  height: 36px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.cnt-slider::-webkit-slider-runnable-track { height: 36px; background: transparent; }
+.cnt-slider::-moz-range-track { height: 36px; background: transparent; }
+
+/* The thumb sits ON its own amber fill, so it needs a ring in the ground
+   colour to stay a distinct object, plus a hairline so it reads against the
+   unfilled rail too. */
+.cnt-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 10px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--muted);
+  cursor: grab;
+}
+.cnt-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--muted);
+  cursor: grab;
+}
+.cnt-slider:active::-webkit-slider-thumb { cursor: grabbing; }
+.cnt-slider:active::-moz-range-thumb { cursor: grabbing; }
 
 .cnt-hint { margin: 0; color: var(--muted); font-size: var(--cnt-t-floor); line-height: 1.5; }
 

@@ -3,33 +3,49 @@ import Icon from './Icon';
 import './CountField.css';
 
 /**
- * "HOW MANY?" — presets, a stepper, and a typed value. No slider.
+ * "HOW MANY?" — presets first, then one secondary row that is exact at one end
+ * and gives you the sense of scale at the other.
  *
- * ── WHY THE SLIDER WENT ────────────────────────────────────────────────────
+ * ── THE SLIDER WENT, AND THEN CAME BACK, AND BOTH WERE RIGHT ───────────────
  *
- * Every AI builder asked this question with THREE controls stacked on each
- * other: an `<input type="range">`, a number box beside it, and a row of preset
- * buttons underneath. Three affordances for one integer, repeated five times
- * across five files.
+ * What was removed: every AI builder asked this with THREE SEPARATE controls
+ * stacked on each other — an `<input type="range">`, a number box beside it,
+ * and a row of presets underneath — repeated across five files, with the range
+ * input the most prominent and the least able to answer the question. Nobody
+ * drags to 37; they drag near it and correct in the number box, which is why
+ * the number box was there. Reported as: "the use of slider seems old school
+ * and not current cool design."
  *
- * The slider was the weakest of the three and the most prominent. Nobody drags
- * to 37; they drag near it and then correct in the number box, which is why the
- * number box was there. It is imprecise by construction, it is poor on touch,
- * it is awkward from a keyboard, and native range styling is the single most
- * dated-looking control on a modern screen — which is what was reported: "the
- * use of slider seems old school and not current cool design."
+ * What went with it, and shouldn't have: the only thing on the field that
+ * answers "is 50 a lot?". Presets and a number box both state a value and
+ * neither gives it a SIZE. That matters more here than it looks — a generation
+ * costs money against an organisation's plan, and takes time in proportion to
+ * this number.
  *
- * ── WHAT REPLACED IT ───────────────────────────────────────────────────────
+ * So the track is back, and it is a different object from the one that left:
  *
- * The presets become the primary control, because they are the real answer
- * almost every time — 5, 10, 20. The selected one is filled, so the current
- * value is legible at a glance rather than inferred from a thumb position.
- * Anything else is typed, with − and + for the small adjustments a slider was
- * genuinely good at.
+ *   - it is secondary, under presets that stay the primary way in;
+ *   - it shares its row with the exact entry that answers its one real
+ *     weakness, so the field reads as TWO affordances, not three;
+ *   - nothing native survives — every visible pixel is painted (CountField.css),
+ *     because dated native range styling was half the original complaint;
+ *   - it replaces the separate `1–100` caption rather than joining it, stating
+ *     the permitted range with its own endpoints;
+ *   - it is drawn only where it carries information. Over a handful of values a
+ *     track is decoration — see TRACK_MIN_SPAN.
  *
- * That is one control instead of three, exact by construction, and it needs no
- * pointer at all.
+ * The presets stay primary because they are still the real answer almost every
+ * time — 5, 10, 20 — and the selected one is filled, so the current value
+ * survives a glance rather than being inferred from a thumb position. Every
+ * value remains reachable without a pointer.
  */
+
+/*
+  Under this many steps a track is decoration: it cannot show a meaningful
+  proportion, and its endpoints say less than the words "1–6" would. Every
+  caller today spans 23, 49 or 99, so every caller gets one.
+*/
+export const TRACK_MIN_SPAN = 12;
 export default function CountField({
   label,
   value,
@@ -39,11 +55,14 @@ export default function CountField({
   presets = [],
   hint = '',
   unit = '',
+  track = true,
 }) {
   const id = useId();
   const clamp = (n) => Math.min(max, Math.max(min, n));
   const current = clamp(Number(value) || min);
   const set = (n) => onChange(clamp(Number(n) || min));
+  const hasTrack = track && max - min >= TRACK_MIN_SPAN;
+  const fill = max > min ? (current - min) / (max - min) : 0;
 
   return (
     /*
@@ -114,7 +133,32 @@ export default function CountField({
         >
           <Icon name="Plus" weight="bold" size={13} color="currentColor" />
         </button>
-        <span className="cnt-range">{min}–{max}</span>
+        {hasTrack ? (
+          /*
+            TWO CONTROLS FOR ONE VALUE, deliberately, and each labelled for what
+            it does rather than for the value — the group already carries the
+            name, exactly as the steppers do. A pointer user drags; everyone
+            else has the presets, the steppers and the box, and the slider still
+            takes arrow keys for anyone who prefers it.
+          */
+          <>
+            <span className="cnt-edge cnt-edge-min">{min}</span>
+            <span className="cnt-track" style={{ '--cnt-fill': fill }}>
+              <input
+                type="range"
+                className="cnt-slider"
+                min={min}
+                max={max}
+                value={current}
+                onChange={(e) => set(e.target.value)}
+                aria-label="Set roughly"
+              />
+            </span>
+            <span className="cnt-edge">{max}</span>
+          </>
+        ) : (
+          <span className="cnt-range">{min}–{max}</span>
+        )}
       </div>
 
       {hint && <p className="cnt-hint">{hint}</p>}

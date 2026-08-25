@@ -1,0 +1,112 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>CountField — the shipped control, both themes</title>
+<!--
+  A LIVE GALLERY, NOT A MOCKUP. Both stylesheets are symlinks to the real files
+  under src/src, so this page cannot drift from what ships — edit the component
+  and reload. It exists because CountField renders on BOTH surfaces (it declares
+  no theme and the AI builders that host it are mounted outside AdminShell, so
+  they inherit paper from public/index.html), and a control measured on one
+  ground only is how `color: var(--bg)` shipped at 1.84:1 on the filled preset.
+
+  Serve it:  python3 -m http.server 8124 --directory docs/design
+             http://localhost:8124/countfield-study/
+-->
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="CountField.css">
+<style>
+  body { margin:0; font-family:Inter,system-ui,sans-serif; }
+  .pane { padding:26px 28px 34px; }
+  .pane[data-theme="light"] { background:#FBF7F1; }
+  .pane[data-theme="dark"]  { background:#0F1A2E; }
+  .banner { font:600 11px/1 Inter,sans-serif; letter-spacing:.1em; text-transform:uppercase;
+            padding:9px 28px; color:#F4EDE4; background:#25375A; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(330px,1fr)); gap:20px;
+          align-items:start; max-width:1180px; }
+  .panel { background:var(--surface); border-radius:12px; padding:18px 20px;
+           box-shadow:0 1px 3px rgba(0,0,0,.14); }
+  .cap { font:600 11px/1.4 Inter,sans-serif; letter-spacing:.08em; text-transform:uppercase;
+         color:var(--muted); margin:0 0 12px; }
+</style>
+
+<div class="banner">Paper — what the AI builders inherit from &lt;html&gt;</div>
+<div class="pane" data-theme="light"><div class="grid" id="light"></div></div>
+
+<div class="banner">Dusk — the console work field</div>
+<div class="pane" data-theme="dark"><div class="grid" id="dark"></div></div>
+
+<script>
+/* The markup CountField.jsx renders. Kept in step by eye, not by import —
+   this page is for looking at paint, and the behaviour is covered by
+   src/src/__tests__/countField.test.jsx. */
+function field({label, value, min, max, presets, hint, track = true}) {
+  const TRACK_MIN_SPAN = 12;
+  const hasTrack = track && max - min >= TRACK_MIN_SPAN;
+  const fill = max > min ? (value - min) / (max - min) : 0;
+  const chips = presets.map(p =>
+    `<button type="button" role="radio" aria-checked="${p===value}"
+       class="cnt-preset${p===value?' is-on':''}">${p}</button>`).join('');
+  const tail = hasTrack
+    ? `<span class="cnt-edge cnt-edge-min">${min}</span>
+       <span class="cnt-track" style="--cnt-fill:${fill}">
+         <input type="range" class="cnt-slider" min="${min}" max="${max}"
+                value="${value}" aria-label="Set roughly">
+       </span>
+       <span class="cnt-edge">${max}</span>`
+    : `<span class="cnt-range">${min}&ndash;${max}</span>`;
+  return `
+  <div class="cnt" role="group" aria-label="${label}">
+    <div class="cnt-head">
+      <label class="cnt-label">${label}</label>
+      <span class="cnt-value">${value}</span>
+    </div>
+    <div class="cnt-presets" role="radiogroup">${chips}</div>
+    <div class="cnt-exact">
+      <button type="button" class="cnt-step">&minus;</button>
+      <input class="cnt-input" type="number" value="${value}">
+      <button type="button" class="cnt-step">+</button>
+      ${tail}
+    </div>
+    ${hint?`<p class="cnt-hint">${hint}</p>`:''}
+  </div>`;
+}
+
+const CASES = [
+  ['On a preset', [
+    {label:'Questions to generate', value:10, min:1, max:100, presets:[5,10,20,50]},
+  ]],
+  ['Off every preset — the head carries the value', [
+    {label:'Questions to generate', value:37, min:1, max:100, presets:[5,10,20,50]},
+  ]],
+  ['At the ends — the fill stops under the thumb', [
+    {label:'Questions to generate', value:1, min:1, max:100, presets:[5,10,20,50]},
+    {label:'Questions to generate', value:100, min:1, max:100, presets:[5,10,20,50]},
+  ]],
+  ['Categories, with the spread it implies', [
+    {label:'Categories to spread them across', value:6, min:1, max:24, presets:[1,3,6,12],
+     hint:'20 questions across 6 categories — about 3–4 each. Categories are what the host can switch on and off mid-session.'},
+    {label:'Categories to spread them across', value:12, min:1, max:24, presets:[1,3,6,12],
+     hint:'4 questions across 12 categories — more categories than questions, so some will come back empty.'},
+  ]],
+  ['Too narrow for a track — the range is stated in words', [
+    {label:'Answer choices', value:4, min:3, max:6, presets:[4,5,6]},
+  ]],
+];
+
+for (const id of ['light','dark']) {
+  document.getElementById(id).innerHTML = CASES.map(([cap, fields]) =>
+    `<div class="panel"><p class="cap">${cap}</p>${fields.map(field).join('<div style="height:18px"></div>')}</div>`
+  ).join('');
+}
+
+document.querySelectorAll('.cnt-slider').forEach(r => r.addEventListener('input', e => {
+  const f = e.target, root = f.closest('.cnt');
+  f.closest('.cnt-track').style.setProperty('--cnt-fill', String((f.value-f.min)/(f.max-f.min)));
+  root.querySelector('.cnt-value').textContent = f.value;
+  root.querySelector('.cnt-input').value = f.value;
+  root.querySelectorAll('.cnt-preset').forEach(b => {
+    const on = b.textContent.trim() === String(f.value);
+    b.classList.toggle('is-on', on); b.setAttribute('aria-checked', on);
+  });
+}));
+</script>
