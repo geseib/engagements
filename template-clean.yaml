@@ -108,6 +108,18 @@ Globals:
         # function, deliberately, so that the set of functions able to read
         # customer content stays something you can enumerate from this file.
         TENANT_KMS_KEY_ID: !Ref TenantKey
+        # THE PUBLISH CHECK, for admin/shared/content-guardrail.js. Global for
+        # the same reason as the key above: the module names it when it is
+        # missing, and — this is the load-bearing part — an ABSENT guardrail
+        # ESCALATES rather than passing. A function that cannot read this does
+        # not quietly approve a set into the public library; it sends it to a
+        # person. See the module's header.
+        CONTENT_GUARDRAIL_ID: !Ref ContentGuardrail
+        # The PUBLISHED version, not DRAFT. A content gate should move when the
+        # template says so and not the moment somebody edits a filter in the
+        # console — and pinning it means the version a set was checked against
+        # is a fact that can be recorded beside the outcome.
+        CONTENT_GUARDRAIL_VERSION: !GetAtt ContentGuardrailVersion.Version
 
 Resources:
 
@@ -718,6 +730,66 @@ Resources:
   # wrapped blob lives on ORG#<id>/METADATA and the plaintext is cached in the
   # Lambda container. Field crypto is AES-256-GCM in node:crypto with the orgId
   # as AAD, so there is no KMS call per item — see lambda-functions/*/tenant-crypto.js.
+  # ── THE CONTENT CHECK THAT GATES THE PUBLIC LIBRARY ─────────────────────
+  #
+  # docs/design/tenancy-redesign/05-share-review.html states the contract to the
+  # person sharing: "An automated review reads the whole set looking for
+  # material that should not be published without a person seeing it: violence,
+  # sexual content, harassment, and content that targets a group."
+  #
+  # The filter strengths below are the THREE-OUTCOME design, and they are not
+  # arbitrary. Guardrails answers with a band — NONE|LOW|MEDIUM|HIGH — and
+  # admin/shared/content-guardrail.js maps HIGH to a refusal and MEDIUM to an
+  # escalation, because a check that must answer yes or no answers wrongly on a
+  # history set that mentions a war. So the filters are configured to REPORT at
+  # a low threshold and the banding is done in code, where it is testable, and
+  # not by tuning a knob in CloudFormation that no test can see.
+  #
+  # PROMPT_ATTACK is configured here but applied ONLY to prompts. A Workie is
+  # executable text fed to a model as instructions; a trivia question about
+  # prompt injection is not an attack. The module decides which categories apply
+  # to which subject — see PROMPT_CATEGORIES.
+  ContentGuardrail:
+    Type: AWS::Bedrock::Guardrail
+    Properties:
+      Name: !Sub '${StackName}-content-check'
+      Description: Gates a question set or Workie on its way into the public library.
+      BlockedInputMessaging: This content was held for review.
+      BlockedOutputsMessaging: This content was held for review.
+      ContentPolicyConfig:
+        FiltersConfig:
+          - Type: VIOLENCE
+            InputStrength: LOW
+            OutputStrength: NONE
+          - Type: SEXUAL
+            InputStrength: LOW
+            OutputStrength: NONE
+          - Type: HATE
+            InputStrength: LOW
+            OutputStrength: NONE
+          - Type: INSULTS
+            InputStrength: LOW
+            OutputStrength: NONE
+          # Guardrails' name for dangerous and criminal instructions — the
+          # owner's "dangerous info".
+          - Type: MISCONDUCT
+            InputStrength: LOW
+            OutputStrength: NONE
+          - Type: PROMPT_ATTACK
+            InputStrength: HIGH
+            OutputStrength: NONE
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: StackName
+          Value: !Ref StackName
+
+  ContentGuardrailVersion:
+    Type: AWS::Bedrock::GuardrailVersion
+    Properties:
+      GuardrailIdentifier: !GetAtt ContentGuardrail.GuardrailId
+      Description: !Sub 'Published by ${StackName}'
+
   TenantKey:
     Type: AWS::KMS::Key
     DeletionPolicy: Retain
