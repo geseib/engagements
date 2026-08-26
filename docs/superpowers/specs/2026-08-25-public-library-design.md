@@ -1,6 +1,6 @@
 # The public library, per-version moderation, and scoped Workies
 
-**Status:** design, approved in conversation 2026-08-25. Not built.
+**Status:** approved 2026-08-25 after agent review. Building all stages.
 
 Three decisions were taken by the owner before this was written, and each one
 closes off alternatives that are otherwise tempting. They are recorded first,
@@ -90,9 +90,8 @@ Today a `versions[]` entry is `{version, createdAt, questionCount, note?}` on th
 set's metadata row, with `activeVersion` pointing at one of them. Content lives
 per version and per scope at `setContentPk(scope, orgId, setId, version)`.
 
-Two fields are added to each entry:
-
-**Each becomes its own ROW, not a field on the `versions[]` entry:**
+Two facts are recorded per version — its review state and, once shared, where
+it went. **Each is its own ROW, not a field on the `versions[]` entry:**
 
 ```
 PK = <scope>SET#<id>#v<n>   SK = 'REVIEW'
@@ -360,6 +359,43 @@ stage 4. Prompt scoping runs in PARALLEL.
    `06-share-rejected.html`, which carries the appeal.
 4. **The public library screen** — `07-public-library.html`.
 5. **Prompt scoping (parallel)** — the bulk. Blocks only D3.
+
+---
+
+## 6a. The two decisions review left open, now settled
+
+**Org personas: NO, not in this work.** `AIPROMPTS` holds prompts, personas and
+default-pointer rows, and scoping the partition scopes all three — but a persona
+is a VOICE, a small curated set of characters Engage maintains, and nothing in
+the owner's request asks for a customer-authored one. Personas therefore stay
+platform-only: `personasPk()` returns the bare partition regardless of scope,
+stated explicitly rather than left to fall out of a prefix function. If a
+customer voice is wanted later it is a separate, smaller piece on top of the
+prompt scoping this does build.
+
+The `GAMETYPE#…` default pointer stays platform-only for the same reason and a
+sharper one: it answers "what does Engage use when a set names nothing", which
+is a house decision by definition. **An org's own prompt is chosen explicitly by
+a set or it is not used** — there is no org-level default, so the cross-scope
+default-collision the review found cannot arise. `create-ai-prompt.js:257`'s
+sweep and `get-ai-summary.js:366`'s Scan both keep working unchanged, which is
+the point.
+
+**Prompt bodies: the S3 key gains the scope prefix, and org bodies are
+encrypted before `PutObject`.** The review is right that `ENCRYPTED_FIELDS`
+alone would encrypt the row and leave the text in the clear, and right that two
+orgs with colliding slugs would overwrite each other's body — the DynamoDB
+partition scoping does not reach S3. So:
+
+```
+prompts/<gameType>/<promptId>/v<n>.json                 platform, plaintext (unchanged)
+prompts/org/<orgId>/<gameType>/<promptId>/v<n>.json     org, ciphertext
+prompts/public/<gameType>/<promptId>/v<n>.json          public, plaintext
+```
+
+Existing keys are untouched and are the platform form, so this is zero
+migration in S3 as well. `update-ai-prompt.js:271`'s `s3Key`/version coupling
+reads the stored key rather than rebuilding it, which is what makes that safe.
 
 ---
 
