@@ -1,7 +1,8 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, ScanCommand, QueryCommand, GetCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
-const { resolvePartitionFromMeta } = require('./shared/set-version');
+const { resolvePartitionFromMeta, setMetadataKey } = require('./shared/set-version');
+const tenant = require('./shared/tenant');
 const { inferPromptType } = require('./shared/prompt-shape');
 const { promptLinkTag } = require('./shared/archive-prompt-link');
 
@@ -140,10 +141,24 @@ async function exportQuestionSets(selectedIds, environment, results) {
     try {
       console.log(`📤 Exporting question set: ${setId}`);
       
-      // Get question set metadata
+      /*
+        THE ARCHIVE IS HOUSE CONTENT ONLY, AND THIS SAYS SO RATHER THAN
+        IMPLYING IT.
+
+        The archive is one shared store behind all three tiers, reached by
+        unauthenticated routes. An organisation's set must never be exported
+        into it, and this read was already platform-only — but by ACCIDENT, from
+        a hard-coded `PK: 'SETS'`. An org set therefore failed here as "not
+        found", which is misleading: it exists, it is simply not exportable.
+
+        Stated explicitly now, through the same key builder every other reader
+        uses. This is also the seam for the refusal the handoff asks for —
+        `export-to-archive.js` takes an arbitrary `selectedItems` list and
+        should refuse anything carrying an `orgId` rather than quietly missing.
+      */
       const setResponse = await db.send(new GetCommand({
         TableName: process.env.TABLE_NAME,
-        Key: { PK: 'SETS', SK: `SET#${setId}` }
+        Key: setMetadataKey({ scope: tenant.PLATFORM, setId }),
       }));
 
       if (!setResponse.Item) {

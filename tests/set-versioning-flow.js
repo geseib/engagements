@@ -975,6 +975,44 @@ function decorate(setId, fields) {
       assert.deepStrictEqual(offenders, [],
         `these bypass the resolver and will read the wrong version:\n  ${offenders.join('\n  ')}`);
     });
+    /*
+      AND THE METADATA PARTITION MOVES TOO.
+
+      The check above deliberately exempts `SK: 'METADATA'`, because set METADATA
+      is not versioned — and that exemption left a hole, because metadata is
+      still SCOPED. It lives at `PK='SETS'` for the platform library and at
+      `PK='ORG#<org>#SETS'` for an organisation's own, so a hard-coded `'SETS'`
+      is a platform-only read that finds NOTHING for every org session and
+      reports no error.
+
+      create-report.js:223 already carries the fix and the post-mortem: "this
+      read `PK: 'SETS'` unconditionally, which since tenancy is the PLATFORM
+      library and nothing else … so for every org session this simply found
+      nothing and the report silently lost its set name, description and
+      instructions — no error, just absent fields." Two call sites in
+      get-ai-summary.js were missed, which cost every org session its set's
+      custom instruction, AI context, persona and prompt.
+
+      `setMetadataKey` from tenant.js is the only correct way to build this key.
+    */
+    // rejects: a runtime reader reaching for the platform library by name.
+    check('no runtime reader hard-codes the `SETS` metadata partition', () => {
+      const offenders = [];
+      for (const rel of readerFiles) {
+        // Comments stripped first: this rule is ABOUT the literal, so the
+        // comments explaining it necessarily contain it.
+        const src = fs.readFileSync(path.join(REPO, 'lambda-functions', rel), 'utf8')
+          .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+          .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+        src.split('\n').forEach((line, i) => {
+          if (/PK\s*:\s*'SETS'/.test(line)) {
+            offenders.push(`${rel}:${i + 1}: ${line.trim()}`);
+          }
+        });
+      }
+      assert.deepStrictEqual(offenders, [],
+        `these read the platform library for every caller, org or not:\n  ${offenders.join('\n  ')}`);
+    });
     check('every reader that touches set content requires set-version', () => {
       const missing = readerFiles.filter((rel) =>
         !fs.readFileSync(path.join(REPO, 'lambda-functions', rel), 'utf8').includes('set-version'));

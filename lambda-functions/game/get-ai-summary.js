@@ -22,6 +22,7 @@ const { consensusLabel } = require('./consensus');
 // brace-tokens and goes red.
 const { analyzeWavelength, buildWavelengthProse } = require('./wavelength');
 const { ORG } = require('./tenant');
+const { setMetadataKey } = require('./set-version');
 const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
 
 /**
@@ -58,6 +59,33 @@ const db = DynamoDBDocumentClient.from(dynamoClient);
  * at the top. That is why this builds its keys with concatenation.
  */
 const orgOf = (item) => (item && typeof item.orgId === 'string' ? item.orgId.trim() : '');
+/**
+ * THE SET METADATA KEY FOR THIS SESSION'S SET — scoped, never assumed.
+ *
+ * Both reads of this row used `PK: 'SETS'`, which since tenancy is the PLATFORM
+ * library and nothing else. An organisation's own set lives at
+ * `ORG#<org>#SETS`, so for every org session these found NOTHING and the
+ * summary silently lost the set's custom instruction, its AI context, its
+ * persona and its prompt — no error, just absent fields, and a Workie that
+ * sounded like the default because the set's own voice was never read.
+ *
+ * `create-report.js:223` already carries this exact fix and its post-mortem.
+ * These two call sites were missed. tests/set-versioning-flow.js now fails on
+ * any hard-coded `PK: 'SETS'` in a runtime reader, so a third cannot hide.
+ *
+ * The scope comes from the SESSION ROW, not from the caller: this route serves
+ * anonymous participants, and a caller-derived scope resolves to platform for
+ * every one of them — which is the bug wearing a different hat.
+ */
+function sessionSetKey(metadata, setId) {
+  const scope = metadata && metadata.QuestionSetScope;
+  return setMetadataKey({
+    scope,
+    orgId: scope === ORG ? ((metadata && metadata.orgId) || '') : '',
+    setId,
+  });
+}
+
 async function sessionOrgId(gameId) {
   const res = await db.send(new GetCommand({
     TableName: process.env.TABLE_NAME,
@@ -993,7 +1021,7 @@ exports.handler = async (event) => {
       try {
         const setResult = await db.send(new GetCommand({
           TableName: process.env.TABLE_NAME,
-          Key: { PK: 'SETS', SK: `SET#${questionSetId}` }
+          Key: sessionSetKey(metadata, questionSetId),
         }));
         
         if (setResult.Item) {
@@ -1076,6 +1104,11 @@ exports.handler = async (event) => {
 
     // Prepare data for AI
     const aiData = {
+      // The scoped key for this session's set, resolved once here where the
+      // session row is in scope. generateAISummary reads the same row again for
+      // the report context and cannot derive it — it is handed `gameId` and a
+      // set id, neither of which says which library.
+      setKey: sessionSetKey(metadata, questionSetId),
       eventTitle: metadata.EventTitle || metadata.Title || 'Engagement Event',
       gameType: metadata.GameType || 'call-and-answer',
       /*
@@ -1306,7 +1339,7 @@ exports.buildFallbackSummary = buildFallbackSummary;
 // so the direct call is now a convenience rather than a workaround.
 exports.generateAISummary = generateAISummary;
 
-async function generateAISummary({ eventTitle, gameType, gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults }) {
+async function generateAISummary({ setKey, eventTitle, gameType, gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults }) {
   // ANONYMITY: while hidden, nothing that ties this round's answer to its
   // author may reach the model — not just the deterministic fallback below.
   // The model's OWN generated summary is built from the template variables
@@ -1509,7 +1542,12 @@ async function generateAISummary({ eventTitle, gameType, gameAiContext, eventDet
       // Fallback to old structure
       const oldSetMetadata = await db.send(new GetCommand({
         TableName: process.env.TABLE_NAME,
-        Key: { PK: 'SETS', SK: `SET#${questionSetId}` }
+        // Handed down from the caller — see the note on sessionSetKey. NO
+        // FALLBACK: the one caller always passes it, and a default of
+        // `PK: 'SETS'` here would be the platform-only read this fix removed,
+        // reinstated as a hedge and silent for exactly the sessions that need
+        // it most.
+        Key: setKey,
       }));
       
       if (oldSetMetadata.Item) {
