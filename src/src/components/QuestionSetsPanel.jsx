@@ -3,6 +3,7 @@ import Icon from './Icon';
 import ListControls from './ListControls';
 import SetImageBadge from './SetImageBadge';
 import useListControls from '../hooks/useListControls';
+import { setOwnerLabel, setOwnerTitle, setOwnerIsOurs } from '../utils/setOwnerTag';
 import { matchesListFilters } from '../config/listControls';
 import {
   GAME_TYPE_LIST,
@@ -380,27 +381,32 @@ export default function QuestionSetsPanel({
                               </span>
                             )
                           )}
-                          {/* WHOSE IT IS. Only the rows that are NOT this
-                              organisation's own are badged — the common case is
-                              the quiet one, or every row shouts and none of
-                              them reads. Without this the refusal above has no
-                              explanation anywhere on screen. */}
-                          {set.scope === 'platform' && (
-                            <span
-                              className="qsets-chip"
-                              title="Managed by Engage and shared with every organisation. Copy it to make changes."
-                            >
-                              Engage
-                            </span>
-                          )}
-                          {set.scope === 'public' && (
-                            <span
-                              className="qsets-chip"
-                              title="Published by another organisation. Copy it to make changes."
-                            >
-                              Public
-                            </span>
-                          )}
+                          {/*
+                            WHOSE IT IS, ON EVERY ROW — Yours / Team / Engage /
+                            Public. This reverses what was here, which badged
+                            only the rows that were NOT this organisation's, on
+                            the argument that "the common case is the quiet one,
+                            or every row shouts and none of them reads."
+
+                            That argument is right about alarms and wrong about
+                            this. Badging the exceptions makes the chip a
+                            WARNING, so an unbadged row means "no warning" —
+                            which is not the same as "yours", and cannot be told
+                            apart from a badge that failed to render. Tagging
+                            every row makes it a COLUMN: four values, always
+                            present, read once and then scanned.
+
+                            The tone stays binary (see utils/setOwnerTag.js).
+                            Four colours would be a legend to memorise; the only
+                            distinction that changes what you can DO is whether
+                            you must copy it first.
+                          */}
+                          <span
+                            className={`qsets-chip${setOwnerIsOurs(set) ? '' : ' qsets-chip--off'}`}
+                            title={setOwnerTitle(set)}
+                          >
+                            {setOwnerLabel(set)}
+                          </span>
                         </div>
                       </td>
                       <td className="qsets-when">{formatWhen(set.updatedAt || set.createdAt)}</td>

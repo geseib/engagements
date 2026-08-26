@@ -1134,3 +1134,63 @@ describe('a generation is visible in the list, running and finished', () => {
     expect(screen.queryByText(/generating/i)).toBeNull();
   });
 });
+
+/**
+ * WHOSE SET IS THIS, ON EVERY ROW.
+ *
+ * Asked for as: *"if we create question sets they need to be tagged by the
+ * owner the tag maybe 'yours' teams engage or public"*.
+ *
+ * The rule itself is unit-tested in setOwnerTag.test.js. What THIS file is for
+ * is the wiring — a rule with no call site is the defect that shipped the inert
+ * AI builder button, which had a green test proving the button existed.
+ */
+describe('every row says whose set it is', () => {
+  const OWNED = [
+    { id: 'a', name: 'My Retro', engagementType: 'call-and-answer', totalQuestions: 5,
+      active: true, canManage: true, mine: true, scope: 'org' },
+    { id: 'b', name: 'Raj Set', engagementType: 'call-and-answer', totalQuestions: 5,
+      active: true, canManage: true, mine: false, scope: 'org' },
+    { id: 'c', name: 'House Set', engagementType: 'call-and-answer', totalQuestions: 5,
+      active: true, canManage: false, mine: false, scope: 'platform' },
+    { id: 'd', name: 'Shared Set', engagementType: 'call-and-answer', totalQuestions: 5,
+      active: true, canManage: false, mine: false, scope: 'public' },
+  ];
+
+  // rejects: the tag being computed and never rendered.
+  test.each([
+    ['My Retro', 'Yours'],
+    ['Raj Set', 'Team'],
+    ['House Set', 'Engage'],
+    ['Shared Set', 'Public'],
+  ])('%s is tagged %s', async (setName, tag) => {
+    await openDialog({}, { sets: OWNED });
+    const row = screen.getByText(setName).closest('tr');
+    expect(within(row).getByText(tag)).toBeInTheDocument();
+  });
+
+  /*
+    EXACTLY ONE, ALWAYS. The point of tagging every row is that the chip becomes
+    a column rather than a warning — a row with none is indistinguishable from a
+    badge that failed to render, which is the ambiguity this replaced.
+  */
+  // rejects: a row falling through all four cases and carrying no tag.
+  test('no row is left untagged', async () => {
+    await openDialog({}, { sets: OWNED });
+    for (const set of OWNED) {
+      const row = screen.getByText(set.name).closest('tr');
+      const tags = ['Yours', 'Team', 'Engage', 'Public']
+        .filter((t) => within(row).queryByText(t));
+      expect(tags).toHaveLength(1);
+    }
+  });
+
+  // rejects: a set with no scope — every pre-tenancy row — being labelled as
+  // the reader's own, which would say they may edit Engage's library.
+  test('a row with no scope reads as Engage, not Yours', async () => {
+    await openDialog({}, { sets: [{ ...OWNED[0], scope: undefined, mine: true }] });
+    const row = screen.getByText('My Retro').closest('tr');
+    expect(within(row).getByText('Engage')).toBeInTheDocument();
+    expect(within(row).queryByText('Yours')).toBeNull();
+  });
+});

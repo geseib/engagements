@@ -11,6 +11,7 @@ import QuestionSetDeleteDialog from './QuestionSetDeleteDialog';
 import QuestionSetEditor from './QuestionSetEditor';
 import { authFetch } from '../auth/authFetch';
 import { recallAllGenerationJobs } from '../utils/generationJob';
+import { setOwnerLabel, setOwnerTitle, setOwnerIsOurs } from '../utils/setOwnerTag';
 import { adminApiUrl } from '../utils/adminApi';
 import { gameTypeLabel } from '../config/gameTypes';
 import { buildEditPayload, editableSnapshot, summarizeEditResult } from '../utils/questionSetEditing';
@@ -500,6 +501,16 @@ export default function HostQuestionSetsDialog({
                     </td>
                     <td>
                       <span className="qsets-chip qsets-chip--type">{gameTypeLabel(set.engagementType)}</span>
+                      {/* WHOSE IT IS — Yours / Team / Engage / Public, on every
+                          row. The same rule the console uses, from the same
+                          module, because two surfaces deriving "whose is this"
+                          separately is two answers waiting to disagree. */}
+                      <span
+                        className={`qsets-chip${setOwnerIsOurs(set) ? '' : ' qsets-chip--off'}`}
+                        title={setOwnerTitle(set)}
+                      >
+                        {setOwnerLabel(set)}
+                      </span>
                       {/* Badged only where it changes what to DO: a generated
                           set nobody has read. Once it is switched on it is an
                           ordinary set and the badge would be noise. */}
@@ -642,7 +653,21 @@ export default function HostQuestionSetsDialog({
                     <td className="qsets-col-set">
                       <span className="qsets-nm">{set.name || set.id}</span>
                     </td>
-                    <td className="qsets-col-type">{gameTypeLabel(set.engagementType)}</td>
+                    <td className="qsets-col-type">
+                      {gameTypeLabel(set.engagementType)}{' '}
+                      {/* THE SHELF IS TWO LIBRARIES, NOT ONE. This section's
+                          heading says "made by an administrator", which is true
+                          of Engage's rows and NOT of a set another organisation
+                          published — and the copy rule differs for neither, so
+                          the row has to say which it is. Same module as the
+                          table above. */}
+                      <span
+                        className={`qsets-chip${setOwnerIsOurs(set) ? '' : ' qsets-chip--off'}`}
+                        title={setOwnerTitle(set)}
+                      >
+                        {setOwnerLabel(set)}
+                      </span>
+                    </td>
                     <td className="qsets-col-qs">{set.totalQuestions || 0}</td>
                     <td className="qsets-col-acts">
                       <div className="qsets-rowact">
