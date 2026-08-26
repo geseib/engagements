@@ -378,6 +378,10 @@ function seedPlatformSet(setId, name) {
     PK: 'SETS', SK: `SET#${setId}`, name, description: 'A shared set.',
     engagementType: 'trivia', questionCount: 2, categoryCount: 1,
     active: true, Quickstart: true,
+    /* THE SET'S OWN WORKIE. A set names the summary prompt and the voice it is
+       meant to be run with; the fixture carried neither, so nothing here could
+       ever have noticed whether a copy kept them. */
+    promptId: 'p-retro-summary', personaId: 'coach',
   });
   store.set(key(`SET#${setId}`, 'CATEGORY#c001'), {
     PK: `SET#${setId}`, SK: 'CATEGORY#c001', Name: 'Pricing', QuestionCount: 2,
@@ -580,6 +584,25 @@ const say = (s) => console.log(s);
     // published.
     assert.strictEqual(meta.Quickstart, false);
     assert.strictEqual(meta.visibility, 'private');
+
+    /*
+      THE WORKIE COMES WITH IT, and this is a CHARACTERISATION test rather than
+      a fix: the handler builds the copy from `...meta`, so it already carried
+      these. Nothing proved it, because the fixture had no `promptId` at all —
+      and "it works because of a spread nobody named" is exactly the kind of
+      thing a later tidy-up into an explicit field list removes in silence.
+
+      It matters more than it looks. A set names the summary prompt and the
+      voice it is meant to be run with; a copy that loses them is a set that
+      reads back as "adapt to the session" and quietly stops sounding like the
+      thing it was copied from.
+    */
+    // rejects: rewriting this copy as an explicit whitelist that forgets the
+    // fields nobody was thinking about.
+    assert.strictEqual(meta.promptId, 'p-retro-summary',
+      'the copy lost the summary prompt the set was built around');
+    assert.strictEqual(meta.personaId, 'coach',
+      'the copy lost the voice the set was built around');
     // The source is untouched.
     assert.ok(store.has(key('SETS', 'SET#80strivia')));
     assert.strictEqual(store.get(key('SETS', 'SET#80strivia')).name, '80s Trivia');
