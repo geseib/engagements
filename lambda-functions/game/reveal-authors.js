@@ -16,9 +16,11 @@
  * revealed here, stays unattributed. create-report.js reads AuthorsRevealed for
  * exactly that reason.)
  *
- * HOST ONLY. The route carries the Cognito authorizer (template-clean.yaml):
- * a participant knows the four-digit game id, and this both flips the flag for
- * the whole room and returns every name.
+ * HOST ONLY — AND THIS SESSION'S HOST. The route carries the Cognito authorizer
+ * (template-clean.yaml): a participant knows the four-digit game id, and this
+ * both flips the flag for the whole room and returns every name. The authorizer
+ * alone only proves the caller is *a* host, and that was the entire boundary
+ * until 2026-08-27; the handler now asks whose session this is as well.
  *
  * IDEMPOTENT. The host is standing in front of a room; a double-tap must not
  * produce an error, and revealing something already revealed is a no-op that
@@ -30,8 +32,10 @@
  * security control.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, QueryCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, QueryCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+
+const { callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -82,6 +86,34 @@ exports.handler = async (event) => {
   const now = new Date().toISOString();
 
   try {
+    /*
+      WHOSE ROOM IS THIS? The Cognito authorizer says the caller is *a* host;
+      nothing here said they were THIS session's host. The owning org lives on
+      METADATA, so this is one extra GetItem — the same one start-game.js and
+      next-question.js pay. 404 rather than 403: see
+      tenant.callerMayDriveSession.
+
+      THIS ROUTE ANSWERS WITH THE NAMES, so unscoped it was worse than the flag
+      it flips. A `hosts` account in any organisation, holding one of 9,000
+      four-digit ids, got back every participant's name against every
+      participant's answer for a round it had nothing to do with — and flipped
+      AuthorsRevealed for the whole room on the way past. anonymity.js exists
+      because that promise is made to participants explicitly, and it is not the
+      host's alone to break.
+    */
+    const ownerRead = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'orgId'
+    }));
+    if (!callerMayDriveSession(event, ownerRead.Item || {})) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ error: 'Game not found' }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
     // Idempotent by construction: an unconditional SET to true.
     await db.send(new UpdateCommand({
       TableName: process.env.TABLE_NAME,

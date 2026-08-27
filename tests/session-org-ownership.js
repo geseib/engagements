@@ -91,6 +91,14 @@ for (const rel of [
   'lambda-functions/game/next-question.js',
   'lambda-functions/game/update-game.js',
   'lambda-functions/game/start-game.js',
+  // Added late, and they had been unscoped since before tenancy: both carry the
+  // Cognito authorizer, so the boundary was "any `hosts` account plus one of
+  // 9,000 codes". `stage-beat` is the sharper one — the `feedback` beat it
+  // writes is half of the gate the PUBLIC comment route trusts, so leaving it
+  // unscoped handed a stranger a write path into a rival's round report.
+  // `session-beat-org-scope.js` drives both handlers and proves that chain.
+  'lambda-functions/game/stage-beat.js',
+  'lambda-functions/game/reveal-authors.js',
 ]) {
   const src = fs.readFileSync(path.join(REPO, rel), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')

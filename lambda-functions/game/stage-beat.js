@@ -30,9 +30,12 @@
  * open on its own tally, not inherit the previous round's discussion prompt.
  * Storing it on the STATE record would do exactly that.
  *
- * HOST ONLY. The route carries the Cognito authorizer (template-clean.yaml),
- * like /close-round and /reveal-authors: a participant knows the four-digit
- * game id, and this moves what the whole room is looking at.
+ * HOST ONLY — AND THIS SESSION'S HOST. The route carries the Cognito authorizer
+ * (template-clean.yaml), like /close-round and /reveal-authors: a participant
+ * knows the four-digit game id, and this moves what the whole room is looking
+ * at. The authorizer alone only proves the caller is *a* host, though, and for
+ * a long time that was the whole boundary — so the handler also asks whose
+ * session this is. See the guard in the handler for what that was worth.
  *
  * IDEMPOTENT. The host is standing in front of a room; a double-tap must be a
  * no-op that still returns 200, not an error.
@@ -43,8 +46,10 @@
  * distinct type is what lets the stage take the beat without a re-sync.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, QueryCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, QueryCommand, GetCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+
+const { callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -146,6 +151,33 @@ exports.handler = async (event) => {
   const now = new Date().toISOString();
 
   try {
+    /*
+      WHOSE ROOM IS THIS? The Cognito authorizer above says the caller is *a*
+      host; until this read, nothing said they were THIS session's host. The
+      owning org lives on METADATA — STATE does not carry it — so this is one
+      extra GetItem, the same one start-game.js and next-question.js pay.
+      404 rather than 403: see tenant.callerMayDriveSession.
+
+      THE BEAT IS A WRITE GRANT, which is why this matters more here than the
+      "idempotent and reversible" note in the header suggests. comments.js is
+      deliberately public — participants hold no Cognito identity — and its gate
+      is two table facts: STATE is `RESULTS#nnn`, and THIS attribute is
+      `feedback`. Its header names this route as the thing that is not public.
+      So while this was unscoped, posting `{beat:'feedback'}` at any of the
+      9,000 four-digit ids opened somebody else's round for comment by anyone
+      holding the code — and those rows are written encrypted under the VICTIM
+      org's key, into their round report and their session report. The beat
+      undoes; the comments do not.
+    */
+    const ownerRead = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'orgId'
+    }));
+    if (!callerMayDriveSession(event, ownerRead.Item || {})) {
+      return respond(404, { error: 'Game not found' });
+    }
+
     // UPDATE, never PUT. AuthorsRevealed lives on this same item, and a PUT here
     // would un-reveal a round get-results had already revealed — every
     // attributed answer on the stage would go back in the box the moment the
