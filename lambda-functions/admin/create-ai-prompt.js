@@ -6,6 +6,10 @@ const { inferPromptType, normalizeOutputSections } = require('./shared/prompt-sh
 const {
   assertTemplateVariablesExist, assertNoBracketDirections, assertReceivesResponses,
 } = require('./shared/template-variable-usage');
+const {
+  createPromptRef, promptKey, promptOwnerStamp,
+} = require('./shared/prompt-access');
+const { requestedScope } = require('./shared/question-set-access');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -145,6 +149,35 @@ exports.handler = async (event) => {
     const timestamp = new Date().toISOString();
     const version = 1;
 
+    /*
+      WHICH LIBRARY DOES THIS WORKIE GO IN?
+
+      `createPromptRef` has the rule and the reasoning (shared/prompt-access.js):
+      an acting organisation wins; Engage staff with no org selected are
+      maintaining the house library; a script or worker with no groups and no
+      org keeps writing platform, which is the seam every seed and every
+      existing test in tests/ai-prompt-lifecycle.js comes through.
+
+      It returns null for a REAL host with no organisation, and this refuses
+      rather than defaulting — silently writing a customer's Workie into the
+      library every other customer reads is the exact failure tenant.js exists
+      to prevent. Same status and same sentence as the sets side
+      (upload-questions.js:700-709), noun changed.
+    */
+    const ref = createPromptRef(event, promptId, requestedScope(event));
+    if (!ref) {
+      return {
+        statusCode: 403,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS'
+        },
+        body: JSON.stringify({ error: 'Choose an organisation before creating a Workie.' })
+      };
+    }
+    const promptStamp = promptOwnerStamp(event, ref);
+
     // Create S3 key based on gameType and promptId
     const s3Key = `prompts/${gameType}/${promptId}/v${version}.json`;
 
@@ -202,7 +235,7 @@ exports.handler = async (event) => {
 
     // Save metadata to DynamoDB using new structure
     const dynamoItem = {
-      PK: 'AIPROMPTS',
+      PK: promptKey(ref).PK,
       SK: `AIPROMPT#${promptId}`,
       promptId,
       name,
@@ -228,7 +261,11 @@ exports.handler = async (event) => {
       s3Key,
       version,
       createdAt: timestamp,
-      updatedAt: timestamp
+      updatedAt: timestamp,
+      // WHOSE WORKIE THIS IS — scope, org and creator, written together.
+      // `canManagePrompt` reads all three back OFF THE ROW, so a row that does
+      // not carry them cannot be managed by anybody.
+      ...promptStamp,
       // NO `ttl`. The table has TimeToLiveSpecification on `ttl`
       // (template-clean.yaml:104-106) because GAME#/PLAYER# records must expire.
       // AI prompts are configuration, not session data — stamping them with
@@ -318,6 +355,10 @@ exports.handler = async (event) => {
       promptId,
       s3Key,
       version,
+      // THE OTHER HALF OF THE REFERENCE. A promptId alone no longer names one
+      // partition, so the client must round-trip the pair.
+      scope: ref.scope,
+      orgId: ref.orgId || null,
       status: 'created',
       message: 'AI prompt created successfully'
     };
