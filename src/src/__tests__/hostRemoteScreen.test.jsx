@@ -40,9 +40,12 @@ const { authFetch } = require('../auth/authFetch');
 /**
  * Route every GET the remote makes. The shapes are the ones the real handlers
  * return: get-game-state.js for /state (including its new `stageBeat`),
- * get-players.js:101-152 for /players, get-ai-summary.js:568 for /ai-summary.
+ * get-players.js:101-152 for /players, get-ai-summary.js:568 for /ai-summary,
+ * comments.js's readComments for /comments (`{gameId, comments}`).
  */
-function serve({ state, stageBeat = 'results', players = [], aiSummary = null, progress = {} }) {
+function serve({
+  state, stageBeat = 'results', players = [], aiSummary = null, progress = {}, comments = null,
+}) {
   global.fetch = jest.fn((url) => {
     if (String(url).includes('/state')) {
       return Promise.resolve({
@@ -62,6 +65,12 @@ function serve({ state, stageBeat = 'results', players = [], aiSummary = null, p
       return Promise.resolve({
         ok: true,
         json: async () => ({ players, stats: { totalPlayers: players.length } }),
+      });
+    }
+    if (String(url).includes('/comments')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ gameId: '4821', comments: comments || [] }),
       });
     }
     if (String(url).includes('/ai-summary')) {
@@ -254,5 +263,62 @@ describe('the AI read-back on the phone', () => {
     serve({ state: 'RESULTS#003', stageBeat: 'field-notes', aiSummary: null });
     await connect();
     expect(await screen.findByText(/reading the responses/i)).toBeInTheDocument();
+  });
+});
+
+/**
+ * THE FEEDBACK ROUND ON THE PHONE.
+ *
+ * `primaryAction` was correctly widened when `feedback` joined the beats past
+ * the read-back (BEATS_PAST_THE_READ_BACK, config/hostRemote.js) — the button
+ * stopped offering to walk the room backwards out of an open round. The panel
+ * BODY was not: it stayed gated on `stageBeat === 'field-notes'` exactly, so
+ * the moment the beat actually moved to 'feedback' the whole "What we heard"
+ * section vanished and nothing replaced it. The host's phone said "Next
+ * Round" and showed no sign the feedback round it had just opened was
+ * running at all.
+ */
+describe('the feedback round on the phone', () => {
+  it('shows the round is open once the beat moves to feedback', async () => {
+    serve({ state: 'RESULTS#003', stageBeat: 'feedback', comments: [] });
+    await connect();
+    expect(await screen.findByText(/feedback round/i)).toBeInTheDocument();
+  });
+
+  it('is not shown while the round is still on its tally beat', async () => {
+    serve({ state: 'RESULTS#003', stageBeat: 'results', comments: [] });
+    await connect();
+    await screen.findByRole('button', { name: /what we heard/i });
+    expect(screen.queryByText(/feedback round/i)).not.toBeInTheDocument();
+  });
+
+  it('fetches and shows the live comment count', async () => {
+    serve({
+      state: 'RESULTS#003',
+      stageBeat: 'feedback',
+      comments: [
+        { commentId: 'c1', anchorKind: 'summary', text: 'a' },
+        { commentId: 'c2', anchorKind: 'response', text: 'b' },
+      ],
+    });
+    await connect();
+    expect(await screen.findByText(/2 comments so far/i)).toBeInTheDocument();
+  });
+
+  it('says nothing about a count when nobody has commented yet', async () => {
+    // Same restraint as the stage (GameHostPage.jsx, hostPhase 'FEEDBACK'):
+    // "0 comments so far" or "no comments yet" reads as a room that has not
+    // done the thing it was asked to do. Silence on the count, not a zero.
+    serve({ state: 'RESULTS#003', stageBeat: 'feedback', comments: [] });
+    await connect();
+    await screen.findByText(/feedback round/i);
+    expect(screen.queryByText(/comments? so far/i)).not.toBeInTheDocument();
+  });
+
+  it('does not fetch comments while the round is still on its tally beat', async () => {
+    serve({ state: 'RESULTS#003', stageBeat: 'results', comments: [{ commentId: 'c1' }] });
+    await connect();
+    await screen.findByRole('button', { name: /what we heard/i });
+    expect(global.fetch.mock.calls.some(([u]) => String(u).includes('/comments'))).toBe(false);
   });
 });

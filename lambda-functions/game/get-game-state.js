@@ -5,6 +5,7 @@ const { ORG } = require('./tenant');
 const { decryptItem } = require('./tenant-crypto');
 
 const { isPresent } = require('./player-presence');
+const { BEATS } = require('./stage-beats');
 
 /**
  * WHOSE SESSION IS THIS? — read off the row, never off the caller.
@@ -148,8 +149,25 @@ exports.handler = async (event) => {
           Key: { PK: `GAME#${gameId}`, SK: `ROUND#${currentQuestionNumber}` }
         }));
         authorsRevealed = !!(roundRecord.Item && roundRecord.Item.AuthorsRevealed);
-        if (roundRecord.Item && roundRecord.Item.StageBeat === 'field-notes') {
-          stageBeat = 'field-notes';
+        /*
+          READ AGAINST THE CLOSED SET, never against one member of it.
+
+          This used to be `=== 'field-notes'`, and when `feedback` was added to
+          `BEATS` (stage-beat.js) that equality quietly reported every stored
+          `feedback` as `results` — the initial value below. The write succeeded,
+          the row was right, and every surface that polls or reloads was told
+          the room was on the tally. This endpoint is upstream of the host page
+          and of the phone remote, so a beat lost here is lost everywhere at
+          once, with nothing to see in any log.
+
+          Same shape, and now the same treatment, as `stageFocus` below: a value
+          this build has never heard of — an older or newer deploy's — falls
+          back to the initial rather than travelling on to a client that will
+          compare it against a list it is not in and silently do nothing.
+        */
+        const storedBeat = roundRecord.Item && roundRecord.Item.StageBeat;
+        if (BEATS.includes(storedBeat)) {
+          stageBeat = storedBeat;
         }
         /*
           Read against the CLOSED set the writer enforces. A value this build

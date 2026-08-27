@@ -571,6 +571,65 @@ function ReportDocument({ reportData }) {
                   <p className="no-answers">No answers recorded for this question.</p>
                 )}
               </div>
+
+              {/*
+                WHAT THE ROOM SAID ABOUT THIS ROUND'S REPORT, in a feedback
+                round. The owner: *"these will get added to the round report and
+                the over all report as well. clearly called out as comments."*
+
+                CLEARLY CALLED OUT is done three ways, because this is the one
+                surface where the two kinds of prose sit closest together and
+                the reader may be holding a printout with no way to ask: its own
+                heading, its own class, and — on every comment — the SECTION it
+                is about. That last one is the load-bearing part here. A comment
+                in the session report is read a long way from the round it
+                belongs to, so "too internal" against nothing is not a comment.
+
+                The label is the STORED one, never re-derived from the answers
+                array beside it. That is what keeps a comment readable after the
+                7-day ANSWER rows expire and this report rebuilds with
+                `answers: []` — from that point the label and the excerpt are
+                the only surviving record of what was being discussed.
+
+                Absent on every report built before this feature, so the guard
+                is a real case and not defensive habit.
+              */}
+              {Array.isArray(question.comments) && question.comments.length > 0 && (
+                <div className="report-comments">
+                  <h3 className="report-block-heading">Comments</h3>
+                  {question.comments.map((comment, cIdx) => (
+                    <div key={comment.commentId || cIdx} className="report-comment report-keep">
+                      {comment.anchorLabel && (
+                        <div className="comment-on">On {comment.anchorLabel}</div>
+                      )}
+                      {/*
+                        THE EXCERPT — quoted material the comment is about, not
+                        the comment itself. In THIS report it is not optional
+                        polish: the label alone names a section ("Response 1 —
+                        Ada") that this document has no other way to show once
+                        the 7-day answer rows behind it have expired, and a
+                        session report is read further from the round it
+                        belongs to than the round report ever is. Absent on a
+                        comment stored before this field existed — `''`, never
+                        undefined, so this renders nothing rather than an empty
+                        quote.
+                      */}
+                      {comment.anchorExcerpt && (
+                        <div className="comment-excerpt">{comment.anchorExcerpt}</div>
+                      )}
+                      <blockquote className="comment-text">{comment.text}</blockquote>
+                      <div className="comment-meta">
+                        {/* `playerName` is ABSENT, never null, on a round the
+                            server redacted — so the fallback is a position,
+                            never a blank where a name should be. */}
+                        <span className="comment-author">
+                          {comment.playerName || `Comment ${cIdx + 1}`}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           );
         })}

@@ -49,15 +49,9 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
 
-/**
- * The only two beats there are.
- *
- * A closed set on purpose. An open one is the worst possible failure here: the
- * write succeeds, the frame goes out, every client compares the value against
- * 'field-notes', and the host watches a button do nothing with no error
- * anywhere in the system.
- */
-const BEATS = ['results', 'field-notes'];
+// The closed set lives in its own module because `get-game-state.js` reads it
+// too — see stage-beats.js for why a second reader moved it there.
+const { BEATS } = require('./stage-beats');
 
 const respond = (statusCode, body) => ({
   statusCode,
@@ -180,3 +174,7 @@ exports.handler = async (event) => {
     return respond(500, { error: 'Failed to set the stage beat' });
   }
 };
+
+/** Re-exported so a test can assert the vocabulary without driving the handler.
+ *  The canonical list is `./stage-beats.js`. */
+exports.BEATS = BEATS;

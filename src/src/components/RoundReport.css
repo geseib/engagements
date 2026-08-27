@@ -1,0 +1,187 @@
+/*
+ * COMMENTS ON A ROUND'S REPORT — and only the comments.
+ *
+ * WHAT THIS SHEET DOES NOT OWN. The round artifact itself — the question, the
+ * responses, the AI summary — is drawn by `RoundReport.jsx` under the
+ * `past-round__*` class names it has always used, and those rules live in
+ * `styles.css:11651-11855`. Extracting the component did not move its
+ * stylesheet, deliberately: the host's dialog and the participant's inline
+ * surface must not be able to drift apart visually, and duplicating those rules
+ * here is exactly how they would.
+ *
+ * So everything below is namespaced `.rr-c` — a scope no other stylesheet
+ * declares — and it adds one thing: the comment blocks and the affordance that
+ * opens the composer.
+ *
+ * ── THEME ──────────────────────────────────────────────────────────────────
+ *
+ * No `data-theme` is declared here, and that is the one deliberate departure
+ * from the house rule that a surface declares its own. This markup is drawn
+ * INSIDE two containers that have already chosen: `PastRound`'s dusk modal and
+ * the player's dusk shell. Declaring a third would either fight them or force a
+ * re-tint block for a component that has only ever needed one polarity. If a
+ * paper container ever renders this, re-point the tokens in a
+ * `.rr-c--onlight` block the way `QuestionSetsPanel.css:585-604` does — do not
+ * rewrite the rules.
+ *
+ * ── CONTRAST, MEASURED ─────────────────────────────────────────────────────
+ *
+ * Composited up the real ancestor stack, not read off the element's own
+ * background. Both containers put this on `--surface` (#1B2942); the comment
+ * block tints it with a 6% white wash, which composites to #22304A.
+ *
+ *   --rr-c-text   #F4EDE4 on #22304A   11.9:1   the comment itself
+ *   --rr-c-muted  #9BA8BE on #22304A    5.5:1   the author and the anchor
+ *   --primary     #F6A94C on #22304A    7.6:1   the Comment affordance
+ *
+ * All three clear AA (4.5:1) for normal text. The tint is the thing that is
+ * invisible in a token table and is why these are composited rather than
+ * assumed from `styles.css`'s own figures.
+ *
+ * ── TYPE ───────────────────────────────────────────────────────────────────
+ *
+ * This surface is read on a PHONE, at arm's length, and on a laptop in the
+ * host's dialog — never projected. So it takes the laptop ladder
+ * (12/13/15/19/24/30), and the floor is 12px. Body copy is 15px because a
+ * comment is prose somebody reads in runs, not a count they glance at.
+ */
+
+.rr-c {
+  /* Scoped locals. An undefined custom property invalidates the WHOLE
+     declaration, so nothing here reaches for a token another stylesheet merely
+     happens to have put in the bundle. */
+  --rr-c-text: var(--text);
+  --rr-c-muted: var(--muted);
+  --rr-c-accent: var(--primary);
+  --rr-c-wash: rgba(255, 255, 255, 0.06);
+  --rr-c-rule: rgba(246, 169, 76, 0.28);
+
+  --rr-c-t-floor: 12px;
+  --rr-c-t-label: 13px;
+  --rr-c-t-body: 15px;
+
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: var(--rr-c-wash);
+  /* The amber edge is the "clearly called out as comments" the owner asked for,
+     doing it structurally rather than with a colour nobody has been taught. */
+  border-left: 3px solid var(--rr-c-rule);
+  border-radius: 6px;
+}
+
+.rr-c__head {
+  margin: 0 0 8px;
+  font-size: var(--rr-c-t-label);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rr-c-accent);
+}
+
+.rr-c__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rr-c__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* min-width:0 so a long unbroken paste can shrink rather than widen the
+     column it is in. */
+  min-width: 0;
+}
+
+.rr-c__anchor {
+  font-size: var(--rr-c-t-floor);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--rr-c-muted);
+  /* NOT truncated. This is the only thing that says which response a comment is
+     about once the response itself has expired out of a rebuilt report, and a
+     reduction with no recovery is a deletion. */
+  overflow-wrap: anywhere;
+}
+
+/*
+  THE EXCERPT — quoted context, not the comment. `--rr-c-muted` reuses the same
+  pairing `.rr-c__anchor` and `.rr-c__who` already clear AA on (measured in
+  roundReportPalette.test.js against the real composited wash), so this needs
+  no new contrast case. NOT clamped or truncated further: `excerptOf`
+  (config/comments.js) already caps this at 140 characters with its own
+  ellipsis before it ever reaches here, so a second cut on top would reduce an
+  already-short string with no recovery — unlike the composer's
+  `.fbr__on-excerpt`, which can clamp because the full section it quotes is
+  still on screen above it; here, once the answer rows this excerpt was cut
+  from have expired, this string is the only surviving copy.
+*/
+.rr-c__excerpt {
+  font-size: var(--rr-c-t-floor);
+  line-height: 1.45;
+  color: var(--rr-c-muted);
+  overflow-wrap: anywhere;
+}
+
+.rr-c__text {
+  font-size: var(--rr-c-t-body);
+  line-height: 1.5;
+  color: var(--rr-c-text);
+  /* Participants paste. Without this a single long token widens the surface and
+     the page scrolls sideways on a phone. */
+  overflow-wrap: anywhere;
+}
+
+.rr-c__who {
+  font-size: var(--rr-c-t-floor);
+  color: var(--rr-c-muted);
+}
+
+/* The heading row that carries a section's Comment affordance.
+   `margin-left: auto` on the button, never `justify-content: flex-end` — the
+   latter overflows toward the START, where a hidden overflow is unreachable.
+   Wraps, so a long heading on a narrow phone pushes the button down rather than
+   off. */
+.rr-c__section-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rr-c__section-head > :first-child {
+  min-width: 0;
+}
+
+.rr-c__add {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: var(--rr-c-t-floor);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--rr-c-accent);
+  background: transparent;
+  border: 1px solid var(--rr-c-rule);
+  border-radius: 999px;
+  cursor: pointer;
+  /* A comfortable target on a phone without growing the row it sits in. */
+  min-height: 28px;
+}
+
+.rr-c__add:hover,
+.rr-c__add:focus-visible {
+  background: var(--rr-c-wash);
+}
+
+/* One per response row, so it has to sit inside a list item that is already a
+   grid of number / text / author. It goes last and stays small. */
+.past-round__answers .rr-c__add {
+  margin-left: 8px;
+  flex: 0 0 auto;
+}

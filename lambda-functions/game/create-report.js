@@ -4,6 +4,7 @@ const { resolveSetPartition, setMetadataKey } = require('./set-version');
 const { ORG } = require('./tenant');
 const { uniquePlayerRecords } = require('./player-rows');
 const { isHidden } = require('./anonymity');
+const { parseCommentSk } = require('./comment-keys');
 const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
 
 /**
@@ -107,6 +108,29 @@ exports.handler = async (event) => {
     const roundsByNumber = new Map(
       (roundsQuery.Items || []).map((r) => [String(r.SK).replace('ROUND#', ''), r])
     );
+
+    /*
+      COMMENTS ON THIS SESSION'S ROUNDS.
+
+      The owner: *"these will get added to the round report and the over all
+      report as well. clearly called out as comments."* One query for the whole
+      session — the sort key puts the round number immediately after the tag
+      (COMMENT#003#…) precisely so this is one prefix read and not a scan.
+
+      Decrypted as `comment`: Text, AnchorExcerpt and AnchorLabel are ciphertext
+      at rest, and AnchorExcerpt is the one that matters most here. It is a
+      verbatim slice of the response being commented on, and from day 8 — once
+      the 7-day ANSWER rows have expired and `answers` below rebuilds empty — it
+      is the only surviving copy of what the room was actually discussing.
+    */
+    const commentsQuery = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: {
+        ':pk': `GAME#${gameId}`,
+        ':sk': 'COMMENT#'
+      }
+    }));
     /** True when THIS round's authors must stay off the report. */
     const roundIsHidden = (paddedQuestionNumber) =>
       isHidden(gameMetadata.Item, roundsByNumber.get(paddedQuestionNumber));
@@ -155,6 +179,45 @@ exports.handler = async (event) => {
       ? await decryptItems(reportOrgId, 'aiSummary', rawAiSummaries)
       : rawAiSummaries;
 
+    /*
+      Grouped by the round in the SORT KEY, not by an attribute, so a row whose
+      QuestionNumber attribute ever disagreed with its key is filed where it can
+      actually be found again. `parseCommentSk` returns null for anything that
+      is not a comment key — the neighbouring QUESTION#/ROUND#/PLAYER# rows in
+      this partition — rather than a half-filled object, which is what stops an
+      answer being counted as a comment.
+    */
+    const rawComments = commentsQuery.Items || [];
+    const commentItems = reportOrgId
+      ? await decryptItems(reportOrgId, 'comment', rawComments)
+      : rawComments;
+
+    const commentsByRound = new Map();
+    for (const row of commentItems) {
+      const parsed = parseCommentSk(row.SK);
+      if (!parsed) continue;
+      const list = commentsByRound.get(parsed.questionNumber) || [];
+      list.push({
+        commentId: parsed.commentId,
+        anchorKind: row.AnchorKind,
+        anchorRef: row.AnchorRef,
+        anchorLabel: row.AnchorLabel,
+        anchorExcerpt: row.AnchorExcerpt,
+        text: row.Text,
+        // OMITTED, never nulled, on a round whose authors are still hidden —
+        // the rule this file already applies to answers, so `displayLabelFor`
+        // reads a comment exactly the way it reads a response, with no new
+        // logic anywhere on the client.
+        ...(roundIsHidden(parsed.questionNumber) ? {} : { playerName: row.playerName }),
+        submittedAt: row.SubmittedAt,
+      });
+      commentsByRound.set(parsed.questionNumber, list);
+    }
+    // The id is time-ordered (comment-keys.js), so this is writing order.
+    for (const list of commentsByRound.values()) {
+      list.sort((a, b) => String(a.commentId).localeCompare(String(b.commentId)));
+    }
+
     // Who actually played.
     //
     // Hoisted above gameStats deliberately. `players` is the raw result of a
@@ -181,7 +244,11 @@ exports.handler = async (event) => {
       totalAnswers: answers.length,
       totalVotes: votes.length,
       averageAnswersPerQuestion: results.length > 0 ? Math.round((answers.length / results.length) * 100) / 100 : 0,
-      averageVotesPerQuestion: results.length > 0 ? Math.round((votes.length / results.length) * 100) / 100 : 0
+      averageVotesPerQuestion: results.length > 0 ? Math.round((votes.length / results.length) * 100) / 100 : 0,
+      // Counted off the rows the report actually renders, so the front page and
+      // the rounds cannot disagree. Stays plaintext with the rest of gameStats —
+      // it is a count, not content.
+      totalComments: commentItems.length
     };
 
     // Get game metadata for scoring configuration
@@ -285,11 +352,24 @@ exports.handler = async (event) => {
       return match ? match[1] : null;
     }).filter(Boolean))];
 
-    // Combine all three sources and deduplicate
+    /*
+      And from COMMENTS — the fourth source, and the one that is easiest to
+      forget because a comment is not something the round itself produced.
+
+      Without it a round whose only surviving artefact is a comment drops out of
+      the report entirely, taking the comments with it and reporting nothing
+      wrong. That is not hypothetical: the raw vote and results rows are 7 days
+      and a comment row is 30, so any session read in its third week reaches
+      exactly this state.
+    */
+    const questionNumbersFromComments = [...commentsByRound.keys()];
+
+    // Combine all four sources and deduplicate
     const questionNumbers = [...new Set([
       ...questionNumbersFromVotes,
       ...questionNumbersFromResults,
-      ...questionNumbersFromAISummaries
+      ...questionNumbersFromAISummaries,
+      ...questionNumbersFromComments
     ])];
 
     console.log(`📊 Found ${questionNumbers.length} questions to process: ${questionNumbers.join(', ')}`);
@@ -545,6 +625,15 @@ exports.handler = async (event) => {
           hasStructuredData: !!(questionAISummary.SummaryText && questionAISummary.DiscussionQuestions)
         } : null,
         
+        /*
+          WHAT THE ROOM SAID ABOUT THIS ROUND'S REPORT, in a feedback round.
+
+          Always an array, never undefined: a renderer that has to tell "no
+          comments" from "the field is missing" will get it wrong on one of the
+          two surfaces that draw this.
+        */
+        comments: commentsByRound.get(questionNumber) || [],
+
         // Results metadata
         processedAt: questionResults?.ProcessedAt,
         completedAt: questionResults?.CompletedAt,

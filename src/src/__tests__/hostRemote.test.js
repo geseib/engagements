@@ -138,14 +138,36 @@ describe('primaryAction — every game type x every phase', () => {
     expect(onNotes('poll').label).toBe('Next Poll');
   });
 
-  it('treats every beat that is not field-notes as the tally beat', () => {
-    // The comparison is against the ONE value, not truthiness. `stageBeat`
+  it('treats every beat BEFORE the read-back as the tally beat', () => {
+    // The comparison is against a KNOWN SET, not truthiness. `stageBeat`
     // arrives from the server (get-game-state), and a truthy check would read
     // the explicit default 'results' as "already past the read-back" and skip
     // the beat again — reinstating the exact defect above.
+    //
+    // This used to read "every beat that is not field-notes", which stopped
+    // being true when `feedback` was added: an unrecognised beat still falls
+    // back to the tally, but `feedback` is past the read-back, not before it.
+    // See the feedback-round case above.
     for (const beat of [undefined, null, '', 'results', 'RESULTS', 'anything']) {
       expect(primaryAction('RESULTS#002', 'trivia', beat).id).toBe('field-notes');
     }
+  });
+
+  it('does not offer to go backwards during a feedback round', () => {
+    /*
+      A feedback round is the third beat. The phone's RESULTS control used to be
+      a binary — `stageBeat === 'field-notes' ? next : fieldNotes` — so a
+      `feedback` beat fell into the else and the phone offered "What We Heard",
+      which is the beat BEFORE the one the room is on. Tapping it would have
+      pulled the whole room back out of the feedback round.
+
+      The rule is not "is it field-notes" but "is the room at or past the
+      read-back": from either of those beats the only way on is the next round.
+    */
+    const onFeedback = (type) => primaryAction('RESULTS#001', type, 'feedback');
+    expect(onFeedback('call-and-answer')).toMatchObject({ id: 'next', label: 'Next Round' });
+    expect(onFeedback('trivia').label).toBe('Next Question');
+    expect(onFeedback('poll').label).toBe('Next Poll');
   });
 
   it('ignores the beat outside RESULTS', () => {
