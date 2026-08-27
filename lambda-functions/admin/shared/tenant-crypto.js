@@ -135,8 +135,12 @@ const MAX_CACHED_ORGS = 32;
  *                        encrypting it to their org key would make the public
  *                        library unreadable by the public.
  *   correctAnswer        The literal string "OptionA". A pointer, not prose.
- *   PersonaName/Id,      Platform configuration. A persona has no tenant —
- *   promptId             see tenant.js on why PK='AIPROMPTS' is untouched.
+ *   PersonaName/Id       Platform configuration. A persona is a VOICE Engage
+ *                        curates and stays platform-only by decision —
+ *                        tenant.js:personasPk says so in code.
+ *   promptId             A pointer, not prose. The Workie it names is scoped
+ *                        and encrypted under the `prompt` entity below; the id
+ *                        itself is how a row is found at all.
  *
  * An unknown entity THROWS rather than encrypting nothing. A typo'd entity
  * silently returning the item unchanged is how a whole row ships in plaintext.
@@ -153,6 +157,42 @@ const ENCRYPTED_FIELDS = Object.freeze({
     // named the four fields above; it is the same kind of content as
     // `customInstruction` and belongs with it.
     'roundKindBrief',
+  ]),
+
+  /** An AI prompt — a Workie: PK=<scope>AIPROMPTS, SK=AIPROMPT#<id>.
+   *
+   *  ORG SCOPE ONLY, like every other entity here — platform and public prompts
+   *  are deliberately plaintext, for the reason upload-questions.js gives about
+   *  the shared libraries: encrypting content the whole product depends on
+   *  would make it unreadable, and there is no org to key it to.
+   *
+   *  `name` and `description` are the same two strings the `set` entity above
+   *  encrypts. The template fields are the prose the customer wrote, and a
+   *  Workie IS that prose — the row is the mirror of the S3 body, which
+   *  create-ai-prompt.js encrypts separately because a partition does not reach
+   *  a bucket.
+   *
+   *  `category` and `status` STAY PLAINTEXT and that is not an oversight:
+   *  get-ai-prompts.js pushes both into a FilterExpression as equality matches,
+   *  and an encrypted value cannot be matched by an equality filter. Same
+   *  argument as the category `Name` note above. `gameType`, `promptType`,
+   *  `s3Key`, `version`, `isDefault`, `tags`, `questionSetIds` and
+   *  `defaultSettings` are vocabulary, pointers, flags, labels and model
+   *  configuration — the "identifiers, timestamps and counts" the privacy page
+   *  already concedes are visible.
+   *
+   *  `template` and `instructions` are absent because they are not on the row:
+   *  create-ai-prompt.js writes those only to the S3 body. */
+  prompt: Object.freeze([
+    'name',
+    'description',
+    'basePrompt',
+    'contextTemplate',
+    'audienceTemplate',
+    'categoryTemplate',
+    'outputFormat',
+    'outputSections',
+    'scenario',
   ]),
 
   /** A question: PK=<scope>SET#<id>[#v<n>], SK=QUESTION#<cat>#<num>.

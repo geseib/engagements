@@ -138,6 +138,25 @@ check('set fields are exactly the agreed set', () =>
      // happened to name the other four.
      'roundKindBrief'].sort()));
 
+// A WORKIE IS THE CONTENT. `name` and `description` are the same two strings
+// the `set` entity already encrypts; the template fields are the prose the
+// customer wrote. `category` and `status` stay plaintext because
+// get-ai-prompts.js pushes both into a FilterExpression as equality matches,
+// and an encrypted value cannot be matched by one — the same argument the
+// category `Name` note above makes for the 24-bit mask.
+check('prompt fields are exactly the agreed set', () =>
+  assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.prompt].sort(),
+    ['audienceTemplate', 'basePrompt', 'categoryTemplate', 'contextTemplate',
+     'description', 'name', 'outputFormat', 'outputSections', 'scenario'].sort()));
+check('a prompt\'s filterable columns are deliberately NOT encrypted', () => {
+  assert.ok(!C.ENCRYPTED_FIELDS.prompt.includes('category'),
+    'category is an equality FilterExpression in get-ai-prompts.js');
+  assert.ok(!C.ENCRYPTED_FIELDS.prompt.includes('status'),
+    'status is an equality FilterExpression in get-ai-prompts.js');
+  assert.ok(!C.ENCRYPTED_FIELDS.prompt.includes('gameType'));
+  assert.ok(!C.ENCRYPTED_FIELDS.prompt.includes('s3Key'));
+});
+
 // THE SESSION BRIEF, and the inconsistency that put it here. `report.gameTitle`
 // and `report.hostName` were already in the ENCRYPT column, and they are the
 // SAME TWO STRINGS as Title/HostName on GAME#<id>/METADATA — so one sentence
