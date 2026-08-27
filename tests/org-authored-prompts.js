@@ -123,8 +123,41 @@ stub('@aws-sdk/client-s3', {
   ListObjectsV2Command: class { constructor(i) { this.input = i; this.type = 'list'; } },
 });
 
+// ---- a KMS that behaves the way the key policy will ------------------------
+const nodeCrypto = require('crypto');
+class GenerateDataKeyCommand { constructor(i) { this.input = i; } }
+class DecryptCommand { constructor(i) { this.input = i; } }
+const wrap = (orgId, key) =>
+  Buffer.from(JSON.stringify({ orgId, key: key.toString('base64') }), 'utf8');
+
+stub('@aws-sdk/client-kms', {
+  KMSClient: class {
+    async send(command) {
+      if (command instanceof GenerateDataKeyCommand) {
+        const orgId = command.input.EncryptionContext?.orgId;
+        assert.ok(orgId, 'GenerateDataKey must bind an orgId');
+        const k2 = nodeCrypto.randomBytes(32);
+        return { Plaintext: k2, CiphertextBlob: wrap(orgId, k2) };
+      }
+      if (command instanceof DecryptCommand) {
+        const ctx = command.input.EncryptionContext?.orgId;
+        if (!ctx) throw new Error('AccessDeniedException: no orgId in encryption context');
+        const blob = JSON.parse(Buffer.from(command.input.CiphertextBlob).toString('utf8'));
+        if (blob.orgId && blob.orgId !== ctx) {
+          throw new Error('InvalidCiphertextException: encryption context mismatch');
+        }
+        return { Plaintext: Buffer.from(blob.key, 'base64') };
+      }
+      throw new Error('unexpected KMS command');
+    }
+  },
+  GenerateDataKeyCommand,
+  DecryptCommand,
+});
+
 process.env.TABLE_NAME = 'test-table';
 process.env.AI_PROMPTS_BUCKET = 'test-bucket';
+process.env.TENANT_KMS_KEY_ID = 'alias/engage-tenant';
 
 const admin = (f) => require(path.join(REPO, 'lambda-functions', 'admin', f));
 const createPrompt = admin('create-ai-prompt.js');
@@ -154,6 +187,28 @@ const STAFF = caller({ userId: 'sub-g', username: 'g', groups: 'admins', status:
 /** No groups and no org: a script, the seed, the suite's own direct calls. */
 const INTERNAL = {};
 
+/** Is this value the envelope shape tenant-crypto writes? */
+const isEnvelope = (v) => !!v && typeof v === 'object' && !Array.isArray(v)
+  && typeof v.v === 'number' && typeof v.iv === 'string'
+  && typeof v.tag === 'string' && typeof v.ct === 'string';
+
+/**
+ * Mint the org exactly as create-org does: ONE GenerateDataKey, and the wrapped
+ * blob onto ORG#<id>/METADATA, which every tenant-crypto copy's default loader
+ * reads through the stubbed DynamoDB.
+ */
+async function mintOrg(orgId) {
+  const C = require(path.join(REPO, 'lambda-functions/admin/shared/tenant-crypto.js'));
+  const blob = await C.createOrgDataKey(orgId);
+  store.set(key(`ORG#${orgId}`, 'METADATA'),
+    { PK: `ORG#${orgId}`, SK: 'METADATA', orgId, dataKeyCiphertext: blob });
+  C.forgetOrg(orgId);
+}
+
+// So a check below can look INSIDE an org's encrypted S3 body — the same
+// module the handler calls, required once and reused.
+const { decryptValue } = require(path.join(REPO, 'lambda-functions/admin/shared/tenant-crypto.js'));
+
 const BODY = {
   name: 'Retro Workie',
   description: 'what the room learned',
@@ -176,6 +231,7 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
   // rejects: PK: 'AIPROMPTS' staying hard-coded, which writes a customer's
   // Workie into the library every other customer reads.
   store.clear(); s3Store.clear(); s3Meta.clear();
+  await mintOrg(ORG);
   const orgRes = await post(HOST, {});
   const orgBody = parse(orgRes);
   await check('a host in an org creates a prompt (201)', () =>
@@ -309,6 +365,7 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
   // hardcoded bare-partition literal, crediting the org's own promptId as the
   // house default.
   store.clear(); s3Store.clear(); s3Meta.clear();
+  await mintOrg(ORG);
   await post(HOST, {});
   await post(HOST, { isDefault: false });
   await post(HOST, { isDefault: true });
@@ -334,6 +391,7 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
   // rejects: `prompts/${gameType}/${promptId}/v${version}.json` staying
   // hard-coded — the collision, and an org's text in the platform namespace.
   store.clear(); s3Store.clear(); s3Meta.clear();
+  await mintOrg(ORG);
   const bodyOrg = parse(await post(HOST, {}));
   // THE INDEPENDENT GROUND TRUTH — built once, from nothing the handler
   // returned, and reused by every check below. Comparing the response's s3Key
@@ -374,10 +432,20 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
   */
   // rejects: metadata.author staying the constant 'admin' for a host-authored
   // org Workie.
+  //
+  // Task 6 (after this section was first written) wraps an org's whole S3
+  // document as ONE envelope — see section 7 below — so `metadata.author` is
+  // no longer sitting in the bucket in the clear for an org Workie. Decrypting
+  // is the only way to look, and it is a STRICTER check than reading the raw
+  // JSON used to be: it fails exactly as before if the author is still the
+  // constant 'admin', and it ALSO fails if the body were encrypted under the
+  // wrong org's key.
   store.clear(); s3Store.clear(); s3Meta.clear();
+  await mintOrg(ORG);
   const stamped = parse(await post(HOST, {}));
-  await check('the S3 body names the real author and the library', () => {
-    const doc = JSON.parse(s3Store.get(stamped.s3Key));
+  await check('the S3 body names the real author and the library', async () => {
+    const raw = JSON.parse(s3Store.get(stamped.s3Key));
+    const doc = await decryptValue(ORG, raw);
     assert.strictEqual(doc.metadata.author, 'sub-amara',
       `author was ${JSON.stringify(doc.metadata.author)}`);
     assert.strictEqual(doc.metadata.scope, 'org');
@@ -412,6 +480,7 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
     change.
   */
   store.clear(); s3Store.clear(); s3Meta.clear();
+  await mintOrg(ORG);
   const mine = parse(await post(HOST, { name: 'Ours' }));
   const house = parse(await post(STAFF, { name: 'Engage house' }));
   const mineToo = parse(await post(HOST, { name: 'Ours too' }));
@@ -521,15 +590,22 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
   */
   // rejects: a shared, mutated query object; and a FilterExpression that stops
   // being applied to the org partition.
+  //
+  // Identified by promptId, not `name` — `name` is now an envelope for the org
+  // row (section 7), which get-ai-prompts.js does not decrypt (Task 7). The
+  // filter's job is unchanged: prove BOTH partitions were queried with the
+  // FilterExpression applied, which promptId membership proves exactly as
+  // well as the sentence did.
   store.clear(); s3Store.clear(); s3Meta.clear();
-  await post(HOST, { name: 'Org lessons', category: 'lessons-learned' });
+  await mintOrg(ORG);
+  const orgLessons = parse(await post(HOST, { name: 'Org lessons', category: 'lessons-learned' }));
   await post(HOST, { name: 'Org retro', category: 'retro' });
-  await post(STAFF, { name: 'House lessons', category: 'lessons-learned' });
+  const houseLessons = parse(await post(STAFF, { name: 'House lessons', category: 'lessons-learned' }));
   const filtered = await list(HOST, { category: 'lessons-learned' });
   await check('the category filter applies to EVERY partition', () => {
-    const names = filtered.body.prompts.map((p) => p.name).sort();
-    assert.deepStrictEqual(names, ['House lessons', 'Org lessons'],
-      `got ${JSON.stringify(names)}`);
+    const ids = filtered.body.prompts.map((p) => p.promptId).sort();
+    assert.deepStrictEqual(ids, [orgLessons.promptId, houseLessons.promptId].sort(),
+      `got ${JSON.stringify(filtered.body.prompts.map((p) => ({ promptId: p.promptId, scope: p.scope })))}`);
   });
   // rejects: the JS gameType/promptType filters being applied per-partition
   // and losing rows, or being dropped in the merge.
@@ -553,6 +629,64 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
       assert.ok(!String(p.SK).startsWith('PERSONA#'), `persona leaked: ${p.SK}`);
       assert.ok(!String(p.SK).startsWith('GAMETYPE#'), `pointer leaked: ${p.SK}`);
     }));
+
+  say('\n7. an org\'s Workie is ciphertext at rest');
+
+  /*
+    docs/design/tenancy-redesign/08-privacy.html: "Engage staff browsing the
+    database see identifiers and ciphertext, not your questions." A Workie is
+    prose the customer wrote. A field shipping in plaintext breaks NOTHING —
+    the product behaves identically and every other test passes — so these
+    assertions are about BYTES AT REST, not about what the handler returns.
+  */
+  // rejects: dropping the encryptItem call, or gating it on something other
+  // than the ref's scope.
+  store.clear(); s3Store.clear(); s3Meta.clear();
+  await mintOrg(ORG);
+  const secret = parse(await post(HOST, {
+    name: 'What we got wrong in Q3', description: 'the honest one',
+  }));
+  await check('the org row\'s name and description are ENVELOPES, not sentences', () => {
+    const row = store.get(`ORG#${ORG}#AIPROMPTS|AIPROMPT#${secret.promptId}`);
+    assert.ok(isEnvelope(row.name), `name stored as ${JSON.stringify(row.name)}`);
+    assert.ok(isEnvelope(row.description), `description stored as ${JSON.stringify(row.description)}`);
+  });
+  // rejects: encrypting the columns the list filters on, which would silently
+  // make every category and status filter return nothing for org prompts.
+  await check('…but category, status and s3Key are still readable', () => {
+    const row = store.get(`ORG#${ORG}#AIPROMPTS|AIPROMPT#${secret.promptId}`);
+    assert.strictEqual(row.category, 'lessons-learned');
+    assert.strictEqual(row.status, 'active');
+    assert.strictEqual(row.s3Key, secret.s3Key);
+    assert.strictEqual(row.orgId, ORG);
+  });
+  /*
+    THE S3 HALF. ENCRYPTED_FIELDS alone encrypts the row and leaves the TEXT in
+    the clear, in a shared bucket, beside a row that is ciphertext. That is the
+    exact mistake spec §3 names.
+  */
+  // rejects: encrypting the row and forgetting the body.
+  await check('the S3 body is an envelope, and the prose is not in it', () => {
+    const raw = s3Store.get(secret.s3Key);
+    assert.ok(!raw.includes('What we got wrong in Q3'),
+      'the Workie name is sitting in the bucket in plaintext');
+    assert.ok(!raw.includes('Summarise the responses.'),
+      'the Workie instructions are sitting in the bucket in plaintext');
+    assert.ok(isEnvelope(JSON.parse(raw)), `body was ${raw.slice(0, 80)}`);
+  });
+
+  // rejects: encrypting PLATFORM content, which would make the shared library
+  // unreadable by everybody — upload-questions.js says why.
+  store.clear(); s3Store.clear(); s3Meta.clear();
+  const open = parse(await post(STAFF, { name: 'Engage house Workie' }));
+  await check('a platform row is still plaintext', () => {
+    const row = store.get(`AIPROMPTS|AIPROMPT#${open.promptId}`);
+    assert.strictEqual(row.name, 'Engage house Workie');
+  });
+  await check('…and its S3 body is still the readable document', () => {
+    const doc = JSON.parse(s3Store.get(open.s3Key));
+    assert.strictEqual(doc.name, 'Engage house Workie');
+  });
 
   say(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

@@ -10,6 +10,7 @@ const {
   createPromptRef, promptKey, promptBodyKey, promptOwnerStamp,
 } = require('./shared/prompt-access');
 const { requestedScope } = require('./shared/question-set-access');
+const { encryptItem, encryptValue } = require('./shared/tenant-crypto');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -267,12 +268,30 @@ exports.handler = async (event) => {
       }
     };
 
+    /*
+      ORG BODIES ARE ENCRYPTED BEFORE PutObject.
+
+      `ENCRYPTED_FIELDS` alone encrypts the ROW and leaves the TEXT in the
+      clear, in a shared bucket, beside a row that is ciphertext — and the text
+      is the content-dense half. The whole document is wrapped as one envelope
+      rather than field by field: the body is read back whole, by one reader,
+      and a per-field envelope inside a JSON document buys nothing.
+
+      Platform and public bodies are plaintext by decision, the same one
+      upload-questions.js states for the shared libraries: encrypting content
+      the whole product depends on would make it unreadable, and there is no org
+      to key it to.
+    */
+    const s3Body = ref.orgId
+      ? JSON.stringify(await encryptValue(ref.orgId, promptContent))
+      : JSON.stringify(promptContent, null, 2);
+
     // Save to S3
     console.log(`💾 Saving prompt content to S3: ${s3Key}`);
     await s3Client.send(new PutObjectCommand({
       Bucket: aiPromptsBucket,
       Key: s3Key,
-      Body: JSON.stringify(promptContent, null, 2),
+      Body: s3Body,
       ContentType: 'application/json',
       Metadata: {
         promptId: promptId,
@@ -331,7 +350,9 @@ exports.handler = async (event) => {
     console.log(`💾 Saving prompt metadata to DynamoDB`);
     await dynamodb.send(new PutCommand({
       TableName: tableName,
-      Item: dynamoItem
+      // Org rows only. `encryptItem` needs an orgId and throws without one, and
+      // a platform row must stay readable by every organisation.
+      Item: ref.orgId ? await encryptItem(ref.orgId, 'prompt', dynamoItem) : dynamoItem
     }));
 
     // If this is marked as default, handle default prompt lookup structure
