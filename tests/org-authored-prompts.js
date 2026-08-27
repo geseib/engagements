@@ -414,6 +414,53 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
   store.clear(); s3Store.clear(); s3Meta.clear();
   const mine = parse(await post(HOST, { name: 'Ours' }));
   const house = parse(await post(STAFF, { name: 'Engage house' }));
+  const mineToo = parse(await post(HOST, { name: 'Ours too' }));
+
+  /*
+    FORCE A REAL CONFLICT BETWEEN THE TWO SORTS, RATHER THAN TRUSTING WALL
+    CLOCK ORDER. `readablePromptRefs` already returns `[org, platform, public]`
+    (prompt-access.js), and `Promise.all(refs.map(...)).flat()` preserves that
+    array order regardless of resolution timing — so the merged list is
+    org-first BEFORE any sort runs. Every row created above also lands in the
+    same millisecond, and `Array.prototype.sort` is stable, so a tie changes
+    nothing either. Without forcing real dates, "the caller's own library
+    comes first" passes on a flat `updatedAt` sort AND on no sort at all —
+    proven by reverting `get-ai-prompts.js`'s sort both ways and re-running:
+    still 37/0 either way.
+
+    Two conflicts, because the sort's two clauses fail independently:
+
+      - CROSS-scope (`SCOPE_RANK`): backdating platform's `updatedAt` to be
+        NEWER than either org row's makes a flat date sort provably put
+        platform first, while only the scope-rank sort still puts org first.
+        "the caller's own library comes first" below asserts this.
+
+      - WITHIN-scope (the `updatedAt` tie-break): `mineToo` is inserted
+        SECOND, so the store's own Map iteration — what a MISSING sort
+        leaves untouched, since nothing reorders it — returns it after
+        `mine`. Giving `mineToo` the NEWER date of the two org rows means
+        only a sort that actually runs puts it first; no sort at all leaves
+        insertion order, `mine` first. "…and within it, the newest Workie
+        leads" below asserts this — the cross-scope check alone cannot catch
+        a deleted sort, because `readablePromptRefs` already guarantees
+        org-before-platform by construction, independent of anything the
+        handler does with the merged list afterward.
+
+    All three backdated directly in the store, the pattern already used
+    below for the persona row.
+  */
+  store.set(`ORG#${ORG}#AIPROMPTS|AIPROMPT#${mine.promptId}`, {
+    ...store.get(`ORG#${ORG}#AIPROMPTS|AIPROMPT#${mine.promptId}`),
+    updatedAt: '2019-01-01T00:00:00.000Z',
+  });
+  store.set(`ORG#${ORG}#AIPROMPTS|AIPROMPT#${mineToo.promptId}`, {
+    ...store.get(`ORG#${ORG}#AIPROMPTS|AIPROMPT#${mineToo.promptId}`),
+    updatedAt: '2021-01-01T00:00:00.000Z',
+  });
+  store.set(`AIPROMPTS|AIPROMPT#${house.promptId}`, {
+    ...store.get(`AIPROMPTS|AIPROMPT#${house.promptId}`),
+    updatedAt: '2030-01-01T00:00:00.000Z',
+  });
 
   // rejects: the single Query on the bare partition, which is a platform-only
   // read and makes every org Workie invisible to its own author.
@@ -439,6 +486,17 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
   await check('the caller\'s own library comes first', () =>
     assert.strictEqual(asHost.body.prompts[0].scope, 'org',
       `first row was ${asHost.body.prompts[0].scope}`));
+  // rejects: a missing sort. readablePromptRefs already guarantees org before
+  // platform by construction, so a deleted sort call still passes the check
+  // above — the merge order alone accounts for scope rank. Recency within a
+  // scope is the property only an actually-running sort provides: `mineToo`
+  // is newer but was inserted SECOND, so a missing sort leaves it behind
+  // `mine`, store insertion order unchanged.
+  await check('…and within it, the newest Workie leads', () => {
+    const orgRows = asHost.body.prompts.filter((p) => p.scope === 'org');
+    assert.strictEqual(orgRows[0] && orgRows[0].promptId, mineToo.promptId,
+      `first org row was ${orgRows[0] && orgRows[0].promptId}`);
+  });
 
   // rejects: probing a partition the caller cannot read, which would turn
   // "absent" into "forbidden" and confirm another org's Workie exists.
