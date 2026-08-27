@@ -177,6 +177,23 @@ const internal = () => ({ requestContext: { authorizer: { lambda: {} } } });
     assert.strictEqual(P.canManagePrompt(staff(), { scope: 'public' }), false);
     assert.strictEqual(P.canManagePrompt(host(), { scope: 'public' }), false);
   });
+  /*
+    A row with an orgId but no scope is not one of the ~41 legacy platform
+    rows — nothing legacy ever recorded an orgId. It is a half-stamped ORG
+    row, the shape question-set-access.js's setScopeOf calls out by name, and
+    reading it as platform would let staff with no active org manage another
+    organisation's Workie just because it was never finished being written.
+  */
+  // rejects: reverting Fix 1, which would read this row as platform and
+  // return true.
+  check('an orgId with no scope is read as org, not platform', () => {
+    assert.strictEqual(P.canManagePrompt(staff(), { orgId: 'org_X' }), false);
+  });
+  // rejects: a Fix 1 that fell back to ORG unconditionally, which would break
+  // every one of the ~41 rows that have neither scope nor orgId.
+  check('neither scope nor orgId is still a legacy platform row', () => {
+    assert.strictEqual(P.canManagePrompt(staff(), {}), true);
+  });
 
   say('\n6. finding one, and not finding another org\'s');
   class GetCommand { constructor(i) { this.input = i; } }
@@ -204,6 +221,27 @@ const internal = () => ({ requestContext: { authorizer: { lambda: {} } } });
     rows.set(`ORG#${ORG}#AIPROMPTS|AIPROMPT#retro`, { name: 'Ours' });
     const found = await P.findPromptForCaller(db, 't', host(), 'retro', 'platform', GetCommand);
     assert.strictEqual(found, null, 'it fell through to a scope it was not asked for');
+  });
+
+  say('\n7. the owner stamp: platform is an absence');
+  /*
+    ownerStamp in question-set-access.js writes PLATFORM as an absence rather
+    than `scope: 'platform'`, so a freshly stamped platform row stays
+    shape-identical to the rows that predate scoping. promptOwnerStamp follows
+    the same rule.
+  */
+  // rejects: reverting Fix 2, which would put `scope: 'platform'` on every
+  // new platform row.
+  check('a platform stamp carries no scope key', () => {
+    const stamp = P.promptOwnerStamp(staff(), { scope: 'platform', promptId: 'p1' });
+    assert.strictEqual('scope' in stamp, false);
+  });
+  // rejects: a Fix 2 that dropped the attribute for every scope instead of
+  // just platform.
+  check('an org stamp still carries its scope and org', () => {
+    const stamp = P.promptOwnerStamp(host(), { scope: 'org', orgId: ORG, promptId: 'p1' });
+    assert.strictEqual(stamp.scope, 'org');
+    assert.strictEqual(stamp.orgId, ORG);
   });
 
   say(`\n${pass} passed, ${fail} failed`);

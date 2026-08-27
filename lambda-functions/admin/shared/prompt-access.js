@@ -129,8 +129,13 @@ function createPromptRef(event, promptId, requestedScope) {
  */
 function canManagePrompt(event, item) {
   if (!item) return false;
-  const scope = clean(item.scope) || tenant.PLATFORM;
   const orgId = clean(item.orgId);
+  // An orgId with no scope is a half-stamped ORG row, not a legacy PLATFORM
+  // one — nothing legacy ever recorded an orgId. Reading it as platform is a
+  // fail-OPEN: it would let any Engage admin with no active org manage
+  // another organisation's Workie. Same shape, same fix, as setScopeOf in
+  // question-set-access.js.
+  const scope = clean(item.scope) || (orgId ? tenant.ORG : tenant.PLATFORM);
 
   if (!tenant.canManageScope(event, scope, orgId)) return false;
   if (scope === tenant.PLATFORM) return true;
@@ -167,9 +172,12 @@ async function findPromptForCaller(db, tableName, event, promptId, requestedScop
 function promptOwnerStamp(event, ref) {
   const { scope, orgId } = promptRef(ref);
   const userId = callerUserId(event);
+  // PLATFORM IS STAMPED AS AN ABSENCE, not `scope: 'platform'` — writing the
+  // string would give new platform rows an attribute the existing ones don't
+  // carry. Same rule as `ownerStamp` in question-set-access.js, same reason.
+  const place = scope === tenant.PLATFORM ? {} : { scope, ...(orgId ? { orgId } : {}) };
   return {
-    scope,
-    ...(orgId ? { orgId } : {}),
+    ...place,
     ...(userId ? { createdBy: userId } : {}),
   };
 }
