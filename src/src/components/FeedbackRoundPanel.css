@@ -1,0 +1,258 @@
+/*
+ * THE PARTICIPANT'S FEEDBACK ROUND — the shell and the composer.
+ *
+ * The round artifact inside this is `RoundReport`, which brings its own rules
+ * (`past-round__*` in `styles.css`, comment blocks in `RoundReport.css`).
+ * Nothing here restyles it: the host's dialog and this surface draw the same
+ * markup on purpose, and a sheet that reached in to change it is how the two
+ * would drift.
+ *
+ * Everything below is namespaced `.fbr` — a scope no other stylesheet declares.
+ *
+ * ── THEME ──────────────────────────────────────────────────────────────────
+ *
+ * No `data-theme` declared. This renders inside `PlayerSurface.css`'s dusk
+ * shell, which has already chosen; a second declaration would either fight it
+ * or need a re-tint block for a polarity this surface has never had.
+ *
+ * ── CONTRAST, MEASURED ─────────────────────────────────────────────────────
+ *
+ * Composited up the real stack. The player shell paints `--surface` (#1B2942);
+ * the composer sits on a 6% white wash of it, #22304A, and the text box on a
+ * 10% wash, #293852.
+ *
+ *   --text     #F4EDE4 on #22304A   11.9:1   the lead line
+ *   --muted    #9BA8BE on #22304A    5.5:1   the character count, the excerpt
+ *   --text     #F4EDE4 on #293852   10.5:1   what is being typed
+ *   --primary  #F6A94C on #22304A    7.6:1   "Commenting on"
+ *   --danger-text #EF8C86 on #22304A 5.6:1   a send that failed
+ *   #1B2942 on #F6A94C               8.4:1   the filled Post button
+ *
+ * `--danger-text`, never `--danger`: #E5645E is 4.38:1 on `--surface` and under
+ * AA for copy. This is precisely the text somebody has to read carefully — it
+ * is standing between them and the words they just wrote.
+ *
+ * ── TYPE ───────────────────────────────────────────────────────────────────
+ *
+ * Read on a phone at arm's length: the laptop ladder (12/13/15/19/24/30), floor
+ * 12px, and the INPUT renders at body (15px). A 13px input is how a surface
+ * ends up illegible exactly where a mistake costs the most — and on iOS a font
+ * size under 16px in a focused input makes the page zoom, so 15px is already
+ * the floor a phone tolerates before it starts moving the layout under a thumb.
+ */
+
+.fbr {
+  --fbr-text: var(--text);
+  --fbr-muted: var(--muted);
+  --fbr-accent: var(--primary);
+  --fbr-error: var(--danger-text);
+  --fbr-ink: var(--bg);
+  --fbr-wash: rgba(255, 255, 255, 0.06);
+  --fbr-well: rgba(255, 255, 255, 0.10);
+  --fbr-rule: rgba(255, 255, 255, 0.14);
+  /* --bg at 55%. A scoped local rather than a literal at the use site: the
+     design rule allows a raw colour only inside a scope's own token block. */
+  --fbr-lift: rgba(15, 26, 46, 0.55);
+
+  --fbr-t-floor: 12px;
+  --fbr-t-label: 13px;
+  --fbr-t-body: 15px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fbr__lead {
+  margin: 0;
+  font-size: var(--fbr-t-body);
+  line-height: 1.5;
+  color: var(--fbr-text);
+}
+
+.fbr__waiting {
+  margin: 0;
+  font-size: var(--fbr-t-body);
+  line-height: 1.5;
+  color: var(--fbr-text);
+}
+
+.fbr__waiting-sub {
+  margin: 0;
+  font-size: var(--fbr-t-label);
+  color: var(--fbr-muted);
+}
+
+/* ── the composer ───────────────────────────────────────────────────────── */
+
+/*
+  STICKY, NOT MODAL. The participant is writing ABOUT a section they need to
+  keep reading, so the composer must not cover it. Pinning it to the bottom
+  keeps it reachable without a scroll while leaving the report visible above —
+  and unlike a modal it cannot trap focus away from the thing being discussed.
+*/
+.fbr__composer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  /*
+    OPAQUE, IN TWO LAYERS, AND THIS IS NOT A STYLE CHOICE.
+
+    A sticky element with a translucent background lets the page scroll THROUGH
+    it. Caught by looking at it: the round's own comments slid under the
+    composer and rendered on top of "Commenting on …", two texts occupying the
+    same pixels while somebody was trying to write.
+
+    `background-color` cannot stack, so the tint is applied as a one-stop
+    gradient over a solid colour. The composite is identical to the wash on
+    `--surface` (#22304A) — which is what `feedbackRoundPalette.test.js`
+    measures every pairing against — and it is now opaque.
+  */
+  background-color: var(--surface);
+  background-image: linear-gradient(var(--fbr-wash), var(--fbr-wash));
+  border: 1px solid var(--fbr-rule);
+  border-radius: 10px;
+  /* Reads as sitting ABOVE the report rather than being part of it. The report
+     scrolls under this edge, so the edge has to be visible. */
+  box-shadow: 0 -8px 20px var(--fbr-lift);
+}
+
+.fbr__on {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fbr__on-label {
+  font-size: var(--fbr-t-floor);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fbr-accent);
+}
+
+.fbr__on-anchor {
+  font-size: var(--fbr-t-label);
+  font-weight: 600;
+  color: var(--fbr-text);
+  overflow-wrap: anywhere;
+}
+
+/*
+  A single text node with min-width:0 — never a flex container with spans.
+  `text-overflow` is inert on the latter and the text is silently cut.
+  Truncated to two lines with the full string still in the DOM, so this is a
+  reduction WITH a recovery: the section it quotes is on screen above.
+*/
+.fbr__on-excerpt {
+  font-size: var(--fbr-t-floor);
+  line-height: 1.45;
+  color: var(--fbr-muted);
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.fbr__box {
+  width: 100%;
+  box-sizing: border-box;
+  /* BODY, not label. See the header: a 13px input is illegible where it matters
+     most, and under 16px iOS zooms the page on focus. */
+  font-size: var(--fbr-t-body);
+  font-family: inherit;
+  line-height: 1.5;
+  color: var(--fbr-text);
+  background: var(--fbr-well);
+  border: 1px solid var(--fbr-rule);
+  border-radius: 8px;
+  padding: 10px;
+  /* Vertical only: a horizontal drag on a phone widens the page. */
+  resize: vertical;
+  min-height: 88px;
+}
+
+.fbr__box:focus-visible {
+  outline: 2px solid var(--fbr-accent);
+  outline-offset: 1px;
+}
+
+.fbr__meta {
+  display: flex;
+  align-items: baseline;
+}
+
+.fbr__count {
+  margin-left: auto;
+  font-size: var(--fbr-t-floor);
+  color: var(--fbr-muted);
+}
+
+.fbr__attribution {
+  margin: 0;
+  font-size: var(--fbr-t-label);
+  line-height: 1.45;
+  color: var(--fbr-muted);
+}
+
+.fbr__error {
+  margin: 0;
+  font-size: var(--fbr-t-label);
+  line-height: 1.45;
+  /* --danger-text, never --danger: the latter is 4.38:1 on --surface. */
+  color: var(--fbr-error);
+}
+
+/* `margin-left: auto` on the first pushed child, never `justify-content:
+   flex-end` — that overflows toward the start, where it is unreachable. Wraps
+   so a narrow phone stacks rather than clipping. */
+.fbr__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.fbr__cancel {
+  font-size: var(--fbr-t-label);
+  font-weight: 600;
+  color: var(--fbr-muted);
+  background: transparent;
+  border: 1px solid var(--fbr-rule);
+  border-radius: 8px;
+  /* 44px: a thumb target, not a mouse target. */
+  min-height: 44px;
+  padding: 0 16px;
+  cursor: pointer;
+}
+
+.fbr__post {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fbr-t-body);
+  font-weight: 700;
+  color: var(--fbr-ink);
+  background: var(--fbr-accent);
+  border: none;
+  border-radius: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  cursor: pointer;
+}
+
+.fbr__post:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.fbr__cancel:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

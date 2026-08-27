@@ -50,11 +50,12 @@ import {
   AI_NOTIFICATION_TIMEOUT_MS, AI_POLL_ATTEMPTS, AI_POLL_INTERVAL_MS,
 } from './utils/aiSummaryRecovery';
 import { createGameBody, updateGameBody } from './config/createGame';
+import { fetchComments } from './utils/commentsClient';
 import { DEFAULT_SCOPE } from './utils/setRef';
 import { gameTypeMeta, gameTypeLabel } from './config/gameTypes';
 import {
   hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
-  stageBeatFromFrame,
+  stageBeatFromFrame, STAGE_BEATS, hostPhaseForBeat,
 } from './config/hostControls';
 import {
   anonymityApplies, authorsHiddenNow, createPayloadFor, displayLabelFor,
@@ -628,6 +629,23 @@ function GameHostPage() {
    * so the next round's results open on the tally.
    */
   const [resultsBeat, setResultsBeat] = useState('results');
+  /*
+    WHAT THE ROOM HAS SAID ABOUT THIS ROUND'S REPORT.
+
+    Declared HERE, with the rest of the state, and not near the render that uses
+    it: this file has five early returns (line ~4578 onward) and a `useState`
+    below any of them makes React error #310 and a blank page in front of a
+    host. Every hook must run on every render.
+  */
+  const [roundComments, setRoundComments] = useState([]);
+  /*
+    The `commentPosted` socket handler is registered once, so it must not close
+    over a single render's `loadRoundComments` — that captures a stale
+    `gameState` and reads the wrong round for the rest of the session. Every
+    render refreshes this ref instead, exactly as `remoteActionsRef` does for
+    the host remote's commands.
+  */
+  const loadRoundCommentsRef = useRef(() => {});
 
   /**
    * The beat the SERVER last reported, AND the exact game state it reported it
@@ -703,6 +721,100 @@ function GameHostPage() {
       body: JSON.stringify({ beat, questionNumber: round }),
     }).catch((err) => console.error('Stage beat publish failed (continuing):', err));
   };
+
+  /**
+   * OPEN A FEEDBACK ROUND — the owner's "request feedback button".
+   *
+   * TWO CALLS, AND THE ORDER IS THE WHOLE POINT.
+   *
+   * `GET /feedback-round` — which is how forty phones get the report — READS
+   * the stored `SK: 'REPORT'` row and does not rebuild it. If the beat opens
+   * before that row exists, every participant gets "the host is preparing this"
+   * and nothing to comment on. So the report is built first, and the beat only
+   * moves once it has.
+   *
+   * A FAILED BUILD DOES NOT OPEN THE ROUND. Half-opening it — a beat with no
+   * report — is the worse outcome: the room is told to comment on something
+   * their devices cannot show them, and the host, looking at the projector,
+   * cannot see that anything is wrong.
+   *
+   * The local beat is set only after both succeed, for the same reason: the
+   * stage must not say "feedback" while the phones say "preparing".
+   */
+  const requestFeedbackRound = async () => {
+    const round = phaseOfGameState(gameState) === 'RESULTS'
+      ? parseInt(String(gameState).split('#')[1], 10)
+      : null;
+    if (!gameId || !round) return;
+
+    try {
+      const built = await authFetch(`${API_BASE}games/${gameId}/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!built.ok) {
+        console.error('Feedback round: the report could not be built; not opening the beat.');
+        return;
+      }
+    } catch (err) {
+      console.error('Feedback round: the report could not be built (continuing):', err);
+      return;
+    }
+
+    setResultsBeat('feedback');
+    publishStageBeat('feedback');
+    loadRoundComments();
+  };
+
+  /*
+    WHAT THE ROOM HAS SAID SO FAR, for the stage.
+
+    The host is watching comments arrive the way the room watches responses
+    arrive during ASK. Read from the live rows rather than the report, because
+    every comment lands after the report was built.
+  */
+  const loadRoundComments = async () => {
+    const round = phaseOfGameState(gameState) === 'RESULTS'
+      ? String(parseInt(String(gameState).split('#')[1], 10)).padStart(3, '0')
+      : null;
+    if (!gameId || !round) return;
+    const result = await fetchComments({ apiBase: API_BASE, gameId, questionNumber: round });
+    // Only on success — a failed read must not wipe what the room can see.
+    if (result.ok) setRoundComments(result.comments);
+  };
+  loadRoundCommentsRef.current = loadRoundComments;
+
+  /*
+    A RELOAD RECOVERS THE COUNT, NOT JUST THE STAGE.
+
+    `resultsBeat` restoring to 'feedback' on reload (`serverStageBeatRef`,
+    above) only fixed which BEAT the host sees — `roundComments` is separate
+    state, and nothing kept it in sync with a reload that lands mid-round.
+    Before this, the only two callers of `loadRoundComments` were
+    `requestFeedbackRound` (this device just opened the round) and the
+    `commentPosted` socket handler (somebody just posted) — neither fires on
+    a reload, so a host who reloaded mid-round came back with
+    `roundComments = []` and the projector showed no count until the next
+    comment happened to arrive.
+
+    Keyed on `resultsBeat` alone, and gated on the exact value rather than any
+    change into it: `loadRoundComments` reads the live `gameState` itself when
+    it actually runs, so this effect only has to know WHEN to call it, and
+    that is exactly when the beat READS 'feedback' — covering a live open
+    (requestFeedbackRound also calls it directly, so this is a harmless
+    duplicate there) and, the case that was missing, a reload that restores
+    straight onto it.
+
+    `loadRoundCommentsRef.current`, not `loadRoundComments` directly: the ref
+    is kept current every render (just above), so this avoids the
+    exhaustive-deps warning a per-render function reference would trigger
+    without inflating the dependency array with something that would make the
+    effect re-run — and refetch — on every render.
+  */
+  useEffect(() => {
+    if (resultsBeat === 'feedback') loadRoundCommentsRef.current();
+  }, [resultsBeat]);
 
   // Host Remote drives the same actions the host toolbar does. The listener below
   // is registered once, so it must not close over a single render's handlers —
@@ -1754,6 +1866,15 @@ Focus on actionable business strategy insights.`;
       setQueueVersion(Number(data.version) || 0);
     });
 
+    /*
+      A COMMENT LANDED. Notify-then-refetch: the frame carries where, never the
+      prose — which also keeps the stage's count on the same side of the
+      anonymity gate as everything else.
+    */
+    webSocketClient.onMessage('commentPosted', () => {
+      loadRoundCommentsRef.current();
+    });
+
     webSocketClient.onMessage('aiSummaryReady', (data) => {
       console.log('🔌 AI Summary ready notification:', data);
       clearAITimers();
@@ -1857,6 +1978,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('stageFocusChanged');
       webSocketClient.offMessage('questionQueueChanged');
       webSocketClient.offMessage('wavelengthAnalysisReady');
+      webSocketClient.offMessage('commentPosted');
       webSocketClient.offMessage('aiSummaryReady');
       webSocketClient.offMessage('aiSummaryError');
       // `gameEnded` was registered above and never removed here — a handler
@@ -1973,7 +2095,17 @@ Focus on actionable business strategy insights.`;
         // if the broadcast that would have refreshed it never arrives.
         serverStageBeatRef.current = {
           state: gameStateData.state ?? null,
-          beat: gameStateData.stageBeat === 'field-notes' ? 'field-notes' : 'results',
+          /*
+            MEMBERSHIP OF THE CLOSED SET, never equality against one member.
+
+            This was `=== 'field-notes' ? 'field-notes' : 'results'`, and when
+            `feedback` joined STAGE_BEATS that collapsed every feedback round
+            back to the tally on this path — so a host who reloaded mid-feedback
+            came back up on the scores with the room still holding the report on
+            forty phones. Nothing errored: the row was right and the endpoint
+            returned the right value.
+          */
+          beat: STAGE_BEATS.includes(gameStateData.stageBeat) ? gameStateData.stageBeat : 'results',
         };
 
         /*
@@ -4345,6 +4477,14 @@ Focus on actionable business strategy insights.`;
         roundNoun: report.roundNoun,
         players: report.playerPerformance || [],
         questions: report.detailedQuestions || [],
+        /*
+          The session-wide comment count. `questions` already carries each
+          round's own comments nested inside `detailedQuestions`, but the total
+          lives on `gameStats` in the payload and THIS OBJECT HAS NO
+          `gameStats` — so it has to be named here, at the top level, or the
+          report's front page cannot state it however many the backend counted.
+        */
+        totalComments: (report.gameStats && report.gameStats.totalComments) || 0,
         allAnswers: [],
         allVotes: []
       };
@@ -4519,7 +4659,7 @@ Focus on actionable business strategy insights.`;
     const roundPhase = phaseOfGameState(gameState);
     const phase = gameState === 'ENDED'
       ? 'ENDED'
-      : (roundPhase === 'RESULTS' && resultsBeat === 'field-notes' ? 'FIELD_NOTES' : roundPhase);
+      : hostPhaseForBeat(roundPhase, resultsBeat);
 
     // The stage's own page arithmetic, re-derived the way the render derives
     // it: the shared index keyed by phase#round, cut by the same slicers.
@@ -4794,9 +4934,16 @@ Focus on actionable business strategy insights.`;
   // the rule the rest of the page uses — so it is named here rather than by
   // widening that function and changing what every other caller sees.
   const roundPhase = phaseOfGameState(gameState);
+  /*
+    ONE DERIVATION, SHARED. This expression exists twice — here and in the
+    auto-mode timer above, which has to sit above the early returns — and it was
+    the same ternary written out both times. `feedback` is exactly the kind of
+    third value that gets added to one copy and not the other, so the mapping
+    moved to config/hostControls.js and both call it.
+  */
   const hostPhase = gameState === 'ENDED'
     ? 'ENDED'
-    : (roundPhase === 'RESULTS' && resultsBeat === 'field-notes' ? 'FIELD_NOTES' : roundPhase);
+    : hostPhaseForBeat(roundPhase, resultsBeat);
 
   /*
     WHERE THE READ-BACK IS, for the dock. On FIELD_NOTES the primary is a page
@@ -4902,6 +5049,13 @@ Focus on actionable business strategy insights.`;
         setResultsBeat('field-notes');
         publishStageBeat('field-notes');
         break;
+      case HOST_INTENTS.FEEDBACK:
+        // Builds the report, THEN moves the beat — see requestFeedbackRound.
+        // Not local-first like FIELD_NOTES: that beat only changes what is on
+        // screen, and this one asks forty phones to fetch something that has to
+        // exist before they ask for it.
+        requestFeedbackRound();
+        break;
       case HOST_INTENTS.REPORT:
         // generateReportForGame, not setShowFinalReport: `showFinalReport` is
         // a flag nothing renders (it only gates the keyboard shortcut), so
@@ -4949,7 +5103,10 @@ Focus on actionable business strategy insights.`;
   // of the round — and is distinguished by its word, not its colour.
   const BAR_PHASE = {
     LOBBY: 'lobby', ASK: 'ask', VOTE: 'vote',
-    RESULTS: 'results', FIELD_NOTES: 'results', ENDED: 'done',
+    // FEEDBACK stays inside RESULTS' green with FIELD_NOTES — all three are
+    // beats of one phase, and repainting the bar mid-round would say the round
+    // had moved when it has not.
+    RESULTS: 'results', FIELD_NOTES: 'results', FEEDBACK: 'results', ENDED: 'done',
   };
 
   /**
@@ -5377,6 +5534,9 @@ Focus on actionable business strategy insights.`;
                 always advances: a host who clicks Next Round means it.
               */
               interceptAdvance={() => {
+                // FIELD_NOTES ONLY. FEEDBACK has no read-back document to page
+                // through, so intercepting → there would swallow the advance
+                // key and leave the host pressing a dead one in front of a room.
                 if (hostPhase !== 'FIELD_NOTES') return false;
                 const md = currentAIInsights?.markdownResponse;
                 if (!md) return false;
@@ -5394,6 +5554,18 @@ Focus on actionable business strategy insights.`;
                 follows the step back the same way it follows the step in.
               */
               onBackKey={() => {
+                /*
+                  ONE STEP BACK ALONG THE BEATS, not a jump to the start of
+                  them. From FEEDBACK the previous beat is the read-back, not
+                  the tally: sending the room straight to the scores would skip
+                  the thing they were just commenting on, and would be the only
+                  place in the flow where ← moves two steps.
+                */
+                if (hostPhase === 'FEEDBACK') {
+                  setResultsBeat('field-notes');
+                  publishStageBeat('field-notes');
+                  return true;
+                }
                 if (hostPhase !== 'FIELD_NOTES') return false;
                 if (stagePageIndex > 0) {
                   setStagePageIndex(stagePageIndex - 1);
@@ -5403,9 +5575,13 @@ Focus on actionable business strategy insights.`;
                 publishStageBeat('results');
                 return true;
               }}
-              keyHint={hostPhase === 'FIELD_NOTES'
-                ? '→ next page · ← back · at the end, → starts the next round'
-                : ''}
+              keyHint={
+                hostPhase === 'FIELD_NOTES'
+                  ? '→ next page · ← back · at the end, → starts the next round'
+                  : hostPhase === 'FEEDBACK'
+                    ? '← back to what we heard · → starts the next round'
+                    : ''
+              }
             />
           </Dock>
         )}
@@ -5951,6 +6127,57 @@ Focus on actionable business strategy insights.`;
                       {currentAIInsights.debugPrompt || currentAIInsights.prompt}
                     </div>
                   </div>
+                )}
+              </>
+            )}
+
+            {/*
+                A FEEDBACK ROUND, ON THE PROJECTOR.
+
+                Design review raised this as genuinely open: the phase
+                derivation could have left `hostPhase` at RESULTS and drawn
+                nothing new. It could not. Leaving it at RESULTS puts the dock's
+                "What We Heard" primary back on screen and lets auto-mode's
+                timer FIRE it, throwing the whole room out of the feedback round
+                with no host action at all — and a new phase with no body here
+                blanks the projector, because the stage renders only on the
+                phases it knows.
+
+                So the stage draws the round: what the room is being asked about,
+                and the comments arriving against it. That second half is the
+                owner's "the comments now can be seen", and it is the same
+                live-arrival shape the room already watches during ASK — the
+                projector is where a room looks to see that something is
+                happening.
+
+                NO NAMES AND NO TEXT ON THE WALL. The stage shows the COUNT per
+                section and nothing else. Two reasons, and the first is the
+                harder one: a comment is prose one named person wrote about
+                another named person's answer, read aloud by being projected,
+                and the room has not agreed to that in the way it agreed to have
+                its responses ranked. The second is practical — comments arrive
+                during the round, so a wall of them would reflow under the
+                room's eyes every few seconds. Everyone holds the full text on
+                their own device, which is where reading belongs. */}
+            {hostPhase === 'FEEDBACK' && (
+              <>
+                <div className="kicker">Your thoughts</div>
+                <h1 className="hero">What do you make of it?</h1>
+                <p className="lede">
+                  The round is on your device. Tap a section — the summary, the results,
+                  or any single response — and say what you think.
+                </p>
+
+                {/* A count, not a list. See above. `roundComments` is empty
+                    until the first one lands, and an empty state that said
+                    "no comments yet" would be a wall telling forty people they
+                    have not done the thing they are being asked to do. */}
+                {roundComments.length > 0 && (
+                  <p className="lede">
+                    {roundComments.length === 1
+                      ? '1 comment so far.'
+                      : `${roundComments.length} comments so far.`}
+                  </p>
                 )}
               </>
             )}

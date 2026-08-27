@@ -23,6 +23,21 @@
 import { gameTypeMeta, normalizeGameType } from './gameTypes';
 import { rosterRows } from './setupPanel';
 
+/**
+ * The beats from which the only way on is the next round.
+ *
+ * A SET rather than an equality test, and named rather than inlined, because
+ * the question the RESULTS control asks is "has the room passed the read-back
+ * yet" — not "is the beat this one string". Spelling it as the latter is what
+ * made the phone offer to walk the room backwards out of a feedback round the
+ * moment `feedback` joined `STAGE_BEATS`.
+ *
+ * Deliberately not derived from `STAGE_BEATS` by slicing off the head: the two
+ * lists answer different questions, and a new beat should have to be placed
+ * here on purpose rather than inherit a position from an array's order.
+ */
+const BEATS_PAST_THE_READ_BACK = new Set(['field-notes', 'feedback']);
+
 /* ------------------------------------------------------------------ phases */
 
 /** Phases the server actually writes into the STATE record. */
@@ -172,14 +187,20 @@ export function primaryAction(state, gameType, stageBeat) {
     case 'VOTE':
       return { ...ACTIONS.results };
 
-    // Two beats, in order: the tally, then the read-back, then out.
+    // Three beats, in order: the tally, the read-back, then a feedback round.
     //
-    // Compared against the ONE value rather than tested for truthiness: the
+    // Compared against a KNOWN SET rather than tested for truthiness: the
     // server sends an explicit 'results' for a round nobody has moved, and a
     // truthy check would read that as "already past the read-back" and skip the
     // beat — which is the defect this whole path exists to fix.
+    //
+    // AT OR PAST THE READ-BACK, not "is it field-notes". This was an equality
+    // test against the single value, and when `feedback` joined the set it fell
+    // into the else: the phone offered "What We Heard" — the beat BEFORE the
+    // one the room was on — and tapping it pulled the whole room back out of
+    // the feedback round the host had just opened.
     case 'RESULTS':
-      return stageBeat === 'field-notes'
+      return BEATS_PAST_THE_READ_BACK.has(stageBeat)
         ? { ...ACTIONS.next, label: `Next ${roundNounFor(gameType)}` }
         : { ...ACTIONS.fieldNotes };
 

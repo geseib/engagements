@@ -326,6 +326,33 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *  PASTED SOURCE DOCUMENT lands — a customer paste of arbitrary internal
    *  material — and `items` is the generated content before it becomes a set. */
   job: Object.freeze(['request', 'items', 'meta']),
+
+  /** A comment on one section of a round's report:
+   *  SK=COMMENT#<nnn>#<anchorKind>#<anchorRef>#<commentId>.
+   *
+   *  Customer-authored prose, written by a named person, about a named
+   *  person's response. It is the same class of content as `answer` and it
+   *  lives in the same partition.
+   *
+   *  `AnchorExcerpt` IS THE ONE THAT IS EASY TO MISS. It is a verbatim slice of
+   *  the material being commented on — an answer, or a line of the AI summary —
+   *  copied onto this row at write time so that a comment stays readable in the
+   *  SESSION report, where the round it belongs to is not on screen beside it.
+   *  That makes it a SECOND COPY of content the boundary already protects one
+   *  copy of, in a different row, and encrypting `Text` alone would leave the
+   *  participant's actual words readable at rest while the commentary about
+   *  them was ciphertext. Exactly the shape of the `Answer`/`ProcessedWords`
+   *  mistake recorded above. `AnchorLabel` joins them because for a response
+   *  anchor it carries a participant's name once the round is attributed.
+   *
+   *  `PlayerName` STAYS PLAINTEXT, as it does on `answer` — identifiers and
+   *  counts are conceded visible, content is not.
+   *
+   *  `AnchorKind`, `AnchorRef` and `QuestionNumber` stay plaintext because they
+   *  are COORDINATES, not content: `create-report.js` groups every comment in a
+   *  session by round and section in one pass, and it must not have to ask KMS
+   *  a question to do it. */
+  comment: Object.freeze(['Text', 'AnchorExcerpt', 'AnchorLabel']),
 });
 
 // ── Plumbing seams (tests, and callers that already hold the org row) ───────

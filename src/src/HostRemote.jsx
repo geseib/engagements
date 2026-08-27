@@ -8,6 +8,7 @@ import RemoteFocusPanel from './components/RemoteFocusPanel';
 import { authFetch } from './auth/authFetch';
 import { categoryRows } from './config/setupPanel';
 import { focusRequest, sameFocus, NO_FOCUS } from './config/stageFocus';
+import { fetchComments } from './utils/commentsClient';
 import {
   primaryAction,
   skipAction,
@@ -117,6 +118,15 @@ function HostRemote() {
   const [focusOpen, setFocusOpen] = useState(false);
   const [focusBusy, setFocusBusy] = useState(false);
   const [connected, setConnected] = useState(false);
+  /*
+    HOW MANY COMMENTS THE ROOM HAS LEFT SO FAR — a count, never the text.
+    Polled the same way `aiSummary` is: this phone holds no WebSocket, so a
+    public GET is the only way a comment posted from someone else's device
+    reaches it. `null` and not `0` at rest, matching `notes.ready`'s "we do not
+    know yet" state, though this panel does not render the distinction — see
+    the render.
+  */
+  const [feedbackCommentCount, setFeedbackCommentCount] = useState(null);
 
   const [busyAction, setBusyAction] = useState(null);
   const [armedAction, setArmedAction] = useState(null);
@@ -280,6 +290,19 @@ function HostRemote() {
 
   /** Is the room reading the AI's read-back right now? */
   const onFieldNotes = summary.phase === 'RESULTS' && stageBeat === 'field-notes';
+  /**
+   * Is the room commenting right now?
+   *
+   * `primaryAction` (config/hostRemote.js) already answers a version of this
+   * question — `BEATS_PAST_THE_READ_BACK.has(stageBeat)` — to decide whether
+   * the button says "Next Round" instead of "What We Heard". That set also
+   * contains 'field-notes', because from the button's point of view both
+   * beats mean "past the read-back, offer to advance". This flag asks a
+   * narrower question — is it SPECIFICALLY the feedback beat — because
+   * 'field-notes' already has its own panel just above and must not also
+   * render this one.
+   */
+  const onFeedback = summary.phase === 'RESULTS' && stageBeat === 'feedback';
 
   /* ------------------------------------------------------- the read-back */
 
@@ -307,6 +330,44 @@ function HostRemote() {
     const timer = setInterval(load, AI_POLL_MS);
     return () => { cancelled = true; clearInterval(timer); };
   }, [gameId, onFieldNotes, notes.ready]);
+
+  /* -------------------------------------------------------- the feedback round */
+
+  /*
+    THE ROOM IS COMMENTING, AND THIS PHONE SHOULD SAY SO.
+
+    `primaryAction` was correctly widened when `feedback` joined the beats
+    past the read-back — the button stopped offering to walk the room
+    backwards out of an open round. This panel is the other half: before it,
+    `onFieldNotes` was the only thing this file ever rendered for a beat past
+    the tally, and it is gated on the EXACT string 'field-notes' — so the
+    moment the beat actually moved to 'feedback' that whole section vanished
+    and nothing replaced it. The host's phone said "Next Round" and showed no
+    sign the feedback round it had just opened was running at all.
+
+    A new round's count is not the old round's count, for the reason
+    `setAiSummary(null)` above resets on every round change.
+  */
+  useEffect(() => { setFeedbackCommentCount(null); }, [gameId, round]);
+
+  useEffect(() => {
+    if (!gameId || !onFeedback || !round) return undefined;
+
+    let cancelled = false;
+    const padded = String(round).padStart(3, '0');
+    const load = async () => {
+      // Public route, no authorizer — same deal as ai-summary above.
+      const result = await fetchComments({ apiBase: apiBase(), gameId, questionNumber: padded });
+      if (cancelled || activeGameRef.current !== gameId) return;
+      // Only on success, matching loadRoundComments in GameHostPage.jsx: a
+      // failed poll must not blank a count the host was already reading.
+      if (result.ok) setFeedbackCommentCount(result.comments.length);
+    };
+
+    load();
+    const timer = setInterval(load, AI_POLL_MS);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [gameId, onFeedback, round]);
 
   /* ----------------------------------------------------------- the focus */
 
@@ -816,6 +877,33 @@ function HostRemote() {
                       Full notes, next steps and every response are in the session report.
                     </p>
                   </>
+                )}
+              </section>
+            )}
+
+            {/* THE ROOM IS COMMENTING — the remote's answer to what the stage
+                shows for `hostPhase === 'FEEDBACK'` (GameHostPage.jsx): a
+                count, never names or text. A comment is prose one named
+                person wrote about another named person's answer; the room
+                agreed to have its RESPONSES ranked, not its remarks read by
+                whoever is holding the host's phone. The kicker alone is what
+                fixes "shows nothing at all" — it is unconditional for as long
+                as the round is open, because a host checking their phone mid
+                round needs to know the round IS running even before anyone
+                has said anything. The count line follows the stage's own
+                restraint (GameHostPage.jsx, hostPhase 'FEEDBACK'): no "0
+                comments yet", which reads as a room being told it has not
+                done the thing it was asked to do — silence until there is a
+                real number. */}
+            {onFeedback && (
+              <section className="hr-notes" aria-label="Feedback round">
+                <p className="hr-notes-kicker">Feedback round</p>
+                {feedbackCommentCount > 0 && (
+                  <p className="hr-notes-waiting">
+                    {feedbackCommentCount === 1
+                      ? '1 comment so far.'
+                      : `${feedbackCommentCount} comments so far.`}
+                  </p>
                 )}
               </section>
             )}

@@ -2541,6 +2541,74 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # ── COMMENTS ON A ROUND'S REPORT ─────────────────────────────────────────
+  # One handler, two public routes. Public for the same reason /votes is: a
+  # participant holds no Cognito identity. What is NOT public is OPENING a
+  # feedback round — that is /stage-beat, which carries the authorizer because
+  # it moves what the whole room is looking at. The handler's own gate is that
+  # the session must be on RESULTS for the round being commented on AND that
+  # round must be on the `feedback` beat.
+  CommentsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-comments'
+      CodeUri: lambda-functions/game/
+      Handler: comments.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          WEBSOCKET_API_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+      Policies:
+        # A comment is customer-authored prose about a named person's response —
+        # Text, AnchorExcerpt and AnchorLabel are all ciphertext at rest
+        # (ENCRYPTED_FIELDS.comment), so this function must unwrap the org's data
+        # key, and ONLY with an orgId encryption context.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        # Posting a comment announces `commentPosted` so the stage and the other
+        # phones refetch. Without this the broadcast is a silent AccessDenied and
+        # a comment appears only for whoever wrote it.
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+      Events:
+        PostCommentEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/comments
+            Method: POST
+        GetCommentsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/comments
+            Method: GET
+        # The one round a participant is being asked to comment on: the round
+        # actually on the `feedback` beat, its report slice and its comments,
+        # and nothing else. Public, and deliberately NOT `GET /report?role=host`
+        # — that route's role parameter is a client claim, and its non-host
+        # branch returns no responses at all, so a phone would have to ask for
+        # the whole session to get the one round it needs.
+        FeedbackRoundEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/feedback-round
+            Method: GET
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   GetVotesFunction:
     Type: AWS::Serverless::Function
     Properties:

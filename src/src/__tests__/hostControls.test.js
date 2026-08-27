@@ -114,18 +114,29 @@ describe('every (gameType, phase) pair yields exactly one primary action', () =>
         /*
           At most one secondary, and it must not be a second way to advance.
 
-          TWO INTENTS ARE LEGITIMATE HERE, not one. Skip is ASK's escape from a
-          round going nowhere. Leave is ENDED's way back to the host menu —
-          added because the only action on a finished session's screen was Open
-          Session Report, which was a dead end rather than a design ("when the
-          session is done need a way to get back to the host menu").
+          FOUR INTENTS ARE LEGITIMATE HERE, and each was argued for on its own.
+          Skip is ASK's escape from a round going nowhere. Leave is ENDED's way
+          back to the host menu — added because the only action on a finished
+          session's screen was Open Session Report, which was a dead end rather
+          than a design ("when the session is done need a way to get back to the
+          host menu").
+
+          Feedback is FIELD_NOTES' last page: the owner asked for "a request
+          feedback button during the AI feedback phase", and this phase already
+          carries a second button mid-document, so the control fills a slot that
+          exists rather than adding one. Field-notes is FEEDBACK's way back —
+          a beat you can only leave by advancing the whole session is a one-way
+          door, which is the same defect Leave was added for.
 
           The rule this assertion actually protects is the NEXT line: a
           secondary must never duplicate the primary's intent. That still holds
-          for both.
+          for all four.
         */
         if (controls.secondary) {
-          expect([HOST_INTENTS.SKIP, HOST_INTENTS.LEAVE]).toContain(controls.secondary.intent);
+          expect([
+            HOST_INTENTS.SKIP, HOST_INTENTS.LEAVE,
+            HOST_INTENTS.FEEDBACK, HOST_INTENTS.FIELD_NOTES,
+          ]).toContain(controls.secondary.intent);
           expect(controls.secondary.intent).not.toBe(controls.primary.intent);
         }
 
@@ -325,13 +336,43 @@ describe('the two additions the stage needs', () => {
     }
   });
 
-  // ASK is the one phase with a secondary. Adding phases must not grow that.
-  test('FIELD_NOTES adds no secondary, and ENDED adds the way out', () => {
-    // FIELD_NOTES is mid-round: a second button there is one more thing to aim
-    // at while a room reads. (The ONE exception is the read-back mid-document,
-    // tested in its own block below — there the second button exists precisely
-    // because the single button was the worse aim.)
-    expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'FIELD_NOTES' }).secondary).toBeNull();
+  /*
+    A SECOND BUTTON MID-ROUND HAS TO BE ARGUED FOR, EVERY TIME.
+
+    This test used to read "FIELD_NOTES adds no secondary", on the reasoning
+    that a second button mid-round is one more thing to aim at while a room
+    reads. That reasoning is intact and still governs; what has changed is that
+    FIELD_NOTES now has two arguments against it rather than none, and both were
+    made in the open:
+
+      1. mid-document, "Skip to Next Round" — because WITHOUT it the aim was
+         worse: the only way past a long read-back was a primary that silently
+         threw away its unread pages;
+      2. on the last page, "Request feedback" — because the owner asked for the
+         control on this phase, and because the two-button bar this phase can
+         show already exists at (1). The last page is the one page where that
+         bar is short, so filling it does not raise the maximum number of things
+         a host has to aim at on FIELD_NOTES.
+
+    What is NOT permitted, and is what the assertions below now pin: BOTH at
+    once. Request feedback must not appear mid-document, where it would displace
+    the skip and reopen the complaint that produced it.
+  */
+  test('FIELD_NOTES offers Request feedback only where the slot is free', () => {
+    const lastPage = hostControlsFor({
+      gameType: 'call-and-answer', phase: 'FIELD_NOTES', notesPage: 0, notesPages: 1,
+    });
+    expect(lastPage.secondary.intent).toBe(HOST_INTENTS.FEEDBACK);
+
+    // Mid-document the slot belongs to the skip, and the feedback control waits.
+    const midDoc = hostControlsFor({
+      gameType: 'call-and-answer', phase: 'FIELD_NOTES', notesPage: 0, notesPages: 3,
+    });
+    expect(midDoc.secondary.id).toBe('skip-notes');
+    expect(midDoc.secondary.intent).not.toBe(HOST_INTENTS.FEEDBACK);
+  });
+
+  test('ENDED adds the way out', () => {
 
     /*
       ENDED is not mid-round, and this assertion used to say it had no way out —
@@ -581,7 +622,11 @@ describe('FIELD_NOTES pages before it advances', () => {
       gameType: 'call-and-answer', phase: 'FIELD_NOTES', notesPage: 2, notesPages: 3,
     });
     expect(controls.primary.intent).toBe(HOST_INTENTS.NEXT);
-    expect(controls.secondary).toBeNull();
+    // The SKIP is gone — there is nothing left to skip. The slot it vacates is
+    // where Request feedback lives; what must never survive here is a control
+    // that would do nothing.
+    expect(controls.secondary.id).not.toBe('skip-notes');
+    expect(controls.secondary.intent).toBe(HOST_INTENTS.FEEDBACK);
   });
 
   test('one page (or callers that pass nothing): unchanged Next Round', () => {
@@ -590,7 +635,7 @@ describe('FIELD_NOTES pages before it advances', () => {
     // always saw.
     const bare = hostControlsFor({ gameType: 'call-and-answer', phase: 'FIELD_NOTES' });
     expect(bare.primary.intent).toBe(HOST_INTENTS.NEXT);
-    expect(bare.secondary).toBeNull();
+    expect(bare.secondary.intent).toBe(HOST_INTENTS.FEEDBACK);
     expect(bare.status.text).toBe('Discussion prompt on screen');
   });
 

@@ -37,27 +37,61 @@ import { statusTone } from '../utils/statusTone';
 /**
  * Host-facing phases.
  *
- * The first four are the order a ROUND moves through. `FIELD_NOTES` is a
- * second beat inside RESULTS (the tally, then what we heard) and `ENDED` is a
- * session state, not a round one — which is why neither joins
- * `hostPhaseSequence()` below: folding them in would make the phase bar draw a
- * fifth segment per round.
+ * The first four are the order a ROUND moves through. `FIELD_NOTES` and
+ * `FEEDBACK` are the second and third BEATS inside RESULTS (the tally, then
+ * what we heard, then the room's comments on it), and `ENDED` is a session
+ * state, not a round one — which is why none of the three joins
+ * `hostPhaseSequence()` below: folding them in would make the phase bar draw
+ * extra segments per round.
  *
  * They still have to be listed HERE, because `hostControlsFor()` opens with
  * `HOST_PHASES.includes(phase) ? phase : 'LOBBY'`. A phase missing from this
  * array does not fail loudly; it silently renders the lobby, which is the same
  * class of bug as `isWaitingState('ENDED')` returning true.
  */
-export const HOST_PHASES = ['LOBBY', 'ASK', 'VOTE', 'RESULTS', 'FIELD_NOTES', 'ENDED'];
+export const HOST_PHASES = ['LOBBY', 'ASK', 'VOTE', 'RESULTS', 'FIELD_NOTES', 'FEEDBACK', 'ENDED'];
 
 /**
- * The two beats of RESULTS, spelled the way the server spells them.
+ * The three beats of RESULTS, spelled the way the server spells them, in the
+ * order a round moves through them.
  *
  * Mirrors `BEATS` in lambda-functions/game/stage-beat.js. Closed on both sides:
  * an open set means the write succeeds, the frame goes out, every client
  * compares it against 'field-notes', and the host watches a button do nothing.
+ * `tests/feedback-round-beat.js` reads this array as text and fails the build if
+ * the two lists drift.
+ *
+ * `feedback` is a FEEDBACK ROUND — the room holds this round's own report and
+ * comments on sections of it. A beat rather than a game state because the
+ * comments have to land in the round report of the round being commented on,
+ * and a state carrying its own ordinal would orphan them from it.
  */
-export const STAGE_BEATS = ['results', 'field-notes'];
+export const STAGE_BEATS = ['results', 'field-notes', 'feedback'];
+
+/**
+ * The host phase a round is in, given its round phase and its beat.
+ *
+ * ONE DERIVATION, because there were two copies of it. `GameHostPage` maps the
+ * beat onto a phase in two places — the auto-mode timer and the render — and
+ * they have to sit apart because one is above the page's early returns and the
+ * other below. They were the same expression written twice
+ * (`beat === 'field-notes' ? 'FIELD_NOTES' : roundPhase`), which is exactly the
+ * shape where a third value gets added to one copy and not the other.
+ *
+ * A BEAT MEANS NOTHING OUTSIDE RESULTS. A beat left over from the previous
+ * round must never rewrite the ASK or VOTE control: FIELD_NOTES' control is an
+ * advance, and offering it while the room is still typing throws away whoever
+ * had not submitted. Same guard, same reason, as `stageBeatFromFrame` above.
+ *
+ * An unrecognised beat leaves the phase alone rather than throwing — an older
+ * or newer deploy's value should degrade to the tally, not white-screen a host.
+ */
+const PHASE_FOR_BEAT = { 'field-notes': 'FIELD_NOTES', feedback: 'FEEDBACK' };
+
+export function hostPhaseForBeat(roundPhase, beat) {
+  if (roundPhase !== 'RESULTS') return roundPhase;
+  return PHASE_FOR_BEAT[beat] || roundPhase;
+}
 
 /**
  * Should the stage act on a `stageBeatChanged` announcement?
@@ -181,6 +215,7 @@ export const HOST_INTENTS = {
   NEXT: 'next',        // handleNextQuestion(false)
   SKIP: 'skip',        // handleNextQuestion(true) — abandon this round
   FIELD_NOTES: 'field-notes', // move RESULTS on to its second beat
+  FEEDBACK: 'feedback',       // open a feedback round — RESULTS' third beat
   PAGE: 'notes-page',  // turn to the next page of the read-back, not a new round
   REPORT: 'report',    // open the session report
   LEAVE: 'leave',      // leave this session and go back to the host menu
@@ -242,6 +277,25 @@ function primaryFor(phase, {
         label: 'What We Heard',
         icon: 'Sparkle',
         intent: HOST_INTENTS.FIELD_NOTES,
+        disabled: false,
+        hint: '',
+      };
+    /*
+      A FEEDBACK ROUND — RESULTS' third beat. The room is holding this round's
+      report on their own devices and commenting on sections of it.
+
+      The primary is the ordinary advance, and deliberately not a "close
+      feedback" control: closing the round and moving the session on are the
+      same act from the host's point of view, and a beat that needed shutting
+      down before the next round would be a second thing to remember while a
+      room waits. The way back to the read-back is the secondary.
+    */
+    case 'FEEDBACK':
+      return {
+        id: 'next',
+        label: `Next ${roundNoun}`,
+        icon: 'ArrowRight',
+        intent: HOST_INTENTS.NEXT,
         disabled: false,
         hint: '',
       };
@@ -404,6 +458,51 @@ export function hostControlsFor({
       label: `Skip to Next ${noun}`,
       icon: 'SkipForward',
       intent: HOST_INTENTS.NEXT,
+      disabled: false,
+      hint: '',
+    };
+  } else if (resolvedPhase === 'FIELD_NOTES') {
+    /*
+      REQUEST FEEDBACK — the owner's *"a request feedback button during the AI
+      feedback phase"*, and the second exception to the mid-round rule.
+
+      IT ONLY EXISTS ON THE LAST PAGE, which is the whole reason it is allowed
+      to exist at all. Mid-document this slot is already spoken for by the skip
+      above, and taking it would reopen the complaint that one fixed. On the
+      last page the slot is empty, so this does not introduce a two-button bar
+      to FIELD_NOTES — that bar already exists mid-document — it fills the one
+      page where the bar is short. The maximum number of things to aim at on
+      this phase does not change.
+
+      The alternatives were worse. Earlier in the round is where "another
+      control is just another thing to aim at" bites hardest. The settings
+      panel is reachable but buried, and a control the host has to go hunting
+      for while a room waits is not a button on the feedback phase.
+    */
+    secondary = {
+      id: 'request-feedback',
+      label: 'Request feedback',
+      icon: 'ChatCircleText',
+      intent: HOST_INTENTS.FEEDBACK,
+      disabled: false,
+      hint: '',
+    };
+  } else if (resolvedPhase === 'FEEDBACK') {
+    /*
+      THE WAY BACK OUT. A beat you can only leave by advancing the session is a
+      one-way door, and a one-way door mid-session is how a host ends up using
+      the browser's back button in front of a room — the same defect ENDED's
+      "Back to Menu" was added for.
+
+      It goes BACKWARD, to the read-back, and that is deliberate: stepping the
+      beat back is also what closes the composer on every phone, so one control
+      both returns the stage and ends the collection.
+    */
+    secondary = {
+      id: 'close-feedback',
+      label: 'Back to What We Heard',
+      icon: 'ArrowLeft',
+      intent: HOST_INTENTS.FIELD_NOTES,
       disabled: false,
       hint: '',
     };
