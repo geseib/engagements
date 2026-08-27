@@ -52,13 +52,26 @@ same value. Both are documented as closed sets on purpose; adding one closed
 value is the sanctioned way to extend them, and `tests/stage-beat-flow.js`
 already pins the pair.
 
-Consequences, all of them good:
+Consequences:
 
 - No new state machine, no new route to open the round, no round renumbering.
-- The host's phone remote drives it for free.
-- A host page reload lands back in the feedback round rather than on the tally.
 - Stepping back to `results` or `field-notes` closes the composer without
   destroying anything — comments are rows, not session state.
+
+**The beat mechanism does NOT extend by adding one value, and the first draft of
+this section was wrong to say it did.** Review found three call sites that
+collapse the beat back to a binary, each of which had to be widened by hand:
+
+| Site | What it did |
+|---|---|
+| `lambda-functions/game/get-game-state.js:151-153` | `stageBeat` starts at `'results'` and is only raised on an exact `'field-notes'` match, so a stored `feedback` was reported to every client as `results`. This one is upstream of the rest: nothing that polls or reloads could learn a feedback round existed. |
+| `src/src/GameHostPage.jsx:1976` | the same binary, so a host reload landed back on the tally. |
+| `src/src/config/hostRemote.js:182-184` | anything not `'field-notes'` offers "What We Heard", so the phone offered to go *backwards* during a feedback round. |
+
+Only `stageBeatFromFrame` (`hostControls.js:78-96`) extended cleanly, because it
+gates on `STAGE_BEATS.includes(beat)` rather than on an equality test. That is
+the shape the other three now follow — read against the closed set, the way
+`get-game-state.js` already reads `stageFocus`.
 
 ## 2. Where the control lives
 
@@ -69,19 +82,55 @@ chip "WHAT WE HEARD", the AI's read-back, and a bottom bar reading
 `src/src/config/hostControls.js` gives `FIELD_NOTES` a primary of **Next Page**
 while pages remain and **Next Round** on the last page, and assigns a secondary
 ("Skip the rest") only in the first case. On the last page the secondary slot is
-free, which is exactly where **Request feedback** goes:
+free, which is where **Request feedback** goes:
 
 - `HOST_PHASES` gains `'FEEDBACK'`.
 - `HOST_INTENTS` gains `FEEDBACK: 'feedback'`.
 - On `FIELD_NOTES`, last page: primary stays `Next Round`; secondary becomes
   `{ id: 'request-feedback', label: 'Request feedback', icon: 'ChatCircleText',
   intent: HOST_INTENTS.FEEDBACK }`.
-- On `FEEDBACK`, the primary is `Next Round` and the secondary is
-  `Back to what we heard`, so the host is never trapped in the new beat.
+- On `FEEDBACK`, the primary is `Next Round` and the secondary returns to the
+  read-back, so the host is never trapped in the new beat.
+
+**This crosses a written invariant, and the invariant is re-argued rather than
+quietly widened.** `hostControls.test.js:328-334` asserts *"FIELD_NOTES adds no
+secondary"* with the reason *"FIELD_NOTES is mid-round: a second button there is
+one more thing to aim at while a room reads"*, and `:113-131` restricts a
+secondary's intent to `SKIP` or `LEAVE`. Both fail as designed.
+
+The invariant already carries one exception, granted mid-document because "the
+single button was the worse aim". The argument for a second one:
+
+- **This does not introduce a two-button bar to FIELD_NOTES; it fills the slot
+  that bar already has, on the one page where it is currently empty.** Mid-
+  document the host already sees Next Page + Skip the rest. The maximum number
+  of aim points on this phase does not change.
+- The alternatives are worse. Mid-round is where the invariant's reason bites
+  hardest. The setup panel is reachable but buried, and the owner asked for a
+  button *"during the AI feedback phase"* — a control the host has to go
+  hunting for while a room waits is not that.
+- The intents stay distinct, which is what the `:129` assertion says it is
+  really protecting: a secondary must never duplicate the primary's intent.
+  `FEEDBACK` ≠ `NEXT`, and on the `FEEDBACK` phase the secondary is
+  `FIELD_NOTES` ≠ `NEXT`.
 
 Advancing the round (`Next Round`) from the feedback beat is unchanged — the
 next round's `ROUND#nnn` row is a different row and opens on its own tally, the
 property `stage-beat.js` already guarantees by keying the beat per round.
+
+**The host stage renders a `FEEDBACK` body.** Review raised this as genuinely
+open: the phase derivation at `GameHostPage.jsx:4522` and `:4799` could either
+leave `hostPhase` at `RESULTS` (in which case auto-mode's timer fires the
+RESULTS primary and throws the room out of the feedback round with no host
+action) or yield a new `FEEDBACK` phase (in which case `BAR_PHASE`, the six
+stage-body guards, `interceptAdvance`, `onBackKey` and `STAGE_GROW` all need an
+entry, or the projector goes blank).
+
+The second, and the work is done rather than avoided. The room is looking at the
+projector; a feedback round with nothing on the stage is not a round. The stage
+shows the round being commented on and the comments arriving against each
+section — which is the *"the comments now can be seen"* half of what was asked
+for, and it is the same live-arrival shape the room already sees during ASK.
 
 ## 3. What the participant sees, and the principle it appears to violate
 
@@ -203,7 +252,7 @@ Attributes:
 | `CommentId` | as in the SK |
 | `AnchorKind`, `AnchorRef`, `AnchorLabel`, `AnchorExcerpt` | §5 |
 | `Text` | the comment itself |
-| `PlayerName`, `playerName`, `name` | author, three spellings — see §8 |
+| `playerName`, `name` | author — **lower-case only**, because those are the spellings `ANON_FIELDS` strips. See §8. |
 | `SubmittedAt` | ISO |
 | `ttl` | 30 days — see §7 |
 
@@ -212,36 +261,58 @@ and `QuestionNumber` against `/^\d+$/` before padding — the same guard, for th
 same reason, that `stage-beat.js:147` and `reveal-authors.js:73` already apply:
 anything else writes a row nothing will ever read again.
 
-## 7. TTL — 30 days, and why not 7 or 90
+## 7. TTL — 30 days, and the argument that does *not* justify it
 
-The table's TTLs are not arbitrary; they are three tiers.
+**This section was rewritten after review. The first version reached the right
+number by an argument that is factually wrong, and the wrong argument mattered
+more than the number, so both are recorded.**
+
+The table's TTLs are three tiers:
 
 | Tier | Rows | TTL |
 |---|---|---|
 | session scaffolding | `METADATA`, `STATE`, reservation, `QUEUE` | 90 days |
-| **durable content** | `#AISummary`, `#RESULTS` (call-and-answer), `REPORT`, `PLAYER#…#SCORE` | **30 days** |
-| raw inputs to a tally | `#ANSWER#`, `#VOTE#`, `PLAYER#` | 7 days |
+| durable content | `#AISummary`, `REPORT`, `PLAYER#…#SCORE`, `#RESULTS` (call-and-answer only) | 30 days |
+| raw inputs to a tally | `#ANSWER#`, `#VOTE#`, `PLAYER#`, `#RESULTS` (wavelength, and the `CREATE_RESULTS` path) | 7 days |
 
-A comment sits in the middle tier, and the brief's test — *"a comment that
-outlives or predeceases the thing it comments on is a bug"* — picks the value
-outright:
+**The argument that was wrong.** The first draft said 30 days is "the only value
+where the annotation and the thing annotated share a fate". They do not share a
+fate, at any TTL, for two reasons found in review:
 
-- **7 days is wrong.** The comment would expire while the AI summary and the
-  results row it points at (both 30d) are still there, and while the `REPORT`
-  row that must contain it (30d) is still being served. A report rebuilt on day
-  8 would render every section with its comments silently missing — a
-  disappearing annotation with no error anywhere.
-- **90 days is wrong in the other direction.** The comment would outlive its
-  anchor: on day 40 the summary, the results and the report are gone, and what
-  survives is prose about material that no longer exists. `AnchorExcerpt` makes
-  that legible rather than meaningless, but a dangling annotation is still not
-  something to design for on purpose.
-- **30 days is the only value where the annotation and the thing annotated
-  share a fate.** A comment is readable for exactly as long as the report that
-  is required to contain it.
+1. **The report's responses are rebuilt from 7-day rows.**
+   `create-report.js:301-302` filters the raw `QUESTION#{n}#ANSWER#` items —
+   7 days (`websocket/message.js:374`) — and those feed `voteTallies`
+   (`:392-401`), `rankedAnswers` (`:436-446`) and finally
+   `detailedQuestions[i].answers` (`:518`). **On day 8 every round's `answers`
+   array rebuilds empty.** The AI summary survives at 30 days; the responses do
+   not. So two of the three anchors already point at material that has gone from
+   a rebuilt report long before any comment TTL expires.
+2. **The `REPORT` row's 30 days is measured from the last rebuild, not from the
+   session.** `create-report.js:721-728` PUTs it unconditionally on every POST,
+   and `config/sessionHistory.js:26-33` records that merely opening the host's
+   history tab re-runs that POST. A report opened on day 10 lives to day 40;
+   comments written on day 0 would be gone.
 
-A comment never annotates the raw `#ANSWER#` row (7d). It annotates a response
-*as it appears in the results row and the report*, both of which are 30 days.
+**Why 30 days is still the right number.** It matches the AI summary
+(`get-ai-summary.js:1203`), the score rows (`get-results.js:588, 846`) and the
+report's nominal life. It is the durable-content tier, and a comment is durable
+content: it is an output that must survive into a report, not a raw input to a
+tally like a vote, which exists only until the tally is computed and baked in.
+7 days would put commentary in the same tier as the ballot; 90 would put it in
+the same tier as the session scaffolding, which holds no content at all.
+
+**What actually protects a comment's meaning is `AnchorExcerpt`, not the TTL.**
+This is the real conclusion, and it promotes the excerpt from a nicety to the
+load-bearing part of the design: from day 8 onward the excerpt is the **only
+surviving copy** of the response a comment is about. That is why it is computed
+at write time, stored on the row, and encrypted (§9) — it is a second copy of
+customer content, and it is the copy that lasts.
+
+**Known defect, named rather than assumed away.** That the report rebuilds
+`answers` from expired 7-day rows is a pre-existing bug in `create-report.js`,
+not something this feature introduces, and it is out of scope here. It is the
+reason the excerpt exists. Anyone raising the comment TTL to "fix" a missing
+response has misread which row expired.
 
 ## 8. Anonymity — a decision that turned out to be forced, and one that is not
 
@@ -257,13 +328,20 @@ nothing. So comments in a feedback round are attributed. That is not a choice.
 
 1. **Comments are still routed through the existing anonymity gate.** The
    handler calls `isHidden(metadata, round)` from `game/anonymity.js` and, when
-   it returns true, redacts with the existing `redactAnswers` — which strips
-   exactly `['playerId', 'playerName', 'name']`, which is exactly what a comment
-   carries. Today that branch never fires. It costs nothing, and it means that
-   if the reveal semantics ever change, comments redact *with* responses instead
-   of becoming the one surface in the product that leaks names. `anonymity.js`
-   is byte-identical across two directories under a drift guard, so it is
-   **not modified** — the existing generic functions are called as they are.
+   it returns true, redacts with the existing `redactAnswers`. Today that branch
+   never fires. It costs nothing, and it means that if the reveal semantics ever
+   change, comments redact *with* responses instead of becoming the one surface
+   in the product that leaks names. `anonymity.js` is byte-identical across two
+   directories under a drift guard, so it is **not modified** — the existing
+   generic functions are called as they are.
+
+   **The author is stored as `playerName`, lower-case, and this is load-bearing
+   rather than incidental.** `ANON_FIELDS` is exactly
+   `['playerId', 'playerName', 'name']` (`anonymity.js:25`). The first draft had
+   the comment row carrying `PlayerName` as well, copying the `answer` row's
+   spelling — and capital-P `PlayerName` is **not** in that list, so it would
+   have survived redaction untouched. The future-proofing would not have worked,
+   which was the entire stated reason for routing through the gate at all.
 
 2. **The composer says so, in words, before anyone types.** Participants have
    spent the session under "Your name is not attached to it until voting closes"
@@ -281,18 +359,29 @@ A comment is customer-authored prose, written by a named person, about a named
 person's response. `tenant-crypto.js` gets a new entity:
 
 ```js
-/** A comment on one section of a round's report:
- *  SK=COMMENT#<nnn>#<anchorKind>#<anchorRef>#<commentId>.
- *  `AnchorExcerpt` is a verbatim slice of the material being commented on —
- *  it is the same content as `Answer` or `SummaryText` and is encrypted for
- *  the same reason. `PlayerName` stays plaintext exactly as it does on
- *  `answer`: it is in the SK and cannot be hidden there, and the concession
- *  the privacy page makes is identifiers visible, content not. */
 comment: Object.freeze(['Text', 'AnchorExcerpt', 'AnchorLabel']),
 ```
 
-`AnchorLabel` is included because for a `response` anchor it may be a
-participant's name once attributed ("Response 3 — Dana Whitfield").
+`AnchorExcerpt` is the one that is easy to miss: it is a verbatim slice of the
+material being commented on, so it is a **second copy** of content the boundary
+already protects one copy of. Encrypting `Text` alone would leave a
+participant's actual words readable at rest while the commentary about them was
+ciphertext — the same shape of mistake as encrypting `Answer` but not
+`ProcessedWords`. `AnchorLabel` joins them because for a `response` anchor it
+carries a participant's name once the round is attributed.
+
+`AnchorKind`, `AnchorRef` and `QuestionNumber` stay plaintext because they are
+**coordinates, not content**: `create-report.js` groups every comment in a
+session by round and section in one pass and must not have to ask KMS a question
+to do it.
+
+`playerName` stays plaintext too, but **not for the reason the first draft
+gave.** It said "it is in the SK and cannot be hidden there" — true of the
+`answer` entity, whose SK is `QUESTION#{n}#ANSWER#{playerName}`, and false here:
+`comment-keys.js` builds a key with no name in it. The real reason is that the
+same participant's `PLAYER#{name}` and `QUESTION#{n}#ANSWER#{name}` rows already
+carry that name in plaintext sort keys, so encrypting this third copy buys
+nothing while costing a decrypt on every grouping pass.
 
 All **three** byte-identical copies are edited (`game/`, `websocket/`,
 `admin/shared/`); `tests/tenant-crypto.js` §8 fails the build otherwise. Any
@@ -313,6 +402,36 @@ over HTTP that must survive into the report, with an org lookup and encryption.
 |---|---|---|
 | `POST /games/{gameId}/comments` | **public** | `{questionNumber, playerName, anchorKind, anchorRef, anchorLabel, anchorExcerpt, text}` |
 | `GET /games/{gameId}/comments` | **public** | `?questionNumber=nnn` (optional; omitted returns the session) |
+| `GET /games/{gameId}/feedback-round` | **public** | one round's report slice + its comments |
+
+**The third route exists because the design originally had no answer to "how
+does the participant get the report", and every obvious answer was wrong.**
+
+- `POST /games/{gameId}/report` **writes**. Forty phones calling it is forty
+  full-partition re-queries, forty KMS encrypts and forty overwrites of the same
+  `SK: 'REPORT'` row per feedback round.
+- `GET /games/{gameId}/report` is read-only but branches on an unverified
+  `?role=` query parameter (`get-report.js:67`), and the non-host branch returns
+  a leaderboard with **no `detailedQuestions` at all** — nothing to comment on.
+  Passing `role=host` from a participant's phone would work, and would hand
+  every phone in the room the whole session: every round, every response, and
+  the standings. That is a much larger grant than a feedback round needs, taken
+  by leaning on a check the code itself documents as unenforceable.
+
+So `GET /games/{gameId}/feedback-round` is minimum-privilege by construction:
+
+- it returns **one** round — the one currently on the `feedback` beat — and
+  refuses with 409 when no round is, so it is not a general back door into a
+  session;
+- no leaderboard, no standings, no other round;
+- comments included, redacted through the same `isHidden` gate;
+- it reads the stored `REPORT` row rather than rebuilding, so a room of forty
+  costs forty cheap reads and no writes.
+
+The host's **Request feedback** therefore does two things in order: `POST
+/report` to build the row, then `POST /stage-beat` with `beat: 'feedback'`. If
+the first fails the round does not open, because a feedback round whose report
+is missing is a blank screen on forty phones.
 
 Public because participants hold no Cognito identity — the same reason
 `POST /games/{gameId}/votes` is public. Opening the round is *not* public: it
@@ -342,14 +461,22 @@ one fetch, not forty.
 `detailedQuestions[i]` and the session report is the object wrapping the array.
 So one change serves both, which is what the owner asked for.
 
-- Query `begins_with(SK, 'COMMENT#')` alongside the existing prefixes, decrypt,
-  group by round number.
+- Query `begins_with(SK, 'COMMENT#')` alongside the existing prefixes
+  (`:61-105`), decrypt beside `:147-153` with the new `comment` entity, group
+  into a `Map` keyed by padded round number the way `roundsByNumber` is built at
+  `:105-107`, and join at the `detailedQuestions.push({...})` at `:483-556`.
 - Each `detailedQuestions[i]` gains `comments: [{commentId, anchorKind,
   anchorRef, anchorLabel, anchorExcerpt, text, playerName?, submittedAt}]`,
   sorted by `submittedAt`. `playerName` is **absent, never null** when hidden —
-  the same rule the file already applies to answers at `:344-354`, so
-  `displayLabelFor` reads it correctly with no new logic.
+  the same rule the file already applies to answers at `:400` and `:440` under
+  the `hideAuthors` guard at `:384`, so `displayLabelFor` reads it correctly
+  with no new logic.
 - `gameStats` gains `totalComments`.
+- **`questionNumbers` must gain comments as a source.** Review found the gap:
+  the union at `:264-292` is votes ∪ results ∪ aiSummaries. A round whose
+  7-day vote and results rows have expired and which never produced a summary
+  drops out of `detailedQuestions` entirely — taking its comments with it, with
+  no error. Comments are a fourth source.
 
 "Clearly called out as comments" is a rendering requirement in three places:
 
@@ -360,11 +487,11 @@ So one change serves both, which is what the owner asked for.
    ("On Response 3:"). This is also the print sheet, so the block gets the same
    `report-keep` break treatment the answers have.
 3. **`GameHostPage.jsx` must forward it.** `GameReport`'s `reportData` is
-   rebuilt from scratch at `GameHostPage.jsx:~4336`, and the file carries a
+   rebuilt from scratch at `GameHostPage.jsx:4337-4349`, and the file carries a
    comment saying anything not explicitly forwarded there is invisible to the
    report no matter what the backend sends. `questions: report.detailedQuestions`
-   already carries the nested comments; `totalComments` must be added
-   explicitly.
+   (`:4346`) already carries the nested comments; `totalComments` needs its own
+   **top-level** key, because that object has no `gameStats` to pass through.
 
 `config/sessionHistory.js`'s `roundsFrom()` must carry `comments` through, or
 the host's `PastRound` shows none.
@@ -384,6 +511,10 @@ the host's `PastRound` shows none.
 **Modified**
 
 - `lambda-functions/game/stage-beat.js` — `BEATS` gains `'feedback'`
+- `lambda-functions/game/get-game-state.js` — read `StageBeat` against the
+  closed set instead of an equality test (§1)
+- `src/src/config/hostRemote.js` — the phone's RESULTS action must not offer to
+  go backwards during a feedback round (§1)
 - `lambda-functions/game/create-report.js` — comments into both reports
 - `lambda-functions/{game,websocket,admin/shared}/tenant-crypto.js` — `comment`
   entity, all three, byte-identical
@@ -475,3 +606,39 @@ No geometric assertions anywhere; jsdom has no layout engine.
   rounds.
 - **The host's phone remote as a comment composer.** It drives the beat; it does
   not compose.
+- **Fixing `create-report.js`'s rebuild of `answers` from expired 7-day rows**
+  (§7). A pre-existing defect this feature does not introduce and is not the
+  place to repair. It is why `AnchorExcerpt` exists.
+
+## 16. What review changed
+
+The design was reviewed against the code before implementation, per the house
+standard in `docs/handoff/public-library-2026-08-27.md` §5. It found seven
+things, and the corrections are folded into the sections above rather than
+listed as errata. Recorded here because several of them were *the design being
+confidently wrong*, not merely incomplete:
+
+1. **§1's central premise was false.** "The beat mechanism extends by adding one
+   value" — three call sites collapse it to a binary, one of them server-side
+   and upstream of the others. Two were in no file list.
+2. **§7's TTL argument was factually wrong** in three ways, while reaching the
+   right number. Rewritten, and the real conclusion (`AnchorExcerpt`, not the
+   TTL, is what protects a comment's meaning) promoted.
+3. **§2 crossed a written invariant** without noticing. Now re-argued
+   explicitly, with the counter-argument stated.
+4. **§8's redaction claim did not work**: `PlayerName` is not in `ANON_FIELDS`,
+   so the future-proofing the section existed for would have been inert.
+5. **§9 gave a true-sounding reason that does not apply** to this entity —
+   `comment`'s sort key carries no name.
+6. **The design never said how a participant obtains the report.** Both obvious
+   routes were wrong; a third, minimum-privilege one was added.
+7. **A round with only comments would vanish from the report**, comments
+   included, with no error.
+
+Verified as correct and left alone: the sort-key format against every existing
+query in the codebase (no `begins_with(SK, 'COMMENT')` anywhere, every `GAME#`
+query prefix-scoped, and `clear-all-games` deletes whole partitions, which is
+right for comments); the `get-results.js:265` unconditional reveal; that
+`detailedQuestions` encryption covers nested comment arrays with no per-node
+handling; and that `roundsFrom` whitelists fields and will silently drop
+`comments` unless told.

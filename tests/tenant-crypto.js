@@ -189,6 +189,39 @@ check('a generation job encrypts the pasted source document', () =>
 check('category Name stays plaintext — the 24-bit mask depends on its order', () =>
   assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.category], []));
 
+// A COMMENT ON ONE SECTION OF A ROUND'S REPORT.
+// SK=COMMENT#<nnn>#<anchorKind>#<anchorRef>#<commentId>.
+//
+// This is customer-authored prose, written by a named person, about a named
+// person's response — among the most sensitive content the table holds.
+//
+// `AnchorExcerpt` is the trap. It is a verbatim slice of the material being
+// commented on, copied onto the comment row at write time so a comment stays
+// readable in the session report without the round beside it. That makes it a
+// SECOND COPY of an answer or a summary, in a different row, and encrypting
+// `Text` alone would leave the participant's actual words readable at rest
+// while the commentary about them was ciphertext — the same shape of mistake
+// as encrypting `Answer` but not `ProcessedWords`.
+check('comment encrypts the prose, the excerpt and the label', () =>
+  assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.comment].sort(),
+    ['AnchorExcerpt', 'AnchorLabel', 'Text']));
+
+// The author is conceded visible exactly as it is on `answer`: PlayerName is
+// part of the sort key on an answer row and cannot be hidden there, so
+// encrypting it on a comment would buy nothing and break the join.
+check('comment PlayerName stays plaintext, as it does on answer', () => {
+  assert.ok(!C.ENCRYPTED_FIELDS.comment.includes('PlayerName'));
+  assert.ok(!C.ENCRYPTED_FIELDS.answer.includes('PlayerName'));
+});
+
+// The anchor is a key, not content: a reader has to group by it without asking
+// KMS anything, and create-report.js groups thousands of rows in one pass.
+check('comment anchor coordinates stay plaintext so rows can be grouped', () => {
+  assert.ok(!C.ENCRYPTED_FIELDS.comment.includes('AnchorKind'));
+  assert.ok(!C.ENCRYPTED_FIELDS.comment.includes('AnchorRef'));
+  assert.ok(!C.ENCRYPTED_FIELDS.comment.includes('QuestionNumber'));
+});
+
 // The index, the owner and the counts stay readable, which is exactly what the
 // privacy page promises is visible.
 const NEVER_ENCRYPTED = ['PK', 'SK', 'orgId', 'createdBy', 'createdAt', 'updatedAt',
@@ -262,6 +295,10 @@ const MUST_NOT_LEAK = {
   report: ['gameTitle', 'hostName', 'playerPerformance', 'detailedQuestions',
     'questionSummaries', 'questionSetData'],
   job: ['request', 'items', 'meta'],
+  // A comment on a section of a round's report. `AnchorExcerpt` carries a
+  // verbatim slice of the commented-on answer or summary, so it is a second
+  // copy of content the boundary already protects one copy of.
+  comment: ['Text', 'AnchorExcerpt', 'AnchorLabel'],
 };
 for (const [entity, fields] of Object.entries(MUST_NOT_LEAK)) {
   check(`no ${entity} field named in the boundary survives as readable text`, async () => {
