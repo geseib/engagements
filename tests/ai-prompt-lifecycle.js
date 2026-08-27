@@ -316,7 +316,24 @@ const list = (qs) => getPrompts.handler({ queryStringParameters: qs || {} })
   });
 
   // === 5. Delete works on the canonical key AND the legacy key =============
+  /**
+   * An ADMIN caller, in this API's real event shape.
+   *
+   * `DELETE /admin/ai-prompts/{promptId}` is admins-only at the authorizer
+   * and, since the tenancy fix, ownership-checked again inside the handler
+   * (`canManagePrompt`, shared/prompt-access.js) — platform passes on the
+   * scope alone, which needs the `admins` group and no active org. Every row
+   * in this file is platform (created above with no caller at all, which
+   * create-ai-prompt.js's internal-invocation seam also routes to platform),
+   * so every caller here is that administrator, acting for nobody.
+   */
+  const ADMIN = {
+    requestContext: { authorizer: { lambda: {
+      userId: 'sub-admin', username: 'admin', groups: 'admins', status: 'enabled',
+    } } },
+  };
   const del = (id, qs) => deletePrompt.handler({
+    ...ADMIN,
     pathParameters: { promptId: id },
     queryStringParameters: qs || {},
   });

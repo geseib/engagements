@@ -7,6 +7,7 @@ const {
 } = require('./shared/set-version');
 const { findSetForCaller, requestedScope } = require('./shared/question-set-access');
 const tenant = require('./shared/tenant');
+const { readReviews } = require('./shared/set-review');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -94,6 +95,18 @@ exports.handler = async (event) => {
       endedByGameId.set(gameId, state === 'ENDED' || state === 'EXPIRED');
     }
 
+    /*
+      THE REVIEW STATE, PER VERSION. Read from its own row rather than from the
+      entry, because the entry lives in an array that `delete-set-version.js`
+      rewrites wholesale — see admin/shared/set-review.js for why that is not a
+      safe home for an approval.
+
+      A version with no row reads as `unreviewed`, which is what a version
+      nobody has checked is. `readReviews` answers for every version asked
+      about, so there is no gap for the projection below to defend against.
+    */
+    const reviews = await readReviews(db, tableName, found.ref, entries.map((e) => e.version));
+
     const versions = entries.map((entry) => ({
       version: entry.version,
       createdAt: entry.createdAt || null,
@@ -102,6 +115,14 @@ exports.handler = async (event) => {
       sourceFile: entry.sourceFile || '',
       note: entry.note || '',
       isActive: entry.version === activeVersion,
+      /*
+        PROJECTED EXPLICITLY, like every other field here. This map is a
+        whitelist: a field not named on it does not reach the client however
+        faithfully it is stored, which is why adding the row was only half the
+        work.
+      */
+      review: (reviews.get(entry.version) || {}).status || 'unreviewed',
+      reviewFindings: (reviews.get(entry.version) || {}).findings || [],
       pinnedByGames: pinnedBySet
         .filter((g) => toVersion(g.QuestionSetVersion) === entry.version)
         .map((g) => String(g.SK).replace('GAME#', ''))

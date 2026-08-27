@@ -138,6 +138,51 @@ check('set fields are exactly the agreed set', () =>
      // happened to name the other four.
      'roundKindBrief'].sort()));
 
+// A WORKIE IS THE CONTENT. `name` and `description` are the same two strings
+// the `set` entity already encrypts; the template fields are the prose the
+// customer wrote. `category` and `status` stay plaintext because
+// get-ai-prompts.js pushes both into a FilterExpression as equality matches,
+// and an encrypted value cannot be matched by one — the same argument the
+// category `Name` note above makes for the 24-bit mask.
+check('prompt fields are exactly the agreed set', () =>
+  assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.prompt].sort(),
+    ['audienceTemplate', 'basePrompt', 'categoryTemplate', 'contextTemplate',
+     'defaultSettings', 'description', 'name', 'outputFormat', 'outputSections',
+     'scenario', 'tags'].sort()));
+check('a prompt\'s filterable columns are deliberately NOT encrypted', () => {
+  assert.ok(!C.ENCRYPTED_FIELDS.prompt.includes('category'),
+    'category is an equality FilterExpression in get-ai-prompts.js');
+  assert.ok(!C.ENCRYPTED_FIELDS.prompt.includes('status'),
+    'status is an equality FilterExpression in get-ai-prompts.js');
+  assert.ok(!C.ENCRYPTED_FIELDS.prompt.includes('gameType'));
+  assert.ok(!C.ENCRYPTED_FIELDS.prompt.includes('s3Key'));
+});
+// defaultSettings and tags were filed as "vocabulary... and model
+// configuration" until review found AIGenerationPromptEditor.jsx writing
+// author-typed free text into defaultSettings (mustHaveCategories,
+// sampleCategories, contextPlaceholder, audiencePlaceholder) and a live row
+// holding one of those strings in the clear, two attributes below an
+// encrypted `name`. encryptValue JSON-serialises, so the map and the array
+// round-trip as themselves, not as their string form.
+check('a prompt\'s defaultSettings (a map) and tags (an array) round-trip through the row', async () => {
+  // Mints its own org rather than relying on 'org_nw' — that key is not
+  // minted until a check further down (section 2), and these checks run in
+  // the order they were PUSHED, not the order KMS calls happen to land.
+  const org = await newOrg('org_prompt_fields');
+  const row = {
+    PK: 'x', SK: 'y',
+    defaultSettings: { mustHaveCategories: 'Layoffs, Attrition, Reorg', numberOfCategories: 3 },
+    tags: ['q3-retro', 'leadership-only'],
+  };
+  const enc = await C.encryptItem(org, 'prompt', row);
+  assert.ok(C.isEnvelope(enc.defaultSettings), `defaultSettings shipped as ${JSON.stringify(enc.defaultSettings)}`);
+  assert.ok(C.isEnvelope(enc.tags), `tags shipped as ${JSON.stringify(enc.tags)}`);
+  assert.ok(!JSON.stringify(enc).includes('Layoffs'), 'defaultSettings prose leaked into the row');
+  const back = await C.decryptItem(org, 'prompt', enc);
+  assert.deepStrictEqual(back.defaultSettings, row.defaultSettings);
+  assert.deepStrictEqual(back.tags, row.tags);
+});
+
 // THE SESSION BRIEF, and the inconsistency that put it here. `report.gameTitle`
 // and `report.hostName` were already in the ENCRYPT column, and they are the
 // SAME TWO STRINGS as Title/HostName on GAME#<id>/METADATA — so one sentence
@@ -262,6 +307,12 @@ const MUST_NOT_LEAK = {
   report: ['gameTitle', 'hostName', 'playerPerformance', 'detailedQuestions',
     'questionSummaries', 'questionSetData'],
   job: ['request', 'items', 'meta'],
+  // A Workie. defaultSettings and tags added after review — see the
+  // ENCRYPTED_FIELDS.prompt comment for why they belong here and not with
+  // category/status.
+  prompt: ['name', 'description', 'basePrompt', 'contextTemplate', 'audienceTemplate',
+    'categoryTemplate', 'outputFormat', 'outputSections', 'scenario',
+    'defaultSettings', 'tags'],
 };
 for (const [entity, fields] of Object.entries(MUST_NOT_LEAK)) {
   check(`no ${entity} field named in the boundary survives as readable text`, async () => {

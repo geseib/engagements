@@ -87,5 +87,26 @@ console.log('\n3. the concrete jobId form the rawPath fallback produces');
 check('a real job id polls the same as the template', () =>
   openToHosts('GET', 'admin/ai-generate-trivia/mt5t6yreeiwar2rt'));
 
+console.log('\n4. and now MAY create one, but nothing wider');
+
+// rejects: opening the whole prompt library to hosts by prefix rather than by
+// exact pair — PUT and DELETE must stay Engage's until copy-on-write lands.
+check('a host may CREATE a Workie', () =>
+  assert.deepStrictEqual(requiredGroupsForRoute('POST', 'admin/ai-prompts').sort(),
+    ['admins', 'hosts']));
+check('…and may still read the library', () =>
+  assert.deepStrictEqual(requiredGroupsForRoute('GET', 'admin/ai-prompts').sort(),
+    ['admins', 'hosts']));
+check('…but may NOT edit one yet', () =>
+  assert.deepStrictEqual(requiredGroupsForRoute('PUT', 'admin/ai-prompts/{promptId}'),
+    ['admins']));
+check('…nor delete one', () =>
+  assert.deepStrictEqual(requiredGroupsForRoute('DELETE', 'admin/ai-prompts/{promptId}'),
+    ['admins']));
+check('…nor reach the advisor or the prompt generator', () => {
+  assert.deepStrictEqual(requiredGroupsForRoute('POST', 'admin/ai-prompt-advisor'), ['admins']);
+  assert.deepStrictEqual(requiredGroupsForRoute('POST', 'admin/ai-generate-prompt'), ['admins']);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

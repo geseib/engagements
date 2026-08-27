@@ -6,6 +6,12 @@ const { inferPromptType, normalizeOutputSections } = require('./shared/prompt-sh
 const {
   assertTemplateVariablesExist, assertNoBracketDirections, assertReceivesResponses,
 } = require('./shared/template-variable-usage');
+const {
+  createPromptRef, promptKey, promptBodyKey, promptOwnerStamp,
+} = require('./shared/prompt-access');
+const { requestedScope, callerUserId } = require('./shared/question-set-access');
+const tenant = require('./shared/tenant');
+const { encryptItem, encryptValue } = require('./shared/tenant-crypto');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -25,8 +31,6 @@ const generatePromptId = () => {
 };
 
 exports.handler = async (event) => {
-  console.log('➕ Create AI Prompt - Event:', JSON.stringify(event, null, 2));
-
   try {
     // Handle CORS preflight
     if (event.requestContext?.http?.method === 'OPTIONS') {
@@ -76,6 +80,43 @@ exports.handler = async (event) => {
       questionSetIds = [],
       tags = []
     } = requestBody;
+
+    /*
+      WHAT USED TO REACH CLOUDWATCH HERE WAS THE WHOLE EVENT — every field of
+      event.body, JSON.stringify'd whole: `name`, `description`,
+      `instructions`, `outputFormat`, `basePrompt`, every template field —
+      the customer's actual Workie prose. The rest of this handler makes all
+      of that ciphertext in DynamoDB and S3 (ENCRYPTED_FIELDS.prompt,
+      tenant-crypto.js); a log line that dumped the raw event put the
+      identical sentences in CloudWatch instead, in the clear, readable with
+      no `kms:Decrypt` and therefore no CloudTrail record of having been read
+      — defeating the exact property tenant-crypto.js's header exists to
+      guarantee.
+
+      LOG ENOUGH TO TRACE A REQUEST, NEVER WHAT IT SAYS: who, for which org,
+      on which route, and how long each free-text field was — never the
+      field itself. Same rule upload-questions.js:208-212 already applies to
+      a CSV upload (filename, title, type, content LENGTH — never content).
+    */
+    const proseLength = (v) => (typeof v === 'string' ? v.length : 0);
+    console.log('➕ Create AI Prompt', JSON.stringify({
+      method: event.requestContext?.http?.method,
+      path: event.requestContext?.http?.path,
+      sub: callerUserId(event) || null,
+      orgId: tenant.callerOrgId(event) || null,
+      lengths: {
+        name: proseLength(name),
+        description: proseLength(description),
+        instructions: proseLength(instructions),
+        outputFormat: proseLength(outputFormat),
+        basePrompt: proseLength(basePrompt),
+        template: proseLength(template),
+        contextTemplate: proseLength(contextTemplate),
+        audienceTemplate: proseLength(audienceTemplate),
+        categoryTemplate: proseLength(categoryTemplate),
+        scenario: proseLength(scenario),
+      },
+    }));
 
     // Validate required fields - support both old (template) and new (instructions + outputFormat) formats
     if (!name || !rawGameType) {
@@ -145,8 +186,91 @@ exports.handler = async (event) => {
     const timestamp = new Date().toISOString();
     const version = 1;
 
-    // Create S3 key based on gameType and promptId
-    const s3Key = `prompts/${gameType}/${promptId}/v${version}.json`;
+    /*
+      WHICH LIBRARY DOES THIS WORKIE GO IN?
+
+      `createPromptRef` has the rule and the reasoning (shared/prompt-access.js):
+      an acting organisation wins; Engage staff with no org selected are
+      maintaining the house library; a script or worker with no groups and no
+      org keeps writing platform, which is the seam every seed and every
+      existing test in tests/ai-prompt-lifecycle.js comes through.
+
+      It returns null for a REAL host with no organisation, and this refuses
+      rather than defaulting — silently writing a customer's Workie into the
+      library every other customer reads is the exact failure tenant.js exists
+      to prevent. Same status and same sentence as the sets side
+      (upload-questions.js:700-709), noun changed.
+    */
+    const ref = createPromptRef(event, promptId, requestedScope(event));
+    if (!ref) {
+      /*
+        createPromptRef RETURNS NULL FOR TWO OPPOSITE REASONS, and one message
+        used to answer for both. An orgless host has nothing to choose FROM —
+        "choose an organisation" names the fix. A caller who already HAS an
+        org and asked for `scope: 'platform'` is refused by a DIFFERENT rule
+        (tenant.js:canManageScope — the interlock that keeps an Engage admin
+        from renaming the house library while standing inside a customer's
+        team) and telling them to "choose an organisation" sends them back to
+        a step they already completed; following it cannot help, because
+        having an org is exactly why they were refused.
+      */
+      const message = tenant.callerOrgId(event)
+        ? "Engage's library can only be changed while you are not acting for an organisation."
+        : 'Choose an organisation before creating a Workie.';
+      return {
+        statusCode: 403,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS'
+        },
+        body: JSON.stringify({ error: message })
+      };
+    }
+    const promptStamp = promptOwnerStamp(event, ref);
+
+    /*
+      THERE IS NO ORG-LEVEL DEFAULT, AND THIS REFUSES RATHER THAN IGNORING.
+
+      The bare AIPROMPTS partition holds three row shapes and only prompts move
+      (shared/tenant.js:114-131). The GAMETYPE#…#CATEGORY#… pointer below
+      answers "what does Engage use when a set names nothing" — a house decision
+      by definition — and `findDefaultPromptId` (game/get-ai-summary.js:394) is
+      a SCAN with `PK = :pk` equality against 'AIPROMPTS'. An ORG# row can never
+      match it, whatever is stamped on it.
+
+      So storing `isDefault: true` on an org row would be a claim nothing in the
+      product can honour, and the caller would never find out. That is exactly
+      the failure the guard at the top of this file names: "I set it and nothing
+      changed". An organisation's Workie is chosen EXPLICITLY by naming it on a
+      question set, or it is not used.
+
+      400 and not 403: the caller may create here, they just asked for something
+      that does not exist. Returned BEFORE the S3 PutObject so there is no
+      orphaned body.
+    */
+    if (isDefault && ref.scope !== 'platform') {
+      return {
+        statusCode: 400,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS'
+        },
+        body: JSON.stringify({
+          error: 'A Workie owned by an organisation cannot be a default. '
+            + "The default Workie for a game type is Engage's house choice; "
+            + "your organisation's Workie is chosen by naming it on a question set."
+        })
+      };
+    }
+
+    // WHERE THE TEXT GOES. Scoping the DynamoDB partition does not reach S3 —
+    // the row stores only `s3Key`, so without this two organisations whose
+    // slugs collide overwrite each other's Workie text. Platform keeps the
+    // exact path it has always had, which is what makes this zero migration in
+    // S3 as well as in the table.
+    const s3Key = promptBodyKey(ref, gameType, version);
 
     console.log(`📝 Creating AI prompt - ID: ${promptId}, GameType: ${gameType}, Category: ${category}`);
 
@@ -179,30 +303,63 @@ exports.handler = async (event) => {
       createdAt: timestamp,
       updatedAt: timestamp,
       metadata: {
-        author: 'admin',
+        // WHO, and WHICH LIBRARY. `author` was the constant string 'admin' on
+        // every prompt ever written, which is a lie the moment a host in an
+        // organisation authors one — and the body is the copy that TRAVELS:
+        // includeContent returns it, export-to-archive copies it wholesale, and
+        // a published Workie would carry it. Nothing reads this field today
+        // (verified: no `metadata.author` reader in lambda-functions or src),
+        // so correcting it is additive.
+        author: promptStamp.createdBy || 'admin',
+        scope: ref.scope,
+        ...(ref.orgId ? { orgId: ref.orgId } : {}),
         createdBy: 'admin-interface',
         format: basePrompt ? 'generation' : (template ? 'legacy' : 'structured')
       }
     };
+
+    /*
+      ORG BODIES ARE ENCRYPTED BEFORE PutObject.
+
+      `ENCRYPTED_FIELDS` alone encrypts the ROW and leaves the TEXT in the
+      clear, in a shared bucket, beside a row that is ciphertext — and the text
+      is the content-dense half. The whole document is wrapped as one envelope
+      rather than field by field: the body is read back whole, by one reader,
+      and a per-field envelope inside a JSON document buys nothing.
+
+      Platform and public bodies are plaintext by decision, the same one
+      upload-questions.js states for the shared libraries: encrypting content
+      the whole product depends on would make it unreadable, and there is no org
+      to key it to.
+    */
+    const s3Body = ref.orgId
+      ? JSON.stringify(await encryptValue(ref.orgId, promptContent))
+      : JSON.stringify(promptContent, null, 2);
 
     // Save to S3
     console.log(`💾 Saving prompt content to S3: ${s3Key}`);
     await s3Client.send(new PutObjectCommand({
       Bucket: aiPromptsBucket,
       Key: s3Key,
-      Body: JSON.stringify(promptContent, null, 2),
+      Body: s3Body,
       ContentType: 'application/json',
       Metadata: {
         promptId: promptId,
         gameType: gameType,
         version: version.toString(),
-        status: status
+        status: status,
+        // So an object found in the bucket is attributable without a table
+        // lookup. `orgId` is spread conditionally: S3 user metadata values must
+        // be strings, and an absent one sent as `undefined` arrives as the
+        // literal four-letter word.
+        scope: ref.scope,
+        ...(ref.orgId ? { orgId: ref.orgId } : {})
       }
     }));
 
     // Save metadata to DynamoDB using new structure
     const dynamoItem = {
-      PK: 'AIPROMPTS',
+      PK: promptKey(ref).PK,
       SK: `AIPROMPT#${promptId}`,
       promptId,
       name,
@@ -228,7 +385,11 @@ exports.handler = async (event) => {
       s3Key,
       version,
       createdAt: timestamp,
-      updatedAt: timestamp
+      updatedAt: timestamp,
+      // WHOSE WORKIE THIS IS — scope, org and creator, written together.
+      // `canManagePrompt` reads all three back OFF THE ROW, so a row that does
+      // not carry them cannot be managed by anybody.
+      ...promptStamp,
       // NO `ttl`. The table has TimeToLiveSpecification on `ttl`
       // (template-clean.yaml:104-106) because GAME#/PLAYER# records must expire.
       // AI prompts are configuration, not session data — stamping them with
@@ -239,11 +400,17 @@ exports.handler = async (event) => {
     console.log(`💾 Saving prompt metadata to DynamoDB`);
     await dynamodb.send(new PutCommand({
       TableName: tableName,
-      Item: dynamoItem
+      // Org rows only. `encryptItem` needs an orgId and throws without one, and
+      // a platform row must stay readable by every organisation.
+      Item: ref.orgId ? await encryptItem(ref.orgId, 'prompt', dynamoItem) : dynamoItem
     }));
 
     // If this is marked as default, handle default prompt lookup structure
-    if (isDefault) {
+    // `ref.scope === 'platform'` is redundant with the refusal above and is
+    // written anyway: this block queries and writes the BARE partition by
+    // literal, four times, and a future edit that relaxes the refusal must trip
+    // over this line rather than quietly start sweeping the wrong library.
+    if (isDefault && ref.scope === 'platform') {
       console.log(`🏷️ Setting as default prompt for ${gameType}`);
 
       try {
@@ -318,6 +485,10 @@ exports.handler = async (event) => {
       promptId,
       s3Key,
       version,
+      // THE OTHER HALF OF THE REFERENCE. A promptId alone no longer names one
+      // partition, so the client must round-trip the pair.
+      scope: ref.scope,
+      orgId: ref.orgId || null,
       status: 'created',
       message: 'AI prompt created successfully'
     };

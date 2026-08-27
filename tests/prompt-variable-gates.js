@@ -179,6 +179,21 @@ async function advise(body) {
   return { res, prompt: bedrockCalls[0] };
 }
 
+/**
+ * An ADMIN caller, in this API's real event shape.
+ *
+ * `PUT /admin/ai-prompts/{promptId}` is admins-only at the authorizer and,
+ * since the tenancy fix, ownership-checked again inside the handler
+ * (`canManagePrompt`, shared/prompt-access.js) — platform passes on the scope
+ * alone, which needs the `admins` group and no active org. `goodId` below is
+ * created with no caller at all, which create-ai-prompt.js's internal-
+ * invocation seam routes to platform, so this is that administrator.
+ */
+const ADMIN = {
+  requestContext: { authorizer: { lambda: {
+    userId: 'sub-admin', username: 'admin', groups: 'admins', status: 'enabled',
+  } } },
+};
 const post = async (body) => {
   quiet();
   const r = await createPrompt.handler({ body: JSON.stringify(body) });
@@ -188,6 +203,7 @@ const post = async (body) => {
 const putUpdate = async (promptId, body) => {
   quiet();
   const r = await updatePrompt.handler({
+    ...ADMIN,
     pathParameters: { promptId },
     body: JSON.stringify(body),
   });

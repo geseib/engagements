@@ -135,8 +135,12 @@ const MAX_CACHED_ORGS = 32;
  *                        encrypting it to their org key would make the public
  *                        library unreadable by the public.
  *   correctAnswer        The literal string "OptionA". A pointer, not prose.
- *   PersonaName/Id,      Platform configuration. A persona has no tenant —
- *   promptId             see tenant.js on why PK='AIPROMPTS' is untouched.
+ *   PersonaName/Id       Platform configuration. A persona is a VOICE Engage
+ *                        curates and stays platform-only by decision —
+ *                        tenant.js:personasPk says so in code.
+ *   promptId             A pointer, not prose. The Workie it names is scoped
+ *                        and encrypted under the `prompt` entity below; the id
+ *                        itself is how a row is found at all.
  *
  * An unknown entity THROWS rather than encrypting nothing. A typo'd entity
  * silently returning the item unchanged is how a whole row ships in plaintext.
@@ -153,6 +157,61 @@ const ENCRYPTED_FIELDS = Object.freeze({
     // named the four fields above; it is the same kind of content as
     // `customInstruction` and belongs with it.
     'roundKindBrief',
+  ]),
+
+  /** An AI prompt — a Workie: PK=<scope>AIPROMPTS, SK=AIPROMPT#<id>.
+   *
+   *  ORG SCOPE ONLY, like every other entity here — platform and public prompts
+   *  are deliberately plaintext, for the reason upload-questions.js gives about
+   *  the shared libraries: encrypting content the whole product depends on
+   *  would make it unreadable, and there is no org to key it to.
+   *
+   *  `name` and `description` are the same two strings the `set` entity above
+   *  encrypts. The template fields are the prose the customer wrote, and a
+   *  Workie IS that prose — the row is the mirror of the S3 body, which
+   *  create-ai-prompt.js encrypts separately because a partition does not reach
+   *  a bucket.
+   *
+   *  `category` and `status` STAY PLAINTEXT and that is not an oversight:
+   *  get-ai-prompts.js pushes both into a FilterExpression as equality matches,
+   *  and an encrypted value cannot be matched by an equality filter. Same
+   *  argument as the category `Name` note above. `gameType`, `promptType`,
+   *  `s3Key`, `version`, `isDefault` and `questionSetIds` are vocabulary,
+   *  pointers and flags — the "identifiers, timestamps and counts" the privacy
+   *  page already concedes are visible, and neither is ever pushed into a
+   *  FilterExpression (get-ai-prompts.js's buildQuery reads `category` and
+   *  `status` only), so encrypting them would cost nothing and buys nothing.
+   *
+   *  `defaultSettings` AND `tags` ARE ENCRYPTED, and were wrongly filed under
+   *  "vocabulary... and model configuration" here until review caught it.
+   *  `defaultSettings` is not a fixed shape: AIGenerationPromptEditor.jsx
+   *  writes `mustHaveCategories`, `sampleCategories`, `contextPlaceholder` and
+   *  `audiencePlaceholder` into it, and those are typed by the author, not
+   *  chosen from a list — a live row was found in testing holding
+   *  `"mustHaveCategories":"Layoffs, Attrition, Reorg"` in the clear, two
+   *  attributes below an encrypted `name`. `tags` is the same shape: a caller
+   *  types free text into an "Add tags…" field (AIPromptManager.jsx,
+   *  AIGenerationPromptEditor.jsx) — not a controlled vocabulary, and nothing
+   *  like the fixed `category`/`status` values above. Both were already inside
+   *  the encrypted S3 envelope — create-ai-prompt.js wraps the whole
+   *  `promptContent` document, and both fields are on it — so leaving the row
+   *  plaintext meant the identical text was ciphertext in the bucket and
+   *  readable two attributes away in the table.
+   *
+   *  `template` and `instructions` are absent because they are not on the row:
+   *  create-ai-prompt.js writes those only to the S3 body. */
+  prompt: Object.freeze([
+    'name',
+    'description',
+    'basePrompt',
+    'contextTemplate',
+    'audienceTemplate',
+    'categoryTemplate',
+    'outputFormat',
+    'outputSections',
+    'scenario',
+    'defaultSettings',
+    'tags',
   ]),
 
   /** A question: PK=<scope>SET#<id>[#v<n>], SK=QUESTION#<cat>#<num>.

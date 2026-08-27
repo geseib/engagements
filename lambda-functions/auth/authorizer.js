@@ -274,10 +274,11 @@ const HOST_ADMIN_ROUTES = new Set([
     started job whose poll route refuses is worse than no job at all: the work
     is done, the money is spent, and the answer is unreachable.
 
-    NOT included: the prompt LIBRARY writes (`POST/PUT/DELETE admin/ai-prompts…`,
-    `ai-prompt-advisor`, `ai-generate-prompt`). Those shape what the AI does for
-    everybody, and they stay Engage's. The read is here because the builders
-    offer a summary prompt to choose from and cannot without it.
+    NOT included: `PUT/DELETE admin/ai-prompts/{promptId}`, `ai-prompt-advisor`,
+    `ai-generate-prompt`. Those still shape what the AI does for everybody, and
+    they stay Engage's. The read is here because the builders offer a summary
+    prompt to choose from and cannot without it — and CREATE is here too now;
+    see the entry below for why.
   */
   'POST admin/ai-generate-trivia',
   'GET admin/ai-generate-trivia/{jobId}',
@@ -295,9 +296,21 @@ const HOST_ADMIN_ROUTES = new Set([
   'GET admin/ai-draft-builder-form/{jobId}',
   'POST admin/ai-draft-set-metadata',
   'GET admin/ai-draft-set-metadata/{jobId}',
-  // READ ONLY. The builders let somebody pick which summary prompt a set uses;
-  // writing the library stays Engage's.
+  // THIS WAS "READ ONLY" UNTIL NOW: an org may now CREATE its own prompt too.
+  // The reason POST was excluded was that a prompt write "shapes what the AI
+  // does for everybody" — true of the one partition that existed when that
+  // line was written. An organisation's prompt now lands in
+  // `ORG#<org>#AIPROMPTS`, is invisible to every other tenant, and can never
+  // become a default — so it shapes what the AI does for THAT organisation
+  // and nobody else. The same expiry the job routes above went through, for
+  // the same reason. Approved by the owner.
+  //
+  // STILL AN EXACT PAIR: PUT/DELETE admin/ai-prompts/{promptId} are
+  // deliberately still absent. Editing a Workie you do not own needs
+  // copy-on-write, which is not built — a host may author one and read the
+  // library, not yet change or retire one.
   'GET admin/ai-prompts',
+  'POST admin/ai-prompts',
   'POST admin/question-sets/{setId}/media/uploads',
   'GET admin/question-sets/{setId}/media',
   // Put a set on the quickstart shelf, or take it off. Ownership-guarded by
@@ -425,6 +438,29 @@ function requiredGroupsForRoute(method, path) {
   // `path.includes('answer')` clause that a set id can satisfy by accident.
   const COPY_ROUTE = /^question-sets\/[^/]+\/copy$/;
   if (path === 'question-sets/{setId}/copy' || COPY_ROUTE.test(path)) {
+    return ['hosts', 'admins'];
+  }
+
+  /*
+    SHARING A SET PUBLICLY, AND WITHDRAWING IT.
+
+    A HOST reaches this route, and the narrower question — whether they may
+    publish THIS organisation's content — is decided in the handler, which
+    requires an org role of `admin` or `owner`. Copying a shared set IN is any
+    member's call because it affects one team; publishing OUT puts their
+    material in front of everyone, so the handler asks for more than the
+    authorizer does.
+
+    Matched by regex as well as by template for the same reason the copy route
+    above is: this handler is reached with a real set id in `rawPath` on some
+    paths, and a concrete id must not fall through to the rules below — one of
+    which is the `path.includes('answer')` clause that a set id can satisfy by
+    accident.
+  */
+  const PUBLISH_ROUTE = /^question-sets\/[^/]+\/(publish|check)$/;
+  if (path === 'question-sets/{setId}/publish'
+    || path === 'question-sets/{setId}/check'
+    || PUBLISH_ROUTE.test(path)) {
     return ['hosts', 'admins'];
   }
 

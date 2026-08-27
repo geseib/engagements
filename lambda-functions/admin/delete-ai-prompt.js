@@ -1,6 +1,11 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, DeleteCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, DeleteObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
+const {
+  findPromptForCaller, canManagePrompt, promptKey, promptBodyKey,
+} = require('./shared/prompt-access');
+const { requestedScope, callerUserId } = require('./shared/question-set-access');
+const tenant = require('./shared/tenant');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -18,42 +23,20 @@ const s3Client = new S3Client({});
  * Where does this prompt actually live?
  *
  * D14: create/get/update and the game-side reader all use
- * `PK:'AIPROMPTS', SK:'AIPROMPT#<id>'`, but this handler and
- * ai-prompt-advisor.js used `PK:'AI_PROMPT#<id>', SK:'METADATA'` — the shape
- * only `populate-default-prompts.js` (dead, unrouted) ever wrote. The result:
+ * `PK:'AIPROMPTS', SK:'AIPROMPT#<id>'` (or, since tenancy, the scoped
+ * equivalent `promptKey` builds), but this handler and ai-prompt-advisor.js
+ * used to use `PK:'AI_PROMPT#<id>', SK:'METADATA'` — the shape only
+ * `populate-default-prompts.js` (dead, unrouted) ever wrote. The result:
  * deleting ANY normally-created prompt threw "AI prompt not found".
  *
- * Try canonical first, fall back to legacy, and return the key that hit so the
- * caller deletes/archives the row it actually read. Anything genuinely stored
- * under the old key stays deletable.
+ * `LEGACY_KEY` is kept, and tried only after the scope-aware search below has
+ * already missed: nothing but that dead writer ever produced this shape, so a
+ * row genuinely stored there is always a platform row, byte-identical to how
+ * this worked before tenancy — no scope, no orgId, no creator to check.
  */
-const CANONICAL_KEY = (promptId) => ({ PK: 'AIPROMPTS', SK: `AIPROMPT#${promptId}` });
 const LEGACY_KEY = (promptId) => ({ PK: `AI_PROMPT#${promptId}`, SK: 'METADATA' });
 
-const locatePrompt = async (promptId) => {
-  const canonical = await dynamodb.send(new GetCommand({
-    TableName: tableName,
-    Key: CANONICAL_KEY(promptId)
-  }));
-  if (canonical.Item) {
-    return { item: canonical.Item, key: CANONICAL_KEY(promptId), keyShape: 'canonical' };
-  }
-
-  console.warn(`⚠️ ${promptId} not found under AIPROMPTS/AIPROMPT# — trying the legacy AI_PROMPT#/METADATA key`);
-  const legacy = await dynamodb.send(new GetCommand({
-    TableName: tableName,
-    Key: LEGACY_KEY(promptId)
-  }));
-  if (legacy.Item) {
-    return { item: legacy.Item, key: LEGACY_KEY(promptId), keyShape: 'legacy' };
-  }
-
-  return null;
-};
-
 exports.handler = async (event) => {
-  console.log('🗑️ Delete AI Prompt - Event:', JSON.stringify(event, null, 2));
-
   try {
     // Handle CORS preflight
     if (event.requestContext?.http?.method === 'OPTIONS') {
@@ -91,23 +74,90 @@ exports.handler = async (event) => {
     const queryParams = event.queryStringParameters || {};
     const hardDelete = queryParams.hardDelete === 'true';
     const deleteAllVersions = queryParams.deleteAllVersions === 'true';
-    
-    console.log('📋 Query params:', queryParams);
-    console.log('📋 hardDelete:', hardDelete);
-    console.log('📋 deleteAllVersions:', deleteAllVersions);
 
-    console.log(`🗑️ Deleting AI prompt: ${promptId}, hardDelete: ${hardDelete}, deleteAllVersions: ${deleteAllVersions}`);
+    /*
+      THIS USED TO LOG THE WHOLE EVENT — `event.requestContext.authorizer.lambda`
+      carries the bearer identity for this call, in the clear, on every request.
+      get-ai-prompts.js already made this same fix for the same reason. Trace
+      the request, not the caller's credentials.
+    */
+    console.log('🗑️ Delete AI Prompt', JSON.stringify({
+      promptId,
+      method: event.requestContext?.http?.method,
+      path: event.requestContext?.http?.path,
+      sub: callerUserId(event) || null,
+      orgId: tenant.callerOrgId(event) || null,
+      hardDelete,
+      deleteAllVersions,
+    }));
 
-    // Get existing prompt metadata (canonical key, then legacy — see locatePrompt)
-    const located = await locatePrompt(promptId);
+    // WHICH LIBRARY, THEN WHO. `findPromptForCaller` searches only the scopes
+    // this caller may READ — their own org, then platform, then public — so a
+    // Workie in another organisation is ABSENT rather than forbidden and this
+    // route 404s on it exactly as it would on a promptId that never existed.
+    // See shared/prompt-access.js.
+    const found = await findPromptForCaller(
+      dynamodb, tableName, event, promptId, requestedScope(event), GetCommand
+    );
 
-    if (!located) {
-      throw new Error(`AI prompt not found: ${promptId}`);
+    let currentPrompt;
+    let dbKey;
+    let ref;
+
+    if (found) {
+      currentPrompt = found.item;
+      ref = found.ref;
+      dbKey = promptKey(ref);
+    } else {
+      // LEGACY FALLBACK, tried only once the scope-aware search has missed.
+      console.warn(`⚠️ ${promptId} not found under AIPROMPTS/AIPROMPT# (or an org partition) — trying the legacy AI_PROMPT#/METADATA key`);
+      const legacy = await dynamodb.send(new GetCommand({
+        TableName: tableName,
+        Key: LEGACY_KEY(promptId)
+      }));
+      if (legacy.Item) {
+        currentPrompt = legacy.Item;
+        dbKey = LEGACY_KEY(promptId);
+        ref = { scope: tenant.PLATFORM, orgId: '', promptId };
+      }
     }
 
-    const currentPrompt = located.item;
-    const promptKey = located.key;
-    console.log(`📍 Found ${promptId} under the ${located.keyShape} key: ${JSON.stringify(promptKey)}`);
+    if (!currentPrompt) {
+      return {
+        statusCode: 404,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Methods': 'DELETE, OPTIONS'
+        },
+        body: JSON.stringify({ error: `AI prompt not found: ${promptId}` })
+      };
+    }
+
+    // 403 before any destructive call — not one S3 object, not the row. Checked
+    // on the RAW row: scope/orgId/createdBy are never encrypted, so this never
+    // needs a KMS call.
+    if (!canManagePrompt(event, currentPrompt)) {
+      const groups = tenant.callerGroups(event);
+      console.warn(
+        `🚫 refused to let groups [${groups.join(', ') || 'none'}] `
+        + `(org: ${tenant.callerOrgId(event) || 'none'}/${tenant.callerOrgRole(event) || '-'}) delete `
+        + `Workie "${promptId}" in ${ref.scope}${ref.orgId ? `/${ref.orgId}` : ''}`
+      );
+      return {
+        statusCode: 403,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Methods': 'DELETE, OPTIONS'
+        },
+        body: JSON.stringify({
+          error: 'This Workie belongs to someone else. You can only delete Workies you created.'
+        })
+      };
+    }
+
+    console.log(`📍 Found ${promptId} in ${ref.scope}${ref.orgId ? `/${ref.orgId}` : ''}: ${JSON.stringify(dbKey)}`);
 
     // Check if this is a default prompt
     if (currentPrompt.isDefault && !hardDelete) {
@@ -135,9 +185,15 @@ exports.handler = async (event) => {
       // Delete all versions from S3 if requested
       if (deleteAllVersions) {
         console.log(`🗑️ Deleting all versions from S3`);
-        
-        // List all objects with the prompt prefix
-        const s3Prefix = `prompts/${currentPrompt.gameType}/${promptId}/`;
+
+        // List all objects with the prompt prefix. SCOPED, like the single-key
+        // path below: a hand-built platform-shaped prefix here would list (and
+        // so only ever delete) the shared bucket's own directory, leaving every
+        // version of an organisation's Workie behind after a "delete all
+        // versions" that reported success. `promptBodyKey` always ends in
+        // `v<n>.json`; stripping that leaves the directory every version of
+        // this Workie lives under, in whichever library it is actually in.
+        const s3Prefix = promptBodyKey(ref, currentPrompt.gameType, 1).replace(/v1\.json$/, '');
         const listResponse = await s3Client.send(new ListObjectsV2Command({
           Bucket: aiPromptsBucket,
           Prefix: s3Prefix
@@ -176,11 +232,13 @@ exports.handler = async (event) => {
         }
       }
 
-      // Delete from DynamoDB
+      // Delete from DynamoDB — the partition this row was actually FOUND in,
+      // not a rebuilt platform key. An org's Workie is deleted from its own
+      // partition or this would silently leave it behind while reporting success.
       console.log(`🗑️ Deleting from DynamoDB`);
       await dynamodb.send(new DeleteCommand({
         TableName: tableName,
-        Key: promptKey
+        Key: dbKey
       }));
 
       console.log(`✅ Hard delete completed for AI prompt: ${promptId}`);
@@ -194,6 +252,8 @@ exports.handler = async (event) => {
         },
         body: JSON.stringify({
           promptId,
+          scope: ref.scope,
+          orgId: ref.orgId || null,
           status: 'deleted',
           message: 'AI prompt permanently deleted'
         })
@@ -205,7 +265,7 @@ exports.handler = async (event) => {
 
       await dynamodb.send(new UpdateCommand({
         TableName: tableName,
-        Key: promptKey,
+        Key: dbKey,
         UpdateExpression: 'SET #status = :status, archivedAt = :archivedAt, updatedAt = :updatedAt',
         ExpressionAttributeNames: {
           '#status': 'status'
@@ -228,6 +288,8 @@ exports.handler = async (event) => {
         },
         body: JSON.stringify({
           promptId,
+          scope: ref.scope,
+          orgId: ref.orgId || null,
           status: 'archived',
           message: 'AI prompt archived successfully'
         })

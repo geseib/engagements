@@ -3,6 +3,10 @@ const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb'
 const { S3Client, ListObjectsV2Command, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { normalizeGameType } = require('./shared/game-types');
 const { isUsableSummaryPrompt, summaryPromptDefect, inferPromptType, normalizeOutputSections } = require('./shared/prompt-shape');
+const { readablePromptRefs, promptKey } = require('./shared/prompt-access');
+const { callerUserId } = require('./shared/question-set-access');
+const { PLATFORM, ORG, PUBLIC, callerOrgId } = require('./shared/tenant');
+const { decryptItem, decryptValue, isEnvelope } = require('./shared/tenant-crypto');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -17,8 +21,6 @@ const dynamodb = DynamoDBDocumentClient.from(dynamoClient, {
 const s3Client = new S3Client({});
 
 exports.handler = async (event) => {
-  console.log('🔍 Get AI Prompts - Event:', JSON.stringify(event, null, 2));
-
   try {
     // Handle CORS preflight
     if (event.requestContext?.http?.method === 'OPTIONS') {
@@ -33,6 +35,22 @@ exports.handler = async (event) => {
       };
     }
 
+    /*
+      THIS USED TO BE JSON.stringify(event) — every header, Authorization
+      included, and (were this route ever called with one) a request body. A
+      GET list carries no Workie prose in its own request, but dumping the
+      whole event is the same blanket-dump habit create-ai-prompt.js:33
+      shipped with, and it is no safer here: `event.requestContext.authorizer
+      .lambda` carries the bearer identity for this call. Trace the request,
+      not quote it.
+    */
+    console.log('🔍 Get AI Prompts', JSON.stringify({
+      method: event.requestContext?.http?.method,
+      path: event.requestContext?.http?.path,
+      sub: callerUserId(event) || null,
+      orgId: callerOrgId(event) || null,
+    }));
+
     const queryParams = event.queryStringParameters || {};
     const gameType = queryParams.gameType;     // any spelling — normalized below
     const category = queryParams.category;     // specific category filter
@@ -41,45 +59,124 @@ exports.handler = async (event) => {
 
     console.log(`🔍 Fetching AI prompts - gameType: ${gameType}, category: ${category}, status: ${status}, promptType: ${promptType}`);
 
-    // Get prompt metadata from DynamoDB using current structure
-    const dynamoQuery = {
-      TableName: tableName,
-      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-      ExpressionAttributeValues: {
-        ':pk': 'AIPROMPTS',
-        ':sk': 'AIPROMPT#'
+    /*
+      EVERY LIBRARY THIS CALLER MAY SEE, MERGED — not one partition any more.
+
+      `readablePromptRefs` is the authority (shared/prompt-access.js ->
+      tenant.js): the caller's own org, then the platform library, then public.
+      Platform is in that list for EVERYBODY with an account, which is what
+      keeps Engage's Workies available to every organisation.
+
+      One Query per scope, run CONCURRENTLY: they hit different partitions, so
+      sequential awaits would only add latency. Three at most.
+
+      A FRESH INPUT OBJECT PER REF, and that is not a style preference. The
+      FilterExpression and its values are per-QueryCommand; sharing one object
+      across a Promise.all and reassigning `:pk` between sends is a race in
+      which every query can end up reading the last `:pk` written.
+
+      `promptKey(ref).PK` rather than a literal: nothing outside tenant.js may
+      spell a partition key, and a hand-built 'ORG#'+id+'#AIPROMPTS' here is
+      exactly the drift that ends with two spellings of one partition.
+
+      `begins_with(SK, 'AIPROMPT#')` STAYS. The bare partition also holds
+      PERSONA#<id> rows and the GAMETYPE#…#CATEGORY#… default pointer, both of
+      which are platform-only by decision (tenant.js:114-131); this condition is
+      the only thing keeping them out of the prompt library.
+    */
+    const buildQuery = (pk) => {
+      const q = {
+        TableName: tableName,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues: { ':pk': pk, ':sk': 'AIPROMPT#' }
+      };
+      // Only `category` and `status` are exact-match, so only they can be
+      // pushed down into a FilterExpression. `gameType` and `promptType` need
+      // normalisation / shape-inference and are applied in JS below — a
+      // FilterExpression on the raw stored value is exactly what made a
+      // `poll`-spelled filter miss every `polls`-spelled row.
+      const filterExpressions = [];
+      if (category) {
+        filterExpressions.push('category = :category');
+        q.ExpressionAttributeValues[':category'] = category;
       }
+      if (status) {
+        filterExpressions.push('#status = :status');
+        q.ExpressionAttributeValues[':status'] = status;
+        q.ExpressionAttributeNames = { '#status': 'status' };
+      }
+      if (filterExpressions.length > 0) q.FilterExpression = filterExpressions.join(' AND ');
+      return q;
     };
 
-    // Only `category` and `status` are exact-match, so only they can be pushed
-    // down into a FilterExpression. `gameType` and `promptType` need
-    // normalisation / shape-inference and are applied in JS below — a
-    // FilterExpression on the raw stored value is exactly what made a
-    // `poll`-spelled filter miss every `polls`-spelled row.
-    const filterExpressions = [];
-    if (category) {
-      filterExpressions.push('category = :category');
-      dynamoQuery.ExpressionAttributeValues[':category'] = category;
-    }
-    if (status) {
-      filterExpressions.push('#status = :status');
-      dynamoQuery.ExpressionAttributeValues[':status'] = status;
-      dynamoQuery.ExpressionAttributeNames = { '#status': 'status' };
-    }
+    const refs = readablePromptRefs(event, '');
+    const perScope = await Promise.all(refs.map(async (ref) => {
+      const res = await dynamodb.send(new QueryCommand(buildQuery(promptKey(ref).PK)));
+      const items = (res && res.Items) || [];
+      /*
+        DECRYPT PER SCOPE, BEFORE ANYTHING PROJECTS A FIELD.
 
-    if (filterExpressions.length > 0) {
-      dynamoQuery.FilterExpression = filterExpressions.join(' AND ');
-    }
+        Done here rather than in `decorate` because the org is a property of the
+        PARTITION this Query named, and one `ref` covers every row it returned —
+        the same shape get-question-sets.js:54-60 uses.
 
-    const response = await dynamodb.send(new QueryCommand(dynamoQuery));
-    let promptsMetadata = response.Items || [];
+        Platform and public rows are left alone: they were never encrypted, and
+        while `decryptValue` would pass their plaintext through regardless,
+        calling it would demand an orgId there is none of. A prompt written into
+        an org partition before this landed is still plaintext and passes
+        straight through. That is the migration: no backfill, both forms
+        coexisting in one Query result.
+      */
+      if (!ref.orgId) return items.map((item) => ({ item, ref }));
+      const out = [];
+      for (const item of items) {
+        /*
+          ONE UNREADABLE ROW MUST NOT TAKE THE REST OF THE LIST DOWN WITH IT.
+          decryptItem throws on the first field it cannot decrypt — a rotated
+          key, a torn write — and this loop used to let that throw escape
+          straight into the outer Promise.all, which rejects the moment ANY
+          one of its promises does. With `refs` holding org/platform/public,
+          that meant one bad row in the CALLER'S OWN org partition 500d the
+          whole response, PLATFORM and PUBLIC included, neither of which was
+          ever in question. The S3 body already gets this treatment two
+          blocks down (`catch (s3Error)`); the row deserves the same
+          isolation.
+        */
+        try {
+          out.push({ item: await decryptItem(ref.orgId, 'prompt', item), ref });
+        } catch (e) {
+          // Server-side only — the diagnosable trail an operator needs
+          // (which row, which org, which field), and it is exactly what
+          // decryptItem's own message already names.
+          console.warn(`⚠️ Could not decrypt prompt row ${item.promptId || item.SK} for org ${ref.orgId}: ${e.message}`);
+          /*
+            WHAT THE CALLER SEES: not the raw envelope — `{v,iv,tag,ct}` is
+            not a name, and handing it back under `name` would render
+            ciphertext as if it were the Workie's title — and not a
+            fabricated value either. Every field this entity encrypts that is
+            STILL an envelope (`isEnvelope`, the same test tenant-crypto.js
+            uses to recognise its own output) becomes `null`; `decryptFailed:
+            true` says why the row looks empty, so a caller reads it as
+            "unreadable", not "untitled".
+          */
+          const degraded = { ...item, decryptFailed: true };
+          for (const f of Object.keys(degraded)) {
+            if (isEnvelope(degraded[f])) degraded[f] = null;
+          }
+          out.push({ item: degraded, ref });
+        }
+      }
+      return out;
+    }));
 
-    console.log(`📊 Found ${promptsMetadata.length} prompt metadata records`);
+    let promptsMetadata = perScope.flat();
+
+    console.log(`📊 Found ${promptsMetadata.length} prompt metadata records across ${refs.length} scope(s)`);
 
     if (gameType && gameType !== 'all') {
       const wanted = normalizeGameType(gameType);
       const before = promptsMetadata.length;
-      promptsMetadata = promptsMetadata.filter(p => normalizeGameType(p.gameType) === wanted);
+      promptsMetadata = promptsMetadata.filter(({ item }) => normalizeGameType(item.gameType) === wanted);
       console.log(`🎮 gameType "${gameType}" → "${wanted}": ${before} → ${promptsMetadata.length}`);
     }
 
@@ -89,7 +186,7 @@ exports.handler = async (event) => {
       // everything. Inference beats the stored attribute because rows written
       // before D15 was fixed are mislabeled `generation` (see prompt-shape.js).
       const before = promptsMetadata.length;
-      promptsMetadata = promptsMetadata.filter(p => inferPromptType(p) === promptType);
+      promptsMetadata = promptsMetadata.filter(({ item }) => inferPromptType(item) === promptType);
       console.log(`🏷️ promptType "${promptType}": ${before} → ${promptsMetadata.length}`);
     }
 
@@ -107,7 +204,7 @@ exports.handler = async (event) => {
      *   `malformed: true` marks them for the cull script.
      * - `summaryPromptStatus` is the picker's grey-out signal (R1b).
      */
-    const decorate = (prompt, promptContent) => {
+    const decorate = (prompt, promptContent, ref) => {
       const synthesizedId = String(prompt.SK || '').replace(/^AIPROMPT#/, '') || undefined;
       const shapeSource = promptContent || prompt;
       const known = Boolean(promptContent) || Boolean(prompt.basePrompt);
@@ -115,6 +212,12 @@ exports.handler = async (event) => {
       return {
         ...prompt,
         ...(promptContent ? { promptContent } : {}),
+        // THE OTHER HALF OF THE REFERENCE. `retro` in an organisation and
+        // `retro` on the platform are two different Workies, so a client that
+        // holds only a promptId cannot address either. Taken from the REF that
+        // named the partition — a row cannot disagree with where it is.
+        scope: ref.scope,
+        orgId: ref.orgId || null,
         promptId: prompt.promptId || synthesizedId,
         malformed: !prompt.promptId,
         gameType: normalizeGameType(prompt.gameType),
@@ -136,7 +239,7 @@ exports.handler = async (event) => {
     };
 
     // Enrich with S3 data if needed
-    const enrichedPrompts = await Promise.all(promptsMetadata.map(async (prompt) => {
+    const enrichedPrompts = await Promise.all(promptsMetadata.map(async ({ item: prompt, ref }) => {
       try {
         // Get latest version from S3 if needed
         if (prompt.s3Key && queryParams.includeContent === 'true') {
@@ -146,13 +249,19 @@ exports.handler = async (event) => {
           }));
 
           const content = await s3Response.Body.transformToString();
-          return decorate(prompt, JSON.parse(content));
+          // An org body was wrapped whole before PutObject
+          // (create-ai-prompt.js). `decryptValue` returns anything that is not
+          // an envelope unchanged, so a platform body and a pre-cipher org body
+          // both pass straight through.
+          const parsed = JSON.parse(content);
+          const doc = ref.orgId ? await decryptValue(ref.orgId, parsed) : parsed;
+          return decorate(prompt, doc, ref);
         }
 
-        return decorate(prompt, null);
+        return decorate(prompt, null, ref);
       } catch (s3Error) {
         console.warn(`⚠️ Could not fetch S3 content for ${prompt.s3Key}:`, s3Error.message);
-        return decorate(prompt, null);
+        return decorate(prompt, null, ref);
       }
     }));
 
@@ -166,9 +275,26 @@ exports.handler = async (event) => {
       console.warn(`⚠️ ${malformed.length} prompt row(s) have no promptId attribute — ` +
         `id synthesized from SK: ${malformed.map(p => p.promptId).join(', ')}`);
     }
+    const decryptFailures = enrichedPrompts.filter(p => p.decryptFailed);
+    if (decryptFailures.length > 0) {
+      console.warn(`⚠️ ${decryptFailures.length} prompt row(s) could not be decrypted — ` +
+        `served without content: ${decryptFailures.map(p => p.promptId).join(', ')}`);
+    }
 
-    // Sort by updatedAt desc
-    enrichedPrompts.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    // ORG, THEN PLATFORM, THEN PUBLIC — and newest first within each.
+    //
+    // `readablePromptRefs` already encodes this rank and the reason for it:
+    // your own content is what you meant. A flat updatedAt sort interleaves a
+    // team's four Workies with Engage's twenty-two, in the one surface built to
+    // show them their own.
+    //
+    // For a caller with no organisation the refs are [platform, public] and
+    // there are no public prompt rows yet, so this orders identically to the
+    // flat sort it replaces for every caller that exists today.
+    const SCOPE_RANK = { [ORG]: 0, [PLATFORM]: 1, [PUBLIC]: 2 };
+    enrichedPrompts.sort((a, b) =>
+      ((SCOPE_RANK[a.scope] ?? 9) - (SCOPE_RANK[b.scope] ?? 9))
+      || (new Date(b.updatedAt) - new Date(a.updatedAt)));
 
     console.log(`✅ Successfully retrieved ${enrichedPrompts.length} AI prompts`);
 
