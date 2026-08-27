@@ -23,7 +23,7 @@ const assert = require('assert');
 
 const REPO = path.join(__dirname, '..');
 const {
-  commentSk, commentPrefix, newCommentId, parseCommentSk, ANCHOR_KINDS,
+  commentSk, commentPrefix, newCommentId, monotonicNow, parseCommentSk, ANCHOR_KINDS,
 } = require(path.join(REPO, 'lambda-functions/game/comment-keys.js'));
 
 let pass = 0, fail = 0;
@@ -139,6 +139,38 @@ check('ids are zero-padded, so a shorter number cannot sort after a longer one',
 
 check('two ids in the same millisecond differ', () => {
   assert.notStrictEqual(newCommentId(1000, 'aaaaaa'), newCommentId(1000, 'bbbbbb'));
+});
+
+/*
+  BUT DIFFERING IS NOT ENOUGH — they must differ IN ORDER.
+
+  This is the defect the round-comments suite caught. Two comments written back
+  to back share a millisecond, so `Date.now()` gives them the same timestamp and
+  the tiebreaker falls through to the RANDOM half of the id. The two are then
+  returned in an order chosen by crypto.randomBytes: stable once written, but
+  not the order they were written in, which is the order a reader is owed.
+*/
+check('a same-millisecond pair still sorts in the order it was issued', () => {
+  const first = newCommentId(monotonicNow(1_700_000_000_000), 'zzzzzz');
+  const second = newCommentId(monotonicNow(1_700_000_000_000), 'aaaaaa');
+  // Note the random halves are deliberately reversed: 'zzzzzz' before
+  // 'aaaaaa'. If randomness were breaking the tie this would fail.
+  assert.ok(first < second, `${first} should sort before ${second}`);
+});
+
+check('the clock never goes backwards when the wall clock does', () => {
+  // NTP steps, container reuse. Going backwards would interleave a new comment
+  // into the middle of an existing thread.
+  const ahead = newCommentId(monotonicNow(1_800_000_000_000), 'aaaaaa');
+  const behind = newCommentId(monotonicNow(1_700_000_000_000), 'aaaaaa');
+  assert.ok(ahead < behind, `${ahead} should still sort before ${behind}`);
+});
+
+check('it does still follow the wall clock forward', () => {
+  // Not a pure counter: a comment written an hour later must carry an hour
+  // later, or the ids stop meaning anything.
+  const t = monotonicNow(1_900_000_000_000);
+  assert.strictEqual(t, 1_900_000_000_000);
 });
 
 check('a generated id survives its own key builder', () => {

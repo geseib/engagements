@@ -53,6 +53,21 @@
 const ANCHOR_KINDS = ['summary', 'results', 'response'];
 
 /**
+ * A comment's character ceiling. Mirrors `MAX_COMMENT` in
+ * src/src/config/comments.js, which is where the reasoning lives: long enough
+ * for a real remark, short enough that a comment cannot become a second
+ * response smuggled into a round that has already been scored and summarised.
+ *
+ * Enforced HERE as well as in the composer, because the composer is a text area
+ * on somebody's phone and the route is public.
+ */
+const MAX_COMMENT = 1000;
+
+/** The stored excerpt's ceiling, mirroring `MAX_EXCERPT`. Enforced for the same
+ *  reason: a client could otherwise attach an arbitrarily long "excerpt". */
+const MAX_EXCERPT = 140;
+
+/**
  * How many digits the timestamp half of an id is padded to.
  *
  * DynamoDB returns a `begins_with` query in LEXICOGRAPHIC sort-key order, and
@@ -121,11 +136,44 @@ function commentPrefix({ questionNumber, anchorKind, anchorRef } = {}) {
 }
 
 /**
+ * A strictly increasing millisecond clock, for the life of this container.
+ *
+ * `Date.now()` alone is NOT enough to order comments, and the gap is not
+ * theoretical — it showed up the first time two comments were written back to
+ * back. Two writes inside one millisecond get the same timestamp, and the
+ * tiebreaker then becomes the RANDOM half of the id, so the two come back in an
+ * order decided by `crypto.randomBytes`. Stable once written, but not the order
+ * they were written in, which is the order a reader is entitled to.
+ *
+ * So the clock never returns the same value twice: if the wall clock has not
+ * advanced, it moves on by one millisecond of its own. Two consequences worth
+ * being explicit about:
+ *
+ *   - WITHIN one container this is a total order, which covers every sequential
+ *     write — a participant posting twice, and the tests.
+ *   - ACROSS containers it degrades to the wall clock, which is the right
+ *     answer: two people in different Lambda invocations who commented in the
+ *     same millisecond have no true order, and inventing one would be a lie
+ *     rather than a fix.
+ *
+ * The drift is bounded by the number of writes a warm container serves in a
+ * millisecond, so it is measured in milliseconds and never compounds.
+ */
+let lastIssued = 0;
+function monotonicNow(now = Date.now()) {
+  const wall = Math.floor(Number(now) || 0);
+  lastIssued = wall > lastIssued ? wall : lastIssued + 1;
+  return lastIssued;
+}
+
+/**
  * A time-ordered, collision-resistant id.
  *
  * `now` and `rand` are parameters rather than read from `Date.now()` and
  * `crypto` inside, so the ordering guarantee above can be tested at fixed
- * timestamps instead of by sleeping.
+ * timestamps instead of by sleeping. Callers that need insertion order pass
+ * `monotonicNow()`; the random half is for collision resistance across
+ * containers, never for ordering.
  */
 function newCommentId(now, rand) {
   const stamp = String(Math.max(0, Math.floor(Number(now) || 0))).padStart(ID_TIME_DIGITS, '0');
@@ -156,9 +204,12 @@ function parseCommentSk(sk) {
 
 module.exports = {
   ANCHOR_KINDS,
+  MAX_COMMENT,
+  MAX_EXCERPT,
   ID_TIME_DIGITS,
   commentSk,
   commentPrefix,
   newCommentId,
+  monotonicNow,
   parseCommentSk,
 };
