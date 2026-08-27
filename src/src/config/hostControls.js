@@ -51,13 +51,21 @@ import { statusTone } from '../utils/statusTone';
 export const HOST_PHASES = ['LOBBY', 'ASK', 'VOTE', 'RESULTS', 'FIELD_NOTES', 'ENDED'];
 
 /**
- * The two beats of RESULTS, spelled the way the server spells them.
+ * The three beats of RESULTS, spelled the way the server spells them, in the
+ * order a round moves through them.
  *
  * Mirrors `BEATS` in lambda-functions/game/stage-beat.js. Closed on both sides:
  * an open set means the write succeeds, the frame goes out, every client
  * compares it against 'field-notes', and the host watches a button do nothing.
+ * `tests/feedback-round-beat.js` reads this array as text and fails the build if
+ * the two lists drift.
+ *
+ * `feedback` is a FEEDBACK ROUND — the room holds this round's own report and
+ * comments on sections of it. A beat rather than a game state because the
+ * comments have to land in the round report of the round being commented on,
+ * and a state carrying its own ordinal would orphan them from it.
  */
-export const STAGE_BEATS = ['results', 'field-notes'];
+export const STAGE_BEATS = ['results', 'field-notes', 'feedback'];
 
 /**
  * Should the stage act on a `stageBeatChanged` announcement?
