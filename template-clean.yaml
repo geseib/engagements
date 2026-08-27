@@ -1074,6 +1074,49 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  CheckQuestionSetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-check-question-set'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      # One ApplyGuardrail call per question, run inline. Sub-second each, so
+      # this is generous for any ordinary set — and a set large enough to
+      # exhaust it leaves the version visibly `checking` rather than silently
+      # unreviewed. See the handler's header.
+      Timeout: 300
+      Handler: check-question-set.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        # Decrypt only: it reads the org's questions to judge them and writes
+        # nothing into an org partition, so it never mints a key.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+            # THE ONE NEW ACTION. bedrock:ApplyGuardrail is not InvokeModel and
+            # is not covered by the model policies elsewhere in this file.
+            - Effect: Allow
+              Action: [ bedrock:ApplyGuardrail ]
+              Resource: !GetAtt ContentGuardrail.GuardrailArn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        CheckSet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /question-sets/{setId}/check
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   PublishQuestionSetFunction:
     Type: AWS::Serverless::Function
     Properties:

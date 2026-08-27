@@ -444,8 +444,10 @@ function requiredGroupsForRoute(method, path) {
     which is the `path.includes('answer')` clause that a set id can satisfy by
     accident.
   */
-  const PUBLISH_ROUTE = /^question-sets\/[^/]+\/publish$/;
-  if (path === 'question-sets/{setId}/publish' || PUBLISH_ROUTE.test(path)) {
+  const PUBLISH_ROUTE = /^question-sets\/[^/]+\/(publish|check)$/;
+  if (path === 'question-sets/{setId}/publish'
+    || path === 'question-sets/{setId}/check'
+    || PUBLISH_ROUTE.test(path)) {
     return ['hosts', 'admins'];
   }
 
