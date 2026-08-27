@@ -64,8 +64,25 @@ const fakeDoc = {
       }
       case 'query': {
         const v = inp.ExpressionAttributeValues || {};
-        const items = [...store.values()].filter((i) =>
+        const names = inp.ExpressionAttributeNames || {};
+        let items = [...store.values()].filter((i) =>
           i.PK === v[':pk'] && String(i.SK).startsWith(String(v[':sk'] ?? '')));
+        // get-ai-prompts.js's buildQuery pushes `category`/`status` into a
+        // FilterExpression of ANDed `attr = :value` clauses, applied by
+        // DynamoDB AFTER the key condition, PER QUERY. Section 6 below
+        // exercises three partitions at once and asserts the filter narrows
+        // each of them — without evaluating it here that assertion would pass
+        // on an implementation that dropped the filter entirely, because this
+        // suite's own store only ever holds a handful of rows per PK anyway.
+        if (inp.FilterExpression) {
+          const clauses = inp.FilterExpression.split(/\s+AND\s+/i);
+          items = items.filter((i) => clauses.every((clause) => {
+            const m = clause.trim().match(/^(#?[\w.]+)\s*=\s*(:[\w]+)$/);
+            if (!m) return true;
+            const attr = m[1].startsWith('#') ? names[m[1]] : m[1];
+            return i[attr] === v[m[2]];
+          }));
+        }
         return { Items: items, Count: items.length };
       }
       default: return { Items: [], Count: 0 };
@@ -382,6 +399,102 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
     assert.strictEqual(meta.scope, 'platform');
     assert.ok(!('orgId' in meta), `orgId present as ${JSON.stringify(meta.orgId)}`);
   });
+
+  say('\n6. the list reads every library the caller may read');
+
+  const list = (who, qs) =>
+    getPrompts.handler({ ...who, queryStringParameters: qs || {} })
+      .then((r) => ({ status: r.statusCode, body: JSON.parse(r.body) }));
+
+  /*
+    A new org Workie is invisible the moment it is written if the list still
+    runs one Query on PK = 'AIPROMPTS'. That is why create and list are one
+    change.
+  */
+  store.clear(); s3Store.clear(); s3Meta.clear();
+  const mine = parse(await post(HOST, { name: 'Ours' }));
+  const house = parse(await post(STAFF, { name: 'Engage house' }));
+
+  // rejects: the single Query on the bare partition, which is a platform-only
+  // read and makes every org Workie invisible to its own author.
+  const asHost = await list(HOST);
+  await check('a host sees their own org Workie', () =>
+    assert.ok(asHost.body.prompts.some((p) => p.promptId === mine.promptId),
+      `ids returned: ${asHost.body.prompts.map((p) => p.promptId).join(', ') || '(none)'}`));
+  await check('…and Engage\'s, in the same list', () =>
+    assert.ok(asHost.body.prompts.some((p) => p.promptId === house.promptId)));
+  // rejects: a client that holds a promptId and cannot tell which library it
+  // came from — the pair is the reference, the id alone is not.
+  await check('every row carries the scope pair', () => {
+    const ours = asHost.body.prompts.find((p) => p.promptId === mine.promptId);
+    const theirs = asHost.body.prompts.find((p) => p.promptId === house.promptId);
+    assert.strictEqual(ours.scope, 'org', `ours.scope was ${JSON.stringify(ours.scope)}`);
+    assert.strictEqual(ours.orgId, ORG);
+    assert.strictEqual(theirs.scope, 'platform');
+    assert.strictEqual(theirs.orgId, null);
+  });
+  // rejects: a flat updatedAt sort, which interleaves a team's own Workies with
+  // Engage's twenty-two and makes "ours" unfindable in the surface built to
+  // show them. readablePromptRefs already encodes the rank and the reason.
+  await check('the caller\'s own library comes first', () =>
+    assert.strictEqual(asHost.body.prompts[0].scope, 'org',
+      `first row was ${asHost.body.prompts[0].scope}`));
+
+  // rejects: probing a partition the caller cannot read, which would turn
+  // "absent" into "forbidden" and confirm another org's Workie exists.
+  const OTHER = caller({
+    userId: 'sub-zed', username: 'zed', groups: 'hosts', status: 'enabled',
+    orgId: 'org_globex', orgRole: 'owner', orgIds: 'org_globex',
+  });
+  const asOther = await list(OTHER);
+  await check('another organisation does not see it — absent, not forbidden', () => {
+    assert.strictEqual(asOther.status, 200);
+    assert.ok(!asOther.body.prompts.some((p) => p.promptId === mine.promptId),
+      'org_globex can read org_acme\'s library');
+  });
+  await check('…but still sees the shared Engage library', () =>
+    assert.ok(asOther.body.prompts.some((p) => p.promptId === house.promptId)));
+
+  /*
+    THE FILTERS. `category` and `status` are pushed into a FilterExpression,
+    which is PER QUERY — so each partition needs its OWN input object. Sharing
+    one object across a Promise.all and reassigning `:pk` between sends is a
+    race in which every query can read the last `:pk` written.
+  */
+  // rejects: a shared, mutated query object; and a FilterExpression that stops
+  // being applied to the org partition.
+  store.clear(); s3Store.clear(); s3Meta.clear();
+  await post(HOST, { name: 'Org lessons', category: 'lessons-learned' });
+  await post(HOST, { name: 'Org retro', category: 'retro' });
+  await post(STAFF, { name: 'House lessons', category: 'lessons-learned' });
+  const filtered = await list(HOST, { category: 'lessons-learned' });
+  await check('the category filter applies to EVERY partition', () => {
+    const names = filtered.body.prompts.map((p) => p.name).sort();
+    assert.deepStrictEqual(names, ['House lessons', 'Org lessons'],
+      `got ${JSON.stringify(names)}`);
+  });
+  // rejects: the JS gameType/promptType filters being applied per-partition
+  // and losing rows, or being dropped in the merge.
+  const byType = await list(HOST, { gameType: 'callandanswer' });
+  await check('the legacy gameType spelling still matches across scopes', () =>
+    assert.strictEqual(byType.body.prompts.length, 3,
+      `got ${byType.body.prompts.length}`));
+
+  /*
+    PERSONAS AND THE DEFAULT POINTER SHARE THE BARE PARTITION AND MUST NOT
+    APPEAR. `begins_with(SK, 'AIPROMPT#')` is what keeps them out and must stay.
+  */
+  // rejects: dropping the SK prefix condition while widening the query, which
+  // would put personas and GAMETYPE# pointer rows in the prompt library.
+  store.clear(); s3Store.clear(); s3Meta.clear();
+  await post(STAFF, { isDefault: true });
+  store.set('AIPROMPTS|PERSONA#sage', { PK: 'AIPROMPTS', SK: 'PERSONA#sage', name: 'Sage' });
+  const clean = await list(HOST);
+  await check('no persona and no default-pointer row enters the list', () =>
+    clean.body.prompts.forEach((p) => {
+      assert.ok(!String(p.SK).startsWith('PERSONA#'), `persona leaked: ${p.SK}`);
+      assert.ok(!String(p.SK).startsWith('GAMETYPE#'), `pointer leaked: ${p.SK}`);
+    }));
 
   say(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

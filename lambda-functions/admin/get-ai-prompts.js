@@ -3,6 +3,8 @@ const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb'
 const { S3Client, ListObjectsV2Command, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { normalizeGameType } = require('./shared/game-types');
 const { isUsableSummaryPrompt, summaryPromptDefect, inferPromptType, normalizeOutputSections } = require('./shared/prompt-shape');
+const { readablePromptRefs, promptKey } = require('./shared/prompt-access');
+const { PLATFORM, ORG, PUBLIC } = require('./shared/tenant');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -41,45 +43,72 @@ exports.handler = async (event) => {
 
     console.log(`🔍 Fetching AI prompts - gameType: ${gameType}, category: ${category}, status: ${status}, promptType: ${promptType}`);
 
-    // Get prompt metadata from DynamoDB using current structure
-    const dynamoQuery = {
-      TableName: tableName,
-      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-      ExpressionAttributeValues: {
-        ':pk': 'AIPROMPTS',
-        ':sk': 'AIPROMPT#'
+    /*
+      EVERY LIBRARY THIS CALLER MAY SEE, MERGED — not one partition any more.
+
+      `readablePromptRefs` is the authority (shared/prompt-access.js ->
+      tenant.js): the caller's own org, then the platform library, then public.
+      Platform is in that list for EVERYBODY with an account, which is what
+      keeps Engage's Workies available to every organisation.
+
+      One Query per scope, run CONCURRENTLY: they hit different partitions, so
+      sequential awaits would only add latency. Three at most.
+
+      A FRESH INPUT OBJECT PER REF, and that is not a style preference. The
+      FilterExpression and its values are per-QueryCommand; sharing one object
+      across a Promise.all and reassigning `:pk` between sends is a race in
+      which every query can end up reading the last `:pk` written.
+
+      `promptKey(ref).PK` rather than a literal: nothing outside tenant.js may
+      spell a partition key, and a hand-built 'ORG#'+id+'#AIPROMPTS' here is
+      exactly the drift that ends with two spellings of one partition.
+
+      `begins_with(SK, 'AIPROMPT#')` STAYS. The bare partition also holds
+      PERSONA#<id> rows and the GAMETYPE#…#CATEGORY#… default pointer, both of
+      which are platform-only by decision (tenant.js:114-131); this condition is
+      the only thing keeping them out of the prompt library.
+    */
+    const buildQuery = (pk) => {
+      const q = {
+        TableName: tableName,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues: { ':pk': pk, ':sk': 'AIPROMPT#' }
+      };
+      // Only `category` and `status` are exact-match, so only they can be
+      // pushed down into a FilterExpression. `gameType` and `promptType` need
+      // normalisation / shape-inference and are applied in JS below — a
+      // FilterExpression on the raw stored value is exactly what made a
+      // `poll`-spelled filter miss every `polls`-spelled row.
+      const filterExpressions = [];
+      if (category) {
+        filterExpressions.push('category = :category');
+        q.ExpressionAttributeValues[':category'] = category;
       }
+      if (status) {
+        filterExpressions.push('#status = :status');
+        q.ExpressionAttributeValues[':status'] = status;
+        q.ExpressionAttributeNames = { '#status': 'status' };
+      }
+      if (filterExpressions.length > 0) q.FilterExpression = filterExpressions.join(' AND ');
+      return q;
     };
 
-    // Only `category` and `status` are exact-match, so only they can be pushed
-    // down into a FilterExpression. `gameType` and `promptType` need
-    // normalisation / shape-inference and are applied in JS below — a
-    // FilterExpression on the raw stored value is exactly what made a
-    // `poll`-spelled filter miss every `polls`-spelled row.
-    const filterExpressions = [];
-    if (category) {
-      filterExpressions.push('category = :category');
-      dynamoQuery.ExpressionAttributeValues[':category'] = category;
-    }
-    if (status) {
-      filterExpressions.push('#status = :status');
-      dynamoQuery.ExpressionAttributeValues[':status'] = status;
-      dynamoQuery.ExpressionAttributeNames = { '#status': 'status' };
-    }
+    const refs = readablePromptRefs(event, '');
+    const perScope = await Promise.all(refs.map(async (ref) => {
+      const res = await dynamodb.send(new QueryCommand(buildQuery(promptKey(ref).PK)));
+      // The ref travels with the row: it named the partition, so it cannot
+      // disagree with where the row actually is.
+      return ((res && res.Items) || []).map((item) => ({ item, ref }));
+    }));
 
-    if (filterExpressions.length > 0) {
-      dynamoQuery.FilterExpression = filterExpressions.join(' AND ');
-    }
+    let promptsMetadata = perScope.flat();
 
-    const response = await dynamodb.send(new QueryCommand(dynamoQuery));
-    let promptsMetadata = response.Items || [];
-
-    console.log(`📊 Found ${promptsMetadata.length} prompt metadata records`);
+    console.log(`📊 Found ${promptsMetadata.length} prompt metadata records across ${refs.length} scope(s)`);
 
     if (gameType && gameType !== 'all') {
       const wanted = normalizeGameType(gameType);
       const before = promptsMetadata.length;
-      promptsMetadata = promptsMetadata.filter(p => normalizeGameType(p.gameType) === wanted);
+      promptsMetadata = promptsMetadata.filter(({ item }) => normalizeGameType(item.gameType) === wanted);
       console.log(`🎮 gameType "${gameType}" → "${wanted}": ${before} → ${promptsMetadata.length}`);
     }
 
@@ -89,7 +118,7 @@ exports.handler = async (event) => {
       // everything. Inference beats the stored attribute because rows written
       // before D15 was fixed are mislabeled `generation` (see prompt-shape.js).
       const before = promptsMetadata.length;
-      promptsMetadata = promptsMetadata.filter(p => inferPromptType(p) === promptType);
+      promptsMetadata = promptsMetadata.filter(({ item }) => inferPromptType(item) === promptType);
       console.log(`🏷️ promptType "${promptType}": ${before} → ${promptsMetadata.length}`);
     }
 
@@ -107,7 +136,7 @@ exports.handler = async (event) => {
      *   `malformed: true` marks them for the cull script.
      * - `summaryPromptStatus` is the picker's grey-out signal (R1b).
      */
-    const decorate = (prompt, promptContent) => {
+    const decorate = (prompt, promptContent, ref) => {
       const synthesizedId = String(prompt.SK || '').replace(/^AIPROMPT#/, '') || undefined;
       const shapeSource = promptContent || prompt;
       const known = Boolean(promptContent) || Boolean(prompt.basePrompt);
@@ -115,6 +144,12 @@ exports.handler = async (event) => {
       return {
         ...prompt,
         ...(promptContent ? { promptContent } : {}),
+        // THE OTHER HALF OF THE REFERENCE. `retro` in an organisation and
+        // `retro` on the platform are two different Workies, so a client that
+        // holds only a promptId cannot address either. Taken from the REF that
+        // named the partition — a row cannot disagree with where it is.
+        scope: ref.scope,
+        orgId: ref.orgId || null,
         promptId: prompt.promptId || synthesizedId,
         malformed: !prompt.promptId,
         gameType: normalizeGameType(prompt.gameType),
@@ -136,7 +171,7 @@ exports.handler = async (event) => {
     };
 
     // Enrich with S3 data if needed
-    const enrichedPrompts = await Promise.all(promptsMetadata.map(async (prompt) => {
+    const enrichedPrompts = await Promise.all(promptsMetadata.map(async ({ item: prompt, ref }) => {
       try {
         // Get latest version from S3 if needed
         if (prompt.s3Key && queryParams.includeContent === 'true') {
@@ -146,13 +181,13 @@ exports.handler = async (event) => {
           }));
 
           const content = await s3Response.Body.transformToString();
-          return decorate(prompt, JSON.parse(content));
+          return decorate(prompt, JSON.parse(content), ref);
         }
 
-        return decorate(prompt, null);
+        return decorate(prompt, null, ref);
       } catch (s3Error) {
         console.warn(`⚠️ Could not fetch S3 content for ${prompt.s3Key}:`, s3Error.message);
-        return decorate(prompt, null);
+        return decorate(prompt, null, ref);
       }
     }));
 
@@ -167,8 +202,20 @@ exports.handler = async (event) => {
         `id synthesized from SK: ${malformed.map(p => p.promptId).join(', ')}`);
     }
 
-    // Sort by updatedAt desc
-    enrichedPrompts.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    // ORG, THEN PLATFORM, THEN PUBLIC — and newest first within each.
+    //
+    // `readablePromptRefs` already encodes this rank and the reason for it:
+    // your own content is what you meant. A flat updatedAt sort interleaves a
+    // team's four Workies with Engage's twenty-two, in the one surface built to
+    // show them their own.
+    //
+    // For a caller with no organisation the refs are [platform, public] and
+    // there are no public prompt rows yet, so this orders identically to the
+    // flat sort it replaces for every caller that exists today.
+    const SCOPE_RANK = { [ORG]: 0, [PLATFORM]: 1, [PUBLIC]: 2 };
+    enrichedPrompts.sort((a, b) =>
+      ((SCOPE_RANK[a.scope] ?? 9) - (SCOPE_RANK[b.scope] ?? 9))
+      || (new Date(b.updatedAt) - new Date(a.updatedAt)));
 
     console.log(`✅ Successfully retrieved ${enrichedPrompts.length} AI prompts`);
 
