@@ -14,6 +14,9 @@ import HelpButton from './components/HelpButton';
 import { getClientId, classifyJoinFailure } from './components/joinResult';
 import './components/PlayerSurface.css';
 
+import FeedbackRoundPanel from './components/FeedbackRoundPanel';
+import { postComment, fetchFeedbackRound, fetchComments } from './utils/commentsClient';
+
 const API_BASE = window.API_BASE;
 
 /**
@@ -34,6 +37,8 @@ const API_BASE = window.API_BASE;
  * cue degrades to a harmless sentence for anybody who cannot. That assumption
  * is honoured here rather than answered.
  */
+const FEEDBACK_REFETCH_MS = 900;
+
 const LookUpCue = ({ children }) => (
   <div className="plr-lookup">
     <svg
@@ -206,6 +211,33 @@ function PlayerPage() {
     return state === 'CREATED' || state === 'STARTED' || 
            (!state.startsWith('ASK#') && !state.startsWith('VOTE#') && !state.startsWith('RESULTS#'));
   };
+  /*
+    A FEEDBACK ROUND — RESULTS' third beat.
+
+    `feedbackRound` is the round the host has opened, or null when none is; the
+    beat itself arrives over `stageBeatChanged` and is confirmed by
+    `GET /feedback-round`, which is the only thing that knows both facts at once
+    (the session's state AND the round's beat).
+
+    Held here rather than derived from `gameState`, because `gameState` is
+    `RESULTS#003` for all three beats and cannot tell them apart.
+  */
+  const [feedbackRound, setFeedbackRound] = useState(null);
+  /*
+    THE ROUND NUMBER, MIRRORED INTO A REF.
+
+    The `commentPosted` handler is registered once, in an effect whose deps are
+    [gameId, playerName, joined, useWebSocket] — deliberately, because
+    re-subscribing on every state change is what caused the host-connection
+    churn documented above. So the closure it creates captures the FIRST value
+    of `feedbackNumber` (null) and never sees another one. A ref is read at call
+    time and does not have that problem.
+  */
+  const feedbackNumberRef = useRef(null);
+  /** The pending debounce timer for a burst of `commentPosted` frames. */
+  const commentRefetchRef = useRef(null);
+  const [feedbackNumber, setFeedbackNumber] = useState(null);
+  const [feedbackComments, setFeedbackComments] = useState([]);
   const [playerName, setPlayerName] = useState('');
   const [nameInput, setNameInput] = useState('');
   const [accessCodeInput, setAccessCodeInput] = useState('');
@@ -702,6 +734,42 @@ function PlayerPage() {
       console.warn('🔌 Player received AI Summary error:', data);
     });
 
+    /*
+      THE BEAT — how a phone learns a feedback round has opened.
+
+      `gameState` is `RESULTS#003` for all three beats of RESULTS and cannot
+      tell them apart, so without this frame a participant sits on the ordinary
+      results card while the room is being asked for feedback. This is also the
+      only reason the beat is broadcast to players at all; before this feature
+      only the projector and the host's phone cared.
+
+      It re-reads rather than trusting the frame: `GET /feedback-round` is the
+      one thing that knows BOTH facts at once — the session's state and the
+      round's beat — and it also carries the report, which the frame does not.
+    */
+    webSocketClient.onMessage('stageBeatChanged', (data) => {
+      console.log('🔌 PLAYER: stage beat changed:', data);
+      loadFeedbackRound();
+    });
+
+    /*
+      SOMEBODY ELSE COMMENTED. Notify-then-refetch, the house pattern — the
+      frame carries where, never the prose.
+
+      DEBOUNCED, because this is the one frame a whole room can emit at once. In
+      a busy forty-person feedback round an immediate refetch per frame is forty
+      GETs per comment; the trailing timer collapses a burst into one read, and
+      the cost of being a second behind is that a comment appears a second late.
+    */
+    webSocketClient.onMessage('commentPosted', (data) => {
+      console.log('🔌 PLAYER: comment posted:', data);
+      if (commentRefetchRef.current) clearTimeout(commentRefetchRef.current);
+      commentRefetchRef.current = setTimeout(() => {
+        commentRefetchRef.current = null;
+        loadComments();
+      }, FEEDBACK_REFETCH_MS);
+    });
+
     // Results ready handler for trivia and call-and-answer
     webSocketClient.onMessage('hostMessage', (data) => {
       if (data.messageType && data.messageType.startsWith('RESULT#')) {
@@ -990,6 +1058,98 @@ function PlayerPage() {
       console.error('❌ PLAYER: Error fetching question:', error);
     }
   };
+
+  /*
+    THE FEEDBACK ROUND, read from the one endpoint that knows it is open.
+
+    `GET /feedback-round` refuses with 409 unless the session is on RESULTS for
+    a round whose ROUND# record is on the `feedback` beat — so a `notOpen`
+    answer is the ORDINARY case, not a failure, and it clears the panel rather
+    than showing an error. Most of a session is not a feedback round.
+
+    A genuine failure keeps whatever is already on screen. A participant halfway
+    through reading a report should not lose it to one flaky GET.
+  */
+  const loadFeedbackRound = async () => {
+    const result = await fetchFeedbackRound({ apiBase: API_BASE, gameId });
+    if (!result.ok) return;
+    if (result.notOpen) {
+      setFeedbackRound(null);
+      setFeedbackNumber(null);
+      setFeedbackComments([]);
+      return;
+    }
+    setFeedbackRound(result.round);
+    setFeedbackNumber(result.questionNumber);
+    setFeedbackComments((result.round && result.round.comments) || []);
+  };
+
+  /** Just the comments — what a `commentPosted` frame triggers. Re-reading the
+   *  whole round to pick up one new comment would make a busy room re-read its
+   *  own report dozens of times a minute. */
+  const loadComments = async () => {
+    if (!feedbackNumberRef.current) return;
+    const result = await fetchComments({
+      apiBase: API_BASE, gameId, questionNumber: feedbackNumberRef.current,
+    });
+    // Only on success: "there are no comments" and "I could not read them" look
+    // identical if a failure also sets an empty list, and the second must not
+    // wipe what the room can already see.
+    if (result.ok) setFeedbackComments(result.comments);
+  };
+
+  /**
+   * Post one comment, and put it on screen without waiting for the round trip.
+   *
+   * The optimistic insert is not decoration: the author's own broadcast reaches
+   * them through the same debounced refetch as everybody else's, so without it
+   * a participant watches their comment take up to a second to appear and taps
+   * Post again.
+   */
+  const submitComment = async (draft) => {
+    const result = await postComment({
+      apiBase: API_BASE,
+      gameId,
+      playerName,
+      questionNumber: draft.questionNumber || feedbackNumber,
+      anchorKind: draft.anchorKind,
+      anchorRef: draft.anchorRef,
+      anchorLabel: draft.anchorLabel,
+      anchorExcerpt: draft.anchorExcerpt,
+      text: draft.text,
+    });
+    if (result.ok && result.comment) {
+      setFeedbackComments((current) => [...current, result.comment]);
+    }
+    return result;
+  };
+
+  // The ref exists so the once-registered socket handler can read the CURRENT
+  // round number; this is the only thing that keeps the two in step.
+  useEffect(() => { feedbackNumberRef.current = feedbackNumber; }, [feedbackNumber]);
+
+  // A pending refetch must not fire into an unmounted page.
+  useEffect(() => () => {
+    if (commentRefetchRef.current) clearTimeout(commentRefetchRef.current);
+  }, []);
+
+  /*
+    ASK ONCE ON ARRIVAL, not only when a frame says so.
+
+    A participant who joins (or reloads, or comes back from a locked screen)
+    DURING a feedback round has already missed the `stageBeatChanged` that
+    opened it. Without this they sit on the ordinary results card while the
+    room is being asked to comment — the same class of defect as the beat that
+    was client-only state before stage-beat.js existed.
+  */
+  useEffect(() => {
+    if (!joined || !gameId) return;
+    if (!String(gameState || '').startsWith('RESULTS#')) return;
+    loadFeedbackRound();
+    // `gameState` is in the deps so entering RESULTS re-asks; the endpoint is a
+    // cheap read and answers 409 for the two beats that are not feedback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joined, gameId, gameState]);
 
   const checkGameState = async (gameIdOverride = null, playerNameOverride = null) => {
     const currentGameId = gameIdOverride || gameId;
@@ -2900,6 +3060,39 @@ function PlayerPage() {
     }
 
   /* -------------------------------------------------------------- RESULTS -- */
+  } else if (gameState.startsWith('RESULTS#') && feedbackRound) {
+    /*
+      A FEEDBACK ROUND — RESULTS' THIRD BEAT.
+
+      Tested BEFORE the ordinary results arm, because both are `RESULTS#nnn` and
+      the raw state cannot tell them apart. `feedbackRound` is non-null only when
+      `GET /feedback-round` confirmed both facts at once: the session is on this
+      round's results AND that round's record is on the `feedback` beat.
+
+      ── THIS IS THE ONE PHASE WHERE THE PHONE CARRIES THE ROOM'S MATERIAL ────
+
+      Every other player view is deliberately the personal half only — "this
+      page will not repeat them" (player-redesign/17-results-call.html). That
+      rule says the phone does not duplicate the stage WHILE THE PARTICIPANT HAS
+      NO TASK. Here they have one, and it cannot happen anywhere else: the owner
+      asked for the report on their own device "so they can read, copy paste",
+      which a projector cannot do, and the commenting has to happen where the
+      keyboard is.
+
+      `volume` stays 'act', not 'watch': there is something to do.
+    */
+    volume = 'act';
+    ctx = position ? `${position} · Feedback` : 'Feedback';
+
+    body = (
+      <FeedbackRoundPanel
+        round={feedbackRound}
+        questionNumber={feedbackNumber}
+        comments={feedbackComments}
+        onSubmit={submitComment}
+      />
+    );
+
   } else if (gameState.startsWith('RESULTS#')) {
     volume = 'watch';
     ctx = position ? `${position} · Results` : 'Results';
