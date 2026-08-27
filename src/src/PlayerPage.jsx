@@ -839,6 +839,12 @@ function PlayerPage() {
       webSocketClient.offMessage('votingStarted');
       webSocketClient.offMessage('playerAnswered');
       webSocketClient.offMessage('playerVoted');
+      // Registered above for the feedback round. A handler that outlives its
+      // session fires with a stale closure — the defect the host page's
+      // registered/removed symmetry test was written for after `gameEnded`
+      // did exactly this.
+      webSocketClient.offMessage('stageBeatChanged');
+      webSocketClient.offMessage('commentPosted');
       webSocketClient.offMessage('aiSummaryReady');
       webSocketClient.offMessage('aiSummaryError');
       webSocketClient.offMessage('hostMessage');

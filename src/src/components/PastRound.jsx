@@ -168,12 +168,19 @@ export default function PastRound({
         </button>
       </div>
 
+      {/*
+        `comments` but no `onComment`: the host READS what the room said and is
+        not offered a way to add to it. A feedback round is the room's turn, and
+        the host's surface is a projector — this dialog is a review of a
+        finished round, opened from the session's rounds list.
+      */}
       <RoundReport
         round={round}
         spotlight={spotlight}
         onSpotlight={setSpotlight}
         onRegenerate={onRegenerate}
         regenerating={busy}
+        comments={round.comments || []}
       />
 
       <div className="past-round__nav">

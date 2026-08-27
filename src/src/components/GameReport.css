@@ -533,6 +533,49 @@
 
 .report-paper .report-answer:last-child { border-bottom: 0; }
 
+/* ---- COMMENTS ----
+   What the room said ABOUT a round's report, in a feedback round.
+
+   This is the one surface where the two kinds of prose sit closest together,
+   and where the reader may be holding a printout with no way to ask which is
+   which — so the distinction is carried by SHAPE, not by colour alone. A
+   comment is indented behind a rule and carries the section it is about; a
+   response is flush and carries a rank. Both survive a monochrome printer,
+   which a colour-only difference would not. */
+.report-paper .report-comments {
+  margin-top: 20px;
+  padding-top: 4px;
+}
+
+.report-paper .report-comment {
+  /* The rule is on the LEFT and the block is indented behind it: on paper an
+     indent reads as "about the thing above" without needing a legend. */
+  box-shadow: inset 2px 0 0 var(--report-rule-strong, currentColor);
+  padding: 12px 0 12px 16px;
+  margin: 0 0 4px;
+}
+
+.report-paper .comment-on {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 0 0 4px;
+  /* Not truncated. Once the 7-day answer rows have expired this label is the
+     only surviving record of what the comment was about, and a reduction with
+     no recovery is a deletion. */
+  overflow-wrap: anywhere;
+}
+
+.report-paper .comment-text {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+
+.report-paper .comment-meta {
+  font-size: 12px;
+}
+
 /* A ranked response gets an amber rule, not a gold gradient and a glow.
    The rule survives a monochrome printer; the gradient becomes a smudge. */
 .report-paper .report-answer.winner {

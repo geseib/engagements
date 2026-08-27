@@ -77,11 +77,63 @@ describe('the host page can open a feedback round', () => {
       then POST /stage-beat — and the ORDER is the whole point, which is why
       this asserts on their relative position rather than on their presence.
     */
-    const opener = host.slice(host.indexOf('requestFeedbackRound'));
-    const reportAt = opener.indexOf('/report');
-    const beatAt = opener.indexOf('stage-beat');
+    // The declaration, not the whole file: `publishStageBeat` is defined
+    // ABOVE this function, so searching from the top would find its URL first
+    // and prove nothing about the order these two run in.
+    const start = host.indexOf('const requestFeedbackRound');
+    expect(start).toBeGreaterThan(-1);
+    const body = host.slice(start, host.indexOf('\n  };', start));
+
+    const reportAt = body.indexOf('/report');
+    const beatAt = body.indexOf('publishStageBeat');
     expect(reportAt).toBeGreaterThan(-1);
     expect(beatAt).toBeGreaterThan(-1);
     expect(reportAt).toBeLessThan(beatAt);
+  });
+
+  test('and it does not open the round when the report could not be built', () => {
+    /*
+      Half-opening it is the worse outcome: the room is told to comment on
+      something their devices cannot show them, and the host — looking at the
+      projector, which needs no report — cannot see that anything is wrong.
+    */
+    const start = host.indexOf('const requestFeedbackRound');
+    const body = host.slice(start, host.indexOf('\n  };', start));
+    // An early return between the build and the beat.
+    const guardAt = body.search(/if \(!built\.ok\)[\s\S]{0,200}?return;/);
+    expect(guardAt).toBeGreaterThan(-1);
+    expect(guardAt).toBeLessThan(body.indexOf('publishStageBeat'));
+  });
+});
+
+
+/**
+ * THE PLAYER PAGE LETS GO OF WHAT IT SUBSCRIBED TO.
+ *
+ * `GameHostPage` has had a registered/removed symmetry test since `gameEnded`
+ * was registered and never removed — a handler that outlived its session and
+ * fired with a stale closure. The PLAYER page had no such test, and adding two
+ * handlers to it reproduced exactly that defect before this was written.
+ */
+describe('the player page registers and removes symmetrically', () => {
+  const player = stripComments(fs.readFileSync(src('PlayerPage.jsx'), 'utf8'));
+
+  const registered = new Set(
+    [...player.matchAll(/webSocketClient\.onMessage\(\s*'([^']+)'/g)].map((m) => m[1]),
+  );
+  const removed = new Set(
+    [...player.matchAll(/webSocketClient\.offMessage\(\s*'([^']+)'/g)].map((m) => m[1]),
+  );
+
+  test('it registers the two frames a feedback round needs', () => {
+    // Without `stageBeatChanged` a phone never learns the round opened:
+    // `gameState` is RESULTS#nnn for all three beats and cannot tell them apart.
+    expect(registered.has('stageBeatChanged')).toBe(true);
+    expect(registered.has('commentPosted')).toBe(true);
+  });
+
+  test('every handler it registers, it also removes', () => {
+    const leaked = [...registered].filter((type) => !removed.has(type));
+    expect(leaked).toEqual([]);
   });
 });

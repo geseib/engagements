@@ -227,6 +227,17 @@ export function roundsFrom(payload) {
         // Wavelength rounds only: the stored word analysis the room saw,
         // passed through untouched for the ENDED session vocabulary.
         wordAnalysis: round.wordAnalysis || null,
+        /*
+          WHAT THE ROOM SAID ABOUT THIS ROUND'S REPORT, in a feedback round.
+
+          This whitelist is the reason the field has to be named here: a round
+          key that `create-report.js` emits and this function does not list is
+          silently dropped, and the surface that needed it renders as though the
+          backend never sent it. `[]` rather than `null` so `RoundReport` has
+          one shape to draw and never has to tell "no comments" from "the field
+          is missing".
+        */
+        comments: Array.isArray(round.comments) ? round.comments : [],
       };
     })
     .sort((a, b) => a.ordinal - b.ordinal);

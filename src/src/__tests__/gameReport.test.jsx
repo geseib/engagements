@@ -349,3 +349,116 @@ describe('the print stylesheet declares the properties that do the work', () => 
     expect(printBlock).toMatch(/\.report-paper button[\s\S]{0,200}?display:\s*none/);
   });
 });
+
+
+/**
+ * COMMENTS IN THE SESSION REPORT.
+ *
+ * The owner: *"these will get added to the round report and the over all report
+ * as well. clearly called out as comments."*
+ *
+ * The round report and the session report are one builder, so the backend half
+ * is a single change (`tests/comment-report-integration.js`). This is the half
+ * that can still go wrong on its own: `GameHostPage` rebuilds `reportData` from
+ * scratch, and anything not explicitly forwarded there is invisible to this
+ * component no matter what the server sent.
+ */
+describe('comments in the session report', () => {
+  const withComments = {
+    gameId: '4821',
+    eventTitle: 'Q3 offsite',
+    players: [{ playerName: 'Ada', totalScore: 3 }],
+    questions: [{
+      questionNumber: '001',
+      questionData: { title: 'Competitive response', detail: 'They cut price.' },
+      answers: [{
+        answerIndex: 0, answerText: 'Freeze discounting.', playerName: 'Ada',
+        rank: 1, rankDisplay: '1st', totalScore: 3, voteBreakdown: '',
+      }],
+      comments: [
+        {
+          commentId: 'c1', anchorKind: 'response', anchorRef: '0',
+          anchorLabel: 'Response 1 — Ada',
+          anchorExcerpt: 'Freeze discounting.',
+          text: 'This is the only one that touches the customer.',
+          playerName: 'Lee Chen', submittedAt: '2026-08-27T10:00:00.000Z',
+        },
+        {
+          commentId: 'c2', anchorKind: 'summary', anchorRef: '',
+          anchorLabel: 'AI summary', anchorExcerpt: 'The room wants to defend price',
+          text: 'Sharper than I expected.',
+          playerName: 'Dana', submittedAt: '2026-08-27T10:01:00.000Z',
+        },
+      ],
+    }],
+  };
+
+  test('each round’s comments are rendered', () => {
+    render(<ReportDocument reportData={withComments} />);
+    expect(screen.getByText('This is the only one that touches the customer.')).toBeInTheDocument();
+    expect(screen.getByText('Sharper than I expected.')).toBeInTheDocument();
+  });
+
+  test('they are headed as comments, so nobody reads one as a response', () => {
+    render(<ReportDocument reportData={withComments} />);
+    expect(screen.getByText('Comments')).toBeInTheDocument();
+  });
+
+  test('each states which section it is about', () => {
+    /*
+      In the SESSION report a comment is read a long way from the round it
+      belongs to — often on paper. "Too internal" against nothing is not a
+      comment; against the section it names, it is. The label comes from the
+      STORED value, so it survives the response itself expiring out of a
+      rebuilt report.
+    */
+    const { container } = render(<ReportDocument reportData={withComments} />);
+    const block = container.querySelector('.report-comments');
+    expect(block.textContent).toContain('Response 1 — Ada');
+    expect(block.textContent).toContain('AI summary');
+  });
+
+  test('each is attributed', () => {
+    const { container } = render(<ReportDocument reportData={withComments} />);
+    const authors = [...container.querySelectorAll('.comment-author')].map((n) => n.textContent);
+    expect(authors).toEqual(['Lee Chen', 'Dana']);
+  });
+
+  test('a round with no comments renders no comment block at all', () => {
+    // An empty "Comments" heading in a printed report is a heading over a blank
+    // space, which reads as a printing fault.
+    const bare = { ...withComments, questions: [{ ...withComments.questions[0], comments: [] }] };
+    const { container } = render(<ReportDocument reportData={bare} />);
+    expect(container.querySelector('.report-comments')).toBeNull();
+  });
+
+  test('an older report with no comments field at all still renders', () => {
+    // Every report built before this feature. `comments` is simply absent.
+    const old = { ...withComments, questions: [{ ...withComments.questions[0], comments: undefined }] };
+    expect(() => render(<ReportDocument reportData={old} />)).not.toThrow();
+  });
+
+  test('the comment block is kept whole across a page break', () => {
+    // The print sheet: a comment split across two pages loses the byline that
+    // says whose it is, which is the one thing a reader needs.
+    const css = fs.readFileSync(
+      path.join(__dirname, '..', 'components', 'GameReport.css'), 'utf8',
+    );
+    expect(css).toMatch(/\.report-comment\b/);
+  });
+});
+
+describe('GameHostPage forwards the comment count', () => {
+  test('totalComments reaches the rebuilt reportData', () => {
+    /*
+      `GameHostPage` builds `gameData` from scratch and carries a comment saying
+      anything not forwarded there is invisible to the report. `questions:
+      report.detailedQuestions` already carries the nested comments; the session
+      total is a separate key and has to be named. The object has no `gameStats`
+      to pass through, so it goes top level.
+    */
+    const src = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
+    const stripped = stripComments(src);
+    expect(stripped).toMatch(/totalComments:/);
+  });
+});
