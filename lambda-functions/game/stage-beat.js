@@ -49,34 +49,9 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
 
-/**
- * The only three beats there are, in the order a round moves through them.
- *
- * A closed set on purpose. An open one is the worst possible failure here: the
- * write succeeds, the frame goes out, every client compares the value against
- * 'field-notes', and the host watches a button do nothing with no error
- * anywhere in the system.
- *
- * `feedback` — the third — is a FEEDBACK ROUND: the room holds the round's own
- * report and comments on sections of it. The owner asked for *"a request
- * feedback button during the AI feedback phase. if so there is a new round
- * where every one can comment on what they have heard"*.
- *
- * IT IS A BEAT AND NOT A GAME STATE, which is the whole design decision. The
- * comments have to land in `detailedQuestions[i]` — the round report of the
- * round being commented on — and a state carrying its own ordinal would orphan
- * them from the thing they annotate, as well as moving LessonNumber, roundOf
- * and the question queue past a round that never asked anything. Everything a
- * feedback round needs is already true of a beat: durable per round, host-only,
- * idempotent, bidirectional between the projector and the phone, and announced
- * without the full client re-sync that `gameStateChanged` forces.
- *
- * It is also not a ROUND KIND. That vocabulary (admin/shared/round-kinds.js) is
- * an authoring axis that steers the question generator; nothing under
- * lambda-functions/game reads it at runtime, and a feedback round has no
- * authored question at all.
- */
-const BEATS = ['results', 'field-notes', 'feedback'];
+// The closed set lives in its own module because `get-game-state.js` reads it
+// too — see stage-beats.js for why a second reader moved it there.
+const { BEATS } = require('./stage-beats');
 
 const respond = (statusCode, body) => ({
   statusCode,
@@ -200,9 +175,6 @@ exports.handler = async (event) => {
   }
 };
 
-/**
- * Exported so the beat vocabulary can be asserted without driving the handler,
- * and so `tests/feedback-round-beat.js` can hold it against the frontend mirror
- * in `src/src/config/hostControls.js`. The handler is unaffected.
- */
+/** Re-exported so a test can assert the vocabulary without driving the handler.
+ *  The canonical list is `./stage-beats.js`. */
 exports.BEATS = BEATS;

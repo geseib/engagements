@@ -54,7 +54,7 @@ import { DEFAULT_SCOPE } from './utils/setRef';
 import { gameTypeMeta, gameTypeLabel } from './config/gameTypes';
 import {
   hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
-  stageBeatFromFrame,
+  stageBeatFromFrame, STAGE_BEATS,
 } from './config/hostControls';
 import {
   anonymityApplies, authorsHiddenNow, createPayloadFor, displayLabelFor,
@@ -1973,7 +1973,17 @@ Focus on actionable business strategy insights.`;
         // if the broadcast that would have refreshed it never arrives.
         serverStageBeatRef.current = {
           state: gameStateData.state ?? null,
-          beat: gameStateData.stageBeat === 'field-notes' ? 'field-notes' : 'results',
+          /*
+            MEMBERSHIP OF THE CLOSED SET, never equality against one member.
+
+            This was `=== 'field-notes' ? 'field-notes' : 'results'`, and when
+            `feedback` joined STAGE_BEATS that collapsed every feedback round
+            back to the tally on this path — so a host who reloaded mid-feedback
+            came back up on the scores with the room still holding the report on
+            forty phones. Nothing errored: the row was right and the endpoint
+            returned the right value.
+          */
+          beat: STAGE_BEATS.includes(gameStateData.stageBeat) ? gameStateData.stageBeat : 'results',
         };
 
         /*

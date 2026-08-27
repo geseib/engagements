@@ -123,6 +123,7 @@ process.env.WEBSOCKET_API_ENDPOINT = 'https://ws.test.invalid/dev';
 
 const stageBeatModule = require(path.join(REPO, 'lambda-functions/game/stage-beat.js'));
 const { handler: stageBeat } = stageBeatModule;
+const { handler: getState } = require(path.join(REPO, 'lambda-functions/game/get-game-state.js'));
 
 let pass = 0, fail = 0;
 function check(label, fn) {
@@ -261,6 +262,51 @@ function seedGame(gameId, lessonNumber = 3) {
     assert.strictEqual(roundOf('3006', '003').StageBeat, 'feedback');
     assert.strictEqual(roundOf('3006', '004').StageBeat, undefined);
   });
+
+  // ---------- 5. it survives the read-back ----------
+  console.log('\n5. every surface that polls or reloads can see it');
+  seedGame('3007', 3);
+  await post('3007', { beat: 'feedback', questionNumber: 3 });
+  const state = await getState({
+    requestContext: { http: { method: 'GET' } },
+    pathParameters: { gameId: '3007' },
+  });
+  const payload = JSON.parse(state.body);
+
+  check('get-game-state reports the feedback beat, not the tally', () => {
+    // THIS IS THE ONE THAT WAS BROKEN. The reader tested `=== 'field-notes'`
+    // against a variable initialised to 'results', so a stored `feedback` was
+    // reported to every client as `results` — the row correct, the wire wrong,
+    // and nothing in any log. This endpoint is upstream of the host page and
+    // the phone remote, so a beat lost here is lost everywhere at once.
+    assert.strictEqual(payload.stageBeat, 'feedback', `stageBeat was '${payload.stageBeat}'`);
+  });
+
+  check('and still reports the older beats it always did', async () => {
+    // Widening the read must not have loosened it into a passthrough.
+    assert.strictEqual(payload.authorsRevealed, true);
+  });
+
+  seedGame('3008', 3);
+  await post('3008', { beat: 'field-notes', questionNumber: 3 });
+  const fieldNotes = JSON.parse((await getState({
+    requestContext: { http: { method: 'GET' } },
+    pathParameters: { gameId: '3008' },
+  })).body);
+  check('field-notes still reads back as field-notes', () =>
+    assert.strictEqual(fieldNotes.stageBeat, 'field-notes'));
+
+  // A value from an older or newer deploy must fall back rather than travel on
+  // to a client that will compare it against a list it is not in.
+  seedGame('3009', 3);
+  put({ PK: 'GAME#3009', SK: 'ROUND#003', QuestionNumber: '003', StageBeat: 'from-the-future' });
+  const unknownBeat = JSON.parse((await getState({
+    requestContext: { http: { method: 'GET' } },
+    pathParameters: { gameId: '3009' },
+  })).body);
+  check('an unrecognised stored beat falls back to the tally', () =>
+    assert.strictEqual(unknownBeat.stageBeat, 'results',
+      `an unknown beat travelled to the client as '${unknownBeat.stageBeat}'`));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);
