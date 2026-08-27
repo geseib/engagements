@@ -50,6 +50,9 @@
   --fbr-wash: rgba(255, 255, 255, 0.06);
   --fbr-well: rgba(255, 255, 255, 0.10);
   --fbr-rule: rgba(255, 255, 255, 0.14);
+  /* --bg at 55%. A scoped local rather than a literal at the use site: the
+     design rule allows a raw colour only inside a scope's own token block. */
+  --fbr-lift: rgba(15, 26, 46, 0.55);
 
   --fbr-t-floor: 12px;
   --fbr-t-label: 13px;
@@ -95,9 +98,26 @@
   flex-direction: column;
   gap: 8px;
   padding: 12px;
-  background: var(--fbr-wash);
+  /*
+    OPAQUE, IN TWO LAYERS, AND THIS IS NOT A STYLE CHOICE.
+
+    A sticky element with a translucent background lets the page scroll THROUGH
+    it. Caught by looking at it: the round's own comments slid under the
+    composer and rendered on top of "Commenting on …", two texts occupying the
+    same pixels while somebody was trying to write.
+
+    `background-color` cannot stack, so the tint is applied as a one-stop
+    gradient over a solid colour. The composite is identical to the wash on
+    `--surface` (#22304A) — which is what `feedbackRoundPalette.test.js`
+    measures every pairing against — and it is now opaque.
+  */
+  background-color: var(--surface);
+  background-image: linear-gradient(var(--fbr-wash), var(--fbr-wash));
   border: 1px solid var(--fbr-rule);
   border-radius: 10px;
+  /* Reads as sitting ABOVE the report rather than being part of it. The report
+     scrolls under this edge, so the edge has to be visible. */
+  box-shadow: 0 -8px 20px var(--fbr-lift);
 }
 
 .fbr__on {
