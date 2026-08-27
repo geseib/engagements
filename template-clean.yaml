@@ -1074,6 +1074,55 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  PublishQuestionSetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-publish-question-set'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 60
+      Handler: publish-question-set.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        # DECRYPT ONLY, and for the OPPOSITE reason to CopyQuestionSetFunction.
+        #
+        # That one encrypts on the way IN. This one decrypts on the way OUT: the
+        # org's questions are ciphertext and the public library is plaintext by
+        # design, because content every organisation reads cannot be keyed to
+        # one of them. It never writes into an org partition, so it never mints
+        # a key — minting stays reserved to the two paths that create
+        # organisations, which tests/tenant-infrastructure.js §3 and
+        # tests/kms-grants-match-code.js both enforce.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        PublishSet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /question-sets/{setId}/publish
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        UnpublishSet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /question-sets/{setId}/publish
+            Method: DELETE
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   OrgGetFunction:
     Type: AWS::Serverless::Function
     Properties:

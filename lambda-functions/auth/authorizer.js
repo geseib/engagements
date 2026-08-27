@@ -428,6 +428,27 @@ function requiredGroupsForRoute(method, path) {
     return ['hosts', 'admins'];
   }
 
+  /*
+    SHARING A SET PUBLICLY, AND WITHDRAWING IT.
+
+    A HOST reaches this route, and the narrower question — whether they may
+    publish THIS organisation's content — is decided in the handler, which
+    requires an org role of `admin` or `owner`. Copying a shared set IN is any
+    member's call because it affects one team; publishing OUT puts their
+    material in front of everyone, so the handler asks for more than the
+    authorizer does.
+
+    Matched by regex as well as by template for the same reason the copy route
+    above is: this handler is reached with a real set id in `rawPath` on some
+    paths, and a concrete id must not fall through to the rules below — one of
+    which is the `path.includes('answer')` clause that a set id can satisfy by
+    accident.
+  */
+  const PUBLISH_ROUTE = /^question-sets\/[^/]+\/publish$/;
+  if (path === 'question-sets/{setId}/publish' || PUBLISH_ROUTE.test(path)) {
+    return ['hosts', 'admins'];
+  }
+
   // ── THE QUESTION-SET ROUTES, WHICH WERE PUBLIC ───────────────────────────
   //
   // These three carry the product's content — the questions, the answers, the
