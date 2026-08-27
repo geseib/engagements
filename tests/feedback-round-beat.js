@@ -126,8 +126,16 @@ const { handler: stageBeat } = stageBeatModule;
 const { handler: getState } = require(path.join(REPO, 'lambda-functions/game/get-game-state.js'));
 
 let pass = 0, fail = 0;
-function check(label, fn) {
-  try { fn(); console.log(`  PASS  ${label}`); pass++; }
+// async-aware: `await fn()` awaits a returned promise the same way it resolves
+// a plain value, so a rejection from an `async` callback lands in this catch
+// exactly like a thrown error from a sync one. Previously a `check(label, async
+// () => {...})` call could never fail — `fn()` returned a pending promise, the
+// try block completed "successfully" around that promise object, and the
+// rejection (if any) settled after this function had already returned. Every
+// call site below now `await`s this function so increments stay ordered and
+// the final tally is complete before it is printed.
+async function check(label, fn) {
+  try { await fn(); console.log(`  PASS  ${label}`); pass++; }
   catch (e) { console.log(`  FAIL  ${label}\n        ${e.message}`); fail++; }
 }
 
@@ -154,13 +162,13 @@ function seedGame(gameId, lessonNumber = 3) {
   // ---------- 1. the vocabulary ----------
   console.log('\n1. feedback is a beat, on both sides of the wire');
 
-  check('the server knows three beats, in flow order', () => {
+  await check('the server knows three beats, in flow order', () => {
     // Written out by hand. Comparing against the module's own export twice
     // would prove only that it agrees with itself.
     assert.deepStrictEqual(stageBeatModule.BEATS, ['results', 'field-notes', 'feedback']);
   });
 
-  check('the frontend mirror declares the same three, in the same order', () => {
+  await check('the frontend mirror declares the same three, in the same order', () => {
     // Read as TEXT, the way tests/round-kind-steering.js:216 reads its mirror.
     // The frontend module is ESM and cannot be require()d into this bundle, and
     // a mirror that drifts fails in the worst way available: the write succeeds,
@@ -178,16 +186,16 @@ function seedGame(gameId, lessonNumber = 3) {
   seedGame('3001');
   const opened = await post('3001', { beat: 'feedback', questionNumber: 3 });
 
-  check('responds 200', () =>
+  await check('responds 200', () =>
     assert.strictEqual(opened.statusCode, 200, `got ${opened.statusCode}: ${opened.body}`));
 
-  check('writes StageBeat=feedback onto the round being commented on', () => {
+  await check('writes StageBeat=feedback onto the round being commented on', () => {
     const round = roundOf('3001', '003');
     assert.ok(round, 'no ROUND#003 record');
     assert.strictEqual(round.StageBeat, 'feedback', `StageBeat is '${round.StageBeat}'`);
   });
 
-  check('leaves AuthorsRevealed alone', () => {
+  await check('leaves AuthorsRevealed alone', () => {
     // The beat and the reveal share this item. A Put here would un-reveal a
     // round get-results had already revealed, and every attributed response in
     // the report the room is about to comment on would go back in the box.
@@ -195,14 +203,14 @@ function seedGame(gameId, lessonNumber = 3) {
       'the reveal was clobbered — this must be an UpdateCommand, not a Put');
   });
 
-  check('does not touch the game STATE row', () => {
+  await check('does not touch the game STATE row', () => {
     // A feedback round is a beat, not a state. If this moved, round numbering,
     // the question queue and every ASK#/VOTE#/RESULTS# prefix test downstream
     // would be reasoning about a state string nothing else knows how to read.
     assert.strictEqual(store.get(key('GAME#3001', 'STATE')).State, 'RESULTS#003');
   });
 
-  check('announces it to the whole room, players included', () => {
+  await check('announces it to the whole room, players included', () => {
     // The participants are the point of this beat — they are the ones who get
     // the report and the composer. A frame that reached only the projector
     // would open a feedback round nobody could join.
@@ -210,7 +218,7 @@ function seedGame(gameId, lessonNumber = 3) {
     assert.deepStrictEqual(ids, ['host-1', 'player-1'], `announced to [${ids}]`);
   });
 
-  check('the frame is a stageBeatChanged carrying the beat and the round', () => {
+  await check('the frame is a stageBeatChanged carrying the beat and the round', () => {
     const frame = sent[0].message;
     assert.strictEqual(frame.type, 'stageBeatChanged', `type was '${frame.type}'`);
     assert.strictEqual(frame.beat, 'feedback', `beat was '${frame.beat}'`);
@@ -223,15 +231,15 @@ function seedGame(gameId, lessonNumber = 3) {
 
   seedGame('3002');
   const unknown = await post('3002', { beat: 'chat', questionNumber: 3 });
-  check('an unknown beat is still refused with 400', () =>
+  await check('an unknown beat is still refused with 400', () =>
     assert.strictEqual(unknown.statusCode, 400, `got ${unknown.statusCode}`));
-  check('and nothing was written for it', () =>
+  await check('and nothing was written for it', () =>
     assert.strictEqual(roundOf('3002', '003').StageBeat, 'field-notes',
       'a refused beat still moved the round'));
 
   seedGame('3003');
   const back = await post('3003', { beat: 'results', questionNumber: 3 });
-  check('the host can still step back to the tally', () => {
+  await check('the host can still step back to the tally', () => {
     assert.strictEqual(back.statusCode, 200);
     assert.strictEqual(roundOf('3003', '003').StageBeat, 'results');
   });
@@ -239,7 +247,7 @@ function seedGame(gameId, lessonNumber = 3) {
   seedGame('3004');
   await post('3004', { beat: 'feedback', questionNumber: 3 });
   const again = await post('3004', { beat: 'feedback', questionNumber: 3 });
-  check('opening the same feedback round twice is a no-op, not an error', () => {
+  await check('opening the same feedback round twice is a no-op, not an error', () => {
     // The host is standing in front of a room; a double-tap must be a 200.
     assert.strictEqual(again.statusCode, 200, `got ${again.statusCode}`);
     assert.strictEqual(roundOf('3004', '003').StageBeat, 'feedback');
@@ -247,7 +255,7 @@ function seedGame(gameId, lessonNumber = 3) {
 
   seedGame('3005');
   const junk = await post('3005', { beat: 'feedback', questionNumber: 'three' });
-  check('a non-numeric round is still refused before it becomes a sort key', () =>
+  await check('a non-numeric round is still refused before it becomes a sort key', () =>
     assert.strictEqual(junk.statusCode, 400, `got ${junk.statusCode}`));
 
   // ---------- 4. per round, not per game ----------
@@ -255,7 +263,7 @@ function seedGame(gameId, lessonNumber = 3) {
   seedGame('3006', 3);
   put({ PK: 'GAME#3006', SK: 'ROUND#004', QuestionNumber: '004' });
   await post('3006', { beat: 'feedback', questionNumber: 3 });
-  check('opening feedback on round 3 leaves round 4 on its own beat', () => {
+  await check('opening feedback on round 3 leaves round 4 on its own beat', () => {
     // The next round's results must open on its own tally, not inherit the
     // previous round's feedback session. Storing the beat on the STATE record
     // would do exactly that.
@@ -273,7 +281,7 @@ function seedGame(gameId, lessonNumber = 3) {
   });
   const payload = JSON.parse(state.body);
 
-  check('get-game-state reports the feedback beat, not the tally', () => {
+  await check('get-game-state reports the feedback beat, not the tally', () => {
     // THIS IS THE ONE THAT WAS BROKEN. The reader tested `=== 'field-notes'`
     // against a variable initialised to 'results', so a stored `feedback` was
     // reported to every client as `results` — the row correct, the wire wrong,
@@ -282,7 +290,7 @@ function seedGame(gameId, lessonNumber = 3) {
     assert.strictEqual(payload.stageBeat, 'feedback', `stageBeat was '${payload.stageBeat}'`);
   });
 
-  check('and still reports the older beats it always did', async () => {
+  await check('and still reports the older beats it always did', async () => {
     // Widening the read must not have loosened it into a passthrough.
     assert.strictEqual(payload.authorsRevealed, true);
   });
@@ -293,7 +301,7 @@ function seedGame(gameId, lessonNumber = 3) {
     requestContext: { http: { method: 'GET' } },
     pathParameters: { gameId: '3008' },
   })).body);
-  check('field-notes still reads back as field-notes', () =>
+  await check('field-notes still reads back as field-notes', () =>
     assert.strictEqual(fieldNotes.stageBeat, 'field-notes'));
 
   // A value from an older or newer deploy must fall back rather than travel on
@@ -304,7 +312,7 @@ function seedGame(gameId, lessonNumber = 3) {
     requestContext: { http: { method: 'GET' } },
     pathParameters: { gameId: '3009' },
   })).body);
-  check('an unrecognised stored beat falls back to the tally', () =>
+  await check('an unrecognised stored beat falls back to the tally', () =>
     assert.strictEqual(unknownBeat.stageBeat, 'results',
       `an unknown beat travelled to the client as '${unknownBeat.stageBeat}'`));
 
