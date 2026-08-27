@@ -1,5 +1,10 @@
 # Handoff — Engage as a multi-tenant SaaS
 
+**SUPERSEDED IN PART.** The public library, per-version moderation and scoped
+Workies moved on substantially on 2026-08-27 — see
+`docs/handoff/public-library-2026-08-27.md`, which also carries the traps found
+building them. This file remains the record for the tenancy work beneath it.
+
 **Branch:** `dev`, live as **`d5d0c4d9`**. Read §0 first — it carries the rules
 that are easy to break again, what is still open, and the test data left behind.
 
