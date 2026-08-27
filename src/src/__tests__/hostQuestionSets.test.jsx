@@ -1194,3 +1194,49 @@ describe('every row says whose set it is', () => {
     expect(within(row).queryByText('Yours')).toBeNull();
   });
 });
+
+/* ------------------------------------------- a row the server could not read */
+
+describe("a host's own set whose content could not be decrypted", () => {
+  /*
+    The shelf reads the same admin list as the console, so it receives the same
+    degraded row — encrypted fields nulled, `decryptFailed: true`. See
+    utils/unreadableSet.js.
+
+    This surface is where it lands hardest, because these are the host's OWN
+    org's sets and org content is the only content that is encrypted at all. The
+    house table below already fell back to `set.id` for a nameless row; this one
+    renders `{set.name}` bare, so a nulled name leaves a row with two live
+    buttons and nothing saying what they act on.
+  */
+  const UNREADABLE = {
+    id: 'q3retro', name: null, description: null,
+    engagementType: 'call-and-answer', totalQuestions: 42, categoryCount: 6,
+    active: true, hasImages: false, canManage: true, mine: true,
+    createdByName: 'ivy', decryptFailed: true,
+  };
+
+  // rejects: `{set.name}` rendered straight through, which leaves the row's
+  // only identifier blank while Rename and Delete stay pointed at it.
+  test('the row is still identifiable, by the field that was never encrypted', async () => {
+    await openDialog({}, { sets: [...HOST_VIEW, UNREADABLE] });
+    expect(screen.getByText('q3retro')).toBeInTheDocument();
+  });
+
+  // rejects: letting it pass as an ordinary row. Delete is the recovery here,
+  // so the row must stay actionable — but a host has to be told which state
+  // they are acting on before they act on it.
+  test('it is marked unreadable rather than passing as an ordinary set', async () => {
+    await openDialog({}, { sets: [...HOST_VIEW, UNREADABLE] });
+    const row = screen.getByText('q3retro').closest('tr');
+    expect(within(row).getByText(/unreadable/i)).toBeInTheDocument();
+  });
+
+  // rejects: hiding the row. A set a host can see in the console, cannot find
+  // on their own shelf, and cannot delete is worse than one that is merely
+  // broken.
+  test('their readable sets are all still listed beside it', async () => {
+    await openDialog({}, { sets: [...HOST_VIEW, UNREADABLE] });
+    expect(screen.getByText('Ivy Retro')).toBeInTheDocument();
+  });
+});

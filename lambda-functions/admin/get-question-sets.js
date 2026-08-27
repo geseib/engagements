@@ -6,7 +6,7 @@ const {
 } = require('./shared/question-set-access');
 const { isAdminCaller } = require('./shared/require-admin');
 const { ORG } = require('./shared/tenant');
-const { decryptItem } = require('./shared/tenant-crypto');
+const { decryptItem, isEnvelope } = require('./shared/tenant-crypto');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -55,7 +55,43 @@ exports.handler = async (event) => {
       if (ref.scope !== ORG || !ref.orgId) return items.map((item) => ({ item, ref }));
       const decrypted = [];
       for (const item of items) {
-        decrypted.push({ item: await decryptItem(ref.orgId, 'set', item), ref });
+        /*
+          ONE UNREADABLE ROW MUST NOT TAKE THE REST OF THE LIBRARY WITH IT.
+          decryptItem throws on the first field it cannot read — a rotated key,
+          a torn write, a half-written row — and this loop used to let that
+          throw escape straight into the outer Promise.all, which rejects the
+          moment ANY one of its promises does. With `refs` holding org,
+          platform and public, that meant one bad row in the caller's OWN
+          partition 500d the whole response: the readable org sets beside it,
+          the PLATFORM library and the public one all disappeared, and none of
+          those three are even encrypted. The org's console showed an empty
+          shelf, and so did the picker in the create-engagement flow.
+          get-ai-prompts.js carries the same guard for the same reason, and
+          got it first — the prompt library had the identical defect.
+        */
+        try {
+          decrypted.push({ item: await decryptItem(ref.orgId, 'set', item), ref });
+        } catch (e) {
+          // Server-side only, and diagnosable: which row, which org, and the
+          // field decryptItem's own message already names.
+          console.warn(`⚠️ Could not decrypt set row ${item.SK} for org ${ref.orgId}: ${e.message}`);
+          /*
+            WHAT THE CALLER SEES: not the raw envelope — `{v,iv,tag,ct}` is not
+            a title, and returning it under `name` would render ciphertext as
+            though the author had typed it — and not a fabricated value either.
+            Every field still holding an envelope (`isEnvelope`, the same test
+            tenant-crypto.js uses to recognise its own output) becomes null, and
+            `decryptFailed: true` says WHY the row is bare, so a reader can tell
+            "unreadable" from "untitled". A degraded row that cannot be told
+            apart from a real one is the failure this whole branch exists to
+            avoid.
+          */
+          const degraded = { ...item, decryptFailed: true };
+          for (const f of Object.keys(degraded)) {
+            if (isEnvelope(degraded[f])) degraded[f] = null;
+          }
+          decrypted.push({ item: degraded, ref });
+        }
       }
       return decrypted;
     }));
@@ -110,6 +146,12 @@ exports.handler = async (event) => {
       updatedAt: item.updatedAt || item.UpdatedAt,
       isAIGenerated: item.isAIGenerated || false,
       hasImages: item.hasImages === true,
+      // UNREADABLE, AND SAYING SO. Projected explicitly because this handler
+      // hand-lists its fields — get-ai-prompts.js gets the same flag for free
+      // from a `...prompt` spread, and a flag that never reaches the client is
+      // the same as no flag at all. Present only when true: absent means the
+      // row decrypted, which is every row in a healthy library.
+      ...(item.decryptFailed ? { decryptFailed: true } : {}),
       // OWNERSHIP.
       //
       // Both fields answer the SCOPED question now: canManage is false for an
@@ -154,6 +196,12 @@ exports.handler = async (event) => {
         .filter((v) => v.version !== null)
         .sort((a, b) => a.version - b.version)
     }));
+
+    const unreadable = questionSets.filter((s) => s.decryptFailed);
+    if (unreadable.length > 0) {
+      console.warn(`⚠️ ${unreadable.length} set row(s) could not be decrypted — ` +
+        `served without content: ${unreadable.map((s) => s.id).join(', ')}`);
+    }
 
     return {
       statusCode: 200,

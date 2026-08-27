@@ -596,3 +596,62 @@ describe('the question set reference survives the picker', () => {
     expect(props.onQuestionSetChange).toHaveBeenCalledWith('teamretro', 'org');
   });
 });
+
+/* --------------------------------------------- a set the server cannot read */
+
+describe('a question set whose content could not be decrypted', () => {
+  /*
+    game/get-question-sets.js now degrades a row it cannot decrypt instead of
+    500ing the whole picker — see utils/unreadableSet.js for the full story. The
+    row arrives with its encrypted fields nulled and `decryptFailed: true`.
+
+    This surface fails DIFFERENTLY from the console list, and worse. The handler
+    used to project `name: item.name || 'Unknown Set'`, so a nulled name here did
+    not come back empty — it came back as a plausible, wrong, unfalsifiable label
+    a host could not tell from a set somebody genuinely left untitled. And unlike
+    the console, this control does something with the row: picking it starts a
+    session against content nobody can read.
+  */
+  const UNREADABLE = {
+    id: 'q3retro',
+    name: null,
+    totalQuestions: 42,
+    engagementType: 'call-and-answer',
+    hasImages: false,
+    decryptFailed: true,
+  };
+  const withUnreadable = () => setup({ questionSets: [...SETS, UNREADABLE] });
+  const options = () => Array.from(setSelect().querySelectorAll('option'));
+  const unreadableOption = () => options().find((o) => o.textContent.includes('q3retro'));
+
+  // rejects: `{set.name} ({set.totalQuestions} questions)` rendered straight
+  // through, which for a nulled name is the line " (42 questions)" — an option
+  // with no subject at all.
+  test('the option names the set by the field that was never encrypted', () => {
+    withUnreadable();
+    expect(unreadableOption()).toBeTruthy();
+  });
+
+  // rejects: keeping it selectable. The console can afford to just mark the row
+  // — nothing there acts on it. Choosing it HERE pins a session to content that
+  // cannot be read, and the failure surfaces in front of a room.
+  test('and it cannot be chosen, because a session built on it could not be played', () => {
+    withUnreadable();
+    expect(unreadableOption()).toBeDisabled();
+  });
+
+  // rejects: a disabled option with no stated reason, which reads as a bug in
+  // the picker rather than a fact about the set.
+  test('the option says why it is unavailable rather than just being dead', () => {
+    withUnreadable();
+    expect(unreadableOption().textContent).toMatch(/unreadable/i);
+  });
+
+  // rejects: filtering `decryptFailed` rows out of the picker. The handler
+  // deliberately keeps them listed; hiding one here would leave a host with a
+  // set they can see in the console, cannot find here, and cannot explain.
+  test('the readable sets are all still offered beside it', () => {
+    withUnreadable();
+    expect(options().some((o) => o.textContent.includes('Strategic Pricing Plays'))).toBe(true);
+  });
+});

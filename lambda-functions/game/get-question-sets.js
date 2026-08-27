@@ -4,7 +4,7 @@ const {
   resolvePartitionFromMeta, toVersion, knownVersions, setMetadataKey, readableSetRefs,
 } = require('./set-version');
 const { ORG } = require('./tenant');
-const { decryptItem } = require('./tenant-crypto');
+const { decryptItem, isEnvelope } = require('./tenant-crypto');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -38,7 +38,27 @@ exports.handler = async (event) => {
       if (ref.scope !== ORG || !ref.orgId) return items.map((item) => ({ item, ref }));
       const decrypted = [];
       for (const item of items) {
-        decrypted.push({ item: await decryptItem(ref.orgId, 'set', item), ref });
+        /*
+          ONE UNREADABLE ROW MUST NOT EMPTY THE PICKER. Identical guard, and
+          identical reason, to admin/get-question-sets.js: decryptItem throws on
+          the first field it cannot read, and an unguarded throw here escapes
+          into the Promise.all above, which rejects the whole handler. That took
+          out the host's ENTIRE choice of sets — their org's readable ones, the
+          Engage library and the public one — over one torn row in a partition
+          two of those three do not even live in.
+        */
+        try {
+          decrypted.push({ item: await decryptItem(ref.orgId, 'set', item), ref });
+        } catch (e) {
+          console.warn(`⚠️ Could not decrypt set row ${item.SK} for org ${ref.orgId}: ${e.message}`);
+          // Envelopes out, a flag in. Never the ciphertext, never a guess — see
+          // the projection below for why 'Unknown Set' is not an option here.
+          const degraded = { ...item, decryptFailed: true };
+          for (const f of Object.keys(degraded)) {
+            if (isEnvelope(degraded[f])) degraded[f] = null;
+          }
+          decrypted.push({ item: degraded, ref });
+        }
       }
       return decrypted;
     }));
@@ -93,8 +113,17 @@ exports.handler = async (event) => {
         // read whichever library it happened to hit first.
         scope: resolved.scope,
         orgId: resolved.orgId || null,
-        name: item.name || 'Unknown Set',
-        description: item.description || '',
+        /*
+          A SET NOBODY NAMED AND A SET NOBODY CAN READ ARE DIFFERENT STATES.
+          `item.name || 'Unknown Set'` says the first about the second: it hands
+          the host a plausible, wrong, unfalsifiable label for a set whose
+          content is unreadable, and one they cannot tell from a genuinely
+          untitled row. On a degraded row the fields stay null and
+          `decryptFailed` carries the reason, so the picker can name the real
+          state and refuse to offer it.
+        */
+        name: item.decryptFailed ? null : (item.name || 'Unknown Set'),
+        description: item.decryptFailed ? null : (item.description || ''),
         totalQuestions: item.questionCount || 0,
         categoryCount: item.categoryCount || categories.length,
         customInstruction: item.customInstruction || null,
@@ -112,7 +141,10 @@ exports.handler = async (event) => {
         availableVersions: knownVersions(item),
         active: true,
         categories: categories,
-        engagementType: item.engagementType || 'call-and-answer'
+        engagementType: item.engagementType || 'call-and-answer',
+        // Present only when true — absent means the row decrypted, which is
+        // every row in a healthy library.
+        ...(item.decryptFailed ? { decryptFailed: true } : {})
       });
     }
     
