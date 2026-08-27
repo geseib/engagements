@@ -498,14 +498,18 @@ the host's `PastRound` shows none.
 
 ## 12. Files
 
-**New**
+**New** (as built)
 
-- `lambda-functions/game/comments.js`
-- `src/src/components/RoundReport.jsx` (extracted from `PastRound`)
-- `src/src/components/RoundReport.css` (comment blocks only; the report body
-  keeps its existing rules in `styles.css`)
-- `src/src/config/comments.js` (anchor vocabulary + label helpers, shared by
-  player and host)
+- `lambda-functions/game/comments.js` — the three routes
+- `lambda-functions/game/comment-keys.js` — the sort key, the closed anchor set,
+  the ceilings and the monotonic id clock
+- `lambda-functions/game/stage-beats.js` — the beat vocabulary, moved out of
+  `stage-beat.js` once `get-game-state.js` became a second reader (§1)
+- `src/src/config/comments.js` — anchor vocabulary and label helpers
+- `src/src/components/RoundReport.jsx` / `.css` — the artifact, extracted from
+  `PastRound`, plus the comment blocks
+- `src/src/components/FeedbackRoundPanel.jsx` / `.css` — the participant surface
+- `src/src/utils/commentsClient.js` — the three calls, injectable
 - tests, §13
 
 **Modified**
