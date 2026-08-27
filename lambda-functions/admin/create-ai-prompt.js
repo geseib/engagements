@@ -178,6 +178,42 @@ exports.handler = async (event) => {
     }
     const promptStamp = promptOwnerStamp(event, ref);
 
+    /*
+      THERE IS NO ORG-LEVEL DEFAULT, AND THIS REFUSES RATHER THAN IGNORING.
+
+      The bare AIPROMPTS partition holds three row shapes and only prompts move
+      (shared/tenant.js:114-131). The GAMETYPE#…#CATEGORY#… pointer below
+      answers "what does Engage use when a set names nothing" — a house decision
+      by definition — and `findDefaultPromptId` (game/get-ai-summary.js:394) is
+      a SCAN with `PK = :pk` equality against 'AIPROMPTS'. An ORG# row can never
+      match it, whatever is stamped on it.
+
+      So storing `isDefault: true` on an org row would be a claim nothing in the
+      product can honour, and the caller would never find out. That is exactly
+      the failure the guard at the top of this file names: "I set it and nothing
+      changed". An organisation's Workie is chosen EXPLICITLY by naming it on a
+      question set, or it is not used.
+
+      400 and not 403: the caller may create here, they just asked for something
+      that does not exist. Returned BEFORE the S3 PutObject so there is no
+      orphaned body.
+    */
+    if (isDefault && ref.scope !== 'platform') {
+      return {
+        statusCode: 400,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS'
+        },
+        body: JSON.stringify({
+          error: 'A Workie owned by an organisation cannot be a default. '
+            + "The default Workie for a game type is Engage's house choice; "
+            + "your organisation's Workie is chosen by naming it on a question set."
+        })
+      };
+    }
+
     // Create S3 key based on gameType and promptId
     const s3Key = `prompts/${gameType}/${promptId}/v${version}.json`;
 
@@ -280,7 +316,11 @@ exports.handler = async (event) => {
     }));
 
     // If this is marked as default, handle default prompt lookup structure
-    if (isDefault) {
+    // `ref.scope === 'platform'` is redundant with the refusal above and is
+    // written anyway: this block queries and writes the BARE partition by
+    // literal, four times, and a future edit that relaxes the refusal must trip
+    // over this line rather than quietly start sweeping the wrong library.
+    if (isDefault && ref.scope === 'platform') {
       console.log(`🏷️ Setting as default prompt for ${gameType}`);
 
       try {

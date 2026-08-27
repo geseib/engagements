@@ -233,6 +233,68 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
   await check('…and wrote nothing', () =>
     assert.strictEqual(store.size, 0, `wrote ${[...store.keys()].join(' | ')}`));
 
+  say('\n3. there is no org-level default');
+
+  /*
+    The bare AIPROMPTS partition holds three row shapes and only prompts move.
+    The GAMETYPE#…#CATEGORY#… pointer answers "what does Engage use when a set
+    names nothing", which is a house decision by definition, and
+    get-ai-summary.js's findDefaultPromptId is a SCAN with `PK = :pk` equality
+    against 'AIPROMPTS' — an ORG# row could never match it however it were
+    stamped. So a stored `isDefault: true` on an org row would be a claim
+    nothing in the product can honour.
+
+    The house rule for that is written in this very handler, at
+    create-ai-prompt.js:99-101: reject at the door rather than storing something
+    that will be silently ignored at runtime.
+  */
+  // rejects: silently ignoring isDefault, which is "I set it and nothing
+  // changed" — the exact complaint this area exists to fix.
+  store.clear(); s3Store.clear(); s3Meta.clear();
+  const orgDefault = await post(HOST, { isDefault: true });
+  await check('an org prompt asking to be the default is refused with 400', () =>
+    assert.strictEqual(orgDefault.statusCode, 400, orgDefault.body));
+  await check('…and the refusal names the rule', () =>
+    assert.match(parse(orgDefault).error, /cannot be a default/));
+  await check('…and wrote no row at all', () =>
+    assert.strictEqual(store.size, 0, `wrote ${[...store.keys()].join(' | ')}`));
+  await check('…and left no orphan body in S3', () =>
+    assert.strictEqual(s3Store.size, 0, `wrote ${[...s3Store.keys()].join(' | ')}`));
+
+  // rejects: the sweep clearing a platform default from an org partition, or
+  // the GAMETYPE# pointer being written into one.
+  store.clear(); s3Store.clear(); s3Meta.clear();
+  const houseDefault = parse(await post(STAFF, { isDefault: true }));
+  await check('a PLATFORM prompt may still be the default', () =>
+    assert.ok(store.get(`AIPROMPTS|AIPROMPT#${houseDefault.promptId}`),
+      `keys present: ${[...store.keys()].join(' | ')}`));
+  await check('…and its pointer row is in the BARE partition, unchanged', () => {
+    const pointers = [...store.values()].filter((i) => String(i.SK).startsWith('GAMETYPE#'));
+    assert.strictEqual(pointers.length, 1, `got ${pointers.length} pointer rows`);
+    assert.strictEqual(pointers[0].PK, 'AIPROMPTS',
+      `the default pointer moved to ${pointers[0].PK} — get-ai-summary's Scan cannot see it there`);
+  });
+
+  /*
+    THE SCAN'S SAFETY, ASSERTED DIRECTLY. findDefaultPromptId (get-ai-summary.js
+    :394-401) filters `PK = 'AIPROMPTS' AND isDefault = true`. Two independent
+    things keep an org row out of it, and this asserts the second: no org row
+    can carry isDefault: true, because the request is refused.
+  */
+  // rejects: storing isDefault: true on an org row "harmlessly".
+  store.clear(); s3Store.clear(); s3Meta.clear();
+  await post(HOST, {});
+  await post(HOST, { isDefault: false });
+  await check('no org prompt row anywhere carries isDefault: true', () =>
+    [...store.values()]
+      .filter((i) => String(i.PK).startsWith('ORG#'))
+      .forEach((i) => assert.notStrictEqual(i.isDefault, true,
+        `${i.PK}/${i.SK} claims a default the resolver can never honour`)));
+  await check('no GAMETYPE# pointer was written outside the bare partition', () =>
+    [...store.values()]
+      .filter((i) => String(i.SK).startsWith('GAMETYPE#'))
+      .forEach((i) => assert.strictEqual(i.PK, 'AIPROMPTS', `pointer at ${i.PK}`)));
+
   say(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
