@@ -3615,6 +3615,14 @@ Resources:
         Variables:
           AI_PROMPTS_BUCKET: !Ref AIPromptsBucket
       Policies:
+        # Tenant content is encrypted per organisation. This function reads or
+        # writes some, so it needs to unwrap that org's data key — and ONLY with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - S3CrudPolicy:

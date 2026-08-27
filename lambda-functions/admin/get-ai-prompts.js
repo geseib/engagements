@@ -5,6 +5,7 @@ const { normalizeGameType } = require('./shared/game-types');
 const { isUsableSummaryPrompt, summaryPromptDefect, inferPromptType, normalizeOutputSections } = require('./shared/prompt-shape');
 const { readablePromptRefs, promptKey } = require('./shared/prompt-access');
 const { PLATFORM, ORG, PUBLIC } = require('./shared/tenant');
+const { decryptItem, decryptValue } = require('./shared/tenant-crypto');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -96,9 +97,27 @@ exports.handler = async (event) => {
     const refs = readablePromptRefs(event, '');
     const perScope = await Promise.all(refs.map(async (ref) => {
       const res = await dynamodb.send(new QueryCommand(buildQuery(promptKey(ref).PK)));
-      // The ref travels with the row: it named the partition, so it cannot
-      // disagree with where the row actually is.
-      return ((res && res.Items) || []).map((item) => ({ item, ref }));
+      const items = (res && res.Items) || [];
+      /*
+        DECRYPT PER SCOPE, BEFORE ANYTHING PROJECTS A FIELD.
+
+        Done here rather than in `decorate` because the org is a property of the
+        PARTITION this Query named, and one `ref` covers every row it returned —
+        the same shape get-question-sets.js:54-60 uses.
+
+        Platform and public rows are left alone: they were never encrypted, and
+        while `decryptValue` would pass their plaintext through regardless,
+        calling it would demand an orgId there is none of. A prompt written into
+        an org partition before this landed is still plaintext and passes
+        straight through. That is the migration: no backfill, both forms
+        coexisting in one Query result.
+      */
+      if (!ref.orgId) return items.map((item) => ({ item, ref }));
+      const out = [];
+      for (const item of items) {
+        out.push({ item: await decryptItem(ref.orgId, 'prompt', item), ref });
+      }
+      return out;
     }));
 
     let promptsMetadata = perScope.flat();
@@ -181,7 +200,13 @@ exports.handler = async (event) => {
           }));
 
           const content = await s3Response.Body.transformToString();
-          return decorate(prompt, JSON.parse(content), ref);
+          // An org body was wrapped whole before PutObject
+          // (create-ai-prompt.js). `decryptValue` returns anything that is not
+          // an envelope unchanged, so a platform body and a pre-cipher org body
+          // both pass straight through.
+          const parsed = JSON.parse(content);
+          const doc = ref.orgId ? await decryptValue(ref.orgId, parsed) : parsed;
+          return decorate(prompt, doc, ref);
         }
 
         return decorate(prompt, null, ref);

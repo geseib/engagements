@@ -688,6 +688,69 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
     assert.strictEqual(doc.name, 'Engage house Workie');
   });
 
+  say('\n8. …and the list unwraps it');
+
+  // rejects: encrypting on write and forgetting to decrypt on read, which
+  // renders `{v:1,iv:…}` where the Workie's name should be.
+  store.clear(); s3Store.clear(); s3Meta.clear();
+  await mintOrg(ORG);
+  const wrapped = parse(await post(HOST, {
+    name: 'What we got wrong in Q3', description: 'the honest one',
+  }));
+  const readBack = await list(HOST);
+  await check('the org Workie comes back as sentences, not envelopes', () => {
+    const row = readBack.body.prompts.find((p) => p.promptId === wrapped.promptId);
+    assert.ok(row, `ids returned: ${readBack.body.prompts.map((p) => p.promptId).join(', ') || '(none)'}`);
+    assert.strictEqual(row.name, 'What we got wrong in Q3',
+      `name came back as ${JSON.stringify(row.name)}`);
+    assert.strictEqual(row.description, 'the honest one');
+  });
+
+  // rejects: decrypting the row and leaving the BODY wrapped, so the picker's
+  // shape preview and the summary engine both read an envelope.
+  const withContent = await list(HOST, { includeContent: 'true' });
+  await check('includeContent unwraps the S3 body too', () => {
+    const row = withContent.body.prompts.find((p) => p.promptId === wrapped.promptId);
+    assert.ok(row.promptContent, 'no promptContent on the row');
+    assert.strictEqual(row.promptContent.name, 'What we got wrong in Q3',
+      `promptContent.name was ${JSON.stringify(row.promptContent && row.promptContent.name)}`);
+    assert.strictEqual(row.promptContent.instructions, 'Summarise the responses.');
+  });
+
+  // rejects: naming an orgId on a platform partition, which `requireOrgId`
+  // throws on — the whole list would 500 for every caller.
+  store.clear(); s3Store.clear(); s3Meta.clear();
+  const plain = parse(await post(STAFF, { name: 'Engage house Workie' }));
+  const staffList = await list(STAFF, { includeContent: 'true' });
+  await check('a platform-only list still succeeds and reads plainly', () => {
+    assert.strictEqual(staffList.status, 200, JSON.stringify(staffList.body));
+    const row = staffList.body.prompts.find((p) => p.promptId === plain.promptId);
+    assert.strictEqual(row.name, 'Engage house Workie');
+    assert.strictEqual(row.promptContent.name, 'Engage house Workie');
+  });
+
+  /*
+    THE MIGRATION, WHICH IS THE PASSTHROUGH RULE. There is no backfill: a row
+    written into an org partition before encryption landed is plaintext and must
+    keep reading.
+  */
+  // rejects: a decrypt that throws on plaintext, which would take out every row
+  // written before this change.
+  store.clear(); s3Store.clear(); s3Meta.clear();
+  await mintOrg(ORG);
+  store.set(key(`ORG#${ORG}#AIPROMPTS`, 'AIPROMPT#legacy'), {
+    PK: `ORG#${ORG}#AIPROMPTS`, SK: 'AIPROMPT#legacy', promptId: 'legacy',
+    name: 'Written before the cipher', gameType: 'call-and-answer',
+    status: 'active', scope: 'org', orgId: ORG,
+    createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+  });
+  const mixed = await list(HOST);
+  await check('a plaintext org row written before encryption still reads', () => {
+    const row = mixed.body.prompts.find((p) => p.promptId === 'legacy');
+    assert.ok(row, 'the pre-cipher row vanished from the list');
+    assert.strictEqual(row.name, 'Written before the cipher');
+  });
+
   say(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
