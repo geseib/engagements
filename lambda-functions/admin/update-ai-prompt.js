@@ -6,6 +6,14 @@ const { normalizeOutputSections, inferPromptType } = require('./shared/prompt-sh
 const {
   assertTemplateVariablesExist, assertNoBracketDirections, assertReceivesResponses,
 } = require('./shared/template-variable-usage');
+const {
+  findPromptForCaller, canManagePrompt, promptKey, promptBodyKey,
+} = require('./shared/prompt-access');
+const { requestedScope, callerUserId } = require('./shared/question-set-access');
+const tenant = require('./shared/tenant');
+const {
+  ENCRYPTED_FIELDS, encryptValue, decryptValue, decryptItem,
+} = require('./shared/tenant-crypto');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -40,8 +48,6 @@ const dynamodb = DynamoDBDocumentClient.from(dynamoClient, {
 const s3Client = new S3Client({});
 
 exports.handler = async (event) => {
-  console.log('✏️ Update AI Prompt - Event:', JSON.stringify(event, null, 2));
-
   try {
     // Handle CORS preflight
     if (event.requestContext?.http?.method === 'OPTIONS') {
@@ -100,22 +106,97 @@ exports.handler = async (event) => {
       && instructions !== undefined && outputFormat !== undefined)
       ? '' : rawTemplate;
 
-    console.log(`✏️ Updating AI prompt: ${promptId}, createNewVersion: ${createNewVersion}`);
+    /*
+      WHAT USED TO REACH CLOUDWATCH HERE WAS THE WHOLE EVENT — same habit
+      create-ai-prompt.js:33 shipped with and fixed for the same reason: an
+      edit to an org's Workie carries the identical prose this handler is about
+      to make ciphertext in DynamoDB and S3 (see the encryption block below). A
+      log line that dumped the raw event put those sentences in CloudWatch
+      instead, in the clear, readable with no `kms:Decrypt` and therefore no
+      CloudTrail record of having been read — defeating the exact property
+      tenant-crypto.js's header exists to guarantee, on every single edit,
+      whether or not anything else in this handler is fixed.
 
-    // Get existing prompt metadata
-    const existingPrompt = await dynamodb.send(new GetCommand({
-      TableName: tableName,
-      Key: {
-        PK: 'AIPROMPTS',
-        SK: `AIPROMPT#${promptId}`
-      }
+      LOG ENOUGH TO TRACE A REQUEST, NEVER WHAT IT SAYS.
+    */
+    const proseLength = (v) => (typeof v === 'string' ? v.length : 0);
+    console.log('✏️ Update AI Prompt', JSON.stringify({
+      promptId,
+      method: event.requestContext?.http?.method,
+      path: event.requestContext?.http?.path,
+      sub: callerUserId(event) || null,
+      orgId: tenant.callerOrgId(event) || null,
+      createNewVersion,
+      lengths: {
+        name: proseLength(name),
+        description: proseLength(description),
+        scenario: proseLength(scenario),
+        template: proseLength(template),
+        instructions: proseLength(instructions),
+        outputFormat: proseLength(outputFormat),
+      },
     }));
 
-    if (!existingPrompt.Item) {
-      throw new Error(`AI prompt not found: ${promptId}`);
+    // WHICH LIBRARY, THEN WHO. `findPromptForCaller` searches only the scopes
+    // this caller may READ — their own org, then platform, then public — so a
+    // Workie in another organisation is ABSENT rather than forbidden and this
+    // route 404s on it exactly as it would on a promptId that never existed.
+    // See shared/prompt-access.js.
+    const found = await findPromptForCaller(
+      dynamodb, tableName, event, promptId, requestedScope(event), GetCommand
+    );
+
+    if (!found) {
+      return {
+        statusCode: 404,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Methods': 'PUT, OPTIONS'
+        },
+        body: JSON.stringify({ error: `AI prompt not found: ${promptId}` })
+      };
     }
 
-    const currentPrompt = existingPrompt.Item;
+    // 403 before any read of the CONTENT, let alone any write. Checked on the
+    // RAW row: scope/orgId/createdBy are never encrypted (ENCRYPTED_FIELDS.prompt
+    // does not name them), so authorisation never needs a KMS call, and a
+    // caller who is about to be refused never gets their target decrypted.
+    if (!canManagePrompt(event, found.item)) {
+      const groups = tenant.callerGroups(event);
+      console.warn(
+        `🚫 refused to let groups [${groups.join(', ') || 'none'}] `
+        + `(org: ${tenant.callerOrgId(event) || 'none'}/${tenant.callerOrgRole(event) || '-'}) update `
+        + `Workie "${promptId}" in ${found.ref.scope}${found.ref.orgId ? `/${found.ref.orgId}` : ''}`
+      );
+      return {
+        statusCode: 403,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Methods': 'PUT, OPTIONS'
+        },
+        body: JSON.stringify({
+          error: 'This Workie belongs to someone else. You can only change Workies you created.'
+        })
+      };
+    }
+
+    const ref = found.ref;
+    // ORG SCOPE ONLY — platform and public Workies are deliberately plaintext,
+    // the same rule create-ai-prompt.js and edit-question-set.js both give: the
+    // shared libraries must stay readable by every organisation, and there is
+    // no org to key them to.
+    const cryptoOrgId = ref.scope === tenant.ORG ? String(ref.orgId || '') : '';
+
+    // THE ROW, IN THE CLEAR. `found.item` is what was actually read off the
+    // table — ciphertext for an org Workie — and every fallback below
+    // (`currentPrompt.name`, `.description`, …) has to read a real sentence,
+    // not an envelope, or a merge with no S3 content to fall back on would
+    // splice `{v,iv,tag,ct}` into the document this handler is about to save.
+    const currentPrompt = cryptoOrgId
+      ? await decryptItem(cryptoOrgId, 'prompt', found.item)
+      : found.item;
     const timestamp = new Date().toISOString();
 
     // Distinguish "not supplied" from "cleared" — the same null-means-skip trap
@@ -136,6 +217,36 @@ exports.handler = async (event) => {
       );
     }
 
+    /*
+      THERE IS NO ORG-LEVEL DEFAULT — the same rule create-ai-prompt.js enforces
+      at creation (shared/tenant.js:114-131, prompt-access.js header). Without
+      this, flipping `isDefault` back on through an EDIT would reopen exactly the
+      hole creation already closes: `findDefaultPromptId` (game/get-ai-summary.js)
+      is a Scan against the bare `AIPROMPTS` partition, so a stamped
+      `isDefault: true` on an org row is a claim nothing in the product can
+      honour, and the default-management block below writes its GAMETYPE#…
+      pointer at the literal 'AIPROMPTS' regardless of which row triggered it.
+      Only the ATTEMPT to turn it on is refused — `isDefault: false` always goes
+      through, so a caller can still unset one that was, somehow, once true —
+      and this is returned before the S3 read so there is no wasted GetObject on
+      a request already being refused.
+    */
+    if (isDefault === true && ref.scope !== tenant.PLATFORM) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Methods': 'PUT, OPTIONS'
+        },
+        body: JSON.stringify({
+          error: 'A Workie owned by an organisation cannot be a default. '
+            + "The default Workie for a game type is Engage's house choice; "
+            + "your organisation's Workie is chosen by naming it on a question set."
+        })
+      };
+    }
+
     // Get current content from S3
     let currentContent = null;
     try {
@@ -143,7 +254,13 @@ exports.handler = async (event) => {
         Bucket: aiPromptsBucket,
         Key: currentPrompt.s3Key
       }));
-      currentContent = JSON.parse(await s3Response.Body.transformToString());
+      const parsedBody = JSON.parse(await s3Response.Body.transformToString());
+      // An org body was wrapped WHOLE before PutObject (create-ai-prompt.js) —
+      // one envelope around the whole document, not a field at a time, because
+      // it is read back whole, by one reader. `decryptValue` returns anything
+      // that is not an envelope unchanged, so a platform body and a pre-cipher
+      // org body (written before this landed) both pass straight through.
+      currentContent = cryptoOrgId ? await decryptValue(cryptoOrgId, parsedBody) : parsedBody;
     } catch (s3Error) {
       console.warn(`⚠️ Could not fetch current content from S3: ${s3Error.message}`);
     }
@@ -289,7 +406,11 @@ exports.handler = async (event) => {
     // because otherwise there is nowhere to put the text this request supplied.
     if (promptHasS3Body && (createNewVersion || currentPrompt.isDefault || !currentPrompt.s3Key)) {
       newVersion = bumpedVersion;
-      newS3Key = `prompts/${currentPrompt.gameType}/${promptId}/v${newVersion}.json`;
+      // SCOPED, like create-ai-prompt.js's s3Key. A hand-built platform-shaped
+      // path here would mint this new version of an organisation's Workie into
+      // the shared bucket namespace every organisation's Workies sit outside
+      // of, and orphan the org-scoped object this version is meant to replace.
+      newS3Key = promptBodyKey(ref, currentPrompt.gameType, newVersion);
       console.log(`🔄 Creating new version: ${newVersion}`);
     }
 
@@ -332,10 +453,18 @@ exports.handler = async (event) => {
     // there is no object to rewrite and no key to rewrite it at.
     if (promptHasS3Body) {
       console.log(`💾 Saving updated content to S3: ${newS3Key}`);
+      // ORG BODIES ARE ENCRYPTED BEFORE PutObject, exactly as create-ai-prompt.js
+      // does it: the whole document as ONE envelope, because it is read back
+      // whole, by one reader, and a per-field envelope inside a JSON document
+      // buys nothing. Platform and public bodies stay plaintext by the same
+      // decision upload-questions.js states for the shared libraries.
+      const newS3Body = cryptoOrgId
+        ? JSON.stringify(await encryptValue(cryptoOrgId, updatedContent))
+        : JSON.stringify(updatedContent, null, 2);
       await s3Client.send(new PutObjectCommand({
         Bucket: aiPromptsBucket,
         Key: newS3Key,
-        Body: JSON.stringify(updatedContent, null, 2),
+        Body: newS3Body,
         ContentType: 'application/json',
         Metadata: {
           promptId: promptId,
@@ -348,6 +477,32 @@ exports.handler = async (event) => {
       console.log(`💾 ${promptId} keeps its body on the DynamoDB row; no S3 object to write.`);
     }
 
+    /*
+      WHAT GETS WRITTEN AS CIPHERTEXT — the DynamoDB half. `encryptItem` takes a
+      whole row and there is no row in an UpdateExpression, so encryption
+      happens per VALUE here, exactly as edit-question-set.js does it for sets.
+
+      The field list is READ FROM tenant-crypto, never restated — a local copy
+      would drift the moment a field is added to the boundary, and the way that
+      drift presents is a new field shipping in plaintext with every test still
+      green.
+
+      ONLY ORG SCOPE: platform and public Workies are the libraries every
+      organisation reads, and there is no org whose key they could be written
+      under.
+
+      `category` is deliberately NOT in ENCRYPTED_FIELDS.prompt — see
+      tenant-crypto.js: get-ai-prompts.js matches it with a FilterExpression
+      equality test, which an envelope can never satisfy. Routing every field
+      through this one helper, rather than hand-picking which ones to encrypt,
+      is what keeps `category` plaintext without a second list to keep in sync
+      with the first.
+    */
+    const encryptedPromptFields = new Set(ENCRYPTED_FIELDS.prompt);
+    const store = async (field, value) => (
+      cryptoOrgId && encryptedPromptFields.has(field) ? encryptValue(cryptoOrgId, value) : value
+    );
+
     // Update DynamoDB metadata
     const updateExpression = [];
     const expressionAttributeValues = {};
@@ -356,43 +511,43 @@ exports.handler = async (event) => {
     if (name !== undefined) {
       updateExpression.push('#name = :name');
       expressionAttributeNames['#name'] = 'name';
-      expressionAttributeValues[':name'] = name;
+      expressionAttributeValues[':name'] = await store('name', name);
     }
-    
+
     if (description !== undefined) {
       updateExpression.push('description = :description');
-      expressionAttributeValues[':description'] = description;
+      expressionAttributeValues[':description'] = await store('description', description);
     }
-    
+
     if (category !== undefined) {
       updateExpression.push('category = :category');
-      expressionAttributeValues[':category'] = category;
+      expressionAttributeValues[':category'] = await store('category', category);
     }
-    
+
     if (scenario !== undefined) {
       updateExpression.push('scenario = :scenario');
-      expressionAttributeValues[':scenario'] = scenario;
+      expressionAttributeValues[':scenario'] = await store('scenario', scenario);
     }
-    
+
     if (isDefault !== undefined) {
       updateExpression.push('isDefault = :isDefault');
       expressionAttributeValues[':isDefault'] = isDefault;
     }
-    
+
     if (status !== undefined) {
       updateExpression.push('#status = :status');
       expressionAttributeNames['#status'] = 'status';
       expressionAttributeValues[':status'] = status;
     }
-    
+
     if (questionSetIds !== undefined) {
       updateExpression.push('questionSetIds = :questionSetIds');
       expressionAttributeValues[':questionSetIds'] = questionSetIds;
     }
-    
+
     if (tags !== undefined) {
       updateExpression.push('tags = :tags');
-      expressionAttributeValues[':tags'] = tags;
+      expressionAttributeValues[':tags'] = await store('tags', tags);
     }
 
     if (outputSectionsSupplied) {
@@ -401,7 +556,7 @@ exports.handler = async (event) => {
       // REMOVE, which keeps this in one SET expression and still normalises to
       // "no declaration" (normalizeOutputSections rejects an empty array).
       updateExpression.push('outputSections = :outputSections');
-      expressionAttributeValues[':outputSections'] = outputSections || [];
+      expressionAttributeValues[':outputSections'] = await store('outputSections', outputSections || []);
     }
 
     // Always update these fields
@@ -429,7 +584,14 @@ exports.handler = async (event) => {
     // Needed by the `REMOVE #ttl` clause below — `ttl` is a DynamoDB reserved word.
     expressionAttributeNames['#ttl'] = 'ttl';
 
-    // Handle default prompt management for both setting and unsetting defaults
+    // Handle default prompt management for both setting and unsetting defaults.
+    //
+    // `ref.scope === 'platform'` is guaranteed by the refusal above whenever
+    // `isDefault === true`, and this block queries and writes the BARE
+    // partition by literal, three times, anyway: a future edit that relaxes
+    // that refusal must trip over this line rather than quietly start sweeping
+    // an organisation's own Workies for a "default" that can only ever be
+    // Engage's. Mirrors the same redundancy in create-ai-prompt.js, same reason.
     if (isDefault !== undefined) {
       if (isDefault === true) {
         console.log(`🏷️ Setting as default prompt for ${currentPrompt.gameType}/${updatedContent.category}`);
@@ -526,10 +688,10 @@ exports.handler = async (event) => {
       console.log(`💾 Updating DynamoDB metadata`);
       await dynamodb.send(new UpdateCommand({
         TableName: tableName,
-        Key: {
-          PK: 'AIPROMPTS',
-          SK: `AIPROMPT#${promptId}`
-        },
+        // The row that was FOUND, not a rebuilt platform key — an org's Workie
+        // is updated in its own partition or this upserts a second, empty,
+        // platform-scoped row under the same promptId.
+        Key: promptKey(ref),
         // `REMOVE ttl` self-heals: any prompt row still carrying the old
         // now+365d stamp loses it the next time anyone saves the prompt, so the
         // one-off sweep in scripts/cull-ai-prompts.js is a floor, not a
@@ -544,6 +706,11 @@ exports.handler = async (event) => {
       promptId,
       version: newVersion,
       s3Key: newS3Key,
+      // THE OTHER HALF OF THE REFERENCE, echoed back for the same reason
+      // create-ai-prompt.js's response carries it: a promptId alone no longer
+      // names one partition.
+      scope: ref.scope,
+      orgId: ref.orgId || null,
       status: 'updated',
       message: createNewVersion ? 'New version created successfully' : 'AI prompt updated successfully'
     };

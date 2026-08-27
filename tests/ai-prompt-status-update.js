@@ -198,8 +198,29 @@ function check(label, fn) {
   } catch (e) { console.log(`  FAIL  ${label}\n        ${e.message}`); fail++; }
 }
 
+/**
+ * An ADMIN caller, in this API's real event shape.
+ *
+ * `PUT /admin/ai-prompts/{promptId}` is admins-only at the authorizer
+ * (auth/authorizer.js: absent from HOST_ADMIN_ROUTES, so it falls to the
+ * trailing `admin/*` rule) and, since the tenancy fix, ownership-checked again
+ * inside the handler (`canManagePrompt`, shared/prompt-access.js) — platform
+ * passes on the scope alone, which needs the `admins` group and NO active org,
+ * the same interlock question-set-access.js documents for sets: an
+ * administrator acting for an organisation must not touch the shared library
+ * by accident. Every row in this file is platform (created below with no
+ * caller at all, which create-ai-prompt.js's internal-invocation seam also
+ * routes to platform), so every caller here is that administrator, acting for
+ * nobody.
+ */
+const ADMIN = {
+  requestContext: { authorizer: { lambda: {
+    userId: 'sub-admin', username: 'admin', groups: 'admins', status: 'enabled',
+  } } },
+};
 const post = (body) => createPrompt.handler({ body: JSON.stringify(body) });
 const put = (promptId, body) => updatePrompt.handler({
+  ...ADMIN,
   pathParameters: { promptId },
   body: JSON.stringify(body),
 });
