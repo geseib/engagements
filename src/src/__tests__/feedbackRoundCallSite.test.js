@@ -106,6 +106,61 @@ describe('the host page can open a feedback round', () => {
   });
 });
 
+/**
+ * A RELOAD RECOVERS THE COMMENT COUNT, NOT JUST THE BEAT.
+ *
+ * `serverStageBeatRef` (above `resultsBeat`'s declaration) already restores
+ * WHICH STAGE the host sees on reload — that was the earlier fix
+ * (`beat: gameStateData.stageBeat === 'field-notes' ? ...` collapsing
+ * 'feedback' to the tally). `roundComments` is separate state, and before
+ * this fix nothing kept it in sync with a reload landing mid-round: the only
+ * two call sites of `loadRoundComments` were `requestFeedbackRound` (this
+ * device just opened the round) and the `commentPosted` socket handler
+ * (somebody just posted) — neither fires on a reload. A host who reloaded
+ * mid-round came back with `roundComments = []` and the projector showed no
+ * count until the next comment happened to arrive.
+ */
+describe('a reload recovers the comment count', () => {
+  /** Every top-level `useEffect(...)` call, () balanced, so a body containing
+   *  its own parens (an `if (...)`) does not truncate the extraction. */
+  function allEffects(text) {
+    const out = [];
+    const re = /useEffect\(/g;
+    let m;
+    // eslint-disable-next-line no-cond-assign
+    while ((m = re.exec(text))) {
+      let depth = 1;
+      let i = m.index + m[0].length;
+      while (depth > 0 && i < text.length) {
+        if (text[i] === '(') depth++;
+        else if (text[i] === ')') depth--;
+        i++;
+      }
+      out.push(text.slice(m.index, i));
+    }
+    return out;
+  }
+
+  test('an effect keyed on resultsBeat reloads the comments once it reads feedback', () => {
+    const candidates = allEffects(host).filter(
+      (e) => /\[\s*resultsBeat\s*\]/.test(e) && /loadRoundComments/.test(e),
+    );
+    expect(candidates.length).toBeGreaterThan(0);
+  });
+
+  test('that effect is gated on the feedback beat specifically, not any beat change', () => {
+    // A bare `[resultsBeat]` dependency with no condition would also fire
+    // going INTO 'results' and 'field-notes', firing a fetch that immediately
+    // discards itself (`loadRoundComments` no-ops off-round only, not
+    // off-beat) — wasteful, and it would pass a looser version of the test
+    // above for the wrong reason.
+    const candidates = allEffects(host).filter(
+      (e) => /\[\s*resultsBeat\s*\]/.test(e) && /loadRoundComments/.test(e),
+    );
+    expect(candidates[0]).toMatch(/resultsBeat === 'feedback'/);
+  });
+});
+
 
 /**
  * THE PLAYER PAGE LETS GO OF WHAT IT SUBSCRIBED TO.

@@ -785,6 +785,37 @@ function GameHostPage() {
   };
   loadRoundCommentsRef.current = loadRoundComments;
 
+  /*
+    A RELOAD RECOVERS THE COUNT, NOT JUST THE STAGE.
+
+    `resultsBeat` restoring to 'feedback' on reload (`serverStageBeatRef`,
+    above) only fixed which BEAT the host sees — `roundComments` is separate
+    state, and nothing kept it in sync with a reload that lands mid-round.
+    Before this, the only two callers of `loadRoundComments` were
+    `requestFeedbackRound` (this device just opened the round) and the
+    `commentPosted` socket handler (somebody just posted) — neither fires on
+    a reload, so a host who reloaded mid-round came back with
+    `roundComments = []` and the projector showed no count until the next
+    comment happened to arrive.
+
+    Keyed on `resultsBeat` alone, and gated on the exact value rather than any
+    change into it: `loadRoundComments` reads the live `gameState` itself when
+    it actually runs, so this effect only has to know WHEN to call it, and
+    that is exactly when the beat READS 'feedback' — covering a live open
+    (requestFeedbackRound also calls it directly, so this is a harmless
+    duplicate there) and, the case that was missing, a reload that restores
+    straight onto it.
+
+    `loadRoundCommentsRef.current`, not `loadRoundComments` directly: the ref
+    is kept current every render (just above), so this avoids the
+    exhaustive-deps warning a per-render function reference would trigger
+    without inflating the dependency array with something that would make the
+    effect re-run — and refetch — on every render.
+  */
+  useEffect(() => {
+    if (resultsBeat === 'feedback') loadRoundCommentsRef.current();
+  }, [resultsBeat]);
+
   // Host Remote drives the same actions the host toolbar does. The listener below
   // is registered once, so it must not close over a single render's handlers —
   // those capture a stale gameState/players. Every render refreshes this ref
