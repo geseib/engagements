@@ -306,6 +306,23 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
   await check('…and wrote nothing', () =>
     assert.strictEqual(store.size, 0, `wrote ${[...store.keys()].join(' | ')}`));
 
+  /*
+    createPromptRef returns null for this AND for the orgless-host case above,
+    and one generic message used to answer for both. Telling a caller who
+    ALREADY HAS an org to "choose an organisation" sends them back to a step
+    they already did — it is not just unhelpful, it names a state they are not
+    in.
+  */
+  // rejects: reusing the orgless-host wording for an org host, which tells
+  // them to do the thing they already did.
+  await check('…with a message that is not "choose an organisation" — they did', () =>
+    assert.notStrictEqual(parse(escalation).error,
+      'Choose an organisation before creating a Workie.',
+      'an org host was told to do the thing they already did'));
+  await check('…and says the true rule instead', () =>
+    assert.match(parse(escalation).error, /not acting for an organisation/i,
+      `got: ${JSON.stringify(parse(escalation).error)}`));
+
   say('\n3. there is no org-level default');
 
   /*
@@ -645,11 +662,25 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
   await mintOrg(ORG);
   const secret = parse(await post(HOST, {
     name: 'What we got wrong in Q3', description: 'the honest one',
+    defaultSettings: { mustHaveCategories: 'Layoffs, Attrition, Reorg', numberOfCategories: 3 },
+    tags: ['q3-retro', 'leadership-only'],
   }));
   await check('the org row\'s name and description are ENVELOPES, not sentences', () => {
     const row = store.get(`ORG#${ORG}#AIPROMPTS|AIPROMPT#${secret.promptId}`);
     assert.ok(isEnvelope(row.name), `name stored as ${JSON.stringify(row.name)}`);
     assert.ok(isEnvelope(row.description), `description stored as ${JSON.stringify(row.description)}`);
+  });
+  // rejects: defaultSettings and tags staying filed as "vocabulary... and
+  // model configuration", which left AIGenerationPromptEditor's free-text
+  // fields (mustHaveCategories, sampleCategories, contextPlaceholder,
+  // audiencePlaceholder) sitting on the row in the clear beside an encrypted
+  // name, while the identical strings were already ciphertext in S3.
+  await check('…and so are defaultSettings and tags, which carry free text too', () => {
+    const row = store.get(`ORG#${ORG}#AIPROMPTS|AIPROMPT#${secret.promptId}`);
+    assert.ok(isEnvelope(row.defaultSettings), `defaultSettings stored as ${JSON.stringify(row.defaultSettings)}`);
+    assert.ok(isEnvelope(row.tags), `tags stored as ${JSON.stringify(row.tags)}`);
+    assert.ok(!JSON.stringify(row).includes('Layoffs'),
+      'defaultSettings prose ("Layoffs, Attrition, Reorg") is sitting in the row in the clear');
   });
   // rejects: encrypting the columns the list filters on, which would silently
   // make every category and status filter return nothing for org prompts.
@@ -750,6 +781,116 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
     assert.ok(row, 'the pre-cipher row vanished from the list');
     assert.strictEqual(row.name, 'Written before the cipher');
   });
+
+  say('\n9. what reaches CloudWatch');
+
+  /*
+    event.body is the WHOLE POST payload — name, description, instructions,
+    outputFormat, basePrompt, every template field. This branch makes all of
+    that ciphertext in DynamoDB and S3 (section 7 above); a log line that
+    dumped the raw event put the identical sentences in CloudWatch instead, in
+    the clear, readable with no kms:Decrypt and therefore no CloudTrail record
+    — defeating the exact property tenant-crypto.js's header exists to
+    guarantee.
+  */
+  store.clear(); s3Store.clear(); s3Meta.clear();
+  await mintOrg(ORG);
+  const savedLog = console.log;
+  const logged = [];
+  console.log = (...args) => { logged.push(args.map(String).join(' ')); };
+  const PROSE = {
+    name: 'What we got wrong in Q3',
+    description: 'the honest one nobody wants in a slide',
+    instructions: 'Summarise exactly what leadership got wrong, by name.',
+    outputFormat: '## The uncomfortable part\n{responsesText}',
+  };
+  let loggedRes;
+  try {
+    loggedRes = await post(HOST, PROSE);
+  } finally {
+    console.log = savedLog;
+  }
+  const allLogged = logged.join('\n');
+
+  await check('the create actually ran, so the log line actually ran', () =>
+    assert.strictEqual(loggedRes.statusCode, 201, loggedRes.body));
+  // rejects: JSON.stringify(event) at the top of the handler, and anything
+  // else that echoes the request body wholesale.
+  await check('none of the Workie prose reaches console.log', () => {
+    for (const [field, text] of Object.entries(PROSE)) {
+      assert.ok(!allLogged.includes(text), `${field} is in the log verbatim: ${allLogged}`);
+    }
+  });
+  // Asserting only that lengths appear would pass a line that logged both the
+  // lengths AND the prose — this is the other half, checked together.
+  await check('…but each field\'s LENGTH is, so a request stays traceable', () => {
+    for (const [field, text] of Object.entries(PROSE)) {
+      assert.ok(allLogged.includes(`"${field}":${text.length}`),
+        `expected "${field}":${text.length} somewhere in the log: ${allLogged}`);
+    }
+  });
+  await check('…and the caller and org are traceable too', () => {
+    assert.ok(allLogged.includes('sub-amara'), `expected the caller sub in the log: ${allLogged}`);
+    assert.ok(allLogged.includes(ORG), `expected the orgId in the log: ${allLogged}`);
+  });
+
+  say('\n10. one corrupted row does not take the rest of the list down with it');
+
+  /*
+    decryptItem throws on the FIRST field it cannot decrypt, and the
+    row-decrypt loop in get-ai-prompts.js used to let that escape straight to
+    the outer Promise.all — which rejects the WHOLE handler the moment any ONE
+    of its promises does, 500ing platform and public rows that were never in
+    question. Simulated the way the real failure happens: not a wrong org
+    (tests/tenant-crypto.js section 3 already owns that story), but a torn
+    write — the stored envelope's own auth tag no longer matches its
+    ciphertext, which is what a partial write or a rotated key leaves behind.
+  */
+  store.clear(); s3Store.clear(); s3Meta.clear();
+  await mintOrg(ORG);
+  const okPrompt = parse(await post(HOST, { name: 'Readable Workie' }));
+  const badPrompt = parse(await post(HOST, { name: 'Corrupted Workie' }));
+  const housePrompt = parse(await post(STAFF, { name: 'Engage house Workie' }));
+
+  const badKey = `ORG#${ORG}#AIPROMPTS|AIPROMPT#${badPrompt.promptId}`;
+  const badRow = store.get(badKey);
+  const tamperedTag = Buffer.from(badRow.name.tag, 'base64');
+  tamperedTag[0] ^= 0xff;
+  store.set(badKey, { ...badRow, name: { ...badRow.name, tag: tamperedTag.toString('base64') } });
+
+  const savedWarn = console.warn;
+  const warned = [];
+  console.warn = (...args) => { warned.push(args.map(String).join(' ')); };
+  let corrupted;
+  try {
+    corrupted = await list(HOST);
+  } finally {
+    console.warn = savedWarn;
+  }
+
+  await check('the list still succeeds — one bad row is not a 500', () =>
+    assert.strictEqual(corrupted.status, 200, JSON.stringify(corrupted.body)));
+  await check('…the readable org row is still in it, still decrypted', () =>
+    assert.ok(corrupted.body.prompts.some((p) =>
+      p.promptId === okPrompt.promptId && p.name === 'Readable Workie'),
+      `ids returned: ${(corrupted.body.prompts || []).map((p) => p.promptId).join(', ')}`));
+  await check('…and the unrelated PLATFORM row is still in it too', () =>
+    assert.ok(corrupted.body.prompts.some((p) => p.promptId === housePrompt.promptId),
+      'the platform library vanished behind one org\'s bad row'));
+  await check('…the bad row is still LISTED, not silently dropped', () =>
+    assert.ok(corrupted.body.prompts.some((p) => p.promptId === badPrompt.promptId)));
+  await check('…but its name is not the raw ciphertext envelope', () => {
+    const row = corrupted.body.prompts.find((p) => p.promptId === badPrompt.promptId);
+    assert.ok(!isEnvelope(row.name), `the envelope leaked into "name": ${JSON.stringify(row.name)}`);
+  });
+  await check('…and it honestly says it could not be read, rather than inventing a name', () => {
+    const row = corrupted.body.prompts.find((p) => p.promptId === badPrompt.promptId);
+    assert.strictEqual(row.decryptFailed, true, `row was ${JSON.stringify(row)}`);
+    assert.strictEqual(row.name, null, `expected no fabricated name, got ${JSON.stringify(row.name)}`);
+  });
+  await check('…and it was logged server-side, naming the row and the org', () =>
+    assert.ok(warned.some((w) => w.includes(badPrompt.promptId) && w.includes(ORG)),
+      `nothing diagnosable was logged: ${JSON.stringify(warned)}`));
 
   say(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

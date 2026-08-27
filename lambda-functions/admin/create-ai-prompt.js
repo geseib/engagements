@@ -9,7 +9,8 @@ const {
 const {
   createPromptRef, promptKey, promptBodyKey, promptOwnerStamp,
 } = require('./shared/prompt-access');
-const { requestedScope } = require('./shared/question-set-access');
+const { requestedScope, callerUserId } = require('./shared/question-set-access');
+const tenant = require('./shared/tenant');
 const { encryptItem, encryptValue } = require('./shared/tenant-crypto');
 
 const tableName = process.env.TABLE_NAME;
@@ -30,8 +31,6 @@ const generatePromptId = () => {
 };
 
 exports.handler = async (event) => {
-  console.log('➕ Create AI Prompt - Event:', JSON.stringify(event, null, 2));
-
   try {
     // Handle CORS preflight
     if (event.requestContext?.http?.method === 'OPTIONS') {
@@ -81,6 +80,43 @@ exports.handler = async (event) => {
       questionSetIds = [],
       tags = []
     } = requestBody;
+
+    /*
+      WHAT USED TO REACH CLOUDWATCH HERE WAS THE WHOLE EVENT — every field of
+      event.body, JSON.stringify'd whole: `name`, `description`,
+      `instructions`, `outputFormat`, `basePrompt`, every template field —
+      the customer's actual Workie prose. The rest of this handler makes all
+      of that ciphertext in DynamoDB and S3 (ENCRYPTED_FIELDS.prompt,
+      tenant-crypto.js); a log line that dumped the raw event put the
+      identical sentences in CloudWatch instead, in the clear, readable with
+      no `kms:Decrypt` and therefore no CloudTrail record of having been read
+      — defeating the exact property tenant-crypto.js's header exists to
+      guarantee.
+
+      LOG ENOUGH TO TRACE A REQUEST, NEVER WHAT IT SAYS: who, for which org,
+      on which route, and how long each free-text field was — never the
+      field itself. Same rule upload-questions.js:208-212 already applies to
+      a CSV upload (filename, title, type, content LENGTH — never content).
+    */
+    const proseLength = (v) => (typeof v === 'string' ? v.length : 0);
+    console.log('➕ Create AI Prompt', JSON.stringify({
+      method: event.requestContext?.http?.method,
+      path: event.requestContext?.http?.path,
+      sub: callerUserId(event) || null,
+      orgId: tenant.callerOrgId(event) || null,
+      lengths: {
+        name: proseLength(name),
+        description: proseLength(description),
+        instructions: proseLength(instructions),
+        outputFormat: proseLength(outputFormat),
+        basePrompt: proseLength(basePrompt),
+        template: proseLength(template),
+        contextTemplate: proseLength(contextTemplate),
+        audienceTemplate: proseLength(audienceTemplate),
+        categoryTemplate: proseLength(categoryTemplate),
+        scenario: proseLength(scenario),
+      },
+    }));
 
     // Validate required fields - support both old (template) and new (instructions + outputFormat) formats
     if (!name || !rawGameType) {
@@ -167,6 +203,20 @@ exports.handler = async (event) => {
     */
     const ref = createPromptRef(event, promptId, requestedScope(event));
     if (!ref) {
+      /*
+        createPromptRef RETURNS NULL FOR TWO OPPOSITE REASONS, and one message
+        used to answer for both. An orgless host has nothing to choose FROM —
+        "choose an organisation" names the fix. A caller who already HAS an
+        org and asked for `scope: 'platform'` is refused by a DIFFERENT rule
+        (tenant.js:canManageScope — the interlock that keeps an Engage admin
+        from renaming the house library while standing inside a customer's
+        team) and telling them to "choose an organisation" sends them back to
+        a step they already completed; following it cannot help, because
+        having an org is exactly why they were refused.
+      */
+      const message = tenant.callerOrgId(event)
+        ? "Engage's library can only be changed while you are not acting for an organisation."
+        : 'Choose an organisation before creating a Workie.';
       return {
         statusCode: 403,
         headers: {
@@ -174,7 +224,7 @@ exports.handler = async (event) => {
           'Access-Control-Allow-Headers': 'Content-Type',
           'Access-Control-Allow-Methods': 'POST, OPTIONS'
         },
-        body: JSON.stringify({ error: 'Choose an organisation before creating a Workie.' })
+        body: JSON.stringify({ error: message })
       };
     }
     const promptStamp = promptOwnerStamp(event, ref);

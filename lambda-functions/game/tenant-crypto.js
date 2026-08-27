@@ -176,10 +176,27 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *  get-ai-prompts.js pushes both into a FilterExpression as equality matches,
    *  and an encrypted value cannot be matched by an equality filter. Same
    *  argument as the category `Name` note above. `gameType`, `promptType`,
-   *  `s3Key`, `version`, `isDefault`, `tags`, `questionSetIds` and
-   *  `defaultSettings` are vocabulary, pointers, flags, labels and model
-   *  configuration — the "identifiers, timestamps and counts" the privacy page
-   *  already concedes are visible.
+   *  `s3Key`, `version`, `isDefault` and `questionSetIds` are vocabulary,
+   *  pointers and flags — the "identifiers, timestamps and counts" the privacy
+   *  page already concedes are visible, and neither is ever pushed into a
+   *  FilterExpression (get-ai-prompts.js's buildQuery reads `category` and
+   *  `status` only), so encrypting them would cost nothing and buys nothing.
+   *
+   *  `defaultSettings` AND `tags` ARE ENCRYPTED, and were wrongly filed under
+   *  "vocabulary... and model configuration" here until review caught it.
+   *  `defaultSettings` is not a fixed shape: AIGenerationPromptEditor.jsx
+   *  writes `mustHaveCategories`, `sampleCategories`, `contextPlaceholder` and
+   *  `audiencePlaceholder` into it, and those are typed by the author, not
+   *  chosen from a list — a live row was found in testing holding
+   *  `"mustHaveCategories":"Layoffs, Attrition, Reorg"` in the clear, two
+   *  attributes below an encrypted `name`. `tags` is the same shape: a caller
+   *  types free text into an "Add tags…" field (AIPromptManager.jsx,
+   *  AIGenerationPromptEditor.jsx) — not a controlled vocabulary, and nothing
+   *  like the fixed `category`/`status` values above. Both were already inside
+   *  the encrypted S3 envelope — create-ai-prompt.js wraps the whole
+   *  `promptContent` document, and both fields are on it — so leaving the row
+   *  plaintext meant the identical text was ciphertext in the bucket and
+   *  readable two attributes away in the table.
    *
    *  `template` and `instructions` are absent because they are not on the row:
    *  create-ai-prompt.js writes those only to the S3 body. */
@@ -193,6 +210,8 @@ const ENCRYPTED_FIELDS = Object.freeze({
     'outputFormat',
     'outputSections',
     'scenario',
+    'defaultSettings',
+    'tags',
   ]),
 
   /** A question: PK=<scope>SET#<id>[#v<n>], SK=QUESTION#<cat>#<num>.

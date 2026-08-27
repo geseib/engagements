@@ -4,8 +4,9 @@ const { S3Client, ListObjectsV2Command, GetObjectCommand } = require('@aws-sdk/c
 const { normalizeGameType } = require('./shared/game-types');
 const { isUsableSummaryPrompt, summaryPromptDefect, inferPromptType, normalizeOutputSections } = require('./shared/prompt-shape');
 const { readablePromptRefs, promptKey } = require('./shared/prompt-access');
-const { PLATFORM, ORG, PUBLIC } = require('./shared/tenant');
-const { decryptItem, decryptValue } = require('./shared/tenant-crypto');
+const { callerUserId } = require('./shared/question-set-access');
+const { PLATFORM, ORG, PUBLIC, callerOrgId } = require('./shared/tenant');
+const { decryptItem, decryptValue, isEnvelope } = require('./shared/tenant-crypto');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -20,8 +21,6 @@ const dynamodb = DynamoDBDocumentClient.from(dynamoClient, {
 const s3Client = new S3Client({});
 
 exports.handler = async (event) => {
-  console.log('🔍 Get AI Prompts - Event:', JSON.stringify(event, null, 2));
-
   try {
     // Handle CORS preflight
     if (event.requestContext?.http?.method === 'OPTIONS') {
@@ -35,6 +34,22 @@ exports.handler = async (event) => {
         body: ''
       };
     }
+
+    /*
+      THIS USED TO BE JSON.stringify(event) — every header, Authorization
+      included, and (were this route ever called with one) a request body. A
+      GET list carries no Workie prose in its own request, but dumping the
+      whole event is the same blanket-dump habit create-ai-prompt.js:33
+      shipped with, and it is no safer here: `event.requestContext.authorizer
+      .lambda` carries the bearer identity for this call. Trace the request,
+      not quote it.
+    */
+    console.log('🔍 Get AI Prompts', JSON.stringify({
+      method: event.requestContext?.http?.method,
+      path: event.requestContext?.http?.path,
+      sub: callerUserId(event) || null,
+      orgId: callerOrgId(event) || null,
+    }));
 
     const queryParams = event.queryStringParameters || {};
     const gameType = queryParams.gameType;     // any spelling — normalized below
@@ -115,7 +130,41 @@ exports.handler = async (event) => {
       if (!ref.orgId) return items.map((item) => ({ item, ref }));
       const out = [];
       for (const item of items) {
-        out.push({ item: await decryptItem(ref.orgId, 'prompt', item), ref });
+        /*
+          ONE UNREADABLE ROW MUST NOT TAKE THE REST OF THE LIST DOWN WITH IT.
+          decryptItem throws on the first field it cannot decrypt — a rotated
+          key, a torn write — and this loop used to let that throw escape
+          straight into the outer Promise.all, which rejects the moment ANY
+          one of its promises does. With `refs` holding org/platform/public,
+          that meant one bad row in the CALLER'S OWN org partition 500d the
+          whole response, PLATFORM and PUBLIC included, neither of which was
+          ever in question. The S3 body already gets this treatment two
+          blocks down (`catch (s3Error)`); the row deserves the same
+          isolation.
+        */
+        try {
+          out.push({ item: await decryptItem(ref.orgId, 'prompt', item), ref });
+        } catch (e) {
+          // Server-side only — the diagnosable trail an operator needs
+          // (which row, which org, which field), and it is exactly what
+          // decryptItem's own message already names.
+          console.warn(`⚠️ Could not decrypt prompt row ${item.promptId || item.SK} for org ${ref.orgId}: ${e.message}`);
+          /*
+            WHAT THE CALLER SEES: not the raw envelope — `{v,iv,tag,ct}` is
+            not a name, and handing it back under `name` would render
+            ciphertext as if it were the Workie's title — and not a
+            fabricated value either. Every field this entity encrypts that is
+            STILL an envelope (`isEnvelope`, the same test tenant-crypto.js
+            uses to recognise its own output) becomes `null`; `decryptFailed:
+            true` says why the row looks empty, so a caller reads it as
+            "unreadable", not "untitled".
+          */
+          const degraded = { ...item, decryptFailed: true };
+          for (const f of Object.keys(degraded)) {
+            if (isEnvelope(degraded[f])) degraded[f] = null;
+          }
+          out.push({ item: degraded, ref });
+        }
       }
       return out;
     }));
@@ -225,6 +274,11 @@ exports.handler = async (event) => {
     if (malformed.length > 0) {
       console.warn(`⚠️ ${malformed.length} prompt row(s) have no promptId attribute — ` +
         `id synthesized from SK: ${malformed.map(p => p.promptId).join(', ')}`);
+    }
+    const decryptFailures = enrichedPrompts.filter(p => p.decryptFailed);
+    if (decryptFailures.length > 0) {
+      console.warn(`⚠️ ${decryptFailures.length} prompt row(s) could not be decrypted — ` +
+        `served without content: ${decryptFailures.map(p => p.promptId).join(', ')}`);
     }
 
     // ORG, THEN PLATFORM, THEN PUBLIC — and newest first within each.
