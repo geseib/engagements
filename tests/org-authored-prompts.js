@@ -295,6 +295,77 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
       .filter((i) => String(i.SK).startsWith('GAMETYPE#'))
       .forEach((i) => assert.strictEqual(i.PK, 'AIPROMPTS', `pointer at ${i.PK}`)));
 
+  say('\n4. the body is in S3, which the partition does not reach');
+
+  /*
+    The prompt TEXT is not in the DynamoDB row — only `s3Key` is. Two orgs whose
+    slugs collide would overwrite each other's Workie text, and the row's
+    partition scoping does not touch it. Platform keys are unchanged, which is
+    what makes this zero migration in S3 as well.
+  */
+  // rejects: `prompts/${gameType}/${promptId}/v${version}.json` staying
+  // hard-coded — the collision, and an org's text in the platform namespace.
+  store.clear(); s3Store.clear(); s3Meta.clear();
+  const bodyOrg = parse(await post(HOST, {}));
+  await check('an org body is written under prompts/org/<orgId>/', () =>
+    assert.strictEqual(bodyOrg.s3Key,
+      `prompts/org/${ORG}/call-and-answer/${bodyOrg.promptId}/v1.json`,
+      `s3Key was ${bodyOrg.s3Key}`));
+  await check('…and that is the object that actually exists', () =>
+    assert.ok(s3Store.has(bodyOrg.s3Key),
+      `objects present: ${[...s3Store.keys()].join(' | ')}`));
+  // rejects: storing the platform key on an org row, which would make
+  // update-ai-prompt.js (which reads the stored key) rewrite the wrong object.
+  await check('…and the ROW stores the scoped key, not a rebuilt one', () => {
+    const row = store.get(`ORG#${ORG}#AIPROMPTS|AIPROMPT#${bodyOrg.promptId}`);
+    assert.strictEqual(row.s3Key, bodyOrg.s3Key);
+  });
+
+  // rejects: changing the platform key shape, which would orphan every body
+  // stored since 2025.
+  store.clear(); s3Store.clear(); s3Meta.clear();
+  const bodyPlatform = parse(await post(STAFF, {}));
+  await check('a platform body keeps the path it has always had', () =>
+    assert.strictEqual(bodyPlatform.s3Key,
+      `prompts/call-and-answer/${bodyPlatform.promptId}/v1.json`,
+      `s3Key was ${bodyPlatform.s3Key}`));
+
+  say('\n5. the body says whose it is');
+
+  /*
+    `metadata.author` was the constant string 'admin' on every prompt ever
+    written. The body is the copy that TRAVELS — it is what includeContent
+    returns, what export-to-archive copies wholesale, and what a published
+    Workie would carry — so a constant there is a lie that outlives the row.
+  */
+  // rejects: metadata.author staying the constant 'admin' for a host-authored
+  // org Workie.
+  store.clear(); s3Store.clear(); s3Meta.clear();
+  const stamped = parse(await post(HOST, {}));
+  await check('the S3 body names the real author and the library', () => {
+    const doc = JSON.parse(s3Store.get(stamped.s3Key));
+    assert.strictEqual(doc.metadata.author, 'sub-amara',
+      `author was ${JSON.stringify(doc.metadata.author)}`);
+    assert.strictEqual(doc.metadata.scope, 'org');
+    assert.strictEqual(doc.metadata.orgId, ORG);
+  });
+  // rejects: an object in the bucket that cannot be attributed without a table
+  // lookup.
+  await check('the S3 object metadata carries the pair too', () => {
+    const meta = s3Meta.get(stamped.s3Key);
+    assert.strictEqual(meta.scope, 'org', `scope was ${JSON.stringify(meta.scope)}`);
+    assert.strictEqual(meta.orgId, ORG);
+  });
+  // rejects: writing `orgId: undefined` into S3 user metadata on a platform
+  // object, which the SDK sends as the literal string "undefined".
+  store.clear(); s3Store.clear(); s3Meta.clear();
+  const housed = parse(await post(STAFF, {}));
+  await check('a platform object carries scope and NO orgId key', () => {
+    const meta = s3Meta.get(housed.s3Key);
+    assert.strictEqual(meta.scope, 'platform');
+    assert.ok(!('orgId' in meta), `orgId present as ${JSON.stringify(meta.orgId)}`);
+  });
+
   say(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

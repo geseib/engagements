@@ -7,7 +7,7 @@ const {
   assertTemplateVariablesExist, assertNoBracketDirections, assertReceivesResponses,
 } = require('./shared/template-variable-usage');
 const {
-  createPromptRef, promptKey, promptOwnerStamp,
+  createPromptRef, promptKey, promptBodyKey, promptOwnerStamp,
 } = require('./shared/prompt-access');
 const { requestedScope } = require('./shared/question-set-access');
 
@@ -214,8 +214,12 @@ exports.handler = async (event) => {
       };
     }
 
-    // Create S3 key based on gameType and promptId
-    const s3Key = `prompts/${gameType}/${promptId}/v${version}.json`;
+    // WHERE THE TEXT GOES. Scoping the DynamoDB partition does not reach S3 —
+    // the row stores only `s3Key`, so without this two organisations whose
+    // slugs collide overwrite each other's Workie text. Platform keeps the
+    // exact path it has always had, which is what makes this zero migration in
+    // S3 as well as in the table.
+    const s3Key = promptBodyKey(ref, gameType, version);
 
     console.log(`📝 Creating AI prompt - ID: ${promptId}, GameType: ${gameType}, Category: ${category}`);
 
@@ -248,7 +252,16 @@ exports.handler = async (event) => {
       createdAt: timestamp,
       updatedAt: timestamp,
       metadata: {
-        author: 'admin',
+        // WHO, and WHICH LIBRARY. `author` was the constant string 'admin' on
+        // every prompt ever written, which is a lie the moment a host in an
+        // organisation authors one — and the body is the copy that TRAVELS:
+        // includeContent returns it, export-to-archive copies it wholesale, and
+        // a published Workie would carry it. Nothing reads this field today
+        // (verified: no `metadata.author` reader in lambda-functions or src),
+        // so correcting it is additive.
+        author: promptStamp.createdBy || 'admin',
+        scope: ref.scope,
+        ...(ref.orgId ? { orgId: ref.orgId } : {}),
         createdBy: 'admin-interface',
         format: basePrompt ? 'generation' : (template ? 'legacy' : 'structured')
       }
@@ -265,7 +278,13 @@ exports.handler = async (event) => {
         promptId: promptId,
         gameType: gameType,
         version: version.toString(),
-        status: status
+        status: status,
+        // So an object found in the bucket is attributable without a table
+        // lookup. `orgId` is spread conditionally: S3 user metadata values must
+        // be strings, and an absent one sent as `undefined` arrives as the
+        // literal four-letter word.
+        scope: ref.scope,
+        ...(ref.orgId ? { orgId: ref.orgId } : {})
       }
     }));
 
