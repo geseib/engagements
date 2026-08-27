@@ -1,7 +1,12 @@
 # Dependencies
+# Trailing-slash patterns match directories only, not a symlink literally named
+# node_modules (mode 120000 blobs are files, not directories, to git's matcher).
+# Keep both forms so a symlinked node_modules can never be re-added by `git add -A`.
 node_modules/
 */node_modules/
 **/node_modules/
+node_modules
+**/node_modules
 
 # AWS SAM build artifacts
 .aws-sam/
