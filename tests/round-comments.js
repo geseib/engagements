@@ -322,9 +322,34 @@ const aComment = (over = {}) => ({
   check('a read can be narrowed to one section', () =>
     assert.strictEqual(scoped.comments.length, 2, `got ${scoped.comments.length}`));
 
-  const whole = JSON.parse((await get('4008', {})).body);
-  check('and widened to the whole session', () =>
-    assert.strictEqual(whole.comments.length, 3, `got ${whole.comments.length}`));
+  const whole = await get('4008', {});
+  check('but NOT widened to the whole session — this route is public and unauthenticated', () => {
+    /*
+      commentPrefix({}) (comment-keys.js) returns the bare 'COMMENT#' on
+      purpose — create-report.js wants exactly that, one query for the whole
+      game. But create-report.js reaches the table directly with its own
+      QueryCommand and never calls this handler, so the session-wide prefix
+      being POSSIBLE is not a reason for this PUBLIC route to serve it. Game
+      ids are four digits (create-game.js:191): without this refusal, an
+      unauthenticated script walking 1000-9999 gets back every comment in
+      every live or recently-ended session it lands on — decrypted, with
+      author names attached — in one call each, no round scoping required.
+      That is the widest public surface this feature has, wider even than the
+      pre-existing GET /games/{id}/answers this is otherwise the shape of.
+    */
+    assert.strictEqual(whole.statusCode, 400, `got ${whole.statusCode}: ${whole.body}`);
+    assert.match(JSON.parse(whole.body).error, /questionNumber/i,
+      'refused for the wrong reason, or not refused at all');
+  });
+
+  check('the per-round read is unaffected — it is what a real composer and a real report page use', () => {
+    // Re-stated here, next to the refusal above, so the two read as one
+    // decision: narrow the public surface without narrowing what any
+    // legitimate caller (the composer, PastRound, the participant's own page)
+    // can already do. `all` above already proved this; this just keeps the
+    // two claims textually adjacent for whoever reads this test next.
+    assert.strictEqual(all.comments.length, 3, `got ${all.comments.length}`);
+  });
 
   const emptyRound = JSON.parse((await get('4008', { questionNumber: '9' })).body);
   check('a round with no comments is an empty list, not an error', () =>

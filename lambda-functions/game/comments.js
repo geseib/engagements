@@ -8,7 +8,8 @@
  * over all report as well."*
  *
  *     POST /games/{gameId}/comments   write one
- *     GET  /games/{gameId}/comments   read a section, a round, or the session
+ *     GET  /games/{gameId}/comments   read a section, or a round — NEVER the
+ *                                      whole session over this route; see below
  *
  * ── PUBLIC, AND WHY THAT IS NOT THE SAME AS UNGUARDED ──────────────────────
  *
@@ -17,6 +18,17 @@
  * OPENING a feedback round: that is `POST /games/{gameId}/stage-beat`, which
  * carries the Cognito authorizer, because it moves what the whole room is
  * looking at.
+ *
+ * THE READ ADDITIONALLY REQUIRES A ROUND, which is stricter than the key
+ * format allows: `commentPrefix({})` (comment-keys.js) happily returns the
+ * bare `COMMENT#` session-wide prefix, because `create-report.js` wants
+ * exactly that — but `create-report.js` reaches the table with its own
+ * QueryCommand and never calls through this handler. Game ids are four
+ * digits (create-game.js:191), so the whole id space is 9,000 values; a
+ * public route that served the unscoped prefix would let an unauthenticated
+ * script walk it and pull every comment out of every session it lands on, in
+ * one call each, no round needed. `readFeedbackRound` below always supplies a
+ * round, so nothing legitimate is narrowed by this.
  *
  * So the gate here is not "who are you" but "is the room actually doing this
  * right now", and it is two facts read from the table, not one:
@@ -301,19 +313,37 @@ async function writeComment(gameId, body) {
 async function readComments(gameId, query) {
   const { questionNumber, anchorKind, anchorRef } = query;
 
-  // An omitted round is the whole session — what create-report wants. A round
-  // that IS supplied has to be a number, or the prefix is meaningless.
-  const scoped = questionNumber !== undefined && questionNumber !== null && questionNumber !== '';
-  if (scoped && !/^\d+$/.test(String(questionNumber).trim())) {
+  /*
+    A ROUND IS REQUIRED ON THIS ROUTE — unlike `commentPrefix({})` itself,
+    which happily returns the bare 'COMMENT#' session-wide prefix, because
+    `create-report.js` wants exactly that (comment-keys.js's own doc comment
+    says so). That caller reaches the table with its own direct QueryCommand
+    and never calls this function, so tightening the requirement here does not
+    touch it.
+
+    This route is PUBLIC and unauthenticated — the same reason
+    `GET /games/{id}/answers` is public — and game ids are four digits
+    (create-game.js:191): the id space is 9,000 values. Without this gate an
+    unauthenticated script walking it gets back every comment in every live or
+    recently-ended session it lands on, on any tenant, decrypted, with author
+    names attached, in one call each — the widest public surface this feature
+    has, because unlike the answers route it needs no round scoping at all to
+    get the whole game in one shot.
+
+    `readFeedbackRound` below always supplies a round when it calls this
+    function, so nothing that legitimately needs a read is affected.
+  */
+  if (questionNumber === undefined || questionNumber === null || questionNumber === '') {
+    return respond(400, { error: 'questionNumber is required' });
+  }
+  if (!/^\d+$/.test(String(questionNumber).trim())) {
     return respond(400, { error: 'questionNumber must be numeric' });
   }
 
-  const prefix = commentPrefix(scoped
-    ? {
-      questionNumber: String(questionNumber).trim().padStart(3, '0'),
-      ...(anchorKind ? { anchorKind, anchorRef } : {}),
-    }
-    : {});
+  const prefix = commentPrefix({
+    questionNumber: String(questionNumber).trim().padStart(3, '0'),
+    ...(anchorKind ? { anchorKind, anchorRef } : {}),
+  });
   if (prefix === null) {
     return respond(400, { error: 'the anchor could not be resolved' });
   }
