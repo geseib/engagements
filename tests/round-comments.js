@@ -109,6 +109,13 @@ const post = (gameId, body) => handler({
   body: JSON.stringify(body),
 });
 
+const feedbackRound = (gameId) => handler({
+  requestContext: { http: { method: 'GET' }, routeKey: 'GET /games/{gameId}/feedback-round' },
+  routeKey: 'GET /games/{gameId}/feedback-round',
+  pathParameters: { gameId },
+  queryStringParameters: {},
+});
+
 const get = (gameId, qs) => handler({
   requestContext: { http: { method: 'GET' }, routeKey: 'GET /games/{gameId}/comments' },
   routeKey: 'GET /games/{gameId}/comments',
@@ -348,6 +355,92 @@ const aComment = (over = {}) => ({
     assert.ok(!('playerName' in c), `playerName survived: ${JSON.stringify(c)}`);
     assert.ok(!('name' in c), 'name survived');
     assert.ok(!('playerId' in c), 'playerId survived');
+  });
+
+  // ---------- 7. what the participant is handed ----------
+  console.log('\n7. the round a participant is asked to comment on');
+
+  /*
+    HOW A PARTICIPANT GETS THE REPORT was missing from the first design, and
+    both obvious answers were wrong.
+
+    POST /report WRITES: forty phones calling it is forty full-partition
+    re-queries, forty KMS encrypts and forty overwrites of the same REPORT row.
+
+    GET /report branches on an unverified `?role=` parameter, and its non-host
+    branch returns a leaderboard with no detailedQuestions at all — nothing to
+    comment on. Passing `role=host` from a phone would work, and would hand
+    every phone in the room the whole session: every round, every response, and
+    the standings.
+
+    So this route is minimum-privilege by construction: ONE round, the one the
+    host has actually opened, and it refuses when none is open.
+  */
+  seedGame('4010');
+  put({
+    PK: 'GAME#4010', SK: 'REPORT',
+    gameId: '4010', gameTitle: 'Q3 offsite', roundNoun: 'Round',
+    gameStats: { totalPlayers: 4, totalComments: 0 },
+    playerPerformance: [{ playerName: 'Ada', totalScore: 9 }],
+    detailedQuestions: [
+      { questionNumber: '002', questionData: { title: 'Round two' }, answers: [], comments: [] },
+      {
+        questionNumber: '003',
+        questionData: { title: 'Competitive response', detail: 'They cut price.' },
+        answers: [{ answerIndex: 0, answerText: 'Freeze discounting.', playerName: 'Ada', rank: 1 }],
+        aiSummary: { summaryText: 'The room wants to defend price.' },
+        comments: [],
+      },
+    ],
+  });
+  await post('4010', aComment({ text: 'Only one touches the customer.' }));
+
+  const fr = JSON.parse((await feedbackRound('4010')).body);
+
+  check('it returns the round the host actually opened', () =>
+    assert.strictEqual(fr.round.questionNumber, '003', `got ${fr.round && fr.round.questionNumber}`));
+
+  check('with the question, the responses and the summary the room is commenting on', () => {
+    assert.strictEqual(fr.round.questionData.title, 'Competitive response');
+    assert.strictEqual(fr.round.answers.length, 1);
+    assert.strictEqual(fr.round.aiSummary.summaryText, 'The room wants to defend price.');
+  });
+
+  check('and the comments already on it', () => {
+    assert.strictEqual(fr.round.comments.length, 1);
+    assert.strictEqual(fr.round.comments[0].text, 'Only one touches the customer.');
+  });
+
+  check('it hands over ONE round and not the session', () => {
+    // The whole point of the route. A participant must not receive round 2.
+    assert.strictEqual(fr.detailedQuestions, undefined, 'the whole session was returned');
+    assert.ok(!Array.isArray(fr.rounds), 'a list of rounds was returned');
+  });
+
+  check('and no standings', () => {
+    // A leaderboard on forty phones mid-session is attribution by arithmetic,
+    // and nothing in a feedback round needs it.
+    assert.strictEqual(fr.playerPerformance, undefined);
+    assert.strictEqual(fr.leaderboard, undefined);
+  });
+
+  check('it says which round is open, for the composer to post back', () =>
+    assert.strictEqual(fr.questionNumber, '003'));
+
+  seedGame('4011', { beat: 'field-notes' });
+  put({ PK: 'GAME#4011', SK: 'REPORT', gameId: '4011', detailedQuestions: [] });
+  const closed = await feedbackRound('4011');
+  check('no open feedback round is a 409, not a report', () =>
+    assert.strictEqual(closed.statusCode, 409, `got ${closed.statusCode}`));
+
+  seedGame('4012');
+  const noReport = await feedbackRound('4012');
+  check('an open round whose report has not been built yet says so', () => {
+    // The host builds the report before opening the beat, but a phone can
+    // arrive between the two calls. It must read as "not ready", not as an
+    // error the participant has to interpret.
+    assert.strictEqual(noReport.statusCode, 409, `got ${noReport.statusCode}`);
+    assert.match(JSON.parse(noReport.body).error, /report/i);
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

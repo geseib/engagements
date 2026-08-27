@@ -2593,6 +2593,18 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/comments
             Method: GET
+        # The one round a participant is being asked to comment on: the round
+        # actually on the `feedback` beat, its report slice and its comments,
+        # and nothing else. Public, and deliberately NOT `GET /report?role=host`
+        # — that route's role parameter is a client claim, and its non-host
+        # branch returns no responses at all, so a phone would have to ask for
+        # the whole session to get the one round it needs.
+        FeedbackRoundEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/feedback-round
+            Method: GET
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName

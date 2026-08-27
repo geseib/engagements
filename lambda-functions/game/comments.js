@@ -58,7 +58,7 @@ const {
   ANCHOR_KINDS, MAX_COMMENT, MAX_EXCERPT,
   commentSk, commentPrefix, newCommentId, monotonicNow, parseCommentSk,
 } = require('./comment-keys');
-const { encryptItem, decryptItems } = require('./tenant-crypto');
+const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
 const { isHidden, redactAnswers } = require('./anonymity');
 
 const client = new DynamoDBClient({});
@@ -375,6 +375,88 @@ async function readComments(gameId, query) {
   return respond(200, { gameId, comments: out });
 }
 
+// ──────────────────────────────────────────────── GET /feedback-round ──────
+
+/**
+ * THE ONE ROUND A PARTICIPANT IS BEING ASKED TO COMMENT ON.
+ *
+ * The owner: *"they should have a copy of the feedback report (the same item
+ * that is avail when you click the previous round in the session rounds screen.
+ * so they can read, copy paste."*
+ *
+ * This route exists because both of the obvious ways to give a phone that
+ * report are wrong:
+ *
+ *   - `POST /games/{id}/report` WRITES. Forty phones calling it is forty
+ *     full-partition re-queries, forty KMS encrypts, and forty overwrites of
+ *     the one `SK: 'REPORT'` row, per feedback round.
+ *   - `GET /games/{id}/report` is read-only, but branches on a `?role=` query
+ *     parameter the handler itself documents as unverifiable, and its non-host
+ *     branch returns a leaderboard with NO `detailedQuestions` — nothing to
+ *     comment on. A phone passing `role=host` would work and would receive the
+ *     entire session: every round, every response, and the standings. That is a
+ *     far larger grant than a feedback round needs, taken by leaning on a check
+ *     that is known not to hold.
+ *
+ * So: ONE round, the one actually on the `feedback` beat, no standings, no
+ * other round, and a 409 when no round is open. Minimum privilege by
+ * construction rather than by promise.
+ *
+ * It READS the stored report rather than rebuilding, so a room of forty costs
+ * forty cheap reads and no writes. The host builds the row before opening the
+ * beat; a phone that arrives between those two calls gets a 409 that says the
+ * report is not ready, which is a state the composer can render as "the host is
+ * preparing this" rather than an error a participant has to interpret.
+ */
+async function readFeedbackRound(gameId) {
+  const { meta, state } = await readSession(gameId);
+  if (!meta || !state) return respond(404, { error: 'Game not found' });
+
+  const onScreen = String(state.State || '').match(/^RESULTS#(\d+)$/);
+  if (!onScreen) {
+    return respond(409, { error: 'the host has not opened a feedback round' });
+  }
+  const padded = onScreen[1];
+
+  const round = await roundRecord(gameId, padded);
+  if (!round || round.StageBeat !== 'feedback') {
+    return respond(409, { error: 'the host has not opened a feedback round' });
+  }
+
+  const stored = await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: 'REPORT' },
+  }));
+  if (!stored.Item) {
+    return respond(409, { error: 'the round report is not ready yet' });
+  }
+
+  const orgId = orgOf(meta);
+  const report = orgId ? await decryptItem(orgId, 'report', stored.Item) : stored.Item;
+
+  const slice = (report.detailedQuestions || [])
+    .find((q) => String(q.questionNumber) === padded);
+  if (!slice) {
+    return respond(409, { error: 'the round report is not ready yet' });
+  }
+
+  // The comments come from the live rows, not from the report's own snapshot:
+  // the report was built when the host opened the round and every comment
+  // arrived after it. Reusing readComments keeps one anonymity gate rather than
+  // a second copy of it here.
+  const live = JSON.parse((await readComments(gameId, { questionNumber: padded })).body);
+
+  return respond(200, {
+    gameId,
+    // Named separately as well as on the round, because this is what the
+    // composer posts back and it must not have to dig for it.
+    questionNumber: padded,
+    roundNoun: report.roundNoun || null,
+    gameTitle: report.gameTitle || null,
+    round: { ...slice, comments: live.comments || [] },
+  });
+}
+
 // ───────────────────────────────────────────────────────── handler ─────────
 
 exports.handler = async (event) => {
@@ -386,6 +468,10 @@ exports.handler = async (event) => {
 
   try {
     if (method === 'GET') {
+      const route = event.requestContext?.routeKey || event.routeKey || '';
+      if (route.includes('/feedback-round')) {
+        return await readFeedbackRound(gameId);
+      }
       return await readComments(gameId, event.queryStringParameters || {});
     }
 
