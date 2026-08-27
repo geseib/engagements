@@ -349,3 +349,143 @@ describe('the print stylesheet declares the properties that do the work', () => 
     expect(printBlock).toMatch(/\.report-paper button[\s\S]{0,200}?display:\s*none/);
   });
 });
+
+/**
+ * A REPORT THAT LOST ITS ANSWERS SAYS SO ON THE PAPER.
+ *
+ * create-report.js rebuilds the report from rows that expire on four clocks —
+ * the ballots and participant rows at seven days, results and summaries at
+ * thirty, the session itself at ninety — so a retro opened weeks later can be
+ * missing the responses it is about. The backend now recovers what it can from
+ * the stored snapshot and reports what it could not (`reportCompleteness`,
+ * lambda-functions/game/report-merge.js).
+ *
+ * The caveat belongs IN THE DOCUMENT and not in the screen toolbar. This
+ * component's own header says it: the report is a document a host hands a
+ * client, and a caveat that does not print is a caveat the client never sees.
+ */
+describe('the report is honest about what it could not reconstruct', () => {
+  const incomplete = {
+    ...reportData,
+    reportCompleteness: {
+      complete: false,
+      source: 'live',
+      recoveredRounds: [],
+      unrecoverableRounds: ['001'],
+      snapshotTakenAt: null,
+      note: 'The participant responses for round 001 have expired.',
+    },
+  };
+
+  // rejects: storing the field faithfully and rendering nothing — which is
+  // exactly what happened to the round noun, and to the version review state
+  // before it. A warning nobody reads is not a warning.
+  test('an incomplete report carries its caveat', () => {
+    const { container } = render(<ReportDocument reportData={incomplete} />);
+    const note = container.querySelector('.report-caveat');
+    expect(note).not.toBeNull();
+    expect(note.textContent).toContain('have expired');
+  });
+
+  // rejects: a banner on every report. A complete report is the normal case and
+  // must look like one — a standing caveat is noise, and noise is ignored.
+  test('a complete report shows nothing at all', () => {
+    const { container } = render(<ReportDocument reportData={{
+      ...reportData,
+      reportCompleteness: {
+        complete: true, source: 'live', recoveredRounds: [], unrecoverableRounds: [],
+        snapshotTakenAt: null,
+      },
+    }} />);
+    expect(container.querySelector('.report-caveat')).toBeNull();
+  });
+
+  // rejects: a report from before this existed rendering an empty warning box.
+  test('a report with no completeness at all shows nothing', () => {
+    const { container } = render(<ReportDocument reportData={reportData} />);
+    expect(container.querySelector('.report-caveat')).toBeNull();
+  });
+
+  // rejects: `report-noprint`, or living inside the toolbar. The whole point is
+  // that it reaches the paper the client is handed.
+  test('the caveat is not screen-only', () => {
+    const { container } = render(<ReportDocument reportData={incomplete} />);
+    const note = container.querySelector('.report-caveat');
+    expect(note.className).not.toContain('report-noprint');
+    expect(note.closest('.report-doc')).not.toBeNull();
+  });
+
+  // rejects: forwarding everything except this one field. GameHostPage rebuilds
+  // the payload object from scratch — its own comment says anything not listed
+  // there is invisible no matter what the backend sends — and that is the third
+  // time a field has been lost at exactly this line.
+  test('GameHostPage forwards reportCompleteness into the report payload', () => {
+    expect(host).toMatch(/reportCompleteness:\s*report\.reportCompleteness/);
+  });
+});
+
+/**
+ * THE CAVEAT'S COLOUR, MEASURED RATHER THAN EYEBALLED.
+ *
+ * The design system's rule 4: contrast is measured, and a claim written into a
+ * CSS comment is not a measurement. `--report-caution` exists because neither
+ * amber token in styles.css can carry text on this page — `--primary` #F6A94C
+ * is 1.96:1 on white and `--primary-deep` #C77B4A is 3.09:1 on --bg — so the
+ * one hex literal this sheet adds has to earn its place every time it changes.
+ *
+ * Read from the stylesheet as text, because jsdom resolves no custom property
+ * and loads no sheet; a computed-style assertion here would pass on an empty
+ * file. Same reason the print assertions above are written this way.
+ */
+describe('the caveat can actually be read', () => {
+  const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const ratio = (a, b) => {
+    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  const screenCss = fs.readFileSync(src('components', 'GameReport.css'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  const declared = (/--report-caution:\s*(#[0-9a-fA-F]{6})/.exec(screenCss) || [])[1];
+
+  const PAPER_BG = '#FBF7F1';      // styles.css [data-theme="light"] --bg
+  const PAPER_SURFACE = '#FFFFFF'; // styles.css [data-theme="light"] --surface
+
+  test('the caution amber clears AA on both paper grounds', () => {
+    expect(declared).toBeTruthy();
+    expect(ratio(hex(declared), hex(PAPER_BG))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(hex(declared), hex(PAPER_SURFACE))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // rejects: reaching for --danger, which never carries text anywhere in this
+  // product (styles.css:22-35 — 4.38:1 on --surface), and rejects reaching for
+  // the amber tokens that fail on paper.
+  test('the caveat does not use a token that cannot carry text here', () => {
+    const block = screenCss.slice(screenCss.indexOf('.report-paper .report-caveat'));
+    const rules = block.slice(0, block.indexOf('.report-paper .report-eyebrow'));
+    expect(rules).not.toMatch(/color:\s*var\(--danger\)/);
+    expect(rules).not.toMatch(/color:\s*var\(--primary(-deep)?\)/);
+  });
+
+  // rejects: a hex literal in the caveat's own rules. The one this feature adds
+  // is declared once, in the scope's token block, where the measurement above
+  // can find it — a colour written straight into a rule is one no test can
+  // check. (The sheet's two other literals, #2A1B08 and #FFF, predate this and
+  // sit on the screen-only toolbar button.)
+  test('the caveat rules themselves hold no colour of their own', () => {
+    const screenOnly = screenCss.slice(0, screenCss.indexOf('@media print'));
+    const from = screenOnly.indexOf('.report-paper .report-caveat');
+    const rules = screenOnly.slice(from, screenOnly.indexOf('.report-paper .report-eyebrow', from));
+    expect(rules).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(rules).toMatch(/var\(--report-caution\)/);
+  });
+
+  // rejects: the caveat quietly acquiring `report-noprint`, or the print block
+  // losing the rules that keep it legible in ink.
+  test('the print sheet restates the caveat instead of hiding it', () => {
+    expect(printBlock).toMatch(/\.report-caveat\b/);
+    expect(printBlock).toMatch(/\.report-caveat[\s\S]*?break-inside:\s*avoid/);
+  });
+});

@@ -386,6 +386,26 @@ function GameReport({
 function ReportDocument({ reportData }) {
   const { gameId, eventTitle, players = [], questions = [] } = reportData;
 
+  /*
+   * WHAT THIS REPORT COULD NOT RECONSTRUCT.
+   *
+   * The session outlives the rows it is made of. Answer and ballot rows expire
+   * seven days after a session, results and AI summaries at thirty, the session
+   * brief itself at ninety — so a retro opened three weeks later can be missing
+   * the responses it is entirely about. create-report.js recovers what it can
+   * from the stored snapshot and states what it could not
+   * (lambda-functions/game/report-merge.js).
+   *
+   * Rendered IN THE DOCUMENT rather than in the screen toolbar, and deliberately
+   * not `report-noprint`: this is a document a host hands a client, and a
+   * caveat that does not reach the paper is not a caveat. It is absent on a
+   * complete report and on any report written before the field existed —
+   * a standing banner would be noise, and noise is ignored.
+   */
+  const caveat = reportData.reportCompleteness && !reportData.reportCompleteness.complete
+    ? reportData.reportCompleteness
+    : null;
+
   // Same round noun the live screens use. resolveRoundNoun() identifies an art
   // round by a non-empty `image`/`Image` on the question — art is not a game
   // type, so the artwork is the only signal. create-report.js projects `image`
@@ -431,6 +451,14 @@ function ReportDocument({ reportData }) {
           </div>
         </dl>
       </header>
+
+      {/* ---- CAVEAT, when the record is not whole ----------------------- */}
+      {caveat && (
+        <aside className="report-caveat report-keep" role="note">
+          <p className="report-caveat-label">Incomplete record</p>
+          <p className="report-caveat-note">{caveat.note}</p>
+        </aside>
+      )}
 
       {/* ---- ROUNDS ---------------------------------------------------- */}
       <div className="report-content">

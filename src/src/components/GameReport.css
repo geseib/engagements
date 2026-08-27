@@ -27,6 +27,14 @@
   --report-measure: 44rem;      /* ~78 characters at 16px — a reading column */
   --report-rule: 1px solid rgba(27, 41, 66, 0.14);
   --report-rule-soft: 1px solid rgba(27, 41, 66, 0.08);
+  /* Caution amber, for the incomplete-record caveat only.
+     `--primary` (#F6A94C) is 1.96:1 on white and `--primary-deep` (#C77B4A) is
+     3.09:1 on this page's --bg, so neither can carry the label. #9A5B18 is the
+     deep amber-brown the rest of the product already settled on for paper
+     (components/QuestionSetsPanel.css:592, CategoryPicker.css:19): MEASURED
+     5.07:1 on --bg #FBF7F1 and 5.41:1 on --surface #FFFFFF. Not --danger: the
+     record being partial is a caveat on the document, not a failure. */
+  --report-caution: #9A5B18;
 
   background: var(--bg);
   color: var(--text);
@@ -183,6 +191,47 @@
   border-bottom: 2px solid var(--text);
   padding-bottom: 28px;
   margin-bottom: 44px;
+}
+
+/* --------------------------------------------------------------------------
+   THE INCOMPLETE-RECORD CAVEAT.
+
+   A session outlives the rows it is made of — responses and ballots expire at
+   seven days, results and AI summaries at thirty, the session brief at ninety
+   — so a retro opened weeks later can be missing the answers it is about.
+   create-report.js recovers what it can from the stored snapshot and states
+   what it could not; this is where it is said.
+
+   IT PRINTS. The block carries no `report-noprint`, and the @media print rules
+   below restate it in ink rather than hiding it, because the document is what a
+   host hands a client and a caveat the client never sees is not a caveat. It is
+   rendered only when something is actually missing (GameReport.jsx) — a banner
+   on every report is noise, and noise is ignored.
+   -------------------------------------------------------------------------- */
+.report-paper .report-caveat {
+  max-width: var(--report-measure);
+  margin: 0 0 40px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border: var(--report-rule);
+  border-left: 3px solid var(--report-caution);
+  border-radius: 4px;
+}
+
+.report-paper .report-caveat-label {
+  margin: 0 0 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--report-caution);
+}
+
+.report-paper .report-caveat-note {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text);
 }
 
 .report-paper .report-eyebrow {
@@ -824,6 +873,32 @@
     border-bottom: 1.5pt solid #000;
     padding: 0 0 16pt;
     margin: 6pt 0 26pt;
+  }
+
+  /* ---- THE CAVEAT, IN INK ----
+     Restated rather than hidden: the paper is the artefact the client keeps.
+     Black on white, because a colour-coded warning on a mono printer is no
+     warning at all, and never split across a page break. */
+  .report-paper .report-caveat {
+    break-inside: avoid;
+    background: none;
+    border: 0;
+    border-left: 2pt solid #000;
+    border-radius: 0;
+    padding: 0 0 0 12pt;
+    margin: 0 0 22pt;
+  }
+
+  .report-paper .report-caveat-label {
+    font-size: 8pt;
+    letter-spacing: 0.24em;
+    color: #000;
+    margin: 0 0 4pt;
+  }
+
+  .report-paper .report-caveat-note {
+    font-size: 9.5pt;
+    color: #000;
   }
 
   .report-paper .report-eyebrow {

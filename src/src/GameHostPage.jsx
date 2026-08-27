@@ -4343,6 +4343,15 @@ Focus on actionable business strategy insights.`;
         // level; this object is rebuilt from scratch, so anything not forwarded
         // here is invisible to GameReport no matter what the backend sends.
         roundNoun: report.roundNoun,
+        // Whether the backend could still reconstruct this session in full.
+        // Answer and ballot rows expire seven days after a session while the
+        // session itself lives ninety, so a retro opened weeks later may be
+        // missing the responses it is about; create-report.js recovers what it
+        // can from the stored snapshot and reports what it could not. Forwarded
+        // here for the reason the comment above gives — this object is rebuilt
+        // from scratch, and a caveat the document never receives is a caveat
+        // nobody reads.
+        reportCompleteness: report.reportCompleteness,
         players: report.playerPerformance || [],
         questions: report.detailedQuestions || [],
         allAnswers: [],
